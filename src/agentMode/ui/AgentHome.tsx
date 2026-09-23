@@ -149,6 +149,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     pendingToolPermissions,
     pendingAskUserQuestions,
   } = useAgentChatRuntimeState(backend);
+  const isLoading = draft.loading || isTurnInFlight;
 
   // Whole-surface root — the portal container for header-anchored overlays
   // (the project-info popover), which live OUTSIDE chatContainerRef. Held in
@@ -782,7 +783,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       mainAgentId={mainAgentId}
       updateUserMessageHistory={updateUserMessageHistory}
       isStarting={isStarting}
-      isTurnInFlight={isTurnInFlight}
+      isLoading={isLoading}
       hasPendingPlanPermission={hasPendingPlanPermission}
       modelPickerOverride={modelPickerOverride ?? undefined}
       modePickerOverride={modePickerOverride ?? undefined}
@@ -987,7 +988,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       pendingToolPermissions={pendingToolPermissions}
                       pendingAskUserQuestions={pendingAskUserQuestions}
                       chatBackend={backend}
-                      isLoading={draft.loading || isTurnInFlight}
+                      isLoading={isLoading}
                     />
                     <AgentChatControls
                       onNewChat={handleNewChat}

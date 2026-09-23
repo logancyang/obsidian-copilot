@@ -189,6 +189,10 @@ export class AgentChatUIState implements AgentChatBackend {
       logWarn("[AgentChatUIState] non-gated plan card has no resolution path");
       return;
     }
+    // Codex publishes the card from its tool call before the permission request;
+    // finalizing earlier would hide the card and leave that request unanswered.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+    if (!this.session.hasPendingPlanPermission()) return;
     const trimmedFeedback = decision === "feedback" ? feedbackText?.trim() : undefined;
     const sendNextTurn = !!trimmedFeedback && this.session.planFeedbackDelivery === "next_turn";
     const pendingTurn = this.currentTurn;

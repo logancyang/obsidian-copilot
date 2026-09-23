@@ -30,38 +30,8 @@ const availableModes = ["read-only", "agent", "agent-full-access"];
 
 describe("codexModeMapping", () => {
   describe("buildCodexModeMapping()", () => {
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 maps Default to approval and Auto to automatic review without full access", () => {
-      const modeState = modes("agent", availableModes);
-      const mapping = buildCodexModeMapping(modeState);
-
-      expect(mapping.canonical).toEqual({
-        default: "read-only",
-        auto: "agent",
-      });
-      expect(mapping.readOnlyModeId).toBe("read-only");
-    });
-
-    it("https://github.com/logancyang/obsidian-copilot/issues/2916 omits the separate Zed adapter's legacy Auto id", () => {
-      const mapping = buildCodexModeMapping(modes("auto", ["read-only", "auto", "full-access"]));
-
-      expect(mapping.canonical).toEqual({
-        default: "read-only",
-        auto: undefined,
-      });
-    });
-
-    it("omits approval presets that the adapter does not advertise", () => {
-      const mapping = buildCodexModeMapping(modes("custom", ["custom"]));
-
-      expect(mapping.canonical).toEqual({
-        default: undefined,
-        auto: undefined,
-      });
-      expect(mapping.readOnlyModeId).toBeNull();
-    });
-
-    it("retains the inventory-free fan-out mode until the adapter reports modes", () => {
-      expect(buildCodexModeMapping(null)).toEqual({
+    it("https://github.com/logancyang/obsidian-copilot/issues/2916 names only the inventory-free fan-out preset", () => {
+      expect(buildCodexModeMapping()).toEqual({
         kind: "setMode",
         canonical: {},
         readOnlyModeId: "read-only",
@@ -131,25 +101,6 @@ describe("codexModeMapping", () => {
       expect(state?.current).toBe("default");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 leaves an external approval-and-Plan combination unmapped", () => {
-      const state = buildCodexModeState(modes("read-only", availableModes), [
-        collaboration("plan"),
-      ]);
-
-      expect(state?.current).toBeNull();
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 keeps approval choices while hiding Plan if collaboration mode is absent", () => {
-      const state = buildCodexModeState(modes("agent", availableModes), null);
-
-      expect(state?.current).toBe("auto");
-      expect(state?.options).toEqual([
-        { value: "default", label: "Default" },
-        { value: "auto", label: "Auto" },
-      ]);
-      expect(state?.apply.plan).toBeUndefined();
-    });
-
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 does not present an externally selected full-access preset as Auto", () => {
       const state = buildCodexModeState(modes("agent-full-access", availableModes), [
         collaboration("default"),
@@ -165,10 +116,11 @@ describe("codexModeMapping", () => {
       });
     });
 
-    it("returns no picker when the adapter advertises no supported approval presets", () => {
-      expect(
-        buildCodexModeState(modes("custom", ["custom"]), [collaboration("default")])
-      ).toBeNull();
+    it.each([
+      ["approval presets", modes("custom", ["custom"]), [collaboration("default")]],
+      ["the collaboration control", modes("agent", availableModes), null],
+    ] as const)("returns no picker when the adapter lacks %s", (_label, modeState, options) => {
+      expect(buildCodexModeState(modeState, options ? [...options] : null)).toBeNull();
     });
   });
 });

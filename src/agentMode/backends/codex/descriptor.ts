@@ -259,8 +259,8 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 
   SettingsPanel: CodexSettingsPanel,
 
-  getModeMapping(modeState) {
-    return buildCodexModeMapping(modeState);
+  getModeMapping() {
+    return buildCodexModeMapping();
   },
 
   getModeState(modeState, configOptions) {

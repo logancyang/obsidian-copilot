@@ -2354,8 +2354,7 @@ export class AgentSessionManager {
   async applyMode(backendId: BackendId, mode: CopilotMode, spec: ModeApplySpec): Promise<void> {
     const session = this.getActiveSession();
     if (!session || session.backendId !== backendId) return;
-    const descriptor = this.resolveDescriptor(backendId);
-    const latestMapping = descriptor.getModeState ? null : descriptor.getModeMapping?.(null, null);
+    const latestMapping = this.resolveDescriptor(backendId).getModeMapping?.(null, null);
     const latestNativeId =
       latestMapping?.kind === "setMode" ? latestMapping.canonical[mode] : undefined;
     const resolvedSpec: ModeApplySpec = latestNativeId

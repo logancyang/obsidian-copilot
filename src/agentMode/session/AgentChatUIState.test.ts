@@ -1,7 +1,11 @@
 import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendDescriptor } from "@/agentMode/session/descriptor";
-import type { BackendProcess, PermissionPrompt } from "@/agentMode/session/types";
+import type {
+  BackendProcess,
+  PermissionPrompt,
+  SessionUpdateHandler,
+} from "@/agentMode/session/types";
 import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
@@ -10,7 +14,11 @@ jest.mock("@/settings/model", () => ({
 }));
 
 describe("AgentChatUIState", () => {
-  function planReview(feedbackDelivery?: "permission" | "next_turn") {
+  function planReview(
+    feedbackDelivery?: "permission" | "next_turn",
+    { permissionArrived = true }: { permissionArrived?: boolean } = {}
+  ) {
+    let emitUpdate: SessionUpdateHandler | undefined;
     let finishFirstTurn: ((result: { stopReason: "end_turn" }) => void) | undefined;
     let failFirstTurn: ((error: Error) => void) | undefined;
     const prompt = jest
@@ -26,7 +34,10 @@ describe("AgentChatUIState", () => {
     const backend = {
       isRunning: () => true,
       onExit: () => () => undefined,
-      registerSessionHandler: () => () => undefined,
+      registerSessionHandler: (_id: string, handler: SessionUpdateHandler) => {
+        emitUpdate = handler;
+        return () => undefined;
+      },
       prompt,
     } as unknown as BackendProcess;
     const descriptor = { planFeedbackDelivery: feedbackDelivery } as unknown as BackendDescriptor;
@@ -62,7 +73,14 @@ describe("AgentChatUIState", () => {
         { optionId: "revise_plan", name: "Revise", kind: "reject_once" },
       ],
     };
-    const permission = session.handlePlanProposalPermission(request);
+    // Codex publishes the plan card from its tool call before the permission request.
+    emitUpdate!({
+      sessionId: "codex-session",
+      update: { sessionUpdate: "tool_call", ...request.toolCall },
+    });
+    const permission = permissionArrived
+      ? session.handlePlanProposalPermission(request)
+      : new Promise<never>(() => undefined);
     const plan = chat.getCurrentPlan();
     if (!plan) throw new Error("Expected a pending plan");
     return {
@@ -70,6 +88,7 @@ describe("AgentChatUIState", () => {
       session,
       plan,
       permission,
+      request,
       prompt,
       firstTurn,
       finishFirstTurn: () => finishFirstTurn!({ stopReason: "end_turn" }),
@@ -142,6 +161,21 @@ describe("AgentChatUIState", () => {
       expect(review.chat.getMessages().some((message) => message.message === "save it")).toBe(
         false
       );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 ignores a decision made before the plan permission arrives and keeps the card reviewable", async () => {
+      const review = planReview("permission", { permissionArrived: false });
+      await review.chat.resolvePlanProposal(review.plan.id, "approve");
+      expect(review.chat.getCurrentPlan()?.id).toBe(review.plan.id);
+
+      const permission = review.session.handlePlanProposalPermission(review.request);
+      await review.chat.resolvePlanProposal(review.plan.id, "approve");
+      expect((await permission).outcome).toEqual({
+        outcome: "selected",
+        optionId: "implement_plan",
+      });
+      review.finishFirstTurn();
+      await review.firstTurn;
     });
 
     it.each(["approve", "reject"] as const)(

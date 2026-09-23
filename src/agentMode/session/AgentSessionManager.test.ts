@@ -34,10 +34,7 @@ import {
 import type { ProjectFileRecord } from "@/projects/type";
 import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
-import {
-  buildCodexModeMapping,
-  buildCodexModeState,
-} from "@/agentMode/backends/codex/codexModeMapping";
+import { buildCodexModeMapping } from "@/agentMode/backends/codex/codexModeMapping";
 import type {
   BackendProcess,
   BackendDescriptor,
@@ -2765,15 +2762,13 @@ describe("AgentSessionManager.applySelection", () => {
 
 describe("AgentSessionManager.applyMode", () => {
   function buildModeManager(
-    getModeMapping: BackendDescriptor["getModeMapping"],
-    getModeState?: BackendDescriptor["getModeState"]
+    getModeMapping: BackendDescriptor["getModeMapping"]
   ): AgentSessionManager {
     const descriptor = {
       ...buildDescriptor(),
       id: "claude",
       displayName: "Claude",
       getModeMapping,
-      getModeState,
     } as BackendDescriptor;
     const modelPreloader = {
       getCachedModelCatalog: jest.fn(() => null),
@@ -2849,7 +2844,7 @@ describe("AgentSessionManager.applyMode", () => {
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 applies both Codex Plan settings without replacing the translated choice", async () => {
-    const manager = buildModeManager(buildCodexModeMapping, buildCodexModeState);
+    const manager = buildModeManager(buildCodexModeMapping);
     const session = await manager.createSession("claude");
 
     await manager.applyMode("claude", "plan", {

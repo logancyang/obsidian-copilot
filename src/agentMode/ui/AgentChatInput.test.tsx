@@ -158,7 +158,7 @@ function inputNode(
       mainAgentId={null}
       updateUserMessageHistory={jest.fn()}
       isStarting={false}
-      isTurnInFlight={false}
+      isLoading={draft.loading}
       hasPendingPlanPermission={false}
       modelPickerOverride={undefined}
       modePickerOverride={undefined}
@@ -604,10 +604,10 @@ describe("AgentChatInput", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
       const draft = makeDraft({ loading: false });
-      const view = renderInput(backend, draft, { isTurnInFlight: true });
+      const view = renderInput(backend, draft, { isLoading: true });
 
       expect(screen.getByTestId("generating-state").textContent).toBe("running");
-      view.rerender(inputNode(backend, draft, { isTurnInFlight: false }));
+      view.rerender(inputNode(backend, draft, { isLoading: false }));
       expect(screen.getByTestId("generating-state").textContent).toBe("idle");
     });
 
@@ -669,7 +669,7 @@ describe("AgentChatInput", () => {
       const backend = makeBackend();
       const draft = makeDraft({ loading: false });
 
-      renderInput(backend, draft, { isTurnInFlight: true });
+      renderInput(backend, draft, { isLoading: true });
       fireEvent.click(screen.getByText("send"));
       await waitFor(() => expect(draft.setQueue).toHaveBeenCalled());
 

@@ -485,7 +485,7 @@ const GENERIC_SUMMARY: ToolSummary = {
 
 const USER_RESPONSE_SUMMARY: ToolSummary = {
   icon: MessageCircleQuestion,
-  collapsedLine: (part) => part.userResponse ?? part.title,
+  collapsedLine: (part) => part.userResponse!,
   outcome: () => null,
 };
 

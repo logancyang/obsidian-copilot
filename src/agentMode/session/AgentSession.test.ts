@@ -4156,51 +4156,6 @@ describe("AgentSession plan proposal lifecycle", () => {
     await turn;
   });
 
-  it("applies a plan decision made before its permission request arrives (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
-    const mock = makeMockBackend();
-    let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
-    mock.prompt.mockImplementation(
-      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
-    );
-    const session = new AgentSession({
-      backend: mock.asBackend,
-      backendSessionId: "acp-1",
-      internalId: "internal-1",
-      backendId: "codex",
-    });
-    const { turn } = session.sendPrompt("plan something");
-    const toolCall = {
-      toolCallId: "tc-codex-plan",
-      kind: "switch_mode" as const,
-      status: "pending" as const,
-      title: "Implement this plan?",
-      rawInput: { plan: "# codex plan" },
-    };
-    mock.emit({ sessionId: "acp-1", update: { sessionUpdate: "tool_call", ...toolCall } });
-    const plan = session.getCurrentPlan();
-    session.resolvePlanProposalPermission(plan!.pendingToolCallId!, false, "add tests");
-    session.finalizePlanDecision(plan!.id);
-
-    const decision = await session.handlePlanProposalPermission({
-      sessionId: "acp-1",
-      toolCall,
-      options: [
-        { optionId: "allow_once", name: "Allow once", kind: "allow_once" },
-        { optionId: "reject_once", name: "Deny once", kind: "reject_once" },
-      ],
-    });
-
-    expect(decision).toEqual({
-      outcome: { outcome: "selected", optionId: "reject_once" },
-      denyMessage: "add tests",
-    });
-    expect(session.getCurrentPlan()).toBeNull();
-    expect(session.hasPendingPlanPermission()).toBe(false);
-
-    resolvePrompt!({ stopReason: "end_turn" });
-    await turn;
-  });
-
   it("does not attach denyMessage when allowing", async () => {
     const mock = makeMockBackend();
     let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
