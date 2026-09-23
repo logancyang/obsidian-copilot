@@ -237,7 +237,7 @@ When("the held answer's connection breaks", async function (this: RuntimeWorld) 
   await held.in.finish();
 });
 
-// Returns once opencode has tried again and been refused, so it is waiting to retry.
+// Returns once the provider has refused opencode's retry, telling it to wait a minute before the next.
 When(
   "the held answer's connection breaks, and the provider refuses the retry with {int} {string}, asking to wait a minute",
   async function (this: RuntimeWorld, status: number, message: string) {
