@@ -9,7 +9,9 @@ import { BINARY_CACHE_HOME, pinnedBinaryPath } from "../harness/pinnedBinary";
 
 /** One scenario's outcome as written to `summary.json`. */
 export interface ScenarioResult {
+  feature: string;
   name: string;
+  /** `passed`, `failed`, or `known gap, unverified: <issue URL>`. */
   status: string;
   elapsedMs: number;
   error?: string;
@@ -21,7 +23,8 @@ export interface ScenarioResult {
  * Collects per-scenario outcomes into `runtime-tests/.report/`, the directory
  * CI uploads when the job fails: `summary.json` identifies the binary, OS,
  * commit, and each scenario's result and elapsed time; `logs/` holds the
- * redacted runtime logs of every scenario that failed.
+ * redacted runtime logs of every scenario that failed. In GitHub Actions it
+ * also lists each scenario's result in the job summary.
  */
 export class Report {
   readonly #dir: string;
@@ -49,7 +52,7 @@ export class Report {
     return this.#results.length;
   }
 
-  /** Write `summary.json` and return its path. */
+  /** Write `summary.json`, and the job summary when run in GitHub Actions, and return the JSON's path. */
   write(): string {
     const summary = {
       // Probed under the cache's home, like the fetcher, so the developer's home is untouched.
@@ -66,6 +69,28 @@ export class Report {
     };
     const file = path.join(this.#dir, "summary.json");
     fs.writeFileSync(file, `${JSON.stringify(summary, null, 2)}\n`);
+    const jobSummary = process.env.GITHUB_STEP_SUMMARY;
+    if (jobSummary) {
+      const cell = (text: string): string => text.replaceAll("|", "\\|");
+      const rows = this.#results.map(
+        (r) => `| ${cell(r.feature)} | ${cell(r.name)} | ${cell(r.status)} |`
+      );
+      fs.appendFileSync(
+        jobSummary,
+        [
+          "## OpenCode runtime contracts",
+          "",
+          `opencode ${summary.opencodeVersion}, ${summary.os}, Node ${summary.node}, commit ${summary.commit}.`,
+          "",
+          "Each scenario ran Copilot's code and the real pinned opencode against a scripted model provider. A pass shows how Copilot and opencode handle the scripted replies; it does not show how a real model would choose what to say or which tools to call.",
+          "",
+          "| Feature | Scenario | Result |",
+          "| --- | --- | --- |",
+          ...rows,
+          "",
+        ].join("\n")
+      );
+    }
     return file;
   }
 }

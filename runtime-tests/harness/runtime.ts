@@ -691,10 +691,10 @@ export class Conversation implements SentAsker {
   }
 
   /** Resolve once the chat shows a permission card, or the turn has ended without one. */
-  untilPermissionOrEnd(): Promise<void> {
+  async untilPermissionOrEnd(): Promise<void> {
     const turn = this.#turn;
     if (!turn) throw new Error("no message has been sent");
-    return waitUntil(
+    await waitUntil(
       () => this.#turnEnded || this.shownPermission !== undefined,
       (listener) => {
         void turn.then(listener);
@@ -704,12 +704,7 @@ export class Conversation implements SentAsker {
       () =>
         `a permission card or the end of the turn; the answer went ${formatTimeline(this.#timeline)}; the provider ${this.describeProvider()}`
     );
-  }
-
-  /** Send a message through the chat input's path and wait for the turn to end. */
-  async send(text: string): Promise<void> {
-    this.start(text);
-    await this.finish();
+    this.#record();
   }
 
   /** Send a message through the chat input's path without waiting for the turn to end. */

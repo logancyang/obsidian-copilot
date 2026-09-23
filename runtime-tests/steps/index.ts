@@ -5,14 +5,19 @@ import * as path from "node:path";
 import {
   After,
   AfterAll,
+  AfterStep,
   Before,
+  BeforeAll,
+  BeforeStep,
   DataTable,
   Given,
   Status,
   Then,
   When,
   World,
+  defineParameterType,
   setDefaultTimeout,
+  setDefinitionFunctionWrapper,
   setWorldConstructor,
   type ITestCaseHookParameter,
 } from "@cucumber/cucumber";
@@ -41,12 +46,16 @@ import {
 import type { HeldStream, RecordedRequest } from "../harness/scriptedProvider";
 import { Report } from "./report";
 
-// Above the harness's own bounds (30s startup plus a 20s turn in one step, 30s
-// teardown), so a slow runtime fails with the harness's message naming what it
-// was waiting for rather than Cucumber's generic timeout.
+// Above the harness's own bounds (at most 30s in one step, 30s teardown), so a
+// slow runtime fails with the harness's message naming what it was waiting for
+// rather than Cucumber's generic timeout.
 setDefaultTimeout(60_000);
 
-const report = new Report(path.resolve(__dirname, "..", ".report"));
+// Created when the run starts, so a dry run, which lists the step vocabulary, keeps the last report.
+let report: Report;
+BeforeAll(function () {
+  report = new Report(path.resolve(__dirname, "..", ".report"));
+});
 
 /** Cucumber's per-scenario state. The harness itself knows nothing about it. */
 class RuntimeWorld extends World {
@@ -59,6 +68,12 @@ class RuntimeWorld extends World {
   readonly named = new Map<string, Conversation>();
   /** The answer the provider holds open, and the conversation waiting on it. */
   held: { stream: HeldStream; in: Conversation } | null = null;
+  /**
+   * Where the scripted model stops for the scenario, in the order it will: an
+   * answer it holds open, or a retry it refuses with a long wait. Each message
+   * sent returns at the next one.
+   */
+  readonly pauses: ScriptedPause[] = [];
   /** How many requests the provider had received when the answer was stopped. */
   requestsWhenStopped = 0;
   /** The notes the vault started with, by vault path. */
@@ -69,6 +84,12 @@ class RuntimeWorld extends World {
   toolCallId = "";
   /** opencode's settled answer to the last read-only question. */
   readOnlyAnswer: AgentAnswer | null = null;
+  /** What a `@known-gap` scenario's last step fails with today, or null for any other scenario. */
+  knownGap: KnownGap | null = null;
+  /** Whether the step running now is the last step of a `@known-gap` scenario. */
+  atGapStep = false;
+  /** Set once that step failed as the gap says it does. */
+  gapConfirmed = false;
 
   /** The conversation the chat view shows, which the scenario's messages go to. */
   get conversation(): Conversation {
@@ -99,9 +120,38 @@ class RuntimeWorld extends World {
 
 setWorldConstructor(RuntimeWorld);
 
-Before(function (this: RuntimeWorld) {
+Before(function (this: RuntimeWorld, { gherkinDocument, pickle }: ITestCaseHookParameter) {
   this.startedAt = Date.now();
+  if (pickle.tags.some((tag) => tag.name === KNOWN_GAP_TAG)) {
+    this.knownGap = readKnownGap(gherkinDocument, pickle);
+  }
 });
+
+BeforeStep(function (this: RuntimeWorld, { pickle, pickleStep }) {
+  this.atGapStep = this.knownGap !== null && pickleStep.id === pickle.steps.at(-1)?.id;
+});
+
+AfterStep(function (this: RuntimeWorld) {
+  this.atGapStep = false;
+});
+
+// A known gap's last step fails today with the message its scenario states.
+// That failure is the gap, so the step passes and the scenario is reported as a
+// known gap. Any other failure, including one earlier in the scenario, fails it.
+setDefinitionFunctionWrapper(
+  (code: (...args: unknown[]) => unknown) =>
+    async function (this: RuntimeWorld | undefined, ...args: unknown[]): Promise<unknown> {
+      try {
+        const result: unknown = await code.call(this, ...args);
+        return result;
+      } catch (error) {
+        const gap = this?.atGapStep ? this.knownGap : null;
+        if (!gap || !(error instanceof assert.AssertionError)) throw error;
+        if (!error.message.includes(gap.failsWith)) throw error;
+        this!.gapConfirmed = true;
+      }
+    }
+);
 
 After(async function (this: RuntimeWorld, scenario: ITestCaseHookParameter) {
   // Read before teardown: a clean shutdown right after a turn logs warnings of
@@ -109,6 +159,16 @@ After(async function (this: RuntimeWorld, scenario: ITestCaseHookParameter) {
   const problems = this.runtime.problems();
   // Cucumber passes a run whose scenarios were skipped; every scenario here is required.
   if (scenario.result?.status === Status.SKIPPED) problems.push("the scenario was skipped");
+  const gap = this.knownGap;
+  if (gap && scenario.result?.status === Status.PASSED && !this.gapConfirmed) {
+    problems.push(
+      `${gap.issue} no longer fails: promote this scenario by removing its ${KNOWN_GAP_TAG} tag and the three lines under its title, and list it in runtime-tests/README.md`
+    );
+  } else if (gap && scenario.result?.status === Status.FAILED) {
+    problems.push(
+      `a ${KNOWN_GAP_TAG} scenario may fail only at its last step, with a message containing ${JSON.stringify(gap.failsWith)}`
+    );
+  }
   // Read before `stop()` deletes the agent home that holds opencode's logs.
   const diagnostics = await this.runtime.diagnostics();
   try {
@@ -118,8 +178,9 @@ After(async function (this: RuntimeWorld, scenario: ITestCaseHookParameter) {
     const error = [scenario.result?.message, ...problems].filter(Boolean).join("\n");
     report.add(
       {
+        feature: scenario.gherkinDocument.feature?.name ?? scenario.pickle.uri,
         name: scenario.pickle.name,
-        status: failed ? "failed" : "passed",
+        status: failed ? "failed" : gap ? `known gap, unverified: ${gap.issue}` : "passed",
         elapsedMs: Date.now() - this.startedAt,
         ...(error ? { error } : {}),
       },
@@ -135,6 +196,21 @@ AfterAll(function () {
   if (report.size === 0) throw new Error("no runtime scenarios ran");
 });
 
+// A saved or shown effort: `at "high" effort`, or `with no effort` for a model
+// that has none.
+defineParameterType({
+  name: "effort",
+  regexp: [/at "([^"]*)" effort/, /with no effort/],
+  transformer: (level: string | undefined) => level ?? null,
+});
+
+// How long a refused request tells opencode to wait before it retries.
+defineParameterType({
+  name: "retryAdvice",
+  regexp: [/retry at once/, /wait a minute/],
+  transformer: (advice: string) => (advice === "retry at once" ? 0 : 60_000),
+});
+
 Given(
   "Copilot's opencode agent uses the scripted model {string} by default",
   async function (this: RuntimeWorld, model: string) {
@@ -146,16 +222,18 @@ Given(
   }
 );
 
-Given(
-  "the model will answer {string} to exactly the message I send",
-  function (this: RuntimeWorld, text: string) {
-    this.runtime.provider.answer(text);
-  }
-);
+Given("the model will answer {string}", function (this: RuntimeWorld, text: string) {
+  this.runtime.provider.answer(text);
+});
 
-When("I send {string} in a new conversation", async function (this: RuntimeWorld, text: string) {
-  this.conversation = await this.runtime.openConversation();
-  await this.conversation.send(text);
+// Returns at the model's next scripted pause, or else once the chat shows a
+// permission card or the turn has ended.
+When("I send {string}", async function (this: RuntimeWorld, text: string) {
+  this.conversation.start(text);
+  const pause = this.pauses.shift();
+  if (!pause) return this.conversation.untilPermissionOrEnd();
+  const held = await this.runtime.waitForProvider(pause.reached, pause.event);
+  if (held) this.held = { stream: held, in: this.conversation };
 });
 
 Then("the answer grew in the conversation as:", function (this: RuntimeWorld, table: DataTable) {
@@ -199,19 +277,8 @@ Given(
 );
 
 Given(
-  "Copilot starts with {string} as opencode's default model",
-  async function (this: RuntimeWorld, model: string) {
-    await this.runtime.start({
-      binaryPath: pinnedBinaryPath(),
-      models: this.models,
-      defaultModel: { model, effort: null },
-    });
-  }
-);
-
-Given(
-  "Copilot starts with {string} at {string} effort as opencode's default model",
-  async function (this: RuntimeWorld, model: string, effort: string) {
+  "Copilot starts with opencode's default model set to {string} {effort}",
+  async function (this: RuntimeWorld, model: string, effort: string | null) {
     await this.runtime.start({
       binaryPath: pinnedBinaryPath(),
       models: this.models,
@@ -235,14 +302,11 @@ When("I switch to conversation {string}", function (this: RuntimeWorld, name: st
   this.runtime.show(this.conversation);
 });
 
-// Returns once the provider holds the answer, which is after the conversation shows its words.
-When(
-  "I send {string}, which the model starts answering with {string} and then holds",
-  async function (this: RuntimeWorld, text: string, answer: string) {
-    const holding = this.runtime.provider.hold(answer);
-    this.conversation.start(text);
-    const stream = await this.runtime.waitForProvider(holding, "hold the answer");
-    this.held = { stream, in: this.conversation };
+// The message it answers is sent once the conversation shows these words.
+Given(
+  "the model will start answering {string} and then hold",
+  function (this: RuntimeWorld, text: string) {
+    this.pauses.push({ event: "hold the answer", reached: this.runtime.provider.hold(text) });
   }
 );
 
@@ -255,19 +319,11 @@ When(
   }
 );
 
-When("the held answer's connection breaks", async function (this: RuntimeWorld) {
-  const held = this.heldAnswer;
-  held.stream.break();
-  await held.in.finish();
-});
-
-// Returns once the provider has refused opencode's retry, telling it to wait a minute before the next.
-When(
-  "the held answer's connection breaks, and the provider refuses the retry with {int} {string}, asking to wait a minute",
-  async function (this: RuntimeWorld, status: number, message: string) {
-    const refused = this.runtime.provider.refuse(status, message, 60_000);
-    this.heldAnswer.stream.break();
-    await this.runtime.waitForProvider(refused, "refuse opencode's retry");
+// Drops the connection once the conversation shows these words, as a failing stream does.
+Given(
+  "the model will start answering {string} and then break",
+  function (this: RuntimeWorld, text: string) {
+    void this.runtime.provider.hold(text).then((held) => held.break());
   }
 );
 
@@ -278,20 +334,24 @@ When("I stop the answer", async function (this: RuntimeWorld) {
   await this.conversation.finish();
 });
 
-When(
-  "I send {string}, which the provider refuses with {int} {string}, asking to retry at once",
-  async function (this: RuntimeWorld, text: string, status: number, message: string) {
-    void this.runtime.provider.refuse(status, message, 0);
-    this.runtime.expectTurnToFail(message);
-    await this.conversation.send(text);
-  }
-);
-
-When(
-  "the provider refuses the next request with {int} {string}",
+// The provider refuses every attempt at the question it refuses first.
+Given(
+  "the provider will refuse the next request with {int} {string}",
   function (this: RuntimeWorld, status: number, message: string) {
     void this.runtime.provider.refuse(status, message);
     this.runtime.expectTurnToFail(message);
+  }
+);
+
+// Asked to retry at once, opencode gives up within a turn and the turn fails.
+// Asked to wait a minute, it waits longer than a turn may take, so the message
+// sent returns once the refusal is sent, for the scenario to act while opencode waits.
+Given(
+  "the provider will refuse the next request with {int} {string}, asking to {retryAdvice}",
+  function (this: RuntimeWorld, status: number, message: string, retryAfterMs: number) {
+    const refused = this.runtime.provider.refuse(status, message, retryAfterMs);
+    if (retryAfterMs === 0) this.runtime.expectTurnToFail(message);
+    else this.pauses.push({ event: "refuse opencode's retry", reached: refused });
   }
 );
 
@@ -350,18 +410,10 @@ Then("the chat tabs show:", function (this: RuntimeWorld, table: DataTable) {
   assert.deepEqual(rows, table.rows());
 });
 
-When(
-  "I send {string}, which the model answers with {string}",
-  async function (this: RuntimeWorld, text: string, answer: string) {
-    this.runtime.provider.answer(answer);
-    await this.conversation.send(text);
-  }
-);
-
 // The Default model setting's write.
 When(
-  "I set opencode's default model to {string} at {string} effort in settings",
-  async function (this: RuntimeWorld, model: string, effort: string) {
+  "I set opencode's default model to {string} {effort} in settings",
+  async function (this: RuntimeWorld, model: string, effort: string | null) {
     await this.runtime.manager.persistDefaultSelection("opencode", {
       baseModelId: this.runtime.wireId(model),
       effort,
@@ -383,7 +435,7 @@ When(
   }
 );
 
-When("opencode restarts from the chat's Reload action", async function (this: RuntimeWorld) {
+When("I restart opencode from the chat's Reload action", async function (this: RuntimeWorld) {
   this.conversation = await this.runtime.restartAgent();
 });
 
@@ -397,7 +449,7 @@ When(
     const key = getModelKeyFromModel(row);
     const option = effortOption(picker.effortOptionsByModelKey?.[key], model, effort);
     picker.commitSelection?.(key, option.value);
-    const expected = `${model} at ${effort} effort`;
+    const expected = selectionShown(model, effort);
     await this.conversation.waitFor(
       () => pickerSelection(this.runtime) === expected,
       () => `the model picker to show ${expected}; it shows ${pickerSelection(this.runtime)}`
@@ -439,16 +491,9 @@ Then("the model picker offers exactly:", function (this: RuntimeWorld, table: Da
 });
 
 Then(
-  "the model picker shows {string} at {string} effort",
-  function (this: RuntimeWorld, model: string, effort: string) {
-    assert.equal(pickerSelection(this.runtime), `${model} at ${effort} effort`);
-  }
-);
-
-Then(
-  "the model picker shows {string} with no effort control",
-  function (this: RuntimeWorld, model: string) {
-    assert.equal(pickerSelection(this.runtime), model);
+  "the model picker shows {string} {effort}",
+  function (this: RuntimeWorld, model: string, effort: string | null) {
+    assert.equal(pickerSelection(this.runtime), selectionShown(model, effort));
   }
 );
 
@@ -478,21 +523,11 @@ Then("the provider answered these agent turns:", function (this: RuntimeWorld, t
 });
 
 Then(
-  "opencode's saved default is {string} at {string} effort",
-  function (this: RuntimeWorld, model: string, effort: string) {
+  "opencode's saved default is {string} {effort}",
+  function (this: RuntimeWorld, model: string, effort: string | null) {
     assert.deepEqual(this.runtime.manager.getDefaultSelection("opencode"), {
       baseModelId: this.runtime.wireId(model),
       effort,
-    });
-  }
-);
-
-Then(
-  "opencode's saved default is {string} with no effort",
-  function (this: RuntimeWorld, model: string) {
-    assert.deepEqual(this.runtime.manager.getDefaultSelection("opencode"), {
-      baseModelId: this.runtime.wireId(model),
-      effort: null,
     });
   }
 );
@@ -532,8 +567,15 @@ function pickerSelection(runtime: Runtime): string {
   const model = row?.displayName ?? "no model";
   if (!picker.effort) return model;
   const { options, value } = picker.effort;
-  const effort = options.find((option) => option.value === value)?.label ?? String(value);
-  return `${model} at ${effort} effort`;
+  return selectionShown(
+    model,
+    options.find((option) => option.value === value)?.label ?? String(value)
+  );
+}
+
+/** What the model picker's trigger reads for `model` at `effort`. */
+function selectionShown(model: string, effort: string | null): string {
+  return effort === null ? model : `${model} at ${effort} effort`;
 }
 
 /** The effort option a user picks by its label, as the picker's stepper shows it. */
@@ -570,6 +612,50 @@ interface ToolCall {
   args: Record<string, unknown>;
 }
 
+/** A point where the scripted model stops for the scenario, and what it does there. */
+interface ScriptedPause {
+  /** What the provider does at this point, for the failure message if it never does. */
+  event: string;
+  /** Resolves when the provider gets there, with the answer it holds, if any. */
+  reached: Promise<HeldStream | void>;
+}
+
+/** Marks a scenario that asserts behavior Copilot does not have yet. */
+const KNOWN_GAP_TAG = "@known-gap";
+
+/**
+ * What a `@known-gap` scenario states under its title: the issue that tracks
+ * the gap, what shipping with it means for users, and a fragment of the
+ * message its last step fails with today.
+ */
+interface KnownGap {
+  issue: string;
+  failsWith: string;
+}
+
+/** Read the known gap `pickle`'s scenario states in its description, or fail the scenario. */
+function readKnownGap(
+  document: ITestCaseHookParameter["gherkinDocument"],
+  pickle: ITestCaseHookParameter["pickle"]
+): KnownGap {
+  const scenario = document.feature?.children.find(
+    (child) => child.scenario && pickle.astNodeIds.includes(child.scenario.id)
+  )?.scenario;
+  const description = scenario?.description ?? "";
+  const issue = /https:\/\/github\.com\/\S+\/issues\/\d+/.exec(description)?.[0];
+  const consequence = /^\s*Release consequence: \S/m.test(description);
+  const failsWith = /^\s*Fails today with: (.+)$/m.exec(description)?.[1].trim();
+  if (!issue || !consequence || !failsWith) {
+    throw new Error(
+      `a ${KNOWN_GAP_TAG} scenario must state its issue URL, a "Release consequence:" line, and a "Fails today with:" line under its title`
+    );
+  }
+  return { issue, failsWith };
+}
+
+/** A quoted value in the wording of a file operation. */
+const QUOTED = '"([^"]*)"';
+
 /**
  * How the pinned opencode (1.18.31) is asked to work on a note: for each way a
  * scenario words what the model does, the tool and the arguments its schema
@@ -578,29 +664,44 @@ interface ToolCall {
  * adapted here and nowhere else.
  */
 const OPENCODE_FILE_TOOLS: readonly [
-  RegExp,
+  string,
   (world: RuntimeWorld, ...words: string[]) => ToolCall,
 ][] = [
   [
-    /^edits "([^"]*)", replacing "([^"]*)" with "([^"]*)"$/,
+    `edit ${QUOTED}, replacing ${QUOTED} with ${QUOTED}`,
     (world, note, oldString, newString) => ({
       name: "edit",
       args: { filePath: world.vaultFile(note), oldString, newString },
     }),
   ],
   [
-    /^rewrites "([^"]*)" as "([^"]*)"$/,
+    `rewrite ${QUOTED} as ${QUOTED}`,
     (world, note, content) => ({
       name: "write",
       args: { filePath: world.vaultFile(note), content },
     }),
   ],
   [
-    /^reads "([^"]*)"$/,
+    `read ${QUOTED}`,
     (world, note) => ({ name: "read", args: { filePath: world.vaultFile(note) } }),
   ],
-  [/^runs "([^"]*)"$/, (_world, command) => ({ name: "bash", args: { command } })],
+  [`run ${QUOTED}`, (_world, command) => ({ name: "bash", args: { command } })],
 ];
+
+// One of the wordings above. Cucumber hands a parameter the capture groups of
+// all its alternatives in one flat list, so each wording matches here without
+// groups and is parsed again for its values.
+defineParameterType({
+  name: "fileOperation",
+  regexp: OPENCODE_FILE_TOOLS.map(([words]) => words.replaceAll(QUOTED, '"[^"]*"')),
+  transformer(this: RuntimeWorld, phrase: string): ToolCall {
+    for (const [words, toCall] of OPENCODE_FILE_TOOLS) {
+      const match = new RegExp(`^${words}$`).exec(phrase);
+      if (match) return toCall(this, ...match.slice(1));
+    }
+    throw new Error(`no opencode tool is mapped for "${phrase}"`);
+  },
+});
 
 /** How a permission card names the vault in a scenario's table. */
 const VAULT_TOKEN = "$VAULT";
@@ -617,21 +718,17 @@ Given("the vault holds these notes:", function (this: RuntimeWorld, table: DataT
   this.filesBefore = this.runtime.fileDigests();
 });
 
-// Returns once the chat shows a permission card, or the turn has ended without one.
-When(
-  /^I send "([^"]*)", and the model (.+?)(?:, then answers "([^"]*)")?$/,
-  async function (this: RuntimeWorld, text: string, action: string, answer: string | null) {
-    queueToolCall(this, action, answer);
-    this.conversation.start(text);
-    await this.conversation.untilPermissionOrEnd();
-  }
-);
+// The agent runs its real tool, and sends the model the result in its next
+// request. The call names a note by its path in the vault, so Copilot must
+// have started.
+Given("the model will {fileOperation}", function (this: RuntimeWorld, call: ToolCall) {
+  this.toolCallId = this.runtime.provider.callTool(call.name, call.args);
+});
 
 // The call a chat makes when a message @-mentions opencode alongside other agents.
 When(
-  /^opencode is asked "([^"]*)" as a read-only question, and the model (.+?)(?:, then answers "([^"]*)")?$/,
-  async function (this: RuntimeWorld, text: string, action: string, answer: string | null) {
-    queueToolCall(this, action, answer);
+  "I ask opencode {string} as a read-only question",
+  async function (this: RuntimeWorld, text: string) {
     this.readOnlyAnswer = await this.runtime.askReadOnly(text);
   }
 );
@@ -652,15 +749,6 @@ Then(
 When(
   "I choose {string} on the permission card",
   async function (this: RuntimeWorld, label: string) {
-    this.conversation.answerPermission(label);
-    await this.conversation.finish();
-  }
-);
-
-When(
-  "I choose {string} on the permission card, and the model then answers {string}",
-  async function (this: RuntimeWorld, label: string, answer: string) {
-    this.runtime.provider.answer(answer);
     this.conversation.answerPermission(label);
     await this.conversation.finish();
   }
@@ -727,20 +815,6 @@ Then("opencode's read-only answer reads {string}", function (this: RuntimeWorld,
   if (!this.readOnlyAnswer) throw new Error("opencode was asked no read-only question");
   assert.deepEqual(drawnReadOnlyAnswer(this.readOnlyAnswer), [text]);
 });
-
-/**
- * Queue the tool call `action` words as the model's next reply, and `answer`
- * as its reply once the tool has run.
- */
-function queueToolCall(world: RuntimeWorld, action: string, answer: string | null): void {
-  const call = OPENCODE_FILE_TOOLS.flatMap(([words, toCall]) => {
-    const match = words.exec(action);
-    return match ? [toCall(world, ...match.slice(1))] : [];
-  })[0];
-  if (!call) throw new Error(`no opencode tool is mapped for "the model ${action}"`);
-  world.toolCallId = world.runtime.provider.callTool(call.name, call.args);
-  if (answer !== null) world.runtime.provider.answer(answer);
-}
 
 /** The latest answer the conversation shows. */
 function lastAnswer(conversation: Conversation): AgentChatMessage {
