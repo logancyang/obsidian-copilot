@@ -1,14 +1,17 @@
 # Testing Guide
 
-How to test the Copilot plugin with unit and end-to-end tests. Most changes only
-need unit tests; use end-to-end tests when unit tests can't answer the question.
+How to test the Copilot plugin with unit tests, runtime contracts, and
+end-to-end tests. Most changes only need unit tests; a user-facing change to
+Agent Mode on the opencode backend also needs a runtime contract; use end-to-end
+tests when neither can answer the question.
 
 ## Test pyramid
 
-| Layer | Command                             | When to use                                                                                                                                                           |
-| ----- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit  | `npm run test`                      | Pure logic. Fast. Mocks the Obsidian API. Default for any code change that doesn't touch Obsidian itself.                                                             |
-| E2E   | `obsidian` CLI against a real vault | Anything that needs the live React tree, the real Obsidian DOM, or actual settings persistence — UI regressions, settings round-trips, plugin lifecycle, perf checks. |
+| Layer            | Command                             | When to use                                                                                                                                                                     |
+| ---------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit             | `npm run test`                      | Pure logic. Fast. Mocks the Obsidian API. Default for any code change that doesn't touch Obsidian itself.                                                                       |
+| Runtime contract | `npm run test:runtime`              | User-facing Agent Mode behavior on the opencode backend, run through Copilot's session layer and the real pinned opencode. See [Runtime contracts](#runtime-contracts-gherkin). |
+| E2E              | `obsidian` CLI against a real vault | Anything that needs the live React tree, the real Obsidian DOM, or actual settings persistence — UI regressions, settings round-trips, plugin lifecycle, perf checks.           |
 
 ## Unit tests
 
@@ -67,6 +70,173 @@ For example, a `select()` suite should explain selection before deduplication:
 This workflow applies Uncle Bob's guidance that tests should read as specifications
 and express intent clearly before making them pass. See
 [Robert C. Martin, "Test First"](https://blog.cleancoder.com/uncle-bob/2013/09/23/Test-first.html).
+
+## Runtime contracts (Gherkin)
+
+`runtime-tests/` holds executable Gherkin scenarios that run Copilot's Agent
+Mode session layer against the real pinned `opencode` binary. Only remote
+inference is replaced, by a scripted provider on localhost.
+[`runtime-tests/README.md`](../../runtime-tests/README.md) lists what is real,
+what stands in for Obsidian, and the behavior each scenario protects.
+
+```bash
+npm run test:runtime        # check the step vocabulary, install the pinned opencode, run every scenario
+npm run test:runtime:steps  # print every step by role, with its uses and an example
+```
+
+Both run on macOS and Linux, need no credentials, and make no inference
+requests. The full run takes about 85 s on an Apple M-series Mac.
+
+### When a scenario is required
+
+The suite reaches Agent Mode chats on the opencode backend: sending and
+streaming, model, effort, and mode selection, stopping and switching chats,
+provider errors, file edits and permission cards, and read-only answers. On that
+surface:
+
+- A pull request that adds or changes user-facing behavior adds or updates a
+  scenario for it.
+- A fix for a meaningful behavioral regression adds the scenario that would have
+  caught it, and shows it failing before the fix.
+- An internal refactor adds no scenario and keeps every scenario passing without
+  editing it. A refactor that has to change a scenario's steps or tables changes
+  behavior, and its PR says which.
+
+Put the originating issue's URL in a comment above the scenario, as the existing
+features do.
+
+### Choosing the layer
+
+| Layer                                                            | Replaces                                                                        | Shows                                                                                   |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Unit (`npm run test`)                                            | Everything outside the module, including the ACP SDK and the agent process      | One module's contract: its logic, branches, and edge cases                              |
+| Runtime contract (`npm run test:runtime`)                        | The remote model provider, and Obsidian's host APIs (see the README's boundary) | That Copilot's session layer, its ACP client, and the real opencode produce the outcome |
+| Hosted model (planned in Brevilabs/obsidian-copilot-private#547) | Nothing on the model path                                                       | That a real model drives the same path; not available yet                               |
+| Real Obsidian (the CLI below)                                    | Nothing                                                                         | Rendering, DOM interaction, settings persistence, and plugin lifecycle                  |
+
+For example, "Reject leaves the note unchanged" is covered at three layers:
+
+- **Unit:** `AgentSession.resolveToolPermission` resolves the pending request
+  with the option the user chose, with the backend mocked.
+- **Runtime contract:** `file-edits.feature`, "An edit the user rejects leaves
+  every file unchanged, and the chat carries on". The scripted model asks
+  opencode's real `edit` tool to change `note.md`, opencode asks Copilot, the
+  scenario presses Reject through the card's own call, and every file under the
+  scenario's temp directory is compared byte for byte. An opencode release that
+  writes before it asks passes the unit test and fails this scenario.
+- **Real Obsidian:** the card appears in the chat view and its buttons respond
+  to a click. The runtime suite renders the card to static markup and never
+  clicks it.
+
+The mock boundary is fixed. A scenario may replace the remote provider and
+Obsidian's host APIs, and nothing between them: if a behavior can only be
+reached by replacing Copilot code or opencode, it belongs in a unit test. A
+scripted reply shows how Copilot and opencode handle that reply, not that a
+real model would send it; the CI summary says so under every run.
+
+### Changes the suite cannot reach
+
+The suite does not reach the Claude Code or Codex backends, chat modes other
+than Agent Mode, settings screens, or what the chat view draws in the DOM. A
+user-facing change there needs no scenario. Its PR instead:
+
+- covers the behavior with unit tests, and with stories for visual states;
+- verifies it in real Obsidian and records the evidence;
+- names the changed behavior the runtime suite does not reach.
+
+Code that opencode's path runs, such as `AgentSession`, is on the surface even
+when the change targets another backend. Widening the suite to a new surface is
+its own issue.
+
+### Known gaps
+
+There is no skip tag, and a skipped, pending, or undefined step fails the run.
+Behavior Copilot does not have yet is recorded one of two ways, each with a
+linked issue, an unverified status, and its release consequence: what users get
+if a release ships with the gap.
+
+- **As a `@known-gap` scenario,** when the gap shows every run. The scenario
+  asserts the intended behavior and states three lines under its title:
+
+  ```gherkin
+  @known-gap
+  Scenario: An agent answering a read-only question cannot change a note through the shell
+    Unverified: https://github.com/Brevilabs/obsidian-copilot-private/issues/573
+    Release consequence: a read-only question can overwrite or delete a note, or a file
+    outside the vault, without asking the user.
+    Fails today with: 'vault/note.md'
+  ```
+
+  It counts as a known gap only when every other step passes, the run is
+  otherwise clean, and its last step fails an assertion whose message contains
+  the `Fails today with:` text. Choose text that names the wrong value, so a
+  broken setup does not match it. Failing anywhere else, or with another
+  message, fails the run. Once the gap is fixed the scenario passes, and the run
+  fails with an instruction to promote it: remove the tag and the three lines,
+  and move it into the README's scenario table.
+
+- **As an entry in the README's Known gaps,** when no scenario can show it: the
+  gap depends on timing, the intended behavior is not decided, or the harness
+  cannot script it. The entry says what the user sees and why it cannot run.
+
+### Writing steps
+
+Scenarios share one vocabulary. Before writing a step, run
+`npm run test:runtime:steps` and reuse a sentence that fits. The grammar:
+
+- **Given** arranges the world: Copilot's settings, the vault, and what the
+  model will do. The model's replies are scripted up front, one step per reply,
+  and answer opencode's requests in order; a refusal also answers every retry
+  of the question it refused. The same script then works with every entry
+  point: a chat message, a read-only question, Stop, or a permission choice.
+- **When** is one user action, through the call the chat view makes for it.
+  The one exception is the rest of a held answer, the only event a scenario
+  times itself.
+- **Then** is one outcome the user can see, or one contract Copilot keeps with
+  opencode, the provider, or the vault.
+
+```gherkin
+Given the model will edit "note.md", replacing "Original" with "Edited"
+And the model will answer "Done"
+When I send "Fix the note"
+And I choose "Allow once" on the permission card
+Then "note.md" reads "Edited line", and no other file changed
+```
+
+A value that varies is a parameter, not a new sentence: add a
+`defineParameterType` in `runtime-tests/steps/index.ts`, as `{effort}` and
+`{fileOperation}` do. A PR that adds a step definition says why no existing one
+fits. `test:runtime` fails on a definition no scenario uses, and CI lists every
+single-use definition in the job summary for review.
+
+### CI
+
+The `OpenCode runtime contracts (22.x)` job runs `npm run test:runtime` on every
+pull request, and the required `build (22.x)` check fails when it does. The job
+fails on:
+
+- an undefined, ambiguous, or unused step, or no scenario found, from a dry run
+  before opencode is installed;
+- a failed, skipped, or pending scenario, or a run in which no scenario ran;
+- a known gap that fails differently, or passes;
+- the rest of the README's runner guarantees, such as a `WARN` or `ERROR` in
+  Copilot's log or a network request the suite does not expect.
+
+Its job summary lists every scenario by feature, name, and result, with known
+gaps marked unverified and their issues, followed by the single-use steps. A
+failed run uploads the `runtime-report` artifact with each failed scenario's
+logs.
+
+### Reviewing a scenario
+
+- Read each changed scenario against the step definitions it runs. Every
+  **Then** must assert what its sentence says; a sentence that promises more
+  than its body checks is a coverage gap, whatever CI says.
+- Name every boundary the change leaves unverified: a surface the suite does
+  not reach, a known gap, or behavior only a real model or real Obsidian shows.
+  The PR description states it.
+- Review is the check that a change's behavior is covered. No path filter or
+  changed-file count can show that, and CI does not try.
 
 ## End-to-end testing (Obsidian CLI)
 
