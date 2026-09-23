@@ -355,6 +355,12 @@ export interface BackendDescriptor {
     configOptions: BackendConfigOption[] | null
   ): ModeMapping | null;
 
+  /** Resolve a picker whose choices span more than one backend setting. */
+  getModeState?(
+    modeState: RawModeState | null,
+    configOptions: BackendConfigOption[] | null
+  ): BackendState["mode"];
+
   /**
    * Optional: replay persisted state before a newly created or resumed session
    * becomes ready for user input. `seededSelection` is the exact (model, effort)

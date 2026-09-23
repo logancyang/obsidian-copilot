@@ -1,4 +1,12 @@
-import type { ModeMapping, RawModeState } from "@/agentMode/session/types";
+import type {
+  BackendConfigOption,
+  BackendState,
+  CopilotMode,
+  ModeApplySpec,
+  ModeMapping,
+  ModeOption,
+  RawModeState,
+} from "@/agentMode/session/types";
 
 /**
  * Resolve the supported Codex adapter's modes against its live inventory so a
@@ -21,9 +29,86 @@ export function buildCodexModeMapping(modeState: RawModeState | null): ModeMappi
     kind: "setMode",
     canonical: {
       default: advertised.has("agent") ? "agent" : undefined,
-      plan: advertised.has("read-only") ? "read-only" : undefined,
       auto: advertised.has("agent-full-access") ? "agent-full-access" : undefined,
     },
     readOnlyModeId: advertised.has("read-only") ? "read-only" : null,
   };
+}
+
+/** Present Codex's collaboration workflow and approval presets as one picker. */
+export function buildCodexModeState(
+  modeState: RawModeState | null,
+  configOptions: BackendConfigOption[] | null
+): BackendState["mode"] {
+  if (!modeState) return null;
+  const advertised = new Set(modeState.availableModes.map((mode) => mode.id));
+  const collaboration = configOptions?.find(
+    (option) => option.id === "collaboration_mode" && option.type === "select"
+  );
+  const collaborationValues = new Set(
+    collaboration?.type === "select"
+      ? collaboration.options.flatMap((option) =>
+          "options" in option ? option.options.map((inner) => inner.value) : [option.value]
+        )
+      : []
+  );
+  const canResetCollaboration =
+    collaboration?.type === "select" && collaborationValues.has("default");
+  const options: ModeOption[] = [];
+  const apply: Partial<Record<CopilotMode, ModeApplySpec>> = {};
+
+  if (advertised.has("agent")) {
+    options.push({ value: "default", label: "Default" });
+    apply.default = canResetCollaboration
+      ? {
+          kind: "sequence",
+          steps: [
+            { kind: "setMode", nativeId: "agent" },
+            { kind: "setConfigOption", configId: collaboration.id, value: "default" },
+          ],
+        }
+      : { kind: "setMode", nativeId: "agent" };
+  }
+
+  // ACP's "read-only" mode changes approval policy; planning is a separate Codex workflow.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+  if (
+    advertised.has("agent") &&
+    collaboration?.type === "select" &&
+    collaborationValues.has("plan")
+  ) {
+    options.push({ value: "plan", label: "Plan" });
+    apply.plan = {
+      kind: "sequence",
+      steps: [
+        { kind: "setMode", nativeId: "agent" },
+        { kind: "setConfigOption", configId: collaboration.id, value: "plan" },
+      ],
+    };
+  }
+
+  if (advertised.has("agent-full-access")) {
+    options.push({ value: "auto", label: "Auto" });
+    apply.auto = canResetCollaboration
+      ? {
+          kind: "sequence",
+          steps: [
+            { kind: "setConfigOption", configId: collaboration.id, value: "default" },
+            { kind: "setMode", nativeId: "agent-full-access" },
+          ],
+        }
+      : { kind: "setMode", nativeId: "agent-full-access" };
+  }
+
+  if (options.length === 0) return null;
+  const current: CopilotMode | null =
+    collaboration?.type === "select" && collaboration.currentValue === "plan" && apply.plan
+      ? "plan"
+      : modeState.currentModeId === "agent-full-access" && apply.auto
+        ? "auto"
+        : (modeState.currentModeId === "agent" || modeState.currentModeId === "read-only") &&
+            apply.default
+          ? "default"
+          : null;
+  return { current, options, apply };
 }

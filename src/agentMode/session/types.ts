@@ -78,8 +78,9 @@ export interface ModeMapping {
   configId?: string;
   canonical: Partial<Record<CopilotMode, string>>;
   /**
-   * Native mode id of the backend's genuine READ-ONLY sandbox (Codex
-   * `"read-only"`); unset when none exists. Distinct from `canonical.plan`, which
+   * Native mode id used for fan-out QA turns (Codex `"read-only"`); Copilot
+   * separately denies write tools because this mode is not a sandbox. Unset
+   * when none exists. Distinct from `canonical.plan`, which
    * may write plan artifacts (Claude). The fan-out orchestrator applies this.
    */
   readOnlyModeId?: string | null;
@@ -261,9 +262,13 @@ export interface ModelWireCodec {
  * should issue. `value` is what the spec carries to the backend; the
  * canonical `CopilotMode` is passed alongside for persistence.
  */
-export type ModeApplySpec =
+type ModeApplyStep =
   | { kind: "setMode"; nativeId: string }
   | { kind: "setConfigOption"; configId: string; value: string };
+
+export type ModeApplySpec =
+  | ModeApplyStep
+  | { kind: "sequence"; steps: [ModeApplyStep, ...ModeApplyStep[]] };
 
 /**
  * Apply spec for a model change — the dispatch channel for `ModelState`.

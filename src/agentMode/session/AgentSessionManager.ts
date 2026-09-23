@@ -49,6 +49,7 @@ import {
 } from "./chatHistoryMerge";
 import { MethodUnsupportedError } from "./errors";
 import { replayPersistedMode } from "./replayPersistedMode";
+import { applyModeSpec } from "./modeApply";
 import {
   FanoutOrchestrator,
   type FanoutHost,
@@ -2353,17 +2354,14 @@ export class AgentSessionManager {
   async applyMode(backendId: BackendId, mode: CopilotMode, spec: ModeApplySpec): Promise<void> {
     const session = this.getActiveSession();
     if (!session || session.backendId !== backendId) return;
-    const latestMapping = this.resolveDescriptor(backendId).getModeMapping?.(null, null);
+    const descriptor = this.resolveDescriptor(backendId);
+    const latestMapping = descriptor.getModeState ? null : descriptor.getModeMapping?.(null, null);
     const latestNativeId =
       latestMapping?.kind === "setMode" ? latestMapping.canonical[mode] : undefined;
     const resolvedSpec: ModeApplySpec = latestNativeId
       ? { kind: "setMode", nativeId: latestNativeId }
       : spec;
-    if (resolvedSpec.kind === "setMode") {
-      await session.setMode(resolvedSpec.nativeId);
-    } else {
-      await session.setConfigOption(resolvedSpec.configId, resolvedSpec.value);
-    }
+    await applyModeSpec(session, resolvedSpec);
     await this.persistDefaultMode(backendId, mode);
   }
 

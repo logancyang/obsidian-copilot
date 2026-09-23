@@ -1,6 +1,7 @@
 import { logWarn } from "@/logger";
 import type { AgentSession } from "./AgentSession";
 import { MethodUnsupportedError } from "./errors";
+import { applyModeSpec } from "./modeApply";
 import type { CopilotMode } from "./types";
 
 /**
@@ -29,11 +30,7 @@ export async function replayPersistedMode(
   const spec = modeState.apply[mode];
   if (!spec) return; // this backend doesn't offer the persisted mode
   try {
-    if (spec.kind === "setMode") {
-      await session.setMode(spec.nativeId);
-    } else {
-      await session.setConfigOption(spec.configId, spec.value);
-    }
+    await applyModeSpec(session, spec);
   } catch (e) {
     if (e instanceof MethodUnsupportedError) return;
     logWarn(`[AgentMode] could not replay persisted mode "${mode}"`, e);

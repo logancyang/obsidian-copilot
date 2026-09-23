@@ -34,7 +34,7 @@ import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver
 import { CodexBinaryManager } from "./CodexBinaryManager";
 import { CODEX_PINNED_VERSION } from "./codexArchive";
 import { CODEX_BINARY_NAME } from "./cliSetup";
-import { buildCodexModeMapping } from "./codexModeMapping";
+import { buildCodexModeMapping, buildCodexModeState } from "./codexModeMapping";
 import { isSupportedCodexAcpPath, inspectCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
 import { classifyBinaryInstall } from "@/agentMode/backends/shared/binaryCompatibility";
 
@@ -258,6 +258,10 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 
   getModeMapping(modeState) {
     return buildCodexModeMapping(modeState);
+  },
+
+  getModeState(modeState, configOptions) {
+    return buildCodexModeState(modeState, configOptions);
   },
 };
 

@@ -3268,6 +3268,42 @@ describe("AgentSession intent capabilities", () => {
     ).toBe(true);
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 requires both mode and config switching for Codex's combined picker", () => {
+    const state: BackendState = {
+      model: null,
+      mode: {
+        current: "default",
+        options: [{ value: "default", label: "Default" }],
+        apply: {
+          default: {
+            kind: "sequence",
+            steps: [
+              { kind: "setMode", nativeId: "agent" },
+              { kind: "setConfigOption", configId: "collaboration_mode", value: "default" },
+            ],
+          },
+        },
+      },
+    };
+
+    expect(
+      sessionWith({
+        isModelSwitchSupported: false,
+        isSetSessionConfigOptionSupported: true,
+        isSetModeSupported: false,
+        initialState: state,
+      }).canSwitchMode()
+    ).toBe(false);
+    expect(
+      sessionWith({
+        isModelSwitchSupported: false,
+        isSetSessionConfigOptionSupported: true,
+        isSetModeSupported: true,
+        initialState: state,
+      }).canSwitchMode()
+    ).toBe(true);
+  });
+
   it("canSwitch* return false while the session status is starting", async () => {
     const mock = makeMockBackend();
     // Keep newSession pending so status stays "starting".

@@ -772,9 +772,17 @@ export class AgentSession {
     if (!sample) return null;
     const spec = mode.apply[sample.value];
     if (!spec) return null;
-    return spec.kind === "setConfigOption"
-      ? this.backend.isSetSessionConfigOptionSupported()
-      : this.backend.isSetSessionModeSupported();
+    // One picker choice may need both Codex collaboration and approval settings.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+    const steps = spec.kind === "sequence" ? spec.steps : [spec];
+    const capabilities = steps.map((step) =>
+      step.kind === "setConfigOption"
+        ? this.backend.isSetSessionConfigOptionSupported()
+        : this.backend.isSetSessionModeSupported()
+    );
+    if (capabilities.includes(false)) return false;
+    if (capabilities.includes(null)) return null;
+    return true;
   }
 
   /**

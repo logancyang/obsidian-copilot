@@ -56,4 +56,23 @@ describe("createDefaultPermissionPrompter — read-only fan-out policy", () => {
     await prompter(promptFor("normal", "edit"));
     expect(handleToolPermission).toHaveBeenCalledTimes(1);
   });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 routes a Codex collaboration plan review to the plan card", async () => {
+    const handlePlanProposalPermission = jest
+      .fn()
+      .mockResolvedValue({ outcome: { outcome: "cancelled" } });
+    const handleToolPermission = jest.fn();
+    const session = {
+      handlePlanProposalPermission,
+      handleToolPermission,
+    } as unknown as AgentSession;
+    const prompter = createDefaultPermissionPrompter(() => session);
+    const request = promptFor("codex", "switch_mode");
+    request.toolCall.rawInput = { plan: "# Build the note" };
+
+    await prompter(request);
+
+    expect(handlePlanProposalPermission).toHaveBeenCalledWith(request);
+    expect(handleToolPermission).not.toHaveBeenCalled();
+  });
 });
