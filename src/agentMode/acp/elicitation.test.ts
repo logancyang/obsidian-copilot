@@ -5,29 +5,29 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/551"
 
 describe("elicitation", () => {
   describe("formToQuestionPrompt()", () => {
-    it(`maps a Codex option and companion note into one question that answers both fields (${issue})`, () => {
+    it(`maps a Codex choice and its note field into one question that answers both fields (${issue})`, () => {
       const request = {
         mode: "form",
         sessionId: "session-1",
-        message: "Choose an approach",
+        message: "Codex needs your input to continue.",
         requestedSchema: {
           type: "object",
           required: ["approach"],
           properties: {
             approach: {
               type: "string",
-              title: "Approach",
-              description: "Pick one",
-              _meta: { codex: { isOther: true } },
+              title: "Which approach?",
+              description: "Approach",
+              _meta: { codex: { isOther: true, isSecret: false } },
               oneOf: [
-                { const: "simple", title: "Simple" },
+                { const: "Simple", title: "Simple", description: "Smallest change" },
                 { const: "None of the above", title: "None of the above" },
               ],
             },
-            approach_note1: {
+            approach_note: {
               type: "string",
-              title: "Details",
-              _meta: { codex: { questionId: "approach", role: "user_note", isSecret: true } },
+              title: "Additional answer or note",
+              _meta: { codex: { questionId: "approach", role: "user_note", isSecret: false } },
             },
           },
         },
@@ -39,96 +39,68 @@ describe("elicitation", () => {
         requestId: "rpc-1",
         questions: [
           {
-            question: "Approach",
-            header: "Pick one",
+            question: "Which approach?",
+            header: "Approach",
             answerKey: "approach",
-            options: [{ label: "Simple" }],
+            options: [{ label: "Simple", description: "Smallest change" }],
             allowOther: true,
-            otherInput: "secret",
           },
         ],
       });
-      expect(form?.toContent({ approach: { selected: ["Simple"] } })).toEqual({
-        approach: "simple",
-      });
-      expect(form?.toContent({ approach: { selected: [], text: " Use a script " } })).toEqual({
+      expect(form?.toContent({ approach: "Simple" })).toEqual({ approach: "Simple" });
+      expect(form?.toContent({ approach: "Use a script" })).toEqual({
         approach: "None of the above",
-        approach_note1: " Use a script ",
+        approach_note: "Use a script",
       });
     });
 
-    it(`maps a string array to a multi-select answered with an array of option values (${issue})`, () => {
+    it(`maps a Codex question without a note field to one that hides Other (${issue})`, () => {
       const request = {
         mode: "form",
         sessionId: "s",
-        message: "Choose checks",
+        message: "Codex needs your input to continue.",
         requestedSchema: {
           type: "object",
-          required: ["checks"],
+          required: ["mcp_install"],
           properties: {
-            checks: {
-              type: "array",
-              title: "Checks",
-              items: {
-                anyOf: [
-                  { const: "build", title: "Build" },
-                  { const: "review", title: "Review" },
-                ],
-              },
+            mcp_install: {
+              type: "string",
+              title: "Install MCP servers?",
+              _meta: { codex: { isOther: false, isSecret: false } },
+              oneOf: [
+                { const: "Install", title: "Install" },
+                { const: "Skip", title: "Skip" },
+              ],
             },
           },
         },
       } as const satisfies CreateElicitationRequest;
+
       const form = formToQuestionPrompt(request, "rpc-2");
       expect(form?.prompt.questions).toEqual([
         {
-          question: "Checks",
-          answerKey: "checks",
-          options: [{ label: "Build" }, { label: "Review" }],
-          multiSelect: true,
+          question: "Install MCP servers?",
+          answerKey: "mcp_install",
+          options: [{ label: "Install" }, { label: "Skip" }],
           allowOther: false,
         },
       ]);
-      expect(form?.toContent({ checks: { selected: ["Build", "Review"] } })).toEqual({
-        checks: ["build", "review"],
-      });
+      expect(form?.toContent({ mcp_install: "Skip" })).toEqual({ mcp_install: "Skip" });
     });
 
-    it(`maps free text and secret metadata to distinct inputs answered with their text (${issue})`, () => {
-      const request = {
+    it(`declines forms that are not Codex questions (${issue})`, () => {
+      const thirdParty = {
         mode: "form",
         sessionId: "s",
-        message: "Credentials",
+        message: "Pick a region",
         requestedSchema: {
           type: "object",
-          required: ["reason", "token"],
           properties: {
-            reason: { type: "string", title: "Reason" },
-            token: { type: "string", title: "Token", _meta: { codex: { isSecret: true } } },
+            region: { type: "string", oneOf: [{ const: "us", title: "US" }] },
           },
         },
       } as const satisfies CreateElicitationRequest;
-      const form = formToQuestionPrompt(request, "rpc-3");
-      expect(form?.prompt.questions).toEqual([
-        { question: "Reason", answerKey: "reason", input: "text", options: [] },
-        { question: "Token", answerKey: "token", input: "secret", options: [] },
-      ]);
-      expect(
-        form?.toContent({
-          reason: { selected: [], text: "Tests" },
-          token: { selected: [], text: " t0k " },
-        })
-      ).toEqual({ reason: "Tests", token: " t0k " });
-    });
-
-    it(`declines unsupported field shapes and request scopes (${issue})`, () => {
-      const unsupported = {
-        mode: "form",
-        sessionId: "s",
-        message: "Age",
-        requestedSchema: { type: "object", properties: { age: { type: "number" } } },
-      } as const satisfies CreateElicitationRequest;
-      expect(formToQuestionPrompt(unsupported, "rpc-4")).toBeNull();
+      expect(formToQuestionPrompt(thirdParty, "rpc-3")).toBeNull();
       expect(
         formToQuestionPrompt(
           {
@@ -138,54 +110,7 @@ describe("elicitation", () => {
             elicitationId: "id",
             url: "https://example.com",
           },
-          "rpc-5"
-        )
-      ).toBeNull();
-      expect(
-        formToQuestionPrompt(
-          {
-            ...unsupported,
-            sessionId: undefined,
-            requestId: "init",
-          },
-          "rpc-6"
-        )
-      ).toBeNull();
-    });
-
-    it(`declines optional and ambiguous option fields instead of showing an unsatisfiable card (${issue})`, () => {
-      expect(
-        formToQuestionPrompt(
-          {
-            mode: "form",
-            sessionId: "s",
-            message: "Optional",
-            requestedSchema: { type: "object", properties: { note: { type: "string" } } },
-          },
-          "rpc-7"
-        )
-      ).toBeNull();
-      expect(
-        formToQuestionPrompt(
-          {
-            mode: "form",
-            sessionId: "s",
-            message: "Duplicate",
-            requestedSchema: {
-              type: "object",
-              required: ["choice"],
-              properties: {
-                choice: {
-                  type: "string",
-                  oneOf: [
-                    { const: "a", title: "Same" },
-                    { const: "b", title: "Same" },
-                  ],
-                },
-              },
-            },
-          },
-          "rpc-8"
+          "rpc-4"
         )
       ).toBeNull();
     });

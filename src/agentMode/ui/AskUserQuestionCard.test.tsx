@@ -50,7 +50,7 @@ describe("AskUserQuestionCard", () => {
       expect(container.firstElementChild?.classList.contains("tw-w-full")).toBe(true);
     });
 
-    it("single-select 'Other' → the trimmed typed text is the answer's text", () => {
+    it("single-select 'Other' → the trimmed typed text is the answer", () => {
       const onResolve = jest.fn();
       const request = makeRequest([
         {
@@ -67,11 +67,11 @@ describe("AskUserQuestionCard", () => {
 
       expect(onResolve).toHaveBeenCalledTimes(1);
       expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
-        "When do we ship?": { selected: [], text: "ship it Friday" },
+        "When do we ship?": "ship it Friday",
       });
     });
 
-    it("multi-select presets + 'Other' → checked labels plus the trimmed text", () => {
+    it("multi-select presets + 'Other' → checked labels and trimmed text joined with ', '", () => {
       const onResolve = jest.fn();
       const request = makeRequest([
         {
@@ -90,7 +90,7 @@ describe("AskUserQuestionCard", () => {
 
       expect(onResolve).toHaveBeenCalledTimes(1);
       expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
-        "Pick tasks": { selected: ["A", "C"], text: "rollback plan" },
+        "Pick tasks": "A, C, rollback plan",
       });
     });
 
@@ -139,9 +139,9 @@ describe("AskUserQuestionCard", () => {
       fireEvent.click(submitButton());
       expect(onResolve).toHaveBeenCalledTimes(1);
       expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
-        "Choose deployment": { selected: ["Production"] },
-        "When should we ship?": { selected: [], text: "Friday after QA" },
-        "Which checks are required?": { selected: ["End-to-end test"] },
+        "Choose deployment": "Production",
+        "When should we ship?": "Friday after QA",
+        "Which checks are required?": "End-to-end test",
       });
     });
 
@@ -168,8 +168,8 @@ describe("AskUserQuestionCard", () => {
       fireEvent.click(submitButton());
 
       expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
-        "Which scope?": { selected: ["Current note"] },
-        "Which format?": { selected: ["Summary"] },
+        "Which scope?": "Current note",
+        "Which format?": "Summary",
       });
     });
 
@@ -254,67 +254,28 @@ describe("AskUserQuestionCard", () => {
       fireEvent.click(submitButton());
 
       expect(onResolve).toHaveBeenCalledTimes(1);
-      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
-        "When do we ship?": { selected: ["A"] },
-      });
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, { "When do we ship?": "A" });
     });
 
-    it("submits a free-text input under its answer key (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", () => {
-      const onResolve = jest.fn();
-      renderCard(
-        makeRequest([
-          { question: "Explain the change", answerKey: "reason", input: "text", options: [] },
-        ]),
-        onResolve
-      );
-      expect((submitButton() as HTMLButtonElement).disabled).toBe(true);
-      fireEvent.change(screen.getByRole("textbox", { name: "Explain the change" }), {
-        target: { value: "  Use the smaller API  " },
-      });
-      fireEvent.click(submitButton());
-      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
-        reason: { selected: [], text: "Use the smaller API" },
-      });
-    });
-
-    it("masks a secret input and submits its exact value (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", () => {
-      const onResolve = jest.fn();
-      renderCard(
-        makeRequest([{ question: "Token", answerKey: "token", input: "secret", options: [] }]),
-        onResolve
-      );
-      const input = screen.getByLabelText("Token");
-      expect(input.getAttribute("type")).toBe("password");
-      fireEvent.change(input, { target: { value: " private-value " } });
-      fireEvent.click(submitButton());
-      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
-        token: { selected: [], text: " private-value " },
-      });
-      expect(screen.queryByText(" private-value ")).toBeNull();
-    });
-
-    it("masks a secret Other response and submits it with surrounding whitespace intact (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", () => {
+    it("hides Other and submits under the answer key when the backend cannot accept typed answers (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", () => {
       const onResolve = jest.fn();
       renderCard(
         makeRequest([
           {
-            question: "Credential",
-            answerKey: "credential",
-            options: [{ label: "Stored" }],
-            allowOther: true,
-            otherInput: "secret",
+            question: "Install MCP servers?",
+            answerKey: "mcp_install",
+            options: [{ label: "Install" }, { label: "Skip" }],
+            allowOther: false,
           },
         ]),
         onResolve
       );
-      fireEvent.click(getOtherControl("radio"));
-      const input = screen.getByLabelText("Other response");
-      expect(input.getAttribute("type")).toBe("password");
-      fireEvent.change(input, { target: { value: " secret-answer " } });
+
+      expect(screen.queryByRole("radio", { name: /^other/i })).toBeNull();
+      fireEvent.click(screen.getByRole("radio", { name: /^Skip$/ }));
       fireEvent.click(submitButton());
-      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
-        credential: { selected: [], text: " secret-answer " },
-      });
+
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, { mcp_install: "Skip" });
     });
   });
 });

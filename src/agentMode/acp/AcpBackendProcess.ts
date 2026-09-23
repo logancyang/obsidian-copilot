@@ -996,9 +996,9 @@ export class AcpBackendProcess implements BackendProcess {
   ): Promise<CreateElicitationResponse> {
     const form = formToQuestionPrompt(request, requestId);
     if (!form) return { action: "decline" };
-    if (!this.askUserQuestionPrompter || signal.aborted) return { action: "cancel" };
+    if (!this.askUserQuestionPrompter) return { action: "cancel" };
     const answers = await this.askUserQuestionPrompter({ ...form.prompt, signal });
-    if (signal.aborted || Object.keys(answers).length === 0) return { action: "cancel" };
+    if (Object.keys(answers).length === 0) return { action: "cancel" };
     return { action: "accept", content: form.toContent(answers) };
   }
 }

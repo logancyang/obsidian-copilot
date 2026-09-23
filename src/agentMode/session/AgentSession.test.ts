@@ -3995,8 +3995,8 @@ describe("AgentSession plan proposal lifecycle", () => {
     expect(session.getPendingAskUserQuestions()).toHaveLength(1);
     expect(statusChanges).toContain("awaiting_permission");
 
-    session.resolveAskUserQuestion("tc-ask", { "Pick a fruit": { selected: ["Pear"] } });
-    await expect(answersPromise).resolves.toEqual({ "Pick a fruit": { selected: ["Pear"] } });
+    session.resolveAskUserQuestion("tc-ask", { "Pick a fruit": "Pear" });
+    await expect(answersPromise).resolves.toEqual({ "Pick a fruit": "Pear" });
     expect(session.getPendingAskUserQuestions()).toHaveLength(0);
     expect(session.getStatus()).toBe("running");
 
@@ -4036,7 +4036,7 @@ describe("AgentSession plan proposal lifecycle", () => {
     controller.abort();
     await expect(answers).resolves.toEqual({});
     expect(session.getPendingAskUserQuestions()).toHaveLength(0);
-    session.resolveAskUserQuestion("rpc-1", { approach: { selected: ["Simple"] } });
+    session.resolveAskUserQuestion("rpc-1", { approach: "Simple" });
     expect(session.getPendingAskUserQuestions()).toHaveLength(0);
   });
 

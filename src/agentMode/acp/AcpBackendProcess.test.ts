@@ -1,9 +1,5 @@
 import { FileSystemAdapter, App } from "obsidian";
-import type {
-  AgentQuestionAnswers,
-  BackendDescriptor,
-  PermissionOption,
-} from "@/agentMode/session/types";
+import type { BackendDescriptor, PermissionOption } from "@/agentMode/session/types";
 import { AcpBackendProcess } from "./AcpBackendProcess";
 import { AcpProcessManager } from "./AcpProcessManager";
 import type { AcpBackend } from "./types";
@@ -525,7 +521,15 @@ describe("AcpBackendProcess", () => {
         type: "object",
         required: ["approach"],
         properties: {
-          approach: { type: "string", title: "Approach", enum: ["simple", "complex"] },
+          approach: {
+            type: "string",
+            title: "Approach",
+            _meta: { codex: { isOther: false } },
+            oneOf: [
+              { const: "simple", title: "Simple" },
+              { const: "complex", title: "Complex" },
+            ],
+          },
         },
       },
     };
@@ -555,33 +559,27 @@ describe("AcpBackendProcess", () => {
           clientCapabilities: expect.objectContaining({ elicitation: { form: {} } }),
         })
       );
-      const prompter = jest.fn().mockResolvedValue({ approach: { selected: ["simple"] } });
+      const prompter = jest.fn().mockResolvedValue({ approach: "Simple" });
       backend.setAskUserQuestionPrompter(prompter);
-      const result = await client.createElicitation(form, "rpc-1", new AbortController().signal);
+      const signal = new AbortController().signal;
+      const result = await client.createElicitation(form, "rpc-1", signal);
       expect(prompter).toHaveBeenCalledWith(
         expect.objectContaining({
           sessionId: "s1",
           requestId: "rpc-1",
           questions: [expect.objectContaining({ answerKey: "approach" })],
+          signal,
         })
       );
       expect(result).toEqual({ action: "accept", content: { approach: "simple" } });
     });
 
-    it("returns cancel after the request signal aborts, even if an answer arrives later (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
+    it("returns cancel when the user dismisses the card (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
       const { backend, client } = await openElicitationBackend();
-      let answer!: (answers: AgentQuestionAnswers) => void;
-      backend.setAskUserQuestionPrompter(
-        () =>
-          new Promise((resolve) => {
-            answer = resolve;
-          })
-      );
-      const controller = new AbortController();
-      const result = client.createElicitation(form, "rpc-2", controller.signal);
-      controller.abort();
-      answer({ approach: { selected: ["simple"] } });
-      await expect(result).resolves.toEqual({ action: "cancel" });
+      backend.setAskUserQuestionPrompter(jest.fn().mockResolvedValue({}));
+      await expect(
+        client.createElicitation(form, "rpc-2", new AbortController().signal)
+      ).resolves.toEqual({ action: "cancel" });
     });
 
     it("declines unsupported forms without displaying a card (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {

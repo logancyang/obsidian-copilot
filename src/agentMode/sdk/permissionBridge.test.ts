@@ -155,7 +155,7 @@ describe("PermissionBridge.canUseTool", () => {
 
   it("routes AskUserQuestion to the ask-question prompter with a session-domain request", async () => {
     const handler = jest.fn<Promise<AgentQuestionAnswers>, [AskUserQuestionPrompt]>(async () => ({
-      "What's your favorite color?": { selected: ["Blue"] },
+      "What's your favorite color?": "Blue",
     }));
     const bridge = makeBridge(null, handler);
     const result = await bridge.canUseTool(
@@ -206,37 +206,11 @@ describe("PermissionBridge.canUseTool", () => {
       questions,
     });
 
-    fake.resolve({ "Pick a fruit": { selected: ["Pear"] } });
+    fake.resolve({ "Pick a fruit": "Pear" });
     const result = await resultPromise;
     expect(result).toEqual({
       behavior: "allow",
       updatedInput: { questions, answers: { "Pick a fruit": "Pear" } },
-    });
-  });
-
-  it("flattens selected labels and Other text into the SDK's comma-joined answer strings", async () => {
-    const fake = new FakeQuestionSession();
-    const bridge = makeBridge(null, fake.handle);
-    const questions = [
-      {
-        question: "Pick fruits",
-        multiSelect: true,
-        options: [{ label: "Apple" }, { label: "Pear" }],
-      },
-      { question: "Pick a color", options: [{ label: "Blue" }] },
-    ];
-    const resultPromise = bridge.canUseTool("AskUserQuestion", { questions }, ctx);
-
-    fake.resolve({
-      "Pick fruits": { selected: ["Apple", "Pear"], text: "Fig" },
-      "Pick a color": { selected: [], text: "Teal" },
-    });
-    await expect(resultPromise).resolves.toEqual({
-      behavior: "allow",
-      updatedInput: {
-        questions,
-        answers: { "Pick fruits": "Apple, Pear, Fig", "Pick a color": "Teal" },
-      },
     });
   });
 

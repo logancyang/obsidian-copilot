@@ -624,25 +624,17 @@ export interface AgentQuestion {
   multiSelect?: boolean;
   /** Key of this question's entry in `AgentQuestionAnswers`; defaults to the question text. */
   answerKey?: string;
-  /** Replaces the option list with a single free-text or masked field. */
-  input?: "text" | "secret";
+  /** Set to `false` when the backend cannot accept a typed "Other" answer. */
   allowOther?: boolean;
-  /** Masks the "Other" response field. */
-  otherInput?: "secret";
-}
-
-/** One question's response: the chosen option labels plus any typed text. */
-export interface AgentQuestionAnswer {
-  selected: string[];
-  /** The `input` field's value, or the "Other" response when Other is chosen. */
-  text?: string;
 }
 
 /**
- * Answers keyed by each question's `answerKey ?? question`. Each backend
- * serializes them into its own wire shape. An empty map signals cancellation.
+ * Answer map keyed by each question's `answerKey ?? question`. Single-select
+ * values are the chosen option label or the typed "Other" text; multi-select
+ * values are the chosen labels joined with `, `. An empty map signals
+ * cancellation.
  */
-export type AgentQuestionAnswers = { [answerKey: string]: AgentQuestionAnswer };
+export type AgentQuestionAnswers = { [answerKey: string]: string };
 
 /**
  * A request from the backend asking the user to answer one or more inline

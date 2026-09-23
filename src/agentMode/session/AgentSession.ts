@@ -441,7 +441,6 @@ export class AgentSession {
     {
       request: AskUserQuestionPrompt;
       resolve: (answers: AgentQuestionAnswers) => void;
-      cleanup?: () => void;
     }
   >();
   // Singleton "current plan" for the floating card. At most one per session
@@ -1696,16 +1695,14 @@ export class AgentSession {
     const requestId = request.requestId;
     if (request.signal?.aborted) return Promise.resolve(EMPTY_ANSWERS);
     return new Promise<AgentQuestionAnswers>((resolve) => {
+      this.pendingQuestionResolvers.set(requestId, { request, resolve });
       // ACP timeout and cancellation withdraw the card without an answer.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
-      const onAbort = (): void => this.resolveAskUserQuestion(requestId, EMPTY_ANSWERS);
-      request.signal?.addEventListener("abort", onAbort, { once: true });
-      this.pendingQuestionResolvers.set(requestId, {
-        request,
-        resolve,
-        cleanup: () => request.signal?.removeEventListener("abort", onAbort),
-      });
-      if (request.signal?.aborted) onAbort();
+      request.signal?.addEventListener(
+        "abort",
+        () => this.resolveAskUserQuestion(requestId, EMPTY_ANSWERS),
+        { once: true }
+      );
       this.recomputeStatusIfChanged();
       this.notifyMessages();
     });
@@ -1720,7 +1717,6 @@ export class AgentSession {
     const entry = this.pendingQuestionResolvers.get(requestId);
     if (!entry) return;
     this.pendingQuestionResolvers.delete(requestId);
-    entry.cleanup?.();
     entry.resolve(answers);
     this.recomputeStatusIfChanged();
     this.notifyMessages();
@@ -1758,8 +1754,7 @@ export class AgentSession {
    * reuse `flushResolvers`, which deals in `PermissionDecision`.
    */
   private flushQuestionResolvers(): void {
-    for (const { resolve, cleanup } of this.pendingQuestionResolvers.values()) {
-      cleanup?.();
+    for (const { resolve } of this.pendingQuestionResolvers.values()) {
       resolve(EMPTY_ANSWERS);
     }
     this.pendingQuestionResolvers.clear();

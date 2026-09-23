@@ -166,7 +166,7 @@ export class PermissionBridge {
       }
       const result: PermissionResult = {
         behavior: "allow",
-        updatedInput: { questions: input.questions, answers: toSdkAnswers(answers) },
+        updatedInput: { questions: input.questions, answers },
       };
       logSdkOutbound("askUserQuestion:response", result, sessionId);
       return result;
@@ -184,19 +184,6 @@ export class PermissionBridge {
     logSdkOutbound(method, result, sessionId);
     return result;
   }
-}
-
-/**
- * The SDK expects one string per question: the chosen labels, followed by any
- * "Other" text, joined with `, `.
- */
-function toSdkAnswers(answers: AgentQuestionAnswers): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(answers).map(([question, { selected, text }]) => [
-      question,
-      (text ? [...selected, text] : selected).join(", "),
-    ])
-  );
 }
 
 const STANDARD_OPTION_NAMES: Record<PermissionOptionKind, string> = {
