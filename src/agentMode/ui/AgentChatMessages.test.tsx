@@ -12,6 +12,9 @@ import React from "react";
 
 type AgentChatMessagesProps = React.ComponentProps<typeof AgentChatMessages>;
 
+const mockSingleMessageRender = jest.fn();
+const mockTrailRender = jest.fn();
+
 jest.mock("@/hooks/useChatScrolling", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useChatScrolling: () => ({
@@ -31,18 +34,22 @@ jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
     message: { message: string };
     footerStart?: React.ReactNode;
     sourcePath?: string;
-  }) => (
-    <div data-source-path={sourcePath}>
-      {message.message}
-      <div data-testid="single-message-footer">{footerStart}</div>
-    </div>
-  ),
+  }) => {
+    mockSingleMessageRender(message);
+    return (
+      <div data-source-path={sourcePath}>
+        {message.message}
+        <div data-testid="single-message-footer">{footerStart}</div>
+      </div>
+    );
+  },
 }));
 
 jest.mock("@/agentMode/ui/AgentTrailView", () => ({
-  AgentTrail: ({ timestamp }: { timestamp?: string }) => (
-    <div data-testid="agent-trail-timestamp">{timestamp}</div>
-  ),
+  AgentTrail: ({ timestamp, parts }: { timestamp?: string; parts: unknown[] }) => {
+    mockTrailRender(parts);
+    return <div data-testid="agent-trail-timestamp">{timestamp}</div>;
+  },
 }));
 
 jest.mock("@/agentMode/ui/ToolPermissionCard", () => ({
@@ -131,6 +138,8 @@ describe("AgentChatMessages", () => {
     beforeEach(() => {
       jest.useFakeTimers();
       jest.setSystemTime(200_000);
+      mockSingleMessageRender.mockClear();
+      mockTrailRender.mockClear();
     });
 
     afterEach(() => jest.useRealTimers());
@@ -161,12 +170,16 @@ describe("AgentChatMessages", () => {
     });
 
     it("retires the prior duration when the next turn starts", () => {
-      const { container } = renderMessages(
-        [
-          assistantMessage("answer-1", 1_000, { turnDurationMs: 51_000 }),
-          assistantMessage("answer-2", 198_000, { message: "", parts: [] }),
-        ],
-        true
+      const completed = assistantMessage("answer-1", 1_000, { turnDurationMs: 51_000 });
+      const { container, rerender, props } = renderMessages([completed], false);
+      expect(screen.getByText("51s")).toBeTruthy();
+
+      rerender(
+        <AgentChatMessages
+          {...props}
+          messages={[completed, assistantMessage("answer-2", 198_000, { message: "", parts: [] })]}
+          isLoading
+        />
       );
 
       expect(screen.queryByText("51s")).toBeNull();
@@ -190,6 +203,44 @@ describe("AgentChatMessages", () => {
       );
 
       expect(screen.getByTestId("agent-trail-timestamp").textContent).toBe(timestamp);
+    });
+
+    it("keeps completed plain and structured turns mounted without rendering them again while the live turn streams https://github.com/logancyang/obsidian-copilot/issues/3343", () => {
+      const user = assistantMessage("user-1", 1_000, {
+        sender: "user",
+        message: "Summarize this note",
+      });
+      const completed = assistantMessage("answer-1", 2_000, {
+        parts: [{ kind: "text", text: "The note has three points." }],
+      });
+      const live = assistantMessage("answer-2", 3_000, {
+        message: "First point",
+        parts: [{ kind: "text", text: "First point" }],
+      });
+      const { rerender, props } = renderMessages([user, completed, live], true);
+      const originalUser = mockSingleMessageRender.mock.calls[0][0];
+      const originalCompletedParts = mockTrailRender.mock.calls[0][0];
+
+      rerender(
+        <AgentChatMessages
+          {...props}
+          messages={[
+            user,
+            completed,
+            {
+              ...live,
+              message: "First point and second point",
+              parts: [{ kind: "text", text: "First point and second point" }],
+            },
+          ]}
+        />
+      );
+
+      expect(mockSingleMessageRender).toHaveBeenCalledTimes(1);
+      expect(mockSingleMessageRender.mock.calls[0][0]).toBe(originalUser);
+      expect(mockTrailRender).toHaveBeenCalledTimes(3);
+      expect(mockTrailRender.mock.calls[0][0]).toBe(originalCompletedParts);
+      expect(screen.getAllByTestId("agent-trail-timestamp")).toHaveLength(2);
     });
 
     it("shows questions before permissions and reveals a permission after questions clear for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
