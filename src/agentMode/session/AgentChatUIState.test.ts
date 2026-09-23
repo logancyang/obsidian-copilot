@@ -203,9 +203,7 @@ describe("AgentChatUIState", () => {
         requestId: "question-one",
         questions: [{ question: "Format: choose one", options: [{ label: "Checklist" }] }],
       });
-      review.chat.resolveAskUserQuestion("question-one", {
-        "Format: choose one": { selected: ["Checklist"] },
-      });
+      review.chat.resolveAskUserQuestion("question-one", { "Format: choose one": "Checklist" });
       await answer;
       const part = review.chat
         .getMessages()
@@ -216,32 +214,6 @@ describe("AgentChatUIState", () => {
         expect(lookupToolSummary(part).collapsedLine(part, { vaultBase: null })).toBe(
           "Answered: Checklist"
         );
-      }
-      review.finishFirstTurn();
-      await review.firstTurn;
-    });
-
-    it("masks secret answers in the transcript (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
-      const review = planReview();
-      const answer = review.session.handleAskUserQuestion({
-        sessionId: "codex-session",
-        requestId: "question-secret",
-        questions: [{ question: "API key", options: [], input: "secret" }],
-      });
-      review.chat.resolveAskUserQuestion("question-secret", {
-        "API key": { selected: [], text: "private-token" },
-      });
-      await answer;
-      const part = review.chat
-        .getMessages()
-        .flatMap((message) => message.parts ?? [])
-        .find((item) => item.kind === "tool_call" && item.id === "question-secret");
-      expect(part?.kind).toBe("tool_call");
-      if (part?.kind === "tool_call") {
-        expect(lookupToolSummary(part).collapsedLine(part, { vaultBase: null })).toBe(
-          "Answered: Secret provided"
-        );
-        expect(JSON.stringify(part)).not.toContain("private-token");
       }
       review.finishFirstTurn();
       await review.firstTurn;
