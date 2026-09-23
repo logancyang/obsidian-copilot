@@ -32,6 +32,8 @@ opencode is the most flexible choice because it can use Copilot-hosted, BYOK, an
 
 Managed installs download and verify the tested OpenCode binary directly. You do not need to install npm, Bun, Node, or a separate archive tool.
 
+If OpenCode's internal service stops responding, Copilot refreshes it after repeated failures. The failed turn explains the problem; send the message again when the agent is ready. If OpenCode cannot reopen the conversation, Copilot starts a new chat.
+
 There are three ways to provide model access:
 
 - **Copilot-hosted:** add your license under **Basic → Copilot License**. Models included with your plan appear automatically.

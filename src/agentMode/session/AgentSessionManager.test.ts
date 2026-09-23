@@ -134,11 +134,15 @@ const mockBackendShutdown = jest.fn(async () => undefined);
 const mockBackendStart = jest.fn(async () => undefined);
 const mockBackendExitListeners = new Set<() => void>();
 const mockSetPermissionPrompter = jest.fn();
+let mockUnhealthyHandler: (() => void) | null = null;
 
 function makeMockBackendProcess() {
   return {
     start: mockBackendStart,
     setPermissionPrompter: mockSetPermissionPrompter,
+    setUnhealthyHandler: (handler: () => void) => {
+      mockUnhealthyHandler = handler;
+    },
     onExit: (fn: () => void) => {
       mockBackendExitListeners.add(fn);
       return () => mockBackendExitListeners.delete(fn);
@@ -414,6 +418,7 @@ beforeEach(() => {
   mockBackendStart.mockClear();
   mockBackendShutdown.mockClear();
   mockSetPermissionPrompter.mockClear();
+  mockUnhealthyHandler = null;
   mockBackendExitListeners.clear();
   mockSessionCancel.mockClear();
   mockSessionDispose.mockClear();
@@ -1972,6 +1977,110 @@ describe("AgentSessionManager.restartBackend", () => {
     expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
     expect(mgr.getActiveSession()).not.toBe(first);
     expect(mgr.getActiveSession()?.backendId).toBe("opencode");
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 restarts after the failed turn settles and keeps its user message and clear error", async () => {
+    const mgr = buildManagerWithReplay({
+      loadSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+        sessionId,
+        state: { model: null, mode: null },
+      })),
+    });
+    const first = await mgr.createSession();
+    const firstHandle = getSessionTestHandle(first);
+    firstHandle.setStatus("running");
+
+    mockUnhealthyHandler?.();
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+
+    const failedTurn = [
+      { message: "Summarize this note" },
+      { message: "OpenCode's internal service stopped. Please try again.", isErrorMessage: true },
+    ];
+    firstHandle.setMessages(failedTurn, true);
+    firstHandle.setStatus("error");
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+    expect(mgr.getActiveSession()).not.toBe(first);
+    expect(
+      mgr
+        .getActiveSession()
+        ?.store.getDisplayMessages()
+        .map((m) => m.message)
+    ).toEqual(failedTurn.map((m) => m.message));
+    expect(mgr.getActiveSession()?.store.getDisplayMessages().at(-1)?.isErrorMessage).toBe(true);
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 keeps failed turns from two chats sharing the same OpenCode process", async () => {
+    const mgr = buildManagerWithReplay({
+      loadSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+        sessionId,
+        state: { model: null, mode: null },
+      })),
+    });
+    const first = await mgr.createSession();
+    const second = await mgr.createSession();
+    getSessionTestHandle(first).setStatus("running");
+    getSessionTestHandle(second).setStatus("running");
+
+    mockUnhealthyHandler?.();
+    const firstMessages = [
+      { message: "First question" },
+      { message: "Internal error: Internal service failure", isErrorMessage: true },
+    ];
+    const secondMessages = [
+      { message: "Second question" },
+      { message: "OpenCode's internal service stopped. Please try again.", isErrorMessage: true },
+    ];
+    getSessionTestHandle(first).setMessages(firstMessages);
+    getSessionTestHandle(first).setStatus("error");
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+    getSessionTestHandle(second).setMessages(secondMessages);
+    getSessionTestHandle(second).setStatus("error");
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    const replaced = mgr.getSessions();
+    expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+    expect(
+      replaced
+        .find((s) => s.chatInputId === first.chatInputId)
+        ?.store.getDisplayMessages()
+        .map((m) => m.message)
+    ).toEqual(firstMessages.map((m) => m.message));
+    expect(
+      replaced
+        .find((s) => s.chatInputId === second.chatInputId)
+        ?.store.getDisplayMessages()
+        .map((m) => m.message)
+    ).toEqual(secondMessages.map((m) => m.message));
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 leaves ordinary restarts to replay the backend transcript", async () => {
+    const mgr = buildManager();
+    const first = await mgr.createSession();
+    getSessionTestHandle(first).setMessages([{ message: "Local draft transcript" }]);
+
+    await mgr.restartBackend("opencode", "models changed");
+
+    expect(mgr.getActiveSession()?.store.getDisplayMessages()).toEqual([]);
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 keeps a fresh fallback free of messages the new backend never received", async () => {
+    const mgr = buildManager();
+    const first = await mgr.createSession();
+    const handle = getSessionTestHandle(first);
+    handle.setStatus("running");
+    mockUnhealthyHandler?.();
+    handle.setMessages([
+      { message: "Unsaved prompt" },
+      { message: "OpenCode's internal service stopped. Please try again." },
+    ]);
+    handle.setStatus("error");
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(mgr.getActiveSession()?.getBackendSessionId()).not.toBe(first.getBackendSessionId());
+    expect(mgr.getActiveSession()?.store.getDisplayMessages()).toEqual([]);
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 interrupts a busy turn when a privacy-boundary restart cannot be deferred", async () => {

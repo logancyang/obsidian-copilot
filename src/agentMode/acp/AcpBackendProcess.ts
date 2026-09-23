@@ -98,6 +98,7 @@ function isMethodNotFoundError(err: unknown): boolean {
 }
 
 const COPILOT_CLIENT_NAME = "obsidian-copilot";
+const INTERNAL_SERVICE_FAILURE = "Internal error: Internal service failure";
 
 /**
  * Per-session bookkeeping for the latest known wire-shaped catalogs. We keep
@@ -136,6 +137,9 @@ export class AcpBackendProcess implements BackendProcess {
     | ((req: AskUserQuestionPrompt) => Promise<AgentQuestionAnswers>)
     | null = null;
   private exitListeners = new Set<() => void>();
+  private unhealthyHandler: (() => void) | null = null;
+  private internalServiceFailures = 0;
+  private recoveryRequested = false;
   private capabilities = new Map<AcpCapability, boolean>();
   private readonly sessionWireState = new Map<SessionId, SessionWireState>();
   // Tool-call ids first seen as a `todowrite`-titled call, so later
@@ -231,6 +235,8 @@ export class AcpBackendProcess implements BackendProcess {
     proc.onExit(() => {
       logWarn(`[AgentMode] backend ${this.backend.id} exited`);
       this.connection = null;
+      this.internalServiceFailures = 0;
+      this.recoveryRequested = false;
       this.domainHandlers.clear();
       this.pendingUpdates.clear();
       this.sessionWireState.clear();
@@ -346,6 +352,13 @@ export class AcpBackendProcess implements BackendProcess {
     this.askUserQuestionPrompter = fn;
   }
 
+  /** Notify the owner when this ACP process needs replacement.
+   * @param fn Schedules replacement of the failing process.
+   */
+  setUnhealthyHandler(fn: () => void): void {
+    this.unhealthyHandler = fn;
+  }
+
   registerSessionHandler(sessionId: SessionId, handler: DomainSessionUpdateHandler): () => void {
     this.domainHandlers.set(sessionId, handler);
     const buffered = this.pendingUpdates.get(sessionId);
@@ -409,10 +422,37 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async prompt(params: PromptInput): Promise<PromptOutput> {
-    const resp = await this.requireConnection().agent.request("session/prompt", {
-      sessionId: sessionIdToAcp(params.sessionId),
-      prompt: promptContentToAcp(params.prompt),
-    });
+    let resp;
+    try {
+      resp = await this.requireConnection().agent.request("session/prompt", {
+        sessionId: sessionIdToAcp(params.sessionId),
+        prompt: promptContentToAcp(params.prompt),
+      });
+    } catch (err) {
+      // OpenCode 2 leaves ACP alive when its private service dies; two matching
+      // failures avoid restarting for a single transient server error.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
+      if (
+        this.backend.recoverOnInternalServiceFailure &&
+        this.isRunning() &&
+        err instanceof RequestError &&
+        err.code === -32603 &&
+        err.message === INTERNAL_SERVICE_FAILURE
+      ) {
+        this.internalServiceFailures++;
+        if (this.internalServiceFailures >= 2) {
+          if (!this.recoveryRequested && this.unhealthyHandler) {
+            this.recoveryRequested = true;
+            this.unhealthyHandler();
+          }
+          throw new Error("OpenCode's internal service stopped. Please try again.");
+        }
+      } else {
+        this.internalServiceFailures = 0;
+      }
+      throw err;
+    }
+    this.internalServiceFailures = 0;
     // Fallback usage source for agents that never push a live `usage_update`
     // notification: the prompt result may carry a turn `usage` with no context
     // window. `usage.totalTokens` is a cumulative session total (not current
