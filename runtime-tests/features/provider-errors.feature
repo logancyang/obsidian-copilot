@@ -10,21 +10,23 @@ Feature: Recovering from provider errors
 
   Background:
     Given Copilot's opencode agent uses the scripted model "model-a" by default
-    When I open a new conversation
 
   # A provider that kept failing left users watching a running turn with no reason:
   # https://github.com/logancyang/obsidian-copilot/issues/3104
   # https://github.com/logancyang/obsidian-copilot/issues/2980
   # https://github.com/Brevilabs/obsidian-copilot-private/issues/553
   Scenario Outline: A provider that keeps answering <status> is retried, then its error is shown and the next message is answered
-    When I send "Question", which the provider refuses with <status> "<message>", asking to retry at once
+    Given the provider will refuse the next request with <status> "<message>", asking to retry at once
+    And the model will answer "Next answer"
+    When I open a new conversation
+    And I send "Question"
     Then opencode retried "Question"
     And the conversation shows exactly:
       | from | message                              | turn ended as |
       | user | Question                             |               |
       | ai   | **Error:** Internal error: <message> |               |
     And the chat's status is "error"
-    When I send "Next question", which the model answers with "Next answer"
+    When I send "Next question"
     Then the conversation shows exactly:
       | from | message                              | turn ended as |
       | user | Question                             |               |
@@ -46,16 +48,18 @@ Feature: Recovering from provider errors
   # and a retry that succeeds repeats the words shown before the break
   # (https://github.com/Brevilabs/obsidian-copilot-private/issues/571).
   Scenario: A stream that breaks mid-answer is retried, and when the retry is refused the chat keeps the words shown and ends in error
-    When I send "Question", which the model starts answering with "Alpha Bravo" and then holds
-    And the provider refuses the next request with 400 "Invalid value for messages"
-    And the held answer's connection breaks
+    Given the model will start answering "Alpha Bravo" and then break
+    And the provider will refuse the next request with 400 "Invalid value for messages", giving no retry time
+    And the model will answer "Next answer"
+    When I open a new conversation
+    And I send "Question"
     Then opencode retried "Question"
     And the conversation shows exactly:
       | from | message     | turn ended as |
       | user | Question    |               |
       | ai   | Alpha Bravo |               |
     And the chat's status is "error"
-    When I send "Next question", which the model answers with "Next answer"
+    When I send "Next question"
     Then the conversation shows exactly:
       | from | message       | turn ended as |
       | user | Question      |               |

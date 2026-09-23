@@ -10,8 +10,9 @@ Feature: Streaming an answer through the real opencode runtime
 
   Scenario: A streamed answer appears in the conversation word by word and then completes
     Given Copilot's opencode agent uses the scripted model "model-a" by default
-    And the model will answer "Alpha Bravo Charlie" to exactly the message I send
-    When I send "Say the three words" in a new conversation
+    And the model will answer "Alpha Bravo Charlie"
+    When I open a new conversation
+    And I send "Say the three words"
     Then the answer grew in the conversation as:
       | Alpha               |
       | Alpha Bravo         |

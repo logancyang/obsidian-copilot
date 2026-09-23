@@ -21,17 +21,19 @@ Feature: Choosing the model, effort, and mode a conversation runs on
   # BYOK OpenAI-compatible models were not offered through opencode:
   # https://github.com/Brevilabs/obsidian-copilot-private/issues/76
   Scenario Outline: A model picked mid-conversation at <effort> effort reaches that model's endpoint with that effort
-    Given Copilot starts with "model-a" as opencode's default model
+    Given Copilot starts with opencode's default model set to "model-a" with no effort
+    And the model will answer "First answer"
+    And the model will answer "Second answer"
     When I open a new conversation
     Then the model picker offers exactly:
       | model         | effort levels              |
       | alpha/model-a |                            |
       | bravo/model-b | low, medium, high, default |
-    And the model picker shows "alpha/model-a" with no effort control
-    When I send "First question", which the model answers with "First answer"
+    And the model picker shows "alpha/model-a" with no effort
+    When I send "First question"
     And I pick "bravo/model-b" at "<effort>" effort in the model picker
     Then the model picker shows "bravo/model-b" at "<effort>" effort
-    When I send "Second question", which the model answers with "Second answer"
+    When I send "Second question"
     Then the provider answered these agent turns:
       | endpoint | model   | reasoning effort |
       | alpha    | model-a |                  |
@@ -55,27 +57,31 @@ Feature: Choosing the model, effort, and mode a conversation runs on
   # A new conversation must open in the mode the user last chose:
   # https://github.com/Brevilabs/obsidian-copilot-private/issues/71
   Scenario: The mode picked in a conversation is confirmed and the next new conversation switches to it
-    Given Copilot starts with "model-a" as opencode's default model
+    Given Copilot starts with opencode's default model set to "model-a" with no effort
     When I open a new conversation
-    Then the mode picker offers "Default, Auto" and shows "Default"
+    Then the mode picker offers "Default, Auto"
+    And the mode picker shows "Default"
     When I choose "Auto" in the mode picker
     And I open a new conversation
-    Then the mode picker switches to "Auto"
+    Then the mode picker shows "Auto"
 
   # A restart resumes each open conversation instead of replacing it:
   # https://github.com/Brevilabs/obsidian-copilot-private/issues/475
-  # Not covered: a pick made after the last turn, or in a chat with no turns, is
-  # not restored: https://github.com/logancyang/obsidian-copilot/issues/3319
+  # A pick made after the last turn, or in a chat with no turns, is not restored;
+  # see the two known gaps that follow.
   Scenario: A conversation continues on the model and effort of its last turn after opencode restarts
-    Given Copilot starts with "model-a" as opencode's default model
+    Given Copilot starts with opencode's default model set to "model-a" with no effort
+    And the model will answer "First answer"
+    And the model will answer "Second answer"
+    And the model will answer "Third answer"
     When I open a new conversation
     And I pick "bravo/model-b" at "high" effort in the model picker
-    And I send "First question", which the model answers with "First answer"
+    And I send "First question"
     And I choose "medium" in the effort picker
-    And I send "Second question", which the model answers with "Second answer"
-    And opencode restarts from the chat's Reload action
+    And I send "Second question"
+    And I restart opencode from the chat's Reload action
     Then the model picker shows "bravo/model-b" at "medium" effort
-    When I send "Third question", which the model answers with "Third answer"
+    When I send "Third question"
     Then the provider answered these agent turns:
       | endpoint | model   | reasoning effort |
       | bravo    | model-b | high             |
@@ -91,14 +97,45 @@ Feature: Choosing the model, effort, and mode a conversation runs on
       | user | Third question  |               |
       | ai   | Third answer    | end_turn      |
 
+  @known-gap
+  Scenario: A model picked after the chat's last turn is still picked after opencode restarts
+    Unverified: https://github.com/logancyang/obsidian-copilot/issues/3319, with an open fix
+    in https://github.com/logancyang/obsidian-copilot/pull/3323.
+    Release consequence: after the Reload action, the next message runs on a model and
+    provider the user did not pick, and nothing on screen says so.
+    Fails today with: 'alpha/model-a'
+
+    Given Copilot starts with opencode's default model set to "model-a" with no effort
+    And the model will answer "First answer"
+    When I open a new conversation
+    And I send "First question"
+    And I pick "bravo/model-b" at "high" effort in the model picker
+    And I restart opencode from the chat's Reload action
+    Then the model picker shows "bravo/model-b" at "high" effort
+
+  @known-gap
+  Scenario: A chat with no turns is still on the saved default model after opencode restarts
+    Unverified: https://github.com/logancyang/obsidian-copilot/issues/3319, with an open fix
+    in https://github.com/logancyang/obsidian-copilot/pull/3323.
+    Release consequence: after the Reload action, a BYOK user's first message goes to
+    OpenCode Zen, a hosted service they never configured.
+    Fails today with: 'OpenCode Zen/Big Pickle'
+
+    Given Copilot starts with opencode's default model set to "model-b" at "high" effort
+    When I open a new conversation
+    Then the model picker shows "bravo/model-b" at "high" effort
+    When I restart opencode from the chat's Reload action
+    Then the model picker shows "bravo/model-b" at "high" effort
+
   # New conversations kept opencode's own effort instead of the saved one:
   # https://github.com/Brevilabs/obsidian-copilot-private/issues/201
   Scenario: A new conversation starts on the default model and effort saved in settings
-    Given Copilot starts with "model-a" as opencode's default model
+    Given Copilot starts with opencode's default model set to "model-a" with no effort
+    And the model will answer "Answer"
     When I set opencode's default model to "model-b" at "high" effort in settings
     And I open a new conversation
     Then the model picker shows "bravo/model-b" at "high" effort
-    When I send "Question", which the model answers with "Answer"
+    When I send "Question"
     Then the provider answered these agent turns:
       | endpoint | model   | reasoning effort |
       | bravo    | model-b | high             |
@@ -106,16 +143,17 @@ Feature: Choosing the model, effort, and mode a conversation runs on
   # A saved default the agent no longer offered silently ran the agent's own model:
   # https://github.com/Brevilabs/obsidian-copilot-private/issues/474
   Scenario: A saved default model that is turned off gives way to an enabled model, and the user is told
-    Given Copilot starts with "model-b" at "high" effort as opencode's default model
+    Given Copilot starts with opencode's default model set to "model-b" at "high" effort
+    And the model will answer "Answer"
     When I turn off "model-b" for opencode in settings
     And I open a new conversation
     Then the model picker offers exactly:
       | model         | effort levels |
       | alpha/model-a |               |
-    And the model picker shows "alpha/model-a" with no effort control
+    And the model picker shows "alpha/model-a" with no effort
     And Copilot showed exactly these notices:
       | opencode no longer offers model-b. New chats use model-a until you pick a new default. |
-    When I send "Question", which the model answers with "Answer"
+    When I send "Question"
     Then the provider answered these agent turns:
       | endpoint | model   | reasoning effort |
       | alpha    | model-a |                  |
@@ -125,10 +163,11 @@ Feature: Choosing the model, effort, and mode a conversation runs on
   # opencode's own model: https://github.com/Brevilabs/obsidian-copilot-private/issues/364
   # The saved default drops that effort: https://github.com/Brevilabs/obsidian-copilot-private/issues/219
   Scenario: A saved effort on a default model with no effort levels is dropped instead of changing the model
-    Given Copilot starts with "model-a" at "high" effort as opencode's default model
+    Given Copilot starts with opencode's default model set to "model-a" at "high" effort
+    And the model will answer "Answer"
     When I open a new conversation
-    Then the model picker shows "alpha/model-a" with no effort control
-    When I send "Question", which the model answers with "Answer"
+    Then the model picker shows "alpha/model-a" with no effort
+    When I send "Question"
     Then the provider answered these agent turns:
       | endpoint | model   | reasoning effort |
       | alpha    | model-a |                  |

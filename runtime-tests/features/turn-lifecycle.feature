@@ -14,12 +14,14 @@ Feature: Stopping an answer and switching chats while one is running
   # Stop must abort opencode's request, keep the words shown, and leave the
   # session reusable: https://github.com/Brevilabs/obsidian-copilot-private/issues/163
   Scenario: A stopped answer keeps the words already shown, and the next message is answered after it
+    Given the model will start answering "Partial answer" and then hold
+    And the model will answer "Second answer"
     When I open a new conversation
-    And I send "First question", which the model starts answering with "Partial answer" and then holds
+    And I send "First question"
     And I stop the answer
     Then opencode closed the held answer's request
     And the chat's status is "idle"
-    When I send "Second question", which the model answers with "Second answer"
+    When I send "Second question"
     Then the conversation shows exactly:
       | from | message         | turn ended as |
       | user | First question  |               |
@@ -33,12 +35,14 @@ Feature: Stopping an answer and switching chats while one is running
   # interrupt the retry. The stopped turn must keep the words shown, opencode must
   # not try again, and the next message must be answered.
   Scenario: An answer stopped while opencode waits to retry it keeps the words shown, and opencode does not try again
+    Given the model will start answering "Alpha Bravo" and then break
+    And the provider will refuse the next request with 500 "The server had an error while processing your request", asking to wait a minute
+    And the model will answer "Next answer"
     When I open a new conversation
-    And I send "Question", which the model starts answering with "Alpha Bravo" and then holds
-    And the held answer's connection breaks, and the provider refuses the retry with 500 "The server had an error while processing your request", asking to wait a minute
+    And I send "Question"
     And I stop the answer
     Then the chat's status is "idle"
-    When I send "Next question", which the model answers with "Next answer"
+    When I send "Next question"
     Then the conversation shows exactly:
       | from | message       | turn ended as |
       | user | Question      |               |
@@ -56,16 +60,18 @@ Feature: Stopping an answer and switching chats while one is running
   # A chat whose turn ends while another tab is shown asks for attention:
   # https://github.com/logancyang/obsidian-copilot/issues/2987
   Scenario: An answer that resumes after the user switched chats lands only in the chat that asked
+    Given the model will start answering "Alpha Bravo" and then hold
+    And the model will answer "Answer B"
     When I open conversation "A"
     And I open conversation "B"
     And I switch to conversation "A"
-    And I send "Question A", which the model starts answering with "Alpha Bravo" and then holds
+    And I send "Question A"
     And I switch to conversation "B"
     Then the chat tabs show:
       | chat | shown | status  | needs attention |
       | A    | no    | running | no              |
       | B    | yes   | idle    | no              |
-    When I send "Question B", which the model answers with "Answer B"
+    When I send "Question B"
     And the model's held answer continues with "Charlie Delta"
     Then conversation "A" shows exactly:
       | from | message                   | turn ended as |

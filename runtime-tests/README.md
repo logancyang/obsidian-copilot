@@ -8,10 +8,13 @@ incompatibility; these scenarios can.
 npm run test:runtime
 ```
 
-The command bundles the suite (`build.mjs`), installs the pinned opencode
-release into `runtime-tests/.opencode/` (`bin/fetchOpencode.ts`), and runs
-`features/` with Cucumber. It needs no credentials and makes no inference
-requests. It runs on macOS and Linux.
+The command bundles the suite (`build.mjs`), checks the step vocabulary
+(`vocabulary.mjs`), installs the pinned opencode release into
+`runtime-tests/.opencode/` (`bin/fetchOpencode.ts`), and runs `features/` with
+Cucumber. It needs no credentials and makes no inference requests. It runs on
+macOS and Linux. `npm run test:runtime:steps` prints every step the scenarios
+use. When a change needs a scenario, and how to write one, is in the
+[testing guide](../designdocs/agents/TESTING_GUIDE.md#runtime-contracts-gherkin).
 
 ## Scenarios
 
@@ -131,26 +134,37 @@ What the pinned opencode advertises and sends, as observed by running it:
 
 ### Known gaps (unverified)
 
-These behaviors do not hold in the scripted runtime, so no scenario asserts
-them. Each was observed with a scenario run outside the suite.
+These behaviors do not hold in the scripted runtime. None is verified, and a
+release that ships with one ships what its consequence describes.
 
-- **A pick made after the chat's last turn is lost on the Reload action.** The
-  resumed chat comes back on the model and effort of its last turn: after a
-  turn on `alpha/model-a`, picking `bravo/model-b` at `high` effort, and Reload,
-  the picker shows `alpha/model-a` and the next message goes to `model-a` on
-  the `alpha` endpoint. The user's next message runs on a model and provider
-  they did not pick, and nothing on screen says so.
-  [#3319](https://github.com/logancyang/obsidian-copilot/issues/3319); open
+Three run as `@known-gap` scenarios, which assert the intended behavior and
+pass only while it fails exactly as they state; the testing guide describes the
+rule. Their descriptions carry the issue and the consequence:
+
+- `model-selection.feature`: A model picked after the chat's last turn is
+  still picked after opencode restarts
+  ([#3319](https://github.com/logancyang/obsidian-copilot/issues/3319); open
   fix [#3323](https://github.com/logancyang/obsidian-copilot/pull/3323);
-  [private #540](https://github.com/Brevilabs/obsidian-copilot-private/issues/540).
-- **A chat with no turns comes back on OpenCode Zen/Big Pickle after the Reload
-  action.** With `bravo/model-b` at `high` effort saved as the default, the
-  resumed chat shows `OpenCode Zen/Big Pickle`, and its first message goes to
-  `opencode.ai`, which the egress proxy refuses. A BYOK user's prompt goes to a
-  hosted service they never configured.
-  [#3319](https://github.com/logancyang/obsidian-copilot/issues/3319); open
-  fix [#3323](https://github.com/logancyang/obsidian-copilot/pull/3323);
-  [private #540](https://github.com/Brevilabs/obsidian-copilot-private/issues/540).
+  [private #540](https://github.com/Brevilabs/obsidian-copilot-private/issues/540)).
+  The resumed chat comes back on `alpha/model-a`, the model of its last turn.
+- `model-selection.feature`: A chat with no turns is still on the saved
+  default model after opencode restarts (same issues). The resumed chat shows
+  `OpenCode Zen/Big Pickle`, and its first message goes to `opencode.ai`, which
+  the egress proxy refuses.
+- `file-edits.feature`: An agent answering a read-only question cannot change
+  a note through the shell
+  ([private #573](https://github.com/Brevilabs/obsidian-copilot-private/issues/573),
+  [private #494](https://github.com/Brevilabs/obsidian-copilot-private/issues/494)).
+  A multi-agent turn's read-only answer may run shell commands, so Copilot's
+  relay skills (web search, fetch) keep working, and opencode has no sandbox of
+  its own: opencode asks with kind `execute`, Copilot allows it once, and
+  `printf … > note.md` overwrites the note. `rm` deleted a note the same way, a
+  command writing `../outside.txt` changed a file outside the vault without an
+  `external_directory` request, and `webfetch` ran without asking.
+
+The rest are listed here, each with what keeps it from running as a scenario.
+Each was observed with a scenario run outside the suite.
+
 - **A retried stream repeats the words shown before it broke.** When a
   provider stream drops mid-answer and opencode's retry succeeds, opencode
   sends the whole retried answer as new chunks on the same message, and the
@@ -160,7 +174,9 @@ them. Each was observed with a scenario run outside the suite.
   `Alpha Bravo Charlie`. When every attempt drops, the reply reads
   `Alpha Bravo` six times. The user reads a garbled answer that is not what the
   model was told it said. The scenario that breaks a stream has the retry
-  refused instead.
+  refused instead. Not executable: the scripted provider sends each word only
+  once the chat shows everything before it, so the retried stream stalls at
+  `Alpha BravoAlpha`, and the stall fails the run whatever the steps assert.
   [private #571](https://github.com/Brevilabs/obsidian-copilot-private/issues/571),
   the unfinished part of
   [private #163](https://github.com/Brevilabs/obsidian-copilot-private/issues/163).
@@ -172,13 +188,15 @@ them. Each was observed with a scenario run outside the suite.
   The user sees a cut-off answer with no reason.
   The broken-stream scenario asserts what is drawn and the error status; when
   this is fixed, `drawnText` in `harness/runtime.ts` must follow the view's new
-  rule and the scenario must expect the error.
+  rule and the scenario must expect the error. Not executable: where the chat
+  should draw the error is not decided, so no step can state it.
   [private #388](https://github.com/Brevilabs/obsidian-copilot-private/issues/388).
 - **A failing provider shows nothing until opencode stops retrying.** While
   opencode retries, the chat shows only a running turn: with no retry header,
   a 500 showed nothing for 70 s before the error appeared. The user cannot
   tell a failing provider from a slow one. The error scenarios ask the
-  provider to retry at once to stay short.
+  provider to retry at once to stay short. Not executable: what the chat
+  should show while opencode retries is not decided.
   [#3104](https://github.com/logancyang/obsidian-copilot/issues/3104);
   [private #564](https://github.com/Brevilabs/obsidian-copilot-private/issues/564).
 - **A new chat can take a message before its saved mode is applied.** Copilot
@@ -190,22 +208,9 @@ them. Each was observed with a scenario run outside the suite.
   holds the message until the mode is confirmed, so the order is opencode's.
   A saved Default needs no request, because every opencode session starts in
   `copilot-build`: the first-edit scenario asserts it. The mode scenario waits
-  for the switch.
+  for the switch. Not executable: opencode won the race in every run, so no
+  scenario can make the message go first.
   [private #574](https://github.com/Brevilabs/obsidian-copilot-private/issues/574).
-- **A read-only answer can change a note through the shell.** A multi-agent
-  turn's read-only answer may run shell commands, so Copilot's relay skills
-  (web search, fetch) keep working, and opencode has no sandbox of its own.
-  When the scripted model asked opencode's `bash` to run
-  `printf 'Overwritten by a read-only answer' > note.md` in a read-only
-  answer, opencode asked with kind `execute`, Copilot allowed it once, and
-  `note.md` was overwritten. `rm` deleted a note the same way, and a command
-  writing `../outside.txt` changed a file outside the vault without an
-  `external_directory` request. The user asked a question and lost a note, or
-  a file outside the vault. In the same answer, `webfetch` ran without asking.
-  The read-only scenarios cover `edit` and `write`, and a shell command that
-  only reads.
-  [private #573](https://github.com/Brevilabs/obsidian-copilot-private/issues/573),
-  [private #494](https://github.com/Brevilabs/obsidian-copilot-private/issues/494).
 - **The agent can edit a note through its `task` subagent without asking.**
   `copilot-build` asks before `edit` and `bash`, but the model is also offered
   `task`, which runs opencode's `general` subagent with opencode's own
@@ -215,7 +220,9 @@ them. Each was observed with a scenario run outside the suite.
   note changed. A shell write from the subagent changed the note the same way,
   and so did the same calls in a read-only answer. A Default-mode user who
   expects to approve every edit gets an edit they never saw. The scenarios
-  cover edits the chat's own agent makes.
+  cover edits the chat's own agent makes. Not executable: the subagent's own
+  requests to the model carry a prompt no conversation sent, which the scripted
+  provider refuses.
   [private #572](https://github.com/Brevilabs/obsidian-copilot-private/issues/572).
 
 ## Test boundary
@@ -393,6 +400,9 @@ refuses and the scenario reports.
 
 The run fails, each checked by trying it, when:
 
+- a step is undefined or ambiguous, a step definition is unused, or no
+  scenario is found (`vocabulary.mjs --check`, a dry run before any scenario
+  starts);
 - a step is undefined, or pending (`strict: true` in `cucumber.mjs`);
 - a scenario is skipped (the `After` hook; Cucumber alone exits 0);
 - Copilot logs a `WARN` or `ERROR` line during the scenario. The check runs
@@ -413,7 +423,10 @@ The run fails, each checked by trying it, when:
   `fs/write_text_file`, with an error. opencode logs such a failure only as an
   INFO frame and carries on, so the turn alone would not show it;
 - no scenario runs, for example after a path typo (the `AfterAll` hook;
-  Cucumber alone exits 0).
+  Cucumber alone exits 0);
+- a `@known-gap` scenario fails before its last step, fails there with an
+  actual value other than its `Fails today with:` text, or passes (the step
+  wrapper and the `After` hook in `steps/index.ts`).
 
 The file-edit scenarios also record a digest of every file under the temp
 root other than the agent home once the vault's notes are written, and assert
@@ -463,15 +476,15 @@ version.
 | Cucumber step          | 60 s   | `setDefaultTimeout`, above the harness bounds         |
 | CI job                 | 10 min | `timeout-minutes` on the runtime job                  |
 
-A scenario is bounded by its steps; the longest (open plus send) is bounded by
-50 s of harness waits.
+A scenario is bounded by its steps, and each step by the harness wait it makes,
+at most 30 s.
 
 Measured durations, with the pinned binary already cached:
 
 | Where                                      | Scenario    | `test:runtime`                             | Whole job |
 | ------------------------------------------ | ----------- | ------------------------------------------ | --------- |
-| Apple M-series Mac, darwin-arm64, Node 26  | 1.6 – 5.9 s | 73 s                                       | —         |
-| GitHub `ubuntu-latest`, linux-x64, Node 22 | 4.5 s mean  | 111 s, after a 5 s install on a cache miss | 147 s     |
+| Apple M-series Mac, darwin-arm64, Node 26  | 1.8 – 6.0 s | 85 s                                       | —         |
+| GitHub `ubuntu-latest`, linux-x64, Node 22 | 4.4 s mean  | 124 s, after a 5 s install on a cache miss | 161 s     |
 
 Locally, startup through a ready session takes about 1.2 s and a turn about
 1 s; the longest scenarios are the Stop during a retry (5.6 – 6.0 s), the
@@ -481,7 +494,7 @@ delay, and the Reload action (4.7 – 4.9 s). A file-edit scenario takes 2.4 –
 Under a CPU load of 12 busy processes on a 10-core machine, the suite passed in
 138 s with the longest scenario at 9.7 s. In CI, `npm ci` takes 14-20 s of
 the job, and the report of a passing run is not uploaded, so the CI scenario
-time is the suite's time over its twenty-five scenarios. On a cache miss the CI install step downloads the release
+time is the suite's time over its twenty-eight scenarios. On a cache miss the CI install step downloads the release
 in 5 s, against 1-2 s after a 1-3 s cache restore on a hit. The startup and
 turn bounds are over fifteen times their local durations; the job bound is
 over four times the CI job.
@@ -498,7 +511,11 @@ refusals, and the refused network attempts. Everything written passes through
 `redactLogText` (`src/utils/redactLog.ts`), the redaction Copilot applies to
 bug-report logs: home-directory user names, email addresses, key- and
 token-shaped values, and `Bearer` and `Basic` credentials. CI uploads the
-directory as the `runtime-report` artifact when the job fails.
+directory as the `runtime-report` artifact when the job fails. In CI the run
+also lists each scenario's feature, name (with an outline's example values),
+and result, `passed`, `failed`, or `known gap, unverified: <issue>`, in the job
+summary, with a note that a
+scripted provider shows nothing about a real model's choices.
 
 ## The harness
 
