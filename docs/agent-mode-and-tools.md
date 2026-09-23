@@ -111,7 +111,7 @@ The permission picker shows only choices supported by the current agent:
 
 opencode supports **Default** and **Auto**. Claude supports **Default**, **Plan**, and **Auto**. Codex shows the choices supported by the installed adapter. Claude also has an **Auto mode permissions** setting that controls how much Auto may approve.
 
-If an OpenCode session cannot offer its ask-before-edit **Default** mode, Agent Chat stops the session and shows an error with **Retry**. Check any custom OpenCode configuration overrides that may remove `copilot-build`, then retry. **Auto** remains available when you choose it explicitly.
+If OpenCode cannot offer **Default**, Agent Chat stops and shows an error because it cannot confirm that edits and commands will ask first. Use the managed OpenCode installation or restore `copilot-build` in your custom configuration, then choose **Retry**. You can still choose **Auto** after a safe session starts.
 
 When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. Stopping the turn cancels unanswered requests.
 

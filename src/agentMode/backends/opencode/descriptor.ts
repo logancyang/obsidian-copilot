@@ -333,14 +333,14 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/556
     if (!state.mode?.options.some((option) => option.value === "default")) {
       throw new UnsafeSessionStateError(
-        "OpenCode's ask-before-edit agent (copilot-build) is unavailable. Check custom OpenCode config overrides, then Retry."
+        "OpenCode did not load Default mode. Without it, edits and commands may run without approval, so Copilot stopped this chat. Use managed OpenCode or restore copilot-build in your custom config, then Retry."
       );
     }
     // New chats must begin in Default; saved Auto is replayed only after opening.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/556
     if (opening === "new" && state.mode.current !== "default") {
       throw new UnsafeSessionStateError(
-        "OpenCode did not start in ask-before-edit Default mode. Check custom OpenCode config overrides, then Retry."
+        "OpenCode started in Auto instead of Default. Edits and commands may run without approval, so Copilot stopped this chat. Use managed OpenCode or check your custom config, then Retry."
       );
     }
   },

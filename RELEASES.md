@@ -4,7 +4,7 @@
 
 ## ⚠️ Compatibility Notes
 
-- OpenCode sessions now stop with a clear error if their ask-before-edit **Default** agent is missing. Custom OpenCode configuration overrides that remove `copilot-build` must be corrected before you can start or resume Agent Chat; use **Retry** after correcting them. **Auto** is still available when chosen explicitly.
+- Agent Chat now stops an OpenCode session if **Default** is unavailable instead of running in **Auto** without your choice. Default asks before editing notes or running commands. If a custom OpenCode configuration removes `copilot-build`, restore it and choose **Retry**. The managed OpenCode installation still works, and you can choose Auto yourself.
 
 # v4.0.10 - Recover from an outdated agent
 
