@@ -472,6 +472,8 @@ export class AgentSession {
   private planSeq = 0;
   // Tool-call ids the user has already finalized a decision on.
   private decidedPlanToolCallIds = new Set<string>();
+  // Plan decisions made before their permission request arrived, keyed by toolCallId.
+  private earlyPlanDecisions = new Map<string, { allow: boolean; denyMessage?: string }>();
   // True when something happened (turn ended, error, permission prompt) while
   // this session was not the active tab. The manager owns the policy for
   // setting this; the session just exposes the flag and notification channel.
@@ -1403,6 +1405,7 @@ export class AgentSession {
     this.flushResolvers(this.pendingToolResolvers);
     this.flushQuestionResolvers();
     this.decidedPlanToolCallIds.clear();
+    this.earlyPlanDecisions.clear();
     this.currentPlan = null;
     this.currentTodoList = null;
     this.currentTodoListSignature = null;
@@ -1425,6 +1428,11 @@ export class AgentSession {
    */
   handlePlanProposalPermission(request: PermissionPrompt): Promise<PermissionDecision> {
     const toolCallId = request.toolCall.toolCallId;
+    const early = this.earlyPlanDecisions.get(toolCallId);
+    if (early) {
+      this.earlyPlanDecisions.delete(toolCallId);
+      return Promise.resolve(planDecisionFor(request, early.allow, early.denyMessage));
+    }
     const exitPlan = tryReadExitPlanModeCall({
       kind: request.toolCall.kind,
       rawInput: request.toolCall.rawInput,
@@ -1446,19 +1454,21 @@ export class AgentSession {
    * cancels when no reject option is offered). When denying, an optional
    * `denyMessage` is forwarded as the agent-visible deny reason — used by
    * the plan card to ride user feedback through the same `canUseTool` deny
-   * instead of as a separate follow-up turn. No-op when no permission is
-   * pending for the given id (e.g. non-gated OpenCode proposals).
+   * instead of as a separate follow-up turn. When the permission has not
+   * arrived yet, the decision is held and applied once it does.
    */
   resolvePlanProposalPermission(toolCallId: string, allow: boolean, denyMessage?: string): void {
     const entry = this.pendingPlanResolvers.get(toolCallId);
-    if (!entry) return;
+    if (!entry) {
+      // Codex publishes the plan card from its tool call before sending the
+      // permission request, so the user can decide first; dropping that decision
+      // would leave the turn awaiting a card that is already gone.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+      this.earlyPlanDecisions.set(toolCallId, { allow, denyMessage });
+      return;
+    }
     this.pendingPlanResolvers.delete(toolCallId);
-    const base = decisionFor(
-      entry.request,
-      allow ? PERMISSION_ALLOW_KINDS : PERMISSION_REJECT_KINDS
-    );
-    const decision: PermissionDecision = !allow && denyMessage ? { ...base, denyMessage } : base;
-    entry.resolve(decision);
+    entry.resolve(planDecisionFor(entry.request, allow, denyMessage));
     this.recomputeStatusIfChanged();
     this.notifyMessages();
   }
@@ -2510,6 +2520,15 @@ function decisionFor(
     if (opt) return { outcome: { outcome: "selected", optionId: opt.optionId } };
   }
   return { outcome: { outcome: "cancelled" } };
+}
+
+function planDecisionFor(
+  req: PermissionPrompt,
+  allow: boolean,
+  denyMessage: string | undefined
+): PermissionDecision {
+  const base = decisionFor(req, allow ? PERMISSION_ALLOW_KINDS : PERMISSION_REJECT_KINDS);
+  return !allow && denyMessage ? { ...base, denyMessage } : base;
 }
 
 function planToPart(plan: PlanSummary & { sessionUpdate?: "plan" }): AgentMessagePart {
