@@ -34,6 +34,13 @@ hosted model's behavior or about Obsidian's UI.
 | `turn-lifecycle.feature`: An answer that resumes after the user switched chats lands only in the chat that asked                                      | Switching tabs does not stop another chat's turn. A second chat runs its own turn while the first one's answer is held, the held answer finishes only in the chat that asked, the shown chat stays shown, and the finished background chat asks for attention. The second chat's request carries no message the first chat sent.                                  | [private #276](https://github.com/Brevilabs/obsidian-copilot-private/issues/276), [private #99](https://github.com/Brevilabs/obsidian-copilot-private/issues/99), [#2987](https://github.com/logancyang/obsidian-copilot/issues/2987) |
 | `provider-errors.feature`: A provider that keeps answering `<status>` is retried, then its error is shown and the next message is answered            | For a 429 and a 500, opencode retries; once it gives up, the chat shows the provider's message as the turn's error and an error status, and the next message is answered in the same chat.                                                                                                                                                                        | [#3104](https://github.com/logancyang/obsidian-copilot/issues/3104), [#2980](https://github.com/logancyang/obsidian-copilot/issues/2980), [private #553](https://github.com/Brevilabs/obsidian-copilot-private/issues/553)            |
 | `provider-errors.feature`: A stream that breaks mid-answer is retried, and when the retry is refused the chat keeps the words shown and ends in error | opencode retries a dropped stream; when the retry is refused, the chat keeps the words already shown and an error status, and the next message is answered. The error's text is not drawn; see Known gaps.                                                                                                                                                        | [private #163](https://github.com/Brevilabs/obsidian-copilot-private/issues/163)                                                                                                                                                      |
+| `file-edits.feature`: An edit the user allows changes exactly that note, and the model is told the result                                             | In Default mode opencode's `edit` and `write` tools each show a permission card naming the tool's kind and the note, with its diff. Allow once changes that note to the expected bytes and nothing else under the temp root, the chat shows the edit as done, and the model's next request carries the result the chat shows for that tool call.                  | [private #556](https://github.com/Brevilabs/obsidian-copilot-private/issues/556), [private #28](https://github.com/Brevilabs/obsidian-copilot-private/issues/28)                                                                      |
+| `file-edits.feature`: An edit the user rejects leaves every file unchanged, and the chat carries on                                                   | Reject leaves every file byte-identical, the chat shows the edit as failed, the turn ends `end_turn` with the chat idle, and the next message is answered.                                                                                                                                                                                                        | [private #556](https://github.com/Brevilabs/obsidian-copilot-private/issues/556)                                                                                                                                                      |
+| `file-edits.feature`: A note the agent reads reaches the model without asking, and no file changes                                                    | opencode's `read` tool runs without a permission card, the note's text reaches the model's next request, and no file changes.                                                                                                                                                                                                                                     | —                                                                                                                                                                                                                                     |
+| `file-edits.feature`: In Auto mode the agent edits a note without asking                                                                              | After the user picks Auto, an edit shows no permission card and changes the note, and the model is told the result.                                                                                                                                                                                                                                               | [private #556](https://github.com/Brevilabs/obsidian-copilot-private/issues/556)                                                                                                                                                      |
+| `file-edits.feature`: A new chat's first edit asks when Default is saved, while another chat on the same opencode runs in Auto                        | A message sent as soon as a new chat can take one runs in the saved Default mode: its edit shows a permission card, and Reject leaves every file unchanged, although another chat on the same opencode process is in Auto.                                                                                                                                        | [private #71](https://github.com/Brevilabs/obsidian-copilot-private/issues/71), [private #556](https://github.com/Brevilabs/obsidian-copilot-private/issues/556)                                                                      |
+| `file-edits.feature`: An agent answering a read-only question cannot change a note                                                                    | When a multi-agent turn asks opencode read-only, Copilot refuses its `edit` and its `write` without showing a card, every file stays byte-identical, and the answer reads "This agent did not answer." The shell is not covered; see Known gaps.                                                                                                                  | [private #12](https://github.com/Brevilabs/obsidian-copilot-private/issues/12), [private #494](https://github.com/Brevilabs/obsidian-copilot-private/issues/494)                                                                      |
+| `file-edits.feature`: An agent answering a read-only question can still run a shell command that reads a note                                         | Copilot lets a read-only answer run a shell command, whose output reaches the model, and the answer shows the model's reply. No file changes.                                                                                                                                                                                                                     | [private #138](https://github.com/Brevilabs/obsidian-copilot-private/issues/138)                                                                                                                                                      |
 
 What the pinned opencode advertises and sends, as observed by running it:
 
@@ -46,7 +53,12 @@ What the pinned opencode advertises and sends, as observed by running it:
 - **Mode.** opencode offers Default (`copilot-build`) and Auto (`build`). A
   text turn's request is the same in both, with the same tools and system
   prompt, so the mode scenario asserts the confirmed state. What the mode
-  changes, whether an edit asks first, is a file-edit behavior.
+  changes, whether an edit asks first, is a file-edit behavior. opencode
+  offers no read-only mode: Copilot's only read-only surface for it is the
+  answer an @-mentioned agent gives in a multi-agent turn, which runs in a
+  session Copilot registers as read-only and whose write requests Copilot
+  refuses without a card. That session starts in opencode's default agent,
+  `copilot-build`, so its edits and shell commands ask Copilot first.
 - **Stop.** On `session/cancel` while an answer streams, opencode closes the
   provider request within 5 ms and answers the prompt with `cancelled`. Stopped
   while it waits to retry, it answers `end_turn` within about 15 ms and makes
@@ -81,6 +93,41 @@ What the pinned opencode advertises and sends, as observed by running it:
   - After a turn fails on a provider error, or a broken stream's retry is
     refused, the question is kept with no reply: `user "Question"`,
     `user "Next question"`.
+
+- **Tools.** In both modes the model is offered `bash`, `edit`, `glob`,
+  `grep`, `read`, `skill`, `task`, `todowrite`, `webfetch`, and `write`. The
+  file tools take an absolute `filePath`: `edit` takes `oldString`,
+  `newString`, and an optional `replaceAll`; `write` takes `content`; `read`
+  takes an optional `offset` and `limit`. `bash` takes `command`, and an
+  optional `timeout` and `workdir`. The scenarios map each operation onto these
+  in one fixture, `OPENCODE_FILE_TOOLS` in `steps/index.ts`.
+- **Edits.** In Default, `edit` and `write` ask once, with ACP kind `edit`, the
+  note's absolute path as the title, the whole note before and after as the
+  diff, and the options Allow once, Always allow, and Reject. `bash` asks with
+  kind `execute` and the command as the title. Approved, an edit is written
+  twice with the same bytes: opencode first sends `fs/write_text_file`, which
+  Copilot's `VaultClient` writes through the vault adapter, and then its own
+  tool writes the file on disk. The model is then told
+  `Edit applied successfully.` by `edit` and `Wrote file successfully.` by
+  `write`. In Auto, neither
+  tool asks.
+- **Rejected edits.** The tool call fails with "The user rejected permission
+  to use this specific tool call.", and opencode ends the turn `end_turn`
+  without asking the model again. The next request carries the rejection as
+  that tool call's result: `user "Fix the note"`, `assistant ""` with the call,
+  `tool "The user rejected permission to use this specific tool call."`,
+  `user "Thanks"`. In a read-only answer the same rejection ends the answer
+  with no text.
+- **Reads.** `read` asks nothing in either mode and reads the file on disk
+  itself; opencode never sends `fs/read_text_file`. The model gets the note
+  inside `<path>`, `<type>`, and `<content>` tags with numbered lines, while
+  the chat shows the note's plain text as the tool's result.
+- **A vault reached through a symlink.** opencode resolves its working
+  directory, so when the vault's path passes through a symlink (macOS's
+  `/var` → `/private/var` temp dir), a file named by the vault's own path
+  reads as outside it: every edit first asks for `external_directory`, with
+  kind `other` and the vault folder as the title, before the edit's own card.
+  The harness roots each scenario at the temp dir's real path.
 
 ### Known gaps (unverified)
 
@@ -137,10 +184,23 @@ them. Each was observed with a scenario run outside the suite.
 - **A new chat can take a message before its saved mode is applied.** Copilot
   asks opencode for the saved mode only once the chat is ready: with Auto
   saved, a new chat shows Default when it can first take a message, and a
-  message sent then goes out before opencode confirms Auto. Whether that first
-  message runs in Auto, or in Default and asks before an edit the user expected
-  to happen without asking, depends on opencode's ordering, which no scenario
-  checks. The mode scenario therefore waits for the switch.
+  message sent then goes out before opencode confirms Auto. Copilot sends the
+  mode request first, and opencode applied it before the message in 6 of 6
+  runs, so the message's edit ran in Auto without a card; nothing in Copilot
+  holds the message until the mode is confirmed, so the order is opencode's.
+  A saved Default needs no request, because every opencode session starts in
+  `copilot-build`: the first-edit scenario asserts it. The mode scenario waits
+  for the switch.
+- **A read-only answer can change a note through the shell.** A multi-agent
+  turn's read-only answer may run shell commands, so Copilot's relay skills
+  (web search, fetch) keep working, and opencode has no sandbox of its own.
+  When the scripted model asked opencode's `bash` to run
+  `printf 'Overwritten by a read-only answer' > note.md` in a read-only
+  answer, opencode asked with kind `execute`, Copilot allowed it once, and
+  `note.md` was overwritten. The user asked a question and lost a note's
+  content. The read-only scenarios cover `edit` and `write`, and a shell
+  command that only reads.
+  [private #494](https://github.com/Brevilabs/obsidian-copilot-private/issues/494).
 
 ## Test boundary
 
@@ -157,12 +217,23 @@ spinner while `running`, a red dot on `error`, an accent dot when the chat
 needs attention. It picks a model, effort, or mode
 through the callbacks of the pickers the chat input renders, which production
 `buildAgentModelPicker` and `buildAgentModePicker` build from the running
-opencode's reported state, and reads what those pickers show. Everything from
-there to the model is production code or the real runtime.
+opencode's reported state, and reads what those pickers show. It answers a permission card with
+`AgentChatUIState.resolveToolPermission`, the card's `onResolve`, choosing the
+option by the label its button shows; reads the card as `ToolPermissionCard`
+renders it to static markup; and reads each tool call's row as `ActionCard`
+draws it, from `lookupToolSummary`, and its result from the call's text output.
+Everything from there to the model is production code or the real runtime.
+
+A read-only question enters at `AgentSessionManager.runFanoutTurn`, with the
+prompt built by `withReadOnlyPreamble`: the call `AgentSession` makes when a
+message @-mentions agents other than the chat's own. The chat-side gate before
+it, a Copilot Plus entitlement and a second installed agent, is not exercised,
+and the answer is read as `FanoutTurnView` draws a settled answer.
 
 **Real:** `AgentSessionManager`, `AgentModelPreloader` (the plugin-load probe
 whose warm process the first chat adopts), `AgentSession`, `AgentMessageStore`,
-`AgentChatUIState`, the default permission prompter, the backend registry and
+`AgentChatUIState`, the default permission prompter with its read-only branch,
+`FanoutOrchestrator`, `ToolPermissionCard`, the backend registry and
 `OpencodeBackendDescriptor`, `OpencodeBackend.buildSpawnDescriptor` and
 `buildOpencodeConfig`, `AcpBackendProcess`, `AcpProcessManager` (a real
 `child_process.spawn`), `@agentclientprotocol/sdk`, `VaultClient`,
@@ -193,7 +264,7 @@ Two session-lifecycle paths are driven the way the product drives them:
 | Substitute                              | Stands in for                           | Why                                                                                                                                                                                                                     |
 | --------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `harness/scriptedProvider.ts`           | The remote model provider               | The one substitution the epic allows. Deterministic SSE over real loopback HTTP, so opencode's own provider adapter still runs. It can also hold an answer open, drop the connection, or refuse with an HTTP error.     |
-| `obsidianShim.ts` → `FileSystemAdapter` | Obsidian's vault adapter                | Must be a class (`instanceof` checks) rooted at the temp vault. `exists` is called when the session ensures the vault's `AGENTS.md`.                                                                                    |
+| `obsidianShim.ts` → `FileSystemAdapter` | Obsidian's vault adapter                | Must be a class (`instanceof` checks) rooted at the temp vault. `exists` is called when the session ensures the vault's `AGENTS.md`; `write` when `VaultClient` answers opencode's `fs/write_text_file`.                |
 | `obsidianShim.ts` → `Platform`          | Obsidian's platform flags               | `requireNodeModule` loads Node built-ins only on desktop.                                                                                                                                                               |
 | `obsidianShim.ts` → `normalizePath`     | Obsidian's path normalizer              | Same rule; path helpers depend on it.                                                                                                                                                                                   |
 | `obsidianShim.ts` → `requestUrl`        | Obsidian's HTTP helper                  | Throws in scenarios, so a remote call from Copilot code fails by name. Only the fetcher enables it.                                                                                                                     |
@@ -246,7 +317,8 @@ for opencode.
 
 ## Isolation
 
-Each scenario gets a fresh temp root holding the vault and an agent home. For
+Each scenario gets a fresh temp root holding the vault and an agent home, under
+the real path of the OS temp dir (see "A vault reached through a symlink"). For
 the scenario's duration the harness points `HOME` and the four `XDG_*` roots at
 the agent home and moves the working directory to the temp root, so neither
 Copilot, the opencode it spawns, nor the `opencode --version` probe that runs
@@ -320,8 +392,17 @@ The run fails, each checked by trying it, when:
   opencode's line, whose error follows on lines of their own, by count. They
   are matched regardless of when they were logged, because opencode's stderr
   can arrive after the turn has ended;
+- Copilot answers a request opencode makes of it, such as
+  `fs/write_text_file`, with an error. opencode logs such a failure only as an
+  INFO frame and carries on, so the turn alone would not show it;
 - no scenario runs, for example after a path typo (the `AfterAll` hook;
   Cucumber alone exits 0).
+
+The file-edit scenarios also record a digest of every file under the temp
+root other than the agent home once the vault's notes are written, and assert
+which of them changed, so a tool that writes beside the vault, or a note it
+should not touch, fails the scenario. opencode itself wrote nothing there
+outside the agent home in any file-edit scenario.
 
 Jest never sees this suite: its roots are `src`, `dev`, and `scripts`, and
 `npx jest --listTests` lists nothing under `runtime-tests/`. The bundle resolves
@@ -354,6 +435,8 @@ version.
 | Streamed chunk visible | 10 s   | The scripted provider's pace barrier                  |
 | Provider event         | 20 s   | Until the provider holds an answer or refuses a retry |
 | Held request closed    | 10 s   | Stop until opencode closes the held request           |
+| Permission card        | 20 s   | Send until the chat shows a card or the turn ends     |
+| Read-only answer       | 20 s   | A read-only question until its answer settles         |
 | Selection confirmed    | 10 s   | A pick, or a new chat's saved mode, until shown       |
 | Settings change        | 30 s   | Old warm probe exits and the new one is warm          |
 | Reload action          | 30 s   | Restart until the resumed chat can take a message     |
@@ -368,16 +451,16 @@ Measured durations, with the pinned binary already cached:
 
 | Where                                      | Scenario    | `test:runtime`            | Whole job |
 | ------------------------------------------ | ----------- | ------------------------- | --------- |
-| Apple M-series Mac, darwin-arm64, Node 26  | 1.6 – 6.0 s | 54 s                      | —         |
+| Apple M-series Mac, darwin-arm64, Node 26  | 1.6 – 5.9 s | 73 s                      | —         |
 | GitHub `ubuntu-latest`, linux-x64, Node 22 | 4.7 s mean  | 78 s, after a 2 s install | 106 s     |
 
 Locally, startup through a ready session takes about 1.2 s and a turn about
 1 s; the longest scenarios are the Stop during a retry (5.6 – 6.0 s), the
 broken stream (4.7 – 4.9 s), which both wait out opencode's 2.1 – 2.5 s retry
-delay, and the Reload action (4.7 – 4.9 s). A stopped answer adds Copilot's
-one-second wait before the next prompt. Under a CPU load of 12 busy processes
-on a 10-core machine, the suite passed in 79 s with the longest scenario at
-7.5 s. In CI, `npm ci` takes 14-20 s of the job, and the report of a passing
+delay, and the Reload action (4.7 – 4.9 s). A file-edit scenario takes 2.4 –
+2.9 s. A stopped answer adds Copilot's one-second wait before the next prompt.
+Under a CPU load of 12 busy processes on a 10-core machine, the suite passed in
+138 s with the longest scenario at 9.7 s. In CI, `npm ci` takes 14-20 s of the job, and the report of a passing
 run is not uploaded, so the CI scenario time is the suite's time over its
 sixteen scenarios. On a cache miss the CI install step downloads the release
 in 5 s, against 1-2 s after a 1-3 s cache restore on a hit. The startup and
