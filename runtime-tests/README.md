@@ -483,8 +483,8 @@ Measured durations, with the pinned binary already cached:
 
 | Where                                      | Scenario    | `test:runtime`                             | Whole job |
 | ------------------------------------------ | ----------- | ------------------------------------------ | --------- |
-| Apple M-series Mac, darwin-arm64, Node 26  | 1.6 – 5.9 s | 73 s                                       | —         |
-| GitHub `ubuntu-latest`, linux-x64, Node 22 | 4.5 s mean  | 111 s, after a 5 s install on a cache miss | 147 s     |
+| Apple M-series Mac, darwin-arm64, Node 26  | 1.8 – 6.0 s | 85 s                                       | —         |
+| GitHub `ubuntu-latest`, linux-x64, Node 22 | 4.4 s mean  | 124 s, after a 5 s install on a cache miss | 161 s     |
 
 Locally, startup through a ready session takes about 1.2 s and a turn about
 1 s; the longest scenarios are the Stop during a retry (5.6 – 6.0 s), the
@@ -494,7 +494,7 @@ delay, and the Reload action (4.7 – 4.9 s). A file-edit scenario takes 2.4 –
 Under a CPU load of 12 busy processes on a 10-core machine, the suite passed in
 138 s with the longest scenario at 9.7 s. In CI, `npm ci` takes 14-20 s of
 the job, and the report of a passing run is not uploaded, so the CI scenario
-time is the suite's time over its twenty-five scenarios. On a cache miss the CI install step downloads the release
+time is the suite's time over its twenty-eight scenarios. On a cache miss the CI install step downloads the release
 in 5 s, against 1-2 s after a 1-3 s cache restore on a hit. The startup and
 turn bounds are over fifteen times their local durations; the job bound is
 over four times the CI job.
