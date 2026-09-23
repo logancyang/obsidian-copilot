@@ -125,6 +125,8 @@ When Claude or Codex asks a set of questions, answer the current tab and select 
 
 Codex can ask questions while the permission picker is on **Safe**, **Plan**, or **Auto**. You do not need to switch to Plan to answer a question.
 
+OpenCode does not show question cards yet. If it asks a clarifying question in chat, answer in the message box.
+
 Permission and question cards stay in a scrolling action area above the message box until you answer them, even while the response continues streaming.
 
 Your vault or project is the agent's working directory, not a security sandbox. Auto or bypass permissions can reach other files and services available to the agent or your account. Use **Safe** for unfamiliar work and review persistent permissions carefully.
