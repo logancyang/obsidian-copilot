@@ -811,6 +811,9 @@ describe("buildOpencodeConfig — provider/model injection", () => {
   });
 });
 
+/** The top-level rule every generated config carries. */
+const QUESTION_DENY = { action: "question", resource: "*", effect: "deny" };
+
 /** `copilot-build`'s ask-before-write rules. */
 const ASK_BEFORE_WRITE = [
   { action: "shell", resource: "*", effect: "ask" },
@@ -849,6 +852,12 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
   it("always spawns with canonical default agent (copilot-build)", async () => {
     const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
     expect(cfg.default_agent).toBe("copilot-build");
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/559 denies OpenCode's native question tool for every agent", async () => {
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+
+    expect(cfg.permissions).toEqual([QUESTION_DENY]);
   });
 
   it("overrides system prompt on both build and copilot-build agents", async () => {
@@ -960,25 +969,28 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
   it("denies a skill enabled for Claude only (cross-discovered, not enabled for opencode)", async () => {
     seedSkills([makeSkill("foo", ["claude"])]);
     const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
-    expect(cfg.permissions).toEqual([{ action: "skill", resource: "foo", effect: "deny" }]);
+    expect(cfg.permissions).toEqual([
+      QUESTION_DENY,
+      { action: "skill", resource: "foo", effect: "deny" },
+    ]);
   });
 
   it("does not deny a skill enabled for both Claude and OpenCode", async () => {
     seedSkills([makeSkill("foo", ["claude", "opencode"])]);
     const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
-    expect(cfg.permissions).toBeUndefined();
+    expect(cfg.permissions).toEqual([QUESTION_DENY]);
   });
 
-  it("emits no top-level permission rules when no skills need denying", async () => {
+  it("adds no skill deny rules when no skills need denying", async () => {
     seedSkills([makeSkill("foo", ["opencode"])]);
     const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
-    expect(cfg.permissions).toBeUndefined();
+    expect(cfg.permissions).toEqual([QUESTION_DENY]);
   });
 
-  it("emits no top-level permission rules when there are no skills at all", async () => {
+  it("adds no skill deny rules when there are no skills at all", async () => {
     seedSkills([]);
     const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
-    expect(cfg.permissions).toBeUndefined();
+    expect(cfg.permissions).toEqual([QUESTION_DENY]);
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 denies native web tools for every Self-Host opencode agent", async () => {
@@ -987,6 +999,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
     expect(cfg.permissions).toEqual([
+      QUESTION_DENY,
       { action: "websearch", resource: "*", effect: "deny" },
       { action: "webfetch", resource: "*", effect: "deny" },
     ]);
@@ -1004,6 +1017,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     // a is claude-only → denied. e is codex-only → denied (codex also
     // populates the cross-discovered `.agents/skills/` path). b/c/d not denied.
     expect(cfg.permissions).toEqual([
+      QUESTION_DENY,
       { action: "skill", resource: "a", effect: "deny" },
       { action: "skill", resource: "e", effect: "deny" },
     ]);
@@ -1013,7 +1027,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     mockSkills = [makeSkill("foo", ["claude"])];
     mockSkillManagerReady = false;
     const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
-    expect(cfg.permissions).toBeUndefined();
+    expect(cfg.permissions).toEqual([QUESTION_DENY]);
   });
 });
 
@@ -1189,6 +1203,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
               permissions: [
                 { action: "*", resource: "*", effect: "allow" },
                 { action: "websearch", resource: "*", effect: "allow" },
+                { action: "question", resource: "*", effect: "allow" },
               ],
               agent: {
                 build: { permission: { bash: "ask", websearch: "allow" } },
@@ -1222,6 +1237,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     expect(cfg.permissions).toEqual([
       { action: "*", resource: "*", effect: "allow" },
       { action: "websearch", resource: "*", effect: "allow" },
+      { action: "question", resource: "*", effect: "allow" },
       ...denies,
     ]);
     expect(cfg.agents.build.permissions).toEqual([

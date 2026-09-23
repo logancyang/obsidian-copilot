@@ -439,7 +439,11 @@ export async function buildOpencodeConfig(
 
   // OpenCode appends top-level rules to every agent, then each agent's own
   // rules; the last rule matching a tool call decides it.
-  const permissions: PermissionRule[] = [];
+  const permissions: PermissionRule[] = [
+    // OpenCode's ACP bridge cancels native questions before Copilot can show them.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/559
+    { action: "question", resource: "*", effect: "deny" },
+  ];
 
   if (s.enableSelfHostMode === true) permissions.push(...NATIVE_WEB_DENIES);
 
@@ -513,7 +517,7 @@ export async function buildOpencodeConfig(
     // disabled individually. Only published levels are trusted, so drop it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/557
     plugins: ["-opencode.variant"],
-    permissions: permissions.length > 0 ? permissions : undefined,
+    permissions,
     agents: {
       [OPENCODE_BUILTIN_BUILD_AGENT_ID]: {
         system,
