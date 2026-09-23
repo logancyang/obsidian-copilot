@@ -1,0 +1,206 @@
+# Canary workflow: a maintainer comments `/canary` on an open stable release PR
+# (title "X.Y.Z") to publish its head commit as a GitHub prerelease tagged
+# "X.Y.Z-canary.<run>". BRAT testers install it; the Obsidian plugin store is
+# untouched because the prerelease never becomes the latest release and
+# manifest.json on master is unchanged. Semver orders X.Y.Z-canary.N below
+# X.Y.Z, so BRAT testers move to the stable release once it ships.
+#
+# Each release PR keeps at most one canary so the Releases page stays readable,
+# and closing the PR (merged or not) deletes it along with its tag.
+#
+# issue_comment workflows always run the copy of this file on master, so edits
+# here take effect only after they merge.
+
+name: Canary
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [closed]
+    branches:
+      - master
+
+jobs:
+  publish:
+    if: >
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      github.event.issue.state == 'open' &&
+      startsWith(github.event.comment.body, '/canary')
+    runs-on: ubuntu-latest
+
+    # Job-level so unrelated comments on the PR (which also start a run of this
+    # workflow) cannot cancel an in-flight publish.
+    concurrency:
+      group: canary-${{ github.event.issue.number }}
+      cancel-in-progress: true
+
+    permissions:
+      contents: write # create prereleases and tags
+      pull-requests: write # reply on the PR
+      attestations: write
+      id-token: write
+
+    steps:
+      # ── Step 1: Authorize the commenter and resolve the PR ──────────────────
+      # Only users with write access may publish. The head SHA is captured once
+      # so a push after the comment cannot change what gets built and tagged.
+      - name: Resolve release PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          PERMISSION=$(gh api "repos/${GITHUB_REPOSITORY}/collaborators/${COMMENTER}/permission" -q .permission)
+          case "$PERMISSION" in
+            admin|maintain|write) ;;
+            *) echo "$COMMENTER has '$PERMISSION' access; publishing a canary requires write."; exit 1 ;;
+          esac
+
+          PR_JSON=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json title,headRefOid,isCrossRepository,baseRefName)
+          TITLE=$(jq -r .title <<< "$PR_JSON")
+          if ! grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' <<< "$TITLE"; then
+            echo "PR title '$TITLE' is not a stable release version (X.Y.Z)."
+            exit 1
+          fi
+          if [ "$(jq -r .isCrossRepository <<< "$PR_JSON")" = "true" ] || [ "$(jq -r .baseRefName <<< "$PR_JSON")" != "master" ]; then
+            echo "Canaries are only published for same-repository PRs targeting master."
+            exit 1
+          fi
+
+          {
+            echo "base=$TITLE"
+            echo "version=$TITLE-canary.$GITHUB_RUN_NUMBER"
+            echo "sha=$(jq -r .headRefOid <<< "$PR_JSON")"
+          } >> "$GITHUB_OUTPUT"
+
+      # ── Step 2: Checkout the PR head ────────────────────────────────────────
+      # No persisted credentials: npm ci and the build run PR code.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.sha }}
+          persist-credentials: false
+
+      - name: Verify version matches manifest
+        env:
+          BASE: ${{ steps.pr.outputs.base }}
+        run: |
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+          if [ "$BASE" != "$MANIFEST_VERSION" ]; then
+            echo "Version mismatch: PR title='$BASE', manifest.json='$MANIFEST_VERSION'"
+            exit 1
+          fi
+
+      - name: Setup Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Obsidian community review gate
+        run: npm run review:obsidian
+
+      - name: Build
+        run: npm run build
+
+      # ── Step 3: Stamp the canary version into the release-asset manifest ────
+      # Runner-only, like the prerelease path in release.yml: BRAT reads the
+      # manifest.json asset, so it must carry the canary version.
+      - name: Prepare release-asset manifest
+        env:
+          VERSION: ${{ steps.pr.outputs.version }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+            manifest.version = process.env.VERSION;
+            fs.writeFileSync("manifest.json", JSON.stringify(manifest, null, 2) + "\n");
+          '
+          cat manifest.json
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+
+      # ── Step 4: Replace this version's previous canary ──────────────────────
+      # Runs after a successful build so a failed build leaves the last working
+      # canary in place.
+      - name: Delete previous canaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE: ${{ steps.pr.outputs.base }}
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName -q '.[].tagName' \
+            | grep -E "^${BASE//./\\.}-canary\.[0-9]+$" \
+            | xargs -r -n1 gh release delete --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+
+      - name: Create canary prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.pr.outputs.version }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh release create "$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SHA" \
+            --title "$VERSION" \
+            --notes "Canary build of #${PR_NUMBER} at ${SHA}. For BRAT testing only; deleted when the PR closes." \
+            --prerelease \
+            main.js \
+            manifest.json \
+            styles.css
+
+      - name: Report result
+        if: always() && steps.pr.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          VERSION: ${{ steps.pr.outputs.version }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$STATUS" = "success" ]; then
+            BODY="Canary \`${VERSION}\` published from ${SHA}. In BRAT, add \`${GITHUB_REPOSITORY}\` and choose \`${VERSION}\` (or latest)."
+          else
+            BODY="Canary \`${VERSION}\` failed: ${RUN_URL}"
+          fi
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+
+  cleanup:
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+
+    concurrency:
+      group: canary-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Delete this PR's canaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if ! grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' <<< "$PR_TITLE"; then
+            echo "Not a stable release PR; nothing to clean up."
+            exit 0
+          fi
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName -q '.[].tagName' \
+            | grep -E "^${PR_TITLE//./\\.}-canary\.[0-9]+$" \
+            | xargs -r -n1 gh release delete --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
