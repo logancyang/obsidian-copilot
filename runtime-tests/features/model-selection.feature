@@ -59,10 +59,11 @@ Feature: Choosing the model, effort, and mode a conversation runs on
   Scenario: The mode picked in a conversation is confirmed and the next new conversation switches to it
     Given Copilot starts with opencode's default model set to "model-a" with no effort
     When I open a new conversation
-    Then the mode picker offers "Default, Auto" and shows "Default"
+    Then the mode picker offers "Default, Auto"
+    And the mode picker shows "Default"
     When I choose "Auto" in the mode picker
     And I open a new conversation
-    Then the mode picker switches to "Auto"
+    Then the mode picker shows "Auto"
 
   # A restart resumes each open conversation instead of replacing it:
   # https://github.com/Brevilabs/obsidian-copilot-private/issues/475
@@ -122,7 +123,8 @@ Feature: Choosing the model, effort, and mode a conversation runs on
 
     Given Copilot starts with opencode's default model set to "model-b" at "high" effort
     When I open a new conversation
-    And I restart opencode from the chat's Reload action
+    Then the model picker shows "bravo/model-b" at "high" effort
+    When I restart opencode from the chat's Reload action
     Then the model picker shows "bravo/model-b" at "high" effort
 
   # New conversations kept opencode's own effort instead of the saved one:

@@ -81,7 +81,7 @@ what stands in for Obsidian, and the behavior each scenario protects.
 
 ```bash
 npm run test:runtime        # check the step vocabulary, install the pinned opencode, run every scenario
-npm run test:runtime:steps  # print every step by role, with its uses and an example
+npm run test:runtime:steps  # print every step by role, with its use count and an example
 ```
 
 Both run on macOS and Linux, need no credentials, and make no inference
@@ -164,16 +164,18 @@ if a release ships with the gap.
     Unverified: https://github.com/Brevilabs/obsidian-copilot-private/issues/573
     Release consequence: a read-only question can overwrite or delete a note, or a file
     outside the vault, without asking the user.
-    Fails today with: 'vault/note.md'
+    Fails today with: [ 'vault/note.md' ]
   ```
 
   It counts as a known gap only when every other step passes, the run is
-  otherwise clean, and its last step fails an assertion whose message contains
-  the `Fails today with:` text. Choose text that names the wrong value, so a
-  broken setup does not match it. Failing anywhere else, or with another
-  message, fails the run. Once the gap is fixed the scenario passes, and the run
-  fails with an instruction to promote it: remove the tag and the three lines,
-  and move it into the README's scenario table.
+  otherwise clean, and its last step fails an assertion whose actual value, as
+  Node's `util.inspect` prints it, is exactly the `Fails today with:` text. A
+  failure that finds any other value, even one that includes today's, fails the
+  run, and so does a failure anywhere else. Assert the gap's setup with a
+  **Then** before the gap step, so a setup that never happened cannot pass as
+  the gap. Once the gap is fixed the scenario passes, and the run fails with an
+  instruction to promote it: remove the tag and the three lines, and move it
+  into the README's scenario table.
 
 - **As an entry in the README's Known gaps,** when no scenario can show it: the
   gap depends on timing, the intended behavior is not decided, or the harness
@@ -207,7 +209,16 @@ A value that varies is a parameter, not a new sentence: add a
 `defineParameterType` in `runtime-tests/steps/index.ts`, as `{effort}` and
 `{fileOperation}` do. A PR that adds a step definition says why no existing one
 fits. `test:runtime` fails on a definition no scenario uses, and CI lists every
-single-use definition in the job summary for review.
+definition that only one step in the feature files uses in the job summary for
+review.
+
+A scenario fails when Copilot logs a `WARN` or `ERROR`. When a new scenario
+hits a warning that is correct for what it does, declare that exact line where
+the step that causes it runs, the way `expectTurnToFail` and the restart's
+`SHUTDOWN_WARNINGS` in `runtime-tests/harness/runtime.ts` do, with a comment
+saying why the warning is right, and justify it in the PR. When the warning
+reports nothing wrong for the user, file an issue to lower its level instead.
+Never allow a warning for the whole run or by a loose pattern.
 
 ### CI
 
@@ -216,14 +227,15 @@ pull request, and the required `build (22.x)` check fails when it does. The job
 fails on:
 
 - an undefined, ambiguous, or unused step, or no scenario found, from a dry run
-  before opencode is installed;
+  before any scenario starts;
 - a failed, skipped, or pending scenario, or a run in which no scenario ran;
 - a known gap that fails differently, or passes;
 - the rest of the README's runner guarantees, such as a `WARN` or `ERROR` in
   Copilot's log or a network request the suite does not expect.
 
-Its job summary lists every scenario by feature, name, and result, with known
-gaps marked unverified and their issues, followed by the single-use steps. A
+Its job summary lists the steps only one feature-file step uses, then every
+scenario by feature, name, and result, with an outline's example values after
+its name and known gaps marked unverified with their issues. A
 failed run uploads the `runtime-report` artifact with each failed scenario's
 logs.
 

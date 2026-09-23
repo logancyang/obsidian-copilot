@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { inspect } from "node:util";
 
 import {
   After,
@@ -135,9 +136,10 @@ AfterStep(function (this: RuntimeWorld) {
   this.atGapStep = false;
 });
 
-// A known gap's last step fails today with the message its scenario states.
+// A known gap's last step fails today with the wrong value its scenario states.
 // That failure is the gap, so the step passes and the scenario is reported as a
-// known gap. Any other failure, including one earlier in the scenario, fails it.
+// known gap. Any other failure, including one earlier in the scenario or one
+// that finds a different wrong value, fails it.
 setDefinitionFunctionWrapper(
   (code: (...args: unknown[]) => unknown) =>
     async function (this: RuntimeWorld | undefined, ...args: unknown[]): Promise<unknown> {
@@ -147,7 +149,7 @@ setDefinitionFunctionWrapper(
       } catch (error) {
         const gap = this?.atGapStep ? this.knownGap : null;
         if (!gap || !(error instanceof assert.AssertionError)) throw error;
-        if (!error.message.includes(gap.failsWith)) throw error;
+        if (inspect(error.actual) !== gap.failsWith) throw error;
         this!.gapConfirmed = true;
       }
     }
@@ -166,7 +168,7 @@ After(async function (this: RuntimeWorld, scenario: ITestCaseHookParameter) {
     );
   } else if (gap && scenario.result?.status === Status.FAILED) {
     problems.push(
-      `a ${KNOWN_GAP_TAG} scenario may fail only at its last step, with a message containing ${JSON.stringify(gap.failsWith)}`
+      `a ${KNOWN_GAP_TAG} scenario may fail only at its last step, with an assertion whose actual value is ${gap.failsWith}`
     );
   }
   // Read before `stop()` deletes the agent home that holds opencode's logs.
@@ -179,7 +181,7 @@ After(async function (this: RuntimeWorld, scenario: ITestCaseHookParameter) {
     report.add(
       {
         feature: scenario.gherkinDocument.feature?.name ?? scenario.pickle.uri,
-        name: scenario.pickle.name,
+        name: scenarioTitle(scenario.gherkinDocument, scenario.pickle),
         status: failed ? "failed" : gap ? `known gap, unverified: ${gap.issue}` : "passed",
         elapsedMs: Date.now() - this.startedAt,
         ...(error ? { error } : {}),
@@ -204,12 +206,18 @@ defineParameterType({
   transformer: (level: string | undefined) => level ?? null,
 });
 
-// How long a refused request tells opencode to wait before it retries.
+// How long a refused request tells opencode to wait before it retries, in its
+// `retry-after-ms` header, or undefined when it sends none.
 defineParameterType({
   name: "retryAdvice",
-  regexp: [/retry at once/, /wait a minute/],
-  transformer: (advice: string) => (advice === "retry at once" ? 0 : 60_000),
+  regexp: [/asking to retry at once/, /asking to wait a minute/, /giving no retry time/],
+  transformer: (advice: string) =>
+    ({ "asking to retry at once": 0, "asking to wait a minute": 60_000 })[advice],
 });
+
+// How a scripted answer stops partway: held open until the scenario continues
+// it, or cut off as a failing stream is.
+defineParameterType({ name: "streamEnd", regexp: /hold|break/ });
 
 Given(
   "Copilot's opencode agent uses the scripted model {string} by default",
@@ -302,11 +310,14 @@ When("I switch to conversation {string}", function (this: RuntimeWorld, name: st
   this.runtime.show(this.conversation);
 });
 
-// The message it answers is sent once the conversation shows these words.
+// Once the conversation shows these words, a held answer returns the message it
+// answers, and a broken one drops the connection.
 Given(
-  "the model will start answering {string} and then hold",
-  function (this: RuntimeWorld, text: string) {
-    this.pauses.push({ event: "hold the answer", reached: this.runtime.provider.hold(text) });
+  "the model will start answering {string} and then {streamEnd}",
+  function (this: RuntimeWorld, text: string, end: string) {
+    const held = this.runtime.provider.hold(text);
+    if (end === "hold") this.pauses.push({ event: "hold the answer", reached: held });
+    else void held.then((stream) => stream.break());
   }
 );
 
@@ -319,14 +330,6 @@ When(
   }
 );
 
-// Drops the connection once the conversation shows these words, as a failing stream does.
-Given(
-  "the model will start answering {string} and then break",
-  function (this: RuntimeWorld, text: string) {
-    void this.runtime.provider.hold(text).then((held) => held.break());
-  }
-);
-
 // The chat input's stop button, then the input unlocking once the turn ends.
 When("I stop the answer", async function (this: RuntimeWorld) {
   await this.conversation.stop();
@@ -334,24 +337,17 @@ When("I stop the answer", async function (this: RuntimeWorld) {
   await this.conversation.finish();
 });
 
-// The provider refuses every attempt at the question it refuses first.
+// The provider refuses every attempt at the question it refuses first. Asked to
+// retry at once, or refused for good, opencode gives up within a turn and the
+// turn fails. Asked to wait a minute, it waits longer than a turn may take, so
+// the message sent returns once the refusal is sent, for the scenario to act
+// while opencode waits.
 Given(
-  "the provider will refuse the next request with {int} {string}",
-  function (this: RuntimeWorld, status: number, message: string) {
-    void this.runtime.provider.refuse(status, message);
-    this.runtime.expectTurnToFail(message);
-  }
-);
-
-// Asked to retry at once, opencode gives up within a turn and the turn fails.
-// Asked to wait a minute, it waits longer than a turn may take, so the message
-// sent returns once the refusal is sent, for the scenario to act while opencode waits.
-Given(
-  "the provider will refuse the next request with {int} {string}, asking to {retryAdvice}",
-  function (this: RuntimeWorld, status: number, message: string, retryAfterMs: number) {
+  "the provider will refuse the next request with {int} {string}, {retryAdvice}",
+  function (this: RuntimeWorld, status: number, message: string, retryAfterMs: number | undefined) {
     const refused = this.runtime.provider.refuse(status, message, retryAfterMs);
-    if (retryAfterMs === 0) this.runtime.expectTurnToFail(message);
-    else this.pauses.push({ event: "refuse opencode's retry", reached: refused });
+    if (retryAfterMs) this.pauses.push({ event: "refuse opencode's retry", reached: refused });
+    else this.runtime.expectTurnToFail(message);
   }
 );
 
@@ -441,14 +437,14 @@ When("I restart opencode from the chat's Reload action", async function (this: R
 
 // Waits for the picker to show the pick, which it does once opencode confirms it.
 When(
-  "I pick {string} at {string} effort in the model picker",
-  async function (this: RuntimeWorld, model: string, effort: string) {
+  "I pick {string} {effort} in the model picker",
+  async function (this: RuntimeWorld, model: string, effort: string | null) {
     const picker = modelPicker(this.runtime);
     const row = picker.models.find((entry) => entry.displayName === model);
     if (!row) throw new Error(`the model picker offers no "${model}"`);
     const key = getModelKeyFromModel(row);
-    const option = effortOption(picker.effortOptionsByModelKey?.[key], model, effort);
-    picker.commitSelection?.(key, option.value);
+    const options = picker.effortOptionsByModelKey?.[key];
+    picker.commitSelection?.(key, effort && effortOption(options, model, effort).value);
     const expected = selectionShown(model, effort);
     await this.conversation.waitFor(
       () => pickerSelection(this.runtime) === expected,
@@ -497,21 +493,21 @@ Then(
   }
 );
 
-Then(
-  "the mode picker offers {string} and shows {string}",
-  function (this: RuntimeWorld, options: string, label: string) {
-    const picker = modePicker(this.runtime);
-    assert.equal(picker.options.map((o) => o.label).join(", "), options);
-    assert.equal(modeShown(this.runtime), label);
-  }
-);
+Then("the mode picker offers {string}", function (this: RuntimeWorld, options: string) {
+  assert.equal(
+    modePicker(this.runtime)
+      .options.map((o) => o.label)
+      .join(", "),
+    options
+  );
+});
 
 // A new conversation opens in the agent's own mode and switches to the saved one
-// once it is ready, so this waits for the switch.
-Then("the mode picker switches to {string}", async function (this: RuntimeWorld, label: string) {
+// once it is ready, so this waits for the mode it should show.
+Then("the mode picker shows {string}", async function (this: RuntimeWorld, label: string) {
   await this.conversation.waitFor(
     () => modeShown(this.runtime) === label,
-    () => `the mode picker to switch to ${label}; it shows ${modeShown(this.runtime)}`
+    () => `the mode picker to show ${label}; it shows ${modeShown(this.runtime)}`
   );
 });
 
@@ -625,23 +621,38 @@ const KNOWN_GAP_TAG = "@known-gap";
 
 /**
  * What a `@known-gap` scenario states under its title: the issue that tracks
- * the gap, what shipping with it means for users, and a fragment of the
- * message its last step fails with today.
+ * the gap, what shipping with it means for users, and the wrong value its last
+ * step's assertion finds today, as `util.inspect` prints it.
  */
 interface KnownGap {
   issue: string;
   failsWith: string;
 }
 
-/** Read the known gap `pickle`'s scenario states in its description, or fail the scenario. */
-function readKnownGap(
-  document: ITestCaseHookParameter["gherkinDocument"],
-  pickle: ITestCaseHookParameter["pickle"]
-): KnownGap {
-  const scenario = document.feature?.children.find(
+type GherkinDocument = ITestCaseHookParameter["gherkinDocument"];
+type Pickle = ITestCaseHookParameter["pickle"];
+
+/** The scenario, or scenario outline, that `pickle` was compiled from. */
+function scenarioOf(document: GherkinDocument, pickle: Pickle) {
+  return document.feature?.children.find(
     (child) => child.scenario && pickle.astNodeIds.includes(child.scenario.id)
   )?.scenario;
-  const description = scenario?.description ?? "";
+}
+
+/**
+ * The scenario's name as a report lists it: an outline's example row adds its
+ * values, since examples whose values are not in the name share one title.
+ */
+function scenarioTitle(document: GherkinDocument, pickle: Pickle): string {
+  const row = scenarioOf(document, pickle)
+    ?.examples.flatMap((examples) => examples.tableBody)
+    .find((candidate) => pickle.astNodeIds.includes(candidate.id));
+  return row ? `${pickle.name} (${row.cells.map((cell) => cell.value).join("; ")})` : pickle.name;
+}
+
+/** Read the known gap `pickle`'s scenario states in its description, or fail the scenario. */
+function readKnownGap(document: GherkinDocument, pickle: Pickle): KnownGap {
+  const description = scenarioOf(document, pickle)?.description ?? "";
   const issue = /https:\/\/github\.com\/\S+\/issues\/\d+/.exec(description)?.[0];
   const consequence = /^\s*Release consequence: \S/m.test(description);
   const failsWith = /^\s*Fails today with: (.+)$/m.exec(description)?.[1].trim();

@@ -103,7 +103,7 @@ Feature: Approving, rejecting, and blocking the agent's file edits
     When I open conversation "A"
     And I choose "Auto" in the mode picker
     And I open conversation "B"
-    Then the mode picker switches to "Auto"
+    Then the mode picker shows "Auto"
     When I choose "Default" in the mode picker
     And I open conversation "C"
     And I send "Fix the note"
@@ -150,7 +150,7 @@ Feature: Approving, rejecting, and blocking the agent's file edits
     Unverified: https://github.com/Brevilabs/obsidian-copilot-private/issues/573
     Release consequence: a read-only question can overwrite or delete a note, or a file
     outside the vault, without asking the user.
-    Fails today with: 'vault/note.md'
+    Fails today with: [ 'vault/note.md' ]
 
     Given the model will run "printf 'Overwritten by a read-only answer' > note.md"
     And the model will answer "Done"

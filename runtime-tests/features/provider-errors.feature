@@ -49,7 +49,7 @@ Feature: Recovering from provider errors
   # (https://github.com/Brevilabs/obsidian-copilot-private/issues/571).
   Scenario: A stream that breaks mid-answer is retried, and when the retry is refused the chat keeps the words shown and ends in error
     Given the model will start answering "Alpha Bravo" and then break
-    And the provider will refuse the next request with 400 "Invalid value for messages"
+    And the provider will refuse the next request with 400 "Invalid value for messages", giving no retry time
     And the model will answer "Next answer"
     When I open a new conversation
     And I send "Question"

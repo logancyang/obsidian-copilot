@@ -401,8 +401,8 @@ refuses and the scenario reports.
 The run fails, each checked by trying it, when:
 
 - a step is undefined or ambiguous, a step definition is unused, or no
-  scenario is found (`vocabulary.mjs --check`, a dry run before the binary is
-  installed);
+  scenario is found (`vocabulary.mjs --check`, a dry run before any scenario
+  starts);
 - a step is undefined, or pending (`strict: true` in `cucumber.mjs`);
 - a scenario is skipped (the `After` hook; Cucumber alone exits 0);
 - Copilot logs a `WARN` or `ERROR` line during the scenario. The check runs
@@ -424,9 +424,9 @@ The run fails, each checked by trying it, when:
   INFO frame and carries on, so the turn alone would not show it;
 - no scenario runs, for example after a path typo (the `AfterAll` hook;
   Cucumber alone exits 0);
-- a `@known-gap` scenario fails before its last step, fails there with a
-  message that lacks its `Fails today with:` text, or passes (the step wrapper
-  and the `After` hook in `steps/index.ts`).
+- a `@known-gap` scenario fails before its last step, fails there with an
+  actual value other than its `Fails today with:` text, or passes (the step
+  wrapper and the `After` hook in `steps/index.ts`).
 
 The file-edit scenarios also record a digest of every file under the temp
 root other than the agent home once the vault's notes are written, and assert
@@ -512,8 +512,9 @@ refusals, and the refused network attempts. Everything written passes through
 bug-report logs: home-directory user names, email addresses, key- and
 token-shaped values, and `Bearer` and `Basic` credentials. CI uploads the
 directory as the `runtime-report` artifact when the job fails. In CI the run
-also lists each scenario's feature, name, and result, `passed`, `failed`, or
-`known gap, unverified: <issue>`, in the job summary, with a note that a
+also lists each scenario's feature, name (with an outline's example values),
+and result, `passed`, `failed`, or `known gap, unverified: <issue>`, in the job
+summary, with a note that a
 scripted provider shows nothing about a real model's choices.
 
 ## The harness
