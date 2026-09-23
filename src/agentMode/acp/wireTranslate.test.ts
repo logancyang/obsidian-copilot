@@ -29,6 +29,16 @@ const testAcpNotificationToEvents = () => {
     expect(events).toEqual([]);
   });
 
+  it.each([
+    ["plan_update", { plan: { type: "markdown", planId: "plan-1", content: "# Plan" } }],
+    ["plan_removed", { planId: "plan-1" }],
+  ])(
+    "drops a %s so the plan-approval card stays the only place a proposed plan renders (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)",
+    (sessionUpdate, fields) => {
+      expect(acpNotificationToEvents(notification({ sessionUpdate, ...fields }))).toEqual([]);
+    }
+  );
+
   it("appends a plan event after a todowrite tool_call carrying rawInput.todos", () => {
     const events = acpNotificationToEvents(
       notification({

@@ -276,6 +276,11 @@ export class AcpBackendProcess implements BackendProcess {
         clientCapabilities: {
           fs: { readTextFile: true, writeTextFile: true },
           elicitation: { form: {} },
+          // The plan-approval card and editor already show a proposed plan. Without
+          // this capability codex-acp also streams the plan body as assistant text,
+          // duplicating it in the chat above the card.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+          plan: {},
         },
         clientInfo: {
           name: COPILOT_CLIENT_NAME,
