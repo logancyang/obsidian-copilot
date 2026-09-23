@@ -6,15 +6,13 @@ Work through an approach with Codex before it changes your notes. Plan mode now 
 
 ## ✨ Enhancements
 
+- Streaming replies do less rendering work in long Agent Chats. A 30-message streaming benchmark on macOS measured 47.1% less renderer scripting time. ([#3349](https://github.com/logancyang/obsidian-copilot/pull/3349), @zeroliu)
 - Use gpt-6-sol and gpt-6-luna with Codex. Copilot now manages codex-acp 1.13.0. ([#3337](https://github.com/logancyang/obsidian-copilot/pull/3337), @zeroliu)
 - Review Codex's plan before it starts making changes. Choose Plan to collaborate on the approach, then approve the inline plan card to continue in Auto. ([#3345](https://github.com/logancyang/obsidian-copilot/pull/3345), @zeroliu)
 - Answer Codex questions inside Agent Chat. Choose an option or write your own answer when Codex needs your input, in Safe, Plan, or Auto mode. ([#3340](https://github.com/logancyang/obsidian-copilot/pull/3340), @zeroliu)
 - See which chats still have an open agent session in Recent Chats and Chat History. Use Close session to release one while keeping the saved conversation. ([#3213](https://github.com/logancyang/obsidian-copilot/pull/3213), @zeroliu)
 - Custom Codex and OpenCode binary setup now explains compatibility risks and recommends the version managed by Copilot. ([#3341](https://github.com/logancyang/obsidian-copilot/pull/3341), @zeroliu)
-
-## 🛠️ Bug Fixes
-
-- OpenCode starts in your vault directory, so it can read vault-relative notes and instructions. ([#3342](https://github.com/logancyang/obsidian-copilot/pull/3342), @zeroliu)
+- Updated how Copilot starts OpenCode in preparation for OpenCode 2. ([#3342](https://github.com/logancyang/obsidian-copilot/pull/3342), @zeroliu)
 
 ## 🧰 Troubleshoot
 
