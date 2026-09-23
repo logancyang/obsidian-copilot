@@ -322,6 +322,7 @@ export class AgentSession {
   readonly internalId: string;
   readonly chatInputId: string;
   readonly backendId: BackendId;
+  readonly planFeedbackDelivery: "permission" | "next_turn";
   /** Immutable scope binding ({@link GLOBAL_SCOPE} or a project id). */
   readonly projectId: ProjectScopeId;
   /** Resolves when startup and any initial model selection have settled. */
@@ -493,6 +494,7 @@ export class AgentSession {
     this.internalId = opts.internalId;
     this.chatInputId = opts.chatInputId ?? uuidv4();
     this.backendId = opts.backendId;
+    this.planFeedbackDelivery = opts.getDescriptor?.()?.planFeedbackDelivery ?? "permission";
     this.projectId = opts.projectId ?? GLOBAL_SCOPE;
     this.cwd = opts.cwd ?? null;
     this.getDescriptor = opts.getDescriptor ?? null;

@@ -117,6 +117,9 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   // codex names a session after the raw first prompt (which leaks the injected
   // context envelope), so the session derives the tab title client-side instead.
   summarizesSessionTitle: false,
+  // Codex ends its turn on revise_plan without acting on the deny message.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/41
+  planFeedbackDelivery: "next_turn",
   wire: codexWire,
   showModelDescriptions: true,
 

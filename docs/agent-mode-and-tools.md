@@ -113,6 +113,8 @@ opencode supports **Safe** and **Auto**. Claude supports **Safe**, **Plan**, and
 
 With Codex, **Safe** uses the adapter's **Ask for approval** preset. It can edit files in the working directory; the adapter asks before editing external files or using the internet. **Auto** uses automatic review within the same workspace-write sandbox, without enabling full access. **Plan** uses Auto's approval preset while Codex drafts a plan and waits for your approval. Once you approve it, Codex continues in **Auto** mode to implement the plan.
 
+When Codex presents a plan, you can **Approve** it, **Reject** it, or type feedback in the plan card. Feedback starts a new chat turn so Codex can revise the plan; review the new proposal before approving it. If you ask Codex to save the plan to a note, approve the revised plan to let it create the note.
+
 When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. Stopping the turn cancels unanswered requests.
 
 When Claude or Codex asks a set of questions, answer the current tab and select **Next**. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead. **Cancel** dismisses the entire request. If Codex withdraws or times out the question, its card disappears.
