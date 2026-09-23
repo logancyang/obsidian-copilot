@@ -90,6 +90,7 @@ function partsEqual(a: AgentMessagePart, b: AgentMessagePart): boolean {
         a.title === b.title &&
         a.toolKind === b.toolKind &&
         a.status === b.status &&
+        a.userResponse === b.userResponse &&
         a.vendorToolName === b.vendorToolName &&
         a.parentToolCallId === b.parentToolCallId &&
         toolProgressEqual(a.progress, b.progress) &&

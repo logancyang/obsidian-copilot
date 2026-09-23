@@ -34,7 +34,7 @@ import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver
 import { CodexBinaryManager } from "./CodexBinaryManager";
 import { CODEX_PINNED_VERSION } from "./codexArchive";
 import { CODEX_BINARY_NAME } from "./cliSetup";
-import { buildCodexModeMapping } from "./codexModeMapping";
+import { buildCodexModeMapping, buildCodexModeState } from "./codexModeMapping";
 import { isSupportedCodexAcpPath, inspectCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
 import { classifyBinaryInstall } from "@/agentMode/backends/shared/binaryCompatibility";
 
@@ -117,6 +117,9 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   // codex names a session after the raw first prompt (which leaks the injected
   // context envelope), so the session derives the tab title client-side instead.
   summarizesSessionTitle: false,
+  // Codex ends its turn on revise_plan without acting on the deny message.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/41
+  planFeedbackDelivery: "next_turn",
   wire: codexWire,
   showModelDescriptions: true,
 
@@ -256,8 +259,12 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 
   SettingsPanel: CodexSettingsPanel,
 
-  getModeMapping(modeState) {
-    return buildCodexModeMapping(modeState);
+  getModeMapping() {
+    return buildCodexModeMapping();
+  },
+
+  getModeState(modeState, configOptions) {
+    return buildCodexModeState(modeState, configOptions);
   },
 };
 

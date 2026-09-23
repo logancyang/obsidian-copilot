@@ -48,6 +48,8 @@ export interface AgentChatBackend {
 
   /** True while ACP `session/new` is still in flight. Send is gated on this. */
   isStarting(): boolean;
+  /** True while the session is running a turn or waiting for its permission decision. */
+  isTurnInFlight(): boolean;
 
   /** Latest unified picker state, or `null` while the backend session is still starting. */
   getBackendState(): BackendState | null;
@@ -64,10 +66,10 @@ export interface AgentChatBackend {
   /**
    * Resolve the current plan proposal the user has decided on. Branches on
    * `currentPlan.permissionGated`:
-   *   - gated (Claude Code ExitPlanMode): resolves the underlying ACP
+   *   - gated (Claude or Codex plan review): resolves the underlying
    *     permission as allow/deny. Approve auto-continues the agent's turn;
-   *     Reject ends the turn; Feedback denies with `feedbackText` as the
-   *     agent-visible deny reason.
+   *     Reject ends the turn; Feedback uses the adapter's configured delivery:
+   *     a deny reason in the current turn or a user prompt after it settles.
    *   - non-gated (OpenCode end-of-turn, or backends whose plan-exit signal
    *     carries no permission): Approve switches to canonical `build` mode
    *     (when the descriptor advertises one) and sends a `Proceed with the

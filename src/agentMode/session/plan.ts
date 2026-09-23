@@ -36,9 +36,10 @@ export interface CurrentPlan {
    */
   sourceFilePath?: string;
   /**
-   * `true` while a live `ExitPlanMode` permission is awaiting the user's
-   * decision. Approve resolves with `allow_once`, Reject with `reject_once`,
-   * Feedback rejects + queues the typed message as a follow-up turn.
+   * `true` while a live plan-review permission is awaiting the user's
+   * decision. Approve selects its allow option; Reject selects its deny option.
+   * Feedback rejects and reaches the agent through either the permission
+   * response or a follow-up turn, according to the backend's delivery contract.
    */
   permissionGated: boolean;
   /** ToolCallId of the live permission, when `permissionGated` is true. */

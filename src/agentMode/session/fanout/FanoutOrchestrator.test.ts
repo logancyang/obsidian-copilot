@@ -577,7 +577,7 @@ describe("FanoutOrchestrator", () => {
 
       it("applies the read-only sandbox id (never plan) only for backends that advertise one", async () => {
         const { host, procs } = makeHost({
-          // codex advertises a genuine read-only sandbox; its plan id is "plan".
+          // Codex's "read-only" id is its approval preset; Plan uses a separate config option.
           codex: { sessionId: "s-codex", readOnlyModeId: "read-only" },
           // opencode has no readOnlyModeId → no mode switch (relies on prompt +
           // permission layers). Stands in for any backend lacking a sandbox.

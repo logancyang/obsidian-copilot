@@ -332,6 +332,21 @@ describe("AcpBackendProcess", () => {
         vaultName: "Main Vault",
       });
     });
+
+    it("advertises plan updates so an agent sends proposed plans outside the chat text (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        buildStubDescriptor()
+      );
+
+      await backend.start();
+
+      expect(mockInitializeRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ clientCapabilities: expect.objectContaining({ plan: {} }) })
+      );
+    });
   });
 
   describe("routeSessionUpdate()", () => {

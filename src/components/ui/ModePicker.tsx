@@ -36,7 +36,7 @@ const MODE_DISPLAY: Record<CopilotMode, { label: string; description: string }> 
   },
   default: {
     label: "Safe",
-    description: "Asks for approval before every edit.",
+    description: "Allows edits under the agent's approval rules.",
   },
 };
 

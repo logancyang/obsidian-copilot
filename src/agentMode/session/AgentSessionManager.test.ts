@@ -2828,21 +2828,35 @@ describe("AgentSessionManager.applyMode", () => {
     expect(session.setMode).toHaveBeenCalledWith("cached-auto");
   });
 
-  it("preserves current Codex mode ids without an inventory (https://github.com/logancyang/obsidian-copilot/issues/2916)", async () => {
+  it("preserves Codex approval mode ids without an inventory (https://github.com/logancyang/obsidian-copilot/issues/2916)", async () => {
     const manager = buildModeManager(buildCodexModeMapping);
     const session = await manager.createSession("claude");
 
     for (const [mode, nativeId] of [
-      ["default", "agent"],
-      ["plan", "read-only"],
-      ["auto", "agent-full-access"],
+      ["default", "read-only"],
+      ["auto", "agent"],
     ] as const) {
       await manager.applyMode("claude", mode, { kind: "setMode", nativeId });
     }
 
-    expect(session.setMode).toHaveBeenNthCalledWith(1, "agent");
-    expect(session.setMode).toHaveBeenNthCalledWith(2, "read-only");
-    expect(session.setMode).toHaveBeenNthCalledWith(3, "agent-full-access");
+    expect(session.setMode).toHaveBeenNthCalledWith(1, "read-only");
+    expect(session.setMode).toHaveBeenNthCalledWith(2, "agent");
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 applies both Codex Plan settings without replacing the translated choice", async () => {
+    const manager = buildModeManager(buildCodexModeMapping);
+    const session = await manager.createSession("claude");
+
+    await manager.applyMode("claude", "plan", {
+      kind: "sequence",
+      steps: [
+        { kind: "setMode", nativeId: "agent" },
+        { kind: "setConfigOption", configId: "collaboration_mode", value: "plan" },
+      ],
+    });
+
+    expect(session.setMode).toHaveBeenCalledWith("agent");
+    expect(session.setConfigOption).toHaveBeenCalledWith("collaboration_mode", "plan");
   });
 });
 

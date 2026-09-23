@@ -243,7 +243,8 @@ function toolCallDeltaFromAcp(
  * than translated into a domain update no consumer reads, and dropping it early
  * also keeps it away from the unknown-discriminant fallback below, which reports
  * a titleless session update and would clear the label on a backend whose titles
- * are trusted.
+ * are trusted. `plan_update` and `plan_removed` are dropped for the same reason:
+ * the plan-approval card owns a proposed plan's body, so the chat renders neither.
  *
  * `todoToolCallIds` is one session's id set, owned by the caller
  * (AcpBackendProcess keys it per session — see `todoToolCallIdsFor`): the first
@@ -256,7 +257,10 @@ export function acpNotificationToEvents(
   n: SessionNotification,
   todoToolCallIds?: Set<string>
 ): SessionEvent[] {
-  if (n.update.sessionUpdate === "user_message_chunk") return [];
+  const kind = n.update.sessionUpdate;
+  if (kind === "user_message_chunk" || kind === "plan_update" || kind === "plan_removed") {
+    return [];
+  }
   const sessionId = sessionIdFromAcp(n.sessionId);
   const events: SessionEvent[] = [{ sessionId, update: acpUpdateToSessionUpdate(n.update) }];
   const todoPlan = todoToolPlanFromAcp(n.update, todoToolCallIds);
