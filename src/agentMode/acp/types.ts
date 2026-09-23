@@ -9,6 +9,8 @@ import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 export interface AcpSpawnDescriptor {
   command: string;
   args: string[];
+  /** Working directory inherited by the agent process when one is required. */
+  cwd?: string;
   env: NodeJS.ProcessEnv;
 }
 

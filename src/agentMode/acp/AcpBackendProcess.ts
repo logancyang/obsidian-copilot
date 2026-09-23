@@ -211,6 +211,7 @@ export class AcpBackendProcess implements BackendProcess {
     const procOpts: AcpProcessManagerOptions = {
       command: descriptor.command,
       args: descriptor.args,
+      cwd: descriptor.cwd,
       env: descriptor.env,
       logTag: this.backend.id,
     };

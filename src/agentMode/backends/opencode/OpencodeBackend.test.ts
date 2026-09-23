@@ -1095,7 +1095,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     );
   });
 
-  it("uses agentMode.backends.opencode.binaryPath as command and passes cwd in args, injecting enabled models", async () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/555 launches ACP in the vault without the removed --cwd argument and injects enabled models", async () => {
     updateSetting("agentMode", {
       byok: {},
       activeBackend: "opencode",
@@ -1123,7 +1123,8 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     const backend = new OpencodeBackend(deps);
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
     expect(desc.command).toBe("/path/to/opencode");
-    expect(desc.args).toEqual(["acp", "--cwd", "/vault/abs"]);
+    expect(desc.args).toEqual(["acp"]);
+    expect(desc.cwd).toBe("/vault/abs");
     expect(desc.env[OPENARTIFACTS_WORKSPACE_ROOT_ENV]).toBe("/vault/abs");
     expect(desc.env.OPENCODE_CONFIG_CONTENT).toBeDefined();
     const cfg = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
@@ -1179,7 +1180,8 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
       vaultName: "active-vault",
     });
 
-    expect(desc.args).toEqual(["acp", "--cwd", "/active-vault"]);
+    expect(desc.args).toEqual(["acp"]);
+    expect(desc.cwd).toBe("/active-vault");
     expect(desc.env[MIYO_SEARCH_SCOPE_ENV]).toBe("current");
     expect(desc.env[MIYO_SEARCH_FOLDER_ENV]).toBe("active-vault");
   });

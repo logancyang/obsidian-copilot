@@ -1,6 +1,7 @@
 import { FileSystemAdapter, App } from "obsidian";
 import type { BackendDescriptor, PermissionOption } from "@/agentMode/session/types";
 import { AcpBackendProcess } from "./AcpBackendProcess";
+import { AcpProcessManager } from "./AcpProcessManager";
 import type { AcpBackend } from "./types";
 import type { VaultClient } from "./VaultClient";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
@@ -282,6 +283,29 @@ describe("AcpBackendProcess", () => {
   });
 
   describe("start()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/555 forwards the backend's process directory to subprocess creation", async () => {
+      const agentBackend = buildStubBackend({
+        buildSpawnDescriptor: jest.fn().mockResolvedValue({
+          command: "/bin/agent",
+          args: ["acp"],
+          cwd: "/Volumes/Notes/Main Vault",
+          env: {},
+        }),
+      });
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        agentBackend,
+        "1.0.0",
+        buildStubDescriptor()
+      );
+
+      await backend.start();
+
+      expect(AcpProcessManager).toHaveBeenCalledWith(
+        expect.objectContaining({ cwd: "/Volumes/Notes/Main Vault" })
+      );
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 passes the active vault identity to the shared process used by global and Project sessions", async () => {
       const agentBackend = buildStubBackend();
       const backend = new AcpBackendProcess(
