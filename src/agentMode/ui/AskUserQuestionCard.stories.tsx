@@ -47,7 +47,6 @@ export const FreeText: StoryObj<AskUserQuestionCardProps> = {
     request: {
       sessionId: "gallery-session",
       requestId: "gallery-text",
-      message: "Codex needs a short explanation before continuing.",
       questions: [
         {
           question: "What should the summary focus on?",
@@ -65,7 +64,6 @@ export const Secret: StoryObj<AskUserQuestionCardProps> = {
     request: {
       sessionId: "gallery-session",
       requestId: "gallery-secret",
-      message: "Codex needs a credential to continue.",
       questions: [{ question: "Access token", answerKey: "token", input: "secret", options: [] }],
     },
   },

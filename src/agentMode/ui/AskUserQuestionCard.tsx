@@ -152,7 +152,6 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
       </div>
 
       <div className="tw-flex tw-flex-col tw-gap-2 tw-px-3 tw-py-2">
-        {request.message ? <div className="tw-text-sm tw-text-muted">{request.message}</div> : null}
         {showTabs ? (
           <div role="tablist" className="copilot-divider-b tw-flex tw-flex-wrap tw-gap-x-1">
             {questions.map((q, idx) => {

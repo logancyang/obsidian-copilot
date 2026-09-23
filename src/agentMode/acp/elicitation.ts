@@ -189,7 +189,6 @@ export function formToQuestionPrompt(
     prompt: {
       sessionId: request.sessionId as SessionId,
       requestId,
-      message: request.message,
       questions,
     },
     toContent: (answers) => {

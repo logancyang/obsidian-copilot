@@ -655,7 +655,6 @@ export type AgentQuestionAnswers = { [answerKey: string]: AgentQuestionAnswer };
 export interface AskUserQuestionPrompt {
   sessionId: SessionId;
   requestId: string;
-  message?: string;
   questions: AgentQuestion[];
   /** Aborted when an ACP agent withdraws a pending request. */
   signal?: AbortSignal;

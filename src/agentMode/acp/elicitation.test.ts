@@ -37,7 +37,6 @@ describe("elicitation", () => {
       expect(form?.prompt).toEqual({
         sessionId: "session-1",
         requestId: "rpc-1",
-        message: "Choose an approach",
         questions: [
           {
             question: "Approach",

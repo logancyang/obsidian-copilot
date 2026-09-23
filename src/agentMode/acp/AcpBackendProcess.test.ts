@@ -562,7 +562,6 @@ describe("AcpBackendProcess", () => {
         expect.objectContaining({
           sessionId: "s1",
           requestId: "rpc-1",
-          message: "Choose an approach",
           questions: [expect.objectContaining({ answerKey: "approach" })],
         })
       );
