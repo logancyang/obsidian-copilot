@@ -41,3 +41,26 @@ export default meta;
 
 /** Answer with Next, or select Checks early to inspect the disabled final Submit state. */
 export const MultipleQuestions: StoryObj<AskUserQuestionCardProps> = {};
+
+/** A Codex prompt such as the skill MCP-install question, which accepts only its listed options. */
+export const WithoutOther: StoryObj<AskUserQuestionCardProps> = {
+  args: {
+    request: {
+      sessionId: "gallery-session",
+      requestId: "gallery-without-other",
+      questions: [
+        {
+          header: "Install MCP servers?",
+          question:
+            "The selected skill needs MCP servers that are not installed yet. Install them now?",
+          answerKey: "mcp_install",
+          options: [
+            { label: "Install", description: "Install and enable the missing MCP servers." },
+            { label: "Skip", description: "Skip installation for now." },
+          ],
+          allowOther: false,
+        },
+      ],
+    },
+  },
+};

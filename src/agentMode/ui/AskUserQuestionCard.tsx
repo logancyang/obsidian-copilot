@@ -46,7 +46,7 @@ function isAnswered(
  * ask-question prompter's happy path; Cancel resolves with `{}`, which the
  * bridge maps to the "User cancelled the question" deny.
  *
- * Each question also offers an "Other" row that reveals a free-form textarea,
+ * Unless its backend opts out, each question also offers an "Other" row that reveals a free-form textarea,
  * so the user can answer when none of the agent's options fit — the typed text
  * is folded into the same plain-string answer the presets produce.
  */
@@ -90,10 +90,10 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
       if (q.multiSelect) {
         const labels = sel instanceof Set ? Array.from(sel) : [];
         if (other && text) labels.push(text);
-        answers[q.question] = labels.join(", ");
+        answers[q.answerKey ?? q.question] = labels.join(", ");
       } else {
         // "Other" wins over any stale preset (radio exclusivity clears it anyway).
-        answers[q.question] = other ? text : typeof sel === "string" ? sel : "";
+        answers[q.answerKey ?? q.question] = other ? text : typeof sel === "string" ? sel : "";
       }
     }
     onResolve(requestId, answers);
@@ -159,7 +159,7 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
               const selected = idx === activeIdx;
               return (
                 <button
-                  key={q.question}
+                  key={q.answerKey ?? q.question}
                   type="button"
                   role="tab"
                   aria-selected={selected}
@@ -185,7 +185,7 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
         ) : null}
 
         <QuestionPanel
-          key={active.question}
+          key={active.answerKey ?? active.question}
           question={active}
           name={`askq-${requestId}-${activeIdx}`}
           selection={selections[activeIdx]}
@@ -284,22 +284,24 @@ const QuestionPanel: React.FC<QuestionPanelProps> = ({
 
         {/* "Other" escape hatch: shares the radio group name so single-select
             grouping stays native, and reveals a free-form textarea when armed. */}
-        <label className="tw-flex tw-cursor-pointer tw-items-start tw-gap-2 tw-rounded tw-px-2 tw-py-1.5 hover:tw-bg-modifier-hover">
-          <span className="tw-flex tw-h-5 tw-shrink-0 tw-items-center">
-            <input
-              type={control}
-              name={name}
-              checked={otherActive}
-              disabled={disabled}
-              onChange={onToggleOther}
-              className="tw-m-0"
-            />
-          </span>
-          <div className="tw-min-w-0">
-            <div className="tw-text-sm tw-leading-5">Other</div>
-            <div className="tw-text-xs tw-text-muted">Type your own response</div>
-          </div>
-        </label>
+        {question.allowOther !== false ? (
+          <label className="tw-flex tw-cursor-pointer tw-items-start tw-gap-2 tw-rounded tw-px-2 tw-py-1.5 hover:tw-bg-modifier-hover">
+            <span className="tw-flex tw-h-5 tw-shrink-0 tw-items-center">
+              <input
+                type={control}
+                name={name}
+                checked={otherActive}
+                disabled={disabled}
+                onChange={onToggleOther}
+                className="tw-m-0"
+              />
+            </span>
+            <div className="tw-min-w-0">
+              <div className="tw-text-sm tw-leading-5">Other</div>
+              <div className="tw-text-xs tw-text-muted">Type your own response</div>
+            </div>
+          </label>
+        ) : null}
       </div>
 
       {otherActive ? (

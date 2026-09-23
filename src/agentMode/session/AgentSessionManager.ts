@@ -225,8 +225,8 @@ export interface ReplaceSessionOptions {
 export interface AgentSessionManagerOptions {
   permissionPrompter: PermissionPrompter;
   /**
-   * Handler the Claude SDK backend calls for its inline `AskUserQuestion`
-   * surface. Optional only so legacy callers (tests) can omit it; production
+   * Handler backends call for inline questions. Optional only so legacy
+   * callers (tests) can omit it; production
    * wiring always supplies one via the barrel in `agentMode/index.ts`. Wired
    * onto each backend that advertises `setAskUserQuestionPrompter`.
    */
@@ -3736,7 +3736,7 @@ export class AgentSessionManager {
    * Register the session-domain prompters on a freshly-adopted backend. The
    * permission prompter is required; the ask-question prompter is wired only
    * when both the manager was configured with one and the backend advertises
-   * the optional `setAskUserQuestionPrompter` surface (Claude SDK today).
+   * the optional `setAskUserQuestionPrompter` surface.
    */
   private wirePrompters(proc: BackendProcess): void {
     proc.setPermissionPrompter(this.opts.permissionPrompter);

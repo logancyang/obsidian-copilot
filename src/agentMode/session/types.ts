@@ -622,18 +622,23 @@ export interface AgentQuestion {
   header?: string;
   options: Array<{ label: string; description?: string }>;
   multiSelect?: boolean;
+  /** Key of this question's entry in `AgentQuestionAnswers`; defaults to the question text. */
+  answerKey?: string;
+  /** Set to `false` when the backend cannot accept a typed "Other" answer. */
+  allowOther?: boolean;
 }
 
 /**
- * Answer map keyed by question text. Single-select values are the chosen
- * option label; multi-select values are the chosen labels joined with `, `.
- * An empty map signals cancellation (the bridge maps it to a deny).
+ * Answer map keyed by each question's `answerKey ?? question`. Single-select
+ * values are the chosen option label or the typed "Other" text; multi-select
+ * values are the chosen labels joined with `, `. An empty map signals
+ * cancellation.
  */
-export type AgentQuestionAnswers = { [questionText: string]: string };
+export type AgentQuestionAnswers = { [answerKey: string]: string };
 
 /**
  * A request from the backend asking the user to answer one or more inline
- * multiple-choice questions (Claude SDK's `AskUserQuestion` tool). Routed
+ * questions (Claude SDK's `AskUserQuestion` tool or ACP form elicitation). Routed
  * through the session-domain ask-question prompter and rendered in the chat's
  * action rail — the sibling of `PermissionPrompt`.
  * `requestId` reuses the backend's tool-call id so the resolver can pair the
@@ -643,6 +648,8 @@ export interface AskUserQuestionPrompt {
   sessionId: SessionId;
   requestId: string;
   questions: AgentQuestion[];
+  /** Aborted when an ACP agent withdraws a pending request. */
+  signal?: AbortSignal;
 }
 
 // ---- Session-creation I/O shapes ---------------------------------------
