@@ -8,7 +8,25 @@ export interface ScriptedEndpoint {
   models: readonly string[];
 }
 
-/** One chat-completion request as the agent sent it, and how it was answered. */
+/** How the provider answers one agent turn. */
+type ScriptedReply =
+  /** Stream `text` one word at a time, then finish. */
+  | { kind: "answer"; text: string }
+  /** Stream `text`, then keep the response open and hand it to `onHeld`. */
+  | { kind: "hold"; text: string; onHeld: (held: HeldStream) => void }
+  /**
+   * Refuse with an HTTP error, as an OpenAI-compatible endpoint does, then call
+   * `onRefused`. `retryAfterMs` sets the `retry-after-ms` header.
+   */
+  | {
+      kind: "error";
+      status: number;
+      message: string;
+      retryAfterMs: number | undefined;
+      onRefused: () => void;
+    };
+
+/** One chat-completion request as the agent sent it. */
 export interface RecordedRequest {
   /** `turn` for an agent turn, `title` for opencode's session-title call. */
   kind: "turn" | "title";
@@ -17,21 +35,44 @@ export interface RecordedRequest {
   model: string;
   /** The request's `reasoning_effort` field, or `null` when it carried none. */
   reasoningEffort: string | null;
+  /** The request's last user message: the question an agent turn answers. */
+  question: string;
+  /** The conversation the request carried, without the system prompt. */
+  messages: readonly { role: string; content: string }[];
+}
+
+/** A conversation waiting on an answer, as the provider paces its stream. */
+export interface Asker {
+  /** Resolves once the answer shown reads exactly `text`; rejects if it never does. */
+  waitForAnswerText(text: string): Promise<void>;
+}
+
+/**
+ * An answer the provider stopped streaming partway. It stays open until the
+ * scenario releases or breaks it, or the agent closes the request.
+ */
+export interface HeldStream {
+  /** The user message the held answer responds to. */
+  readonly question: string;
+  readonly state: "held" | "released" | "broken" | "closed by the agent";
+  /** Stream `rest` and finish the answer. */
+  release(rest: string): void;
+  /** Destroy the connection mid-answer, as a dropped provider stream does. */
+  break(): void;
+  /** Resolves when the agent closes the request itself, as a cancelled turn does. */
+  readonly closedByAgent: Promise<void>;
 }
 
 export interface ScriptedProviderOptions {
   /** The only bearer credential the provider accepts. */
   apiKey: string;
-  /** The text Copilot was asked to send, which an agent turn's last user message must equal. */
-  sentText: () => string | undefined;
   /**
-   * Awaited after each streamed chunk of an agent turn, before the next one is
-   * written, with the answer text sent so far. Lets the caller hold every
-   * chunk until the previous one is visible, so streaming order is observable
-   * without timing assumptions. A rejection aborts the stream and is reported
-   * as a failure.
+   * The conversation waiting on an answer to `message`, an agent turn's last
+   * user message, or `undefined` when no conversation sent it. Each streamed
+   * chunk waits until that conversation shows it before the next is written,
+   * so streaming order is observable without timing assumptions.
    */
-  pace: (sentSoFar: string) => Promise<void>;
+  askerFor: (message: string) => Asker | undefined;
 }
 
 /**
@@ -43,18 +84,21 @@ export interface ScriptedProviderOptions {
  * endpoint, each under its own base path, so which endpoint a request reached
  * is observable. Anything the script does not cover — a path no endpoint
  * serves, a missing credential, a model the endpoint does not serve, a turn
- * whose last user message is not what Copilot sent, a turn with no scripted
- * answer — is refused and recorded in {@link failures}.
+ * whose last user message no conversation sent, a turn with no scripted
+ * reply — is refused and recorded in {@link failures}.
  */
 export class ScriptedProvider {
   readonly #options: ScriptedProviderOptions;
   #server: http.Server | null = null;
   #port = 0;
   #endpoints: readonly ScriptedEndpoint[] = [];
-  readonly #answers: string[] = [];
+  readonly #replies: ScriptedReply[] = [];
   readonly #requests: RecordedRequest[] = [];
   readonly #failures: string[] = [];
   readonly #open = new Set<http.ServerResponse>();
+  readonly #held: HeldStream[] = [];
+  /** The last error reply and the question it refused, which it keeps refusing. */
+  #failing: { question: string; reply: ScriptedReply } | null = null;
 
   constructor(options: ScriptedProviderOptions) {
     this.#options = options;
@@ -65,7 +109,7 @@ export class ScriptedProvider {
     return `http://127.0.0.1:${this.#port}/${endpoint}/v1`;
   }
 
-  /** Chat-completion requests answered so far, oldest first. */
+  /** Chat-completion requests received so far, oldest first. */
   get requests(): readonly RecordedRequest[] {
     return this.#requests;
   }
@@ -75,9 +119,36 @@ export class ScriptedProvider {
     return this.#failures;
   }
 
+  /** Answers held so far, oldest first, including ones since released, broken, or closed. */
+  get held(): readonly HeldStream[] {
+    return this.#held;
+  }
+
   /** Queue an answer for the next agent turn, streamed one word at a time. */
   answer(text: string): void {
-    this.#answers.push(text);
+    this.#replies.push({ kind: "answer", text });
+  }
+
+  /**
+   * Queue an answer for the next agent turn that streams `text` and then stays
+   * open. Resolves with the open answer once the conversation shows `text`.
+   */
+  hold(text: string): Promise<HeldStream> {
+    return new Promise((onHeld) => this.#replies.push({ kind: "hold", text, onHeld }));
+  }
+
+  /**
+   * Queue an HTTP error for the next agent turn. It refuses every later
+   * attempt at the same question too, as a provider that keeps failing does.
+   * Resolves once the first refusal has been sent.
+   *
+   * @param retryAfterMs The `retry-after-ms` header, which sets opencode's wait
+   * before its next attempt; without it opencode backs off on its own.
+   */
+  refuse(status: number, message: string, retryAfterMs?: number): Promise<void> {
+    return new Promise((onRefused) =>
+      this.#replies.push({ kind: "error", status, message, retryAfterMs, onRefused })
+    );
   }
 
   /** Listen on a loopback port, serving only `endpoints`. */
@@ -125,48 +196,132 @@ export class ScriptedProvider {
     }
     // opencode names a new session with a separate, tool-less completion. It is
     // part of every first turn, so it gets a fixed title instead of consuming
-    // the answer scripted for the turn.
+    // the reply scripted for the turn.
     const kind = Array.isArray(body.tools) ? "turn" : "title";
+    const messages = (body.messages ?? [])
+      .filter((message) => message.role !== "system")
+      .map((message) => ({
+        role: message.role,
+        content:
+          typeof message.content === "string" ? message.content : JSON.stringify(message.content),
+      }));
+    const question = messages.findLast((message) => message.role === "user")?.content ?? "";
+    let asker: Asker | undefined;
     if (kind === "turn") {
-      const received = body.messages?.findLast((message) => message.role === "user")?.content;
-      const sent = this.#options.sentText();
-      if (received !== sent) {
+      asker = this.#options.askerFor(question);
+      if (!asker) {
         return this.#refuse(
           res,
           400,
-          `the agent turn's last user message was ${JSON.stringify(received)}, not ${JSON.stringify(sent)}`
+          `the agent turn's last user message was ${JSON.stringify(question)}, which no conversation sent`
         );
       }
     }
-    const answer = kind === "title" ? "Runtime scenario" : this.#answers.shift();
-    if (answer === undefined) {
-      return this.#refuse(res, 500, `agent turn on "${model}" arrived with no scripted answer`);
+    const reply =
+      kind === "title"
+        ? TITLE_REPLY
+        : this.#failing?.question === question
+          ? this.#failing.reply
+          : this.#replies.shift();
+    if (reply === undefined) {
+      return this.#refuse(res, 400, `agent turn on "${model}" arrived with no scripted reply`);
     }
     this.#requests.push({
       kind,
       endpoint: endpoint.name,
       model,
       reasoningEffort: typeof body.reasoning_effort === "string" ? body.reasoning_effort : null,
+      question,
+      messages,
     });
 
+    if (reply.kind === "error") {
+      this.#failing = { question, reply };
+      const retryAfter =
+        reply.retryAfterMs === undefined ? {} : { "retry-after-ms": String(reply.retryAfterMs) };
+      res.writeHead(reply.status, { "content-type": "application/json", ...retryAfter });
+      res.end(JSON.stringify({ error: { message: reply.message } }), reply.onRefused);
+      return;
+    }
+
     this.#open.add(res);
-    res.on("close", () => this.#open.delete(res));
+    let closedByProvider = false;
+    const closedByAgent = new Promise<void>((resolve) =>
+      res.on("close", () => {
+        this.#open.delete(res);
+        if (!closedByProvider) resolve();
+      })
+    );
+    const close = (): void => {
+      closedByProvider = true;
+      res.destroy();
+    };
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+    // Writes each word once the asker shows everything before it. Returns false
+    // when the stream ended early: the answer stalled, or the agent closed it.
     let sent = "";
-    for (const word of answer.match(/\s*\S+/g) ?? []) {
-      sent += word;
-      writeEvent(res, chunk(model, { role: "assistant", content: word }));
-      if (kind === "title") continue;
-      try {
-        await this.#options.pace(sent);
-      } catch (error) {
-        this.#failures.push(`streaming "${answer}" stalled: ${String(error)}`);
-        res.destroy();
-        return;
+    const stream = async (text: string): Promise<boolean> => {
+      for (const word of text.match(/\s*\S+/g) ?? []) {
+        sent += word;
+        writeEvent(res, chunk(model, { role: "assistant", content: word }));
+        if (!asker) continue;
+        try {
+          await Promise.race([asker.waitForAnswerText(sent), closedByAgent]);
+        } catch (error) {
+          this.#failures.push(`streaming "${sent}" stalled: ${String(error)}`);
+          close();
+          return false;
+        }
+        if (res.destroyed) return false;
       }
+      return true;
+    };
+
+    if (!(await stream(reply.text))) return;
+    if (reply.kind === "hold") {
+      const rest = await this.#hold(question, closedByAgent, reply.onHeld);
+      if (rest === null) return close();
+      if (!(await stream(rest))) return;
     }
     writeEvent(res, chunk(model, {}, "stop"));
+    closedByProvider = true;
     res.end("data: [DONE]\n\n");
+  }
+
+  /**
+   * Hand a {@link HeldStream} to `onHeld` and wait for the scenario or the
+   * agent to end the hold. Resolves with the rest of the answer on release, or
+   * `null` once the stream is broken or closed.
+   */
+  #hold(
+    question: string,
+    closedByAgent: Promise<void>,
+    onHeld: (held: HeldStream) => void
+  ): Promise<string | null> {
+    return new Promise((resolve) => {
+      const held = {
+        question,
+        state: "held" as HeldStream["state"],
+        closedByAgent,
+        release: (rest: string) => {
+          if (held.state !== "held") return;
+          held.state = "released";
+          resolve(rest);
+        },
+        break: () => {
+          if (held.state !== "held") return;
+          held.state = "broken";
+          resolve(null);
+        },
+      };
+      void closedByAgent.then(() => {
+        if (held.state !== "held") return;
+        held.state = "closed by the agent";
+        resolve(null);
+      });
+      this.#held.push(held);
+      onHeld(held);
+    });
   }
 
   #refuse(res: http.ServerResponse, status: number, reason: string): void {
@@ -175,6 +330,9 @@ export class ScriptedProvider {
     res.end(JSON.stringify({ error: { message: `[runtime-tests] ${reason}` } }));
   }
 }
+
+/** The fixed answer to opencode's session-title call. */
+const TITLE_REPLY: ScriptedReply = { kind: "answer", text: "Runtime scenario" };
 
 /** The parts of an OpenAI-compatible chat-completion request the script reads. */
 interface ChatCompletionRequest {
