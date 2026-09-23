@@ -863,7 +863,6 @@ const HTML_ENTITIES: Record<string, string> = {
  */
 export function drawnReadOnlyAnswer(answer: AgentAnswer): string {
   if (answer.status === "error") return answer.error?.trim() || "This agent failed to answer.";
-  if (answer.status === "cancelled") return answer.text || "Cancelled";
   return answer.text || "This agent did not answer.";
 }
 
