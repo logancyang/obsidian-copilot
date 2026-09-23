@@ -30,22 +30,22 @@ const availableModes = ["read-only", "agent", "agent-full-access"];
 
 describe("codexModeMapping", () => {
   describe("buildCodexModeMapping()", () => {
-    it("maps the adapter's approval presets and keeps its fan-out mode", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 maps Default to approval and Auto to automatic review without full access", () => {
       const modeState = modes("agent", availableModes);
       const mapping = buildCodexModeMapping(modeState);
 
       expect(mapping.canonical).toEqual({
-        default: "agent",
-        auto: "agent-full-access",
+        default: "read-only",
+        auto: "agent",
       });
       expect(mapping.readOnlyModeId).toBe("read-only");
     });
 
-    it("https://github.com/logancyang/obsidian-copilot/issues/2916 omits the separate Zed adapter's legacy ids", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/2916 omits the separate Zed adapter's legacy Auto id", () => {
       const mapping = buildCodexModeMapping(modes("auto", ["read-only", "auto", "full-access"]));
 
       expect(mapping.canonical).toEqual({
-        default: undefined,
+        default: "read-only",
         auto: undefined,
       });
     });
@@ -74,7 +74,7 @@ describe("codexModeMapping", () => {
       const state = translateBackendState(
         {
           models: null,
-          modes: modes("agent", availableModes),
+          modes: modes("read-only", availableModes),
           configOptions: [collaboration("default")],
         },
         {
@@ -94,7 +94,7 @@ describe("codexModeMapping", () => {
           default: {
             kind: "sequence",
             steps: [
-              { kind: "setMode", nativeId: "agent" },
+              { kind: "setMode", nativeId: "read-only" },
               { kind: "setConfigOption", configId: "collaboration_mode", value: "default" },
             ],
           },
@@ -109,21 +109,21 @@ describe("codexModeMapping", () => {
             kind: "sequence",
             steps: [
               { kind: "setConfigOption", configId: "collaboration_mode", value: "default" },
-              { kind: "setMode", nativeId: "agent-full-access" },
+              { kind: "setMode", nativeId: "agent" },
             ],
           },
         },
       });
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 shows Plan until the adapter returns to Default after approval", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 shows Auto after an approved Plan returns to default collaboration", () => {
       const modeState = modes("agent", availableModes);
 
       expect(buildCodexModeState(modeState, [collaboration("plan")])?.current).toBe("plan");
-      expect(buildCodexModeState(modeState, [collaboration("default")])?.current).toBe("default");
+      expect(buildCodexModeState(modeState, [collaboration("default")])?.current).toBe("auto");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 uses Safe for an older read-only session outside collaboration Plan", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 shows Safe for the approval preset outside collaboration Plan", () => {
       const state = buildCodexModeState(modes("read-only", availableModes), [
         collaboration("default"),
       ]);
@@ -131,8 +131,16 @@ describe("codexModeMapping", () => {
       expect(state?.current).toBe("default");
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 leaves an external approval-and-Plan combination unmapped", () => {
+      const state = buildCodexModeState(modes("read-only", availableModes), [
+        collaboration("plan"),
+      ]);
+
+      expect(state?.current).toBeNull();
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 keeps approval choices while hiding Plan if collaboration mode is absent", () => {
-      const state = buildCodexModeState(modes("agent-full-access", availableModes), null);
+      const state = buildCodexModeState(modes("agent", availableModes), null);
 
       expect(state?.current).toBe("auto");
       expect(state?.options).toEqual([
@@ -140,6 +148,21 @@ describe("codexModeMapping", () => {
         { value: "auto", label: "Auto" },
       ]);
       expect(state?.apply.plan).toBeUndefined();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 does not present an externally selected full-access preset as Auto", () => {
+      const state = buildCodexModeState(modes("agent-full-access", availableModes), [
+        collaboration("default"),
+      ]);
+
+      expect(state?.current).toBeNull();
+      expect(state?.apply.auto).toEqual({
+        kind: "sequence",
+        steps: [
+          { kind: "setConfigOption", configId: "collaboration_mode", value: "default" },
+          { kind: "setMode", nativeId: "agent" },
+        ],
+      });
     });
 
     it("returns no picker when the adapter advertises no supported approval presets", () => {

@@ -456,14 +456,13 @@ export class FanoutOrchestrator {
   }
 
   /**
-   * Apply the backend's genuine read-only sandbox mode when it advertises one via
-   * `ModeMapping.readOnlyModeId` (codex → `read-only`). Belt-and-suspenders on top
-   * of the prompt preamble + permission denial.
+   * Apply the backend's most restrictive advertised mode when one is available.
+   * Codex calls its approval preset `read-only`, but that preset can still edit
+   * workspace files, so the prompt preamble and permission denial remain needed.
    *
    * Keyed off `readOnlyModeId`, NOT `canonical.plan`: a backend's plan mode may
    * write plan artifacts (Claude's `plan` writes files), the opposite of
-   * read-only. Backends without a true read-only sandbox leave it unset and rely
-   * on the prompt + permission layers (which hard-deny writes regardless).
+   * read-only. Backends without an applicable native mode leave it unset.
    */
   private async applyReadOnlyMode(
     proc: BackendProcess,

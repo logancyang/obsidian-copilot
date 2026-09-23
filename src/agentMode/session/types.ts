@@ -53,11 +53,9 @@ export type SessionId = string;
  * Copilot's canonical operational modes for Agent Mode. Each backend's
  * `getModeMapping` projects these onto its own native mode/agent ids.
  *
- *   - `default` — balanced; agent may write/exec but the user must approve
- *                 each permission request. Picked when the user hasn't
- *                 explicitly selected a mode.
- *   - `plan`    — agent drafts a plan; no writes.
- *   - `auto`    — same as default, but bypass all permission prompts.
+ *   - `default` — the backend's approval preset; may write within its allowed scope.
+ *   - `plan`    — asks the backend to draft a plan before implementation.
+ *   - `auto`    — the backend's automatic approval preset.
  */
 export type CopilotMode = "default" | "plan" | "auto";
 
@@ -78,10 +76,9 @@ export interface ModeMapping {
   configId?: string;
   canonical: Partial<Record<CopilotMode, string>>;
   /**
-   * Native mode id used for fan-out QA turns (Codex `"read-only"`); Copilot
-   * separately denies write tools because this mode is not a sandbox. Unset
-   * when none exists. Distinct from `canonical.plan`, which
-   * may write plan artifacts (Claude). The fan-out orchestrator applies this.
+   * Native mode id used for fan-out QA turns (Codex `"read-only"` is its
+   * approval preset, not a read-only sandbox). Copilot separately denies
+   * recognized write tools; the plan mode may write plan artifacts.
    */
   readOnlyModeId?: string | null;
 }

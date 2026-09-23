@@ -335,10 +335,10 @@ describe("CodexBackend", () => {
         }
       );
 
-      it("starts current codex-acp adapters in their canonical default mode", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 starts Codex with the approval preset that permits workspace edits", async () => {
         const backend = new CodexBackend();
         const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
-        expect(desc.env.INITIAL_AGENT_MODE).toBe("agent");
+        expect(desc.env.INITIAL_AGENT_MODE).toBe("read-only");
       });
 
       it("lets a user override the initial codex-acp mode", async () => {

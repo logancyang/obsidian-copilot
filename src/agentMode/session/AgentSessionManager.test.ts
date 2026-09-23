@@ -2838,14 +2838,14 @@ describe("AgentSessionManager.applyMode", () => {
     const session = await manager.createSession("claude");
 
     for (const [mode, nativeId] of [
-      ["default", "agent"],
-      ["auto", "agent-full-access"],
+      ["default", "read-only"],
+      ["auto", "agent"],
     ] as const) {
       await manager.applyMode("claude", mode, { kind: "setMode", nativeId });
     }
 
-    expect(session.setMode).toHaveBeenNthCalledWith(1, "agent");
-    expect(session.setMode).toHaveBeenNthCalledWith(2, "agent-full-access");
+    expect(session.setMode).toHaveBeenNthCalledWith(1, "read-only");
+    expect(session.setMode).toHaveBeenNthCalledWith(2, "agent");
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 applies both Codex Plan settings without replacing the translated choice", async () => {

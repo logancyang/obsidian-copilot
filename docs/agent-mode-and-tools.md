@@ -105,13 +105,13 @@ The permission picker shows only choices supported by the current agent:
 
 | Choice   | What it does                                                                                         |
 | -------- | ---------------------------------------------------------------------------------------------------- |
-| **Safe** | Asks for approval before edits                                                                       |
+| **Safe** | Allows edits under the agent's approval rules                                                        |
 | **Plan** | Drafts a plan and waits for your approval before editing when the current agent supports this choice |
 | **Auto** | Reduces approval prompts according to the current agent's automatic permission rule                  |
 
 opencode supports **Safe** and **Auto**. Claude supports **Safe**, **Plan**, and **Auto**. Codex shows the choices supported by the installed adapter. Claude also has an **Auto mode permissions** setting that controls how much Auto may approve.
 
-With Codex, **Plan** asks the agent to draft an implementation plan and wait for approval. Once you approve it, Codex continues in **Safe** mode to implement the plan.
+With Codex, **Safe** uses the adapter's **Ask for approval** preset. It can edit files in the working directory; the adapter asks before editing external files or using the internet. **Auto** uses automatic review within the same workspace-write sandbox, without enabling full access. **Plan** uses Auto's approval preset while Codex drafts a plan and waits for your approval. Once you approve it, Codex continues in **Auto** mode to implement the plan.
 
 When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. Stopping the turn cancels unanswered requests.
 

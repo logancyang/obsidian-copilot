@@ -28,8 +28,8 @@ export function buildCodexModeMapping(modeState: RawModeState | null): ModeMappi
   return {
     kind: "setMode",
     canonical: {
-      default: advertised.has("agent") ? "agent" : undefined,
-      auto: advertised.has("agent-full-access") ? "agent-full-access" : undefined,
+      default: advertised.has("read-only") ? "read-only" : undefined,
+      auto: advertised.has("agent") ? "agent" : undefined,
     },
     readOnlyModeId: advertised.has("read-only") ? "read-only" : null,
   };
@@ -57,20 +57,21 @@ export function buildCodexModeState(
   const options: ModeOption[] = [];
   const apply: Partial<Record<CopilotMode, ModeApplySpec>> = {};
 
-  if (advertised.has("agent")) {
+  if (advertised.has("read-only")) {
     options.push({ value: "default", label: "Default" });
     apply.default = canResetCollaboration
       ? {
           kind: "sequence",
           steps: [
-            { kind: "setMode", nativeId: "agent" },
+            { kind: "setMode", nativeId: "read-only" },
             { kind: "setConfigOption", configId: collaboration.id, value: "default" },
           ],
         }
-      : { kind: "setMode", nativeId: "agent" };
+      : { kind: "setMode", nativeId: "read-only" };
   }
 
-  // ACP's "read-only" mode changes approval policy; planning is a separate Codex workflow.
+  // ACP's "read-only" ID still allows workspace edits; it selects the approval preset.
+  // Planning is a separate Codex workflow.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
   if (
     advertised.has("agent") &&
@@ -87,26 +88,32 @@ export function buildCodexModeState(
     };
   }
 
-  if (advertised.has("agent-full-access")) {
+  if (advertised.has("agent")) {
     options.push({ value: "auto", label: "Auto" });
     apply.auto = canResetCollaboration
       ? {
           kind: "sequence",
           steps: [
             { kind: "setConfigOption", configId: collaboration.id, value: "default" },
-            { kind: "setMode", nativeId: "agent-full-access" },
+            { kind: "setMode", nativeId: "agent" },
           ],
         }
-      : { kind: "setMode", nativeId: "agent-full-access" };
+      : { kind: "setMode", nativeId: "agent" };
   }
 
   if (options.length === 0) return null;
   const current: CopilotMode | null =
-    collaboration?.type === "select" && collaboration.currentValue === "plan" && apply.plan
+    modeState.currentModeId === "agent" &&
+    collaboration?.type === "select" &&
+    collaboration.currentValue === "plan" &&
+    apply.plan
       ? "plan"
-      : modeState.currentModeId === "agent-full-access" && apply.auto
+      : modeState.currentModeId === "agent" &&
+          (collaboration?.type !== "select" || collaboration.currentValue === "default") &&
+          apply.auto
         ? "auto"
-        : (modeState.currentModeId === "agent" || modeState.currentModeId === "read-only") &&
+        : modeState.currentModeId === "read-only" &&
+            (collaboration?.type !== "select" || collaboration.currentValue === "default") &&
             apply.default
           ? "default"
           : null;
