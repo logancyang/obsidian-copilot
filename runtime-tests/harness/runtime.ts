@@ -5,7 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import type { App as ObsidianApp } from "obsidian";
-import { createElement } from "react";
+import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { OPENCODE_PINNED_VERSION } from "@/agentMode/backends/opencode/ui/opencodeVersion";
@@ -16,6 +16,8 @@ import { AgentModelPreloader } from "@/agentMode/session/AgentModelPreloader";
 import { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { AgentAnswer } from "@/agentMode/session/fanout/fanoutTypes";
 import type { AgentChatMessage, PermissionPrompt, StopReason } from "@/agentMode/session/types";
+import { buildFanoutOptions } from "@/agentMode/ui/fanoutDropdown";
+import { FanoutTurnView } from "@/agentMode/ui/FanoutTurnView";
 import { createDefaultPermissionPrompter } from "@/agentMode/ui/permissionPrompter";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
 import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
@@ -29,7 +31,7 @@ import { AI_SENDER, DEFAULT_SETTINGS, USER_SENDER } from "@/constants";
 
 import { EgressProxy } from "./egressProxy";
 import { App } from "./obsidianApp";
-import { shownNotices } from "./obsidianShim";
+import { shownNotices, vaultWrites } from "./obsidianShim";
 import { ScriptedProvider, type Asker, type HeldStream } from "./scriptedProvider";
 
 // Agent Mode schedules its timers on `window`, which a bare Node process lacks.
@@ -171,6 +173,7 @@ export class Runtime {
     // The log buffer and the notices outlive a scenario; start each one with its own.
     await logFileManager.clear();
     shownNotices.length = 0;
+    vaultWrites.length = 0;
     const providers = [...new Set(options.models.map((m) => m.provider))];
     await this.provider.start(
       providers.map((name) => ({
@@ -675,11 +678,16 @@ export class Conversation implements SentAsker {
     return this.ui.getPendingToolPermissions()[0];
   }
 
-  /** Pick `optionId` on the card now shown, as its button does. */
-  answerPermission(optionId: string): void {
+  /** Press the button labelled `label` on the card now shown. */
+  answerPermission(label: string): void {
     const request = this.shownPermission;
     if (!request) throw new Error("the chat shows no permission card");
-    this.ui.resolveToolPermission(request.toolCall.toolCallId, optionId);
+    const option = request.options.find((candidate) => candidate.name === label);
+    if (!option) {
+      const offered = request.options.map((candidate) => candidate.name).join(", ");
+      throw new Error(`the permission card offers no "${label}"; it offers ${offered}`);
+    }
+    this.ui.resolveToolPermission(request.toolCall.toolCallId, option.optionId);
   }
 
   /** Resolve once the chat shows a permission card, or the turn has ended without one. */
@@ -837,10 +845,30 @@ export function drawnToolCalls(message: AgentChatMessage, vaultBase: string): st
  * kind, each diff's path and lines, and one line per button.
  */
 export function drawnPermissionCard(request: PermissionPrompt): string[] {
-  const html = renderToStaticMarkup(
-    createElement(ToolPermissionCard, { request, onResolve: () => {} })
+  return drawnLines(createElement(ToolPermissionCard, { request, onResolve: () => {} }));
+}
+
+/**
+ * What `FanoutTurnView` draws below its tab row for one agent's answer to a
+ * read-only question, rendered by the component itself.
+ */
+export function drawnReadOnlyAnswer(answer: AgentAnswer): string[] {
+  const turn = {
+    answers: { [answer.backendId]: answer },
+    summary: { status: "done" as const, text: "" },
+  };
+  // No note is open, so the answer's links resolve from the vault root.
+  const app = { workspace: { getActiveFile: () => null } } as unknown as ObsidianApp;
+  const lines = drawnLines(
+    createElement(FanoutTurnView, { turn, app, value: answer.backendId, onSelect: () => {} })
   );
-  return html
+  // The tab row draws one line per tab, each its label.
+  return lines.slice(buildFanoutOptions(turn).length);
+}
+
+/** The text lines `element` draws, one per block element, as static markup. */
+function drawnLines(element: ReactElement): string[] {
+  return renderToStaticMarkup(element)
     .replace(/<\/(div|p|pre|button)>/g, "\n")
     .replace(/<[^>]*>/g, "")
     .replace(/&(lt|gt|quot|#x27|amp);/g, (_, entity: string) => HTML_ENTITIES[entity])
@@ -856,15 +884,6 @@ const HTML_ENTITIES: Record<string, string> = {
   "#x27": "'",
   amp: "&",
 };
-
-/**
- * What `FanoutTurnView` draws for one agent's answer to a read-only question
- * once it has settled: its text, or the line it shows in place of none.
- */
-export function drawnReadOnlyAnswer(answer: AgentAnswer): string {
-  if (answer.status === "error") return answer.error?.trim() || "This agent failed to answer.";
-  return answer.text || "This agent did not answer.";
-}
 
 function formatTimeline(timeline: readonly AnswerSnapshot[]): string {
   if (timeline.length === 0) return "unshown";

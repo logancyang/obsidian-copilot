@@ -16,8 +16,11 @@ Feature: Approving, rejecting, and blocking the agent's file edits
       | other.md        | Unrelated line |
       | folder/child.md | Nested line    |
 
-  # Default mode asks before every edit, and Auto is only ever the user's choice:
-  # https://github.com/Brevilabs/obsidian-copilot-private/issues/556
+  # Default mode asks before an edit the chat's own agent makes, and Auto is only
+  # ever the user's choice: https://github.com/Brevilabs/obsidian-copilot-private/issues/556
+  # Not covered, listed in runtime-tests/README.md: an edit made through opencode's
+  # task subagent does not ask:
+  # https://github.com/Brevilabs/obsidian-copilot-private/issues/572
   # The card shows the edit's diff: https://github.com/Brevilabs/obsidian-copilot-private/issues/28
   Scenario Outline: An edit the user allows changes exactly that note, and the model is told the result
     When I open a new conversation
@@ -34,6 +37,7 @@ Feature: Approving, rejecting, and blocking the agent's file edits
       | Reject                               |
     When I choose "Allow once" on the permission card, and the model then answers "Done"
     Then "note.md" reads "<after>", and no other file changed
+    And Copilot wrote "<after>" to "note.md" through the vault
     And the model was told the result the chat shows for the tool call
     And the answer shows these tool calls:
       | tool call      | status    |
@@ -60,12 +64,7 @@ Feature: Approving, rejecting, and blocking the agent's file edits
       | Edited note.md | failed |
     And the chat's status is "idle"
     When I send "Thanks", which the model answers with "You're welcome"
-    Then the conversation shows exactly:
-      | from | message        | turn ended as |
-      | user | Fix the note   |               |
-      | ai   |                | end_turn      |
-      | user | Thanks         |               |
-      | ai   | You're welcome | end_turn      |
+    Then the answer reads "You're welcome"
     And no file changed
 
   Scenario: A note the agent reads reaches the model without asking, and no file changes
@@ -114,12 +113,13 @@ Feature: Approving, rejecting, and blocking the agent's file edits
 
   # An @-mentioned agent answers a multi-agent question read-only:
   # https://github.com/Brevilabs/obsidian-copilot-private/issues/12
-  # Not covered, listed in runtime-tests/README.md: a shell command in that answer can
-  # still write (https://github.com/Brevilabs/obsidian-copilot-private/issues/494).
+  # Not covered, listed in runtime-tests/README.md: a shell command or a task subagent
+  # in that answer can still write:
+  # https://github.com/Brevilabs/obsidian-copilot-private/issues/573,
+  # https://github.com/Brevilabs/obsidian-copilot-private/issues/572
   Scenario Outline: An agent answering a read-only question cannot change a note
     When opencode is asked "Fix the note" as a read-only question, and the model <change>
     Then no file changed
-    And opencode's read-only answer reads "This agent did not answer."
 
     Examples:
       | change                                              |

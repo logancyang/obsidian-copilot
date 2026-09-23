@@ -19,6 +19,7 @@ import {
 
 import { listBackendDescriptors } from "@/agentMode/backends/registry";
 import type { AgentAnswer } from "@/agentMode/session/fanout/fanoutTypes";
+import type { AgentChatMessage } from "@/agentMode/session/types";
 import { buildAgentModelPicker } from "@/agentMode/ui/agentModelPickerHelpers";
 import { buildAgentModePicker } from "@/agentMode/ui/agentModePickerHelpers";
 import type { AgentModePickerOverride } from "@/agentMode/ui/useAgentModePicker";
@@ -26,7 +27,7 @@ import type { AgentModelPickerOverride } from "@/agentMode/ui/useAgentModelPicke
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { getModelKeyFromModel, getSettings } from "@/settings/model";
 
-import { shownNotices } from "../harness/obsidianShim";
+import { shownNotices, vaultWrites } from "../harness/obsidianShim";
 import { pinnedBinaryPath } from "../harness/pinnedBinary";
 import {
   Conversation,
@@ -563,21 +564,43 @@ function modeShown(runtime: Runtime): string {
   return picker.options.find((o) => o.value === picker.value)?.label ?? String(picker.value);
 }
 
+/** A tool call the scripted model asks the agent to make. */
+interface ToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
 /**
- * How the pinned opencode (1.18.31) is asked to work on a note: the tool and
- * the arguments its schema takes, as it advertises them to the model.
- * Scenarios name only what the agent does to which note, so a release that
- * renames a tool or an argument is adapted here and nowhere else.
+ * How the pinned opencode (1.18.31) is asked to work on a note: for each way a
+ * scenario words what the model does, the tool and the arguments its schema
+ * takes, as it advertises them to the model. Scenarios name only what the agent
+ * does to which note, so a release that renames a tool or an argument is
+ * adapted here and nowhere else.
  */
-const OPENCODE_FILE_TOOLS = {
-  edit: (filePath: string, oldString: string, newString: string) => ({
-    name: "edit",
-    args: { filePath, oldString, newString },
-  }),
-  rewrite: (filePath: string, content: string) => ({ name: "write", args: { filePath, content } }),
-  read: (filePath: string) => ({ name: "read", args: { filePath } }),
-  shell: (command: string) => ({ name: "bash", args: { command } }),
-};
+const OPENCODE_FILE_TOOLS: readonly [
+  RegExp,
+  (world: RuntimeWorld, ...words: string[]) => ToolCall,
+][] = [
+  [
+    /^edits "([^"]*)", replacing "([^"]*)" with "([^"]*)"$/,
+    (world, note, oldString, newString) => ({
+      name: "edit",
+      args: { filePath: world.vaultFile(note), oldString, newString },
+    }),
+  ],
+  [
+    /^rewrites "([^"]*)" as "([^"]*)"$/,
+    (world, note, content) => ({
+      name: "write",
+      args: { filePath: world.vaultFile(note), content },
+    }),
+  ],
+  [
+    /^reads "([^"]*)"$/,
+    (world, note) => ({ name: "read", args: { filePath: world.vaultFile(note) } }),
+  ],
+  [/^runs "([^"]*)"$/, (_world, command) => ({ name: "bash", args: { command } })],
+];
 
 /** How a permission card names the vault in a scenario's table. */
 const VAULT_TOKEN = "$VAULT";
@@ -594,41 +617,22 @@ Given("the vault holds these notes:", function (this: RuntimeWorld, table: DataT
   this.filesBefore = this.runtime.fileDigests();
 });
 
-// Each returns once the chat shows a permission card, or the turn has ended without one.
+// Returns once the chat shows a permission card, or the turn has ended without one.
 When(
-  "I send {string}, and the model edits {string}, replacing {string} with {string}",
-  async function (this: RuntimeWorld, text: string, note: string, from: string, to: string) {
-    const call = OPENCODE_FILE_TOOLS.edit(this.vaultFile(note), from, to);
-    await sendWithToolCall(this, text, call);
+  /^I send "([^"]*)", and the model (.+?)(?:, then answers "([^"]*)")?$/,
+  async function (this: RuntimeWorld, text: string, action: string, answer: string | null) {
+    queueToolCall(this, action, answer);
+    this.conversation.start(text);
+    await this.conversation.untilPermissionOrEnd();
   }
 );
 
+// The call a chat makes when a message @-mentions opencode alongside other agents.
 When(
-  "I send {string}, and the model rewrites {string} as {string}",
-  async function (this: RuntimeWorld, text: string, note: string, content: string) {
-    await sendWithToolCall(this, text, OPENCODE_FILE_TOOLS.rewrite(this.vaultFile(note), content));
-  }
-);
-
-When(
-  "I send {string}, and the model edits {string}, replacing {string} with {string}, then answers {string}",
-  async function (
-    this: RuntimeWorld,
-    text: string,
-    note: string,
-    from: string,
-    to: string,
-    answer: string
-  ) {
-    const call = OPENCODE_FILE_TOOLS.edit(this.vaultFile(note), from, to);
-    await sendWithToolCall(this, text, call, answer);
-  }
-);
-
-When(
-  "I send {string}, and the model reads {string}, then answers {string}",
-  async function (this: RuntimeWorld, text: string, note: string, answer: string) {
-    await sendWithToolCall(this, text, OPENCODE_FILE_TOOLS.read(this.vaultFile(note)), answer);
+  /^opencode is asked "([^"]*)" as a read-only question, and the model (.+?)(?:, then answers "([^"]*)")?$/,
+  async function (this: RuntimeWorld, text: string, action: string, answer: string | null) {
+    queueToolCall(this, action, answer);
+    this.readOnlyAnswer = await this.runtime.askReadOnly(text);
   }
 );
 
@@ -648,7 +652,7 @@ Then(
 When(
   "I choose {string} on the permission card",
   async function (this: RuntimeWorld, label: string) {
-    choosePermission(this.conversation, label);
+    this.conversation.answerPermission(label);
     await this.conversation.finish();
   }
 );
@@ -657,7 +661,7 @@ When(
   "I choose {string} on the permission card, and the model then answers {string}",
   async function (this: RuntimeWorld, label: string, answer: string) {
     this.runtime.provider.answer(answer);
-    choosePermission(this.conversation, label);
+    this.conversation.answerPermission(label);
     await this.conversation.finish();
   }
 );
@@ -675,6 +679,15 @@ Then(
     const changed = path.relative(path.dirname(this.runtime.vaultPath), this.vaultFile(note));
     assert.deepEqual(changedFiles(this.filesBefore, this.runtime.fileDigests()), [changed]);
     assert.equal(fs.readFileSync(this.vaultFile(note), "utf-8"), content);
+  }
+);
+
+// opencode's own tool writes the same bytes afterwards, so the file alone cannot
+// show that Copilot's write reached Obsidian's vault adapter.
+Then(
+  "Copilot wrote {string} to {string} through the vault",
+  function (this: RuntimeWorld, content: string, note: string) {
+    assert.deepEqual(vaultWrites, [[note, content]]);
   }
 );
 
@@ -700,72 +713,40 @@ Then("the model was told what {string} says", function (this: RuntimeWorld, note
 });
 
 Then("the answer shows these tool calls:", function (this: RuntimeWorld, table: DataTable) {
-  const answer = this.conversation.messages.findLast((m) => m.sender === AI_SENDER);
-  if (!answer) throw new Error("the conversation shows no answer");
-  assert.deepEqual(drawnToolCalls(answer, this.runtime.vaultPath), table.rows());
+  assert.deepEqual(
+    drawnToolCalls(lastAnswer(this.conversation), this.runtime.vaultPath),
+    table.rows()
+  );
 });
 
-// The call a chat makes when a message @-mentions opencode alongside other agents.
-When(
-  "opencode is asked {string} as a read-only question, and the model edits {string}, replacing {string} with {string}",
-  async function (this: RuntimeWorld, text: string, note: string, from: string, to: string) {
-    const call = OPENCODE_FILE_TOOLS.edit(this.vaultFile(note), from, to);
-    this.toolCallId = this.runtime.provider.callTool(call.name, call.args);
-    this.readOnlyAnswer = await this.runtime.askReadOnly(text);
-  }
-);
-
-When(
-  "opencode is asked {string} as a read-only question, and the model rewrites {string} as {string}",
-  async function (this: RuntimeWorld, text: string, note: string, content: string) {
-    const call = OPENCODE_FILE_TOOLS.rewrite(this.vaultFile(note), content);
-    this.toolCallId = this.runtime.provider.callTool(call.name, call.args);
-    this.readOnlyAnswer = await this.runtime.askReadOnly(text);
-  }
-);
-
-When(
-  "opencode is asked {string} as a read-only question, and the model runs {string}, then answers {string}",
-  async function (this: RuntimeWorld, text: string, command: string, answer: string) {
-    const call = OPENCODE_FILE_TOOLS.shell(command);
-    this.toolCallId = this.runtime.provider.callTool(call.name, call.args);
-    this.runtime.provider.answer(answer);
-    this.readOnlyAnswer = await this.runtime.askReadOnly(text);
-  }
-);
+Then("the answer reads {string}", function (this: RuntimeWorld, text: string) {
+  assert.equal(drawnText(lastAnswer(this.conversation)), text);
+});
 
 Then("opencode's read-only answer reads {string}", function (this: RuntimeWorld, text: string) {
   if (!this.readOnlyAnswer) throw new Error("opencode was asked no read-only question");
-  assert.equal(drawnReadOnlyAnswer(this.readOnlyAnswer), text);
+  assert.deepEqual(drawnReadOnlyAnswer(this.readOnlyAnswer), [text]);
 });
 
 /**
- * Queue `call` as the model's reply to `text`, and `answer` as its reply once
- * the tool has run; send `text`; and wait until the chat shows a permission
- * card or the turn ends.
+ * Queue the tool call `action` words as the model's next reply, and `answer`
+ * as its reply once the tool has run.
  */
-async function sendWithToolCall(
-  world: RuntimeWorld,
-  text: string,
-  call: { name: string; args: Record<string, unknown> },
-  answer?: string
-): Promise<void> {
+function queueToolCall(world: RuntimeWorld, action: string, answer: string | null): void {
+  const call = OPENCODE_FILE_TOOLS.flatMap(([words, toCall]) => {
+    const match = words.exec(action);
+    return match ? [toCall(world, ...match.slice(1))] : [];
+  })[0];
+  if (!call) throw new Error(`no opencode tool is mapped for "the model ${action}"`);
   world.toolCallId = world.runtime.provider.callTool(call.name, call.args);
-  if (answer !== undefined) world.runtime.provider.answer(answer);
-  world.conversation.start(text);
-  await world.conversation.untilPermissionOrEnd();
+  if (answer !== null) world.runtime.provider.answer(answer);
 }
 
-/** Press the button labelled `label` on the permission card the chat shows. */
-function choosePermission(conversation: Conversation, label: string): void {
-  const request = conversation.shownPermission;
-  if (!request) throw new Error("the chat shows no permission card");
-  const option = request.options.find((candidate) => candidate.name === label);
-  if (!option) {
-    const offered = request.options.map((candidate) => candidate.name).join(", ");
-    throw new Error(`the permission card offers no "${label}"; it offers ${offered}`);
-  }
-  conversation.answerPermission(option.optionId);
+/** The latest answer the conversation shows. */
+function lastAnswer(conversation: Conversation): AgentChatMessage {
+  const answer = conversation.messages.findLast((m) => m.sender === AI_SENDER);
+  if (!answer) throw new Error("the conversation shows no answer");
+  return answer;
 }
 
 /** The files, by path from the temp root, that were added, removed, or changed. */
