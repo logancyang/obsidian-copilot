@@ -76,5 +76,42 @@ describe("debugTap", () => {
         expect.objectContaining({ kind: "result", method: "(unknown)", payload: "[redacted]" })
       );
     });
+
+    it("keeps redacting when a request id answered before its request was logged is reused (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
+      (getSettings as jest.Mock).mockReturnValue({ agentMode: { debugFullFrames: true } });
+      (logInfo as jest.Mock).mockClear();
+      (frameSink.append as jest.Mock).mockClear();
+      const encoder = new TextEncoder();
+      let inbound!: ReadableStreamDefaultController<Uint8Array>;
+      const rawStdin = new WritableStream<Uint8Array>({ write() {} });
+      const rawStdout = new ReadableStream<Uint8Array>({
+        start(controller) {
+          inbound = controller;
+        },
+      });
+      const streams = wrapStreamsForDebug(rawStdin, rawStdout, "codex");
+      const reader = streams.stdout.getReader();
+      const writer = streams.stdin.getWriter();
+      const secret = "private-secret-value";
+
+      await writer.write(
+        encoder.encode(`${JSON.stringify({ jsonrpc: "2.0", id: 7, result: {} })}\n`)
+      );
+      inbound.enqueue(
+        encoder.encode(
+          `${JSON.stringify({ jsonrpc: "2.0", id: 7, method: "session/request_permission", params: {} })}\n`
+        )
+      );
+      await reader.read();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      await writer.write(
+        encoder.encode(
+          `${JSON.stringify({ jsonrpc: "2.0", id: 7, result: { action: "accept", content: { token: secret } } })}\n`
+        )
+      );
+
+      expect(JSON.stringify((logInfo as jest.Mock).mock.calls)).not.toContain(secret);
+      expect(JSON.stringify((frameSink.append as jest.Mock).mock.calls)).not.toContain(secret);
+    });
   });
 });

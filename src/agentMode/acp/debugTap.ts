@@ -124,6 +124,14 @@ export class NdjsonLineSplitter {
   }
 }
 
+/**
+ * Pending-map value for a response logged before its request. The late request
+ * consumes it instead of leaving a stale method that would unredact a later
+ * elicitation response reusing the id.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+ */
+const ANSWERED_EARLY = "(answered)";
+
 function logFrame(
   arrow: "→" | "←",
   line: string,
@@ -164,7 +172,10 @@ function logFrame(
     // Request or notification.
     const method = frame.method;
     const idLabel = idStr !== null ? `#${idStr}` : "(notif)";
-    if (idStr !== null) ownPending.set(idStr, method);
+    if (idStr !== null) {
+      if (ownPending.get(idStr) === ANSWERED_EARLY) ownPending.delete(idStr);
+      else ownPending.set(idStr, method);
+    }
     logInfo(`[ACP ${arrow}][${tag}] ${method}  ${idLabel}  ${formatPayload(frame.params)}`);
     emit?.(idStr !== null ? "request" : "notif", method, idStr, frame.params);
     return;
@@ -173,8 +184,12 @@ function logFrame(
   // Response (result or error). Method name comes from the side that
   // originated the request — that's `peerPending` from this stream's
   // perspective.
-  const method = idStr !== null ? (peerPending.get(idStr) ?? "(unknown)") : "(unknown)";
-  if (idStr !== null) peerPending.delete(idStr);
+  const pending = idStr !== null ? peerPending.get(idStr) : undefined;
+  const method = pending && pending !== ANSWERED_EARLY ? pending : "(unknown)";
+  if (idStr !== null) {
+    if (method === "(unknown)") peerPending.set(idStr, ANSWERED_EARLY);
+    else peerPending.delete(idStr);
+  }
   const idLabel = idStr !== null ? `#${idStr}` : "(no-id)";
   // Elicitation responses can contain passwords. The tee's logging branch may
   // observe a response before its request, so an unknown result is sensitive
