@@ -761,6 +761,8 @@ export interface BackendProcess {
   isRunning(): boolean;
   onExit(listener: () => void): () => void;
   setPermissionPrompter(fn: (req: PermissionPrompt) => Promise<PermissionDecision>): void;
+  /** Called when a backend identifies a recoverable process failure during a session turn. */
+  setUnhealthyHandler?(fn: () => void): void;
   /**
    * Optional: register the session-domain handler the backend calls when it
    * needs the user to answer inline multiple-choice questions (Claude SDK's

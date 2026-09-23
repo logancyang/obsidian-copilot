@@ -25,6 +25,8 @@ export interface AcpBackend {
   readonly id: BackendId;
   /** Human-readable name surfaced in the UI. */
   readonly displayName: string;
+  /** Recover when repeated ACP service errors indicate a live process lost its private server. */
+  readonly recoverOnInternalServiceFailure?: boolean;
   /** Build the spawn descriptor (BYOK keys decrypted, env composed). */
   buildSpawnDescriptor(ctx: {
     vaultBasePath: string;
