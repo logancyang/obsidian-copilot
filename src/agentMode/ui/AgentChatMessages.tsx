@@ -57,6 +57,94 @@ function lastAssistant(visible: AgentChatMessage[]): AgentChatMessage | undefine
   return undefined;
 }
 
+interface AgentMessageRowProps {
+  message: AgentChatMessage;
+  messageKey: string;
+  app: App;
+  sourcePath: string;
+  isLatestAssistant: boolean;
+  isStreaming: boolean;
+  minHeight?: number;
+}
+
+// Completed messages retain their object identity across streaming updates, so
+// stable row props keep their Markdown and trail renderers out of the live path.
+// https://github.com/logancyang/obsidian-copilot/issues/3343
+const AgentMessageRow = memo(function AgentMessageRow({
+  message,
+  messageKey,
+  app,
+  sourcePath,
+  isLatestAssistant,
+  isStreaming,
+  minHeight,
+}: AgentMessageRowProps) {
+  const adaptedMessage = toChatMessageView(message);
+  const isAssistant = message.sender !== USER_SENDER;
+  const hasParts = (message.parts?.length ?? 0) > 0;
+  const renderTrail = isAssistant && hasParts;
+  const completedTurnDurationMs = isLatestAssistant ? message.turnDurationMs : undefined;
+  const runningTurnStartedAtMs =
+    isLatestAssistant && isStreaming ? message.timestamp?.epoch : undefined;
+  const completedTurnDuration =
+    completedTurnDurationMs !== undefined ? (
+      <AgentTurnDurationIndicator status="complete" durationMs={completedTurnDurationMs} inline />
+    ) : null;
+  const runningTurnDuration =
+    runningTurnStartedAtMs !== undefined ? (
+      <AgentTurnDurationIndicator status="running" startedAtMs={runningTurnStartedAtMs} />
+    ) : null;
+  const isStreamingPlaceholder = isAssistant && isStreaming && !hasParts && !message.message;
+  const fanoutTurn = isAssistant ? message.fanout : undefined;
+
+  return (
+    <div
+      data-message-key={messageKey}
+      className="tw-w-full"
+      style={{ minHeight: minHeight !== undefined ? `${minHeight}px` : "auto" }}
+    >
+      {fanoutTurn ? (
+        <div className="tw-px-3 tw-pt-2">
+          <FanoutMessageCard
+            message={message}
+            turn={fanoutTurn}
+            app={app}
+            footerStart={completedTurnDuration}
+          />
+          {runningTurnDuration}
+        </div>
+      ) : isStreamingPlaceholder ? (
+        <div className="tw-px-3 tw-pt-2">{runningTurnDuration}</div>
+      ) : renderTrail ? (
+        <div className="tw-px-3 tw-pt-2">
+          <AgentTrail
+            parts={message.parts!}
+            isStreaming={isStreaming}
+            turnStartedAtMs={runningTurnStartedAtMs}
+            turnDurationMs={completedTurnDurationMs}
+            timestamp={message.timestamp?.display}
+            app={app}
+            turnStopReason={message.turnStopReason}
+          />
+        </div>
+      ) : (
+        // Agent Mode has no per-message regenerate / edit / delete flow yet
+        // (ACP owns conversation history server-side), so only copy / insert apply.
+        <>
+          <ChatSingleMessage
+            sourcePath={sourcePath}
+            message={adaptedMessage}
+            app={app}
+            isStreaming={false}
+            footerStart={completedTurnDuration}
+          />
+          {runningTurnDuration ? <div className="tw-px-3">{runningTurnDuration}</div> : null}
+        </>
+      )}
+    </div>
+  );
+});
+
 const AgentChatMessages = memo(
   ({
     messages,
@@ -103,101 +191,26 @@ const AgentChatMessages = memo(
           className="tw-relative tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-scroll-smooth tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)]"
         >
           {visible.map((message, index) => {
-            const isLastMessage = index === visible.length - 1;
             // A plan remains part of the transcript, so it supplies tail
             // content. Blocking actions live in their own rail and do not
             // change the transcript's scroll headroom.
             const shouldApplyMinHeight =
-              isLastMessage && message.sender !== USER_SENDER && !showPlanCard;
-            const adaptedMessage = adapted[index];
-            // When an assistant message has structured parts, the trail owns
-            // its entire body — `text` parts already cover streamed prose, so
-            // an additional `ChatSingleMessage` would duplicate it.
-            const isAssistant = message.sender !== USER_SENDER;
-            const hasParts = (message.parts?.length ?? 0) > 0;
-            const renderTrail = isAssistant && hasParts;
-            const ownsTurnDuration = isAssistant && message.id === latestAssistant?.id;
-            const completedTurnDurationMs = ownsTurnDuration ? message.turnDurationMs : undefined;
-            const runningTurnStartedAtMs =
-              ownsTurnDuration && message.id === streamingMessageId
-                ? message.timestamp?.epoch
-                : undefined;
-            const completedTurnDuration =
-              completedTurnDurationMs !== undefined ? (
-                <AgentTurnDurationIndicator
-                  status="complete"
-                  durationMs={completedTurnDurationMs}
-                  inline
-                />
-              ) : null;
-            const runningTurnDuration =
-              runningTurnStartedAtMs !== undefined ? (
-                <AgentTurnDurationIndicator status="running" startedAtMs={runningTurnStartedAtMs} />
-              ) : null;
-            // The streaming placeholder (empty body, no parts) renders the
-            // whole-turn timer in-place, so the user sees progress the moment
-            // they hit send rather than an empty assistant bubble.
-            const isStreamingPlaceholder =
-              isAssistant && message.id === streamingMessageId && !hasParts && !message.message;
-            // A multi-agent turn owns this message's body — the segmented tab
-            // row replaces the plain assistant text and the streaming spinner
-            // (its per-agent slots show their own live states). `message.fanout`
-            // is present for BOTH the live in-flight turn and a reloaded
-            // transcript whose composite body was parsed back into a turn.
-            const fanoutTurn = isAssistant ? message.fanout : undefined;
+              index === visible.length - 1 && message.sender !== USER_SENDER && !showPlanCard;
+            const messageKey = getMessageKey(adapted[index], index);
 
             return (
-              <div
-                key={getMessageKey(adaptedMessage, index)}
-                data-message-key={getMessageKey(adaptedMessage, index)}
-                className="tw-w-full"
-                style={{
-                  minHeight: shouldApplyMinHeight ? `${containerMinHeight}px` : "auto",
-                }}
-              >
-                {fanoutTurn ? (
-                  <div className="tw-px-3 tw-pt-2">
-                    <FanoutMessageCard
-                      message={message}
-                      turn={fanoutTurn}
-                      app={app}
-                      footerStart={completedTurnDuration}
-                    />
-                    {runningTurnDuration}
-                  </div>
-                ) : isStreamingPlaceholder ? (
-                  <div className="tw-px-3 tw-pt-2">{runningTurnDuration}</div>
-                ) : renderTrail ? (
-                  <div className="tw-px-3 tw-pt-2">
-                    <AgentTrail
-                      parts={message.parts!}
-                      isStreaming={message.id === streamingMessageId}
-                      turnStartedAtMs={runningTurnStartedAtMs}
-                      turnDurationMs={completedTurnDurationMs}
-                      timestamp={message.timestamp?.display}
-                      app={app}
-                      turnStopReason={message.turnStopReason}
-                    />
-                  </div>
-                ) : (
-                  // Agent Mode has no per-message regenerate / edit / delete flow
-                  // yet (ACP owns conversation history server-side), so no
-                  // lifecycle handlers are wired — ChatButtons renders only the
-                  // copy / insert actions it can honor.
-                  <>
-                    <ChatSingleMessage
-                      sourcePath={sourcePath}
-                      message={adaptedMessage}
-                      app={app}
-                      isStreaming={false}
-                      footerStart={completedTurnDuration}
-                    />
-                    {runningTurnDuration ? (
-                      <div className="tw-px-3">{runningTurnDuration}</div>
-                    ) : null}
-                  </>
-                )}
-              </div>
+              <AgentMessageRow
+                key={messageKey}
+                messageKey={messageKey}
+                message={message}
+                app={app}
+                sourcePath={sourcePath}
+                isLatestAssistant={
+                  message.sender !== USER_SENDER && message.id === latestAssistant?.id
+                }
+                isStreaming={message.id === streamingMessageId}
+                minHeight={shouldApplyMinHeight ? containerMinHeight : undefined}
+              />
             );
           })}
           {inlinePlanCard}
