@@ -1,18 +1,24 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
 import type { App as ObsidianApp } from "obsidian";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import { OPENCODE_PINNED_VERSION } from "@/agentMode/backends/opencode/ui/opencodeVersion";
 import { backendRegistry } from "@/agentMode/backends/registry";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
-import type { AgentSession } from "@/agentMode/session/AgentSession";
+import { withReadOnlyPreamble, type AgentSession } from "@/agentMode/session/AgentSession";
 import { AgentModelPreloader } from "@/agentMode/session/AgentModelPreloader";
 import { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import type { AgentChatMessage, StopReason } from "@/agentMode/session/types";
+import type { AgentAnswer } from "@/agentMode/session/fanout/fanoutTypes";
+import type { AgentChatMessage, PermissionPrompt, StopReason } from "@/agentMode/session/types";
 import { createDefaultPermissionPrompter } from "@/agentMode/ui/permissionPrompter";
+import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
+import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
 import { err2String } from "@/errorFormat";
 import { logFileManager } from "@/logFileManager";
 import type CopilotPlugin from "@/main";
@@ -24,7 +30,7 @@ import { AI_SENDER, DEFAULT_SETTINGS, USER_SENDER } from "@/constants";
 import { EgressProxy } from "./egressProxy";
 import { App } from "./obsidianApp";
 import { shownNotices } from "./obsidianShim";
-import { ScriptedProvider, type HeldStream } from "./scriptedProvider";
+import { ScriptedProvider, type Asker, type HeldStream } from "./scriptedProvider";
 
 // Agent Mode schedules its timers on `window`, which a bare Node process lacks.
 (globalThis as { window?: unknown }).window ??= globalThis;
@@ -78,6 +84,13 @@ const SHUTDOWN_WARNINGS: readonly RegExp[] = [
  */
 const OPENCODE_REQUEST_FAILED_LOG = " ERROR [AgentMode][opencode] Error handling request {";
 
+/**
+ * Copilot's answer to a request opencode made of it, such as
+ * `fs/write_text_file`, failed. opencode only logs such a failure, so a turn
+ * that depended on it can still look fine.
+ */
+const CLIENT_ERROR_REPLY = / \[ACP →\]\[opencode\] \(error\) /;
+
 /** One observed state of the conversation's latest assistant message. */
 export interface AnswerSnapshot {
   text: string;
@@ -113,7 +126,7 @@ export interface RuntimeOptions {
 export class Runtime {
   readonly provider = new ScriptedProvider({
     apiKey: SYNTHETIC_API_KEY,
-    askerFor: (message) => this.#conversations.findLast((c) => c.sentText === message),
+    askerFor: (message) => this.#askers.findLast((asker) => asker.sentText === message),
   });
   readonly egress = new EgressProxy();
 
@@ -129,8 +142,8 @@ export class Runtime {
   /** One fragment per log line the turns a scenario made fail are expected to write. */
   readonly #expectedFailureLogs: string[] = [];
   #manager: AgentSessionManager | null = null;
-  /** Every chat opened so far, oldest first. */
-  #conversations: Conversation[] = [];
+  /** Every chat opened and read-only question asked so far, oldest first. */
+  #askers: SentAsker[] = [];
   /** Process startups the manager does not wait for on shutdown; see {@link stop}. */
   readonly #startups: Promise<unknown>[] = [];
 
@@ -141,7 +154,11 @@ export class Runtime {
    * plugin load starts.
    */
   async start(options: RuntimeOptions): Promise<void> {
-    this.#tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "copilot-runtime-"));
+    // opencode resolves symlinks in its working directory. Under a linked temp
+    // dir (macOS's /var → /private/var), a vault named through the link reads
+    // as outside itself, and every edit first asks for an external directory.
+    const tmp = await fs.promises.realpath(os.tmpdir());
+    this.#tempRoot = await fs.promises.mkdtemp(path.join(tmp, "copilot-runtime-"));
     this.#vaultPath = path.join(this.#tempRoot, "vault");
     this.#agentHome = path.join(this.#tempRoot, "agent-home");
     await fs.promises.mkdir(this.#vaultPath, { recursive: true });
@@ -255,6 +272,58 @@ export class Runtime {
       throw new Error(`opencode did not start a conversation: ${err2String(error)}`);
     }
     return this.#track(session.internalId);
+  }
+
+  /** The scenario's disposable vault, which opencode runs in. */
+  get vaultPath(): string {
+    return this.#vaultPath;
+  }
+
+  /**
+   * A digest of every file under the scenario's temp root except the agent
+   * home, keyed by its path from the root: the vault, and anything a tool
+   * wrote beside it. opencode's own state in the agent home is left out.
+   */
+  fileDigests(): Map<string, string> {
+    const digests = new Map<string, string>();
+    const visit = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const file = path.join(dir, entry.name);
+        if (file === this.#agentHome) continue;
+        if (entry.isDirectory()) visit(file);
+        else digests.set(path.relative(this.#tempRoot, file), digestOf(file));
+      }
+    };
+    visit(this.#tempRoot);
+    return digests;
+  }
+
+  /**
+   * Ask opencode `question` the way a chat asks an @-mentioned agent in a
+   * multi-agent turn: the manager's fan-out runs it in an ephemeral read-only
+   * session, behind the read-only preamble the chat prepends. Resolves with
+   * opencode's answer once it settles.
+   */
+  async askReadOnly(question: string): Promise<AgentAnswer> {
+    const prompt = withReadOnlyPreamble([{ type: "text", text: question }]);
+    const answer = new ReadOnlyAnswer(prompt[0].type === "text" ? prompt[0].text : question);
+    this.#askers.push(answer);
+    const turn = this.#requireManager().runFanoutTurn({
+      agents: ["opencode"],
+      // The chat's own agent. With one answerer it writes no summary, so it never starts.
+      mainAgent: "claude",
+      prompt,
+      originalPromptText: question,
+      signal: new AbortController().signal,
+      onChange: (update) => answer.update(update.answers.opencode),
+    });
+    const settled = await within(
+      TURN_TIMEOUT_MS,
+      turn,
+      () =>
+        `the read-only answer did not settle; it reads ${JSON.stringify(answer.text)}; the provider ${this.#describeProvider()}`
+    );
+    return settled.answers.opencode;
   }
 
   /** The production session manager, for the selection and restart APIs the chat view calls. */
@@ -398,9 +467,11 @@ export class Runtime {
       .filter((target) => !EXPECTED_REFUSED_EGRESS.has(target))
       .map((target) => `the runtime tried to reach ${target}`);
     const failureLogs = [...this.#expectedFailureLogs];
-    const loggedProblems = logFileManager
-      .exportLogText()
-      .split("\n")
+    const lines = logFileManager.exportLogText().split("\n");
+    const failedReplies = lines
+      .filter((line) => CLIENT_ERROR_REPLY.test(line))
+      .map((line) => `Copilot answered opencode with an error: ${line}`);
+    const loggedProblems = lines
       .filter((line) => ["WARN", "ERROR"].includes(line.split(" ")[1]))
       .filter((line) => !this.#expectedLogLines.has(line))
       .filter((line) => {
@@ -412,7 +483,7 @@ export class Runtime {
         return false;
       })
       .map((line) => `Copilot logged: ${line}`);
-    return [...this.provider.failures, ...unexpectedEgress, ...loggedProblems];
+    return [...this.provider.failures, ...unexpectedEgress, ...failedReplies, ...loggedProblems];
   }
 
   /**
@@ -446,7 +517,7 @@ export class Runtime {
   async stop(): Promise<string[]> {
     const manager = this.#manager;
     this.#manager = null;
-    this.#conversations = [];
+    this.#askers = [];
     this.#modelManagement = null;
     this.#preloader = null;
     this.#expectedLogLines.clear();
@@ -542,20 +613,29 @@ export class Runtime {
     const ui = this.#requireManager().getChatUIState(internalId);
     if (!ui) throw new Error("the new session has no chat UI state");
     const conversation = new Conversation(internalId, ui, () => this.#describeProvider());
-    this.#conversations.push(conversation);
+    this.#askers.push(conversation);
     return conversation;
   }
+}
+
+/** Something that sent the provider a question and shows the answer: a chat or a read-only question. */
+interface SentAsker extends Asker {
+  /** The user message the provider sees as the question. */
+  readonly sentText: string | undefined;
 }
 
 /**
  * One Agent Mode chat, observed through the same `AgentChatUIState` the chat
  * view renders from. Records every distinct state of the latest assistant
- * message so a scenario can assert how an answer arrived, not just its end.
+ * message so a scenario can assert how an answer arrived, not just its end,
+ * and every permission card the chat showed.
  */
-export class Conversation {
+export class Conversation implements SentAsker {
   #timeline: AnswerSnapshot[] = [];
   #sentText: string | undefined;
   #turn: Promise<void> | null = null;
+  #turnEnded = false;
+  readonly #permissionsShown: PermissionPrompt[] = [];
 
   /**
    * @param id The chat's session id, which the chat view's tabs switch by.
@@ -585,6 +665,39 @@ export class Conversation {
     return this.#timeline;
   }
 
+  /** Every permission card the chat has shown, oldest first. */
+  get permissionsShown(): readonly PermissionPrompt[] {
+    return this.#permissionsShown;
+  }
+
+  /** The permission card the chat shows now, if any. */
+  get shownPermission(): PermissionPrompt | undefined {
+    return this.ui.getPendingToolPermissions()[0];
+  }
+
+  /** Pick `optionId` on the card now shown, as its button does. */
+  answerPermission(optionId: string): void {
+    const request = this.shownPermission;
+    if (!request) throw new Error("the chat shows no permission card");
+    this.ui.resolveToolPermission(request.toolCall.toolCallId, optionId);
+  }
+
+  /** Resolve once the chat shows a permission card, or the turn has ended without one. */
+  untilPermissionOrEnd(): Promise<void> {
+    const turn = this.#turn;
+    if (!turn) throw new Error("no message has been sent");
+    return waitUntil(
+      () => this.#turnEnded || this.shownPermission !== undefined,
+      (listener) => {
+        void turn.then(listener);
+        return this.ui.subscribe(listener);
+      },
+      TURN_TIMEOUT_MS,
+      () =>
+        `a permission card or the end of the turn; the answer went ${formatTimeline(this.#timeline)}; the provider ${this.describeProvider()}`
+    );
+  }
+
   /** Send a message through the chat input's path and wait for the turn to end. */
   async send(text: string): Promise<void> {
     this.start(text);
@@ -595,7 +708,12 @@ export class Conversation {
   start(text: string): void {
     this.#timeline = [];
     this.#sentText = text;
-    this.#turn = this.ui.sendMessage(text).turn;
+    this.#turnEnded = false;
+    const turn = this.ui.sendMessage(text).turn;
+    this.#turn = turn;
+    void turn.then(() => {
+      if (this.#turn === turn) this.#turnEnded = true;
+    });
   }
 
   /** Wait for the turn the last message started to end, as the chat input does before it unlocks. */
@@ -639,6 +757,12 @@ export class Conversation {
   }
 
   #record(): void {
+    for (const request of this.ui.getPendingToolPermissions()) {
+      const id = request.toolCall.toolCallId;
+      if (!this.#permissionsShown.some((shown) => shown.toolCall.toolCallId === id)) {
+        this.#permissionsShown.push(request);
+      }
+    }
     const answer = this.ui.getMessages().findLast((m) => m.sender === AI_SENDER);
     if (!answer) return;
     const next = { text: drawnText(answer), stopReason: answer.turnStopReason ?? null };
@@ -659,6 +783,90 @@ export function drawnText(message: AgentChatMessage): string {
   return message.parts.flatMap((part) => (part.kind === "text" ? [part.text] : [])).join("\n\n");
 }
 
+/**
+ * An @-mentioned agent's answer to a read-only question, as the multi-agent
+ * turn streams it. Paces the provider the way a chat does.
+ */
+class ReadOnlyAnswer implements SentAsker {
+  #answer: AgentAnswer | undefined;
+  readonly #listeners = new Set<() => void>();
+
+  /** @param sentText The prompt as sent, read-only preamble included. */
+  constructor(readonly sentText: string) {}
+
+  get text(): string {
+    return this.#answer?.text ?? "";
+  }
+
+  /** Take the latest state of the answer, as the multi-agent turn reports it. */
+  update(answer: AgentAnswer | undefined): void {
+    this.#answer = answer;
+    for (const listener of this.#listeners) listener();
+  }
+
+  waitForAnswerText(text: string): Promise<void> {
+    return waitUntil(
+      () => this.text === text,
+      (listener) => {
+        this.#listeners.add(listener);
+        return () => this.#listeners.delete(listener);
+      },
+      CHUNK_VISIBLE_TIMEOUT_MS,
+      () => `the read-only answer to show "${text}"; it shows ${JSON.stringify(this.text)}`
+    );
+  }
+}
+
+/**
+ * Each tool call in `message` as the chat's trail draws its row: the summary
+ * line `ActionCard` shows, and the status its badge stands for.
+ *
+ * @param vaultBase The vault root, which the row's paths are shown relative to.
+ */
+export function drawnToolCalls(message: AgentChatMessage, vaultBase: string): string[][] {
+  return (message.parts ?? []).flatMap((part) =>
+    part.kind === "tool_call"
+      ? [[lookupToolSummary(part).collapsedLine(part, { vaultBase }), part.status]]
+      : []
+  );
+}
+
+/**
+ * The lines the chat's `ToolPermissionCard` draws for `request`, rendered by
+ * the component itself: its heading, what the agent wants to run, the tool's
+ * kind, each diff's path and lines, and one line per button.
+ */
+export function drawnPermissionCard(request: PermissionPrompt): string[] {
+  const html = renderToStaticMarkup(
+    createElement(ToolPermissionCard, { request, onResolve: () => {} })
+  );
+  return html
+    .replace(/<\/(div|p|pre|button)>/g, "\n")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&(lt|gt|quot|#x27|amp);/g, (_, entity: string) => HTML_ENTITIES[entity])
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+const HTML_ENTITIES: Record<string, string> = {
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  "#x27": "'",
+  amp: "&",
+};
+
+/**
+ * What `FanoutTurnView` draws for one agent's answer to a read-only question
+ * once it has settled: its text, or the line it shows in place of none.
+ */
+export function drawnReadOnlyAnswer(answer: AgentAnswer): string {
+  if (answer.status === "error") return answer.error?.trim() || "This agent failed to answer.";
+  if (answer.status === "cancelled") return answer.text || "Cancelled";
+  return answer.text || "This agent did not answer.";
+}
+
 function formatTimeline(timeline: readonly AnswerSnapshot[]): string {
   if (timeline.length === 0) return "unshown";
   return timeline
@@ -666,6 +874,12 @@ function formatTimeline(timeline: readonly AnswerSnapshot[]): string {
       s.stopReason ? `${JSON.stringify(s.text)} (${s.stopReason})` : JSON.stringify(s.text)
     )
     .join(" → ");
+}
+
+function digestOf(file: string): string {
+  return createHash("sha256")
+    .update(new Uint8Array(fs.readFileSync(file)))
+    .digest("hex");
 }
 
 /** Reject with `explain()` if `promise` has not settled within `ms`. */

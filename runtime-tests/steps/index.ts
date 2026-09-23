@@ -1,4 +1,5 @@
 import * as assert from "node:assert/strict";
+import * as fs from "node:fs";
 import * as path from "node:path";
 
 import {
@@ -17,16 +18,25 @@ import {
 } from "@cucumber/cucumber";
 
 import { listBackendDescriptors } from "@/agentMode/backends/registry";
+import type { AgentAnswer } from "@/agentMode/session/fanout/fanoutTypes";
 import { buildAgentModelPicker } from "@/agentMode/ui/agentModelPickerHelpers";
 import { buildAgentModePicker } from "@/agentMode/ui/agentModePickerHelpers";
 import type { AgentModePickerOverride } from "@/agentMode/ui/useAgentModePicker";
 import type { AgentModelPickerOverride } from "@/agentMode/ui/useAgentModelPicker";
-import { USER_SENDER } from "@/constants";
+import { AI_SENDER, USER_SENDER } from "@/constants";
 import { getModelKeyFromModel, getSettings } from "@/settings/model";
 
 import { shownNotices } from "../harness/obsidianShim";
 import { pinnedBinaryPath } from "../harness/pinnedBinary";
-import { Conversation, Runtime, drawnText, type ScriptedModel } from "../harness/runtime";
+import {
+  Conversation,
+  Runtime,
+  drawnPermissionCard,
+  drawnReadOnlyAnswer,
+  drawnText,
+  drawnToolCalls,
+  type ScriptedModel,
+} from "../harness/runtime";
 import type { HeldStream, RecordedRequest } from "../harness/scriptedProvider";
 import { Report } from "./report";
 
@@ -50,6 +60,14 @@ class RuntimeWorld extends World {
   held: { stream: HeldStream; in: Conversation } | null = null;
   /** How many requests the provider had received when the answer was stopped. */
   requestsWhenStopped = 0;
+  /** The notes the vault started with, by vault path. */
+  readonly notes = new Map<string, string>();
+  /** Every file outside the agent home as the scenario started, by digest. */
+  filesBefore = new Map<string, string>();
+  /** The id of the tool call the model asked for last. */
+  toolCallId = "";
+  /** opencode's settled answer to the last read-only question. */
+  readOnlyAnswer: AgentAnswer | null = null;
 
   /** The conversation the chat view shows, which the scenario's messages go to. */
   get conversation(): Conversation {
@@ -65,6 +83,11 @@ class RuntimeWorld extends World {
     const conversation = this.named.get(name);
     if (!conversation) throw new Error(`no conversation "${name}" has been opened`);
     return conversation;
+  }
+
+  /** The absolute path of `note` in the scenario's vault. */
+  vaultFile(note: string): string {
+    return path.join(this.runtime.vaultPath, note);
   }
 
   get heldAnswer(): { stream: HeldStream; in: Conversation } {
@@ -538,4 +561,233 @@ function modePicker(runtime: Runtime): AgentModePickerOverride {
 function modeShown(runtime: Runtime): string {
   const picker = modePicker(runtime);
   return picker.options.find((o) => o.value === picker.value)?.label ?? String(picker.value);
+}
+
+/**
+ * How the pinned opencode (1.18.31) is asked to work on a note: the tool and
+ * the arguments its schema takes, as it advertises them to the model.
+ * Scenarios name only what the agent does to which note, so a release that
+ * renames a tool or an argument is adapted here and nowhere else.
+ */
+const OPENCODE_FILE_TOOLS = {
+  edit: (filePath: string, oldString: string, newString: string) => ({
+    name: "edit",
+    args: { filePath, oldString, newString },
+  }),
+  rewrite: (filePath: string, content: string) => ({ name: "write", args: { filePath, content } }),
+  read: (filePath: string) => ({ name: "read", args: { filePath } }),
+  shell: (command: string) => ({ name: "bash", args: { command } }),
+};
+
+/** How a permission card names the vault in a scenario's table. */
+const VAULT_TOKEN = "$VAULT";
+
+// Each note is written byte for byte as the table gives it, then every file
+// is recorded so a scenario can prove which ones changed.
+Given("the vault holds these notes:", function (this: RuntimeWorld, table: DataTable) {
+  for (const { note, content } of table.hashes()) {
+    const file = path.join(this.runtime.vaultPath, note);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, content);
+    this.notes.set(note, content);
+  }
+  this.filesBefore = this.runtime.fileDigests();
+});
+
+// Each returns once the chat shows a permission card, or the turn has ended without one.
+When(
+  "I send {string}, and the model edits {string}, replacing {string} with {string}",
+  async function (this: RuntimeWorld, text: string, note: string, from: string, to: string) {
+    const call = OPENCODE_FILE_TOOLS.edit(this.vaultFile(note), from, to);
+    await sendWithToolCall(this, text, call);
+  }
+);
+
+When(
+  "I send {string}, and the model rewrites {string} as {string}",
+  async function (this: RuntimeWorld, text: string, note: string, content: string) {
+    await sendWithToolCall(this, text, OPENCODE_FILE_TOOLS.rewrite(this.vaultFile(note), content));
+  }
+);
+
+When(
+  "I send {string}, and the model edits {string}, replacing {string} with {string}, then answers {string}",
+  async function (
+    this: RuntimeWorld,
+    text: string,
+    note: string,
+    from: string,
+    to: string,
+    answer: string
+  ) {
+    const call = OPENCODE_FILE_TOOLS.edit(this.vaultFile(note), from, to);
+    await sendWithToolCall(this, text, call, answer);
+  }
+);
+
+When(
+  "I send {string}, and the model reads {string}, then answers {string}",
+  async function (this: RuntimeWorld, text: string, note: string, answer: string) {
+    await sendWithToolCall(this, text, OPENCODE_FILE_TOOLS.read(this.vaultFile(note)), answer);
+  }
+);
+
+Then(
+  "the chat asks for permission with a card that reads:",
+  function (this: RuntimeWorld, table: DataTable) {
+    const request = this.conversation.shownPermission;
+    if (!request) throw new Error("the chat shows no permission card");
+    const drawn = drawnPermissionCard(request).map((line) =>
+      line.replaceAll(this.runtime.vaultPath, VAULT_TOKEN)
+    );
+    assert.deepEqual(drawn, table.raw().flat());
+  }
+);
+
+// The card's button, then the chat input unlocking once the turn ends.
+When(
+  "I choose {string} on the permission card",
+  async function (this: RuntimeWorld, label: string) {
+    choosePermission(this.conversation, label);
+    await this.conversation.finish();
+  }
+);
+
+When(
+  "I choose {string} on the permission card, and the model then answers {string}",
+  async function (this: RuntimeWorld, label: string, answer: string) {
+    this.runtime.provider.answer(answer);
+    choosePermission(this.conversation, label);
+    await this.conversation.finish();
+  }
+);
+
+Then("the chat asked for no permission", async function (this: RuntimeWorld) {
+  const shown = this.conversation.permissionsShown.map((request) => drawnPermissionCard(request));
+  assert.deepEqual(shown, [], "the chat showed a permission card");
+  await this.conversation.finish();
+});
+
+Then(
+  "{string} reads {string}, and no other file changed",
+  function (this: RuntimeWorld, note: string, content: string) {
+    // Digests are keyed by path from the temp root, which holds the vault.
+    const changed = path.relative(path.dirname(this.runtime.vaultPath), this.vaultFile(note));
+    assert.deepEqual(changedFiles(this.filesBefore, this.runtime.fileDigests()), [changed]);
+    assert.equal(fs.readFileSync(this.vaultFile(note), "utf-8"), content);
+  }
+);
+
+Then("no file changed", function (this: RuntimeWorld) {
+  assert.deepEqual(changedFiles(this.filesBefore, this.runtime.fileDigests()), []);
+});
+
+Then(
+  "the model was told the result the chat shows for the tool call",
+  function (this: RuntimeWorld) {
+    const shown = shownToolOutput(this.conversation, this.toolCallId);
+    assert.ok(shown, "the chat shows no result for the tool call");
+    assert.equal(toolResultSent(this), shown);
+  }
+);
+
+Then("the model was told what {string} says", function (this: RuntimeWorld, note: string) {
+  const result = toolResultSent(this);
+  const content = this.notes.get(note) ?? "";
+  for (const line of content.split("\n").filter(Boolean)) {
+    assert.ok(result.includes(line), `the tool result ${JSON.stringify(result)} lacks "${line}"`);
+  }
+});
+
+Then("the answer shows these tool calls:", function (this: RuntimeWorld, table: DataTable) {
+  const answer = this.conversation.messages.findLast((m) => m.sender === AI_SENDER);
+  if (!answer) throw new Error("the conversation shows no answer");
+  assert.deepEqual(drawnToolCalls(answer, this.runtime.vaultPath), table.rows());
+});
+
+// The call a chat makes when a message @-mentions opencode alongside other agents.
+When(
+  "opencode is asked {string} as a read-only question, and the model edits {string}, replacing {string} with {string}",
+  async function (this: RuntimeWorld, text: string, note: string, from: string, to: string) {
+    const call = OPENCODE_FILE_TOOLS.edit(this.vaultFile(note), from, to);
+    this.toolCallId = this.runtime.provider.callTool(call.name, call.args);
+    this.readOnlyAnswer = await this.runtime.askReadOnly(text);
+  }
+);
+
+When(
+  "opencode is asked {string} as a read-only question, and the model rewrites {string} as {string}",
+  async function (this: RuntimeWorld, text: string, note: string, content: string) {
+    const call = OPENCODE_FILE_TOOLS.rewrite(this.vaultFile(note), content);
+    this.toolCallId = this.runtime.provider.callTool(call.name, call.args);
+    this.readOnlyAnswer = await this.runtime.askReadOnly(text);
+  }
+);
+
+When(
+  "opencode is asked {string} as a read-only question, and the model runs {string}, then answers {string}",
+  async function (this: RuntimeWorld, text: string, command: string, answer: string) {
+    const call = OPENCODE_FILE_TOOLS.shell(command);
+    this.toolCallId = this.runtime.provider.callTool(call.name, call.args);
+    this.runtime.provider.answer(answer);
+    this.readOnlyAnswer = await this.runtime.askReadOnly(text);
+  }
+);
+
+Then("opencode's read-only answer reads {string}", function (this: RuntimeWorld, text: string) {
+  if (!this.readOnlyAnswer) throw new Error("opencode was asked no read-only question");
+  assert.equal(drawnReadOnlyAnswer(this.readOnlyAnswer), text);
+});
+
+/**
+ * Queue `call` as the model's reply to `text`, and `answer` as its reply once
+ * the tool has run; send `text`; and wait until the chat shows a permission
+ * card or the turn ends.
+ */
+async function sendWithToolCall(
+  world: RuntimeWorld,
+  text: string,
+  call: { name: string; args: Record<string, unknown> },
+  answer?: string
+): Promise<void> {
+  world.toolCallId = world.runtime.provider.callTool(call.name, call.args);
+  if (answer !== undefined) world.runtime.provider.answer(answer);
+  world.conversation.start(text);
+  await world.conversation.untilPermissionOrEnd();
+}
+
+/** Press the button labelled `label` on the permission card the chat shows. */
+function choosePermission(conversation: Conversation, label: string): void {
+  const request = conversation.shownPermission;
+  if (!request) throw new Error("the chat shows no permission card");
+  const option = request.options.find((candidate) => candidate.name === label);
+  if (!option) {
+    const offered = request.options.map((candidate) => candidate.name).join(", ");
+    throw new Error(`the permission card offers no "${label}"; it offers ${offered}`);
+  }
+  conversation.answerPermission(option.optionId);
+}
+
+/** The files, by path from the temp root, that were added, removed, or changed. */
+function changedFiles(before: Map<string, string>, after: Map<string, string>): string[] {
+  const paths = new Set([...before.keys(), ...after.keys()]);
+  return [...paths].filter((file) => before.get(file) !== after.get(file)).sort();
+}
+
+/** The result text the chat's trail shows for tool call `id`, as `ActionCard` draws it. */
+function shownToolOutput(conversation: Conversation, id: string): string {
+  const part = conversation.messages
+    .flatMap((message) => message.parts ?? [])
+    .find((candidate) => candidate.kind === "tool_call" && candidate.id === id);
+  if (part?.kind !== "tool_call") throw new Error(`the chat shows no tool call ${id}`);
+  return (part.output ?? []).flatMap((o) => (o.type === "text" ? [o.text] : [])).join("\n");
+}
+
+/** The tool message the model's next request carried for the scenario's tool call. */
+function toolResultSent(world: RuntimeWorld): string {
+  const result = world.runtime.provider.requests
+    .flatMap((request) => request.messages)
+    .find((message) => message.role === "tool" && message.toolCallId === world.toolCallId);
+  if (!result) throw new Error(`no request to the model carried the result of ${world.toolCallId}`);
+  return result.content;
 }

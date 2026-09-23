@@ -45,6 +45,11 @@ export class FileSystemAdapter {
     return this.basePath;
   }
 
+  /** `VaultClient` writes through this when the agent calls ACP `fs/write_text_file`. */
+  async write(relativePath: string, data: string): Promise<void> {
+    await nodeFs.promises.writeFile(nodePath.join(this.basePath, relativePath), data);
+  }
+
   async exists(relativePath: string): Promise<boolean> {
     try {
       await nodeFs.promises.access(nodePath.join(this.basePath, relativePath));
