@@ -67,6 +67,15 @@ describe("OpencodeConfigView", () => {
       expect(options.map((o) => o.getAttribute("aria-checked"))).toEqual(["true", "false"]);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/560 describes managed OpenCode 2 without claiming a GitHub download", () => {
+      renderView({ managed: { ...MANAGED, version: "2.0.14" } });
+
+      expect(
+        screen.getByText("Let Copilot download and manage the official opencode binary.")
+      ).toBeTruthy();
+      expect(screen.queryByText(/GitHub repo/)).toBeNull();
+    });
+
     it("labels the upgrade as the custom binary's own command when that is the active source", () => {
       renderView({ state: { ...OUTDATED, source: "custom" }, activeSource: "custom" });
 
