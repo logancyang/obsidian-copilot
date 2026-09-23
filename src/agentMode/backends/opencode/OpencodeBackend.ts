@@ -168,7 +168,7 @@ export class OpencodeBackend implements AcpBackend {
     if (settings.enableSelfHostMode === true && configOverride !== undefined) {
       // An explicit config override must not reopen agent-native web tools while
       // Self-Host mode promises that queries stay on the configured route.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/558
       let overriddenConfig: Record<string, unknown>;
       try {
         const parsed = JSON.parse(configOverride) as unknown;
@@ -177,8 +177,8 @@ export class OpencodeBackend implements AcpBackend {
       } catch {
         throw new Error("opencode OPENCODE_CONFIG_CONTENT must be a JSON object.");
       }
-      overriddenConfig.permission = denyNativeWebTools(overriddenConfig.permission);
-      const overriddenAgents = overriddenConfig.agent;
+      overriddenConfig.permissions = appendNativeWebDenies(overriddenConfig.permissions);
+      const overriddenAgents = overriddenConfig.agents;
       if (
         overriddenAgents &&
         typeof overriddenAgents === "object" &&
@@ -187,7 +187,7 @@ export class OpencodeBackend implements AcpBackend {
         for (const agent of Object.values(overriddenAgents)) {
           if (!agent || typeof agent !== "object" || Array.isArray(agent)) continue;
           const agentConfig = agent as Record<string, unknown>;
-          agentConfig.permission = denyNativeWebTools(agentConfig.permission);
+          agentConfig.permissions = appendNativeWebDenies(agentConfig.permissions);
         }
       }
       configContent = JSON.stringify(overriddenConfig);
@@ -266,6 +266,17 @@ function denyNativeWebTools(permission: unknown): Record<string, unknown> {
         ? (permission as Record<string, unknown>)
         : {};
   return { ...permissionRecord, websearch: "deny", webfetch: "deny" };
+}
+
+// OpenCode 2 uses the last matching native rule. An invalid array must not
+// leave Self-Host web access to OpenCode's fallback policy.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/558
+function appendNativeWebDenies(permissions: unknown): unknown[] {
+  return [
+    ...(Array.isArray(permissions) ? permissions : []),
+    { action: "websearch", resource: "*", effect: "deny" },
+    { action: "webfetch", resource: "*", effect: "deny" },
+  ];
 }
 
 /** The `OPENCODE_CONFIG_CONTENT` document, typed by OpenCode's published schema. */
