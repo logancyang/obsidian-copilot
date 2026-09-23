@@ -1,5 +1,9 @@
 import { FileSystemAdapter, App } from "obsidian";
-import type { BackendDescriptor, PermissionOption } from "@/agentMode/session/types";
+import type {
+  AgentQuestionAnswers,
+  BackendDescriptor,
+  PermissionOption,
+} from "@/agentMode/session/types";
 import { AcpBackendProcess } from "./AcpBackendProcess";
 import { AcpProcessManager } from "./AcpProcessManager";
 import type { AcpBackend } from "./types";
@@ -551,7 +555,7 @@ describe("AcpBackendProcess", () => {
           clientCapabilities: expect.objectContaining({ elicitation: { form: {} } }),
         })
       );
-      const prompter = jest.fn().mockResolvedValue({ approach: "simple" });
+      const prompter = jest.fn().mockResolvedValue({ approach: { selected: ["simple"] } });
       backend.setAskUserQuestionPrompter(prompter);
       const result = await client.createElicitation(form, "rpc-1", new AbortController().signal);
       expect(prompter).toHaveBeenCalledWith(
@@ -567,7 +571,7 @@ describe("AcpBackendProcess", () => {
 
     it("returns cancel after the request signal aborts, even if an answer arrives later (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
       const { backend, client } = await openElicitationBackend();
-      let answer!: (answers: Record<string, string>) => void;
+      let answer!: (answers: AgentQuestionAnswers) => void;
       backend.setAskUserQuestionPrompter(
         () =>
           new Promise((resolve) => {
@@ -577,7 +581,7 @@ describe("AcpBackendProcess", () => {
       const controller = new AbortController();
       const result = client.createElicitation(form, "rpc-2", controller.signal);
       controller.abort();
-      answer({ approach: "simple" });
+      answer({ approach: { selected: ["simple"] } });
       await expect(result).resolves.toEqual({ action: "cancel" });
     });
 

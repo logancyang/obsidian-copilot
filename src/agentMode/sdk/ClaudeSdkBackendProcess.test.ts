@@ -655,7 +655,7 @@ describe("ClaudeSdkBackendProcess", () => {
       const permissionPrompter = jest.fn(async () => ({
         outcome: { outcome: "selected" as const, optionId: "allow_once" },
       }));
-      const questionPrompter = jest.fn(async () => ({ "Continue?": "Yes" }));
+      const questionPrompter = jest.fn(async () => ({ "Continue?": { selected: ["Yes"] } }));
       proc.setPermissionPrompter(permissionPrompter);
       proc.setAskUserQuestionPrompter(questionPrompter);
 

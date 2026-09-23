@@ -5,7 +5,7 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/551"
 
 describe("elicitation", () => {
   describe("formToQuestionPrompt()", () => {
-    it(`maps a Codex option and companion note into one question (${issue})`, () => {
+    it(`maps a Codex option and companion note into one question that answers both fields (${issue})`, () => {
       const request = {
         mode: "form",
         sessionId: "session-1",
@@ -33,7 +33,8 @@ describe("elicitation", () => {
         },
       } as const satisfies CreateElicitationRequest;
 
-      expect(formToQuestionPrompt(request, "rpc-1")).toEqual({
+      const form = formToQuestionPrompt(request, "rpc-1");
+      expect(form?.prompt).toEqual({
         sessionId: "session-1",
         requestId: "rpc-1",
         message: "Choose an approach",
@@ -42,17 +43,22 @@ describe("elicitation", () => {
             question: "Approach",
             header: "Pick one",
             answerKey: "approach",
-            options: [{ label: "Simple", value: "simple" }],
+            options: [{ label: "Simple" }],
             allowOther: true,
-            otherOptionValue: "None of the above",
-            otherNoteKey: "approach_note1",
             otherInput: "secret",
           },
         ],
       });
+      expect(form?.toContent({ approach: { selected: ["Simple"] } })).toEqual({
+        approach: "simple",
+      });
+      expect(form?.toContent({ approach: { selected: [], text: " Use a script " } })).toEqual({
+        approach: "None of the above",
+        approach_note1: " Use a script ",
+      });
     });
 
-    it(`maps a string array to option values without flattening (${issue})`, () => {
+    it(`maps a string array to a multi-select answered with an array of option values (${issue})`, () => {
       const request = {
         mode: "form",
         sessionId: "s",
@@ -74,21 +80,22 @@ describe("elicitation", () => {
           },
         },
       } as const satisfies CreateElicitationRequest;
-      expect(formToQuestionPrompt(request, "rpc-2")?.questions).toEqual([
+      const form = formToQuestionPrompt(request, "rpc-2");
+      expect(form?.prompt.questions).toEqual([
         {
           question: "Checks",
           answerKey: "checks",
-          options: [
-            { label: "Build", value: "build" },
-            { label: "Review", value: "review" },
-          ],
+          options: [{ label: "Build" }, { label: "Review" }],
           multiSelect: true,
           allowOther: false,
         },
       ]);
+      expect(form?.toContent({ checks: { selected: ["Build", "Review"] } })).toEqual({
+        checks: ["build", "review"],
+      });
     });
 
-    it(`maps free text and secret metadata to distinct inputs (${issue})`, () => {
+    it(`maps free text and secret metadata to distinct inputs answered with their text (${issue})`, () => {
       const request = {
         mode: "form",
         sessionId: "s",
@@ -102,10 +109,17 @@ describe("elicitation", () => {
           },
         },
       } as const satisfies CreateElicitationRequest;
-      expect(formToQuestionPrompt(request, "rpc-3")?.questions).toEqual([
+      const form = formToQuestionPrompt(request, "rpc-3");
+      expect(form?.prompt.questions).toEqual([
         { question: "Reason", answerKey: "reason", input: "text", options: [] },
         { question: "Token", answerKey: "token", input: "secret", options: [] },
       ]);
+      expect(
+        form?.toContent({
+          reason: { selected: [], text: "Tests" },
+          token: { selected: [], text: " t0k " },
+        })
+      ).toEqual({ reason: "Tests", token: " t0k " });
     });
 
     it(`declines unsupported field shapes and request scopes (${issue})`, () => {

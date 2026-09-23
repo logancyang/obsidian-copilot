@@ -620,23 +620,29 @@ export interface PermissionDecision {
 export interface AgentQuestion {
   question: string;
   header?: string;
-  options: Array<{ label: string; value?: string; description?: string }>;
+  options: Array<{ label: string; description?: string }>;
   multiSelect?: boolean;
-  /** ACP's stable field id; Claude questions continue to use question text. */
+  /** Key of this question's entry in `AgentQuestionAnswers`; defaults to the question text. */
   answerKey?: string;
+  /** Replaces the option list with a single free-text or masked field. */
   input?: "text" | "secret";
   allowOther?: boolean;
-  otherOptionValue?: string;
-  otherNoteKey?: string;
+  /** Masks the "Other" response field. */
   otherInput?: "secret";
 }
 
+/** One question's response: the chosen option labels plus any typed text. */
+export interface AgentQuestionAnswer {
+  selected: string[];
+  /** The `input` field's value, or the "Other" response when Other is chosen. */
+  text?: string;
+}
+
 /**
- * Claude answers use question text and option labels, joining multi-select
- * labels with `, `. ACP answers use field IDs and preserve multi-select arrays.
- * An empty map signals cancellation.
+ * Answers keyed by each question's `answerKey ?? question`. Each backend
+ * serializes them into its own wire shape. An empty map signals cancellation.
  */
-export type AgentQuestionAnswers = { [questionTextOrFieldId: string]: string | string[] };
+export type AgentQuestionAnswers = { [answerKey: string]: AgentQuestionAnswer };
 
 /**
  * A request from the backend asking the user to answer one or more inline

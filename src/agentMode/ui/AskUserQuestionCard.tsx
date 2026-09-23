@@ -49,7 +49,7 @@ function isAnswered(
  *
  * Each question also offers an "Other" row that reveals a free-form textarea,
  * so the user can answer when none of the agent's options fit — the typed text
- * is folded into the same plain-string answer the presets produce.
+ * is returned beside the selected labels for the backend to serialize.
  */
 export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ request, onResolve }) => {
   const { questions, requestId } = request;
@@ -86,37 +86,14 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
       const sel = selections[i];
-      const other = otherActive[i] ?? false;
-      const text = (customTexts[i] ?? "").trim();
-      const key = q.answerKey ?? q.question;
-      if (q.input) {
-        answers[key] = q.input === "secret" ? (customTexts[i] ?? "") : text;
-        continue;
-      }
-      if (q.multiSelect) {
-        const labels = sel instanceof Set ? Array.from(sel) : [];
-        if (other && text) labels.push(text);
-        answers[key] = q.answerKey
-          ? labels.map(
-              (label) => q.options.find((option) => option.label === label)?.value ?? label
-            )
-          : labels.join(", ");
-      } else {
-        // ACP has stable option values and a separate note field. Claude's
-        // question-text/plain-string contract remains unchanged.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
-        answers[key] =
-          other && q.otherNoteKey
-            ? (q.otherOptionValue ?? "")
-            : other
-              ? text
-              : typeof sel === "string"
-                ? q.answerKey
-                  ? (q.options.find((option) => option.label === sel)?.value ?? sel)
-                  : sel
-                : "";
-        if (other && q.otherNoteKey) answers[q.otherNoteKey] = text;
-      }
+      const raw = customTexts[i] ?? "";
+      // Masked values keep their exact whitespace, since a credential may include it.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+      const text = q.input === "secret" || q.otherInput === "secret" ? raw : raw.trim();
+      const selected =
+        sel instanceof Set ? Array.from(sel) : typeof sel === "string" && sel ? [sel] : [];
+      answers[q.answerKey ?? q.question] =
+        q.input || otherActive[i] ? { selected, text } : { selected };
     }
     onResolve(requestId, answers);
   };
@@ -285,11 +262,6 @@ const QuestionPanel: React.FC<QuestionPanelProps> = ({
       ) : (
         <div className="tw-text-sm">{question.question}</div>
       )}
-      {/* ACP uses header as the field description; Claude uses it only as a tab label.
-          https://github.com/Brevilabs/obsidian-copilot-private/issues/551 */}
-      {question.answerKey && question.header ? (
-        <div className="tw-text-xs tw-text-muted">{question.header}</div>
-      ) : null}
       {!question.input ? (
         <div className="tw-flex tw-flex-col tw-gap-1">
           {question.options.map((opt) => {

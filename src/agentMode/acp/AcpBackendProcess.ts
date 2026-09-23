@@ -994,11 +994,11 @@ export class AcpBackendProcess implements BackendProcess {
     requestId: string,
     signal: AbortSignal
   ): Promise<CreateElicitationResponse> {
-    const prompt = formToQuestionPrompt(request, requestId);
-    if (!prompt) return { action: "decline" };
+    const form = formToQuestionPrompt(request, requestId);
+    if (!form) return { action: "decline" };
     if (!this.askUserQuestionPrompter || signal.aborted) return { action: "cancel" };
-    const answers = await this.askUserQuestionPrompter({ ...prompt, signal });
+    const answers = await this.askUserQuestionPrompter({ ...form.prompt, signal });
     if (signal.aborted || Object.keys(answers).length === 0) return { action: "cancel" };
-    return { action: "accept", content: answers };
+    return { action: "accept", content: form.toContent(answers) };
   }
 }

@@ -1,11 +1,27 @@
 import type {
   CreateElicitationRequest,
+  ElicitationContentValue,
   ElicitationSchema,
   EnumOption,
   MultiSelectPropertySchema,
   StringPropertySchema,
 } from "@agentclientprotocol/sdk";
-import type { AgentQuestion, AskUserQuestionPrompt, SessionId } from "@/agentMode/session/types";
+import type {
+  AgentQuestion,
+  AgentQuestionAnswer,
+  AgentQuestionAnswers,
+  AskUserQuestionPrompt,
+  SessionId,
+} from "@/agentMode/session/types";
+
+type ElicitationContent = Record<string, ElicitationContentValue>;
+
+/** A supported form shown as inline questions, plus the encoder for the card's answers. */
+export interface ElicitationQuestionForm {
+  prompt: AskUserQuestionPrompt;
+  /** Serialize the card's answers into the form's field ids and option values. */
+  toContent: (answers: AgentQuestionAnswers) => ElicitationContent;
+}
 
 function codexFlag(metadata: unknown, flag: string): boolean {
   return codexValue(metadata, flag) === true;
@@ -21,6 +37,18 @@ function codexValue(metadata: unknown, key: string): unknown {
     : undefined;
 }
 
+function toOption(choice: EnumOption): AgentQuestion["options"][number] {
+  return {
+    label: choice.title,
+    ...(choice.description ? { description: choice.description } : {}),
+  };
+}
+
+/** Option titles are unique per field, so the card's label identifies the wire value. */
+function constOf(choices: EnumOption[], label: string | undefined): string {
+  return choices.find((choice) => choice.title === label)?.const ?? label ?? "";
+}
+
 function hasUnsupportedStringConstraints(field: StringPropertySchema): boolean {
   return (
     field.minLength != null ||
@@ -34,7 +62,7 @@ function hasUnsupportedStringConstraints(field: StringPropertySchema): boolean {
 export function formToQuestionPrompt(
   request: CreateElicitationRequest,
   requestId: string
-): AskUserQuestionPrompt | null {
+): ElicitationQuestionForm | null {
   if (request.mode !== "form" || !("sessionId" in request) || !("requestedSchema" in request))
     return null;
   const schema = request.requestedSchema as ElicitationSchema;
@@ -43,6 +71,7 @@ export function formToQuestionPrompt(
   const ids = Object.keys(properties);
   if (ids.length === 0) return null;
   const questions: AgentQuestion[] = [];
+  const encoders: Array<(answer: AgentQuestionAnswer, content: ElicitationContent) => void> = [];
   const required = new Set(schema.required ?? []);
   const noteIds = ids.filter((id) => codexValue(properties[id]._meta, "role") === "user_note");
   const consumed = new Set<string>();
@@ -102,22 +131,29 @@ export function formToQuestionPrompt(
         if (new Set(visible.map((choice) => choice.title)).size !== visible.length) return null;
         questions.push({
           ...common,
-          options: visible.map((choice) => ({
-            label: choice.title,
-            value: choice.const,
-            ...(choice.description ? { description: choice.description } : {}),
-          })),
+          options: visible.map(toOption),
           allowOther: Boolean(hasNote),
-          ...(hasNote ? { otherOptionValue: other!.const, otherNoteKey: noteId } : {}),
           ...(noteField && codexFlag(noteField._meta, "isSecret")
             ? { otherInput: "secret" as const }
             : {}),
+        });
+        // Codex reads an "Other" answer as its sentinel option plus the paired note.
+        encoders.push(({ selected, text }, content) => {
+          if (noteId && text !== undefined) {
+            content[id] = other!.const;
+            content[noteId] = text;
+          } else {
+            content[id] = constOf(visible, selected[0]);
+          }
         });
       } else {
         questions.push({
           ...common,
           options: [],
           input: codexFlag(stringField._meta, "isSecret") ? "secret" : "text",
+        });
+        encoders.push(({ text }, content) => {
+          content[id] = text ?? "";
         });
       }
     } else if (field.type === "array") {
@@ -135,13 +171,12 @@ export function formToQuestionPrompt(
       if (new Set(choices.map((choice) => choice.title)).size !== choices.length) return null;
       questions.push({
         ...common,
-        options: choices.map((choice) => ({
-          label: choice.title,
-          value: choice.const,
-          ...(choice.description ? { description: choice.description } : {}),
-        })),
+        options: choices.map(toOption),
         multiSelect: true,
         allowOther: false,
+      });
+      encoders.push(({ selected }, content) => {
+        content[id] = selected.map((label) => constOf(choices, label));
       });
     } else {
       // A partial form could collect data the agent never receives correctly.
@@ -151,9 +186,19 @@ export function formToQuestionPrompt(
   }
   if (consumed.size !== noteIds.length) return null;
   return {
-    sessionId: request.sessionId as SessionId,
-    requestId,
-    message: request.message,
-    questions,
+    prompt: {
+      sessionId: request.sessionId as SessionId,
+      requestId,
+      message: request.message,
+      questions,
+    },
+    toContent: (answers) => {
+      const content: ElicitationContent = {};
+      questions.forEach((question, i) => {
+        const answer = answers[question.answerKey ?? question.question];
+        if (answer) encoders[i](answer, content);
+      });
+      return content;
+    },
   };
 }

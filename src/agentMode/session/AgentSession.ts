@@ -1694,11 +1694,11 @@ export class AgentSession {
    */
   handleAskUserQuestion(request: AskUserQuestionPrompt): Promise<AgentQuestionAnswers> {
     const requestId = request.requestId;
-    if (request.signal?.aborted) return Promise.resolve({});
+    if (request.signal?.aborted) return Promise.resolve(EMPTY_ANSWERS);
     return new Promise<AgentQuestionAnswers>((resolve) => {
       // ACP timeout and cancellation withdraw the card without an answer.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
-      const onAbort = (): void => this.resolveAskUserQuestion(requestId, {});
+      const onAbort = (): void => this.resolveAskUserQuestion(requestId, EMPTY_ANSWERS);
       request.signal?.addEventListener("abort", onAbort, { once: true });
       this.pendingQuestionResolvers.set(requestId, {
         request,
