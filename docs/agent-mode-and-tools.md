@@ -30,6 +30,8 @@ opencode is the most flexible choice because it can use Copilot-hosted, BYOK, an
 2. If you already installed it, choose **My own binary** in **Configure**, then select **Auto-detect** or enter the absolute path and click **Apply**.
 3. Enable the models you want to see and choose a **Default model**.
 
+Managed installs download the tested OpenCode binary directly. You do not need to install npm, Bun, or Node. When Copilot adopts OpenCode 2, it will verify the download and extract it without a separate archive tool.
+
 There are three ways to provide model access:
 
 - **Copilot-hosted:** add your license under **Basic → Copilot License**. Models included with your plan appear automatically.

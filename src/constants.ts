@@ -742,9 +742,9 @@ export const RESTRICTION_MESSAGES = {
 } as const;
 
 export const OPENCODE_RELEASE_URL_TEMPLATE =
-  "https://github.com/sst/opencode/releases/download/v{version}/{asset}";
+  "https://github.com/anomalyco/opencode/releases/download/v{version}/{asset}";
 export const OPENCODE_RELEASE_API_URL_TEMPLATE =
-  "https://api.github.com/repos/sst/opencode/releases/tags/v{version}";
+  "https://api.github.com/repos/anomalyco/opencode/releases/tags/v{version}";
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
   userId: uuidv4(),

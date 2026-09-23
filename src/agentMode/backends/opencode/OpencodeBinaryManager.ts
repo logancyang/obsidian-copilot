@@ -20,6 +20,7 @@ import { FileSystemAdapter, requestUrl } from "obsidian";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { expectedBinaryName, resolveOpencodeTarget } from "./platformResolver";
+import { extractNpmBinary, resolveNpmAsset, verifyNpmIntegrity } from "./npmPackage";
 import type { InstallState as BackendInstallState } from "@/agentMode/session/types";
 import {
   ManagedInstallAbortError,
@@ -246,7 +247,7 @@ export function legacyVaultDataDir(
 
 /**
  * Manages the lifecycle of the opencode binary on disk: platform-aware
- * download from GitHub releases, extraction into a per-user OS-local dir
+ * download from GitHub releases or npm, extraction into a per-user OS-local dir
  * (outside the vault, see {@link opencodeManagedDataDir}), and persistence of
  * the install location into `settings.agentMode`. Desktop-only.
  */
@@ -398,10 +399,17 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     const { target, candidates } = await resolveOpencodeTarget();
     this.throwIfAborted(opts.signal);
 
-    const release = await this.fetchReleaseMetadata(version);
+    // OpenCode 2 publishes platform binaries on npm, while 1.x remains on GitHub. https://github.com/Brevilabs/obsidian-copilot-private/issues/560
+    const isNpm = Number(version.split(".")[0]) >= 2;
+    const asset = isNpm
+      ? await resolveNpmAsset(version, candidates, (url) =>
+          requestUrl({ url, method: "GET", throw: false })
+        )
+      : await this.fetchReleaseMetadata(version).then((release) => {
+          const match = pickMatchingAsset(release, candidates);
+          return { name: match.name, url: match.browser_download_url, size: match.size };
+        });
     this.throwIfAborted(opts.signal);
-
-    const asset = pickMatchingAsset(release, candidates);
 
     const binName = expectedBinaryName(target.platform);
     const finalBinPath = nodePath().join(versionDir, "bin", binName);
@@ -446,9 +454,9 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
 
     try {
       const archivePath = nodePath().join(tmpDir, asset.name);
-      await downloadFile(asset.browser_download_url, archivePath, {
+      await downloadFile(asset.url, archivePath, {
         displayName: "opencode",
-        bytes: asset.size,
+        bytes: "size" in asset ? asset.size : undefined,
         signal: opts.signal,
         onProgress: (received, total) => opts.progress.download(received, total),
       });
@@ -456,10 +464,22 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
       opts.progress.extracting();
       const extractDir = nodePath().join(tmpDir, "extract");
       await nodeFs().promises.mkdir(extractDir, { recursive: true });
-      await extractArchive(archivePath, extractDir);
+      if ("integrity" in asset) {
+        await verifyNpmIntegrity(archivePath, asset.integrity, opts.signal);
+        await extractNpmBinary(
+          archivePath,
+          nodePath().join(extractDir, binName),
+          binName,
+          opts.signal
+        );
+      } else {
+        await extractArchive(archivePath, extractDir);
+      }
       this.throwIfAborted(opts.signal);
 
-      const extractedBin = await locateFile(extractDir, binName);
+      const extractedBin = isNpm
+        ? nodePath().join(extractDir, binName)
+        : await locateFile(extractDir, binName);
       if (target.platform !== "windows") {
         await nodeFs().promises.chmod(extractedBin, 0o755);
       }

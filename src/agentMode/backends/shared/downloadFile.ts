@@ -7,8 +7,11 @@ const MAX_REDIRECTS = 5;
 export interface DownloadFileOptions {
   /** Names the download in error messages. */
   displayName: string;
-  /** Exact size the release publishes; any other size fails the download. */
-  bytes: number;
+  /**
+   * Exact size the release publishes; any other size fails the download. When
+   * the source publishes no size, the response's Content-Length is enforced.
+   */
+  bytes?: number;
   /** SHA-256 hex digest the release publishes, when it provides one. */
   sha256?: string;
   signal: AbortSignal;
@@ -34,7 +37,7 @@ export async function downloadFile(
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
   const https = requireNodeModule<typeof import("node:https")>("https");
   const crypto = requireNodeModule<typeof import("node:crypto")>("crypto");
-  const { displayName, bytes, sha256, signal, onProgress } = options;
+  const { displayName, sha256, signal, onProgress } = options;
   if (signal.aborted) throw new ManagedInstallAbortError();
   const response = await new Promise<import("node:http").IncomingMessage>((resolve, reject) => {
     const get = (current: string, hops: number): void => {
@@ -63,6 +66,13 @@ export async function downloadFile(
     };
     get(url, MAX_REDIRECTS);
   });
+  // npm registry metadata publishes an integrity digest but no tarball size.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/560
+  const bytes = options.bytes ?? Number(response.headers["content-length"]);
+  if (!Number.isSafeInteger(bytes) || bytes <= 0) {
+    response.destroy();
+    throw new Error(`${displayName} download size unknown.`);
+  }
   const hash = crypto.createHash("sha256");
   let received = 0;
   let reportedPercent = 0;

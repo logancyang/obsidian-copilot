@@ -25,6 +25,15 @@ export function buildAssetCandidates(target: AssetTarget): string[] {
   const base = `opencode-${target.platform}-${target.arch}`;
   const out: string[] = [];
 
+  // Older x64 musl hosts need both the libc and instruction-set variants. https://github.com/Brevilabs/obsidian-copilot-private/issues/560
+  if (
+    target.platform === "linux" &&
+    target.libc === "musl" &&
+    target.arch === "x64" &&
+    target.hasAvx2 === false
+  ) {
+    out.push(`${base}-baseline-musl`);
+  }
   if (target.platform === "linux" && target.libc === "musl") {
     out.push(`${base}-musl`);
   }
