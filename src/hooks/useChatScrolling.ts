@@ -1,6 +1,8 @@
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/types/message";
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect, useLayoutEffect } from "react";
+
+const END_THRESHOLD_PX = 24;
 
 interface UseChatScrollingOptions {
   chatHistory: ChatMessage[];
@@ -9,6 +11,10 @@ interface UseChatScrollingOptions {
 interface UseChatScrollingReturn {
   containerMinHeight: number;
   scrollContainerCallbackRef: (node: HTMLDivElement | null) => void;
+  contentCallbackRef: (node: HTMLDivElement | null) => void;
+  onScroll: () => void;
+  isScrollPaused: boolean;
+  scrollToEnd: () => void;
   getMessageKey: (message: ChatMessage, index: number) => string;
 }
 
@@ -16,8 +22,14 @@ export const useChatScrolling = ({
   chatHistory,
 }: UseChatScrollingOptions): UseChatScrollingReturn => {
   const [containerMinHeight, setContainerMinHeight] = useState(0);
+  const [isScrollPaused, setIsScrollPaused] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const isFollowingRef = useRef(true);
+  const lastScrollTopRef = useRef(0);
+  const chatHistoryRef = useRef(chatHistory);
+  chatHistoryRef.current = chatHistory;
 
   // Generate consistent message key for DOM identification
   // Using message IDs is better, as in the case of a network disconnection, the timestamps of two messages could be identical.
@@ -33,7 +45,8 @@ export const useChatScrolling = ({
     const containerHeight = messagesContainer.clientHeight;
 
     // Find the last user message element to measure its actual height
-    const lastUserMessageIndex = chatHistory
+    const history = chatHistoryRef.current;
+    const lastUserMessageIndex = history
       .map((msg, idx) => ({ msg, idx }))
       .filter(({ msg }) => msg.isVisible && msg.sender === USER_SENDER)
       .pop()?.idx;
@@ -42,10 +55,7 @@ export const useChatScrolling = ({
 
     if (lastUserMessageIndex !== undefined) {
       // Try to find the corresponding DOM element
-      const lastUserMessageKey = getMessageKey(
-        chatHistory[lastUserMessageIndex],
-        lastUserMessageIndex
-      );
+      const lastUserMessageKey = getMessageKey(history[lastUserMessageIndex], lastUserMessageIndex);
       const lastUserMessageElement = messagesContainer.querySelector(
         `[data-message-key="${lastUserMessageKey}"]`
       );
@@ -54,7 +64,7 @@ export const useChatScrolling = ({
         lastUserMessageHeight = lastUserMessageElement.getBoundingClientRect().height;
       } else {
         // Fallback: estimate based on message length (rough approximation)
-        const messageLength = chatHistory[lastUserMessageIndex].message.length;
+        const messageLength = history[lastUserMessageIndex].message.length;
         const estimatedLines = Math.ceil(messageLength / 80); // ~80 chars per line
         lastUserMessageHeight = Math.max(60, estimatedLines * 24); // ~24px per line + padding
       }
@@ -63,55 +73,77 @@ export const useChatScrolling = ({
     const minHeight = Math.max(100, containerHeight - lastUserMessageHeight);
 
     return minHeight;
-  }, [chatHistory, getMessageKey]);
+  }, [getMessageKey]);
+
+  const alignToEnd = useCallback(() => {
+    const node = scrollContainerRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+    lastScrollTopRef.current = node.scrollTop;
+  }, []);
+
+  const scrollToEnd = useCallback(() => {
+    isFollowingRef.current = true;
+    setIsScrollPaused(false);
+    alignToEnd();
+  }, [alignToEnd]);
+
+  const onScroll = useCallback(() => {
+    const node = scrollContainerRef.current;
+    if (!node) return;
+    // Readers can inspect older turns without losing their place during a growing response.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/277
+    const distanceFromEnd = node.scrollHeight - node.clientHeight - node.scrollTop;
+    if (distanceFromEnd <= END_THRESHOLD_PX) {
+      isFollowingRef.current = true;
+      setIsScrollPaused(false);
+    } else if (node.scrollTop < lastScrollTopRef.current) {
+      // Content can grow without a reader action, so only upward movement pauses following.
+      isFollowingRef.current = false;
+      setIsScrollPaused(true);
+    }
+    lastScrollTopRef.current = node.scrollTop;
+  }, []);
 
   // Memoized callback ref that gets called only when the DOM element actually changes
   const scrollContainerCallbackRef = useCallback(
     (node: HTMLDivElement | null) => {
-      // Only proceed if the node actually changed
-      if (node === scrollContainerRef.current) {
-        return; // Same node, nothing to do
-      }
-
-      // Clean up previous observer if it exists
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-        resizeObserverRef.current = null;
-      }
-
-      // Update the ref
+      if (node === scrollContainerRef.current) return;
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
       scrollContainerRef.current = node;
 
       if (node) {
-        // Calculate initial height using dynamic measurement
-        const calculatedMinHeight = calculateDynamicMinHeight();
-        setContainerMinHeight(calculatedMinHeight);
-
-        // Set up ResizeObserver on the messages container
+        setContainerMinHeight(calculateDynamicMinHeight());
         const resizeObserver = new ResizeObserver(() => {
-          if (scrollContainerRef.current) {
-            // Recalculate min-height dynamically based on current messages
-            const newCalculatedMinHeight = calculateDynamicMinHeight();
-            setContainerMinHeight(newCalculatedMinHeight);
-          }
+          setContainerMinHeight(calculateDynamicMinHeight());
+          // Markdown and images can grow after React commits the streaming message.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/277
+          if (isFollowingRef.current) alignToEnd();
         });
-
-        // Observe the messages container for size changes
         resizeObserver.observe(node);
-
+        if (contentRef.current) resizeObserver.observe(contentRef.current);
         resizeObserverRef.current = resizeObserver;
       }
     },
-    [calculateDynamicMinHeight]
+    [alignToEnd, calculateDynamicMinHeight]
   );
 
+  const contentCallbackRef = useCallback((node: HTMLDivElement | null) => {
+    if (node === contentRef.current) return;
+    if (contentRef.current) resizeObserverRef.current?.unobserve(contentRef.current);
+    contentRef.current = node;
+    if (node) resizeObserverRef.current?.observe(node);
+  }, []);
+
   // Recalculate min-height when chat history changes (new messages)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (scrollContainerRef.current && chatHistory.length > 0) {
       const newCalculatedMinHeight = calculateDynamicMinHeight();
       setContainerMinHeight(newCalculatedMinHeight);
     }
-  }, [chatHistory, calculateDynamicMinHeight]);
+    if (isFollowingRef.current) alignToEnd();
+  }, [chatHistory, calculateDynamicMinHeight, alignToEnd]);
 
   // Cleanup ResizeObserver on unmount
   useEffect(() => {
@@ -121,21 +153,6 @@ export const useChatScrolling = ({
       }
     };
   }, []);
-
-  // Scroll to bottom function
-  const scrollToBottom = useCallback((behavior: "smooth" | "instant" = "smooth") => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({
-        top: scrollContainerRef.current.scrollHeight,
-        behavior,
-      });
-    }
-  }, []);
-
-  // Scroll to bottom when component mounts (instant to avoid initial animation)
-  useEffect(() => {
-    scrollToBottom("instant");
-  }, [scrollToBottom]);
 
   // Scroll only when a new user message is appended. Tracks the latest
   // visible user-message id rather than the trailing element's sender so the
@@ -155,21 +172,24 @@ export const useChatScrolling = ({
       ? `${latestUserMessage.id ?? latestUserMessage.timestamp?.epoch ?? ""}`
       : undefined;
 
-    // First render: prime the ref so the on-mount instant scroll isn't
-    // immediately followed by a smooth scroll.
+    // The layout effect has already aligned the initial transcript.
     if (lastSeenUserMessageIdRef.current === undefined) {
       lastSeenUserMessageIdRef.current = latestId;
       return;
     }
     if (latestId && latestId !== lastSeenUserMessageIdRef.current) {
       lastSeenUserMessageIdRef.current = latestId;
-      scrollToBottom();
+      scrollToEnd();
     }
-  }, [chatHistory, scrollToBottom]);
+  }, [chatHistory, scrollToEnd]);
 
   return {
     containerMinHeight,
     scrollContainerCallbackRef,
+    contentCallbackRef,
+    onScroll,
+    isScrollPaused,
+    scrollToEnd,
     getMessageKey,
   };
 };

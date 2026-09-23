@@ -7,19 +7,24 @@ import type {
 } from "@/agentMode/session/types";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { AI_SENDER } from "@/constants";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 type AgentChatMessagesProps = React.ComponentProps<typeof AgentChatMessages>;
 
 const mockSingleMessageRender = jest.fn();
 const mockTrailRender = jest.fn();
+const mockScrollState = { paused: false, onResume: jest.fn() };
 
 jest.mock("@/hooks/useChatScrolling", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useChatScrolling: () => ({
     containerMinHeight: 0,
     scrollContainerCallbackRef: jest.fn(),
+    contentCallbackRef: jest.fn(),
+    onScroll: jest.fn(),
+    isScrollPaused: mockScrollState.paused,
+    scrollToEnd: mockScrollState.onResume,
     getMessageKey: (message: { id: string }) => message.id,
   }),
 }));
@@ -140,9 +145,19 @@ describe("AgentChatMessages", () => {
       jest.setSystemTime(200_000);
       mockSingleMessageRender.mockClear();
       mockTrailRender.mockClear();
+      mockScrollState.paused = false;
+      mockScrollState.onResume.mockClear();
     });
 
     afterEach(() => jest.useRealTimers());
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/277 shows a return control over the paused transcript and resumes following on click", () => {
+      mockScrollState.paused = true;
+      renderMessages([assistantMessage("response", 1_000)], false);
+
+      fireEvent.click(screen.getByRole("button", { name: "Scroll to end" }));
+      expect(mockScrollState.onResume).toHaveBeenCalledTimes(1);
+    });
 
     it("forwards the active session conversation path to user messages https://github.com/Brevilabs/obsidian-copilot-private/issues/539", () => {
       const { container } = renderMessages(
