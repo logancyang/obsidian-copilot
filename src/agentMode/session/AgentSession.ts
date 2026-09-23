@@ -22,6 +22,7 @@ import {
   PermissionDecision,
   PermissionOptionKind,
   PermissionPrompt,
+  PlanDecisionAction,
   PlanSummary,
   PromptContent,
   PromptInput,
@@ -1592,11 +1593,29 @@ export class AgentSession {
    * Drop the current plan once the user has decided. The UI gates the card
    * render on `decision === "pending"`, so a terminal state is never visible
    * to the user — clearing synchronously is fine.
+   * @param proposalId - The plan card being resolved.
+   * @param decision - The action submitted by the user, when known.
+   * @param feedbackText - The user's requested changes for a feedback action.
    */
-  finalizePlanDecision(proposalId: string): boolean {
+  finalizePlanDecision(
+    proposalId: string,
+    decision?: PlanDecisionAction,
+    feedbackText?: string
+  ): boolean {
     if (!this.currentPlan || this.currentPlan.id !== proposalId) return false;
     if (this.currentPlan.pendingToolCallId) {
       this.decidedPlanToolCallIds.add(this.currentPlan.pendingToolCallId);
+      if (decision) {
+        const summary =
+          decision === "approve"
+            ? "Approved plan"
+            : decision === "reject"
+              ? "Rejected plan"
+              : `Requested plan changes: ${feedbackText ?? "Feedback sent"}`;
+        // ACP may report only a titleless completion after the user decides.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/41
+        this.recordUserResponse(this.currentPlan.pendingToolCallId, summary);
+      }
     }
     this.currentPlan = null;
     this.notifyCurrentPlanChanged();
@@ -1737,9 +1756,39 @@ export class AgentSession {
     const entry = this.pendingQuestionResolvers.get(requestId);
     if (!entry) return;
     this.pendingQuestionResolvers.delete(requestId);
+    if (Object.keys(answers).length > 0) {
+      const responses = entry.request.questions.flatMap((question) => {
+        const answer = answers[question.answerKey ?? question.question];
+        return answer ? [{ question: question.question, answer }] : [];
+      });
+      // ACP elicitation may have no tool call of its own; record the
+      // submitted answers in the current assistant turn.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+      if (responses.length > 0) {
+        const summary = `Answered: ${responses.map(({ answer }) => answer).join("; ")}`;
+        const detail = responses.map(({ question, answer }) => `${question}: ${answer}`).join("\n");
+        this.recordUserResponse(requestId, summary, detail);
+      }
+    }
     entry.resolve(answers);
     this.recomputeStatusIfChanged();
     this.notifyMessages();
+  }
+
+  private recordUserResponse(toolCallId: string, summary: string, detail?: string): void {
+    const messageId = this.store.findMessageIdWithToolCall(toolCallId) ?? this.placeholderId;
+    if (!messageId) return;
+    const previous = this.findToolCallPart(messageId, toolCallId);
+    const part: AgentMessagePart = {
+      ...(previous?.kind === "tool_call" ? previous : {}),
+      kind: "tool_call",
+      id: toolCallId,
+      title: summary,
+      status: "completed",
+      userResponse: summary,
+      ...(detail ? { output: [{ type: "text", text: detail }] } : {}),
+    };
+    if (this.store.upsertAgentPart(messageId, part)) this.notifyMessages();
   }
 
   /**

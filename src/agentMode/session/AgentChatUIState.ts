@@ -116,6 +116,14 @@ export class AgentChatUIState implements AgentChatBackend {
     return this.session.getStatus() === "starting";
   }
 
+  isTurnInFlight(): boolean {
+    const status = this.session.getStatus();
+    // A plan decision can resume a turn after the composer has cleared its own
+    // loading flag, so the session remains the authority for active work.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/41
+    return status === "running" || status === "awaiting_permission";
+  }
+
   getBackendState(): BackendState | null {
     return this.session.getState();
   }
@@ -192,7 +200,7 @@ export class AgentChatUIState implements AgentChatBackend {
       decision === "approve",
       sendNextTurn ? undefined : trimmedFeedback
     );
-    this.session.finalizePlanDecision(plan.id);
+    this.session.finalizePlanDecision(plan.id, decision, trimmedFeedback);
     this.notifyListeners();
     if (sendNextTurn) {
       await pendingTurn;

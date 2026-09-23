@@ -142,6 +142,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const {
     messages,
     isStarting,
+    isTurnInFlight,
     hasPendingPlanPermission,
     currentPlan,
     currentTodoList,
@@ -781,6 +782,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       mainAgentId={mainAgentId}
       updateUserMessageHistory={updateUserMessageHistory}
       isStarting={isStarting}
+      isTurnInFlight={isTurnInFlight}
       hasPendingPlanPermission={hasPendingPlanPermission}
       modelPickerOverride={modelPickerOverride ?? undefined}
       modePickerOverride={modePickerOverride ?? undefined}
@@ -985,7 +987,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       pendingToolPermissions={pendingToolPermissions}
                       pendingAskUserQuestions={pendingAskUserQuestions}
                       chatBackend={backend}
-                      isLoading={draft.loading}
+                      isLoading={draft.loading || isTurnInFlight}
                     />
                     <AgentChatControls
                       onNewChat={handleNewChat}

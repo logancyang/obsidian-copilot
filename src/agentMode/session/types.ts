@@ -856,6 +856,8 @@ export type AgentMessagePart =
       title: string;
       toolKind?: AgentToolKind;
       status: AgentToolStatus;
+      /** User's submitted plan decision or question answer, retained across late tool updates. */
+      userResponse?: string;
       input?: unknown;
       output?: AgentToolCallOutput[];
       locations?: { path: string; line?: number }[];

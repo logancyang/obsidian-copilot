@@ -13,6 +13,7 @@ import React, { useEffect } from "react";
 interface FakeBackendState {
   messages: AgentChatMessage[];
   isStarting: boolean;
+  isTurnInFlight: boolean;
   hasPendingPlanPermission: boolean;
   currentPlan: CurrentPlan | null;
   currentTodoList?: AgentTodoListEntry[] | null;
@@ -29,6 +30,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
   const state: FakeBackendState = {
     messages: initial.messages ?? [],
     isStarting: initial.isStarting ?? false,
+    isTurnInFlight: initial.isTurnInFlight ?? false,
     hasPendingPlanPermission: initial.hasPendingPlanPermission ?? false,
     currentPlan: initial.currentPlan ?? null,
     currentTodoList: initial.currentTodoList ?? null,
@@ -44,6 +46,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     },
     getMessages: () => state.messages,
     isStarting: () => state.isStarting,
+    isTurnInFlight: () => state.isTurnInFlight,
     hasPendingPlanPermission: () => state.hasPendingPlanPermission,
     getCurrentPlan: () => state.currentPlan,
     getCurrentTodoList: () => state.currentTodoList ?? null,
@@ -68,9 +71,27 @@ describe("useAgentChatRuntimeState", () => {
 
     expect(result.current.messages).toEqual([msg("a")]);
     expect(result.current.isStarting).toBe(true);
+    expect(result.current.isTurnInFlight).toBe(false);
     expect(result.current.hasPendingPlanPermission).toBe(false);
     expect(result.current.currentPlan).toBeNull();
     expect(result.current.pendingToolPermissions).toEqual([]);
+  });
+
+  it("shows an externally started plan implementation as running until the turn finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", () => {
+    const fake = makeFakeBackend();
+    const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
+
+    act(() => {
+      fake.state.isTurnInFlight = true;
+      fake.emit();
+    });
+    expect(result.current.isTurnInFlight).toBe(true);
+
+    act(() => {
+      fake.state.isTurnInFlight = false;
+      fake.emit();
+    });
+    expect(result.current.isTurnInFlight).toBe(false);
   });
 
   it("re-syncs every field when the backend notifies", () => {

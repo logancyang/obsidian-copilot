@@ -33,6 +33,9 @@ export type GroupedTrailNode = RenderNode | ActivityGroupNode;
 
 /** Tool calls that own an interactive surface and must stay visible. */
 function isInteractive(part: ToolCallPart): boolean {
+  // A submitted response must remain visible after its action card closes.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+  if (part.userResponse) return true;
   if (part.mcpServer) return false;
   const name = part.vendorToolName;
   return (

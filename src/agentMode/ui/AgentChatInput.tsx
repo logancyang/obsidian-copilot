@@ -71,6 +71,8 @@ interface AgentChatInputProps {
   mainAgentId: BackendId | null;
   updateUserMessageHistory: (newMessage: string) => void;
   isStarting: boolean;
+  /** Backend turn state, including plan-review continuations started outside this composer. */
+  isTurnInFlight: boolean;
   hasPendingPlanPermission: boolean;
   modelPickerOverride: ChatInputProps["modelPickerOverride"];
   modePickerOverride: ChatInputProps["modePickerOverride"];
@@ -200,6 +202,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   mainAgentId,
   updateUserMessageHistory,
   isStarting,
+  isTurnInFlight,
   hasPendingPlanPermission,
   modelPickerOverride,
   modePickerOverride,
@@ -256,7 +259,7 @@ export const AgentChatInput = memo(function AgentChatInput({
     contextNotes,
     includeActiveNote,
     includeActiveWebTab,
-    loading,
+    loading: draftLoading,
     queue: queuedMessages,
     setInput: setInputMessage,
     setContextNotes,
@@ -268,6 +271,7 @@ export const AgentChatInput = memo(function AgentChatInput({
     setQueue: setQueuedMessages,
     resetCompose,
   } = draft;
+  const loading = draftLoading || isTurnInFlight;
   const activeModelEntry = modelPickerOverride?.models.find(
     (model) => getModelKeyFromModel(model) === modelPickerOverride.value
   );

@@ -3709,7 +3709,7 @@ describe("AgentSession client-derived title (non-summarizing backends)", () => {
 });
 
 describe("AgentSession plan proposal lifecycle", () => {
-  it("does not resurrect the plan card when a late tool_call_update arrives for a finalized proposal", async () => {
+  it("keeps an approved decision visible without resurrecting the plan card after a late tool update (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", async () => {
     const mock = makeMockBackend();
     let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
     mock.prompt.mockImplementation(
@@ -3741,7 +3741,7 @@ describe("AgentSession plan proposal lifecycle", () => {
     expect(initialPlan?.decision).toBe("pending");
     expect(initialPlan?.pendingToolCallId).toBe("tc-plan-1");
 
-    expect(session.finalizePlanDecision(initialPlan!.id)).toBe(true);
+    expect(session.finalizePlanDecision(initialPlan!.id, "approve")).toBe(true);
     expect(session.getCurrentPlan()).toBeNull();
 
     mock.emit({
@@ -3756,6 +3756,11 @@ describe("AgentSession plan proposal lifecycle", () => {
       },
     });
     expect(session.getCurrentPlan()).toBeNull();
+    const decidedPart = session.store
+      .getDisplayMessages()
+      .flatMap((message) => message.parts ?? [])
+      .find((part) => part.kind === "tool_call" && part.id === "tc-plan-1");
+    expect(decidedPart?.kind === "tool_call" && decidedPart.userResponse).toBe("Approved plan");
 
     resolvePrompt!({ stopReason: "end_turn" });
     await turn;

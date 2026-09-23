@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 export interface AgentChatRuntimeState {
   messages: AgentChatMessage[];
   isStarting: boolean;
+  isTurnInFlight: boolean;
   hasPendingPlanPermission: boolean;
   currentPlan: CurrentPlan | null;
   currentTodoList: AgentTodoListEntry[] | null;
@@ -36,6 +37,7 @@ function readBackendRuntimeSnapshot(backend: AgentChatBackend): BackendRuntimeSn
     state: {
       messages: backend.getMessages(),
       isStarting: backend.isStarting(),
+      isTurnInFlight: backend.isTurnInFlight(),
       hasPendingPlanPermission: backend.hasPendingPlanPermission(),
       currentPlan: backend.getCurrentPlan(),
       currentTodoList: backend.getCurrentTodoList(),

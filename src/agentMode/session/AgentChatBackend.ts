@@ -48,6 +48,8 @@ export interface AgentChatBackend {
 
   /** True while ACP `session/new` is still in flight. Send is gated on this. */
   isStarting(): boolean;
+  /** True while the session is running a turn or waiting for its permission decision. */
+  isTurnInFlight(): boolean;
 
   /** Latest unified picker state, or `null` while the backend session is still starting. */
   getBackendState(): BackendState | null;
