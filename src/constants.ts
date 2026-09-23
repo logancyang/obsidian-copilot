@@ -741,11 +741,6 @@ export const RESTRICTION_MESSAGES = {
     `${extension.toUpperCase()} files are not supported in the current mode.`,
 } as const;
 
-export const OPENCODE_RELEASE_URL_TEMPLATE =
-  "https://github.com/anomalyco/opencode/releases/download/v{version}/{asset}";
-export const OPENCODE_RELEASE_API_URL_TEMPLATE =
-  "https://api.github.com/repos/anomalyco/opencode/releases/tags/v{version}";
-
 export const DEFAULT_SETTINGS: CopilotSettings = {
   userId: uuidv4(),
   isPaidUser: false,

@@ -14,12 +14,11 @@ export interface AssetTarget {
 }
 
 /**
- * Build the prioritized list of opencode release asset stems (no extension)
+ * Build the prioritized list of OpenCode npm platform variants
  * for the given target. The first match wins; later entries are fallbacks
  * when the preferred variant is not published for a release.
  *
- * Mirrors the fallback order in opencode's own launcher script
- * (`bin/opencode` in sst/opencode).
+ * Mirrors the fallback order in OpenCode's launcher script.
  */
 export function buildAssetCandidates(target: AssetTarget): string[] {
   const base = `opencode-${target.platform}-${target.arch}`;
