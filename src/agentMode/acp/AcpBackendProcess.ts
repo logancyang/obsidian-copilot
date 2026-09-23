@@ -380,7 +380,7 @@ export class AcpBackendProcess implements BackendProcess {
     });
     return {
       sessionId: sessionIdFromAcp(wireResp.sessionId),
-      state: this.computeState(wireResp.sessionId),
+      state: this.computeOpenedState(wireResp.sessionId, "new"),
     };
   }
 
@@ -681,7 +681,7 @@ export class AcpBackendProcess implements BackendProcess {
     });
     return {
       sessionId: params.sessionId,
-      state: this.computeState(sessionIdToAcp(params.sessionId)),
+      state: this.computeOpenedState(sessionIdToAcp(params.sessionId), "resume"),
     };
   }
 
@@ -710,7 +710,7 @@ export class AcpBackendProcess implements BackendProcess {
       });
       return {
         sessionId,
-        state: this.computeState(sessionIdToAcp(sessionId)),
+        state: this.computeOpenedState(sessionIdToAcp(sessionId), "load"),
         transcript: finishReplayTranscript(collector),
       };
     } finally {
@@ -795,6 +795,17 @@ export class AcpBackendProcess implements BackendProcess {
       configOptions: null,
     };
     return acpStateToBackendState(wire.modes, wire.configOptions, this.descriptor);
+  }
+
+  private computeOpenedState(
+    sessionId: AcpSessionId,
+    opening: "new" | "resume" | "load"
+  ): BackendState {
+    const state = this.computeState(sessionId);
+    // Validate the opening catalog before any caller can send a prompt.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/556
+    this.descriptor.validateSessionState?.(state, opening);
+    return state;
   }
 
   private routeSessionUpdate(acpSessionId: AcpSessionId, update: SessionNotification): void {

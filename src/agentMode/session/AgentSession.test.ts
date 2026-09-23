@@ -791,6 +791,23 @@ describe("buildUserDisplayContent", () => {
 });
 
 describe("AgentSession.sendPrompt", () => {
+  it("rejects a prompt without changing chat when session opening fails https://github.com/Brevilabs/obsidian-copilot-private/issues/556", async () => {
+    const mock = makeMockBackend();
+    mock.newSession.mockRejectedValueOnce(new Error("copilot-build unavailable"));
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+
+    await expect(session.ready).rejects.toThrow("copilot-build unavailable");
+    expect(session.getStatus()).toBe("error");
+    expect(() => session.sendPrompt("edit this note")).toThrow("Session failed to start");
+    expect(session.store.getDisplayMessages()).toEqual([]);
+    expect(mock.prompt).not.toHaveBeenCalled();
+  });
+
   it("appends user + placeholder synchronously and resolves on stopReason", async () => {
     const mock = makeMockBackend();
     const session = new AgentSession({

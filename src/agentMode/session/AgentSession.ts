@@ -947,6 +947,11 @@ export class AgentSession {
     if (status === "starting") {
       throw new Error("Session is still starting");
     }
+    // A rejected opening catalog leaves no backend session to receive a prompt.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/556
+    if (this.backendSessionId === null) {
+      throw new Error("Session failed to start");
+    }
     if (status === "running" || status === "awaiting_permission") {
       throw new Error("Session already has a turn in flight");
     }

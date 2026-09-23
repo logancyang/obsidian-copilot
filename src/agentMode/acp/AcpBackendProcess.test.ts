@@ -599,6 +599,50 @@ describe("AcpBackendProcess", () => {
     await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toThrow(/start\(\)/);
   });
 
+  describe("newSession()", () => {
+    it("rejects an unsafe session before returning it to chat https://github.com/Brevilabs/obsidian-copilot-private/issues/556", async () => {
+      const validateSessionState = jest.fn(() => {
+        throw new Error("Default agent unavailable");
+      });
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        buildStubDescriptor({ validateSessionState })
+      );
+      await backend.start();
+
+      await expect(backend.newSession({ cwd: "/vault" })).rejects.toThrow(
+        "Default agent unavailable"
+      );
+      expect(validateSessionState).toHaveBeenCalledWith({ model: null, mode: null }, "new");
+    });
+  });
+
+  describe("resumeSession()", () => {
+    it("rejects an unsafe resumed session before returning it to chat https://github.com/Brevilabs/obsidian-copilot-private/issues/556", async () => {
+      mockInitializeResult = {
+        protocolVersion: 1,
+        agentCapabilities: { sessionCapabilities: { resume: {} } },
+      };
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        buildStubDescriptor({
+          validateSessionState: () => {
+            throw new Error("Default agent unavailable");
+          },
+        })
+      );
+      await backend.start();
+
+      await expect(backend.resumeSession({ sessionId: "s1", cwd: "/vault" })).rejects.toThrow(
+        "Default agent unavailable"
+      );
+    });
+  });
+
   describe("additionalDirectories (capability-gated)", () => {
     async function startBackend(): Promise<AcpBackendProcess> {
       const backend = new AcpBackendProcess(
@@ -731,6 +775,25 @@ describe("AcpBackendProcess", () => {
   });
 
   describe("loadSession()", () => {
+    it("rejects an unsafe loaded session before returning its transcript to chat https://github.com/Brevilabs/obsidian-copilot-private/issues/556", async () => {
+      mockInitializeResult = { protocolVersion: 1, agentCapabilities: { loadSession: true } };
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        buildStubDescriptor({
+          validateSessionState: () => {
+            throw new Error("Default agent unavailable");
+          },
+        })
+      );
+      await backend.start();
+
+      await expect(backend.loadSession({ sessionId: "s1", cwd: "/vault" })).rejects.toThrow(
+        "Default agent unavailable"
+      );
+    });
+
     /** Reach the VaultClient the backend wired in, to push replayed frames. */
     function replayer(backend: AcpBackendProcess): (update: unknown) => void {
       const client = getVaultClient(backend) as unknown as {

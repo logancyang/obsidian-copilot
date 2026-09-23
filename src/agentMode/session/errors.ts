@@ -20,6 +20,17 @@ export class MethodUnsupportedError extends Error {
 }
 
 /**
+ * Carries an unsafe opening catalog from the backend to session and history callers.
+ * Other backend failures keep their normal resume fallback behavior.
+ */
+export class UnsafeSessionStateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnsafeSessionStateError";
+  }
+}
+
+/**
  * Thrown by a backend's `prompt()` when it determines the agent is not signed
  * in (e.g. the Claude CLI has no saved login and no env-based credentials).
  * `runTurn` catches it like any prompt failure — replacing the empty

@@ -38,6 +38,7 @@ import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
 import { findModelEntry } from "@/agentMode/session/translateBackendState";
 import { phaseLabel } from "./installProgress";
 import type { ManagedInstallActionState } from "@/agentMode/session/types";
+import { UnsafeSessionStateError } from "@/agentMode/session/errors";
 
 /** Config option id OpenCode uses to switch the active agent at runtime. */
 const OPENCODE_MODE_CONFIG_OPTION_ID = "mode";
@@ -325,6 +326,23 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
       configId: OPENCODE_MODE_CONFIG_OPTION_ID,
       canonical: { ...OPENCODE_CANONICAL_MODE_AGENT_IDS },
     };
+  },
+
+  validateSessionState(state, opening): void {
+    // Without this option, OpenCode can silently run its built-in no-ask build agent.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/556
+    if (!state.mode?.options.some((option) => option.value === "default")) {
+      throw new UnsafeSessionStateError(
+        "OpenCode's ask-before-edit agent (copilot-build) is unavailable. Check custom OpenCode config overrides, then Retry."
+      );
+    }
+    // New chats must begin in Default; saved Auto is replayed only after opening.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/556
+    if (opening === "new" && state.mode.current !== "default") {
+      throw new UnsafeSessionStateError(
+        "OpenCode did not start in ask-before-edit Default mode. Check custom OpenCode config overrides, then Retry."
+      );
+    }
   },
 };
 

@@ -7,6 +7,7 @@ import * as path from "node:path";
 import { FileSystemAdapter } from "obsidian";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendState, ModelEntry } from "@/agentMode/session/types";
+import { translateBackendState } from "@/agentMode/session/translateBackendState";
 import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
 
 jest.mock("@/settings/model", () => ({
@@ -22,6 +23,69 @@ jest.mock("@/logger", () => ({
 
 describe("descriptor", () => {
   describe("OpencodeBackendDescriptor", () => {
+    describe("validateSessionState()", () => {
+      const stateWithAgents = (currentValue: string, agents: string[]): BackendState =>
+        translateBackendState(
+          {
+            models: null,
+            modes: null,
+            configOptions: [
+              {
+                id: "mode",
+                type: "select",
+                name: "Agent",
+                category: "mode",
+                currentValue,
+                options: agents.map((value) => ({ value, name: value })),
+              },
+            ],
+          },
+          OpencodeBackendDescriptor
+        );
+
+      it("accepts a session that advertises the ask-before-edit Default agent alongside Auto", () => {
+        expect(() =>
+          OpencodeBackendDescriptor.validateSessionState?.(
+            stateWithAgents("copilot-build", ["copilot-build", "build", "plan"]),
+            "new"
+          )
+        ).not.toThrow();
+      });
+
+      it("rejects OpenCode's build and plan catalog without copilot-build before chat can start https://github.com/Brevilabs/obsidian-copilot-private/issues/556", () => {
+        expect(() =>
+          OpencodeBackendDescriptor.validateSessionState?.(
+            stateWithAgents("build", ["build", "plan"]),
+            "new"
+          )
+        ).toThrow(/copilot-build/);
+      });
+
+      it("rejects a new session already in Auto despite advertising Default https://github.com/Brevilabs/obsidian-copilot-private/issues/556", () => {
+        expect(() =>
+          OpencodeBackendDescriptor.validateSessionState?.(
+            stateWithAgents("build", ["copilot-build", "build"]),
+            "new"
+          )
+        ).toThrow(/Default/);
+      });
+
+      it("allows a resumed session to retain chosen Auto when Default remains available https://github.com/Brevilabs/obsidian-copilot-private/issues/556", () => {
+        expect(() =>
+          OpencodeBackendDescriptor.validateSessionState?.(
+            stateWithAgents("build", ["copilot-build", "build"]),
+            "resume"
+          )
+        ).not.toThrow();
+      });
+
+      it("rejects an absent mode catalog instead of assuming Default is available https://github.com/Brevilabs/obsidian-copilot-private/issues/556", () => {
+        expect(() =>
+          OpencodeBackendDescriptor.validateSessionState?.({ model: null, mode: null }, "new")
+        ).toThrow(/copilot-build/);
+      });
+    });
+
     describe("managedInstall.getState()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 maps shared progress without adding a fabricated percentage", async () => {
         const manager = getOpencodeBinaryManager(vaultPlugin(os.tmpdir()));

@@ -33,7 +33,7 @@ import {
 } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
 import { getProjectContextSignature } from "@/projects/projectContextSignature";
-import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import { MethodUnsupportedError, UnsafeSessionStateError } from "@/agentMode/session/errors";
 import { buildCodexModeMapping } from "@/agentMode/backends/codex/codexModeMapping";
 import type {
   BackendProcess,
@@ -1636,6 +1636,30 @@ describe("AgentSessionManager.getOrCreateActiveSession", () => {
     const a = await mgr.getOrCreateActiveSession();
     const again = await mgr.getOrCreateActiveSession();
     expect(again).toBe(a);
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces the failed tab with a fresh session on Retry after startup fails https://github.com/Brevilabs/obsidian-copilot-private/issues/556", async () => {
+    const mgr = buildManager();
+    const failed = await mgr.getOrCreateActiveSession();
+    getSessionTestHandle(failed).setStatus("error");
+    jest.spyOn(failed, "getBackendSessionId").mockReturnValue(null);
+
+    const retry = await mgr.getOrCreateActiveSession();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(retry).not.toBe(failed);
+    expect(retry).toBe(mgr.getActiveSession());
+    expect(mgr.getSessions()).toEqual([retry]);
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a session with a backend id after a recoverable turn error", async () => {
+    const mgr = buildManager();
+    const existing = await mgr.getOrCreateActiveSession();
+    getSessionTestHandle(existing).setStatus("error");
+
+    expect(await mgr.getOrCreateActiveSession()).toBe(existing);
     expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
   });
 });
@@ -3654,6 +3678,32 @@ describe("AgentSessionManager chat history aggregation", () => {
   });
 
   describe("loadNativeSessionFromHistory()", () => {
+    it("surfaces the missing Default agent error from load or resume instead of a generic failure https://github.com/Brevilabs/obsidian-copilot-private/issues/556", async () => {
+      for (const failureAt of ["load", "resume"] as const) {
+        const unsafeError = new UnsafeSessionStateError(
+          "OpenCode's copilot-build agent is unavailable"
+        );
+        const backend = {
+          ...makeMockBackendProcess(),
+          loadSession: jest.fn(async () => {
+            throw failureAt === "load" ? unsafeError : new MethodUnsupportedError("session/load");
+          }),
+          resumeSession: jest.fn(async () => {
+            throw unsafeError;
+          }),
+        };
+        const { manager } = buildHistoryHarness({
+          createBackendProcess: jest.fn(() => backend),
+        });
+
+        await expect(
+          manager.loadNativeSessionFromHistory("opencode", "saved-chat")
+        ).rejects.toThrow("OpenCode's copilot-build agent is unavailable");
+        expect(manager.getActiveSession()).toBeNull();
+        expect(manager.getLastError()).toContain("copilot-build");
+      }
+    });
+
     it("does not spawn or load history through an incompatible binary (https://github.com/Brevilabs/obsidian-copilot-private/issues/531)", async () => {
       const createBackendProcess = jest.fn(() => makeMockBackendProcess());
       const { manager } = buildHistoryHarness({

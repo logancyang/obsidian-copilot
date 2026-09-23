@@ -47,7 +47,7 @@ import {
   mergeChatHistoryItems,
   type MarkdownChatEntry,
 } from "./chatHistoryMerge";
-import { MethodUnsupportedError } from "./errors";
+import { MethodUnsupportedError, UnsafeSessionStateError } from "./errors";
 import { replayPersistedMode } from "./replayPersistedMode";
 import {
   FanoutOrchestrator,
@@ -1234,7 +1234,12 @@ export class AgentSessionManager {
     // Only reuse the active session when it belongs to the current scope —
     // after `enterProject` the prior scope's session may still be pointed at by
     // `activeSessionId` until this seeds a fresh one for the new scope.
+    // A session rejected before opening cannot recover in place; Retry replaces its empty tab.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/556
     if (active && active.projectId === this.activeProjectId && active.getStatus() !== "closed") {
+      if (active.getStatus() === "error" && active.getBackendSessionId() === null) {
+        return this.replaceSessionInPlace(active.internalId);
+      }
       return active;
     }
     // Dedupe rapid auto-spawn callers (e.g. the router effect re-running
@@ -3369,6 +3374,13 @@ export class AgentSessionManager {
         additionalDirectories,
       });
     } catch (err) {
+      // An unsafe catalog must reach history callers as the actionable error.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/556
+      if (err instanceof UnsafeSessionStateError) {
+        this.setLastError(err.message);
+        this.finishPendingCreate();
+        throw err;
+      }
       if (!(err instanceof MethodUnsupportedError)) {
         logWarn(`[AgentMode] loadSession failed for ${sessionId}`, err);
         this.finishPendingCreate();
@@ -3385,6 +3397,13 @@ export class AgentSessionManager {
           additionalDirectories,
         });
       } catch (err) {
+        // A missing approval mode must reach the user instead of a generic history fallback.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/556
+        if (err instanceof UnsafeSessionStateError) {
+          this.setLastError(err.message);
+          this.finishPendingCreate();
+          throw err;
+        }
         if (err instanceof MethodUnsupportedError) {
           logInfo(
             `[AgentMode] backend ${backendId} does not support session resume; falling back to fresh session`

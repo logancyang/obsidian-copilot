@@ -355,6 +355,9 @@ export interface BackendDescriptor {
     configOptions: BackendConfigOption[] | null
   ): ModeMapping | null;
 
+  /** Reject an opening catalog that cannot satisfy this backend's safety contract. */
+  validateSessionState?(state: BackendState, opening: "new" | "resume" | "load"): void;
+
   /**
    * Optional: replay persisted state before a newly created or resumed session
    * becomes ready for user input. `seededSelection` is the exact (model, effort)

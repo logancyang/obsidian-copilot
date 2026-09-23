@@ -1,5 +1,11 @@
 # Release Notes
 
+# Unreleased
+
+## ⚠️ Compatibility Notes
+
+- OpenCode sessions now stop with a clear error if their ask-before-edit **Default** agent is missing. Custom OpenCode configuration overrides that remove `copilot-build` must be corrected before you can start or resume Agent Chat; use **Retry** after correcting them. **Auto** is still available when chosen explicitly.
+
 # v4.0.10 - Recover from an outdated agent
 
 A Copilot update can move the version your coding agent needs, and an agent that fell behind used to leave Agent Chat stuck: saved models greyed out, a single button that only ran a managed download, and no way back to the conversation you were in. An agent that needs updating now stays usable. Its saved models stay selectable, and picking one is held until the update lands, so your conversation and unsent text survive the trip. Agent settings and the chat status card both name the version Copilot needs and offer **Configure**, which opens the dialog where a managed download and your own binary are both available. ([#3281](https://github.com/logancyang/obsidian-copilot/pull/3281), [#3283](https://github.com/logancyang/obsidian-copilot/pull/3283), [#3284](https://github.com/logancyang/obsidian-copilot/pull/3284), [#3285](https://github.com/logancyang/obsidian-copilot/pull/3285), @zeroliu)
