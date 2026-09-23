@@ -9,7 +9,6 @@ import { providerNeedsResolvedApiKey } from "@/modelManagement";
 import { isCatalogProviderDefaultEndpoint } from "@/utils/providerBaseUrl";
 import type { BackendConfigRegistry, ProviderRegistry } from "@/modelManagement";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
-import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
 import type { CopilotMode } from "@/agentMode/session/types";
 import { composeDenyList, getManagedSkills, SkillManager } from "@/agentMode/skills";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
@@ -269,41 +268,24 @@ function denyNativeWebTools(permission: unknown): Record<string, unknown> {
 }
 
 /**
- * opencode `variants` declaring exactly the effort levels a model really has.
+ * OpenCode 2 effort choices for a model whose supported levels are known.
  *
- * opencode builds an effort menu for any model it is told reasons, and with no catalog
- * entry for Copilot Plus it infers the levels from the model id — a fixed low/medium/high
- * plus whatever its per-model special cases add. The result is wrong in both directions:
- * it offers levels that are synonyms of each other and misses levels the model has.
- * Config variants merge over the inferred ones and any marked `disabled` are dropped, so
- * publishing the real set plus a disable for every other level replaces the guess
- * outright. https://github.com/logancyang/obsidian-copilot/issues/2917
- *
- * @param levels - The levels the service published for this model, ascending.
+ * @param levels - Levels the model supports, in the order to show them.
  */
-export function effortVariantsFor(
-  levels: readonly string[]
-): Record<string, Record<string, unknown>> {
-  const variants: Record<string, Record<string, unknown>> = {};
-  for (const level of levels) variants[level] = { reasoningEffort: level };
-  // Completeness is the whole contract here: a level missing from the canonical
-  // vocabulary cannot be disabled, so it survives into opencode's menu for a model the
-  // service never advertised it for, and picking a level the service rejects fails the
-  // turn with a raw error payload instead of answering.
-  // https://github.com/logancyang/obsidian-copilot/issues/2915
-  for (const level of EFFORT_LEVELS_ASCENDING) {
-    if (!variants[level]) variants[level] = { disabled: true };
-  }
-  return variants;
+export function effortVariantsFor(levels: readonly string[]) {
+  return levels.map((level) => ({ id: level, settings: { reasoningEffort: level } }));
 }
 
-/** Mutable opencode provider config entry built into `OPENCODE_CONFIG_CONTENT`. */
-type ProviderConfig = {
-  npm?: string;
+const FALLBACK_EFFORTS = ["low", "medium", "high"] as const;
+
+/** Mutable OpenCode provider config entry built into `OPENCODE_CONFIG_CONTENT`. */
+interface ProviderConfig {
+  package?: string;
   name?: string;
-  options?: { apiKey?: string; baseURL?: string; headers?: Record<string, string> };
+  settings?: { apiKey?: string; baseURL?: string };
+  headers?: Record<string, string>;
   models?: Record<string, Record<string, unknown>>;
-};
+}
 
 /**
  * Build the `OPENCODE_CONFIG_CONTENT` payload from the enabled opencode models.
@@ -322,7 +304,7 @@ export async function buildOpencodeConfig(
 ): Promise<Record<string, unknown>> {
   const { providerRegistry, backendConfigRegistry } = deps;
 
-  const provider: Record<string, ProviderConfig> = {};
+  const providers: Record<string, ProviderConfig> = {};
   const injected: string[] = [];
 
   for (const entry of backendConfigRegistry.resolveEnabled("opencode")) {
@@ -343,7 +325,7 @@ export async function buildOpencodeConfig(
     const catalogProviderId = origin.kind === "byok" ? origin.catalogProviderId : undefined;
     const hasCatalogIdentity = !!catalogProviderId;
 
-    let providerConfig = provider[mapping.id];
+    let providerConfig = providers[mapping.id];
     if (!providerConfig) {
       const apiKey = await providerRegistry.getApiKey(entry.provider.providerId);
       // Runtime auth follows the persisted provider contract and keychain state,
@@ -383,51 +365,42 @@ export async function buildOpencodeConfig(
       providerConfig = {
         ...(hasCatalogIdentity
           ? {}
-          : { npm: "@ai-sdk/openai-compatible", name: entry.provider.displayName }),
-        options: {
+          : { package: "aisdk:@ai-sdk/openai-compatible", name: entry.provider.displayName }),
+        settings: {
           ...(apiKey ? { apiKey } : {}),
           ...(baseURL ? { baseURL } : {}),
-          ...(origin.kind === "copilot-plus" && deps.clientVersion
-            ? { headers: { "X-Client-Version": deps.clientVersion } }
-            : {}),
         },
+        ...(origin.kind === "copilot-plus" && deps.clientVersion
+          ? { headers: { "X-Client-Version": deps.clientVersion } }
+          : {}),
       };
-      provider[mapping.id] = providerConfig;
+      providers[mapping.id] = providerConfig;
     }
 
     if (!providerConfig.models) providerConfig.models = {};
-    // Carry the model's known modalities into the config. opencode resolves a
-    // model's capabilities as `injected ?? models.dev-catalog ?? default`, and
-    // `unsupportedParts` strips image/file parts whenever `input.image` is
-    // false. For catalog providers this stays in agreement with opencode's own
-    // catalog; for providers opencode has no catalog entry for (Copilot Plus,
-    // self-hosted OpenAI-compatible) the default is `false`, so a genuinely
-    // multimodal model would have its images silently stripped. Injecting the
-    // modalities we already know prevents that.
     const { info } = entry.configuredModel;
     const modelConfig: Record<string, unknown> = {};
-    if (info.modalities) {
-      modelConfig.modalities = info.modalities;
-      if (info.modalities.input?.includes("image")) modelConfig.attachment = true;
+    // Unknown custom models must start text-only; catalog models can inherit
+    // their own capabilities until Copilot has modality metadata to override.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/557
+    if (!hasCatalogIdentity || info.modalities) {
+      modelConfig.capabilities = {
+        tools: info.toolCall ?? true,
+        input: info.modalities?.input ?? ["text"],
+        output: info.modalities?.output ?? ["text"],
+      };
     }
-    // Declare reasoning support so opencode offers a thought-level (effort) option
-    // for the model. opencode has no catalog entry for Copilot Plus / self-hosted
-    // OpenAI-compatible providers, so without this it defaults to non-reasoning and
-    // the effort picker shows "na". Mirrors the modalities injection above.
-    if (info.reasoning) {
-      // Copilot Plus publishes the levels each model really has, carried on the
-      // persisted row by the catalog reconcile so the spawn never waits on the
-      // service; a BYOK model has no list and keeps opencode's own inference.
-      // Undefined means no list is known, which must not be read as "no levels".
-      // https://github.com/logancyang/obsidian-copilot/issues/2917
-      const published = origin.kind === "copilot-plus" ? (info.reasoningEfforts ?? null) : null;
-      // A model that honors no level gets no control at all: opencode builds the menu
-      // only for models it is told reason, so leaving `reasoning` unset is how the
-      // menu disappears rather than showing entries that do nothing.
-      if (published === null || published.length > 0) {
-        modelConfig.reasoning = true;
-        if (published) modelConfig.variants = effortVariantsFor(published);
-      }
+    // Only Copilot Plus publishes authoritative levels. OpenCode's native
+    // catalog owns BYOK variants; custom models need an explicit list so a
+    // non-reasoning model does not inherit a selectable effort menu.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/557
+    if (!hasCatalogIdentity) {
+      const levels = !info.reasoning
+        ? []
+        : origin.kind === "copilot-plus" && info.reasoningEfforts !== undefined
+          ? info.reasoningEfforts
+          : FALLBACK_EFFORTS;
+      modelConfig.variants = effortVariantsFor(levels);
     }
     providerConfig.models[info.id] = modelConfig;
     injected.push(`${mapping.id}/${info.id}`);
@@ -437,13 +410,13 @@ export async function buildOpencodeConfig(
     logInfo(
       `[AgentMode] injected ${injected.length} model(s) into opencode config: ${injected.join(", ")}`
     );
-  } else if (Object.keys(provider).length === 0) {
+  } else if (Object.keys(providers).length === 0) {
     logInfo(
       "[AgentMode] no enabled BYOK models found; opencode will rely on its own auth. Add and enable models for opencode in Copilot settings to use Agent Mode end-to-end."
     );
   }
 
-  const config: Record<string, unknown> = { provider };
+  const config: Record<string, unknown> = { providers };
 
   // Top-level rules cover primary agents and subagents. Self-Host mode cannot
   // rely on prompt steering because opencode's native tools contact its own

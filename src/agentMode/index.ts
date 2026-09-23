@@ -183,6 +183,7 @@ function spawnModelConfigKey(
         model.info.reasoning,
         model.info.reasoningEfforts,
         model.info.modalities,
+        model.info.toolCall,
       ])
     )
     .sort()
