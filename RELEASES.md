@@ -1,5 +1,29 @@
 # Release Notes
 
+# v4.0.12 - OpenCode 2 in your vault
+
+> Planned release: the features below are awaiting merge and final verification. This draft is not ready to publish.
+
+OpenCode 2, the agent runtime behind Copilot Plus and your own model providers, comes to Agent Chat. Open a chat directly from the note you are reading, and follow long replies without losing your place.
+
+## ✨ Enhancements
+
+- Use OpenCode 2 in Agent Chat with Copilot-managed installation. ([#3365](https://github.com/logancyang/obsidian-copilot/pull/3365), @zeroliu)
+- Start a conversation about the note you are reading. Click the Copilot icon in its desktop note header to open Agent Chat with the note attached. ([#3363](https://github.com/logancyang/obsidian-copilot/pull/3363), @zeroliu)
+- Follow long replies as they stream in Agent Chat and Quick Chat. Scroll up to read at your own pace, then use the down-arrow to return to the latest text. ([#3358](https://github.com/logancyang/obsidian-copilot/pull/3358), @zeroliu)
+- See what Codex installation is doing, with elapsed connection time, downloaded bytes, and named setup stages. ([#3361](https://github.com/logancyang/obsidian-copilot/pull/3361), @zeroliu)
+
+## ⚠️ Compatibility Notes
+
+OpenCode users need version 2.0.3 or newer. OpenCode 1 and earlier 2.0.x versions no longer run; open OpenCode **Configure** and choose the Copilot-managed 2.0.3 version. Newer custom versions remain selectable, but affected releases can omit configured models when a chat starts. ([#3365](https://github.com/logancyang/obsidian-copilot/pull/3365), @zeroliu)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.11 - Plan together with Codex
 
 Work through an approach with Codex before it changes your notes. Plan mode now brings the plan back for your review, and Codex questions appear directly in Agent Chat so you can guide the next step.
