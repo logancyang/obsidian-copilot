@@ -53,6 +53,9 @@ export async function resolveNpmAsset(
     const metadata = response.json as NpmMetadata;
     const tarball = metadata.dist?.tarball;
     const integrity = metadata.dist?.integrity;
+    // The registry response decides which bytes become an executable, so metadata for
+    // another package, a non-HTTPS URL, or a non-tarball must never be downloaded.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/560
     if (metadata.name !== packageName || metadata.version !== version || !tarball) {
       throw new Error(`Invalid npm metadata for ${packageName}@${version}.`);
     }

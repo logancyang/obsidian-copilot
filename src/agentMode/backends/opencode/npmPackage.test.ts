@@ -171,6 +171,24 @@ describe("npmPackage", () => {
         }))
       ).rejects.toThrow(/Invalid npm metadata/);
     });
+
+    it(`${ISSUE} refuses a tarball URL that is not an HTTPS package archive`, async () => {
+      for (const tarball of [
+        "http://registry.npmjs.org/pkg.tgz",
+        "https://registry.npmjs.org/pkg.zip",
+      ]) {
+        await expect(
+          resolveNpmAsset("2.0.14", ["opencode-darwin-arm64"], async () => ({
+            status: 200,
+            json: {
+              name: "@opencode/cli-darwin-arm64",
+              version: "2.0.14",
+              dist: { tarball, integrity: "sha512-" + Buffer.alloc(64).toString("base64") },
+            },
+          }))
+        ).rejects.toThrow(/Invalid npm tarball URL/);
+      }
+    });
   });
 
   describe("verifyNpmIntegrity()", () => {
