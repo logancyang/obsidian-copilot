@@ -2,7 +2,7 @@ import {
   ManagedBinaryManager,
   type BinarySettings,
   type InstalledBinary,
-  type ManagedBinaryInstallOptions,
+  type ManagedBinaryPipelineOptions,
 } from "@/agentMode/backends/shared/ManagedBinaryManager";
 import {
   ManagedInstallAbortError,
@@ -14,20 +14,18 @@ import * as path from "node:path";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
-class TestBinaryManager extends ManagedBinaryManager<number> {
+class TestBinaryManager extends ManagedBinaryManager {
   settings: BinarySettings = {};
   validate = jest.fn(async (binaryPath: string) => ({ version: "1.2.3", path: binaryPath }));
-  pipeline = jest.fn(
-    async (options: ManagedBinaryInstallOptions<number> & { signal: AbortSignal }) => {
-      options.onProgress?.(50);
-      this.selectInstalledBinary({
-        binaryVersion: "1.2.3",
-        binaryPath: "/managed/binary",
-        binarySource: "managed",
-      });
-      return { version: "1.2.3", path: "/managed/binary" };
-    }
-  );
+  pipeline = jest.fn(async (options: ManagedBinaryPipelineOptions<object>) => {
+    options.progress.extracting();
+    this.selectInstalledBinary({
+      binaryVersion: "1.2.3",
+      binaryPath: "/managed/binary",
+      binarySource: "managed",
+    });
+    return { version: "1.2.3", path: "/managed/binary" };
+  });
 
   constructor(private dataDir: string) {
     super("Test agent");
@@ -45,7 +43,7 @@ class TestBinaryManager extends ManagedBinaryManager<number> {
     return this.validate(binaryPath);
   }
   protected installPipeline(
-    options: ManagedBinaryInstallOptions<number> & { signal: AbortSignal }
+    options: ManagedBinaryPipelineOptions<object>
   ): Promise<InstalledBinary> {
     return this.pipeline(options);
   }
@@ -180,6 +178,35 @@ describe("ManagedBinaryManager", () => {
         expect(listener).toHaveBeenCalledTimes(2);
       });
     });
+    describe("getActionState()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 exposes installation progress and retryable failures", () => {
+        const state = jest.spyOn(manager, "getRuntimeState");
+        state.mockReturnValue({
+          kind: "installing",
+          progress: { label: "Downloading", percent: 30 },
+        });
+        expect(manager.getActionState()).toEqual({
+          kind: "running",
+          label: "Downloading",
+          percent: 30,
+        });
+        state.mockReturnValue({ kind: "error", message: "download failed", operation: "install" });
+        expect(manager.getActionState()).toEqual({ kind: "error", message: "download failed" });
+        state.mockRestore();
+      });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 disables competing actions during path validation and hides unrelated failures", () => {
+        const state = jest.spyOn(manager, "getRuntimeState");
+        for (const kind of ["busy", "detecting"] as const) {
+          state.mockReturnValue({ kind });
+          expect(manager.getActionState()).toEqual({ kind: "running", label: "Configuring…" });
+        }
+        state.mockReturnValue({ kind: "error", message: "bad path", operation: "configure" });
+        expect(manager.getActionState()).toEqual({ kind: "idle" });
+        expect(manager.getActionState()).toBe(manager.getActionState());
+        state.mockRestore();
+      });
+    });
+
     describe("install()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 publishes backend progress, returns the installation, and ignores progress after completion", async () => {
         const progress = jest.fn();
@@ -189,15 +216,29 @@ describe("ManagedBinaryManager", () => {
           version: "1.2.3",
           path: "/managed/binary",
         });
-        expect(progress).toHaveBeenCalledWith(50);
+        const extracting = { label: "Extracting Test agent…", percent: 80 };
+        expect(progress).toHaveBeenCalledWith(extracting);
         const idle = manager.getRuntimeState();
-        manager.pipeline.mock.calls[0][0].onProgress?.(75);
+        manager.pipeline.mock.calls[0][0].progress.activating();
         expect(manager.getRuntimeState()).toBe(idle);
         expect(snapshots).toEqual([
           { kind: "installing", progress: null },
-          { kind: "installing", progress: 50 },
+          { kind: "installing", progress: extracting },
           { kind: "idle" },
         ]);
+      });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/578 stops elapsed-time updates when the install settles", async () => {
+        jest.useFakeTimers();
+        try {
+          await manager.install();
+          const listener = jest.fn();
+          manager.subscribeRuntimeState(listener);
+          await jest.advanceTimersByTimeAsync(60_000);
+          expect(listener).not.toHaveBeenCalled();
+          expect(manager.getRuntimeState()).toEqual({ kind: "idle" });
+        } finally {
+          jest.useRealTimers();
+        }
       });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 prevents custom selection and removal from overwriting a running install", async () => {
         let finish!: (value: InstalledBinary) => void;

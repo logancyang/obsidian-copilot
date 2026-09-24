@@ -23,52 +23,19 @@ jest.mock("@/logger", () => ({
 describe("descriptor", () => {
   describe("OpencodeBackendDescriptor", () => {
     describe("managedInstall.getState()", () => {
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 maps shared progress without adding a fabricated percentage", async () => {
-        const manager = getOpencodeBinaryManager(vaultPlugin(os.tmpdir()));
-        const getState = jest
-          .spyOn(manager, "getRuntimeState")
-          .mockReturnValue({ kind: "installing", progress: null });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/578 reports the shared manager's install progress", () => {
         const plugin = vaultPlugin(os.tmpdir());
+        const manager = getOpencodeBinaryManager(plugin);
+        const getState = jest.spyOn(manager, "getRuntimeState").mockReturnValue({
+          kind: "installing",
+          progress: { label: "Downloading opencode — 1.0 KB / 2.0 KB", percent: 42 },
+        });
 
         expect(OpencodeBackendDescriptor.managedInstall?.getState(plugin)).toEqual({
           kind: "running",
-          label: "Starting…",
+          label: "Downloading opencode — 1.0 KB / 2.0 KB",
+          percent: 42,
         });
-
-        for (const kind of ["busy", "detecting"] as const) {
-          getState.mockReturnValue({ kind });
-          expect(OpencodeBackendDescriptor.managedInstall?.getState(plugin)).toEqual({
-            kind: "running",
-            label: "Configuring…",
-          });
-        }
-        getState.mockReturnValue({
-          kind: "error",
-          message: "invalid path",
-          operation: "configure",
-        });
-        expect(OpencodeBackendDescriptor.managedInstall?.getState(plugin)).toEqual({
-          kind: "idle",
-        });
-        getState.mockReturnValue({
-          kind: "error",
-          message: "download failed",
-          operation: "install",
-        });
-        expect(OpencodeBackendDescriptor.managedInstall?.getState(plugin)).toEqual({
-          kind: "error",
-          message: "download failed",
-        });
-        for (const total of [100, undefined]) {
-          getState.mockReturnValue({
-            kind: "installing",
-            progress: { phase: "download", received: 42, total, assetName: "agent.zip" },
-          });
-          const state = OpencodeBackendDescriptor.managedInstall?.getState(plugin);
-          expect(state?.kind).toBe("running");
-          if (state?.kind === "running")
-            expect(state.label.match(/%/g)?.length ?? 0).toBe(total ? 1 : 0);
-        }
         getState.mockRestore();
       });
     });

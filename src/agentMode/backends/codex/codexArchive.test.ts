@@ -106,28 +106,18 @@ describe("codexArchive", () => {
         );
       }
     );
-    it(`reports received bytes against the manifest size before extraction: ${PROGRESS_ISSUE}`, async () => {
-      const midpoint = Math.floor(bytes.length / 2);
-      mockGet.mockImplementation((_url, _options, callback) => {
-        const response = Readable.from([
-          Buffer.from(bytes.subarray(0, midpoint)),
-          Buffer.from(bytes.subarray(midpoint)),
-        ]);
-        Object.assign(response, { statusCode: 200 });
-        callback(response);
-        return Object.assign(new EventEmitter(), { setTimeout: jest.fn(), destroy: jest.fn() });
-      });
-      const progress: unknown[] = [];
+    it(`reports downloaded bytes against the manifest size before extraction: ${PROGRESS_ISSUE}`, async () => {
+      const events: string[] = [];
 
-      await installCodexArchive(stage, new AbortController().signal, (event) => {
-        progress.push(event);
+      await installCodexArchive(stage, new AbortController().signal, {
+        download: (received, total) => events.push(`download ${received}/${total}`),
+        extracting: () => events.push("extract"),
       });
 
-      expect(progress).toEqual([
-        { phase: "download", received: 0, total: bytes.length },
-        { phase: "download", received: midpoint, total: bytes.length },
-        { phase: "download", received: bytes.length, total: bytes.length },
-        { phase: "extract" },
+      expect(events).toEqual([
+        `download 0/${bytes.length}`,
+        `download ${bytes.length}/${bytes.length}`,
+        "extract",
       ]);
       expect(fs.existsSync(path.join(stage, "codex-runtime", "codex"))).toBe(true);
     });

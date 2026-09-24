@@ -2,11 +2,14 @@ import {
   classifyBinaryInstall,
   assertBinaryCompatible,
 } from "@/agentMode/backends/shared/binaryCompatibility";
+import { downloadFile } from "@/agentMode/backends/shared/downloadFile";
 import { extractArchive } from "@/agentMode/backends/shared/extractArchive";
 import {
   ManagedBinaryManager,
   type BinarySettings,
   type InstalledBinary,
+  type ManagedBinaryInstallOptions,
+  type ManagedBinaryPipelineOptions,
 } from "@/agentMode/backends/shared/ManagedBinaryManager";
 import { OPENCODE_MIN_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { OPENCODE_RELEASE_API_URL_TEMPLATE } from "@/constants";
@@ -24,8 +27,6 @@ import {
   promoteManagedVersion,
   type ManagedInstallRuntimeState,
 } from "@/agentMode/backends/shared/managedInstall";
-
-type IncomingMessage = import("node:http").IncomingMessage;
 
 function nodeFs(): typeof import("node:fs") {
   return requireNodeModule<typeof import("node:fs")>("fs");
@@ -45,33 +46,15 @@ async function execFileAsync(
   const { stdout } = await promisify(execFile)(file, args, options);
   return { stdout };
 }
-const DOWNLOAD_INACTIVITY_TIMEOUT_MS = 30_000;
 // Generous: first-run on Windows (Defender real-time scan) and macOS
 // (Gatekeeper translocation) can add a few seconds before the binary responds.
 const VERIFY_BINARY_TIMEOUT_MS = 8_000;
 // `opencode upgrade` downloads and swaps a release binary — give it room.
 const UPGRADE_BINARY_TIMEOUT_MS = 180_000;
 
-export type ProgressEvent =
-  | { phase: "resolve"; message: string }
-  | { phase: "download"; received: number; total?: number; assetName: string }
-  | { phase: "extract"; message: string }
-  | { phase: "done"; version: string; path: string };
-
-export interface InstallOptions {
-  onProgress?: (e: ProgressEvent) => void;
+export interface InstallOptions extends ManagedBinaryInstallOptions {
   /** Override pinned version. Defaults to OPENCODE_PINNED_VERSION. */
   version?: string;
-}
-
-/**
- * What the install pipeline needs on top of the public options. The signal is
- * absent from {@link InstallOptions} on purpose: the manager owns cancellation
- * through {@link OpencodeBinaryManager.cancelCurrentOperation}, so a caller
- * cannot supply one, and the pipeline only ever receives the manager's own.
- */
-interface InstallPipelineOptions extends InstallOptions {
-  signal?: AbortSignal;
 }
 
 export type InstallState =
@@ -87,7 +70,7 @@ export type InstallState =
  * `busy` covers the operations with nothing to show but the fact that they are
  * running; `installing` is separate because it carries download progress.
  */
-export type RuntimeState = ManagedInstallRuntimeState<ProgressEvent>;
+export type RuntimeState = ManagedInstallRuntimeState;
 
 /** Thrown when a second binary-path operation is started while one is running. */
 export class OperationInFlightError extends ManagedInstallOperationInFlightError {
@@ -267,7 +250,7 @@ export function legacyVaultDataDir(
  * (outside the vault, see {@link opencodeManagedDataDir}), and persistence of
  * the install location into `settings.agentMode`. Desktop-only.
  */
-export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, InstallOptions> {
+export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> {
   constructor(private plugin: CopilotPlugin) {
     super("opencode");
   }
@@ -396,10 +379,10 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
    * when possible. The caller must hold the installation lock so an upgrade can
    * install the replacement and remove the old version as one operation.
    *
-   * @param opts - Release version, progress callback, and cancellation signal.
+   * @param opts - Release version, progress reporter, and cancellation signal.
    */
   protected async installPipeline(
-    opts: InstallPipelineOptions = {}
+    opts: ManagedBinaryPipelineOptions<InstallOptions>
   ): Promise<{ version: string; path: string }> {
     const version = opts.version ?? OPENCODE_PINNED_VERSION;
     // Manual retries must not replace a working selection with an unsupported release pin. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
@@ -411,7 +394,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
     const dataDir = this.getDataDir();
     const versionDir = nodePath().join(dataDir, version);
 
-    opts.onProgress?.({ phase: "resolve", message: "Resolving platform asset…" });
+    opts.progress.connecting();
     const { target, candidates } = await resolveOpencodeTarget();
     this.throwIfAborted(opts.signal);
 
@@ -441,7 +424,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
           binarySource: "managed",
         });
       }
-      opts.onProgress?.({ phase: "done", version, path: finalBinPath });
+      opts.progress.done();
       return { version, path: finalBinPath };
     }
 
@@ -463,10 +446,14 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
 
     try {
       const archivePath = nodePath().join(tmpDir, asset.name);
-      await downloadToFile(asset.browser_download_url, archivePath, asset.size, opts);
-      this.throwIfAborted(opts.signal);
+      await downloadFile(asset.browser_download_url, archivePath, {
+        displayName: "opencode",
+        bytes: asset.size,
+        signal: opts.signal,
+        onProgress: (received, total) => opts.progress.download(received, total),
+      });
 
-      opts.onProgress?.({ phase: "extract", message: "Extracting archive…" });
+      opts.progress.extracting();
       const extractDir = nodePath().join(tmpDir, "extract");
       await nodeFs().promises.mkdir(extractDir, { recursive: true });
       await extractArchive(archivePath, extractDir);
@@ -495,10 +482,12 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
 
       // Verification must finish before any published directory changes.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
+      opts.progress.verifying();
       const verified = await verifyOpencodeBinary(nodePath().join(stageBinDir, binName));
       if (parseVersionFromStdout(verified.stdout) !== version)
         throw new Error(`The opencode download did not report version ${version}.`);
       this.throwIfAborted(opts.signal);
+      opts.progress.activating();
       await promoteManagedVersion(stageDir, versionDir, "opencode");
 
       this.selectInstalledBinary({
@@ -506,7 +495,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
         binaryPath: finalBinPath,
         binarySource: "managed",
       });
-      opts.onProgress?.({ phase: "done", version, path: finalBinPath });
+      opts.progress.done();
       logInfo(`[AgentMode] opencode ${version} installed at ${finalBinPath}`);
       return { version, path: finalBinPath };
     } catch (err) {
@@ -529,14 +518,9 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
   async upgradeManaged(opts: InstallOptions = {}): Promise<{ version: string; path: string }> {
     return this.runExclusive({ kind: "installing", progress: null }, async (signal) => {
       const prev = readOpencodeSettings();
-      const result = await this.installPipeline({
+      const result = await this.runInstallPipeline(signal, {
         ...opts,
-        signal,
         version: OPENCODE_PINNED_VERSION,
-        onProgress: (e) => {
-          this.publishProgress(e);
-          opts.onProgress?.(e);
-        },
       });
       if (
         prev.binarySource === "managed" &&
@@ -658,7 +642,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
     return res.json as GithubRelease;
   }
 
-  private throwIfAborted(signal?: AbortSignal): void {
+  private throwIfAborted(signal: AbortSignal): void {
     if (signal?.aborted) throw new AbortError();
   }
 }
@@ -690,128 +674,6 @@ async function readManifest(p: string): Promise<InstallManifest | null> {
 
 async function removeDir(p: string): Promise<void> {
   await nodeFs().promises.rm(p, { recursive: true, force: true });
-}
-
-/**
- * Issue a GET against `url`, following up to `maxRedirects` 3xx hops. Resolves
- * with the response stream on a 2xx or rejects on any other terminal status.
- * Honors the supplied AbortSignal at every step.
- */
-function httpsGetWithRedirects(
-  url: string,
-  signal: AbortSignal | undefined,
-  maxRedirects = 5
-): Promise<IncomingMessage> {
-  const https = requireNodeModule<typeof import("node:https")>("https");
-  return new Promise((resolve, reject) => {
-    const request = (currentUrl: string, redirectsLeft: number): void => {
-      let onAbort: (() => void) | null = null;
-      const detachAbort = (): void => {
-        if (onAbort) signal?.removeEventListener("abort", onAbort);
-        onAbort = null;
-      };
-      const req = https.get(currentUrl, (res) => {
-        const status = res.statusCode ?? 0;
-        if (status >= 300 && status < 400 && res.headers.location) {
-          detachAbort();
-          if (redirectsLeft <= 0) {
-            res.resume();
-            reject(new Error(`Too many redirects fetching ${url}`));
-            return;
-          }
-          res.resume();
-          const next = new URL(res.headers.location, currentUrl).toString();
-          request(next, redirectsLeft - 1);
-          return;
-        }
-        if (status !== 200) {
-          detachAbort();
-          res.resume();
-          reject(new Error(`HTTP ${status} fetching ${currentUrl}`));
-          return;
-        }
-        // Hand the response off without detaching: the consumer may still
-        // need to abort mid-stream. Cleanup happens on res 'close'/'end'.
-        res.on("close", detachAbort);
-        resolve(res);
-      });
-      req.on("error", (e) => {
-        detachAbort();
-        reject(e);
-      });
-      if (signal) {
-        if (signal.aborted) {
-          req.destroy(new AbortError());
-        } else {
-          onAbort = (): void => {
-            req.destroy(new AbortError());
-          };
-          signal.addEventListener("abort", onAbort, { once: true });
-        }
-      }
-    };
-    request(url, maxRedirects);
-  });
-}
-
-/**
- * Stream a remote asset to `dest`, emitting progress events and aborting if
- * no bytes arrive for `DOWNLOAD_INACTIVITY_TIMEOUT_MS`. Stalled connections
- * surface a clear "download stalled" error instead of hanging forever.
- */
-async function downloadToFile(
-  url: string,
-  dest: string,
-  expectedSize: number | undefined,
-  opts: InstallPipelineOptions
-): Promise<void> {
-  const assetName = nodePath().basename(dest);
-  const res = await httpsGetWithRedirects(url, opts.signal);
-  const total =
-    expectedSize ??
-    (res.headers["content-length"] ? Number(res.headers["content-length"]) : undefined);
-
-  let received = 0;
-  let stalled = false;
-  let inactivityTimer: number | null = null;
-  const out = nodeFs().createWriteStream(dest);
-  await new Promise<void>((resolve, reject) => {
-    const clearInactivity = (): void => {
-      if (inactivityTimer) {
-        window.clearTimeout(inactivityTimer);
-        inactivityTimer = null;
-      }
-    };
-    const armInactivity = (): void => {
-      clearInactivity();
-      inactivityTimer = window.setTimeout(() => {
-        stalled = true;
-        res.destroy(
-          new Error(
-            `Download stalled — no bytes received for ${Math.round(DOWNLOAD_INACTIVITY_TIMEOUT_MS / 1000)}s. Check your network and retry.`
-          )
-        );
-      }, DOWNLOAD_INACTIVITY_TIMEOUT_MS);
-    };
-    armInactivity();
-    res.on("data", (chunk: Uint8Array) => {
-      received += chunk.length;
-      armInactivity();
-      opts.onProgress?.({ phase: "download", received, total, assetName });
-    });
-    const fail = (e: Error): void => {
-      clearInactivity();
-      reject(e);
-    };
-    res.on("error", fail);
-    out.on("error", fail);
-    out.on("finish", () => {
-      clearInactivity();
-      if (stalled) return; // already rejected via res.destroy()
-      resolve();
-    });
-    res.pipe(out);
-  });
 }
 
 // BFS because the binary's depth inside the upstream archive varies across

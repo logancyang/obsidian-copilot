@@ -4,31 +4,24 @@ import {
   type BinarySettings,
   type InstalledBinary,
   type ManagedBinaryInstallOptions,
+  type ManagedBinaryPipelineOptions,
 } from "@/agentMode/backends/shared/ManagedBinaryManager";
 import {
   ManagedInstallAbortError,
   promoteManagedVersion,
 } from "@/agentMode/backends/shared/managedInstall";
-import type { ManagedInstallActionState } from "@/agentMode/session/types";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
-import { formatBytes } from "@/utils/formatBytes";
 import { getSettings, updateAgentModeBackendFields } from "@/settings/model";
 import { resolveSupportedCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
 
 import { installCodexArchive, CODEX_PINNED_VERSION } from "./codexArchive";
 
-const IDLE_ACTION_STATE = Object.freeze({ kind: "idle" as const });
 const TIMEOUT_MS = 5 * 60_000;
 const EMPTY_BINARY_SETTINGS: BinarySettings = Object.freeze({});
 
-interface CodexInstallProgress {
-  label: string;
-  percent: number;
-}
-
 /** Owns the native Codex bundle installation; shared lifecycle operations never modify user-owned packages. */
-export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgress> {
+export class CodexBinaryManager extends ManagedBinaryManager {
   constructor() {
     super("Codex adapter");
   }
@@ -51,25 +44,6 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
     return { version: supported.version, path: supported.entryPath };
   }
 
-  readonly getActionState = (): ManagedInstallActionState => {
-    const state = this.getRuntimeState();
-    if (state.kind === "installing") {
-      return {
-        kind: "running",
-        label: state.progress?.label ?? "Starting…",
-        percent: state.progress?.percent ?? 0,
-      };
-    }
-    // Path validation holds the same lock; other windows must not start a competing update.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
-    if (state.kind === "busy" || state.kind === "detecting")
-      return { kind: "running", label: "Configuring…" };
-    // Retry installs only, never a failed custom-path selection.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
-    if (state.kind === "error" && state.operation === "install")
-      return { kind: "error", message: state.message };
-    return IDLE_ACTION_STATE;
-  };
   getDataDir(): string {
     const home = requireNodeModule<typeof import("node:os")>("os").homedir();
     if (!home || !path().isAbsolute(home) || path().parse(home).root === home) {
@@ -79,10 +53,8 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
   }
   protected async installPipeline({
     signal,
-    onProgress,
-  }: ManagedBinaryInstallOptions<CodexInstallProgress> & {
-    signal: AbortSignal;
-  }): Promise<InstalledBinary> {
+    progress,
+  }: ManagedBinaryPipelineOptions<ManagedBinaryInstallOptions>): Promise<InstalledBinary> {
     // Manual retries must not replace a working selection with an unsupported release pin. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
     assertBinaryCompatible(
       { kind: "installed", version: CODEX_PINNED_VERSION, source: "managed" },
@@ -93,39 +65,22 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
     const versionDir = path().join(dataDir, CODEX_PINNED_VERSION);
     const stageDir = path().join(dataDir, `.tmp-${CODEX_PINNED_VERSION}-${Date.now()}`);
     await fs().promises.mkdir(stageDir, { recursive: true });
-    const waitingSince = Date.now();
-    // Release metadata and redirects can take longer than the transfer; keep the visible wait alive.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/578
-    const waitTimer = window.setInterval(() => {
-      const seconds = Math.floor((Date.now() - waitingSince) / 1000);
-      onProgress?.({ label: `Connecting to Codex download… ${seconds}s elapsed`, percent: 5 });
-    }, 5_000);
     try {
-      onProgress?.({ label: "Connecting to Codex download…", percent: 5 });
-      await installCodexArchive(stageDir, signal, (progress) => {
-        window.clearInterval(waitTimer);
-        // Download bytes are measurable; later phases name work whose duration varies by device.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/578
-        if (progress.phase === "download") {
-          onProgress?.({
-            label: `Downloading Codex adapter — ${formatBytes(progress.received)} / ${formatBytes(progress.total)}`,
-            percent: 10 + Math.floor((progress.received / progress.total) * 65),
-          });
-        } else onProgress?.({ label: "Extracting Codex adapter…", percent: 80 });
-      });
-      onProgress?.({ label: "Verifying Codex adapter…", percent: 87 });
+      progress.connecting();
+      await installCodexArchive(stageDir, signal, progress);
+      progress.verifying();
       const stagedEntry = entryPath(stageDir);
       await verifyLauncher(stagedEntry, signal);
       // A runnable adapter alone does not prove its bundled native runtime survived extraction.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
-      onProgress?.({ label: "Verifying bundled Codex runtime…", percent: 93 });
+      progress.verifying("bundled Codex runtime");
       const runtime = await run(stagedEntry, ["cli", "--help"], signal);
       if (!runtime.includes("Codex CLI"))
         throw new Error("The bundled Codex runtime could not start.");
       // Cancellation during verification must not replace the working installation.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
       if (signal.aborted) throw new ManagedInstallAbortError();
-      onProgress?.({ label: "Activating Codex adapter…", percent: 98 });
+      progress.activating();
       await promoteManagedVersion(stageDir, versionDir, "Codex adapter");
       const finalEntry = entryPath(versionDir);
       this.selectInstalledBinary({
@@ -133,10 +88,9 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
         binaryVersion: CODEX_PINNED_VERSION,
         binarySource: "managed",
       });
-      onProgress?.({ label: "Codex adapter ready.", percent: 100 });
+      progress.done();
       return { version: CODEX_PINNED_VERSION, path: finalEntry };
     } finally {
-      window.clearInterval(waitTimer);
       await fs()
         .promises.rm(stageDir, { recursive: true, force: true })
         .catch(() => {});

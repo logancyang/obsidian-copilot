@@ -1,15 +1,21 @@
 import { assertBinaryCompatible } from "./binaryCompatibility";
 import {
+  InstallProgressReporter,
+  type ManagedInstallProgress,
+} from "@/agentMode/backends/shared/installProgress";
+import {
   ManagedInstallAbortError,
   ManagedInstallOperationInFlightError,
   type ManagedInstallRuntimeState,
 } from "@/agentMode/backends/shared/managedInstall";
+import type { ManagedInstallActionState } from "@/agentMode/session/types";
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { validateExecutableFile } from "@/utils/detectBinary";
 
 // Offline reloads retry at most daily; this file is local to the managed runtime directory.
 const AUTOMATIC_UPDATE_RETRY_DELAY_MS = 24 * 60 * 60 * 1000;
+const IDLE_ACTION_STATE: ManagedInstallActionState = Object.freeze({ kind: "idle" });
 
 export interface BinarySettings {
   binaryPath?: string;
@@ -22,21 +28,27 @@ export interface InstalledBinary {
   path: string;
 }
 
-export interface ManagedBinaryInstallOptions<TProgress> {
-  onProgress?: (progress: TProgress) => void;
+export interface ManagedBinaryInstallOptions {
+  /** Receives progress in addition to the manager's shared runtime state. */
+  onProgress?: (progress: ManagedInstallProgress) => void;
 }
+
+/** What a backend's install pipeline receives from the manager that runs it. */
+export type ManagedBinaryPipelineOptions<TOptions> = TOptions & {
+  signal: AbortSignal;
+  progress: InstallProgressReporter;
+};
 
 /**
  * Coordinates installation, custom selection, and removal under one process-local
  * write lock. Backends own package acquisition, version validation, and settings.
  */
 export abstract class ManagedBinaryManager<
-  TProgress,
-  TOptions extends ManagedBinaryInstallOptions<TProgress> = ManagedBinaryInstallOptions<TProgress>,
+  TOptions extends ManagedBinaryInstallOptions = ManagedBinaryInstallOptions,
 > {
   private automaticSelection: BinarySettings | null = null;
   private operation: AbortController | null = null;
-  private runtimeState: ManagedInstallRuntimeState<TProgress> = { kind: "idle" };
+  private runtimeState: ManagedInstallRuntimeState = { kind: "idle" };
   private readonly subscribers = new Set<() => void>();
 
   constructor(private readonly displayName: string) {}
@@ -48,12 +60,33 @@ export abstract class ManagedBinaryManager<
     };
   };
 
-  readonly getRuntimeState = (): ManagedInstallRuntimeState<TProgress> => this.runtimeState;
+  readonly getRuntimeState = (): ManagedInstallRuntimeState => this.runtimeState;
 
-  private publishState(next: ManagedInstallRuntimeState<TProgress>): void {
+  private publishState(next: ManagedInstallRuntimeState): void {
     this.runtimeState = next;
     this.subscribers.forEach((notify) => notify());
   }
+
+  /** Projects the shared runtime state onto the install action every setup surface renders. */
+  readonly getActionState = (): ManagedInstallActionState => {
+    const state = this.getRuntimeState();
+    if (state.kind === "installing") {
+      return {
+        kind: "running",
+        label: state.progress?.label ?? "Starting…",
+        percent: state.progress?.percent ?? 0,
+      };
+    }
+    // Path validation holds the same lock; other windows must not start a competing update.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+    if (state.kind === "busy" || state.kind === "detecting")
+      return { kind: "running", label: "Configuring…" };
+    // Retry installs only, never a failed custom-path selection.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+    if (state.kind === "error" && state.operation === "install")
+      return { kind: "error", message: state.message };
+    return IDLE_ACTION_STATE;
+  };
 
   /** Clears a completed failure when a new plugin lifecycle adopts this manager. */
   forgetSettledError(): void {
@@ -71,7 +104,7 @@ export abstract class ManagedBinaryManager<
     this.operation?.abort();
   }
 
-  protected publishProgress(progress: TProgress): void {
+  private publishProgress(progress: ManagedInstallProgress): void {
     // Late progress must not return a completed installation to the running state.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     if (!this.operation) return;
@@ -79,7 +112,7 @@ export abstract class ManagedBinaryManager<
   }
 
   protected async runExclusive<T>(
-    running: ManagedInstallRuntimeState<TProgress>,
+    running: ManagedInstallRuntimeState,
     body: (signal: AbortSignal) => Promise<T>
   ): Promise<T> {
     // Reject a competing writer while every surface observes the active run.
@@ -179,10 +212,7 @@ export abstract class ManagedBinaryManager<
         this.assertAutomaticSelection();
         attempted = true;
         try {
-          await this.installPipeline({
-            signal,
-            onProgress: (progress: TProgress) => this.publishProgress(progress),
-          } as TOptions & { signal: AbortSignal });
+          await this.runInstallPipeline(signal, {} as TOptions);
           await fs.promises
             .rm(failurePath, { force: true })
             .catch((error) => logWarn(`[AgentMode] Could not clear update cooldown: ${error}`));
@@ -238,8 +268,29 @@ export abstract class ManagedBinaryManager<
   protected abstract updateBinarySettings(settings: BinarySettings): void;
   protected abstract validateCustomBinary(binaryPath: string): Promise<InstalledBinary>;
   protected abstract installPipeline(
-    options: TOptions & { signal: AbortSignal }
+    options: ManagedBinaryPipelineOptions<TOptions>
   ): Promise<InstalledBinary>;
+
+  /**
+   * Runs the backend's install pipeline with shared progress reporting. The
+   * caller must hold the operation lock.
+   * @param signal - Cancels the running operation.
+   * @param options - Backend installation options and an optional progress observer.
+   */
+  protected async runInstallPipeline(
+    signal: AbortSignal,
+    options: TOptions
+  ): Promise<InstalledBinary> {
+    const progress = new InstallProgressReporter(this.displayName, (update) => {
+      this.publishProgress(update);
+      options.onProgress?.(update);
+    });
+    try {
+      return await this.installPipeline({ ...options, signal, progress });
+    } finally {
+      progress.dispose();
+    }
+  }
 
   /**
    * Installs the backend package while preventing competing binary selection or removal.
@@ -247,14 +298,7 @@ export abstract class ManagedBinaryManager<
    */
   async install(options: TOptions = {} as TOptions): Promise<InstalledBinary> {
     return this.runExclusive({ kind: "installing", progress: null }, (signal) =>
-      this.installPipeline({
-        ...options,
-        signal,
-        onProgress: (progress: TProgress) => {
-          this.publishProgress(progress);
-          options.onProgress?.(progress);
-        },
-      })
+      this.runInstallPipeline(signal, options)
     );
   }
 

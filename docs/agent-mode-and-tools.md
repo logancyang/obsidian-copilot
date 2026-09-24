@@ -24,7 +24,7 @@ A one-agent chat can work without a Copilot license when you bring your own mode
 
 opencode is the most flexible choice because it can use Copilot-hosted, BYOK, and local models.
 
-1. In the **opencode** tab, open **Configure**, choose **Managed by Copilot**, then click **Download & install**.
+1. In the **opencode** tab, open **Configure**, choose **Managed by Copilot**, then click **Download & install**. Progress shows elapsed time while connecting, downloaded bytes during transfer, then extraction, verification, and activation.
 2. If you already installed it, choose **My own binary** in **Configure**, then select **Auto-detect** or enter the absolute path and click **Apply**.
 3. Enable the models you want to see and choose a **Default model**.
 
