@@ -72,6 +72,25 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
       fs.rmSync(root, { recursive: true, force: true });
     });
     describe("install()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/569 downloads the tested OpenCode 2.0.3 release by default", async () => {
+        jest
+          .mocked(npmPackage.extractNpmBinary)
+          .mockImplementation(async (_archive, destination) => {
+            fs.writeFileSync(
+              destination,
+              `#!${process.execPath}\nprocess.stdout.write("2.0.3");\n`
+            );
+          });
+        const result = await manager.install();
+        expect(result.version).toBe("2.0.3");
+        expect(npmPackage.resolveNpmAsset).toHaveBeenCalledWith(
+          "2.0.3",
+          ["opencode-darwin-arm64"],
+          expect.any(AbortSignal)
+        );
+        expect(getSettings().agentMode.backends?.opencode?.binaryPath).toBe(result.path);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/560 installs a verified OpenCode 2 npm binary without a system archive command", async () => {
         const version = "2.0.14";
         const result = await manager.install({ version });

@@ -22,6 +22,10 @@ export const OpencodeConfigView: React.FC<OpencodeConfigViewProps> = (props) => 
     customDescription="Point Agent Mode at a binary you already have on disk. Useful for self-builders or air-gapped machines."
     customPathPlaceholder="/absolute/path/to/opencode"
     customPathNotFoundHint="opencode not found. Install it natively (`~/.opencode/bin/opencode[.exe]`), via bun/npm, or paste a custom path manually."
-    upgradeLabel={props.activeSource === "custom" ? "Run opencode upgrade" : "Upgrade to latest"}
+    upgradeLabel={
+      props.activeSource === "custom"
+        ? "Run opencode upgrade"
+        : `Upgrade to v${props.managed.version}`
+    }
   />
 );

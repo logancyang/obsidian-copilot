@@ -33,9 +33,9 @@ const MANAGED: OpencodeManagedInfo = {
 const OUTDATED: InstallState = {
   kind: "incompatible",
   source: "managed",
-  currentVersion: "0.14.2",
+  currentVersion: "1.18.31",
   minVersion: OPENCODE_MIN_VERSION,
-  message: `opencode v0.14.2 is not supported. Copilot requires opencode v${OPENCODE_MIN_VERSION} or newer.`,
+  message: `opencode v1.18.31 is not supported. Copilot requires opencode v${OPENCODE_MIN_VERSION} or newer.`,
 };
 
 /**
@@ -82,7 +82,7 @@ export const ManagedInstalling: StoryObj<OpencodeConfigViewProps> = {
   args: {
     managed: {
       ...MANAGED,
-      version: "2.0.14",
+      version: OPENCODE_PINNED_VERSION,
       run: {
         kind: "running",
         label: "Downloading opencode — 24.1 MB / 75.8 MB",
