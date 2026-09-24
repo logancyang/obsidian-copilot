@@ -1,5 +1,5 @@
 import { EVENT_NAMES } from "@/constants";
-import { App } from "obsidian";
+import { App, type TFile } from "obsidian";
 import * as React from "react";
 
 // App context
@@ -14,7 +14,29 @@ export const AppContext = React.createContext<App | undefined>(undefined);
  */
 export class ChatViewEventTarget extends EventTarget {
   private pendingInsertText: string | null = null;
+  private pendingContextNotes: readonly TFile[] = EMPTY_CONTEXT_NOTES;
   private visiblePending = false;
+
+  /**
+   * Keep a clicked note until Agent Chat has a draft; repeated clicks must not add duplicate context.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/579
+   */
+  queueContextNote(note: TFile): void {
+    if (!this.pendingContextNotes.some((pending) => pending.path === note.path)) {
+      this.pendingContextNotes = [...this.pendingContextNotes, note];
+    }
+    this.dispatchEvent(new CustomEvent(EVENT_NAMES.ADD_NOTE_TO_CHAT_CONTEXT));
+  }
+
+  /**
+   * Take notes queued before or during Agent Chat startup.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/579
+   */
+  consumePendingContextNotes(): readonly TFile[] {
+    const notes = this.pendingContextNotes;
+    this.pendingContextNotes = EMPTY_CONTEXT_NOTES;
+    return notes;
+  }
 
   /** Queue text for the chat input and notify any already-attached listener. */
   queueInsertText(text: string): void {
@@ -46,6 +68,8 @@ export class ChatViewEventTarget extends EventTarget {
     return pending;
   }
 }
+
+const EMPTY_CONTEXT_NOTES: readonly TFile[] = Object.freeze([]);
 
 // Event target context
 export const EventTargetContext = React.createContext<EventTarget | undefined>(undefined);

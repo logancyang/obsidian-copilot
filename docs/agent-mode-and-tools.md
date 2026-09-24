@@ -83,7 +83,7 @@ For Windows-specific installation help, see [Windows setup for Agent Chat](agent
 
 ### Start a chat
 
-Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** from the command palette. If the default agent is missing, its custom binary is outdated or unusable, or it is not signed in, Copilot opens **Select your agent** with the reason and a **Configure** action. You can also choose another working agent and select **Start chat**. If an agent is still starting, wait for that launch to finish before starting another agent. **Configure** remains available while you wait. If you already have a chat open, Copilot keeps the conversation and your unsent draft visible and shows a warning above the chat.
+Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** from the command palette. From an open note, select the Copilot icon beside the note's view controls to open Agent Chat with that note attached to your next message. If Agent Chat is already open, the icon brings it into view; otherwise, it opens in the right sidebar. If the default agent is missing, its custom binary is outdated or unusable, or it is not signed in, Copilot opens **Select your agent** with the reason and a **Configure** action. You can also choose another working agent and select **Start chat**. If an agent is still starting, wait for that launch to finish before starting another agent. **Configure** remains available while you wait. If you already have a chat open, Copilot keeps the conversation and your unsent draft visible and shows a warning above the chat.
 
 An empty Agent Chat shows a fixed hint: "Ask anything • @ to add context • / for commands".
 

@@ -14,6 +14,8 @@ Context is the material Copilot gives an AI with your request. Choose the shorte
 
 Select **+** beside the Agent Chat composer to open **Add context**. Depending on what is open, you can add the **Active Note**, other **Notes**, **Folders**, the **Active Web Tab**, other **Web Tabs**, or **Images**. Web tabs come from Copilot's desktop Web Viewer.
 
+You can also select the Copilot icon in a note's header. Agent Chat opens with that specific note attached to the current draft. The attachment stays with the draft if you switch notes before sending.
+
 You can also add context while typing:
 
 - Type `[[` and select a note to insert `[[Note title]]`.

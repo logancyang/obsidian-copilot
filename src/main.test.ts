@@ -11,6 +11,7 @@ jest.mock("obsidian", () => {
     editorInfoField: StateField.define<unknown>({ create: () => null, update: (value) => value }),
     Plugin: class Plugin {},
     PluginSettingTab: class PluginSettingTab {},
+    MarkdownView: class MarkdownView {},
   };
 });
 jest.mock("@/LLMProviders/chatModelManager", () => ({
@@ -53,6 +54,7 @@ jest.mock("@/agentMode", () => ({
 import CopilotPlugin from "@/main";
 import { getSelectedTextContexts, setSelectedTextContexts } from "@/aiParams";
 import { DEFAULT_SETTINGS } from "@/constants";
+import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import type { WebSelectionTrackingOptions } from "@/services/webViewerService/webViewerServiceSelection";
 import { EditorView } from "@codemirror/view";
@@ -74,6 +76,7 @@ import { logFileManager } from "@/logFileManager";
 import { flushPersistence } from "@/services/settingsPersistence";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
+import { TFile, type WorkspaceLeaf } from "obsidian";
 
 /**
  * Build a plugin instance without running Obsidian's `Plugin` constructor or
@@ -275,6 +278,73 @@ describe("main", () => {
         expect(options.isEnabled()).toBe(true);
         expect(mockStartSelectionTracker).toHaveBeenCalled();
         (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+      });
+    });
+
+    describe("openAgentChatFromNote()", () => {
+      class AgentView {
+        eventTarget = { queueVisible: jest.fn(), queueContextNote: jest.fn() };
+      }
+
+      beforeEach(() => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 reveals an existing Agent Chat and attaches the clicked note", async () => {
+        const plugin = createPluginUnderTest([]);
+        const agentView = new AgentView();
+        const leaf = { view: agentView } as unknown as WorkspaceLeaf;
+        const revealLeaf = jest.fn();
+        const getRightLeaf = jest.fn();
+        Object.assign(plugin, {
+          CopilotAgentView: AgentView,
+          app: {
+            workspace: {
+              getLeavesOfType: jest.fn(() => [leaf]),
+              revealLeaf,
+              getRightLeaf,
+            },
+          },
+        });
+        const note = Object.assign(new TFile(), { path: "Research.md" });
+
+        await plugin.openAgentChatFromNote(note);
+
+        expect(revealLeaf).toHaveBeenCalledWith(leaf);
+        expect(getRightLeaf).not.toHaveBeenCalled();
+        expect(agentView.eventTarget.queueContextNote).toHaveBeenCalledWith(note);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 opens Agent Chat in the right sidebar and attaches the clicked note when none is open", async () => {
+        const plugin = createPluginUnderTest([]);
+        const agentView = new AgentView();
+        const leaf = {
+          view: agentView,
+          setViewState: jest.fn().mockResolvedValue(undefined),
+        } as unknown as WorkspaceLeaf;
+        const getRightLeaf = jest.fn(() => leaf);
+        const getLeaf = jest.fn();
+        const revealLeaf = jest.fn();
+        Object.assign(plugin, {
+          CopilotAgentView: AgentView,
+          app: {
+            workspace: {
+              getLeavesOfType: jest.fn(() => []),
+              getRightLeaf,
+              getLeaf,
+              revealLeaf,
+            },
+          },
+        });
+        const note = Object.assign(new TFile(), { path: "Journal.md" });
+
+        await plugin.openAgentChatFromNote(note);
+
+        expect(getRightLeaf).toHaveBeenCalledWith(false);
+        expect(getLeaf).not.toHaveBeenCalled();
+        expect(leaf.setViewState).toHaveBeenCalledWith({ type: CHAT_AGENT_VIEWTYPE, active: true });
+        expect(revealLeaf).toHaveBeenCalledWith(leaf);
+        expect(agentView.eventTarget.queueContextNote).toHaveBeenCalledWith(note);
       });
     });
 

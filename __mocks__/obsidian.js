@@ -132,7 +132,7 @@ module.exports = {
     this.noticeEl = window.document.createElement("div");
     this.hide = jest.fn();
   }),
-  TFile: jest.fn().mockImplementation(function (path) {
+  TFile: jest.fn().mockImplementation(function (path = "") {
     this.path = path;
     this.name = path.split("/").pop();
     this.basename = this.name.replace(/\.[^/.]+$/, "");
