@@ -10,7 +10,7 @@ import {
 
 const MANAGED: OpencodeManagedInfo = {
   platform: "darwin-arm64",
-  version: "0.15.6",
+  version: "2.0.3",
   destination: "~/.obsidian-copilot/opencode",
   run: { kind: "idle" },
 };
@@ -18,9 +18,9 @@ const MANAGED: OpencodeManagedInfo = {
 const OUTDATED: InstallState = {
   kind: "incompatible",
   source: "managed",
-  currentVersion: "0.14.2",
-  minVersion: "0.15.6",
-  message: "opencode v0.14.2 is not supported. Copilot requires opencode v0.15.6 or newer.",
+  currentVersion: "1.18.31",
+  minVersion: "2.0.3",
+  message: "opencode v1.18.31 is not supported. Copilot requires opencode v2.0.3 or newer.",
 };
 
 const makeActions = (): jest.Mocked<OpencodeConfigActions> => ({
@@ -71,6 +71,15 @@ describe("OpencodeConfigView", () => {
       renderView({ state: { ...OUTDATED, source: "custom" }, activeSource: "custom" });
 
       expect(screen.getByRole("button", { name: "Run opencode upgrade" })).toBeTruthy();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/569 names the managed version it will install", () => {
+      renderView({
+        state: OUTDATED,
+        activeSource: "managed",
+      });
+
+      expect(screen.getByRole("button", { name: "Upgrade to v2.0.3" })).toBeTruthy();
     });
   });
 });

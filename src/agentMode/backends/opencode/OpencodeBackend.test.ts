@@ -53,7 +53,7 @@ function resetPromptState(): void {
 
 jest.mock("./OpencodeBinaryManager", () => ({
   ...jest.requireActual("./OpencodeBinaryManager"),
-  verifyOpencodeBinary: jest.fn().mockResolvedValue({ stdout: "1.18.31" }),
+  verifyOpencodeBinary: jest.fn().mockResolvedValue({ stdout: "2.0.3" }),
 }));
 
 jest.mock("@/logger", () => ({
@@ -1063,16 +1063,16 @@ describe("buildOpencodeConfig — context-cache external_directory allow", () =>
 });
 
 describe("OpencodeBackend.buildSpawnDescriptor", () => {
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 rejects the actual old executable even when settings claim a supported version", async () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/569 rejects a V1 executable even when settings claim a supported V2 version", async () => {
     updateAgentModeBackendFields("opencode", {
       binaryPath: "/old-opencode",
-      binaryVersion: "2.0.0",
+      binaryVersion: "2.0.3",
       binarySource: "managed",
     });
-    jest.mocked(verifyOpencodeBinary).mockResolvedValueOnce({ stdout: "1.0.0" });
+    jest.mocked(verifyOpencodeBinary).mockResolvedValueOnce({ stdout: "1.18.31" });
     await expect(
       new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({ vaultBasePath: "/vault" })
-    ).rejects.toThrow("1.0.0");
+    ).rejects.toThrow("1.18.31");
     expect(verifyOpencodeBinary).toHaveBeenCalledWith("/old-opencode");
   });
 

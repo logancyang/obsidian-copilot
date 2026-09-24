@@ -75,9 +75,10 @@ import {
 } from "./OpencodeBinaryManager";
 
 describe("isOpencodeVersionOutdated", () => {
-  it("requires the ACP cancellation fix shipped in 1.16.0", () => {
-    expect(isOpencodeVersionOutdated("1.15.13")).toBe(true);
-    expect(isOpencodeVersionOutdated("1.16.0")).toBe(false);
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/569 rejects V1 and accepts the first supported V2 release", () => {
+    expect(isOpencodeVersionOutdated("1.18.31")).toBe(true);
+    expect(isOpencodeVersionOutdated("2.0.2")).toBe(true);
+    expect(isOpencodeVersionOutdated("2.0.3")).toBe(false);
   });
 });
 
@@ -203,6 +204,16 @@ describe("OpencodeBinaryManager", () => {
         ).toBe("error");
       }
     );
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/569 accepts a newer custom V2 binary while managed downloads stay pinned", () => {
+      expect(
+        toOpencodeInstallState({
+          kind: "installed",
+          version: "2.0.14",
+          path: "/custom/opencode",
+          source: "custom",
+        })
+      ).toEqual({ kind: "ready", source: "custom" });
+    });
     it("returns the shared incompatible state for an outdated install", () => {
       expect(
         toOpencodeInstallState({
