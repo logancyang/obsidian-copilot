@@ -7,6 +7,8 @@ Agent Chat and Quick Chat both use the vault-root `AGENTS.md` for your custom in
 - **Agent Chat** reads it when starting a session with opencode, Claude, or Codex.
 - **Quick Chat** reads the latest saved file for each request on desktop and mobile, unless you explicitly select a saved system prompt.
 
+Agent Chat's built-in guidance covers vault context, Obsidian links and tool routing. The selected agent decides how much searching and planning the task needs, and can report unavailable tools or access honestly.
+
 ## Choose the right instruction tool
 
 | Use                          | Best for                                                      |

@@ -139,9 +139,7 @@ describe("CodexBackend", () => {
 
         const config = JSON.parse(desc.env.CODEX_CONFIG as string);
         expect(config.developer_instructions).toContain("Obsidian Copilot");
-        expect(config.developer_instructions).toContain(
-          "NOT a software-engineering agent or CLI coding tool"
-        );
+        expect(config.developer_instructions).toContain("not a CLI coding agent");
         expect(config.developer_instructions).toContain("{folder_name}");
         expect(config.developer_instructions).toContain("{activeNote}");
         expect(config.developer_instructions).not.toContain("metadata.copilot-enabled-agents");
