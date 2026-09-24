@@ -2,7 +2,7 @@
 
 # v4.0.12 - OpenCode 2 in your vault
 
-![OpenCode 2 — Copilot for Obsidian 4.0.12](https://github.com/user-attachments/assets/8003588a-0f0c-41ca-abc4-1c7c4f7e5b61)
+![OpenCode 2 — Copilot for Obsidian 4.0.12](https://github.com/user-attachments/assets/6a793773-91d3-4236-b9c7-69950efb6660)
 
 OpenCode 2, the agent runtime behind Copilot Plus and your own model providers, comes to Agent Chat. Open a chat directly from the note you are reading, and follow long replies without losing your place.
 
@@ -15,7 +15,7 @@ OpenCode 2, the agent runtime behind Copilot Plus and your own model providers, 
 
 - Follow long replies as they stream in Agent Chat and Quick Chat. Scroll up to read at your own pace, then use the down-arrow to return to the latest text. ([#3358](https://github.com/logancyang/obsidian-copilot/pull/3358), @zeroliu)
 
-  ![Agent Chat automatically follows a streaming reply](https://github.com/user-attachments/assets/93f6a0bb-0336-4129-8c14-4749be1b9f22)
+  ![Agent Chat automatically follows a streaming reply](https://github.com/user-attachments/assets/7d4f5626-71a7-452d-963f-ae1ff3dec6e4)
 
 - See what Codex installation is doing, with elapsed connection time, downloaded bytes, and named setup stages. ([#3361](https://github.com/logancyang/obsidian-copilot/pull/3361), @zeroliu)
 
