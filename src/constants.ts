@@ -883,7 +883,6 @@ export const EVENT_NAMES = {
   ACTIVE_LEAF_CHANGE: "active-leaf-change",
   ABORT_STREAM: "abort-stream",
   INSERT_TEXT_TO_CHAT: "insert-text-to-chat",
-  ADD_NOTE_TO_CHAT_CONTEXT: "add-note-to-chat-context",
 };
 
 export enum ABORT_REASON {

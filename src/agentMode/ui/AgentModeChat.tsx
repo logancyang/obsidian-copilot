@@ -10,16 +10,9 @@ import {
   useManagedInstallActionState,
   useSessionBackendDescriptor,
 } from "@/agentMode/ui/useBackendDescriptor";
-import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
-import { ChatViewEventTarget, EventTargetContext } from "@/context";
-import { EVENT_NAMES } from "@/constants";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
-import { useSettingsValue } from "@/settings/model";
 import React from "react";
-
-/** See AGENTS.md → "Referential stability". */
-const EMPTY_CHAT_INPUT_IDS: readonly string[] = Object.freeze([]);
 
 interface Props {
   plugin: CopilotPlugin;
@@ -47,8 +40,6 @@ export const AgentModeChat: React.FC<Props> = ({
   );
   const signedOut = Boolean(descriptor.auth && auth.status?.signedIn === false);
   const managedInstall = useManagedInstallActionState(descriptor, plugin);
-  const settings = useSettingsValue();
-  const eventTarget = React.useContext(EventTargetContext);
   const [tick, setTick] = React.useState(0);
 
   React.useEffect(() => {
@@ -102,48 +93,6 @@ export const AgentModeChat: React.FC<Props> = ({
     descriptor.openInstallUI(plugin);
   }, [descriptor, plugin]);
 
-  // Compose drafts live here rather than in `AgentHome`: a backend restart
-  // closes the old session before its replacement exists, and AgentHome
-  // unmounts while there is no active session. This component stays mounted
-  // across that gap, during which `activeChatInputId` is null.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/473
-  const activeChatInputId = manager?.getActiveSession()?.chatInputId ?? null;
-  const liveChatInputIds = manager?.getLiveChatInputIds() ?? EMPTY_CHAT_INPUT_IDS;
-  const draft = useAgentInputDrafts({
-    activeChatInputId,
-    liveChatInputIds,
-    defaultIncludeActiveNote: settings.autoAddActiveContentToContext === true,
-  });
-  const { setContextNotes, setIncludeActiveNote } = draft;
-
-  // The note header can be clicked before the first Agent session exists; leave
-  // the event queued until there is a draft that can retain the clicked file.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/579
-  React.useEffect(() => {
-    const bus = eventTarget instanceof ChatViewEventTarget ? eventTarget : null;
-    if (!bus || !activeChatInputId) return;
-    const addPendingNotes = (): void => {
-      const notes = bus.consumePendingContextNotes();
-      if (notes.length === 0) return;
-      setContextNotes((previous) => {
-        const next = [...previous];
-        for (const note of notes) {
-          if (!next.some((existing) => existing.path === note.path)) next.push(note);
-        }
-        return next.length === previous.length ? previous : next;
-      });
-      // A current note already has a dynamic badge. Keep only the fixed
-      // attachment so it stays with this draft when the editor changes notes.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/579
-      if (notes.some((note) => note.path === plugin.app.workspace.getActiveFile()?.path)) {
-        setIncludeActiveNote(false);
-      }
-    };
-    bus.addEventListener(EVENT_NAMES.ADD_NOTE_TO_CHAT_CONTEXT, addPendingNotes);
-    addPendingNotes();
-    return () => bus.removeEventListener(EVENT_NAMES.ADD_NOTE_TO_CHAT_CONTEXT, addPendingNotes);
-  }, [eventTarget, activeChatInputId, setContextNotes, setIncludeActiveNote, plugin]);
-
   if (!manager) return null;
 
   const activeSession = manager.getActiveSession();
@@ -157,7 +106,6 @@ export const AgentModeChat: React.FC<Props> = ({
         backend={backend}
         sessionId={activeSession.internalId}
         chatInputId={activeSession.chatInputId}
-        draft={draft}
         manager={manager}
         plugin={plugin}
         onSaveChat={onSaveChat}

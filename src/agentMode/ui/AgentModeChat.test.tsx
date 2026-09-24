@@ -1,13 +1,10 @@
-import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
-import { TFile } from "obsidian";
 import { AgentModeChat } from "@/agentMode/ui/AgentModeChat";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { InstallState } from "@/agentMode/session/types";
 import type CopilotPlugin from "@/main";
-import { ChatViewEventTarget, EventTargetContext } from "@/context";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 // Readiness of the backend the pane would run, swapped per test. Declared with
@@ -43,12 +40,8 @@ jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
 
 // Heavy children are irrelevant to the guards under test — render markers so
 // the no-session fallback's branch is observable without their real trees.
-let mockLastDraft: AgentInputDraftControls | null = null;
 jest.mock("@/agentMode/ui/AgentHome", () => ({
-  AgentHome: (props: { draft: AgentInputDraftControls }) => {
-    mockLastDraft = props.draft;
-    return <div data-testid="agent-home">{props.draft.input}</div>;
-  },
+  AgentHome: () => <div data-testid="agent-home" />,
 }));
 jest.mock("@/agentMode/ui/AgentModeStatus", () => ({
   AgentModeStatus: () => <div data-testid="status-card" />,
@@ -88,26 +81,15 @@ function makeManager({
     getLastError: jest.fn(() => lastError),
     getActiveSession: jest.fn(() => null),
     getActiveChatUIState: jest.fn(() => null),
-    getLiveChatInputIds: jest.fn(() => []),
     getOrCreateActiveSession,
   } as unknown as AgentSessionManager & { getOrCreateActiveSession: jest.Mock };
   return { manager, getOrCreateActiveSession };
 }
 
-function renderChat(manager: AgentSessionManager, bus?: ChatViewEventTarget, activeFile?: TFile) {
-  const plugin = {
-    app: { workspace: { getActiveFile: () => activeFile } },
-    agentSessionManager: manager,
-  } as unknown as CopilotPlugin;
-  if (!bus) {
-    return render(
-      <AgentModeChat plugin={plugin} onSaveChat={() => {}} updateUserMessageHistory={() => {}} />
-    );
-  }
+function renderChat(manager: AgentSessionManager) {
+  const plugin = { app: {}, agentSessionManager: manager } as unknown as CopilotPlugin;
   return render(
-    <EventTargetContext.Provider value={bus}>
-      <AgentModeChat plugin={plugin} onSaveChat={() => {}} updateUserMessageHistory={() => {}} />
-    </EventTargetContext.Provider>
+    <AgentModeChat plugin={plugin} onSaveChat={() => {}} updateUserMessageHistory={() => {}} />
   );
 }
 
@@ -132,7 +114,6 @@ describe("AgentModeChat", () => {
     mockManagedInstall = undefined;
     mockInstallAction = { kind: "idle" };
     mockInstallState = { kind: "ready", source: "custom" };
-    mockLastDraft = null;
   });
 
   describe("startup upgrade", () => {
@@ -161,126 +142,6 @@ describe("AgentModeChat", () => {
       );
       await waitFor(() => expect(getOrCreateActiveSession).toHaveBeenCalledTimes(1));
       expect(screen.queryByRole("progressbar")).toBeNull();
-    });
-  });
-
-  describe("compose draft ownership", () => {
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 adds a clicked note to the active session draft once, preserving other attachments", () => {
-      const active = { internalId: "s-1", chatInputId: "chat-1" } as unknown as AgentSession;
-      const { manager } = makeManager({
-        activeProjectId: GLOBAL_SCOPE,
-        scopeSessions: [active],
-        poolSessions: [active],
-      });
-      (manager.getActiveSession as jest.Mock).mockReturnValue(active);
-      (manager.getActiveChatUIState as jest.Mock).mockReturnValue({});
-      (manager.getLiveChatInputIds as jest.Mock).mockReturnValue(["chat-1"]);
-      const bus = new ChatViewEventTarget();
-      const existing = Object.assign(new TFile(), { path: "Existing.md" });
-      const clicked = Object.assign(new TFile(), { path: "Clicked.md" });
-      renderChat(manager, bus);
-      act(() => mockLastDraft!.setContextNotes([existing]));
-
-      act(() => {
-        bus.queueContextNote(clicked);
-        bus.queueContextNote(clicked);
-      });
-
-      expect(mockLastDraft!.contextNotes).toEqual([existing, clicked]);
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 shows the clicked current note once by replacing the dynamic Active Note attachment", () => {
-      const active = { internalId: "s-1", chatInputId: "chat-1" } as unknown as AgentSession;
-      const { manager } = makeManager({
-        activeProjectId: GLOBAL_SCOPE,
-        scopeSessions: [active],
-        poolSessions: [active],
-      });
-      (manager.getActiveSession as jest.Mock).mockReturnValue(active);
-      (manager.getActiveChatUIState as jest.Mock).mockReturnValue({});
-      (manager.getLiveChatInputIds as jest.Mock).mockReturnValue(["chat-1"]);
-      const clicked = Object.assign(new TFile(), { path: "Clicked.md" });
-      const bus = new ChatViewEventTarget();
-      renderChat(manager, bus, clicked);
-      expect(mockLastDraft!.includeActiveNote).toBe(true);
-
-      act(() => bus.queueContextNote(clicked));
-
-      expect(mockLastDraft!.includeActiveNote).toBe(false);
-      expect(mockLastDraft!.contextNotes).toEqual([clicked]);
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 holds a clicked note until the first Agent Chat session is ready", () => {
-      const { manager } = makeManager({
-        activeProjectId: GLOBAL_SCOPE,
-        scopeSessions: [],
-        poolSessions: [],
-      });
-      const bus = new ChatViewEventTarget();
-      const clicked = Object.assign(new TFile(), { path: "Clicked.md" });
-      bus.queueContextNote(clicked);
-      const { rerender } = renderChat(manager, bus);
-      const active = { internalId: "s-1", chatInputId: "chat-1" } as unknown as AgentSession;
-      (manager.getActiveSession as jest.Mock).mockReturnValue(active);
-      (manager.getActiveChatUIState as jest.Mock).mockReturnValue({});
-      (manager.getLiveChatInputIds as jest.Mock).mockReturnValue(["chat-1"]);
-
-      rerender(
-        <EventTargetContext.Provider value={bus}>
-          <AgentModeChat
-            plugin={
-              {
-                app: { workspace: { getActiveFile: () => undefined } },
-                agentSessionManager: manager,
-              } as unknown as CopilotPlugin
-            }
-            onSaveChat={() => {}}
-            updateUserMessageHistory={() => {}}
-          />
-        </EventTargetContext.Provider>
-      );
-
-      expect(mockLastDraft!.contextNotes).toEqual([clicked]);
-    });
-
-    it("keeps the unsent message across a restart that leaves no active session (https://github.com/Brevilabs/obsidian-copilot-private/issues/473)", () => {
-      // A backend restart closes the session before its replacement exists. With
-      // the draft store inside AgentHome, that gap unmounts the component and
-      // destroys the text the user had typed but not sent.
-      const active = { internalId: "s-1", chatInputId: "chat-1" } as unknown as AgentSession;
-      const { manager } = makeManager({
-        activeProjectId: GLOBAL_SCOPE,
-        scopeSessions: [active],
-        poolSessions: [active],
-      });
-      const getActiveSession = manager.getActiveSession as jest.Mock;
-      const getActiveChatUIState = manager.getActiveChatUIState as jest.Mock;
-      const getLiveChatInputIds = manager.getLiveChatInputIds as jest.Mock;
-      getActiveSession.mockReturnValue(active);
-      getActiveChatUIState.mockReturnValue({});
-      getLiveChatInputIds.mockReturnValue(["chat-1"]);
-
-      const { rerender } = renderChat(manager);
-      act(() => mockLastDraft!.setInput("half-written question"));
-      expect(screen.getByTestId("agent-home").textContent).toBe("half-written question");
-
-      // The restart gap: no active session, but the manager still vouches for
-      // the chat input, so the draft must not be pruned.
-      getActiveSession.mockReturnValue(null);
-      getActiveChatUIState.mockReturnValue(null);
-      const plugin = { app: {}, agentSessionManager: manager } as unknown as CopilotPlugin;
-      rerender(
-        <AgentModeChat plugin={plugin} onSaveChat={() => {}} updateUserMessageHistory={() => {}} />
-      );
-      expect(screen.queryByTestId("agent-home")).toBeNull();
-
-      // The replacement session reuses the same chat input.
-      getActiveSession.mockReturnValue(active);
-      getActiveChatUIState.mockReturnValue({});
-      rerender(
-        <AgentModeChat plugin={plugin} onSaveChat={() => {}} updateUserMessageHistory={() => {}} />
-      );
-      expect(screen.getByTestId("agent-home").textContent).toBe("half-written question");
     });
   });
 
@@ -420,7 +281,7 @@ describe("AgentModeChat", () => {
       }
     );
     it.each(failures)(
-      "keeps the chat and draft mounted when %s becomes known during preload (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)",
+      "keeps the chat mounted when %s becomes known during preload (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)",
       (_name, state, signedOut) => {
         const active = { internalId: "s-1", chatInputId: "chat-1" } as AgentSession;
         const { manager } = makeManager({
@@ -430,15 +291,7 @@ describe("AgentModeChat", () => {
         });
         (manager.getActiveSession as jest.Mock).mockReturnValue(active);
         (manager.getActiveChatUIState as jest.Mock).mockReturnValue({});
-        (manager.getLiveChatInputIds as jest.Mock).mockReturnValue(["chat-1"]);
         const { rerender } = renderChat(manager);
-        const note = new (TFile as unknown as new (path: string) => TFile)("Context.md");
-        const image = new File(["image"], "context.png", { type: "image/png" });
-        act(() => {
-          mockLastDraft!.setInput("Preserve my question");
-          mockLastDraft!.setContextNotes([note]);
-          mockLastDraft!.setSelectedImages([image]);
-        });
         const home = screen.getByTestId("agent-home");
         mockInstallState = state;
         mockHasAuth = signedOut;
@@ -452,9 +305,6 @@ describe("AgentModeChat", () => {
           />
         );
         expect(screen.getByTestId("agent-home")).toBe(home);
-        expect(home.textContent).toBe("Preserve my question");
-        expect(mockLastDraft!.contextNotes).toEqual([note]);
-        expect(mockLastDraft!.images).toEqual([image]);
       }
     );
     it("waits for authentication before auto-starting and starts after sign-in (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {

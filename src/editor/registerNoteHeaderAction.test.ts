@@ -1,15 +1,12 @@
 jest.mock("obsidian", () => ({
   MarkdownView: class MarkdownView {},
-  Notice: jest.fn(),
   TFile: class TFile {},
 }));
-jest.mock("@/logger", () => ({ logError: jest.fn() }));
 
 import type CopilotPlugin from "@/main";
 import { registerNoteHeaderAction } from "@/editor/registerNoteHeaderAction";
 import { COPILOT_AGENT_ICON_ID } from "@/constants";
-import { logError } from "@/logger";
-import { MarkdownView, Notice, TFile, type WorkspaceLeaf } from "obsidian";
+import { MarkdownView, TFile, type WorkspaceLeaf } from "obsidian";
 
 interface NoteView extends MarkdownView {
   addAction: jest.Mock;
@@ -36,7 +33,7 @@ function fixture(views: NoteView[]) {
   const listeners = new Map<string, () => void>();
   let layoutReady: () => void = () => undefined;
   let cleanup: () => void = () => undefined;
-  const openAgentChatFromNote = jest.fn().mockResolvedValue(undefined);
+  const addNoteToAgentChat = jest.fn().mockResolvedValue(undefined);
   const workspace = {
     getLeavesOfType: jest.fn(() => views.map((view) => ({ view }) as unknown as WorkspaceLeaf)),
     onLayoutReady: jest.fn((callback: () => void) => {
@@ -50,7 +47,7 @@ function fixture(views: NoteView[]) {
   const plugin = {
     app: { workspace },
     isPluginLifecycleActive: () => true,
-    openAgentChatFromNote,
+    addNoteToAgentChat,
     registerEvent: jest.fn(),
     register: jest.fn((callback: () => void) => {
       cleanup = callback;
@@ -62,7 +59,7 @@ function fixture(views: NoteView[]) {
     listeners,
     layoutReady: () => layoutReady(),
     cleanup: () => cleanup(),
-    openAgentChatFromNote,
+    addNoteToAgentChat,
   };
 }
 
@@ -70,7 +67,7 @@ describe("registerNoteHeaderAction", () => {
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 adds a Copilot action to every open note and passes the clicked view's current file", () => {
     const research = noteView("Research.md");
     const journal = noteView("Journal.md");
-    const { plugin, layoutReady, openAgentChatFromNote } = fixture([research, journal]);
+    const { plugin, layoutReady, addNoteToAgentChat } = fixture([research, journal]);
 
     registerNoteHeaderAction(plugin);
     layoutReady();
@@ -80,7 +77,7 @@ describe("registerNoteHeaderAction", () => {
 
     research.file = Object.assign(new TFile(), { path: "Reused tab.md" });
     button.click();
-    expect(openAgentChatFromNote).toHaveBeenCalledWith(research.file);
+    expect(addNoteToAgentChat).toHaveBeenCalledWith(research.file, true);
     expect(journal.addAction).toHaveBeenCalledTimes(1);
   });
 
@@ -109,7 +106,7 @@ describe("registerNoteHeaderAction", () => {
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 restores the action when Obsidian replaces a note header", () => {
     const view = noteView("Research.md");
-    const { plugin, layoutReady, listeners, openAgentChatFromNote } = fixture([view]);
+    const { plugin, layoutReady, listeners, addNoteToAgentChat } = fixture([view]);
 
     registerNoteHeaderAction(plugin);
     layoutReady();
@@ -118,34 +115,18 @@ describe("registerNoteHeaderAction", () => {
 
     expect(view.addAction).toHaveBeenCalledTimes(2);
     (view.addAction.mock.results[1].value as HTMLButtonElement).click();
-    expect(openAgentChatFromNote).toHaveBeenCalledWith(view.file);
+    expect(addNoteToAgentChat).toHaveBeenCalledWith(view.file, true);
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 leaves Agent Chat closed when the clicked Markdown view has no note", () => {
     const view = noteView("Research.md");
-    const { plugin, layoutReady, openAgentChatFromNote } = fixture([view]);
+    const { plugin, layoutReady, addNoteToAgentChat } = fixture([view]);
 
     registerNoteHeaderAction(plugin);
     layoutReady();
     Object.assign(view, { file: null });
     (view.addAction.mock.results[0].value as HTMLButtonElement).click();
 
-    expect(openAgentChatFromNote).not.toHaveBeenCalled();
-  });
-
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 reports a failure to open Agent Chat without losing the clicked note", async () => {
-    const view = noteView("Research.md");
-    const { plugin, layoutReady, openAgentChatFromNote } = fixture([view]);
-    const error = new Error("Agent pane unavailable");
-    openAgentChatFromNote.mockRejectedValue(error);
-
-    registerNoteHeaderAction(plugin);
-    layoutReady();
-    (view.addAction.mock.results[0].value as HTMLButtonElement).click();
-    await Promise.resolve();
-
-    expect(openAgentChatFromNote).toHaveBeenCalledWith(view.file);
-    expect(logError).toHaveBeenCalledWith("Failed to open Agent Chat from the note header.", error);
-    expect(Notice).toHaveBeenCalledWith("Could not open Agent Chat. Check Copilot logs.");
+    expect(addNoteToAgentChat).not.toHaveBeenCalled();
   });
 });

@@ -59,7 +59,7 @@ export default class RelevantNotesView extends ItemView {
     this.root.render(
       <EventTargetContext.Provider value={this.eventTarget}>
         <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
-          <RelevantNotes onAddToChat={(text) => void this.plugin.insertTextIntoActiveChat(text)} />
+          <RelevantNotes onAddToChat={(note) => void this.plugin.addNoteToActiveChat(note)} />
         </div>
       </EventTargetContext.Provider>
     );

@@ -226,8 +226,8 @@ function useRelevantNotes({
 
 interface RelevantNotesProps {
   className?: string;
-  /** Insert text (a `[[wikilink]]`) into the target chat input. */
-  onAddToChat: (text: string) => void;
+  /** Attach a note to the target chat input. */
+  onAddToChat: (note: TFile) => void;
 }
 
 export const RelevantNotes = memo(
@@ -298,8 +298,9 @@ export const RelevantNotes = memo(
         void leaf.openFile(file).catch((err) => logError("openFile failed", err));
       }
     };
-    const addToChat = (prompt: string) => {
-      onAddToChat(`[[${prompt}]]`);
+    const addToChat = (notePath: string) => {
+      const file = app.vault.getAbstractFileByPath(notePath);
+      if (file instanceof TFile) onAddToChat(file);
     };
 
     // A local-app deeplink cannot configure the remote server used on mobile
@@ -347,7 +348,7 @@ export const RelevantNotes = memo(
                   onAddToChat={() =>
                     chat.context
                       ? chat.context.addFile(row.note.note.path)
-                      : addToChat(row.note.note.title)
+                      : addToChat(row.note.note.path)
                   }
                   onNavigateToNote={() => navigateToNote(row.note.note.path)}
                 />

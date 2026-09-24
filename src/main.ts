@@ -1124,13 +1124,19 @@ export default class CopilotPlugin extends Plugin {
   }
 
   /**
-   * Open Agent Chat with the clicked Markdown note attached to its active draft.
-   * https://github.com/Brevilabs/obsidian-copilot-private/issues/579
+   * Open or reveal Agent Chat with a note attached to its active draft.
+   * @param note - Note to send with the user's next Agent Chat message.
+   * @param openInRightSidebar - Place a newly opened pane in the right sidebar
+   *   instead of the user's default open area.
    */
-  async openAgentChatFromNote(note: TFile): Promise<void> {
-    const leaf = await this.activateAgentView(true);
-    if (leaf && this.isCopilotAgentView(leaf.view)) {
-      leaf.view.eventTarget.queueContextNote(note);
+  async addNoteToAgentChat(note: TFile, openInRightSidebar = false): Promise<void> {
+    const leaf = await this.activateAgentView(openInRightSidebar);
+    if (!leaf) return;
+    try {
+      await this.agentSessionManager?.addContextNoteToActiveChat(note);
+    } catch (error) {
+      logError("Failed to add a note to Agent Chat.", error);
+      new Notice("Could not add the note to Agent Chat. Check Copilot logs.");
     }
   }
 
@@ -1143,32 +1149,27 @@ export default class CopilotPlugin extends Plugin {
   }
 
   /**
-   * Insert text (a `[[wikilink]]` from the Relevant Notes pane) into the chat view
-   * the user last focused (see `pickContextChatViewType`), opening that view if none
-   * is open. Routes via the target view's `eventTarget`, the same seam
-   * `processText`/`emitChatIsVisible` use, so the standalone pane never needs the
-   * chat's Lexical editor directly.
+   * Add a note to the chat view the user last focused (see `pickContextChatViewType`),
+   * opening that view if none is open.
+   * @param note - Note the Relevant Notes pane offers as chat context.
    */
-  async insertTextIntoActiveChat(text: string): Promise<void> {
-    const viewType = this.pickContextChatViewType();
-    let leaf = this.app.workspace.getLeavesOfType(viewType)[0] ?? null;
+  async addNoteToActiveChat(note: TFile): Promise<void> {
+    if (this.pickContextChatViewType() === CHAT_AGENT_VIEWTYPE) {
+      await this.addNoteToAgentChat(note);
+      return;
+    }
+    let leaf = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0] ?? null;
     if (!leaf) {
-      if (viewType === CHAT_AGENT_VIEWTYPE) {
-        await this.activateAgentView();
-      } else {
-        await this.activateView();
-      }
-      leaf = this.app.workspace.getLeavesOfType(viewType)[0] ?? null;
+      await this.activateView();
+      leaf = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0] ?? null;
     }
     if (!leaf) return;
 
     this.app.workspace.revealLeaf(leaf);
-    const view = leaf.view;
     // The bus latches the text if the view's React tree hasn't mounted its
-    // listener yet, so a freshly-opened view drains it on mount — delivery no
-    // longer depends on guessing how long mounting takes.
-    if (view instanceof CopilotView || this.isCopilotAgentView(view)) {
-      view.eventTarget.queueInsertText(text);
+    // listener yet, so a freshly-opened view drains it on mount.
+    if (leaf.view instanceof CopilotView) {
+      leaf.view.eventTarget.queueInsertText(`[[${note.basename}]]`);
     }
   }
 

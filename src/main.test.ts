@@ -52,6 +52,7 @@ jest.mock("@/agentMode", () => ({
 }));
 
 import CopilotPlugin from "@/main";
+import CopilotView from "@/components/CopilotView";
 import { getSelectedTextContexts, setSelectedTextContexts } from "@/aiParams";
 import { DEFAULT_SETTINGS } from "@/constants";
 import { CHAT_AGENT_VIEWTYPE } from "@/constants";
@@ -76,7 +77,7 @@ import { logFileManager } from "@/logFileManager";
 import { flushPersistence } from "@/services/settingsPersistence";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
-import { TFile, type WorkspaceLeaf } from "obsidian";
+import { Notice, TFile, type WorkspaceLeaf } from "obsidian";
 
 /**
  * Build a plugin instance without running Obsidian's `Plugin` constructor or
@@ -281,70 +282,129 @@ describe("main", () => {
       });
     });
 
-    describe("openAgentChatFromNote()", () => {
+    describe("addNoteToAgentChat()", () => {
       class AgentView {
-        eventTarget = { queueVisible: jest.fn(), queueContextNote: jest.fn() };
+        eventTarget = { queueVisible: jest.fn() };
       }
 
       beforeEach(() => {
+        jest.clearAllMocks();
         (isDesktopRuntime as jest.Mock).mockReturnValue(true);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 reveals an existing Agent Chat and attaches the clicked note", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 reveals an existing Agent Chat and attaches the note to its active draft", async () => {
         const plugin = createPluginUnderTest([]);
-        const agentView = new AgentView();
-        const leaf = { view: agentView } as unknown as WorkspaceLeaf;
+        const leaf = { view: new AgentView() } as unknown as WorkspaceLeaf;
         const revealLeaf = jest.fn();
         const getRightLeaf = jest.fn();
+        const addContextNoteToActiveChat = jest.fn().mockResolvedValue(undefined);
         Object.assign(plugin, {
           CopilotAgentView: AgentView,
-          app: {
-            workspace: {
-              getLeavesOfType: jest.fn(() => [leaf]),
-              revealLeaf,
-              getRightLeaf,
-            },
-          },
+          agentSessionManager: { addContextNoteToActiveChat },
+          app: { workspace: { getLeavesOfType: jest.fn(() => [leaf]), revealLeaf, getRightLeaf } },
         });
         const note = Object.assign(new TFile(), { path: "Research.md" });
 
-        await plugin.openAgentChatFromNote(note);
+        await plugin.addNoteToAgentChat(note, true);
 
         expect(revealLeaf).toHaveBeenCalledWith(leaf);
         expect(getRightLeaf).not.toHaveBeenCalled();
-        expect(agentView.eventTarget.queueContextNote).toHaveBeenCalledWith(note);
+        expect(addContextNoteToActiveChat).toHaveBeenCalledWith(note);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 opens Agent Chat in the right sidebar and attaches the clicked note when none is open", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 opens Agent Chat in the right sidebar before attaching the note when none is open", async () => {
         const plugin = createPluginUnderTest([]);
-        const agentView = new AgentView();
         const leaf = {
-          view: agentView,
+          view: new AgentView(),
           setViewState: jest.fn().mockResolvedValue(undefined),
         } as unknown as WorkspaceLeaf;
         const getRightLeaf = jest.fn(() => leaf);
         const getLeaf = jest.fn();
         const revealLeaf = jest.fn();
+        const addContextNoteToActiveChat = jest.fn().mockResolvedValue(undefined);
         Object.assign(plugin, {
           CopilotAgentView: AgentView,
+          agentSessionManager: { addContextNoteToActiveChat },
           app: {
-            workspace: {
-              getLeavesOfType: jest.fn(() => []),
-              getRightLeaf,
-              getLeaf,
-              revealLeaf,
-            },
+            workspace: { getLeavesOfType: jest.fn(() => []), getRightLeaf, getLeaf, revealLeaf },
           },
         });
         const note = Object.assign(new TFile(), { path: "Journal.md" });
 
-        await plugin.openAgentChatFromNote(note);
+        await plugin.addNoteToAgentChat(note, true);
 
         expect(getRightLeaf).toHaveBeenCalledWith(false);
         expect(getLeaf).not.toHaveBeenCalled();
         expect(leaf.setViewState).toHaveBeenCalledWith({ type: CHAT_AGENT_VIEWTYPE, active: true });
         expect(revealLeaf).toHaveBeenCalledWith(leaf);
-        expect(agentView.eventTarget.queueContextNote).toHaveBeenCalledWith(note);
+        expect(addContextNoteToActiveChat).toHaveBeenCalledWith(note);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 reports a failed attachment without throwing", async () => {
+        const plugin = createPluginUnderTest([]);
+        const failure = new Error("backend missing");
+        Object.assign(plugin, {
+          CopilotAgentView: AgentView,
+          agentSessionManager: {
+            addContextNoteToActiveChat: jest.fn().mockRejectedValue(failure),
+          },
+          app: {
+            workspace: {
+              getLeavesOfType: jest.fn(() => [{ view: new AgentView() }]),
+              revealLeaf: jest.fn(),
+            },
+          },
+        });
+
+        await expect(
+          plugin.addNoteToAgentChat(Object.assign(new TFile(), { path: "Research.md" }))
+        ).resolves.toBeUndefined();
+
+        expect(logError).toHaveBeenCalledWith("Failed to add a note to Agent Chat.", failure);
+        expect(Notice).toHaveBeenCalledWith(
+          "Could not add the note to Agent Chat. Check Copilot logs."
+        );
+      });
+    });
+
+    describe("addNoteToActiveChat()", () => {
+      beforeEach(() => {
+        jest.clearAllMocks();
+      });
+
+      it("attaches the note to Agent Chat when Agent Chat is the target", async () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        const plugin = createPluginUnderTest([]);
+        const addNoteToAgentChat = jest
+          .spyOn(plugin, "addNoteToAgentChat")
+          .mockResolvedValue(undefined);
+        const note = Object.assign(new TFile(), { path: "Research.md" });
+
+        await plugin.addNoteToActiveChat(note);
+
+        expect(addNoteToAgentChat).toHaveBeenCalledWith(note);
+      });
+
+      it("inserts a wikilink into the legacy chat when it is the target", async () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+        const plugin = createPluginUnderTest([]);
+        const view = Object.assign(Object.create(CopilotView.prototype) as CopilotView, {
+          eventTarget: { queueInsertText: jest.fn() },
+        });
+        const leaf = { view } as unknown as WorkspaceLeaf;
+        const revealLeaf = jest.fn();
+        Object.assign(plugin, {
+          app: { workspace: { getLeavesOfType: jest.fn(() => [leaf]), revealLeaf } },
+        });
+        const note = Object.assign(new TFile(), {
+          path: "Notes/Research.md",
+          basename: "Research",
+        });
+
+        await plugin.addNoteToActiveChat(note);
+
+        expect(revealLeaf).toHaveBeenCalledWith(leaf);
+        expect(view.eventTarget.queueInsertText).toHaveBeenCalledWith("[[Research]]");
       });
     });
 

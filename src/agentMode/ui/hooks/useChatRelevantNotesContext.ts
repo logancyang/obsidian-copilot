@@ -117,19 +117,16 @@ export function useChatRelevantNotesContext(
   // Equal retrieval content must keep its identity across streaming renders.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
   const key = JSON.stringify({ id, request: snapshot, skippedAttachments });
-  const { setContextNotes } = draft;
+  const { addContextNote } = draft;
   const current = useMemo<ChatRelevantNotesContext>(
     () => ({
       ...(JSON.parse(key) as Omit<ChatRelevantNotesContext, "addFile">),
       addFile: (path) => {
         const file = app.vault.getAbstractFileByPath(path);
-        if (file instanceof TFile)
-          setContextNotes((notes) =>
-            notes.some((note) => note.path === path) ? notes : [...notes, file]
-          );
+        if (file instanceof TFile) addContextNote(file);
       },
     }),
-    [key, app, setContextNotes]
+    [key, app, addContextNote]
   );
   const currentRef = useRef(current);
   currentRef.current = current;

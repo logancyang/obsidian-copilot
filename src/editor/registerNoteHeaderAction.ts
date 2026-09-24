@@ -1,7 +1,6 @@
 import { COPILOT_AGENT_ICON_ID } from "@/constants";
-import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
-import { MarkdownView, Notice } from "obsidian";
+import { MarkdownView } from "obsidian";
 
 /**
  * Keep the note-to-Agent action on every Markdown header, including views Obsidian opens later.
@@ -31,11 +30,7 @@ export function registerNoteHeaderAction(plugin: CopilotPlugin): void {
           // An empty Markdown view has no note to attach yet.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/579
           const file = view.file;
-          if (!file) return;
-          void plugin.openAgentChatFromNote(file).catch((error) => {
-            logError("Failed to open Agent Chat from the note header.", error);
-            new Notice("Could not open Agent Chat. Check Copilot logs.");
-          });
+          if (file) void plugin.addNoteToAgentChat(file, true);
         }
       );
       actions.set(view, action);

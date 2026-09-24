@@ -319,6 +319,7 @@ function buildWorkspace(): unknown {
     getLeavesOfType: jest.fn((viewType: string) =>
       viewType === CHAT_AGENT_VIEWTYPE ? [chatLeaf] : []
     ),
+    getActiveFile: jest.fn(() => null),
   };
 }
 
@@ -888,14 +889,13 @@ describe("AgentSessionManager", () => {
     });
 
     describe("createGlobalSessionWithDraft()", () => {
-      it("binds an unsent draft to the new logical composer and consumes it once for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+      it("writes the unsent text into the new chat's own draft for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
         const mgr = buildManager();
 
         const session = await mgr.createGlobalSessionWithDraft("Review this repair");
 
         expect(mgr.getActiveSession()).toBe(session);
-        expect(mgr.consumeInitialDraft(session.chatInputId)).toBe("Review this repair");
-        expect(mgr.consumeInitialDraft(session.chatInputId)).toBeUndefined();
+        expect(mgr.drafts.get(session.chatInputId)?.input).toBe("Review this repair");
       });
 
       it("switches directly to the requested scope without spawning an extra blank session for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
@@ -926,16 +926,16 @@ describe("AgentSessionManager", () => {
         }
       });
 
-      it("drops the initial draft when the session closes before the composer consumes it for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+      it("drops the drafted text when its session closes for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
         const mgr = buildManager();
         const session = await mgr.createGlobalSessionWithDraft("Review this repair");
 
         await mgr.closeSession(session.internalId);
 
-        expect(mgr.consumeInitialDraft(session.chatInputId)).toBeUndefined();
+        expect(mgr.drafts.get(session.chatInputId)).toBeUndefined();
       });
 
-      it("drops the initial draft when session creation fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+      it("leaves no draft behind when session creation fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
         const projectId = "project-before-failed-draft";
         const recordSpy = jest
           .spyOn(projectsState, "getCachedProjectRecordById")
@@ -963,7 +963,7 @@ describe("AgentSessionManager", () => {
           );
 
           expect(failedChatInputId).toBeDefined();
-          expect(mgr.consumeInitialDraft(failedChatInputId as string)).toBeUndefined();
+          expect(mgr.drafts.get(failedChatInputId as string)).toBeUndefined();
           expect(mgr.getActiveSession()).toBe(previousSession);
         } finally {
           recordSpy.mockRestore();
@@ -1011,6 +1011,29 @@ describe("AgentSessionManager", () => {
         } finally {
           recordSpy.mockRestore();
         }
+      });
+    });
+
+    describe("addContextNoteToActiveChat()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 attaches the note to the active chat's draft", async () => {
+        const mgr = buildManager();
+        const session = await mgr.createSession();
+        const note = mockTFile({ path: "Research.md" });
+
+        await mgr.addContextNoteToActiveChat(note);
+
+        expect(mgr.drafts.get(session.chatInputId)?.contextNotes).toEqual([note]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 starts the first chat when none exists so the note has a draft to land in", async () => {
+        const mgr = buildManager();
+        const note = mockTFile({ path: "Research.md" });
+
+        await mgr.addContextNoteToActiveChat(note);
+
+        const session = mgr.getActiveSession();
+        expect(mgr.getSessions()).toEqual([session]);
+        expect(mgr.drafts.get(session!.chatInputId)?.contextNotes).toEqual([note]);
       });
     });
 
@@ -1850,11 +1873,13 @@ describe("AgentSessionManager.restartBackend", () => {
     const mgr = buildManager();
     const first = await mgr.createSession();
     const chatInputId = first.chatInputId;
+    mgr.drafts.update(chatInputId, (draft) => ({ ...draft, input: "half-written question" }));
 
     await mgr.restartBackend("opencode", "byok key saved");
 
     expect(mgr.getActiveSession()).not.toBe(first);
     expect(mgr.getActiveSession()?.chatInputId).toBe(chatInputId);
+    expect(mgr.drafts.get(chatInputId)?.input).toBe("half-written question");
   });
 
   it("reports the replaced chat input as live while no session owns it (https://github.com/Brevilabs/obsidian-copilot-private/issues/473)", async () => {
