@@ -52,6 +52,8 @@ import { getSelectedTextContexts, setSelectedTextContexts } from "@/aiParams";
 import { DEFAULT_SETTINGS } from "@/constants";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import type { WebSelectionTrackingOptions } from "@/services/webViewerService/webViewerServiceSelection";
+import { EditorView } from "@codemirror/view";
+import type { Extension } from "@codemirror/state";
 
 const mockStartSelectionTracker = jest.fn();
 const mockSelectionTrackerOptions = jest.fn();
@@ -92,7 +94,6 @@ function createPluginUnderTest(calls: string[]) {
     projectRegister: { cleanup: jest.fn(() => calls.push("projects")) },
     settingsUnsubscriber: jest.fn(() => calls.push("settings")),
     modelManagement: { dispose: jest.fn(() => calls.push("modelManagement")) },
-    cleanupSelectionHandler: jest.fn(),
     cleanupWebSelectionWatcher: jest.fn(),
   });
 
@@ -107,6 +108,58 @@ async function flushTeardown(): Promise<void> {
 
 describe("main", () => {
   describe("CopilotPlugin", () => {
+    describe("initSelectionHandler()", () => {
+      it("attaches and clears a note excerpt from editor updates even when another view is active (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
+        setSelectedTextContexts([]);
+        let extension: Extension | undefined;
+        let noteView: { file: { path: string; basename: string }; editor: object };
+        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
+        Object.assign(plugin, {
+          registerEditorExtension: (value: Extension) => {
+            extension = value;
+          },
+          app: {
+            workspace: {
+              getLeavesOfType: () => [{ view: noteView }],
+              getActiveViewOfType: () => null,
+              getActiveFile: () => ({ path: "Wrong.md", basename: "Wrong" }),
+            },
+          },
+        });
+
+        plugin.initSelectionHandler();
+        const cm = new EditorView({
+          doc: "Excerpt from the note",
+          parent: document.body,
+          extensions: [extension!],
+        });
+        noteView = {
+          file: { path: "Research.md", basename: "Research" },
+          editor: {
+            cm,
+            listSelections: () => [
+              {
+                anchor: { line: 0, ch: cm.state.selection.main.anchor },
+                head: { line: 0, ch: cm.state.selection.main.head },
+              },
+            ],
+            getSelection: () =>
+              cm.state.sliceDoc(cm.state.selection.main.from, cm.state.selection.main.to),
+          },
+        };
+        cm.focus();
+        cm.dispatch({ selection: { anchor: 0, head: 7 } });
+
+        expect(getSelectedTextContexts()).toEqual([
+          expect.objectContaining({ content: "Excerpt", notePath: "Research.md" }),
+        ]);
+        cm.dispatch({ selection: { anchor: 7 } });
+        expect(getSelectedTextContexts()).toEqual([]);
+        cm.destroy();
+        setSelectedTextContexts([]);
+      });
+    });
+
     describe("handleSelectionChange()", () => {
       it("automatically attaches a note excerpt even when the retired preferences were saved as false", () => {
         settingsStore.set(settingsAtom, {
@@ -139,6 +192,33 @@ describe("main", () => {
             startLine: 2,
             endLine: 3,
           }),
+        ]);
+        setSelectedTextContexts([]);
+      });
+      it("updates selected text when the content changes at the same editor range (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
+        setSelectedTextContexts([]);
+        let selectedText = "First";
+        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
+        Object.assign(plugin, {
+          app: {
+            workspace: {
+              getActiveViewOfType: () => ({
+                editor: {
+                  listSelections: () => [{ anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 5 } }],
+                  getSelection: () => selectedText,
+                },
+              }),
+              getActiveFile: () => ({ path: "Research.md", basename: "Research" }),
+            },
+          },
+        });
+
+        plugin.handleSelectionChange();
+        selectedText = "After";
+        plugin.handleSelectionChange();
+
+        expect(getSelectedTextContexts()).toEqual([
+          expect.objectContaining({ content: "After", notePath: "Research.md" }),
         ]);
         setSelectedTextContexts([]);
       });
