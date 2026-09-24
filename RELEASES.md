@@ -9,7 +9,7 @@ OpenCode, the agent runtime behind Copilot Plus and your own model providers, is
 ## ✨ Enhancements
 
 - Copilot agent is fine-tuned to work better with your frontier AI agent with our up-to-date system prompts. ([#3366](https://github.com/logancyang/obsidian-copilot/pull/3366), @zeroliu)
-- Use OpenCode 2 in Agent Chat with Copilot-managed installation. ([#3365](https://github.com/logancyang/obsidian-copilot/pull/3365), @zeroliu)
+- Copilot is now fully compatible with OpenCode 2. ([#3365](https://github.com/logancyang/obsidian-copilot/pull/3365), @zeroliu)
 - Use the new Copilot button in the note header to quickly access Agent Chat with the note attached. ([#3363](https://github.com/logancyang/obsidian-copilot/pull/3363), @zeroliu)
 
   ![Copilot icon in the top-right corner of the note header](https://github.com/user-attachments/assets/6adba14e-c049-452b-9080-3b5486b5ad14)
