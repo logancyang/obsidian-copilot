@@ -1454,7 +1454,11 @@ export default class CopilotPlugin extends Plugin {
 
   /** Route a vault-scoped URI through the existing history loaders. */
   async openChatDeepLink(params: Record<string, string>): Promise<void> {
-    const id = params.vault === this.app.vault.getName() && parseChatDeepLinkId(params.id ?? "");
+    // Obsidian uses `vault` to select the target vault and removes it before
+    // invoking protocol handlers. Keep a mismatch guard for direct callers.
+    // https://github.com/logancyang/obsidian-copilot/issues/3271
+    const vaultMatches = params.vault === undefined || params.vault === this.app.vault.getName();
+    const id = vaultMatches && parseChatDeepLinkId(params.id ?? "");
     if (!id) {
       new Notice("Invalid chat link for this vault.");
       return;

@@ -162,6 +162,21 @@ describe("main", () => {
     describe("openChatDeepLink()", () => {
       beforeEach(() => jest.clearAllMocks());
 
+      it("opens the chat when Obsidian consumes the vault parameter before dispatch https://github.com/logancyang/obsidian-copilot/issues/3271", async () => {
+        const plugin = createPluginUnderTest([]);
+        Object.assign(plugin, { app: { vault: { getName: () => "My Vault" } } });
+        jest.mocked(parseChatDeepLinkId).mockReturnValue("epoch:1735732800000");
+        jest.mocked(findChatFileByDeepLinkId).mockResolvedValue({
+          path: "Copilot/conversations/renamed.md",
+        } as unknown as TFile);
+        const load = jest.spyOn(plugin, "loadChatById").mockResolvedValue(undefined);
+
+        await plugin.openChatDeepLink({ action: "copilot-chat", id: "epoch:1735732800000" });
+
+        expect(findChatFileByDeepLinkId).toHaveBeenCalledWith(plugin.app, "epoch:1735732800000");
+        expect(load).toHaveBeenCalledWith("Copilot/conversations/renamed.md");
+      });
+
       it("loads the path resolved from an epoch via the existing loader", async () => {
         const plugin = createPluginUnderTest([]);
         Object.assign(plugin, { app: { vault: { getName: () => "My Vault" } } });
