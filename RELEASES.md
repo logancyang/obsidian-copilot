@@ -2,7 +2,7 @@
 
 # v4.0.12 - OpenCode 2 in your vault
 
-![OpenCode 2 — Copilot for Obsidian 4.0.12](https://github.com/user-attachments/assets/d9fe60ea-e8e9-41d5-887f-ff3886166a1a)
+![OpenCode 2 — Copilot for Obsidian 4.0.12](https://github.com/user-attachments/assets/8003588a-0f0c-41ca-abc4-1c7c4f7e5b61)
 
 OpenCode 2, the agent runtime behind Copilot Plus and your own model providers, comes to Agent Chat. Open a chat directly from the note you are reading, and follow long replies without losing your place.
 
