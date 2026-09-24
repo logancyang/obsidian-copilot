@@ -9,11 +9,11 @@ OpenCode, the agent runtime behind Copilot Plus and your own model providers, is
 ## ✨ Enhancements
 
 - Use OpenCode 2 in Agent Chat with Copilot-managed installation. ([#3365](https://github.com/logancyang/obsidian-copilot/pull/3365), @zeroliu)
-- Start a conversation about the note you are reading. Click the Copilot icon in its desktop note header to open Agent Chat with the note attached. ([#3363](https://github.com/logancyang/obsidian-copilot/pull/3363), @zeroliu)
+- Use the new Copilot button in the note header to quickly access Agent Chat with the note attached. ([#3363](https://github.com/logancyang/obsidian-copilot/pull/3363), @zeroliu)
 
   ![Copilot icon in the top-right corner of the note header](https://github.com/user-attachments/assets/6adba14e-c049-452b-9080-3b5486b5ad14)
 
-- Follow long replies as they stream in Agent Chat and Quick Chat. Scroll up to read at your own pace, then use the down-arrow to return to the latest text. ([#3358](https://github.com/logancyang/obsidian-copilot/pull/3358), @zeroliu)
+- Agent responses now auto-scroll. You can still scroll up to read at your own pace. ([#3358](https://github.com/logancyang/obsidian-copilot/pull/3358), @zeroliu)
 
   ![Agent Chat automatically follows a streaming reply](https://github.com/user-attachments/assets/7d4f5626-71a7-452d-963f-ae1ff3dec6e4)
 
@@ -21,7 +21,7 @@ OpenCode, the agent runtime behind Copilot Plus and your own model providers, is
 
 ## 🛠️ Bug Fixes
 
-- Selected note text stays attached when you click into chat immediately after selecting it. Editing the selected text also updates the attached excerpt. ([#3368](https://github.com/logancyang/obsidian-copilot/pull/3368), @zeroliu)
+- Selected note text now reliably shows up as chat context. ([#3368](https://github.com/logancyang/obsidian-copilot/pull/3368), @zeroliu)
 
 ## ⚠️ Compatibility Notes
 
