@@ -15,7 +15,7 @@ OpenCode 2, the agent runtime behind Copilot Plus and your own model providers, 
 
 - Follow long replies as they stream in Agent Chat and Quick Chat. Scroll up to read at your own pace, then use the down-arrow to return to the latest text. ([#3358](https://github.com/logancyang/obsidian-copilot/pull/3358), @zeroliu)
 
-  ![Streaming replies, scrolling up to read, and returning to the latest text](https://github.com/user-attachments/assets/2a35406a-bff5-4958-8e4e-ec4f16381918)
+  ![Agent Chat automatically follows a streaming reply](https://github.com/user-attachments/assets/93f6a0bb-0336-4129-8c14-4749be1b9f22)
 
 - See what Codex installation is doing, with elapsed connection time, downloaded bytes, and named setup stages. ([#3361](https://github.com/logancyang/obsidian-copilot/pull/3361), @zeroliu)
 
