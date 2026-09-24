@@ -11,7 +11,7 @@ describe("buildPillSyntaxDirective", () => {
 
   it("frames the tokens as concrete references, not template placeholders", () => {
     expect(directive).toMatch(/concrete references/i);
-    expect(directive).toMatch(/NOT as template placeholders/);
+    expect(directive).toMatch(/not template placeholders/);
   });
 
   it("gives the agent a usable folder-scoping pattern", () => {

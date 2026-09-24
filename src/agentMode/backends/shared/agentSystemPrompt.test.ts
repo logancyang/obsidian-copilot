@@ -1,5 +1,4 @@
 import { resetSettings, updateSetting } from "@/settings/model";
-import { AGENT_TODO_PLANNING_STEERING } from "@/system-prompts/agentTodoPlanningSteering";
 import {
   setDisableBuiltinSystemPrompt,
   setSelectedPromptTitle,
@@ -42,12 +41,25 @@ describe("agentSystemPrompt", () => {
       resetPromptState();
     });
 
+    it("keeps the full prompt compact without legacy agent restrictions (https://github.com/Brevilabs/obsidian-copilot-private/issues/596)", () => {
+      for (const docProcessorBackend of ["plus", "miyo"] as const) {
+        updateSetting("docProcessorBackend", docProcessorBackend);
+        for (const enableMiyoSearchSkill of [false, true]) {
+          updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
+          const prompt = buildAgentSystemPrompt();
+          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3000);
+          expect(prompt).not.toMatch(
+            /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
+          );
+        }
+      }
+    });
+
     it("includes the Copilot base prompt and the pill-syntax directive by default", () => {
       const prompt = buildAgentSystemPrompt();
       expect(prompt.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
       expect(prompt).toContain("{folder_name}");
       expect(prompt).toContain("{activeNote}");
-      expect(prompt).toContain(AGENT_TODO_PLANNING_STEERING);
       expect(prompt).not.toContain("<user_custom_instructions>");
     });
 
@@ -67,7 +79,6 @@ describe("agentSystemPrompt", () => {
       const prompt = buildAgentSystemPrompt();
       expect(prompt).not.toContain(COPILOT_PROMPT_BASE);
       expect(prompt).not.toContain("You are Obsidian Copilot");
-      expect(prompt).not.toContain(AGENT_TODO_PLANNING_STEERING);
       expect(prompt).toContain("{folder_name}");
     });
 
@@ -80,6 +91,16 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt()).toContain(COPILOT_PROJECT_WORKSPACE_POLICY);
       expect(COPILOT_PROJECT_WORKSPACE_POLICY).toContain("outputs/");
       expect(COPILOT_PROJECT_WORKSPACE_POLICY).toContain("configured context sources");
+      expect(COPILOT_PROJECT_WORKSPACE_POLICY).toContain(
+        "unless the user specifies another destination"
+      );
+      expect(COPILOT_PROJECT_WORKSPACE_POLICY).toContain("including external sources");
+      expect(COPILOT_PROJECT_WORKSPACE_POLICY).toContain(
+        "read → <absolute path> snapshots directly"
+      );
+      expect(COPILOT_PROJECT_WORKSPACE_POLICY).toContain(
+        "only when instructions or the user name them"
+      );
     });
 
     it("steers toward the builtin Copilot Plus skills regardless of Plus status", () => {
@@ -94,11 +115,15 @@ describe("agentSystemPrompt", () => {
       expect(nonPlus).toContain("copilot-fetch-x");
       // Fallback clause so a missing/unlicensed skill never dead-ends or blocks
       // a free user — it routes the agent to its own equivalent tool instead.
-      expect(nonPlus).toMatch(/silently fall back to your own equivalent tool/i);
-      expect(nonPlus).toMatch(/never refuse and never block the user/i);
+      expect(nonPlus).toMatch(/silently use an equivalent tool/i);
+      expect(nonPlus).toMatch(/Never block on upgrading/i);
       // Fallback also covers a skill that runs but fails for this request (e.g. a
       // page the relay can't fetch), so a single bad input doesn't dead-end it.
-      expect(nonPlus).toMatch(/fails for this particular request/i);
+      expect(nonPlus).toMatch(/or fails/i);
+      expect(nonPlus).toContain("if none exists, say it's unavailable");
+      expect(nonPlus).toContain(
+        "briefly and occasionally only when the skill explicitly invites it"
+      );
 
       // A Plus user gets the same steering.
       updateSetting("isPaidUser", true);
@@ -109,8 +134,10 @@ describe("agentSystemPrompt", () => {
       const prompt = buildAgentSystemPrompt();
       // Both halves of the routing rule, plus the privacy constraint on queries.
       expect(prompt).toMatch(/search locally first/i);
-      expect(prompt).toMatch(/without waiting for an explicit web-search request/i);
-      expect(prompt).toMatch(/Do not place text from the vault into a web query/i);
+      expect(prompt).toMatch(
+        /Proactively search\/fetch current facts, external topics and third-party docs/i
+      );
+      expect(prompt).toMatch(/Do not place vault text in web queries/i);
     });
 
     it("uses the local fail-closed document route only when Miyo is selected", () => {
@@ -122,7 +149,9 @@ describe("agentSystemPrompt", () => {
       expect(prompt).not.toContain(COPILOT_PLUS_DOCUMENT_STEERING);
       expect(prompt).toContain("miyo-parse");
       // Cancels the blanket fallback clause the Plus tools steering sets up.
-      expect(prompt).toMatch(/fallback rule above does NOT apply/i);
+      expect(prompt).toMatch(/report and stop: no fallback/i);
+      expect(prompt).toContain("PDFs/EPUBs must stay local");
+      expect(prompt).toContain("cloud parsers or web services");
     });
 
     it("suppresses the steering when the builtin prompt is disabled", () => {
@@ -144,8 +173,8 @@ describe("agentSystemPrompt", () => {
       expect(prompt).toContain(COPILOT_MIYO_SEARCH_STEERING);
       // Names the skill and gives concrete triggers for when to call it.
       expect(prompt).toContain("miyo-search");
-      expect(prompt).toMatch(/too slow|enough relevant/i);
-      expect(prompt).toMatch(/explicitly asks/i);
+      expect(prompt).toMatch(/too slow|too few relevant/i);
+      expect(prompt).toMatch(/explicitly requested/i);
     });
 
     it("suppresses the Miyo steering when the builtin prompt is disabled, even if the skill is enabled", () => {
@@ -206,9 +235,14 @@ describe("agentSystemPrompt", () => {
   });
 
   describe("COPILOT_PROMPT_BASE", () => {
-    it("establishes Obsidian Copilot identity, not a CLI/coding agent", () => {
+    it("establishes Obsidian Copilot identity and vault workspace", () => {
       expect(COPILOT_PROMPT_BASE).toMatch(/Obsidian Copilot/);
-      expect(COPILOT_PROMPT_BASE).toMatch(/NOT a software-engineering agent or CLI coding tool/);
+      expect(COPILOT_PROMPT_BASE).toMatch(/vault or project workspace/);
+      expect(COPILOT_PROMPT_BASE).toContain("not a CLI coding agent");
+      expect(COPILOT_PROMPT_BASE).toContain("tags usually mean Obsidian note properties");
+      expect(COPILOT_PROMPT_BASE).toContain("Read notes before describing their contents");
+      expect(COPILOT_PROMPT_BASE).toContain("Report uncertainty and access/tool failures honestly");
+      expect(COPILOT_PROMPT_BASE).toContain("detail appropriate to the task");
     });
 
     it("does not carry chat-mode-only baggage that misfires in tool-driven agents", () => {
@@ -218,29 +252,11 @@ describe("agentSystemPrompt", () => {
       expect(COPILOT_PROMPT_BASE).not.toMatch(/YouTube/);
     });
 
-    it("ports AGENT_LOOP_GUIDANCE behavior bullets", () => {
-      expect(COPILOT_PROMPT_BASE).toMatch(/NEVER search for the same/);
-    });
-
-    it("renders note titles as bare [[wikilinks]], never backticked (v3 rule 7)", () => {
-      expect(COPILOT_PROMPT_BASE).toMatch(
-        /note titles[^\n]*\[\[title\]\][^\n]*never wrap them in backticks/i
-      );
-    });
-
-    it("renders image links without wrapping them in backticks (v3 rules 8-9)", () => {
-      expect(COPILOT_PROMPT_BASE).toMatch(/!\[\[link\]\][^\n]*never wrap them in backticks/i);
-      expect(COPILOT_PROMPT_BASE).toMatch(/!\[alt\]\(url\)[^\n]*never wrap them in backticks/i);
-    });
-
-    it("specifies valid GitHub-flavored tables and forbids stray trailing pipes on caption lines", () => {
-      expect(COPILOT_PROMPT_BASE).toContain("a delimiter row of dashes");
-      expect(COPILOT_PROMPT_BASE).toMatch(
-        /never append a trailing `\|` to a caption, heading, or any line that is not itself a table row/
-      );
-      // The old ambiguous wording made the agent append ` |` to a table's caption
-      // line, producing an orphan pipe row that breaks GFM rendering.
-      expect(COPILOT_PROMPT_BASE).not.toContain("immediately add ` |` after the table heading");
+    it("keeps Obsidian note and image syntax without generic formatting tutorials", () => {
+      expect(COPILOT_PROMPT_BASE).toContain("[[title]] for note titles");
+      expect(COPILOT_PROMPT_BASE).toContain("![[link]] for vault images");
+      expect(COPILOT_PROMPT_BASE).toContain("![alt](url) for web images");
+      expect(COPILOT_PROMPT_BASE).toContain("never wrap links in backticks");
     });
 
     it("retains the LaTeX formatting rule", () => {
