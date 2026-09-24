@@ -86,6 +86,11 @@ export const CustomReady: StoryObj<ManagedBinaryConfigViewProps> = {
   },
 };
 
+export const CustomPathUnset: StoryObj<ManagedBinaryConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: { source: "custom" },
+};
+
 export const Installing: StoryObj<ManagedBinaryConfigViewProps> = {
   render: InteractiveConfigView,
   args: {

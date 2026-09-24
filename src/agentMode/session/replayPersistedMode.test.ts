@@ -55,6 +55,25 @@ describe("replayPersistedMode", () => {
     expect(setConfigOption).toHaveBeenCalledWith("approval", "plan");
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 restores Codex Plan collaboration on a new session", async () => {
+    const { session, setMode, setConfigOption } = makeSession({
+      mode: modeState("default", {
+        plan: {
+          kind: "sequence",
+          steps: [
+            { kind: "setMode", nativeId: "agent" },
+            { kind: "setConfigOption", configId: "collaboration_mode", value: "plan" },
+          ],
+        },
+      }),
+    });
+
+    await replayPersistedMode(session, "plan");
+
+    expect(setMode).toHaveBeenCalledWith("agent");
+    expect(setConfigOption).toHaveBeenCalledWith("collaboration_mode", "plan");
+  });
+
   it("is a no-op when no mode is persisted", async () => {
     const { session, setMode } = makeSession({
       mode: modeState("default", { auto: { kind: "setMode", nativeId: "bypassPermissions" } }),

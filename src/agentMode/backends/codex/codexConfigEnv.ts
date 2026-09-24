@@ -39,6 +39,7 @@ export function mergeCodexConfigEnv(
   existing: string | undefined,
   developerInstructions: string
 ): string {
+  const userConfig = parseCodexConfig(existing);
   const managed: CodexManagedConfig = {
     developer_instructions: developerInstructions,
     approval_policy: "on-request",
@@ -47,7 +48,13 @@ export function mergeCodexConfigEnv(
   };
   return JSON.stringify({
     ...CODEX_DEFAULT_CONFIG,
-    ...parseCodexConfig(existing),
+    ...userConfig,
+    // Codex gates structured questions in Default separately from permission modes.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+    features: {
+      default_mode_request_user_input: true,
+      ...(userConfig.features as Record<string, unknown> | undefined),
+    },
     ...managed,
   });
 }

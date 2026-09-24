@@ -98,7 +98,7 @@ export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, app, c
         <PlanTeaser plan={plan} />
       </div>
 
-      <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-2">
+      <div className="copilot-divider-t tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-px-3 tw-py-2">
         <Button variant="secondary" size="sm" onClick={safeAsyncHandler(handleOpen)}>
           <FileText className="tw-size-4" />
           Open
@@ -128,7 +128,7 @@ export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, app, c
       </div>
 
       {isPending ? (
-        <div className="tw-flex tw-items-stretch tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-2">
+        <div className="copilot-divider-t tw-flex tw-items-stretch tw-gap-2 tw-px-3 tw-py-2">
           <textarea
             className="tw-min-h-9 tw-flex-1 tw-resize-y tw-rounded tw-border tw-border-solid tw-border-border tw-bg-primary tw-px-2 tw-py-1 tw-text-sm tw-text-normal tw-outline-none focus:tw-border-border-focus"
             placeholder={FEEDBACK_PLACEHOLDER}

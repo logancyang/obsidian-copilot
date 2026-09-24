@@ -17,6 +17,8 @@ export interface AcpProcessManagerOptions {
   command: string;
   /** Process arguments. */
   args: string[];
+  /** Working directory inherited by the agent process. */
+  cwd?: string;
   /** Environment for the child. Pass through `process.env` plus any overrides. */
   env: NodeJS.ProcessEnv;
   /** Tag used in stderr/log lines so multiple agents can be distinguished. */
@@ -54,6 +56,7 @@ export class AcpProcessManager {
     const { Readable, Writable } = requireNodeModule<typeof import("node:stream")>("stream");
     logInfo(`[AgentMode] spawning ${this.opts.command} ${this.opts.args.join(" ")} (tag=${tag})`);
     const child = spawn(this.opts.command, this.opts.args, {
+      cwd: this.opts.cwd,
       env: this.opts.env,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
@@ -158,8 +161,8 @@ export class AcpProcessManager {
  * CSI (colors, cursor moves) and OSC (window title) escape sequences. Agent
  * binaries and their plugins write these to stdout for a human terminal;
  * anything prefixed to a JSON-RPC envelope makes `JSON.parse` throw, and the
- * SDK's `ndJsonStream` drops such frames silently — which strands Agent Mode
- * when the decorated frame is the initialization response.
+ * SDK rejects the decorated frame instead of delivering its response, stranding
+ * Agent Mode when that response completes initialization.
  * See https://github.com/logancyang/obsidian-copilot/issues/2876.
  *
  * The CSI parameter class spans the full `0x30`-`0x3f` range ECMA-48 allows,

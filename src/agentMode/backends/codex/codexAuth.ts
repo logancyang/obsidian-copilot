@@ -2,6 +2,7 @@ import type { BackendAuth, BackendAuthStatus } from "@/agentMode/session/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { sanitizeBuiltinSkillEnvOverrides } from "@/agentMode/backends/shared/builtinSkillEnv";
 import { signInWithCli, signOutWithCli } from "@/agentMode/backends/shared/cliSignIn";
+import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { detectBinary } from "@/utils/detectBinary";
 import { buildCodexAcpInvocation, resolveSupportedCodexAcpEntry } from "./codexVersion";
@@ -36,6 +37,7 @@ async function readCodexAuthStatus(settings: CopilotSettings) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 10_000);
   let status: BackendAuthStatus | undefined;
+  let lastReply = "none";
   let input: import("node:stream").Writable;
   try {
     // account/read exposes identity without opening credential files or returning tokens.
@@ -69,12 +71,14 @@ async function readCodexAuthStatus(settings: CopilotSettings) {
           }
           if (!reply || typeof reply !== "object") return;
           if (reply.id === 0 && reply.result) {
+            lastReply = "initialize";
             input.write(JSON.stringify({ method: "initialized" }) + "\n");
             input.write(
               JSON.stringify({ id: 1, method: "account/read", params: { refreshToken: false } }) +
                 "\n"
             );
           } else if (reply.id === 1 && reply.result) {
+            lastReply = "account/read";
             const account = reply.result.account;
             if (account === null) status = { signedIn: false };
             else if (account && typeof account.type === "string") {
@@ -91,14 +95,24 @@ async function readCodexAuthStatus(settings: CopilotSettings) {
               };
             }
             input.end();
-          } else if ((reply.id === 0 || reply.id === 1) && reply.error) input.end();
+          } else if ((reply.id === 0 || reply.id === 1) && reply.error) {
+            // Diagnostics identify the failed protocol step without recording account data or CLI output.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/578
+            lastReply = reply.id === 0 ? "initialize error" : "account/read error";
+            input.end();
+          }
         },
       }
     ).done;
     // Probe failures must not masquerade as successful logout.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
-    if (!status || controller.signal.aborted)
+    if (!status || controller.signal.aborted) {
+      logWarn("[AgentMode] Codex account probe incomplete", {
+        lastReply,
+        timedOut: controller.signal.aborted,
+      });
       throw new Error("Unable to verify Codex authentication status.");
+    }
     return status;
   } finally {
     window.clearTimeout(timeout);
@@ -138,6 +152,9 @@ export const codexAuth: BackendAuth = {
     try {
       return await readCodexAuthStatus(settings);
     } catch {
+      // A failed probe looks signed out in the UI, so record that failure without error text or paths.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/578
+      logWarn("[AgentMode] Codex account status unavailable");
       return { signedIn: false };
     }
   },
@@ -172,6 +189,10 @@ export const codexAuth: BackendAuth = {
         acceptUrl: (url) => url.startsWith("https://auth.openai.com/"),
       }
     ).done;
+    // A browser success page cannot establish whether the adapter accepted the account; cancellation is expected.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/578
+    if (!result.loggedIn && !handlers?.signal?.aborted)
+      logWarn("[AgentMode] Codex browser sign-in ended without a verified account");
     return { signedIn: result.loggedIn, ...(result.label ? { label: result.label } : {}) };
   },
 };

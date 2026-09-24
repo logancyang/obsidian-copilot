@@ -16,6 +16,8 @@ Open [**Settings → Copilot → Basic → Agents**](settings.md#basic). Configu
 | **Claude**   | You already use Claude Code                     | Your Claude Code installation and Anthropic account                        |
 | **Codex**    | You already use the Codex CLI and Codex account | Your Codex CLI login through the `codex-acp` adapter                       |
 
+For opencode and Codex, **Managed by Copilot** uses the version Copilot tests. **My own binary** remains available, but other versions may not work correctly with Copilot. The Configure dialog reminds you of this when you choose your own binary.
+
 A one-agent chat can work without a Copilot license when you bring your own model access. An eligible paid plan adds Copilot-hosted models and cloud-backed features. [Compare Copilot plans](copilot-plus-and-self-host.md).
 
 ### opencode
@@ -101,21 +103,27 @@ Each agent has its own model list. The models shown in one agent do not automati
 
 The permission picker shows only choices supported by the current agent:
 
-| Choice      | What it does                                                                        |
-| ----------- | ----------------------------------------------------------------------------------- |
-| **Default** | Uses the agent's normal approval behavior and is the safest starting point          |
-| **Plan**    | Prepares a read-only plan before edits when the current agent supports this choice  |
-| **Auto**    | Reduces approval prompts according to the current agent's automatic permission rule |
+| Choice   | What it does                                                                                         |
+| -------- | ---------------------------------------------------------------------------------------------------- |
+| **Safe** | Allows edits under the agent's approval rules                                                        |
+| **Plan** | Drafts a plan and waits for your approval before editing when the current agent supports this choice |
+| **Auto** | Reduces approval prompts according to the current agent's automatic permission rule                  |
 
-opencode supports **Default** and **Auto**. Claude supports **Default**, **Plan**, and **Auto**. Codex shows the choices supported by the installed adapter. Claude also has an **Auto mode permissions** setting that controls how much Auto may approve.
+opencode supports **Safe** and **Auto**. Claude supports **Safe**, **Plan**, and **Auto**. Codex shows the choices supported by the installed adapter. Claude also has an **Auto mode permissions** setting that controls how much Auto may approve.
+
+With Codex, **Safe** uses the adapter's **Ask for approval** preset. It can edit files in the working directory; the adapter asks before editing external files or using the internet. **Auto** uses automatic review within the same workspace-write sandbox, without enabling full access. **Plan** uses Auto's approval preset while Codex drafts a plan and waits for your approval. Once you approve it, Codex continues in **Auto** mode to implement the plan.
+
+When Codex presents a plan, you can **Approve** it, **Reject** it, or type feedback in the plan card. Feedback starts a new chat turn so Codex can revise the plan; review the new proposal before approving it. If you ask Codex to save the plan to a note, approve the revised plan to let it create the note.
 
 When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. Stopping the turn cancels unanswered requests.
 
-When an agent asks a set of questions, answer the current tab and select **Next**. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead; **Cancel** declines the entire request.
+When Claude or Codex asks a set of questions, answer the current tab and select **Next**. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead. **Cancel** dismisses the entire request. If Codex withdraws or times out the question, its card disappears.
+
+Codex can ask questions while the permission picker is on **Safe**, **Plan**, or **Auto**. You do not need to switch to Plan to answer a question.
 
 Permission and question cards stay in a scrolling action area above the message box until you answer them, even while the response continues streaming.
 
-Your vault or project is the agent's working directory, not a security sandbox. Auto or bypass permissions can reach other files and services available to the agent or your account. Use **Default** for unfamiliar work and review persistent permissions carefully.
+Your vault or project is the agent's working directory, not a security sandbox. Auto or bypass permissions can reach other files and services available to the agent or your account. Use **Safe** for unfamiliar work and review persistent permissions carefully.
 
 ## Context and history
 
@@ -125,6 +133,7 @@ Agent Chat keeps each conversation separate:
 - Select **New Chat** to reset the current tab.
 - Select **Stop** to cancel the current turn. Queued follow-ups return to the message box, with their notes, web pages, agent mentions, and images, so you can edit or resend them. Queued content comes before the current draft, and custom commands return as their expanded text.
 - Use **Recent Chats** from the Agent Chat home screen, or **Chat History** inside a conversation, to resume saved work. The **Recent Chats** list can be scrolled or searched.
+- A spinner marks a chat while its agent is responding. When the response stops but the session remains live, a small blue dot appears on the bottom-right corner of the chat icon. Hover the row and select **Close session** to release that session. Saved history stays available to reopen, and other chats keep running. If the agent does not support closing individual sessions or release fails, the chat stays marked live with an error.
 - Add the active note, selected text, other notes, folders, a Copilot Web Viewer tab, or supported images. You can also mention a note with `[[Note title]]`.
 - Hover the context ring beside the send controls to see how much of the model's context window is in use. The ring stays empty until the agent reports usage, and a stopped response keeps the last reported reading. If the connected account reports usage limits, the same panel shows the available limit and reset time.
 

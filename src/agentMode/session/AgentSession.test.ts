@@ -49,6 +49,7 @@ interface MockBackend {
   emit: (event: SessionEvent) => void;
   prompt: jest.Mock;
   cancel: jest.Mock;
+  closeSession: jest.Mock;
   newSession: jest.Mock;
   setSessionModel: jest.Mock;
   setSessionConfigOption: jest.Mock;
@@ -70,6 +71,7 @@ function makeMockBackend(): MockBackend {
   });
   const prompt = jest.fn(async () => ({ stopReason: "end_turn" as const }));
   const cancel = jest.fn(async () => undefined);
+  const closeSession = jest.fn(async () => undefined);
   const newSession = jest.fn(async () => ({ sessionId: "acp-1", state: emptyState() }));
   const setSessionModel = jest.fn(async () => emptyState());
   const setSessionConfigOption = jest.fn(async () => emptyState());
@@ -83,6 +85,7 @@ function makeMockBackend(): MockBackend {
     newSession: newSession,
     prompt: prompt,
     cancel: cancel,
+    closeSession,
     setSessionModel: setSessionModel,
     isSetSessionModelSupported: () => true,
     setSessionMode: setSessionMode,
@@ -99,6 +102,7 @@ function makeMockBackend(): MockBackend {
     registerHandler,
     prompt,
     cancel,
+    closeSession,
     newSession,
     setSessionModel,
     setSessionConfigOption,
@@ -1573,6 +1577,54 @@ describe("AgentSession.sendPrompt", () => {
       jest.useRealTimers();
     }
   });
+});
+
+describe("AgentSession.releaseBackendSession", () => {
+  function setupReleaseSession() {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    return { mock, session };
+  }
+
+  it("closes a running backend session without waiting for cancellation https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+    const { mock, session } = setupReleaseSession();
+    mock.cancel.mockImplementation(() => new Promise<void>(() => undefined));
+    let finishPrompt!: (result: { stopReason: "cancelled" }) => void;
+    mock.prompt.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishPrompt = resolve;
+        })
+    );
+    const turn = session.sendPrompt("release this session").turn;
+
+    const release = session.releaseBackendSession();
+    await Promise.resolve();
+
+    expect(mock.closeSession).toHaveBeenCalledWith({ sessionId: "acp-1" });
+    expect(mock.cancel).not.toHaveBeenCalled();
+    await release;
+    finishPrompt({ stopReason: "cancelled" });
+    await turn;
+  });
+
+  it.each(["missing", "unsupported"])(
+    "explains %s close support for https://github.com/Brevilabs/obsidian-copilot-private/issues/429",
+    async (kind) => {
+      const { mock, session } = setupReleaseSession();
+      if (kind === "missing") delete mock.asBackend.closeSession;
+      else mock.closeSession.mockRejectedValueOnce(new MethodUnsupportedError("session/close"));
+
+      await expect(session.releaseBackendSession()).rejects.toThrow(
+        "This agent does not support closing individual sessions."
+      );
+    }
+  );
 });
 
 describe("withReadOnlyPreamble", () => {
@@ -3216,6 +3268,42 @@ describe("AgentSession intent capabilities", () => {
     ).toBe(true);
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 requires both mode and config switching for Codex's combined picker", () => {
+    const state: BackendState = {
+      model: null,
+      mode: {
+        current: "default",
+        options: [{ value: "default", label: "Default" }],
+        apply: {
+          default: {
+            kind: "sequence",
+            steps: [
+              { kind: "setMode", nativeId: "agent" },
+              { kind: "setConfigOption", configId: "collaboration_mode", value: "default" },
+            ],
+          },
+        },
+      },
+    };
+
+    expect(
+      sessionWith({
+        isModelSwitchSupported: false,
+        isSetSessionConfigOptionSupported: true,
+        isSetModeSupported: false,
+        initialState: state,
+      }).canSwitchMode()
+    ).toBe(false);
+    expect(
+      sessionWith({
+        isModelSwitchSupported: false,
+        isSetSessionConfigOptionSupported: true,
+        isSetModeSupported: true,
+        initialState: state,
+      }).canSwitchMode()
+    ).toBe(true);
+  });
+
   it("canSwitch* return false while the session status is starting", async () => {
     const mock = makeMockBackend();
     // Keep newSession pending so status stays "starting".
@@ -3621,7 +3709,7 @@ describe("AgentSession client-derived title (non-summarizing backends)", () => {
 });
 
 describe("AgentSession plan proposal lifecycle", () => {
-  it("does not resurrect the plan card when a late tool_call_update arrives for a finalized proposal", async () => {
+  it("keeps an approved decision visible without resurrecting the plan card after a late tool update (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", async () => {
     const mock = makeMockBackend();
     let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
     mock.prompt.mockImplementation(
@@ -3653,7 +3741,7 @@ describe("AgentSession plan proposal lifecycle", () => {
     expect(initialPlan?.decision).toBe("pending");
     expect(initialPlan?.pendingToolCallId).toBe("tc-plan-1");
 
-    expect(session.finalizePlanDecision(initialPlan!.id)).toBe(true);
+    expect(session.finalizePlanDecision(initialPlan!.id, "approve")).toBe(true);
     expect(session.getCurrentPlan()).toBeNull();
 
     mock.emit({
@@ -3668,6 +3756,11 @@ describe("AgentSession plan proposal lifecycle", () => {
       },
     });
     expect(session.getCurrentPlan()).toBeNull();
+    const decidedPart = session.store
+      .getDisplayMessages()
+      .flatMap((message) => message.parts ?? [])
+      .find((part) => part.kind === "tool_call" && part.id === "tc-plan-1");
+    expect(decidedPart?.kind === "tool_call" && decidedPart.userResponse).toBe("Approved plan");
 
     resolvePrompt!({ stopReason: "end_turn" });
     await turn;
@@ -3963,6 +4056,29 @@ describe("AgentSession plan proposal lifecycle", () => {
     expect(session.getPendingAskUserQuestions()).toHaveLength(0);
     // Stable reference across idle ticks so React subscribers don't re-render.
     expect(session.getPendingAskUserQuestions()).toBe(session.getPendingAskUserQuestions());
+  });
+
+  it("withdraws an ACP question when its request signal aborts (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "codex",
+    });
+    const controller = new AbortController();
+    const answers = session.handleAskUserQuestion({
+      sessionId: "acp-1",
+      requestId: "rpc-1",
+      questions: [{ question: "Approach", answerKey: "approach", options: [{ label: "Simple" }] }],
+      signal: controller.signal,
+    });
+    expect(session.getPendingAskUserQuestions()).toHaveLength(1);
+    controller.abort();
+    await expect(answers).resolves.toEqual({});
+    expect(session.getPendingAskUserQuestions()).toHaveLength(0);
+    session.resolveAskUserQuestion("rpc-1", { approach: "Simple" });
+    expect(session.getPendingAskUserQuestions()).toHaveLength(0);
   });
 
   it("flushes a pending AskUserQuestion with empty answers when the turn is cancelled", async () => {

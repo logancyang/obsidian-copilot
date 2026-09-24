@@ -58,3 +58,17 @@ export const ShortList: StoryObj<GlobalRecentChatsSectionProps> = {
 export const ScrollableList: StoryObj<GlobalRecentChatsSectionProps> = {
   render: renderShelf,
 };
+
+/** Hover either blue-dot icon to verify the live-session tooltip. */
+export const OpenSessions: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: {
+    items: items.slice(0, 3).map((item, index) => ({
+      ...item,
+      title: ["Session live", "Agent responding", "Saved chat, session closed"][index],
+    })),
+    openChatIds: new Set([items[0].id, items[1].id]),
+    runningChatIds: new Set([items[1].id]),
+    onCloseSession: noop,
+  },
+  render: renderShelf,
+};

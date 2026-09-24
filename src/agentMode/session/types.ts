@@ -53,11 +53,9 @@ export type SessionId = string;
  * Copilot's canonical operational modes for Agent Mode. Each backend's
  * `getModeMapping` projects these onto its own native mode/agent ids.
  *
- *   - `default` — balanced; agent may write/exec but the user must approve
- *                 each permission request. Picked when the user hasn't
- *                 explicitly selected a mode.
- *   - `plan`    — agent drafts a plan; no writes.
- *   - `auto`    — same as default, but bypass all permission prompts.
+ *   - `default` — the backend's approval preset; may write within its allowed scope.
+ *   - `plan`    — asks the backend to draft a plan before implementation.
+ *   - `auto`    — the backend's automatic approval preset.
  */
 export type CopilotMode = "default" | "plan" | "auto";
 
@@ -78,9 +76,9 @@ export interface ModeMapping {
   configId?: string;
   canonical: Partial<Record<CopilotMode, string>>;
   /**
-   * Native mode id of the backend's genuine READ-ONLY sandbox (Codex
-   * `"read-only"`); unset when none exists. Distinct from `canonical.plan`, which
-   * may write plan artifacts (Claude). The fan-out orchestrator applies this.
+   * Native mode id used for fan-out QA turns (Codex `"read-only"` is its
+   * approval preset, not a read-only sandbox). Copilot separately denies
+   * recognized write tools; the plan mode may write plan artifacts.
    */
   readOnlyModeId?: string | null;
 }
@@ -261,9 +259,13 @@ export interface ModelWireCodec {
  * should issue. `value` is what the spec carries to the backend; the
  * canonical `CopilotMode` is passed alongside for persistence.
  */
-export type ModeApplySpec =
+type ModeApplyStep =
   | { kind: "setMode"; nativeId: string }
   | { kind: "setConfigOption"; configId: string; value: string };
+
+export type ModeApplySpec =
+  | ModeApplyStep
+  | { kind: "sequence"; steps: [ModeApplyStep, ...ModeApplyStep[]] };
 
 /**
  * Apply spec for a model change — the dispatch channel for `ModelState`.
@@ -622,18 +624,23 @@ export interface AgentQuestion {
   header?: string;
   options: Array<{ label: string; description?: string }>;
   multiSelect?: boolean;
+  /** Key of this question's entry in `AgentQuestionAnswers`; defaults to the question text. */
+  answerKey?: string;
+  /** Set to `false` when the backend cannot accept a typed "Other" answer. */
+  allowOther?: boolean;
 }
 
 /**
- * Answer map keyed by question text. Single-select values are the chosen
- * option label; multi-select values are the chosen labels joined with `, `.
- * An empty map signals cancellation (the bridge maps it to a deny).
+ * Answer map keyed by each question's `answerKey ?? question`. Single-select
+ * values are the chosen option label or the typed "Other" text; multi-select
+ * values are the chosen labels joined with `, `. An empty map signals
+ * cancellation.
  */
-export type AgentQuestionAnswers = { [questionText: string]: string };
+export type AgentQuestionAnswers = { [answerKey: string]: string };
 
 /**
  * A request from the backend asking the user to answer one or more inline
- * multiple-choice questions (Claude SDK's `AskUserQuestion` tool). Routed
+ * questions (Claude SDK's `AskUserQuestion` tool or ACP form elicitation). Routed
  * through the session-domain ask-question prompter and rendered in the chat's
  * action rail — the sibling of `PermissionPrompt`.
  * `requestId` reuses the backend's tool-call id so the resolver can pair the
@@ -643,6 +650,8 @@ export interface AskUserQuestionPrompt {
   sessionId: SessionId;
   requestId: string;
   questions: AgentQuestion[];
+  /** Aborted when an ACP agent withdraws a pending request. */
+  signal?: AbortSignal;
 }
 
 // ---- Session-creation I/O shapes ---------------------------------------
@@ -783,6 +792,12 @@ export interface BackendProcess {
   newSession(params: OpenSessionInput): Promise<OpenSessionOutput>;
   prompt(params: PromptInput): Promise<PromptOutput>;
   cancel(params: CancelInput): Promise<void>;
+  /**
+   * Release one live session without deleting its persisted history or stopping sibling sessions.
+   * Rejects when the backend cannot release it; callers must retain their live session on failure.
+   * @param params Identifies the live session whose resources should be released.
+   */
+  closeSession?(params: { sessionId: SessionId }): Promise<void>;
   setSessionModel(params: { sessionId: SessionId; modelId: string }): Promise<BackendState>;
   isSetSessionModelSupported(): boolean | null;
   setSessionMode(params: { sessionId: SessionId; modeId: string }): Promise<BackendState>;
@@ -841,6 +856,8 @@ export type AgentMessagePart =
       title: string;
       toolKind?: AgentToolKind;
       status: AgentToolStatus;
+      /** User's submitted plan decision or question answer, retained across late tool updates. */
+      userResponse?: string;
       input?: unknown;
       output?: AgentToolCallOutput[];
       locations?: { path: string; line?: number }[];

@@ -55,6 +55,10 @@ export function lookupToolSummary(part: ToolCallPart): ToolSummary {
 }
 
 function selectToolSummary(part: ToolCallPart): ToolSummary {
+  // A user's choice remains the visible result even when a late adapter
+  // update retains the original tool kind or vendor name.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/41
+  if (part.userResponse) return USER_RESPONSE_SUMMARY;
   // Heuristic: opencode's `task` tool is a sub-agent invocation but
   // surfaces no `vendorToolName` and maps to `kind: "other"`. Recognize
   // it by data shape so the registry stays backend-id-free.
@@ -476,6 +480,12 @@ const KIND_SUMMARIES: Record<string, ToolSummary> = {
 const GENERIC_SUMMARY: ToolSummary = {
   icon: pickToolIcon({}),
   collapsedLine: (p) => genericToolLabel(p),
+  outcome: () => null,
+};
+
+const USER_RESPONSE_SUMMARY: ToolSummary = {
+  icon: MessageCircleQuestion,
+  collapsedLine: (part) => part.userResponse!,
   outcome: () => null,
 };
 

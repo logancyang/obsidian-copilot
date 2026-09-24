@@ -1,5 +1,14 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, Check, Edit2, MessageCircle, Trash2, X } from "lucide-react";
+import {
+  ArrowUpRight,
+  Check,
+  Edit2,
+  LoaderCircle,
+  MessageCircle,
+  Power,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchBar } from "@/components/ui/SearchBar";
@@ -44,6 +53,9 @@ type ChatHistoryBadgeResolver = (item: ChatHistoryItem) => React.ReactNode;
 interface ChatHistoryPopoverProps {
   children: React.ReactNode;
   chatHistory: ChatHistoryItem[];
+  openChatIds?: ReadonlySet<string>;
+  runningChatIds?: ReadonlySet<string>;
+  onCloseSession?: (id: string) => Promise<void>;
   onUpdateTitle: (id: string, newTitle: string) => Promise<void>;
   onDeleteChat: (id: string) => Promise<void>;
   onLoadChat?: (id: string) => Promise<void>;
@@ -70,6 +82,9 @@ interface ChatHistoryPopoverProps {
 export function ChatHistoryPopover({
   children,
   chatHistory,
+  openChatIds,
+  runningChatIds,
+  onCloseSession,
   onUpdateTitle,
   onDeleteChat,
   onLoadChat,
@@ -344,6 +359,9 @@ export function ChatHistoryPopover({
                           <ChatHistoryItem
                             key={chat.id}
                             chat={chat}
+                            isSessionOpen={openChatIds?.has(chat.id) ?? false}
+                            isRunning={runningChatIds?.has(chat.id) ?? false}
+                            onCloseSession={onCloseSession}
                             isEditing={editingId === chat.id}
                             editingTitle={editingTitle}
                             onEditingTitleChange={setEditingTitle}
@@ -386,6 +404,9 @@ export function ChatHistoryPopover({
 
 interface ChatHistoryItemProps {
   chat: ChatHistoryItem;
+  isSessionOpen: boolean;
+  isRunning: boolean;
+  onCloseSession?: (id: string) => Promise<void>;
   isEditing: boolean;
   editingTitle: string;
   onEditingTitleChange: (title: string) => void;
@@ -404,6 +425,9 @@ interface ChatHistoryItemProps {
 
 function ChatHistoryItem({
   chat,
+  isSessionOpen,
+  isRunning,
+  onCloseSession,
   isEditing,
   editingTitle,
   onEditingTitleChange,
@@ -456,14 +480,24 @@ function ChatHistoryItem({
       className={cn(
         "tw-group tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-modifier-hover"
       )}
+      role="button"
+      tabIndex={0}
+      // Let keyboard users reach release controls without opening the chat.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
+      onKeyDown={(event) => {
+        if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onLoadChat(chat.id);
+        }
+      }}
       onClick={() => onLoadChat(chat.id)}
     >
       <ChatIconWithAttention
         icon={RowIcon}
         needsAttention={chat.needsAttention}
+        isSessionLive={isSessionOpen}
         iconClassName="tw-size-3 tw-text-muted"
       />
-
       <span
         className="tw-block tw-min-w-0 tw-flex-1 tw-truncate tw-text-sm tw-font-medium tw-text-normal"
         title={chat.title}
@@ -473,10 +507,17 @@ function ChatHistoryItem({
 
       {getBadge?.(chat)}
 
+      {isRunning && (
+        <LoaderCircle
+          className="tw-size-3.5 tw-shrink-0 tw-animate-spin tw-text-accent group-focus-within:tw-hidden group-hover:tw-hidden"
+          aria-label="Responding"
+        />
+      )}
+
       <div
         className={cn(
           "tw-flex tw-shrink-0 tw-items-center tw-gap-1.5 tw-transition-opacity",
-          isMobile ? "tw-flex" : "tw-hidden group-hover:tw-flex"
+          isMobile ? "tw-flex" : "tw-hidden group-focus-within:tw-flex group-hover:tw-flex"
         )}
       >
         {confirmDeleteId === chat.id ? (
@@ -510,6 +551,21 @@ function ChatHistoryItem({
         ) : (
           // Show edit and delete buttons
           <>
+            {isSessionOpen && onCloseSession && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="tw-size-5 tw-p-0"
+                aria-label="Close session"
+                title="Close session"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  safeAsyncHandler(onCloseSession)(chat.id);
+                }}
+              >
+                <Power className="tw-size-3" />
+              </Button>
+            )}
             <Button
               size="sm"
               variant="ghost"

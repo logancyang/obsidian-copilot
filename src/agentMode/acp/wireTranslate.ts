@@ -16,7 +16,6 @@ import type {
   SessionConfigOption,
   SessionId as AcpSessionId,
   SessionModeState,
-  SessionModelState,
   SessionNotification,
   StopReason as AcpStopReason,
   ToolCall,
@@ -32,7 +31,6 @@ import type {
   BackendConfigOption,
   BackendDescriptor,
   RawModeState,
-  RawModelState,
   BackendState,
   CancelInput,
   ListedSessionInfo,
@@ -53,20 +51,6 @@ import { resolveToolName } from "@/agentMode/session/toolName";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
 
 // ---- Catalog wire → neutral (pass-through, structural alias) -----------
-
-export function modelStateFromAcp(
-  state: SessionModelState | null | undefined
-): RawModelState | null {
-  if (!state) return null;
-  return {
-    currentModelId: state.currentModelId,
-    availableModels: state.availableModels.map((m) => ({
-      modelId: m.modelId,
-      name: m.name,
-      description: m.description ?? undefined,
-    })),
-  };
-}
 
 export function modeStateFromAcp(state: SessionModeState | null | undefined): RawModeState | null {
   if (!state) return null;
@@ -126,14 +110,13 @@ function configOptionFromAcp(opt: SessionConfigOption): BackendConfigOption {
 }
 
 export function acpStateToBackendState(
-  models: SessionModelState | null | undefined,
   modes: SessionModeState | null | undefined,
   configOptions: SessionConfigOption[] | null | undefined,
   descriptor: BackendDescriptor
 ): BackendState {
   return translateBackendState(
     {
-      models: modelStateFromAcp(models),
+      models: null,
       modes: modeStateFromAcp(modes),
       configOptions: configOptionsFromAcp(configOptions),
     },
@@ -260,7 +243,8 @@ function toolCallDeltaFromAcp(
  * than translated into a domain update no consumer reads, and dropping it early
  * also keeps it away from the unknown-discriminant fallback below, which reports
  * a titleless session update and would clear the label on a backend whose titles
- * are trusted.
+ * are trusted. `plan_update` and `plan_removed` are dropped for the same reason:
+ * the plan-approval card owns a proposed plan's body, so the chat renders neither.
  *
  * `todoToolCallIds` is one session's id set, owned by the caller
  * (AcpBackendProcess keys it per session — see `todoToolCallIdsFor`): the first
@@ -273,7 +257,10 @@ export function acpNotificationToEvents(
   n: SessionNotification,
   todoToolCallIds?: Set<string>
 ): SessionEvent[] {
-  if (n.update.sessionUpdate === "user_message_chunk") return [];
+  const kind = n.update.sessionUpdate;
+  if (kind === "user_message_chunk" || kind === "plan_update" || kind === "plan_removed") {
+    return [];
+  }
   const sessionId = sessionIdFromAcp(n.sessionId);
   const events: SessionEvent[] = [{ sessionId, update: acpUpdateToSessionUpdate(n.update) }];
   const todoPlan = todoToolPlanFromAcp(n.update, todoToolCallIds);

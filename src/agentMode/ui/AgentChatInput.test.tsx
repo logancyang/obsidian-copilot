@@ -49,6 +49,7 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
         placeholder?: string;
         handleSendMessage?: () => void;
         onStopGenerating?: () => void;
+        isGenerating?: boolean;
       },
       ref: React.ForwardedRef<import("@/components/chat-components/ChatInput").ChatInputHandle>
     ) => {
@@ -67,6 +68,7 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
       return (
         <>
           {props.topRightAccessory}
+          <span data-testid="generating-state">{props.isGenerating ? "running" : "idle"}</span>
           <button type="button" onClick={() => props.handleSendMessage?.()}>
             send
           </button>
@@ -156,6 +158,7 @@ function inputNode(
       mainAgentId={null}
       updateUserMessageHistory={jest.fn()}
       isStarting={false}
+      isLoading={draft.loading}
       hasPendingPlanPermission={false}
       modelPickerOverride={undefined}
       modePickerOverride={undefined}
@@ -597,6 +600,17 @@ describe("AgentChatInput", () => {
   });
 
   describe("AgentChatInput()", () => {
+    it("shows the running state while a plan-approved turn continues after the composer send settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
+      const draft = makeDraft({ loading: false });
+      const view = renderInput(backend, draft, { isLoading: true });
+
+      expect(screen.getByTestId("generating-state").textContent).toBe("running");
+      view.rerender(inputNode(backend, draft, { isLoading: false }));
+      expect(screen.getByTestId("generating-state").textContent).toBe("idle");
+    });
+
     it("keeps the static composer guidance when an empty draft is typed into and cleared", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
@@ -644,6 +658,18 @@ describe("AgentChatInput", () => {
       const draft = makeDraft({ loading: true });
 
       renderInput(backend, draft);
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(draft.setQueue).toHaveBeenCalled());
+
+      expect(backend.sendMessage).not.toHaveBeenCalled();
+      expect(enqueuedItem(draft.setQueue as jest.Mock).queueReason).toBe("busy");
+    });
+
+    it("queues a message behind a plan-approved turn even after draft loading clears (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", async () => {
+      const backend = makeBackend();
+      const draft = makeDraft({ loading: false });
+
+      renderInput(backend, draft, { isLoading: true });
       fireEvent.click(screen.getByText("send"));
       await waitFor(() => expect(draft.setQueue).toHaveBeenCalled());
 

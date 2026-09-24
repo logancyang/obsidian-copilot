@@ -256,5 +256,26 @@ describe("AskUserQuestionCard", () => {
       expect(onResolve).toHaveBeenCalledTimes(1);
       expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, { "When do we ship?": "A" });
     });
+
+    it("hides Other and submits under the answer key when the backend cannot accept typed answers (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", () => {
+      const onResolve = jest.fn();
+      renderCard(
+        makeRequest([
+          {
+            question: "Install MCP servers?",
+            answerKey: "mcp_install",
+            options: [{ label: "Install" }, { label: "Skip" }],
+            allowOther: false,
+          },
+        ]),
+        onResolve
+      );
+
+      expect(screen.queryByRole("radio", { name: /^other/i })).toBeNull();
+      fireEvent.click(screen.getByRole("radio", { name: /^Skip$/ }));
+      fireEvent.click(submitButton());
+
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, { mcp_install: "Skip" });
+    });
   });
 });

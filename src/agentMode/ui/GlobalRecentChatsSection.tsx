@@ -11,7 +11,16 @@ import { cn } from "@/lib/utils";
 import { isNativeChatId } from "@/utils/nativeChatId";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
-import { ArrowUpRight, Check, Edit2, LoaderCircle, MessageCircle, Trash2, X } from "lucide-react";
+import {
+  ArrowUpRight,
+  Check,
+  Edit2,
+  LoaderCircle,
+  MessageCircle,
+  Power,
+  Trash2,
+  X,
+} from "lucide-react";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
@@ -59,6 +68,8 @@ interface GlobalRecentChatsSectionProps {
    * rows swap their relative-time chip for a spinner. Omitted means "none".
    */
   runningChatIds?: ReadonlySet<string>;
+  openChatIds?: ReadonlySet<string>;
+  onCloseSession?: (id: string) => Promise<void>;
   /**
    * Recent-list ids whose live session is flagging needs-attention. OR'd with
    * each item's baked-in `needsAttention` snapshot so the done-dot appears the
@@ -108,17 +119,17 @@ const ChatIconTile = memo(
   ({
     Icon,
     needsAttention,
+    isSessionLive,
   }: {
     Icon: React.ComponentType<{ className?: string }>;
     needsAttention?: boolean;
+    isSessionLive?: boolean;
   }) => (
-    <span
-      aria-hidden="true"
-      className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-bg-secondary tw-text-muted"
-    >
+    <span className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-bg-secondary tw-text-muted">
       <ChatIconWithAttention
         icon={Icon}
         needsAttention={needsAttention}
+        isSessionLive={isSessionLive}
         iconClassName="tw-size-4"
       />
     </span>
@@ -145,6 +156,8 @@ interface RecentChatRowProps {
   onOpenSourceFile: (id: string) => void;
   /** Whether this chat's backend turn is running in the background. */
   isRunning: boolean;
+  isSessionOpen: boolean;
+  onCloseSession?: (id: string) => Promise<void>;
   /** Snapshot ∪ live needs-attention — drives the icon tile's done-dot. */
   hasAttention: boolean;
 }
@@ -172,6 +185,8 @@ const RecentChatRow = memo(function RecentChatRow({
   canOpenSourceFile,
   onOpenSourceFile,
   isRunning,
+  isSessionOpen,
+  onCloseSession,
   hasAttention,
 }: RecentChatRowProps): React.ReactElement {
   const Icon = resolveChatIcon(item) ?? MessageCircle;
@@ -221,7 +236,9 @@ const RecentChatRow = memo(function RecentChatRow({
         }
       }}
     >
-      <ChatIconTile Icon={Icon} needsAttention={hasAttention} />
+      {/* Session ownership and active response are independent indicators.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/429 */}
+      <ChatIconTile Icon={Icon} needsAttention={hasAttention} isSessionLive={isSessionOpen} />
       <RecentChatTitle title={item.title} />
 
       {/* Relative time by default; a backgrounded running session shows an accent
@@ -238,7 +255,7 @@ const RecentChatRow = memo(function RecentChatRow({
               "tw-size-3.5 tw-shrink-0 tw-animate-spin tw-text-accent",
               "group-focus-within:tw-hidden group-hover:tw-hidden"
             )}
-            aria-label="Running"
+            aria-label="Responding"
           />
         ) : (
           <span
@@ -278,6 +295,21 @@ const RecentChatRow = memo(function RecentChatRow({
             </>
           ) : (
             <>
+              {isSessionOpen && onCloseSession && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="tw-size-5 tw-p-0"
+                  aria-label="Close session"
+                  title="Close session"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    safeAsyncHandler(onCloseSession)(item.id);
+                  }}
+                >
+                  <Power className="tw-size-3" />
+                </Button>
+              )}
               {canOpenSourceFile && (
                 <Button
                   size="sm"
@@ -346,6 +378,8 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   onOpenSourceFile,
   onLoadHistory,
   runningChatIds,
+  openChatIds,
+  onCloseSession,
   attentionChatIds,
   projectNamesById,
   sortStrategy = "recent",
@@ -494,6 +528,8 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
                 canOpenSourceFile={!isNativeChatId(item.id)}
                 onOpenSourceFile={handleOpenSourceFile}
                 isRunning={runningChatIds?.has(item.id) ?? false}
+                isSessionOpen={openChatIds?.has(item.id) ?? false}
+                onCloseSession={onCloseSession}
                 hasAttention={!!item.needsAttention || (attentionChatIds?.has(item.id) ?? false)}
               />
             ))}

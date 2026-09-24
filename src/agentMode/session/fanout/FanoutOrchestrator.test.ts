@@ -230,12 +230,40 @@ describe("FanoutOrchestrator", () => {
         expect(turn.summary).toEqual({ status: "done", text: "" });
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 applies explicit Codex effort to both answer and summary sessions", async () => {
+      function configureCodex(proc: BackendProcess): void {
+        const state: BackendState = {
+          mode: null,
+          model: {
+            current: { baseModelId: "original", effort: "low" },
+            apply: {
+              kind: "setConfigOption",
+              configId: "model",
+              effortConfigId: "reasoning_effort",
+            },
+            availableModels: [
+              {
+                baseModelId: "example",
+                name: "Example",
+                provider: null,
+                effortOptions: [
+                  { value: "low", label: "low" },
+                  { value: "high", label: "high" },
+                ],
+              },
+            ],
+          },
+        };
+        jest.mocked(proc.newSession).mockResolvedValue({ sessionId: "s-codex", state });
+        jest.mocked(proc.setSessionConfigOption).mockResolvedValue(state);
+      }
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/550 applies explicit Codex effort to both answer and summary sessions", async () => {
         const { host, procs } = makeHost({
           codex: { sessionId: "s-codex" },
           claude: { sessionId: "s-claude" },
         });
         const proc = procs.get("codex")!.proc;
+        configureCodex(proc);
         host.ensureBackendForFanout = async (backendId) =>
           backendId === "codex"
             ? { proc, descriptor: CodexBackendDescriptor }
@@ -250,32 +278,41 @@ describe("FanoutOrchestrator", () => {
         });
         jest.mocked(procs.get("claude")!.proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
         await new FanoutOrchestrator(host).run(runInput(["codex", "claude"]));
-        expect(proc.setSessionModel).toHaveBeenCalledWith({
+        expect(proc.setSessionConfigOption).toHaveBeenCalledWith({
           sessionId: "s-codex",
-          modelId: "example[high]",
+          configId: "model",
+          value: "example",
         });
-        expect(proc.setSessionModel).toHaveBeenCalledTimes(2);
-        expect(proc.setSessionConfigOption).not.toHaveBeenCalled();
+        expect(proc.setSessionConfigOption).toHaveBeenCalledWith({
+          sessionId: "s-codex",
+          configId: "reasoning_effort",
+          value: "high",
+        });
+        expect(proc.setSessionConfigOption).toHaveBeenCalledTimes(4);
+        expect(proc.setSessionModel).not.toHaveBeenCalled();
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 reports an unsupported model-only switch rather than running fan-out on a different model", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/550 reports a rejected model config switch rather than running fan-out on a different model", async () => {
         const { host, procs } = makeHost({ codex: { sessionId: "s-codex" } });
         const proc = procs.get("codex")!.proc;
+        configureCodex(proc);
         host.ensureBackendForFanout = async () => ({ proc, descriptor: CodexBackendDescriptor });
         host.getDefaultSelection = () => ({ baseModelId: "example", effort: null });
+        jest.mocked(proc.setSessionConfigOption).mockRejectedValue(new Error("Model unavailable"));
         const result = await new FanoutOrchestrator(host).run(runInput(["codex"]));
         expect(result.answers.codex.status).toBe("error");
-        expect(result.answers.codex.error).toContain("Choose an explicit effort");
+        expect(result.answers.codex.error).toContain("Model unavailable");
         expect(proc.prompt).not.toHaveBeenCalled();
         expect(proc.setSessionModel).not.toHaveBeenCalled();
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 exposes a summary-only model selection failure while preserving successful answers", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/550 exposes a summary-only model selection failure while preserving successful answers", async () => {
         const { host, procs } = makeHost({
           codex: { sessionId: "s-codex" },
           claude: { sessionId: "s-claude" },
         });
         const proc = procs.get("codex")!.proc;
+        configureCodex(proc);
         host.ensureBackendForFanout = async (backendId) =>
           backendId === "codex"
             ? { proc, descriptor: CodexBackendDescriptor }
@@ -283,14 +320,17 @@ describe("FanoutOrchestrator", () => {
                 proc: procs.get(backendId)!.proc,
                 descriptor: descriptorFor(backendId),
               };
-        let codexSelectionCount = 0;
-        host.getDefaultSelection = (backendId) => {
-          if (backendId !== "codex") return null;
-          codexSelectionCount += 1;
-          return codexSelectionCount === 1
-            ? { baseModelId: "example", effort: "high" }
-            : { baseModelId: "example", effort: null };
-        };
+        host.getDefaultSelection = () => ({ baseModelId: "example", effort: "high" });
+        const successState = await proc.setSessionConfigOption({
+          sessionId: "s-codex",
+          configId: "model",
+          value: "example",
+        });
+        jest
+          .mocked(proc.setSessionConfigOption)
+          .mockResolvedValueOnce(successState)
+          .mockResolvedValueOnce(successState)
+          .mockRejectedValueOnce(new Error("Model unavailable"));
         jest.mocked(proc.prompt).mockImplementation(async () => {
           procs.get("codex")!.emit(textChunk("s-codex", "Successful answer"));
           return { stopReason: "end_turn" };
@@ -301,7 +341,7 @@ describe("FanoutOrchestrator", () => {
 
         expect(result.answers.codex).toMatchObject({ status: "done", text: "Successful answer" });
         expect(result.summary.status).toBe("done");
-        expect(result.summary.error).toContain("Choose an explicit effort for the Codex model.");
+        expect(result.summary.error).toContain("Model unavailable");
         expect(result.summary.complete).not.toBe(true);
         expect(proc.prompt).toHaveBeenCalledTimes(1);
       });
@@ -537,7 +577,7 @@ describe("FanoutOrchestrator", () => {
 
       it("applies the read-only sandbox id (never plan) only for backends that advertise one", async () => {
         const { host, procs } = makeHost({
-          // codex advertises a genuine read-only sandbox; its plan id is "plan".
+          // Codex's "read-only" id is its approval preset; Plan uses a separate config option.
           codex: { sessionId: "s-codex", readOnlyModeId: "read-only" },
           // opencode has no readOnlyModeId → no mode switch (relies on prompt +
           // permission layers). Stands in for any backend lacking a sandbox.

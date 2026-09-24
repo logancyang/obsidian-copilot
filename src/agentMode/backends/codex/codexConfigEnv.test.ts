@@ -6,6 +6,7 @@ describe("codexConfigEnv", () => {
       expect(JSON.parse(mergeCodexConfigEnv(undefined, "Use the vault."))).toEqual({
         model_context_window: 1_000_000,
         model_auto_compact_token_limit: 500_000,
+        features: { default_mode_request_user_input: true },
         developer_instructions: "Use the vault.",
         approval_policy: "on-request",
         approvals_reviewer: "user",
@@ -28,10 +29,28 @@ describe("codexConfigEnv", () => {
         model: "custom-model",
         model_context_window: 400_000,
         model_auto_compact_token_limit: 300_000,
+        features: { default_mode_request_user_input: true },
         developer_instructions: "Use the vault.",
         approval_policy: "on-request",
         approvals_reviewer: "user",
         sandbox_mode: "workspace-write",
+      });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 enables questions in Codex Default alongside other user features", () => {
+      const existing = JSON.stringify({ features: { unified_exec: true } });
+
+      expect(JSON.parse(mergeCodexConfigEnv(existing, "Use the vault.")).features).toEqual({
+        unified_exec: true,
+        default_mode_request_user_input: true,
+      });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 honors an explicit opt-out of Codex Default questions", () => {
+      const existing = JSON.stringify({ features: { default_mode_request_user_input: false } });
+
+      expect(JSON.parse(mergeCodexConfigEnv(existing, "Use the vault.")).features).toEqual({
+        default_mode_request_user_input: false,
       });
     });
   });

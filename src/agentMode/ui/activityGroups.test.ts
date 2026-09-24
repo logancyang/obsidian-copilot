@@ -80,6 +80,15 @@ describe("activityGroups", () => {
       expect(types(grouped)).toEqual(["text", "reasoning", "text"]);
     });
 
+    it("keeps a submitted question answer visible beside agent tools (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", () => {
+      const grouped = foldActivityGroups([
+        action("shell", { vendorToolName: "Bash" }),
+        action("answer", { userResponse: "Answered: Checklist" }),
+        action("read", { vendorToolName: "Read" }),
+      ]);
+      expect(types(grouped)).toEqual(["action", "action", "action"]);
+    });
+
     it("splits a run in two when prose interrupts it", () => {
       const grouped = foldActivityGroups([
         action("a", { vendorToolName: "Read" }),

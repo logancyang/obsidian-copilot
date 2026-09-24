@@ -1,3 +1,4 @@
+import { prefetchConfigEfforts } from "@/agentMode/backends/shared/prefetchConfigEfforts";
 import { Notice } from "obsidian";
 import { resolveEffort } from "@/lib/model-effort";
 import { codexAuth } from "./codexAuth";
@@ -33,7 +34,7 @@ import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver
 import { CodexBinaryManager } from "./CodexBinaryManager";
 import { CODEX_PINNED_VERSION } from "./codexArchive";
 import { CODEX_BINARY_NAME } from "./cliSetup";
-import { buildCodexModeMapping } from "./codexModeMapping";
+import { buildCodexModeMapping, buildCodexModeState } from "./codexModeMapping";
 import { isSupportedCodexAcpPath, inspectCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
 import { classifyBinaryInstall } from "@/agentMode/backends/shared/binaryCompatibility";
 
@@ -91,14 +92,12 @@ const codexWire: ModelWireCodec = {
 /**
  * Codex backend — wraps the configured `codex-acp`, which inherits auth from
  * the bundled Codex CLI login. Auth is adapter-owned (no Copilot-side keys),
- * so the candidate models come entirely from the CLI's live `availableModels`
+ * so the candidate models come entirely from the CLI's live config catalog
  * (active session or preloader cache); curation is the model-management
  * `backends.codex.enabledModels` set surfaced via `getEnabledModelEntries`.
  *
- * codex-acp advertises one model per (base × effort) combination, so effort is
- * read back off the wire id (`codexModelId`) and the variants collapse into a
- * single picker row plus a sibling effort dropdown. The advertised set is the
- * only source of effort levels — Copilot enumerates none of its own.
+ * Model and effort are separate config options. Effort levels are discovered for
+ * each enabled model through a probe session; Copilot enumerates none of its own.
  */
 export const CodexBackendDescriptor: BackendDescriptor = {
   id: "codex",
@@ -118,6 +117,9 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   // codex names a session after the raw first prompt (which leaks the injected
   // context envelope), so the session derives the tab title client-side instead.
   summarizesSessionTitle: false,
+  // Codex ends its turn on revise_plan without acting on the deny message.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/41
+  planFeedbackDelivery: "next_turn",
   wire: codexWire,
   showModelDescriptions: true,
 
@@ -220,16 +222,32 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     },
   },
 
-  async applySelection(session: ModelSelectionSession, selection: ModelSelection): Promise<void> {
-    const options = session
-      .getState()
-      ?.model?.availableModels.find(
-        (model) => model.baseModelId === selection.baseModelId
-      )?.effortOptions;
-    await session.applyModelWireId(
-      codexWire.encode({ ...selection, effort: resolveEffort(selection.effort, options) })
+  async applySelection(
+    session: ModelSelectionSession,
+    selection: ModelSelection,
+    context
+  ): Promise<void> {
+    const currentBase = context
+      ? context.backendReportedCurrent?.baseModelId
+      : session.getState()?.model?.current.baseModelId;
+    // Model options accept bare ids; effort belongs to the selected model's refreshed
+    // config catalog. https://github.com/Brevilabs/obsidian-copilot-private/issues/550
+    if (currentBase !== selection.baseModelId) {
+      await session.applyModelWireId(selection.baseModelId);
+    }
+    const model = session.getState()?.model;
+    const apply = model?.apply;
+    const effort = resolveEffort(
+      selection.effort,
+      model?.availableModels.find((entry) => entry.baseModelId === selection.baseModelId)
+        ?.effortOptions
     );
+    if (apply?.kind === "setConfigOption" && apply.effortConfigId && effort !== null) {
+      await session.setConfigOption(apply.effortConfigId, effort);
+    }
   },
+
+  prefetchEffortCatalog: prefetchConfigEfforts,
 
   createBackendProcess(args): BackendProcess {
     // Codex sees managed skills only via the `.agents/skills/<name>`
@@ -241,8 +259,12 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 
   SettingsPanel: CodexSettingsPanel,
 
-  getModeMapping(modeState) {
-    return buildCodexModeMapping(modeState);
+  getModeMapping() {
+    return buildCodexModeMapping();
+  },
+
+  getModeState(modeState, configOptions) {
+    return buildCodexModeState(modeState, configOptions);
   },
 };
 

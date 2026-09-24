@@ -161,3 +161,61 @@ export const RunningAfterStop: StoryObj<AgentChatMessagesProps> = {
   },
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };
+
+/** An approved plan keeps a running indicator while the agent implements it. */
+export const ApprovedPlanRunning: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    currentPlan: null,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      { ...message, id: "plan-request", sender: "user", message: "Plan a note for my trip." },
+      {
+        ...message,
+        id: "plan-implementation",
+        message: "The plan is approved. I'm creating the note now.",
+      },
+    ],
+    isLoading: true,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};
+
+/** Submitted decisions and answers remain readable after their action cards close. */
+export const PlanResponses: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    currentPlan: null,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      { ...message, id: "request", sender: "user", message: "Plan my trip." },
+      {
+        ...message,
+        id: "responses",
+        message: "",
+        parts: [
+          {
+            kind: "tool_call",
+            id: "answer",
+            title: "Answered: Checklist",
+            status: "completed",
+            userResponse: "Answered: Checklist",
+            output: [{ type: "text", text: "Choose a format: Checklist" }],
+          },
+          {
+            kind: "tool_call",
+            id: "plan-approval",
+            title: "Approved plan",
+            status: "completed",
+            toolKind: "switch_mode",
+            userResponse: "Approved plan",
+          },
+        ],
+      },
+    ],
+    isLoading: false,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};

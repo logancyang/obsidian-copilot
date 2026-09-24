@@ -315,6 +315,9 @@ function translateMode(
   inputs: BackendStateInputs,
   descriptor: BackendDescriptor
 ): BackendState["mode"] {
+  if (descriptor.getModeState) {
+    return descriptor.getModeState(inputs.modes, inputs.configOptions);
+  }
   const mapping = descriptor.getModeMapping?.(inputs.modes, inputs.configOptions);
   if (!mapping) return null;
   if (mapping.kind === "setMode") return translateSetModeMapping(mapping, inputs.modes);

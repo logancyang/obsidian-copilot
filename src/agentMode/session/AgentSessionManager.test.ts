@@ -36,6 +36,7 @@ import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { buildCodexModeMapping } from "@/agentMode/backends/codex/codexModeMapping";
 import type {
+  BackendProcess,
   BackendDescriptor,
   BackendId,
   BackendModelCatalog,
@@ -144,6 +145,7 @@ function makeMockBackendProcess() {
     },
     isRunning: () => mockBackendIsRunning,
     shutdown: mockBackendShutdown,
+    closeSession: jest.fn(async (_params: { sessionId: string }) => undefined),
     // Stub the session-event surface so warm-adoption tests can construct
     // a real `AgentSession` via the state-options branch without throwing.
     registerSessionHandler: jest.fn(() => () => {}),
@@ -178,6 +180,7 @@ function makeMockSession(overrides: {
   chatInputId?: string;
   backendSessionId?: string;
   backendId: string;
+  backend?: BackendProcess;
   projectId?: string;
   ready?: Promise<void>;
   label?: string;
@@ -204,6 +207,9 @@ function makeMockSession(overrides: {
     getStatus: () => status,
     store: { getDisplayMessages: () => displayMessages },
     cancel: mockSessionCancel,
+    backend: overrides.backend,
+    backendSessionId: sessionId,
+    releaseBackendSession: AgentSession.prototype.releaseBackendSession,
     dispose: mockSessionDispose,
     setModel: jest.fn(),
     setMode: jest.fn(),
@@ -262,6 +268,7 @@ const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((o
     internalId: opts.internalId,
     chatInputId: opts.chatInputId,
     backendId: opts.backendId,
+    backend: opts.backend,
     projectId: opts.projectId,
   })
 );
@@ -443,6 +450,84 @@ function savedNoteFixture() {
 
 describe("AgentSessionManager", () => {
   describe("AgentSessionManager", () => {
+    describe("getOpenChatIds()", () => {
+      it("includes idle and running conversations and removes released sessions for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+        const mgr = buildManager();
+        const empty = mgr.getOpenChatIds();
+        expect(mgr.getOpenChatIds()).toBe(empty);
+        const idle = await mgr.createSession();
+        const running = await mgr.createSession();
+        getSessionTestHandle(running).setStatus("running");
+        const idleId = buildNativeChatId(idle.backendId, idle.getBackendSessionId()!);
+        const runningId = buildNativeChatId(running.backendId, running.getBackendSessionId()!);
+        expect(mgr.getOpenChatIds()).toEqual(new Set([idleId, runningId]));
+        await mgr.closeChatSession(idleId);
+        expect(mgr.getOpenChatIds()).toEqual(new Set([runningId]));
+      });
+    });
+
+    describe("detachSessionFromTab()", () => {
+      it("keeps the backend session open and discoverable in history for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+        const mgr = buildManager();
+        const session = await mgr.createSession();
+        const historyId = buildNativeChatId(session.backendId, session.getBackendSessionId()!);
+        const proc = mgr.getBackendProcess(session.backendId)!;
+
+        mgr.detachSessionFromTab(session.internalId);
+
+        expect(mgr.getSessionsForScope(session.projectId)).not.toContain(session);
+        expect(mgr.getSessions()).toContain(session);
+        expect(mgr.getOpenChatIds()).toContain(historyId);
+        expect(proc.closeSession).not.toHaveBeenCalled();
+        expect(mockSessionCancel).not.toHaveBeenCalled();
+        expect(mockSessionDispose).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("closeChatSession()", () => {
+      it("closes by saved or stale native identity and retains the saved transcript for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+        for (const useNativeId of [false, true]) {
+          const saved = new Map<string, unknown>();
+          const persistence = {
+            saveSession: jest.fn(async (messages: unknown) => {
+              saved.set("chats/research.md", messages);
+              return { path: "chats/research.md" };
+            }),
+          };
+          const mgr = buildManager(
+            {},
+            persistence as unknown as ConstructorParameters<
+              typeof AgentSessionManager
+            >[2]["persistenceManager"]
+          );
+          const session = await mgr.createSession();
+          getSessionTestHandle(session).setMessages([{ message: "Initial answer" }]);
+          await mgr.saveActiveSession();
+          const nativeId = buildNativeChatId(session.backendId, session.getBackendSessionId()!);
+          expect(mgr.getOpenChatIds()).toEqual(new Set([nativeId, "chats/research.md"]));
+          await mgr.closeChatSession(useNativeId ? nativeId : "chats/research.md");
+          expect(saved.get("chats/research.md")).toEqual([{ message: "Initial answer" }]);
+          expect(mgr.getOpenChatIds().size).toBe(0);
+          expect(mgr.getSessions()).toEqual([]);
+        }
+      });
+
+      it("releases only the selected backend session while preserving another active chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+        const mgr = buildManager();
+        const selected = await mgr.createSession();
+        const sibling = await mgr.createSession();
+        const proc = mgr.getBackendProcess(selected.backendId)!;
+        const id = buildNativeChatId(selected.backendId, selected.getBackendSessionId()!);
+        await mgr.closeChatSession(id);
+        expect(proc.closeSession).toHaveBeenCalledWith({
+          sessionId: selected.getBackendSessionId(),
+        });
+        expect(mgr.getSessions()).toEqual([sibling]);
+        expect(mgr.getActiveSession()).toBe(sibling);
+        expect(proc.shutdown).not.toHaveBeenCalled();
+      });
+    });
+
     describe("noteSpawnConfigChanged()", () => {
       it("keeps an open session alive and holds the restart for the user (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const mgr = buildManager();
@@ -2743,21 +2828,35 @@ describe("AgentSessionManager.applyMode", () => {
     expect(session.setMode).toHaveBeenCalledWith("cached-auto");
   });
 
-  it("preserves current Codex mode ids without an inventory (https://github.com/logancyang/obsidian-copilot/issues/2916)", async () => {
+  it("preserves Codex approval mode ids without an inventory (https://github.com/logancyang/obsidian-copilot/issues/2916)", async () => {
     const manager = buildModeManager(buildCodexModeMapping);
     const session = await manager.createSession("claude");
 
     for (const [mode, nativeId] of [
-      ["default", "agent"],
-      ["plan", "read-only"],
-      ["auto", "agent-full-access"],
+      ["default", "read-only"],
+      ["auto", "agent"],
     ] as const) {
       await manager.applyMode("claude", mode, { kind: "setMode", nativeId });
     }
 
-    expect(session.setMode).toHaveBeenNthCalledWith(1, "agent");
-    expect(session.setMode).toHaveBeenNthCalledWith(2, "read-only");
-    expect(session.setMode).toHaveBeenNthCalledWith(3, "agent-full-access");
+    expect(session.setMode).toHaveBeenNthCalledWith(1, "read-only");
+    expect(session.setMode).toHaveBeenNthCalledWith(2, "agent");
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 applies both Codex Plan settings without replacing the translated choice", async () => {
+    const manager = buildModeManager(buildCodexModeMapping);
+    const session = await manager.createSession("claude");
+
+    await manager.applyMode("claude", "plan", {
+      kind: "sequence",
+      steps: [
+        { kind: "setMode", nativeId: "agent" },
+        { kind: "setConfigOption", configId: "collaboration_mode", value: "plan" },
+      ],
+    });
+
+    expect(session.setMode).toHaveBeenCalledWith("agent");
+    expect(session.setConfigOption).toHaveBeenCalledWith("collaboration_mode", "plan");
   });
 });
 

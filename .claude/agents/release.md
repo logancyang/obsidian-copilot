@@ -225,7 +225,7 @@ EOF
 
 ### Step 8: Report Back
 
-Share the PR URL with the user and summarize what was included in the release.
+Share the PR URL with the user and summarize what was included in the release. Mention that commenting `/canary` on the PR publishes its current head as a BRAT-installable prerelease (`X.Y.Z-canary.N`) for testing before merge.
 
 ## Important Rules
 

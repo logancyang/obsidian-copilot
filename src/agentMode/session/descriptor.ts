@@ -234,6 +234,13 @@ export interface BackendDescriptor {
    */
   readonly summarizesSessionTitle: boolean;
 
+  /**
+   * Where plan feedback is delivered after a gated plan rejection. Some adapters
+   * consume the permission's deny message in the current turn; others end the
+   * turn and need a new user prompt. Defaults to `permission`.
+   */
+  readonly planFeedbackDelivery?: "permission" | "next_turn";
+
   /** Sync read of install/setup state from settings + last-known disk reconcile. */
   getInstallState(settings: CopilotSettings): InstallState;
 
@@ -354,6 +361,12 @@ export interface BackendDescriptor {
     modeState: RawModeState | null,
     configOptions: BackendConfigOption[] | null
   ): ModeMapping | null;
+
+  /** Resolve a picker whose choices span more than one backend setting. */
+  getModeState?(
+    modeState: RawModeState | null,
+    configOptions: BackendConfigOption[] | null
+  ): BackendState["mode"];
 
   /**
    * Optional: replay persisted state before a newly created or resumed session

@@ -70,32 +70,31 @@ describe("codexVersion", () => {
   });
   describe("resolveSupportedCodexAcpPackage()", () => {
     it("returns the validated version of a user-owned npm package", () => {
-      const packageFileSystem = packageFs(UNIX_ENTRY, metadata("1.10.0"));
+      const packageFileSystem = packageFs(UNIX_ENTRY, metadata("1.13.0"));
 
       expect(
         resolveSupportedCodexAcpPackage("/usr/local/bin/codex-acp", "darwin", packageFileSystem)
-      ).toEqual({ entryPath: UNIX_ENTRY, version: "1.10.0" });
+      ).toEqual({ entryPath: UNIX_ENTRY, version: "1.13.0" });
     });
     it.each(["darwin", "linux", "win32"] as const)(
       "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 resolves a pinned native bundle on %s",
       (platform) => {
         const entry = platform === "win32" ? "C:\\bundle\\codex-acp.exe" : "/bundle/codex-acp";
         const nativeFs = packageFs(entry, {
-          acpVersion: "1.10.0",
+          acpVersion: "1.13.0",
           target: `${platform}-${process.arch}`,
         });
         expect(resolveSupportedCodexAcpPackage(entry, platform, nativeFs)).toEqual({
           entryPath: entry,
-          version: "1.10.0",
+          version: "1.13.0",
         });
       }
     );
     it.each([
-      ["1.9.0", 1],
-      ["0.0.45", 1],
-      ["0.0.45+build.1", 1],
-      ["0.0.46-beta.1", 1],
-      ["1.10.0", 2],
+      ["1.13.0", 1],
+      ["1.13.0+build.1", 1],
+      ["1.14.0-beta.1", 1],
+      ["1.13.0", 2],
     ])(
       "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 retains native bundle identity %s revision %s for managed updates",
       (acpVersion, packagingRevision) => {
@@ -130,7 +129,7 @@ describe("codexVersion", () => {
             entry,
             "darwin",
             packageFs(entry, {
-              acpVersion: "1.10.0",
+              acpVersion: "1.13.0",
               packagingRevision: 1,
               target: `darwin-${process.arch}`,
               ...override,
@@ -141,7 +140,20 @@ describe("codexVersion", () => {
     );
   });
   describe("resolveSupportedCodexAcpEntry()", () => {
-    it("https://github.com/logancyang/obsidian-copilot/issues/2967 accepts the earliest adapter with bundled CLI authentication", () => {
+    it.each(["0.0.45", "1.12.0", "1.13.0-beta.1"])(
+      "rejects adapter %s below the tested config-option minimum https://github.com/Brevilabs/obsidian-copilot-private/issues/550",
+      (version) => {
+        expect(() =>
+          resolveSupportedCodexAcpEntry(
+            UNIX_ENTRY,
+            "darwin",
+            packageFs(UNIX_ENTRY, metadata(version))
+          )
+        ).toThrow("not supported");
+      }
+    );
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/2967 accepts the minimum supported adapter", () => {
       const packageFileSystem = packageFs(UNIX_ENTRY, metadata(CODEX_MIN_VERSION));
 
       expect(
@@ -155,7 +167,7 @@ describe("codexVersion", () => {
 
     it("resolves the current package layout with Windows path rules", () => {
       const entry = "C:\\npm\\node_modules\\@agentclientprotocol\\codex-acp\\dist\\index.js";
-      const packageFileSystem = packageFs(entry, metadata("1.7.0"));
+      const packageFileSystem = packageFs(entry, metadata("1.13.0"));
 
       expect(resolveSupportedCodexAcpEntry(entry, "win32", packageFileSystem)).toBe(entry);
       expect(packageFileSystem.readFileSync).toHaveBeenCalledWith(
@@ -195,7 +207,7 @@ describe("codexVersion", () => {
       ).toThrow("not supported");
     });
 
-    it.each(["1.8.0-beta.1", "1.7.0+build.1", "0.0.45+build.1"])(
+    it.each(["1.14.0-beta.1", "1.13.0+build.1"])(
       "https://github.com/logancyang/obsidian-copilot/issues/2967 accepts supported versions with a semantic-version suffix: %s",
       (version) => {
         expect(
@@ -209,8 +221,8 @@ describe("codexVersion", () => {
     );
 
     it.each([
-      ["wrong package", { ...metadata("1.7.0"), name: "other" }],
-      ["wrong entry", { ...metadata("1.7.0"), bin: { "codex-acp": "bin/index.js" } }],
+      ["wrong package", { ...metadata("1.13.0"), name: "other" }],
+      ["wrong entry", { ...metadata("1.13.0"), bin: { "codex-acp": "bin/index.js" } }],
       ["malformed version", metadata("1.7")],
       ["malformed metadata", []],
     ])("rejects %s metadata", (_label, packageMetadata) => {
@@ -236,12 +248,12 @@ describe("codexVersion", () => {
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/2916 accepts a supported adapter path", () => {
-      expect(isSupportedCodexAcpPath(installedAdapterPath(metadata("1.7.0")))).toBe(true);
+      expect(isSupportedCodexAcpPath(installedAdapterPath(metadata("1.13.0")))).toBe(true);
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/2916 rejects an unsupported adapter path", () => {
       expect(
-        isSupportedCodexAcpPath(installedAdapterPath({ ...metadata("1.7.0"), name: "other" }))
+        isSupportedCodexAcpPath(installedAdapterPath({ ...metadata("1.13.0"), name: "other" }))
       ).toBe(false);
     });
   });

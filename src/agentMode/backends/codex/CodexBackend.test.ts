@@ -28,8 +28,8 @@ jest.mock("./codexVersion", () => {
     __esModule: true,
     inspectCodexAcpPackage: (path: string) => ({
       entryPath: jest.mocked(resolveSupportedCodexAcpEntry)(path),
-      version: "1.11.0",
-      runtimeVersion: "1.11.0",
+      version: "1.13.0",
+      runtimeVersion: "1.13.0",
     }),
     resolveSupportedCodexAcpEntry: jest
       .fn()
@@ -73,12 +73,12 @@ describe("CodexBackend", () => {
         const minimum = jest.replaceProperty<{ CODEX_MIN_VERSION: string }, "CODEX_MIN_VERSION">(
           codexVersion,
           "CODEX_MIN_VERSION",
-          "1.12.0"
+          "1.14.0"
         );
         try {
           await expect(
             new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" })
-          ).rejects.toThrow("1.11.0");
+          ).rejects.toThrow("1.13.0");
         } finally {
           minimum.restore();
         }
@@ -335,10 +335,10 @@ describe("CodexBackend", () => {
         }
       );
 
-      it("starts current codex-acp adapters in their canonical default mode", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 starts Codex with the approval preset that permits workspace edits", async () => {
         const backend = new CodexBackend();
         const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
-        expect(desc.env.INITIAL_AGENT_MODE).toBe("agent");
+        expect(desc.env.INITIAL_AGENT_MODE).toBe("read-only");
       });
 
       it("lets a user override the initial codex-acp mode", async () => {
