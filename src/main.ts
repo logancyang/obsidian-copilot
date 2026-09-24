@@ -4,6 +4,12 @@ import type { AgentSessionManager, SkillManager } from "@/agentMode";
 // Deep import (not the barrel): these run on the load path for every
 // platform, and the barrel pulls Node-only modules that crash mobile.
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
+import {
+  buildChatDeepLink,
+  findChatFileByDeepLinkId,
+  getSavedChatDeepLinkId,
+  parseChatDeepLinkId,
+} from "@/utils/chatDeepLink";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChainOwner from "@/LLMProviders/chainOwner";
 import { CustomModel, setSelectedTextContexts, getSelectedTextContexts } from "@/aiParams";
@@ -494,6 +500,13 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize web selection watcher (Desktop only)
     this.initWebSelectionWatcher();
+
+    // A queued URI may fire as soon as its handler is registered, so register
+    // after chat managers and views are ready to load a conversation.
+    // https://github.com/logancyang/obsidian-copilot/issues/3271
+    this.registerObsidianProtocolHandler("copilot-chat", (params) => {
+      void this.openChatDeepLink(params);
+    });
   }
 
   /** Collect one-time manual folder moves without opening a separate modal. */
@@ -1418,6 +1431,45 @@ export default class CopilotPlugin extends Plugin {
       return;
     }
     await this.loadChatHistory(file);
+  }
+
+  /** Copy a portable link to a saved note or a native agent session. */
+  async copyChatLink(chatId: string): Promise<void> {
+    try {
+      const id = isNativeChatId(chatId)
+        ? parseChatDeepLinkId(chatId)
+        : await getSavedChatDeepLinkId(this.app, chatId);
+      const link = id && buildChatDeepLink(this.app.vault.getName(), id);
+      if (!link) {
+        new Notice("Save this chat before copying a link.");
+        return;
+      }
+      await navigator.clipboard.writeText(link);
+      new Notice("Chat link copied.");
+    } catch (error) {
+      logError("Failed to copy chat link", error);
+      new Notice("Could not copy chat link.");
+    }
+  }
+
+  /** Route a vault-scoped URI through the existing history loaders. */
+  async openChatDeepLink(params: Record<string, string>): Promise<void> {
+    const id = params.vault === this.app.vault.getName() && parseChatDeepLinkId(params.id ?? "");
+    if (!id) {
+      new Notice("Invalid chat link for this vault.");
+      return;
+    }
+    try {
+      const chatId = isNativeChatId(id) ? id : (await findChatFileByDeepLinkId(this.app, id))?.path;
+      if (!chatId) {
+        new Notice("Chat link not found or ambiguous.");
+        return;
+      }
+      await this.loadChatById(chatId);
+    } catch (error) {
+      logError("Failed to open chat link", error);
+      new Notice("Could not open chat link.");
+    }
   }
 
   /**
