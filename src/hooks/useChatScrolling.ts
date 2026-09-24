@@ -4,6 +4,9 @@ import { useCallback, useRef, useState, useEffect, useLayoutEffect } from "react
 
 const END_THRESHOLD_PX = 24;
 
+const isNearEnd = (node: HTMLElement): boolean =>
+  node.scrollHeight - node.clientHeight - node.scrollTop <= END_THRESHOLD_PX;
+
 interface UseChatScrollingOptions {
   chatHistory: ChatMessage[];
 }
@@ -93,8 +96,7 @@ export const useChatScrolling = ({
     if (!node) return;
     // Readers can inspect older turns without losing their place during a growing response.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/277
-    const distanceFromEnd = node.scrollHeight - node.clientHeight - node.scrollTop;
-    if (distanceFromEnd <= END_THRESHOLD_PX) {
+    if (isNearEnd(node)) {
       isFollowingRef.current = true;
       setIsScrollPaused(false);
     } else if (node.scrollTop < lastScrollTopRef.current) {
@@ -117,16 +119,17 @@ export const useChatScrolling = ({
         setContainerMinHeight(calculateDynamicMinHeight());
         const resizeObserver = new ResizeObserver(() => {
           setContainerMinHeight(calculateDynamicMinHeight());
-          // Markdown and images can grow after React commits the streaming message.
+          // Markdown and images can grow after React commits the streaming message, and a
+          // taller viewport can reach the end without firing a scroll event.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/277
-          if (isFollowingRef.current) alignToEnd();
+          if (isFollowingRef.current || isNearEnd(node)) scrollToEnd();
         });
         resizeObserver.observe(node);
         if (contentRef.current) resizeObserver.observe(contentRef.current);
         resizeObserverRef.current = resizeObserver;
       }
     },
-    [alignToEnd, calculateDynamicMinHeight]
+    [calculateDynamicMinHeight, scrollToEnd]
   );
 
   const contentCallbackRef = useCallback((node: HTMLDivElement | null) => {
