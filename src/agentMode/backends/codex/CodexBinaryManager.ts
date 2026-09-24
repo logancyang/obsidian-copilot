@@ -12,6 +12,7 @@ import {
 import type { ManagedInstallActionState } from "@/agentMode/session/types";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { formatBytes } from "@/utils/formatBytes";
 import { getSettings, updateAgentModeBackendFields } from "@/settings/model";
 import { resolveSupportedCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
 
@@ -93,19 +94,30 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
     const stageDir = path().join(dataDir, `.tmp-${CODEX_PINNED_VERSION}-${Date.now()}`);
     await fs().promises.mkdir(stageDir, { recursive: true });
     try {
-      onProgress?.({ label: "Installing the Codex adapter…", percent: 30 });
-      await installCodexArchive(stageDir, signal);
-      onProgress?.({ label: "Verifying the Codex adapter…", percent: 85 });
+      onProgress?.({ label: "Connecting to Codex download…", percent: 5 });
+      await installCodexArchive(stageDir, signal, (progress) => {
+        // Download bytes are measurable; later phases name work whose duration varies by device.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/578
+        if (progress.phase === "download") {
+          onProgress?.({
+            label: `Downloading Codex adapter — ${formatBytes(progress.received)} / ${formatBytes(progress.total)}`,
+            percent: 10 + Math.floor((progress.received / progress.total) * 65),
+          });
+        } else onProgress?.({ label: "Extracting Codex adapter…", percent: 80 });
+      });
+      onProgress?.({ label: "Verifying Codex adapter…", percent: 87 });
       const stagedEntry = entryPath(stageDir);
       await verifyLauncher(stagedEntry, signal);
       // A runnable adapter alone does not prove its bundled native runtime survived extraction.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      onProgress?.({ label: "Verifying bundled Codex runtime…", percent: 93 });
       const runtime = await run(stagedEntry, ["cli", "--help"], signal);
       if (!runtime.includes("Codex CLI"))
         throw new Error("The bundled Codex runtime could not start.");
       // Cancellation during verification must not replace the working installation.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
       if (signal.aborted) throw new ManagedInstallAbortError();
+      onProgress?.({ label: "Activating Codex adapter…", percent: 98 });
       await promoteManagedVersion(stageDir, versionDir, "Codex adapter");
       const finalEntry = entryPath(versionDir);
       this.selectInstalledBinary({

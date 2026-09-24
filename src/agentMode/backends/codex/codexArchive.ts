@@ -7,6 +7,10 @@ import { CODEX_PINNED_VERSION } from "./cliSetup";
 export { CODEX_PINNED_VERSION } from "./cliSetup";
 const RELEASE = `https://github.com/Brevilabs/codex-acp-binary/releases/download/v${CODEX_PINNED_VERSION}`;
 
+export type CodexArchiveProgress =
+  | { phase: "download"; received: number; total: number }
+  | { phase: "extract" };
+
 /**
  * Downloads, verifies, and extracts the Codex adapter and bundled runtime for
  * this platform. Leaves the active installation unchanged so the caller can
@@ -14,8 +18,13 @@ const RELEASE = `https://github.com/Brevilabs/codex-acp-binary/releases/download
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/379
  * @param stage - Empty temporary directory in which to extract the bundle.
  * @param signal - Cancels download and extraction.
+ * @param onProgress - Reports verified-size download bytes and archive extraction.
  */
-export async function installCodexArchive(stage: string, signal: AbortSignal): Promise<void> {
+export async function installCodexArchive(
+  stage: string,
+  signal: AbortSignal,
+  onProgress?: (progress: CodexArchiveProgress) => void
+): Promise<void> {
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
   const path = requireNodeModule<typeof import("node:path")>("path");
   const crypto = requireNodeModule<typeof import("node:crypto")>("crypto");
@@ -90,6 +99,8 @@ export async function installCodexArchive(stage: string, signal: AbortSignal): P
   });
   const hash = crypto.createHash("sha256");
   let received = 0;
+  let reportedPercent = 0;
+  onProgress?.({ phase: "download", received, total: manifest.archiveBytes });
   const output = await fs.promises.open(archive, "wx");
   try {
     for await (const chunk of response as AsyncIterable<Uint8Array>) {
@@ -100,6 +111,13 @@ export async function installCodexArchive(stage: string, signal: AbortSignal): P
       }
       hash.update(chunk);
       await output.writeFile(chunk);
+      // Large release archives need visible byte progress without rerendering for every network chunk.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/578
+      const percent = Math.floor((received / manifest.archiveBytes) * 100);
+      if (percent !== reportedPercent) {
+        reportedPercent = percent;
+        onProgress?.({ phase: "download", received, total: manifest.archiveBytes });
+      }
     }
   } finally {
     response.destroy();
@@ -107,6 +125,7 @@ export async function installCodexArchive(stage: string, signal: AbortSignal): P
   }
   if (received !== manifest.archiveBytes || hash.digest("hex") !== manifest.sha256)
     throw new Error("Codex archive checksum mismatch.");
+  onProgress?.({ phase: "extract" });
   await extractArchive(archive, stage, { signal, stripComponents: 1 });
   await fs.promises.unlink(archive);
 }

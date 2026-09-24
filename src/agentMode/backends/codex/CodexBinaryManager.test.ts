@@ -144,6 +144,37 @@ describe("CodexBinaryManager", () => {
         expect(manager.getActionState()).toEqual({ kind: "idle" });
         unsubscribe();
       });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/578 shows transferred bytes and each installation phase during a managed install", async () => {
+        jest.mocked(installCodexArchive).mockImplementation(async (stage, _signal, onProgress) => {
+          onProgress?.({ phase: "download", received: 0, total: 2048 });
+          onProgress?.({ phase: "download", received: 1024, total: 2048 });
+          onProgress?.({ phase: "download", received: 2048, total: 2048 });
+          onProgress?.({ phase: "extract" });
+          fs.writeFileSync(path.join(stage, "codex-acp"), "native");
+        });
+        const manager = new CodexBinaryManager();
+        const progress: Array<{ label: string; percent: number }> = [];
+        manager.subscribeRuntimeState(() => {
+          const state = manager.getActionState();
+          if (state.kind === "running" && state.percent !== undefined)
+            progress.push({ label: state.label, percent: state.percent });
+        });
+
+        await manager.install();
+
+        expect(progress).toEqual([
+          { label: "Starting…", percent: 0 },
+          { label: "Connecting to Codex download…", percent: 5 },
+          { label: "Downloading Codex adapter — 0 B / 2.0 KB", percent: 10 },
+          { label: "Downloading Codex adapter — 1.0 KB / 2.0 KB", percent: 42 },
+          { label: "Downloading Codex adapter — 2.0 KB / 2.0 KB", percent: 75 },
+          { label: "Extracting Codex adapter…", percent: 80 },
+          { label: "Verifying Codex adapter…", percent: 87 },
+          { label: "Verifying bundled Codex runtime…", percent: 93 },
+          { label: "Activating Codex adapter…", percent: 98 },
+          { label: "Codex adapter ready.", percent: 100 },
+        ]);
+      });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 rejects a wrong adapter version or missing bundled runtime before selecting files", async () => {
         const manager = new CodexBinaryManager();
         const before = getSettings().agentMode.backends?.codex;

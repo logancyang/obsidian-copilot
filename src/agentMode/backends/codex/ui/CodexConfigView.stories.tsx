@@ -98,11 +98,34 @@ export const ManagedInstalling: StoryObj<CodexConfigViewProps> = {
   args: {
     managed: {
       ...MANAGED,
+      platform: "win32-arm64",
       run: {
         kind: "running",
-        label: "Installing the Codex adapter…",
-        percent: 30,
+        label: "Downloading Codex adapter — 80.1 MB / 160.2 MB",
+        percent: 42,
       },
+    },
+  },
+};
+
+export const ManagedExtracting: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    managed: {
+      ...MANAGED,
+      platform: "win32-arm64",
+      run: { kind: "running", label: "Extracting Codex adapter…", percent: 80 },
+    },
+  },
+};
+
+export const ManagedActivating: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    managed: {
+      ...MANAGED,
+      platform: "win32-arm64",
+      run: { kind: "running", label: "Activating Codex adapter…", percent: 98 },
     },
   },
 };

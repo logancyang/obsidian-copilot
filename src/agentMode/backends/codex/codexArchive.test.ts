@@ -14,6 +14,7 @@ jest.mock("@/utils/desktopRuntime", () => ({
 }));
 jest.mock("obsidian", () => ({ requestUrl: jest.fn() }));
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/379";
+const PROGRESS_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/578";
 
 describe("codexArchive", () => {
   describe("installCodexArchive()", () => {
@@ -105,6 +106,31 @@ describe("codexArchive", () => {
         );
       }
     );
+    it(`reports received bytes against the manifest size before extraction: ${PROGRESS_ISSUE}`, async () => {
+      const midpoint = Math.floor(bytes.length / 2);
+      mockGet.mockImplementation((_url, _options, callback) => {
+        const response = Readable.from([
+          Buffer.from(bytes.subarray(0, midpoint)),
+          Buffer.from(bytes.subarray(midpoint)),
+        ]);
+        Object.assign(response, { statusCode: 200 });
+        callback(response);
+        return Object.assign(new EventEmitter(), { setTimeout: jest.fn(), destroy: jest.fn() });
+      });
+      const progress: unknown[] = [];
+
+      await installCodexArchive(stage, new AbortController().signal, (event) => {
+        progress.push(event);
+      });
+
+      expect(progress).toEqual([
+        { phase: "download", received: 0, total: bytes.length },
+        { phase: "download", received: midpoint, total: bytes.length },
+        { phase: "download", received: bytes.length, total: bytes.length },
+        { phase: "extract" },
+      ]);
+      expect(fs.existsSync(path.join(stage, "codex-runtime", "codex"))).toBe(true);
+    });
     it.each(["linux", "darwin", "win32"])(
       `downloads the published archive format for %s: ${ISSUE}`,
       async (targetPlatform) => {
