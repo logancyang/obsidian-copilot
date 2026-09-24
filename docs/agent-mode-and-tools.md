@@ -64,7 +64,7 @@ The archive format and extraction command are separate: bsdtar can unpack ZIP fi
 For an existing or manually installed `@agentclientprotocol/codex-acp` adapter, Copilot checks compatibility and reports any required update in **Configure**. The adapter version and bundled Codex CLI version are separate.
 
 1. Open **Basic → Agents → Codex → Configure**.
-2. Choose **Download & install** under **Managed by Copilot**. Copilot shows downloaded bytes and then labels extraction, verification, and activation while it prepares Codex. It keeps your current installation until the replacement is ready. You do not need Node.js or npm.
+2. Choose **Download & install** under **Managed by Copilot**. Copilot shows elapsed time while connecting, downloaded bytes during transfer, then labels extraction, verification, and activation while it prepares Codex. It keeps your current installation until the replacement is ready. You do not need Node.js or npm.
 3. Click **Sign in**, finish authentication in your browser, and return to Obsidian. If the browser does not open, click **Open sign-in page**. You can cancel or retry sign-in. Existing credentials are reused when you use the same Codex profile.
 4. If you prefer your own adapter, use **My own binary** to Auto-detect it or enter its absolute path. You remain responsible for upgrades to that binary.
 5. Enable the models you want and choose a default.

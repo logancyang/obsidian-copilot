@@ -93,9 +93,17 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
     const versionDir = path().join(dataDir, CODEX_PINNED_VERSION);
     const stageDir = path().join(dataDir, `.tmp-${CODEX_PINNED_VERSION}-${Date.now()}`);
     await fs().promises.mkdir(stageDir, { recursive: true });
+    const waitingSince = Date.now();
+    // Release metadata and redirects can take longer than the transfer; keep the visible wait alive.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/578
+    const waitTimer = window.setInterval(() => {
+      const seconds = Math.floor((Date.now() - waitingSince) / 1000);
+      onProgress?.({ label: `Connecting to Codex download… ${seconds}s elapsed`, percent: 5 });
+    }, 5_000);
     try {
       onProgress?.({ label: "Connecting to Codex download…", percent: 5 });
       await installCodexArchive(stageDir, signal, (progress) => {
+        window.clearInterval(waitTimer);
         // Download bytes are measurable; later phases name work whose duration varies by device.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/578
         if (progress.phase === "download") {
@@ -128,6 +136,7 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
       onProgress?.({ label: "Codex adapter ready.", percent: 100 });
       return { version: CODEX_PINNED_VERSION, path: finalEntry };
     } finally {
+      window.clearInterval(waitTimer);
       await fs()
         .promises.rm(stageDir, { recursive: true, force: true })
         .catch(() => {});

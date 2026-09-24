@@ -108,6 +108,21 @@ export const ManagedInstalling: StoryObj<CodexConfigViewProps> = {
   },
 };
 
+export const ManagedConnecting: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    managed: {
+      ...MANAGED,
+      platform: "win32-arm64",
+      run: {
+        kind: "running",
+        label: "Connecting to Codex download… 65s elapsed",
+        percent: 5,
+      },
+    },
+  },
+};
+
 export const ManagedExtracting: StoryObj<CodexConfigViewProps> = {
   render: InteractiveConfigView,
   args: {

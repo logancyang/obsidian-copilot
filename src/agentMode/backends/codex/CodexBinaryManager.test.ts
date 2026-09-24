@@ -98,6 +98,7 @@ describe("CodexBinaryManager", () => {
     });
 
     afterEach(() => {
+      jest.useRealTimers();
       setSettings({ agentMode: originalAgentMode });
       setPlatform(originalPlatform);
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -174,6 +175,33 @@ describe("CodexBinaryManager", () => {
           { label: "Activating Codex adapter…", percent: 98 },
           { label: "Codex adapter ready.", percent: 100 },
         ]);
+      });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/578 shows elapsed wait time before Codex download bytes arrive", async () => {
+        jest.useFakeTimers();
+        let beginDownload!: () => void;
+        let releaseDownload!: () => void;
+        const entered = new Promise<void>((resolve) => (beginDownload = resolve));
+        const held = new Promise<void>((resolve) => (releaseDownload = resolve));
+        jest.mocked(installCodexArchive).mockImplementation(async (stage, _signal, onProgress) => {
+          beginDownload();
+          await held;
+          onProgress?.({ phase: "download", received: 1024, total: 2048 });
+          fs.writeFileSync(path.join(stage, "codex-acp"), "native");
+        });
+        const manager = new CodexBinaryManager();
+        const install = manager.install();
+        await entered;
+
+        await jest.advanceTimersByTimeAsync(65_000);
+        expect(manager.getActionState()).toMatchObject({
+          kind: "running",
+          label: "Connecting to Codex download… 65s elapsed",
+          percent: 5,
+        });
+
+        releaseDownload();
+        await install;
+        expect(manager.getActionState()).toEqual({ kind: "idle" });
       });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 rejects a wrong adapter version or missing bundled runtime before selecting files", async () => {
         const manager = new CodexBinaryManager();
