@@ -380,10 +380,14 @@ export async function buildOpencodeConfig(
     if (!providerConfig.models) providerConfig.models = {};
     const { info } = entry.configuredModel;
     const modelConfig: Record<string, unknown> = {};
-    // Unknown custom models must start text-only; catalog models can inherit
-    // their own capabilities until Copilot has modality metadata to override.
+    // Unknown custom models must start text-only. OpenCode 2 replaces a model's
+    // capabilities wholesale, so a catalog model keeps its native entry unless
+    // Copilot knows every field rather than inheriting guessed defaults.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/557
-    if (!hasCatalogIdentity || info.modalities) {
+    if (
+      !hasCatalogIdentity ||
+      (info.modalities?.input && info.modalities.output && info.toolCall !== undefined)
+    ) {
       modelConfig.capabilities = {
         tools: info.toolCall ?? true,
         input: info.modalities?.input ?? ["text"],

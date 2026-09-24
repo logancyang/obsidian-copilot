@@ -268,6 +268,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     });
     const model = makeModel("p-anthropic", "claude-sonnet-4-6");
     model.info.modalities = { input: ["text", "image"], output: ["text"] };
+    model.info.toolCall = true;
     const deps = makeDeps({
       resolved: [okEntry(provider, model)],
       keys: { "p-anthropic": "anth-123" },
@@ -289,6 +290,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     });
     const model = makeModel("p-anthropic", "deepseek-v4-flash");
     model.info.modalities = { input: ["text"], output: ["text"] };
+    model.info.toolCall = true;
     const deps = makeDeps({
       resolved: [okEntry(provider, model)],
       keys: { "p-anthropic": "anth-123" },
@@ -328,6 +330,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     });
     const model = makeModel("p-anthropic", "deepseek-v4-flash");
     model.info.modalities = { input: ["text"], output: ["text"] };
+    model.info.toolCall = true;
     model.info.reasoning = true;
     const deps = makeDeps({
       resolved: [okEntry(provider, model)],
@@ -356,6 +359,28 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       providers: Record<string, { models?: Record<string, unknown> }>;
     };
     expect(cfg.providers.anthropic.models).toEqual({ "hand-typed-model": {} });
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 inherits catalog capabilities when Copilot knows only some of them", async () => {
+    const provider = makeProvider("p-anthropic", {
+      kind: "byok",
+      catalogProviderId: "anthropic",
+    });
+    const inputOnly = makeModel("p-anthropic", "input-only");
+    inputOnly.info.modalities = { input: ["text", "image"] };
+    inputOnly.info.toolCall = false;
+    const unknownTools = makeModel("p-anthropic", "unknown-tools");
+    unknownTools.info.modalities = { input: ["text"], output: ["text", "image"] };
+    const deps = makeDeps({
+      resolved: [okEntry(provider, inputOnly), okEntry(provider, unknownTools)],
+      keys: { "p-anthropic": "anth-123" },
+    });
+
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      providers: Record<string, { models?: Record<string, unknown> }>;
+    };
+
+    expect(cfg.providers.anthropic.models).toEqual({ "input-only": {}, "unknown-tools": {} });
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 leaves catalog modalities intact when only tool support is known", async () => {
