@@ -28,6 +28,7 @@ import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpe
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
+import { buildNativeChatId } from "@/utils/nativeChatId";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
@@ -822,6 +823,14 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     </div>
   );
 
+  const activeSession = manager.getSession(sessionId);
+  const nativeSessionId = activeSession?.getBackendSessionId();
+  const chatLinkId =
+    manager.getSessionSourcePath(sessionId) ||
+    (activeSession && nativeSessionId
+      ? buildNativeChatId(activeSession.backendId, nativeSessionId)
+      : undefined);
+
   return (
     <div ref={setRootEl} className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
       {/* Project header sits ABOVE the tab strip: a project scope is just the
@@ -991,6 +1000,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       isLoading={isLoading}
                     />
                     <AgentChatControls
+                      chatLinkId={chatLinkId}
+                      onCopyChatLink={(id) => plugin.copyChatLink(id)}
                       onNewChat={handleNewChat}
                       onSaveAsNote={handleSaveAsNote}
                       chatHistoryItems={chatHistoryItems}
