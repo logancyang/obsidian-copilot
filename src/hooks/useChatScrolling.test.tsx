@@ -115,6 +115,20 @@ describe("useChatScrolling", () => {
       expect(geometry.scrollTop).toBe(250);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/277 resumes following when a taller viewport reaches the end without a scroll event", () => {
+      render(<ChatScrollHarness chatHistory={[userMessage("first")]} />);
+      geometry.scrollTop = 40;
+      fireEvent.scroll(screen.getByTestId("transcript"));
+
+      geometry.clientHeight = 160;
+      act(() => resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver)));
+      expect(screen.queryByRole("button", { name: "Scroll to end" })).toBeNull();
+
+      geometry.scrollHeight = 300;
+      act(() => resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver)));
+      expect(geometry.scrollTop).toBe(140);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/277 returns to the end and follows later growth when the reader uses the return control", () => {
       render(<ChatScrollHarness chatHistory={[userMessage("first")]} />);
       geometry.scrollTop = 30;
