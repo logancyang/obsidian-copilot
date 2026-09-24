@@ -1,5 +1,6 @@
 import { ManagedInstallAbortError } from "@/agentMode/backends/shared/managedInstall";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { compareSemver } from "@/utils/semver";
 
 interface NpmMetadata {
   name?: string;
@@ -23,16 +24,28 @@ export interface NpmAsset {
  * @param version - OpenCode release to install.
  * @param candidates - Platform variants ordered from most suitable to fallback.
  * @param fetchMetadata - Registry request that also works in Obsidian's desktop runtime.
+ * @param signal - Cancellation owned by the managed install operation.
  */
 export async function resolveNpmAsset(
   version: string,
   candidates: string[],
-  fetchMetadata: (url: string) => Promise<MetadataResponse>
+  fetchMetadata: (url: string) => Promise<MetadataResponse>,
+  signal?: AbortSignal
 ): Promise<NpmAsset> {
   for (const candidate of candidates) {
-    const packageName = `@opencode/cli-${candidate.slice("opencode-".length)}`;
+    if (signal?.aborted) throw new ManagedInstallAbortError();
+    // OpenCode 1 publishes unscoped platform packages, and the managed pin stays on
+    // 1.x until the OpenCode 2 cutover, so both registries must stay installable.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/560
+    const packageName =
+      compareSemver(version, "2.0.0") >= 0
+        ? `@opencode/cli-${candidate.slice("opencode-".length)}`
+        : candidate;
     const url = `https://registry.npmjs.org/${packageName.replace("/", "%2F")}/${encodeURIComponent(version)}`;
     const response = await fetchMetadata(url);
+    // Hosts try a baseline or musl build first, and not every variant is published.
+    // A registry outage must still surface as an error rather than "no package".
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/560
     if (response.status === 404) continue;
     if (response.status < 200 || response.status >= 300) {
       throw new Error(`OpenCode npm package lookup failed with status ${response.status}.`);

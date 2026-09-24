@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { extractNpmBinary, resolveNpmAsset, verifyNpmIntegrity } from "./npmPackage";
+import { ManagedInstallAbortError } from "@/agentMode/backends/shared/managedInstall";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/560";
 
@@ -85,6 +86,43 @@ describe("npmPackage", () => {
       );
       expect(fetch).toHaveBeenCalledTimes(2);
       expect(asset.name).toBe("pkg.tgz");
+    });
+
+    it(`${ISSUE} resolves an OpenCode 1 release from its unscoped platform package`, async () => {
+      const fetch = jest.fn(async () => ({
+        status: 200,
+        json: {
+          name: "opencode-darwin-arm64",
+          version: "1.18.31",
+          dist: {
+            tarball:
+              "https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.18.31.tgz",
+            integrity: "sha512-" + Buffer.alloc(64).toString("base64"),
+          },
+        },
+      }));
+      const asset = await resolveNpmAsset("1.18.31", ["opencode-darwin-arm64"], fetch);
+      expect(fetch).toHaveBeenCalledWith(
+        "https://registry.npmjs.org/opencode-darwin-arm64/1.18.31"
+      );
+      expect(asset.name).toBe("opencode-darwin-arm64-1.18.31.tgz");
+    });
+
+    it(`${ISSUE} stops trying fallback packages once the install is cancelled`, async () => {
+      const controller = new AbortController();
+      const fetch = jest.fn(async () => {
+        controller.abort();
+        return { status: 404, json: {} };
+      });
+      await expect(
+        resolveNpmAsset(
+          "2.0.14",
+          ["opencode-linux-x64-baseline-musl", "opencode-linux-x64-musl"],
+          fetch,
+          controller.signal
+        )
+      ).rejects.toThrow(ManagedInstallAbortError);
+      expect(fetch).toHaveBeenCalledTimes(1);
     });
 
     it(`${ISSUE} fails clearly when no platform package exists`, async () => {

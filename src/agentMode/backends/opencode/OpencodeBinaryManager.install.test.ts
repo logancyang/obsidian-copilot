@@ -82,7 +82,8 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
         expect(jest.mocked(npmPackage.resolveNpmAsset)).toHaveBeenCalledWith(
           version,
           ["opencode-darwin-arm64"],
-          expect.any(Function)
+          expect.any(Function),
+          expect.any(AbortSignal)
         );
         expect(npmPackage.verifyNpmIntegrity).toHaveBeenCalledWith(
           expect.stringContaining(".tgz"),

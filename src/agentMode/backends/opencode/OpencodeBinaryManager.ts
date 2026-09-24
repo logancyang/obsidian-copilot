@@ -361,8 +361,11 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     const { target, candidates } = await resolveOpencodeTarget();
     this.throwIfAborted(opts.signal);
 
-    const asset = await resolveNpmAsset(version, candidates, (url) =>
-      requestUrl({ url, method: "GET", throw: false })
+    const asset = await resolveNpmAsset(
+      version,
+      candidates,
+      (url) => requestUrl({ url, method: "GET", throw: false }),
+      opts.signal
     );
     this.throwIfAborted(opts.signal);
 
