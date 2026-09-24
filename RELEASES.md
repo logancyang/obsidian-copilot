@@ -13,6 +13,10 @@ OpenCode 2, the agent runtime behind Copilot Plus and your own model providers, 
 - Follow long replies as they stream in Agent Chat and Quick Chat. Scroll up to read at your own pace, then use the down-arrow to return to the latest text. ([#3358](https://github.com/logancyang/obsidian-copilot/pull/3358), @zeroliu)
 - See what Codex installation is doing, with elapsed connection time, downloaded bytes, and named setup stages. ([#3361](https://github.com/logancyang/obsidian-copilot/pull/3361), @zeroliu)
 
+## 🛠️ Bug Fixes
+
+- Selected note text stays attached when you click into chat immediately after selecting it. Editing the selected text also updates the attached excerpt. ([#3368](https://github.com/logancyang/obsidian-copilot/pull/3368), @zeroliu)
+
 ## ⚠️ Compatibility Notes
 
 OpenCode users need version 2.0.3 or newer. OpenCode 1 and earlier 2.0.x versions no longer run; open OpenCode **Configure** and choose the Copilot-managed 2.0.3 version. Newer custom versions remain selectable, but affected releases can omit configured models when a chat starts. ([#3365](https://github.com/logancyang/obsidian-copilot/pull/3365), @zeroliu)
