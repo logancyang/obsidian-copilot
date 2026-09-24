@@ -3,8 +3,10 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { codexAuth } from "./codexAuth";
 import { getSettings } from "@/settings/model";
+import { logWarn } from "@/logger";
 
 jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
+jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
 const mockSpawn = jest.fn();
 const mockExec = jest.fn();
 jest.mock("./codexVersion", () => ({
@@ -68,6 +70,7 @@ const serve = (account: unknown = ACCOUNT) => {
 
 describe("codexAuth", () => {
   beforeEach(() => {
+    jest.mocked(logWarn).mockClear();
     mockSpawn.mockReset().mockImplementation((_command, args) => {
       if (args.includes("app-server")) return serve();
       const proc = child();
@@ -116,6 +119,38 @@ describe("codexAuth", () => {
     });
   });
   describe("getStatus()", () => {
+    it("records a Codex probe setup failure without logging its error text: https://github.com/Brevilabs/obsidian-copilot-private/issues/578", async () => {
+      await expect(codexAuth.getStatus(configured({ binaryPath: "" }))).resolves.toEqual({
+        signedIn: false,
+      });
+
+      expect(logWarn).toHaveBeenCalledWith("[AgentMode] Codex account status unavailable");
+      expect(JSON.stringify(jest.mocked(logWarn).mock.calls)).not.toContain(
+        "Install Codex before signing in"
+      );
+    });
+    it("records which Codex account reply failed without logging the reply or credentials: https://github.com/Brevilabs/obsidian-copilot-private/issues/578", async () => {
+      const proc = child();
+      mockSpawn.mockReturnValue(proc);
+      proc.stdin.on("data", (data) => {
+        const request = JSON.parse(String(data));
+        if (request.id === 0) queueMicrotask(() => proc.stdout.write('{"id":0,"result":{}}\n'));
+        if (request.id === 1)
+          queueMicrotask(() =>
+            proc.stdout.write('{"id":1,"error":{"message":"private@example.com secret-token"}}\n')
+          );
+      });
+      proc.stdin.on("finish", () => queueMicrotask(() => proc.emit("close", 1)));
+
+      await expect(codexAuth.getStatus(settings)).resolves.toEqual({ signedIn: false });
+
+      expect(logWarn).toHaveBeenCalledWith("[AgentMode] Codex account probe incomplete", {
+        lastReply: "account/read error",
+        timedOut: false,
+      });
+      expect(JSON.stringify(jest.mocked(logWarn).mock.calls)).not.toContain("private@example.com");
+      expect(JSON.stringify(jest.mocked(logWarn).mock.calls)).not.toContain("secret-token");
+    });
     it.each(["/bundle/codex-acp.exe", "C:/npm/codex-acp/dist/index.js"])(
       `only discovers Node for a Windows npm entry %s: ${ISSUE}`,
       async (binaryPath) => {
@@ -146,6 +181,7 @@ describe("codexAuth", () => {
         const write = jest.spyOn(proc.stdin, "write");
         mockSpawn.mockReturnValue(proc);
         await expect(codexAuth.getStatus(settings)).resolves.toEqual(expected);
+        expect(logWarn).not.toHaveBeenCalled();
         expect(write.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
           {
             id: 0,
@@ -227,7 +263,7 @@ describe("codexAuth", () => {
       await expect(codexAuth.getStatus(settings)).resolves.toEqual({ signedIn: false });
     });
     it.each(["darwin", "win32"] as const)(
-      `stops the owned process tree before settling a timed-out status probe on %s: ${ISSUE}`,
+      `stops a timed-out status probe and records that no reply arrived on %s: ${ISSUE} https://github.com/Brevilabs/obsidian-copilot-private/issues/578`,
       async (host) => {
         jest.useFakeTimers();
         const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
@@ -246,6 +282,10 @@ describe("codexAuth", () => {
           const pending = codexAuth.getStatus(settings);
           await jest.advanceTimersByTimeAsync(10_000);
           await expect(pending).resolves.toEqual({ signedIn: false });
+          expect(logWarn).toHaveBeenCalledWith("[AgentMode] Codex account probe incomplete", {
+            lastReply: "none",
+            timedOut: true,
+          });
           if (host === "win32")
             expect(mockExec).toHaveBeenCalledWith(
               "taskkill",
@@ -346,6 +386,31 @@ describe("codexAuth", () => {
     });
   });
   describe("signIn()", () => {
+    it("does not record an expected Codex sign-in cancellation as a failure: https://github.com/Brevilabs/obsidian-copilot-private/issues/578", async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(codexAuth.signIn(settings, { signal: controller.signal })).resolves.toEqual({
+        signedIn: false,
+      });
+
+      expect(logWarn).not.toHaveBeenCalled();
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+    it("records an unverified Codex browser sign-in without account details: https://github.com/Brevilabs/obsidian-copilot-private/issues/578", async () => {
+      mockSpawn.mockImplementation((_command, args) => {
+        if (args.includes("app-server")) return serve(null);
+        const proc = child();
+        queueMicrotask(() => proc.emit("close", 0));
+        return proc;
+      });
+
+      await expect(codexAuth.signIn(settings, {})).resolves.toEqual({ signedIn: false });
+
+      expect(logWarn).toHaveBeenCalledWith(
+        "[AgentMode] Codex browser sign-in ended without a verified account"
+      );
+    });
     it(`selects the OpenAI authorization URL and verifies status with the same profile: ${ISSUE}`, async () => {
       const onUrl = jest.fn();
       mockSpawn.mockImplementation((_command, args) => {
