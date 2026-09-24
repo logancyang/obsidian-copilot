@@ -10,7 +10,13 @@ OpenCode 2, the agent runtime behind Copilot Plus and your own model providers, 
 
 - Use OpenCode 2 in Agent Chat with Copilot-managed installation. ([#3365](https://github.com/logancyang/obsidian-copilot/pull/3365), @zeroliu)
 - Start a conversation about the note you are reading. Click the Copilot icon in its desktop note header to open Agent Chat with the note attached. ([#3363](https://github.com/logancyang/obsidian-copilot/pull/3363), @zeroliu)
+
+  ![Copilot Agent Chat with the current note attached](https://github.com/user-attachments/assets/9d33121f-b683-4f75-bf4b-edf3efed3e3f)
+
 - Follow long replies as they stream in Agent Chat and Quick Chat. Scroll up to read at your own pace, then use the down-arrow to return to the latest text. ([#3358](https://github.com/logancyang/obsidian-copilot/pull/3358), @zeroliu)
+
+  ![Streaming replies, scrolling up to read, and returning to the latest text](https://github.com/user-attachments/assets/2a35406a-bff5-4958-8e4e-ec4f16381918)
+
 - See what Codex installation is doing, with elapsed connection time, downloaded bytes, and named setup stages. ([#3361](https://github.com/logancyang/obsidian-copilot/pull/3361), @zeroliu)
 
 ## 🛠️ Bug Fixes
