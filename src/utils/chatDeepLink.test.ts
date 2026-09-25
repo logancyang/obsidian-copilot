@@ -45,7 +45,7 @@ describe("chatDeepLink", () => {
       );
     });
 
-    it("reads the epoch from disk when the note is in a hidden folder", async () => {
+    it("reads the epoch from disk when the note is in a hidden folder (https://github.com/logancyang/obsidian-copilot/issues/3271)", async () => {
       mockReadFrontmatter.mockResolvedValue({ epoch: "1735732800000" });
       expect(await getSavedChatDeepLinkId(app, ".copilot/conversations/chat.md")).toBe(
         "epoch:1735732800000"
@@ -53,6 +53,11 @@ describe("chatDeepLink", () => {
     });
 
     it("returns null when the note has no epoch", async () => {
+      expect(await getSavedChatDeepLinkId(app, "Copilot/conversations/chat.md")).toBeNull();
+    });
+
+    it("returns null for a fractional epoch the link grammar cannot express (https://github.com/logancyang/obsidian-copilot/issues/3271)", async () => {
+      mockGetCache.mockReturnValue({ frontmatter: { epoch: 1.5 } } as never);
       expect(await getSavedChatDeepLinkId(app, "Copilot/conversations/chat.md")).toBeNull();
     });
   });
@@ -72,6 +77,21 @@ describe("chatDeepLink", () => {
     it("returns null when no conversation owns the epoch", async () => {
       mockList.mockResolvedValue([chat("Copilot/conversations/chat.md")]);
       mockReadFrontmatter.mockResolvedValue({ epoch: "1600000000000" });
+      expect(await findChatFileByDeepLinkId(app, "epoch:1735732800000")).toBeNull();
+    });
+
+    it("ignores a matching note in a sibling folder that shares the folder's name prefix (https://github.com/logancyang/obsidian-copilot/issues/3271)", async () => {
+      mockList.mockResolvedValue([chat("Copilot/conversations-backup/chat.md")]);
+      mockReadFrontmatter.mockResolvedValue({ epoch: "1735732800000" });
+      expect(await findChatFileByDeepLinkId(app, "epoch:1735732800000")).toBeNull();
+    });
+
+    it("returns null when two conversations share the epoch, such as a sync conflict copy (https://github.com/logancyang/obsidian-copilot/issues/3271)", async () => {
+      mockList.mockResolvedValue([
+        chat("Copilot/conversations/chat.md"),
+        chat("Copilot/conversations/chat (conflicted copy).md"),
+      ]);
+      mockReadFrontmatter.mockResolvedValue({ epoch: "1735732800000" });
       expect(await findChatFileByDeepLinkId(app, "epoch:1735732800000")).toBeNull();
     });
 
