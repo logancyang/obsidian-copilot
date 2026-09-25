@@ -44,7 +44,6 @@ describe("findChatRelevantNotes", () => {
         id: "a",
         request: { folder_name: "Vault", draft: "topic", file_paths: ["Vault/a.md"] },
         skippedAttachments: 1,
-        addFile: jest.fn(),
       });
       expect(search).toHaveBeenCalledWith("url", {
         folder_name: "Vault",
@@ -60,7 +59,6 @@ describe("findChatRelevantNotes", () => {
         id: "a",
         request: { folder_name: "Vault" },
         skippedAttachments: 1,
-        addFile: jest.fn(),
       });
       expect(result.status).toBe("no-usable-context");
       expect(search).not.toHaveBeenCalled();
@@ -75,7 +73,6 @@ describe("findChatRelevantNotes", () => {
           file_paths: [" "],
         },
         skippedAttachments: 0,
-        addFile: jest.fn(),
       };
       const blank = await findChatRelevantNotes(app, context);
       expect(blank.status).toBe("no-usable-context");
@@ -105,7 +102,6 @@ describe("findChatRelevantNotes", () => {
           id: "a",
           request: { folder_name: "Vault", draft: "topic" },
           skippedAttachments: 0,
-          addFile: jest.fn(),
         });
         expect(result.status).toBe(errorCode ? "unsupported-service" : "unavailable");
       }
@@ -125,7 +121,6 @@ describe("findChatRelevantNotes", () => {
               id: "a",
               request: { folder_name: "Vault", draft: "topic" },
               skippedAttachments: 0,
-              addFile: jest.fn(),
             })
           ).status
         ).toBe(status);

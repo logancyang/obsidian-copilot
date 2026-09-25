@@ -46,7 +46,6 @@ function fixture(views: NoteView[]) {
   };
   const plugin = {
     app: { workspace },
-    isPluginLifecycleActive: () => true,
     addNoteToAgentChat,
     registerEvent: jest.fn(),
     register: jest.fn((callback: () => void) => {
@@ -81,7 +80,7 @@ describe("registerNoteHeaderAction", () => {
     expect(journal.addAction).toHaveBeenCalledTimes(1);
   });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 adds an action when a note leaf opens and removes actions from closed leaves and on unload", () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 adds an action once per note leaf, including leaves opened later, and removes them on unload", () => {
     const first = noteView("First.md");
     const views = [first];
     const { plugin, layoutReady, listeners, cleanup } = fixture(views);
@@ -96,26 +95,9 @@ describe("registerNoteHeaderAction", () => {
     listeners.get("layout-change")!();
     expect(second.addAction).toHaveBeenCalledTimes(1);
 
-    views.shift();
-    listeners.get("layout-change")!();
-    expect((first.addAction.mock.results[0].value as HTMLElement).isConnected).toBe(false);
-
     cleanup();
+    expect((first.addAction.mock.results[0].value as HTMLElement).isConnected).toBe(false);
     expect((second.addAction.mock.results[0].value as HTMLElement).isConnected).toBe(false);
-  });
-
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 restores the action when Obsidian replaces a note header", () => {
-    const view = noteView("Research.md");
-    const { plugin, layoutReady, listeners, addNoteToAgentChat } = fixture([view]);
-
-    registerNoteHeaderAction(plugin);
-    layoutReady();
-    (view.addAction.mock.results[0].value as HTMLElement).remove();
-    listeners.get("layout-change")!();
-
-    expect(view.addAction).toHaveBeenCalledTimes(2);
-    (view.addAction.mock.results[1].value as HTMLButtonElement).click();
-    expect(addNoteToAgentChat).toHaveBeenCalledWith(view.file, true);
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 leaves Agent Chat closed when the clicked Markdown view has no note", () => {

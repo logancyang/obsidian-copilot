@@ -148,16 +148,4 @@ describe("useAgentInputDrafts", () => {
 
     expect(result.current.contextNotes).toEqual([note]);
   });
-
-  it("attaches a note to its own chat input through addContextNote", () => {
-    const { result, store } = renderDrafts({
-      chatInputId: "a",
-      defaultIncludeActiveNote: false,
-    });
-    const note = file("Research.md");
-
-    act(() => result.current.addContextNote(note));
-
-    expect(store.get("a")?.contextNotes).toEqual([note]);
-  });
 });

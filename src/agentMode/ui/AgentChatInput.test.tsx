@@ -134,7 +134,6 @@ const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInput
   queue: [],
   setInput: jest.fn(),
   setContextNotes: jest.fn(),
-  addContextNote: jest.fn(),
   setSelectedImages: jest.fn(),
   addImages: jest.fn(),
   setIncludeActiveNote: jest.fn(),

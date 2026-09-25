@@ -18,8 +18,6 @@ interface UseAgentInputDraftsArgs {
 export interface AgentInputDraftControls extends AgentInputDraft {
   setInput: React.Dispatch<React.SetStateAction<string>>;
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
-  /** Attach a note as fixed context once; see {@link AgentInputDraftStore.addContextNote}. */
-  addContextNote: (note: TFile) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
   addImages: (files: File[]) => void;
   setIncludeActiveNote: (include: boolean) => void;
@@ -67,11 +65,6 @@ export function useAgentInputDrafts({
         contextNotes: applyState(value, draft.contextNotes),
       })),
     [updateActive]
-  );
-
-  const addContextNote = useCallback(
-    (note: TFile) => store.addContextNote(chatInputId, note),
-    [store, chatInputId]
   );
 
   const setSelectedImages = useCallback<React.Dispatch<React.SetStateAction<File[]>>>(
@@ -161,7 +154,6 @@ export function useAgentInputDrafts({
       ...fields,
       setInput,
       setContextNotes,
-      addContextNote,
       setSelectedImages,
       addImages,
       setIncludeActiveNote,
@@ -174,7 +166,6 @@ export function useAgentInputDrafts({
       fields,
       setInput,
       setContextNotes,
-      addContextNote,
       setSelectedImages,
       addImages,
       setIncludeActiveNote,

@@ -97,7 +97,6 @@ function selectChat(id: string, question: string) {
     id,
     request: { folder_name: "Vault", messages: [{ role: "user" as const, content: question }] },
     skippedAttachments: 0,
-    addFile: jest.fn(),
   };
   getChatRelevantNotesStore(mockApp).select(chat);
   return chat;
@@ -232,7 +231,6 @@ describe("RelevantNotes", () => {
         id: "old-miyo",
         request: { folder_name: "Vault", messages: [{ role: "user", content: "topic" }] },
         skippedAttachments: 0,
-        addFile: jest.fn(),
       });
       render(<RelevantNotes onAddToChat={jest.fn()} />);
       await screen.findByText("Target");
@@ -352,7 +350,6 @@ describe("RelevantNotes", () => {
         id: "reconnecting",
         request: { folder_name: "Vault", messages: [{ role: "user", content: "topic" }] },
         skippedAttachments: 0,
-        addFile: jest.fn(),
       });
       const findChat = jest.mocked(findChatRelevantNotes);
       findChat.mockResolvedValueOnce({ notes: [], status: "unavailable" }).mockResolvedValueOnce({

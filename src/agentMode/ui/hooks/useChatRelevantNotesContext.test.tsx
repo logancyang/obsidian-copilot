@@ -55,7 +55,6 @@ describe("useChatRelevantNotesContext", () => {
         contextNotes: [],
         includeActiveNote: false,
         loading: false,
-        addContextNote: jest.fn(),
       } as unknown as AgentInputDraftControls;
     });
     afterEach(() => {
@@ -418,7 +417,6 @@ describe("useChatRelevantNotesContext", () => {
         id: "other",
         request: { folder_name: "Vault", draft: "other topic" },
         skippedAttachments: 0,
-        addFile: jest.fn(),
       };
       const store = getChatRelevantNotesStore(app);
       store.select(other);
@@ -440,7 +438,6 @@ describe("useChatRelevantNotesContext", () => {
         id: "popout",
         request: { folder_name: "Vault", draft: "popout topic" },
         skippedAttachments: 0,
-        addFile: jest.fn(),
       };
       store.select(popout);
       const { rerender } = renderHook(
@@ -471,25 +468,6 @@ describe("useChatRelevantNotesContext", () => {
       });
     });
 
-    it("adds a recommended file to the new session's attachments after switching sessions (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
-      const firstSessionAdd = jest.fn();
-      const secondSessionAdd = jest.fn();
-      const { rerender } = renderHook(
-        ({ id, addContextNote }) =>
-          useChatRelevantNotesContext(app, root, id, { ...draft, addContextNote }, [], undefined),
-        { initialProps: { id: "first-chat", addContextNote: firstSessionAdd } }
-      );
-      act(() => {
-        root.dispatchEvent(new Event("pointerdown"));
-      });
-      rerender({ id: "second-chat", addContextNote: secondSessionAdd });
-
-      getChatRelevantNotesStore(app).getSnapshot()!.addFile("Embeddings.md");
-
-      expect(firstSessionAdd).not.toHaveBeenCalled();
-      expect(secondSessionAdd).toHaveBeenCalledTimes(1);
-      expect(secondSessionAdd.mock.calls[0][0].path).toBe("Embeddings.md");
-    });
     it("keeps the editor as the source when clicking the Relevant Notes popout control (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { getByRole } = render(
         <RelevantNotesShelfPanel onPopOut={jest.fn()}>

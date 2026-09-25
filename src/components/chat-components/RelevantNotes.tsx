@@ -345,11 +345,7 @@ export const RelevantNotes = memo(
                   entering={row.entering}
                   animated={animated}
                   rowRef={registerRow(row.note.note.path)}
-                  onAddToChat={() =>
-                    chat.context
-                      ? chat.context.addFile(row.note.note.path)
-                      : addToChat(row.note.note.path)
-                  }
+                  onAddToChat={() => addToChat(row.note.note.path)}
                   onNavigateToNote={() => navigateToNote(row.note.note.path)}
                 />
               ))}
