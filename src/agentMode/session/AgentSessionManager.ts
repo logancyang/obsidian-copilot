@@ -358,7 +358,6 @@ export class AgentSessionManager {
     { reason: string; immediate: boolean }
   >();
   private readonly restartingBackends = new Set<BackendId>();
-  private readonly recoveringBackends = new Set<BackendId>();
   /**
    * Backends running with spawn config the user has since changed, mapped to
    * the accumulated reasons. Applying the change means restarting, which closes
@@ -3746,9 +3745,7 @@ export class AgentSessionManager {
       // The rejected turn must finish writing its error before replacement.
       // restartBackend defers while that session is running.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
-      this.recoveringBackends.add(backendId);
       void this.restartBackend(backendId, "internal service stopped").catch((err) => {
-        if (this.backends.get(backendId) === proc) this.recoveringBackends.delete(backendId);
         this.setLastError(err2String(err));
         logError(`[AgentMode] ${backendId} internal service restart failed`, err);
       });
@@ -3839,7 +3836,6 @@ export class AgentSessionManager {
       // is M5.
       if (this.backends.get(backendId) === proc) {
         this.backends.delete(backendId);
-        this.recoveringBackends.delete(backendId);
         // Retry spawns from current settings; a dead generation has no config left to apply.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
         this.heldConfigChanges.delete(backendId);
@@ -3995,7 +3991,6 @@ export class AgentSessionManager {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
     this.heldConfigChanges.delete(backendId);
     logInfo(`[AgentMode] restarting ${backendId} backend: ${reason}`);
-    const recovering = this.recoveringBackends.has(backendId);
     // Declared out here so the `finally` can release it however the restart ends.
     const retainedChatInputIds: string[] = [];
     try {
@@ -4015,9 +4010,7 @@ export class AgentSessionManager {
             labelSource: session.getLabelSource(),
             detached: this.detachedFromTabIds.has(session.internalId),
             recoveryMessages:
-              recovering && session.getStatus() === "error"
-                ? session.store.getDisplayMessages()
-                : undefined,
+              session.getStatus() === "error" ? session.store.getDisplayMessages() : undefined,
           }))
         : [];
       for (const replacement of replacements) {
@@ -4073,7 +4066,6 @@ export class AgentSessionManager {
       }
     } finally {
       this.restartingBackends.delete(backendId);
-      if (recovering) this.recoveringBackends.delete(backendId);
       for (const id of retainedChatInputIds) this.retainedChatInputIds.delete(id);
       // Published after the release so a restart that threw still lets the
       // draft store collect an id no session claimed.

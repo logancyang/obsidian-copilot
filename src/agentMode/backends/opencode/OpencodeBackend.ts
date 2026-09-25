@@ -88,7 +88,6 @@ export interface OpencodeModelDeps {
 export class OpencodeBackend implements AcpBackend {
   readonly id = "opencode" as const;
   readonly displayName = "opencode";
-  readonly recoverOnInternalServiceFailure = true;
 
   readonly #deps: OpencodeModelDeps;
 
