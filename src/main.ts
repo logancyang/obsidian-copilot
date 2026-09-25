@@ -98,7 +98,9 @@ import {
 import {
   addIcon,
   Editor,
+  editorInfoField,
   FileSystemAdapter,
+  MarkdownFileInfo,
   MarkdownView,
   Menu,
   Notice,
@@ -130,6 +132,7 @@ import {
   trashFile,
 } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
+import { EditorView } from "@codemirror/view";
 import { OpenArtifactsPublisher } from "@/openArtifacts/OpenArtifactsPublisher";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
 import {
@@ -168,8 +171,6 @@ export default class CopilotPlugin extends Plugin {
   // never-focused-a-chat state is harmless.
   private lastActiveChatViewType: typeof CHAT_VIEWTYPE | typeof CHAT_AGENT_VIEWTYPE = CHAT_VIEWTYPE;
   private selectionDebounceTimer?: number;
-  private selectionChangeHandler?: () => void;
-  private selectionListenerDocument?: Document;
   private lastSelectionSignature?: string;
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
@@ -699,8 +700,7 @@ export default class CopilotPlugin extends Plugin {
       }
     }
 
-    // Cleanup selection handler
-    this.cleanupSelectionHandler();
+    window.clearTimeout(this.selectionDebounceTimer);
     this.cleanupWebSelectionWatcher();
     this.clearSelectionContext();
 
@@ -815,43 +815,75 @@ export default class CopilotPlugin extends Plugin {
     );
   }
 
-  /**
-   * Initialize automatic text selection handler
-   * Listens to selectionchange events and automatically adds selected text to chat context
-   */
+  /** Capture note selections in Edit and Reading view before focus can move to chat. */
   initSelectionHandler() {
-    this.selectionChangeHandler = () => {
-      // Clear existing debounce timer
-      if (this.selectionDebounceTimer) {
-        window.clearTimeout(this.selectionDebounceTimer);
-      }
+    this.registerEditorExtension(
+      EditorView.updateListener.of((update) => {
+        if (!update.selectionSet || !update.view.hasFocus) return;
 
-      // Debounce selection changes to avoid excessive triggers
-      this.selectionDebounceTimer = window.setTimeout(() => {
-        this.handleSelectionChange();
-      }, 500);
-    };
+        // The originating editor identifies its note even in a popout, where
+        // the active leaf may differ. https://github.com/Brevilabs/obsidian-copilot-private/issues/597
+        const info = update.state.field(editorInfoField, false);
+        if (info) this.scheduleSelectionUpdate(() => this.handleSelectionChange(info));
+      })
+    );
 
-    // Capture the document at registration so removal targets the same one
-    // (activeDocument can change if the user focuses a popout window).
-    this.selectionListenerDocument = activeDocument;
-    this.selectionListenerDocument.addEventListener("selectionchange", this.selectionChangeHandler);
+    const watchDocument = (doc: Document) =>
+      this.registerDomEvent(doc, "selectionchange", () => this.handleReadingSelectionChange(doc));
+    watchDocument(activeDocument);
+    this.registerEvent(this.app.workspace.on("window-open", (win) => watchDocument(win.doc)));
   }
 
-  /**
-   * Clean up selection handler on plugin unload
-   */
-  cleanupSelectionHandler() {
-    if (this.selectionDebounceTimer) {
-      window.clearTimeout(this.selectionDebounceTimer);
+  /** Debounces selection updates so dragging a selection does not rewrite chat context on every step. */
+  private scheduleSelectionUpdate(update: () => void): void {
+    window.clearTimeout(this.selectionDebounceTimer);
+    this.selectionDebounceTimer = window.setTimeout(update, 500);
+  }
+
+  private handleReadingSelectionChange(doc: Document): void {
+    const selection = doc.getSelection();
+    const anchor = selection?.anchorNode;
+    const focus = selection?.focusNode;
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const file = view?.file;
+    if (!anchor || !focus || !file || view.getMode() !== "preview") return;
+
+    // Only rendered text inside the note is a note selection; a later chat
+    // selection leaves the pending one attached. https://github.com/Brevilabs/obsidian-copilot-private/issues/597
+    const readingEl = view.previewMode.containerEl;
+    if (!readingEl.contains(anchor) || !readingEl.contains(focus)) return;
+
+    const selectedText = selection.toString();
+    this.scheduleSelectionUpdate(() => {
+      const signature = `preview:${file.path}:${selectedText}`;
+      if (signature === this.lastSelectionSignature) return;
+      this.lastSelectionSignature = signature;
+
+      if (!selectedText.trim()) {
+        this.clearNoteSelectionContexts();
+        return;
+      }
+
+      // Rendered Markdown does not expose reliable source line numbers for every selection.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/597
+      this.setSelectionContext({
+        id: uuidv4(),
+        content: selectedText,
+        sourceType: "note",
+        noteTitle: file.basename,
+        notePath: file.path,
+        startLine: 0,
+        endLine: 0,
+      });
+    });
+  }
+
+  private clearNoteSelectionContexts(): void {
+    const currentContexts = getSelectedTextContexts();
+    const nonNoteContexts = currentContexts.filter((ctx) => ctx.sourceType !== "note");
+    if (currentContexts.length !== nonNoteContexts.length) {
+      setSelectedTextContexts(nonNoteContexts);
     }
-    if (this.selectionChangeHandler && this.selectionListenerDocument) {
-      this.selectionListenerDocument.removeEventListener(
-        "selectionchange",
-        this.selectionChangeHandler
-      );
-    }
-    this.selectionListenerDocument = undefined;
   }
 
   /**
@@ -883,27 +915,18 @@ export default class CopilotPlugin extends Plugin {
   }
 
   /**
-   * Handle text selection changes
-   * Only processes selections from markdown editors
+   * Updates chat context from a note editor's current selection.
+   * @param info - Editor and note that changed, including editors in popout windows.
    */
-  handleSelectionChange() {
-    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!activeView || !activeView.editor) {
-      return;
-    }
-
-    const editor = activeView.editor;
-    const activeFile = this.app.workspace.getActiveFile();
-
-    // Get selection range first to validate it exists
-    const selectionRange = editor.listSelections()[0];
-    if (!selectionRange) {
+  handleSelectionChange({ editor, file }: MarkdownFileInfo) {
+    const selectionRange = editor?.listSelections()[0];
+    if (!editor || !selectionRange) {
       return;
     }
 
     // Compute selection signature to avoid redundant updates
-    const signature = activeFile
-      ? `${activeFile.path}:${selectionRange.anchor.line}:${selectionRange.anchor.ch}:${selectionRange.head.line}:${selectionRange.head.ch}`
+    const signature = file
+      ? `${file.path}:${selectionRange.anchor.line}:${selectionRange.anchor.ch}:${selectionRange.head.line}:${selectionRange.head.ch}`
       : "";
 
     // Skip if selection hasn't changed
@@ -916,15 +939,11 @@ export default class CopilotPlugin extends Plugin {
 
     // If selection is empty, clear note-type contexts
     if (!selectedText || !selectedText.trim()) {
-      const currentContexts = getSelectedTextContexts();
-      const nonNoteContexts = currentContexts.filter((ctx) => ctx.sourceType !== "note");
-      if (currentContexts.length !== nonNoteContexts.length) {
-        setSelectedTextContexts(nonNoteContexts);
-      }
+      this.clearNoteSelectionContexts();
       return;
     }
 
-    if (!activeFile) {
+    if (!file) {
       return;
     }
 
@@ -938,8 +957,8 @@ export default class CopilotPlugin extends Plugin {
       id: uuidv4(),
       content: selectedText,
       sourceType: "note",
-      noteTitle: activeFile.basename,
-      notePath: activeFile.path,
+      noteTitle: file.basename,
+      notePath: file.path,
       startLine,
       endLine,
     };

@@ -75,6 +75,26 @@ describe("ContextBadges", () => {
       }
     );
 
+    it("shows a Reading view excerpt and note path without a false line number (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
+      render(
+        <ContextSelectedTextBadge
+          selectedText={{
+            id: "reading-excerpt",
+            sourceType: "note",
+            content: "Rendered note passage",
+            noteTitle: "Research",
+            notePath: "Projects/Research.md",
+            startLine: 0,
+            endLine: 0,
+          }}
+        />
+      );
+      expect(screen.getByTestId("label").textContent).toBe("Rendered note passage");
+      expect(screen.getByText("Selection")).toBeTruthy();
+      expect(screen.getByRole("tooltip").textContent).toContain("Projects/Research.md");
+      expect(screen.getByRole("tooltip").textContent).not.toMatch(/L\d/);
+    });
+
     it.each([note, web])("removes a $sourceType selection from its excerpt badge", (source) => {
       const onRemove = jest.fn();
       render(
