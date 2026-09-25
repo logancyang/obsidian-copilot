@@ -43,6 +43,8 @@ export async function downloadFile(
         if (status >= 300 && status < 400 && res.headers.location && hops > 0) {
           res.resume();
           const next = new URL(res.headers.location, current);
+          // A downgraded redirect would let the network substitute the release asset.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
           if (next.protocol !== "https:") {
             reject(new Error(`Unsafe ${displayName} download redirect.`));
             return;

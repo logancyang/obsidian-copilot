@@ -279,6 +279,28 @@ describe("ManagedBinaryManager", () => {
         expect(manager.isBusy()).toBe(false);
         manager.cancelCurrentOperation();
       });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/578 stops elapsed-time updates while an uncancellable request is still settling", async () => {
+        jest.useFakeTimers();
+        try {
+          let fail!: (error: Error) => void;
+          manager.pipeline.mockImplementationOnce(({ progress }) => {
+            progress.connecting();
+            return new Promise((_resolve, reject) => (fail = reject));
+          });
+          const progress = jest.fn();
+          const installing = manager.install({ onProgress: progress });
+          manager.cancelCurrentOperation();
+          const listener = jest.fn();
+          manager.subscribeRuntimeState(listener);
+          await jest.advanceTimersByTimeAsync(60_000);
+          expect(listener).not.toHaveBeenCalled();
+          expect(progress).toHaveBeenCalledTimes(1);
+          fail(new ManagedInstallAbortError());
+          await expect(installing).rejects.toThrow("Aborted");
+        } finally {
+          jest.useRealTimers();
+        }
+      });
     });
     describe("forgetSettledError()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 preserves idle and running snapshots when a lifecycle reopens", async () => {

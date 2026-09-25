@@ -282,6 +282,9 @@ export abstract class ManagedBinaryManager<
     options: TOptions
   ): Promise<InstalledBinary> {
     const progress = new InstallProgressReporter(this.displayName, (update) => {
+      // Some requests cannot be aborted, so a cancelled install can keep running and must look stopped.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/578
+      if (signal.aborted) return;
       this.publishProgress(update);
       options.onProgress?.(update);
     });

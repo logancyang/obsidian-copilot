@@ -73,7 +73,7 @@ describe("downloadFile", () => {
         [BYTES.length, BYTES.length],
       ]);
     });
-    it("follows HTTPS redirects to the published asset", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 follows HTTPS redirects to the published asset", async () => {
       serve(
         { statusCode: 302, headers: { location: "https://cdn.example.test/asset.zip" } },
         { statusCode: 200, chunks: [BYTES] }
@@ -94,7 +94,7 @@ describe("downloadFile", () => {
 
       expect(fs.readFileSync(dest)).toEqual(BYTES);
     });
-    it("rejects a redirect that leaves HTTPS before requesting it", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 rejects a redirect that leaves HTTPS before requesting it", async () => {
       serve({ statusCode: 302, headers: { location: "http://example.test/asset.zip" } });
 
       await expect(download()).rejects.toThrow("Unsafe Agent download redirect.");
