@@ -42,7 +42,7 @@ export function ChatTranscriptViewport({
           aria-label="Scroll to end"
           title="Scroll to end"
           onClick={scrollToEnd}
-          className="tw-absolute tw-inset-x-0 tw-bottom-3 tw-z-[1] tw-mx-auto tw-size-8 tw-rounded-full tw-border tw-border-border tw-bg-primary tw-shadow-md hover:tw-bg-interactive-hover"
+          className="tw-absolute tw-inset-x-0 tw-bottom-3 tw-z-[1] tw-mx-auto tw-size-8 tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-primary hover:tw-bg-interactive-hover"
         >
           <ArrowDown className="tw-size-4" aria-hidden="true" />
         </Button>
