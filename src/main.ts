@@ -8,7 +8,6 @@ import {
   buildChatDeepLink,
   findChatFileByDeepLinkId,
   getSavedChatDeepLinkId,
-  parseChatDeepLinkId,
 } from "@/utils/chatDeepLink";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChainOwner from "@/LLMProviders/chainOwner";
@@ -1436,15 +1435,12 @@ export default class CopilotPlugin extends Plugin {
   /** Copy a portable link to a saved note or a native agent session. */
   async copyChatLink(chatId: string): Promise<void> {
     try {
-      const id = isNativeChatId(chatId)
-        ? parseChatDeepLinkId(chatId)
-        : await getSavedChatDeepLinkId(this.app, chatId);
-      const link = id && buildChatDeepLink(this.app.vault.getName(), id);
-      if (!link) {
+      const id = isNativeChatId(chatId) ? chatId : await getSavedChatDeepLinkId(this.app, chatId);
+      if (!id) {
         new Notice("Save this chat before copying a link.");
         return;
       }
-      await navigator.clipboard.writeText(link);
+      await navigator.clipboard.writeText(buildChatDeepLink(this.app.vault.getName(), id));
       new Notice("Chat link copied.");
     } catch (error) {
       logError("Failed to copy chat link", error);
@@ -1452,21 +1448,14 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  /** Route a vault-scoped URI through the existing history loaders. */
+  /** Route a `copilot-chat` URI through the existing history loaders. */
   async openChatDeepLink(params: Record<string, string>): Promise<void> {
-    // Obsidian uses `vault` to select the target vault and removes it before
-    // invoking protocol handlers. Keep a mismatch guard for direct callers.
-    // https://github.com/logancyang/obsidian-copilot/issues/3271
-    const vaultMatches = params.vault === undefined || params.vault === this.app.vault.getName();
-    const id = vaultMatches && parseChatDeepLinkId(params.id ?? "");
-    if (!id) {
-      new Notice("Invalid chat link for this vault.");
-      return;
-    }
+    const id = params.id ?? "";
     try {
+      // Only epoch ids resolve to a file path, so a URI can never name an arbitrary path.
       const chatId = isNativeChatId(id) ? id : (await findChatFileByDeepLinkId(this.app, id))?.path;
       if (!chatId) {
-        new Notice("Chat link not found or ambiguous.");
+        new Notice("Chat link not found.");
         return;
       }
       await this.loadChatById(chatId);
