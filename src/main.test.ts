@@ -1,3 +1,4 @@
+/* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
 // The plugin module graph reaches Obsidian base classes the shared mock does
 // not model and provider SDKs Jest cannot resolve under jsdom; stubbing them
 // here (rather than in `__mocks__/obsidian.js`) keeps the blast radius to this
@@ -42,6 +43,11 @@ jest.mock("@/services/webViewerService/webViewerServiceSingleton", () => ({
 }));
 jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: jest.fn(() => false) }));
 jest.mock("@/utils/notificationSound", () => ({ disposeNotificationSound: jest.fn() }));
+jest.mock("@/utils/chatDeepLink", () => ({
+  buildChatDeepLink: jest.fn(),
+  findChatFileByDeepLinkId: jest.fn(),
+  getSavedChatDeepLinkId: jest.fn(),
+}));
 const mockSkillManagerDispose = jest.fn();
 const mockSkillManagerHasInstance = jest.fn(() => true);
 jest.mock("@/agentMode", () => ({
@@ -77,6 +83,11 @@ import { logFileManager } from "@/logFileManager";
 import { flushPersistence } from "@/services/settingsPersistence";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
+import {
+  buildChatDeepLink,
+  findChatFileByDeepLinkId,
+  getSavedChatDeepLinkId,
+} from "@/utils/chatDeepLink";
 import { Notice, TFile, type WorkspaceLeaf } from "obsidian";
 
 /**
@@ -116,6 +127,80 @@ async function flushTeardown(): Promise<void> {
 
 describe("main", () => {
   describe("CopilotPlugin", () => {
+    describe("copyChatLink()", () => {
+      beforeEach(() => jest.clearAllMocks());
+
+      it("copies the saved file's frontmatter epoch as a vault-scoped URI", async () => {
+        const plugin = createPluginUnderTest([]);
+        Object.assign(plugin, { app: { vault: { getName: () => "My Vault" } } });
+        jest.mocked(getSavedChatDeepLinkId).mockResolvedValue("epoch:1735732800000");
+        jest.mocked(buildChatDeepLink).mockReturnValue("obsidian://copilot-chat?stable");
+        const writeText = jest.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+
+        await plugin.copyChatLink("Copilot/conversations/renamed.md");
+
+        expect(getSavedChatDeepLinkId).toHaveBeenCalledWith(
+          plugin.app,
+          "Copilot/conversations/renamed.md"
+        );
+        expect(buildChatDeepLink).toHaveBeenCalledWith("My Vault", "epoch:1735732800000");
+        expect(writeText).toHaveBeenCalledWith("obsidian://copilot-chat?stable");
+      });
+
+      it("copies a native agent identity without looking for a Markdown note", async () => {
+        const plugin = createPluginUnderTest([]);
+        Object.assign(plugin, { app: { vault: { getName: () => "My Vault" } } });
+        const nativeId = "copilot-agent-session://codex/abc";
+        jest.mocked(buildChatDeepLink).mockReturnValue("obsidian://copilot-chat?native");
+        const writeText = jest.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+
+        await plugin.copyChatLink(nativeId);
+
+        expect(getSavedChatDeepLinkId).not.toHaveBeenCalled();
+        expect(buildChatDeepLink).toHaveBeenCalledWith("My Vault", nativeId);
+        expect(writeText).toHaveBeenCalledWith("obsidian://copilot-chat?native");
+      });
+    });
+
+    describe("openChatDeepLink()", () => {
+      beforeEach(() => jest.clearAllMocks());
+
+      it("loads the note resolved from an epoch id through the existing loader", async () => {
+        const plugin = createPluginUnderTest([]);
+        jest.mocked(findChatFileByDeepLinkId).mockResolvedValue({
+          path: "Copilot/conversations/renamed.md",
+        } as unknown as TFile);
+        const load = jest.spyOn(plugin, "loadChatById").mockResolvedValue(undefined);
+
+        await plugin.openChatDeepLink({ action: "copilot-chat", id: "epoch:1735732800000" });
+
+        expect(findChatFileByDeepLinkId).toHaveBeenCalledWith(plugin.app, "epoch:1735732800000");
+        expect(load).toHaveBeenCalledWith("Copilot/conversations/renamed.md");
+      });
+
+      it("resumes a native agent session id without looking for a note", async () => {
+        const plugin = createPluginUnderTest([]);
+        const load = jest.spyOn(plugin, "loadChatById").mockResolvedValue(undefined);
+
+        await plugin.openChatDeepLink({ id: "copilot-agent-session://codex/abc" });
+
+        expect(findChatFileByDeepLinkId).not.toHaveBeenCalled();
+        expect(load).toHaveBeenCalledWith("copilot-agent-session://codex/abc");
+      });
+
+      it("does not load anything when the id resolves to no note", async () => {
+        const plugin = createPluginUnderTest([]);
+        jest.mocked(findChatFileByDeepLinkId).mockResolvedValue(null);
+        const load = jest.spyOn(plugin, "loadChatById").mockResolvedValue(undefined);
+
+        await plugin.openChatDeepLink({ id: "Copilot/conversations/private.md" });
+
+        expect(load).not.toHaveBeenCalled();
+      });
+    });
+
     describe("initSelectionHandler()", () => {
       beforeEach(() => {
         jest.useFakeTimers();

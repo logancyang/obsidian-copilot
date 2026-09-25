@@ -4,6 +4,7 @@ import {
   ChatHistoryPopover,
 } from "@/components/chat-components/ChatHistoryPopover";
 import { Button } from "@/components/ui/button";
+import { CopyChatLinkButton } from "@/components/chat-components/CopyChatLinkButton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
@@ -34,6 +35,8 @@ interface AgentChatControlsProps {
   openChatIds?: ReadonlySet<string>;
   runningChatIds?: ReadonlySet<string>;
   onOpenSourceFile?: (id: string) => Promise<void>;
+  chatLinkId?: string;
+  onCopyChatLink?: (id: string) => void | Promise<void>;
   /**
    * Context-window usage meter, rendered as the first item in the right-side
    * control cluster (left of New Chat). Self-renders `null` until the backend
@@ -72,6 +75,8 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   openChatIds,
   runningChatIds,
   onOpenSourceFile,
+  chatLinkId,
+  onCopyChatLink,
   usageMeter,
   showMultiAgentUpsell = false,
 }) => {
@@ -108,14 +113,17 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
       <div className="tw-flex tw-items-center tw-gap-1">
         {usageMeter}
         {onNewChat && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost2" size="icon" title="New Chat" onClick={onNewChat}>
-                <MessageCirclePlus className="tw-size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>New Chat</TooltipContent>
-          </Tooltip>
+          <>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost2" size="icon" title="New Chat" onClick={onNewChat}>
+                  <MessageCirclePlus className="tw-size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>New Chat</TooltipContent>
+            </Tooltip>
+            <CopyChatLinkButton chatId={chatLinkId} onCopyLink={onCopyChatLink} />
+          </>
         )}
         {!settings.autosaveChat && onSaveAsNote && (
           <Tooltip>

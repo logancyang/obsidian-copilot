@@ -15,6 +15,7 @@ import {
   ChatHistoryPopover,
 } from "@/components/chat-components/ChatHistoryPopover";
 import { TokenCounter } from "./TokenCounter";
+import { CopyChatLinkButton } from "./CopyChatLinkButton";
 import { ChatSettingsPopover } from "@/components/chat-components/ChatSettingsPopover";
 
 interface ChatControlsProps {
@@ -27,6 +28,8 @@ interface ChatControlsProps {
   onLoadChat: (id: string) => Promise<void>;
   onOpenSourceFile?: (id: string) => Promise<void>;
   latestTokenCount?: number | null;
+  chatLinkId?: string;
+  onCopyChatLink?: (id: string) => void | Promise<void>;
 }
 
 export function ChatControls({
@@ -39,6 +42,8 @@ export function ChatControls({
   onLoadChat,
   onOpenSourceFile,
   latestTokenCount,
+  chatLinkId,
+  onCopyChatLink,
 }: ChatControlsProps) {
   const settings = useSettingsValue();
   const [selectedChain, setSelectedChain] = useChainType();
@@ -68,6 +73,7 @@ export function ChatControls({
           </TooltipTrigger>
           <TooltipContent>New Chat</TooltipContent>
         </Tooltip>
+        <CopyChatLinkButton chatId={chatLinkId} onCopyLink={onCopyChatLink} />
         <ChatSettingsPopover />
         {!settings.autosaveChat && (
           <Tooltip>
