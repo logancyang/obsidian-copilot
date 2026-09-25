@@ -1071,3 +1071,106 @@ If your plugin does not need CSS, delete this file.
 .copilot-fade-mask-bottom {
   background: linear-gradient(to top, var(--background-primary), transparent);
 }
+
+/*
+ * Rendered inline diff decorations.
+ *
+ * The ins/del elements and the table rows these rules target are produced by a
+ * post-pass over markup that the Obsidian Markdown renderer emitted, so React
+ * never owns those nodes and cannot carry Tailwind classes on them. The code and
+ * block wrappers are styled here too so a single place defines the red and green
+ * tints, which come from Obsidian theme variables and therefore track the
+ * active theme.
+ */
+.copilot-diff-ins,
+.copilot-diff-block-ins {
+  background: rgb(var(--color-green-rgb), 0.18);
+
+  /* The green wash is the whole signal; the underline browsers put on `ins`
+     makes plain insertions look like links and doubles up on real ones. */
+  text-decoration: none;
+}
+
+.copilot-diff-del,
+.copilot-diff-block-del {
+  background: rgb(var(--color-red-rgb), 0.18);
+  text-decoration: line-through;
+  color: var(--text-muted);
+
+  /* A replacement renders as the old text immediately followed by the new one.
+     Without a gap the two run together as one word. The margin sits on the
+     deletion rather than on an adjacent-sibling insertion because the two are
+     often not siblings: replacing a link puts each inside its own anchor. */
+  margin-inline-end: 0.25em;
+}
+
+/* A deletion is wrapped inside whatever emphasis the renderer produced, so struck
+   text would otherwise read as emphasis rather than as something removed.
+   Headings are left alone: a removed heading should still look like a heading. */
+b .copilot-diff-del,
+strong .copilot-diff-del,
+i .copilot-diff-del,
+em .copilot-diff-del,
+mark .copilot-diff-del {
+  font-weight: normal;
+  font-style: normal;
+}
+
+/* A row that changed as a whole is tinted on its cells, not on the row: the
+   reading-view stylesheet paints an alternating background on every even column
+   with a higher specificity than a row-level rule, which would leave those
+   columns untinted and break the band into stripes. */
+.markdown-rendered tbody tr.copilot-diff-row-ins > td {
+  background: rgb(var(--color-green-rgb), 0.18);
+}
+
+.markdown-rendered tbody tr.copilot-diff-row-del > td {
+  background: rgb(var(--color-red-rgb), 0.18);
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+/* Inside such a row the per-word tint would stack on the cell tint and break the
+   band into patches, so only the cell carries the color. */
+tr.copilot-diff-row-ins .copilot-diff-ins,
+tr.copilot-diff-row-del .copilot-diff-del {
+  background: none;
+}
+
+/* A task line the diff added keeps the checked box but drops the reading view
+   strike, which in this view would read as a deletion. The selector has to
+   reach the list item because that is where the decoration is set. */
+.markdown-rendered ul > li.task-list-item.copilot-diff-task-ins {
+  text-decoration: none;
+}
+
+.copilot-diff-block-del,
+.copilot-diff-block-ins {
+  border-left: 3px solid;
+  padding-left: 0.5em;
+}
+
+.copilot-diff-block-ins {
+  border-left-color: rgb(var(--color-green-rgb), 0.6);
+}
+
+.copilot-diff-block-del {
+  border-left-color: rgb(var(--color-red-rgb), 0.6);
+}
+
+.copilot-diff-code {
+  white-space: pre-wrap;
+  overflow-x: auto;
+  padding: var(--size-4-2);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  font-size: var(--font-smaller);
+}
+
+.copilot-diff-code .diff-line-ins {
+  background: rgb(var(--color-green-rgb), 0.18);
+}
+
+.copilot-diff-code .diff-line-del {
+  background: rgb(var(--color-red-rgb), 0.18);
+}
