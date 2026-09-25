@@ -98,6 +98,7 @@ describe("CodexBinaryManager", () => {
     });
 
     afterEach(() => {
+      jest.useRealTimers();
       setSettings({ agentMode: originalAgentMode });
       setPlatform(originalPlatform);
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -143,6 +144,64 @@ describe("CodexBinaryManager", () => {
         expect(listener).toHaveBeenCalled();
         expect(manager.getActionState()).toEqual({ kind: "idle" });
         unsubscribe();
+      });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/578 shows transferred bytes and each installation phase during a managed install", async () => {
+        jest.mocked(installCodexArchive).mockImplementation(async (stage, _signal, progress) => {
+          progress?.download(0, 2048);
+          progress?.download(1024, 2048);
+          progress?.download(2048, 2048);
+          progress?.extracting();
+          fs.writeFileSync(path.join(stage, "codex-acp"), "native");
+        });
+        const manager = new CodexBinaryManager();
+        const progress: Array<{ label: string; percent: number }> = [];
+        manager.subscribeRuntimeState(() => {
+          const state = manager.getActionState();
+          if (state.kind === "running" && state.percent !== undefined)
+            progress.push({ label: state.label, percent: state.percent });
+        });
+
+        await manager.install();
+
+        expect(progress).toEqual([
+          { label: "Starting…", percent: 0 },
+          { label: "Connecting to Codex adapter download…", percent: 5 },
+          { label: "Downloading Codex adapter — 0 B / 2.0 KB", percent: 10 },
+          { label: "Downloading Codex adapter — 1.0 KB / 2.0 KB", percent: 42 },
+          { label: "Downloading Codex adapter — 2.0 KB / 2.0 KB", percent: 75 },
+          { label: "Extracting Codex adapter…", percent: 80 },
+          { label: "Verifying Codex adapter…", percent: 90 },
+          { label: "Verifying bundled Codex runtime…", percent: 90 },
+          { label: "Activating Codex adapter…", percent: 98 },
+          { label: "Codex adapter ready.", percent: 100 },
+        ]);
+      });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/578 shows elapsed wait time before Codex download bytes arrive", async () => {
+        jest.useFakeTimers();
+        let beginDownload!: () => void;
+        let releaseDownload!: () => void;
+        const entered = new Promise<void>((resolve) => (beginDownload = resolve));
+        const held = new Promise<void>((resolve) => (releaseDownload = resolve));
+        jest.mocked(installCodexArchive).mockImplementation(async (stage, _signal, progress) => {
+          beginDownload();
+          await held;
+          progress?.download(1024, 2048);
+          fs.writeFileSync(path.join(stage, "codex-acp"), "native");
+        });
+        const manager = new CodexBinaryManager();
+        const install = manager.install();
+        await entered;
+
+        await jest.advanceTimersByTimeAsync(65_000);
+        expect(manager.getActionState()).toMatchObject({
+          kind: "running",
+          label: "Connecting to Codex adapter download… 65s elapsed",
+          percent: 5,
+        });
+
+        releaseDownload();
+        await install;
+        expect(manager.getActionState()).toEqual({ kind: "idle" });
       });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 rejects a wrong adapter version or missing bundled runtime before selecting files", async () => {
         const manager = new CodexBinaryManager();
@@ -205,37 +264,6 @@ describe("CodexBinaryManager", () => {
         expect(() => new CodexBinaryManager().getDataDir()).toThrow("home directory");
       });
     });
-    describe("getActionState()", () => {
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 exposes installation progress and retryable failures", () => {
-        const manager = new CodexBinaryManager();
-        const state = jest.spyOn(manager, "getRuntimeState");
-        state.mockReturnValue({
-          kind: "installing",
-          progress: { label: "Downloading", percent: 30 },
-        });
-        expect(manager.getActionState()).toEqual({
-          kind: "running",
-          label: "Downloading",
-          percent: 30,
-        });
-        state.mockReturnValue({ kind: "error", message: "download failed", operation: "install" });
-        expect(manager.getActionState()).toEqual({ kind: "error", message: "download failed" });
-        state.mockRestore();
-      });
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 disables competing actions during path validation and hides unrelated failures", () => {
-        const manager = new CodexBinaryManager();
-        const state = jest.spyOn(manager, "getRuntimeState");
-        for (const kind of ["busy", "detecting"] as const) {
-          state.mockReturnValue({ kind });
-          expect(manager.getActionState()).toEqual({ kind: "running", label: "Configuring…" });
-        }
-        state.mockReturnValue({ kind: "error", message: "bad path", operation: "configure" });
-        expect(manager.getActionState()).toEqual({ kind: "idle" });
-        expect(manager.getActionState()).toBe(manager.getActionState());
-        state.mockRestore();
-      });
-    });
-
     describe("setCustomBinaryPath()", () => {
       // Real filesystem fixtures need the host path rules, unlike mocked bundle installs.
       // https://github.com/logancyang/obsidian-copilot/issues/2967

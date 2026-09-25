@@ -24,7 +24,7 @@ A one-agent chat can work without a Copilot license when you bring your own mode
 
 opencode is the most flexible choice because it can use Copilot-hosted, BYOK, and local models.
 
-1. In the **opencode** tab, open **Configure**, choose **Managed by Copilot**, then click **Download & install**.
+1. In the **opencode** tab, open **Configure**, choose **Managed by Copilot**, then click **Download & install**. Progress shows elapsed time while connecting, downloaded bytes during transfer, then extraction, verification, and activation.
 2. If you already installed it, choose **My own binary** in **Configure**, then select **Auto-detect** or enter the absolute path and click **Apply**.
 3. Enable the models you want to see and choose a **Default model**.
 
@@ -64,7 +64,7 @@ The archive format and extraction command are separate: bsdtar can unpack ZIP fi
 For an existing or manually installed `@agentclientprotocol/codex-acp` adapter, Copilot checks compatibility and reports any required update in **Configure**. The adapter version and bundled Codex CLI version are separate.
 
 1. Open **Basic → Agents → Codex → Configure**.
-2. Choose **Download & install** under **Managed by Copilot**. Copilot downloads Codex and its runtime, verifies the download, and keeps your current installation until the replacement is ready. You do not need Node.js or npm.
+2. Choose **Download & install** under **Managed by Copilot**. Copilot shows elapsed time while connecting, downloaded bytes during transfer, then labels extraction, verification, and activation while it prepares Codex. It keeps your current installation until the replacement is ready. You do not need Node.js or npm.
 3. Click **Sign in**, finish authentication in your browser, and return to Obsidian. If the browser does not open, click **Open sign-in page**. You can cancel or retry sign-in. Existing credentials are reused when you use the same Codex profile.
 4. If you prefer your own adapter, use **My own binary** to Auto-detect it or enter its absolute path. You remain responsible for upgrades to that binary.
 5. Enable the models you want and choose a default.

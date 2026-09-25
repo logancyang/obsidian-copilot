@@ -84,8 +84,8 @@ export const ManagedInstalling: StoryObj<OpencodeConfigViewProps> = {
       ...MANAGED,
       run: {
         kind: "running",
-        label: "Downloading opencode-darwin-arm64.zip — 12.4 MB / 41.0 MB (30%)",
-        percent: 30,
+        label: "Downloading opencode — 12.4 MB / 41.0 MB",
+        percent: 29,
       },
     },
   },
