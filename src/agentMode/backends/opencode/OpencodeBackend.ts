@@ -177,18 +177,14 @@ export class OpencodeBackend implements AcpBackend {
       } catch {
         throw new Error("opencode OPENCODE_CONFIG_CONTENT must be a JSON object.");
       }
+      overriddenConfig.permission = denyNativeWebTools(overriddenConfig.permission);
       overriddenConfig.permissions = appendNativeWebDenies(overriddenConfig.permissions);
-      const overriddenAgents = overriddenConfig.agents;
-      if (
-        overriddenAgents &&
-        typeof overriddenAgents === "object" &&
-        !Array.isArray(overriddenAgents)
-      ) {
-        for (const agent of Object.values(overriddenAgents)) {
-          if (!agent || typeof agent !== "object" || Array.isArray(agent)) continue;
-          const agentConfig = agent as Record<string, unknown>;
-          agentConfig.permissions = appendNativeWebDenies(agentConfig.permissions);
-        }
+      // OpenCode 2 reads both the legacy and native permission shapes.
+      for (const agent of agentConfigs(overriddenConfig.agent)) {
+        agent.permission = denyNativeWebTools(agent.permission);
+      }
+      for (const agent of agentConfigs(overriddenConfig.agents)) {
+        agent.permissions = appendNativeWebDenies(agent.permissions);
       }
       configContent = JSON.stringify(overriddenConfig);
     }
@@ -268,8 +264,16 @@ function denyNativeWebTools(permission: unknown): Record<string, unknown> {
   return { ...permissionRecord, websearch: "deny", webfetch: "deny" };
 }
 
-// OpenCode 2 uses the last matching native rule. An invalid array must not
-// leave Self-Host web access to OpenCode's fallback policy.
+/** Agent entries of a user config's agent map, skipping values OpenCode would reject. */
+function agentConfigs(agents: unknown): Record<string, unknown>[] {
+  if (!agents || typeof agents !== "object" || Array.isArray(agents)) return [];
+  return Object.values(agents).filter(
+    (agent): agent is Record<string, unknown> =>
+      !!agent && typeof agent === "object" && !Array.isArray(agent)
+  );
+}
+
+// OpenCode 2 uses the last matching native rule.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/558
 function appendNativeWebDenies(permissions: unknown): unknown[] {
   return [
