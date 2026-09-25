@@ -94,6 +94,20 @@ describe("downloadFile", () => {
 
       expect(fs.readFileSync(dest)).toEqual(BYTES);
     });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/560 enforces Content-Length when the source publishes no size", async () => {
+      serve({
+        statusCode: 200,
+        headers: { "content-length": String(BYTES.length + 1) },
+        chunks: [BYTES],
+      });
+
+      await expect(download({ bytes: undefined })).rejects.toThrow("Agent download size mismatch.");
+    });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/560 rejects an unsized asset whose response has no Content-Length", async () => {
+      serve({ statusCode: 200, chunks: [BYTES] });
+
+      await expect(download({ bytes: undefined })).rejects.toThrow("Agent download size unknown.");
+    });
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 rejects a redirect that leaves HTTPS before requesting it", async () => {
       serve({ statusCode: 302, headers: { location: "http://example.test/asset.zip" } });
 

@@ -43,10 +43,15 @@ describe("buildAssetCandidates", () => {
     ).toEqual(["opencode-linux-x64-musl", "opencode-linux-x64"]);
   });
 
-  it("linux x64 musl without avx2 → musl, baseline, regular", () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/560 selects combined baseline-musl before fallback packages on older linux x64", () => {
     expect(
       buildAssetCandidates({ platform: "linux", arch: "x64", libc: "musl", hasAvx2: false })
-    ).toEqual(["opencode-linux-x64-musl", "opencode-linux-x64-baseline", "opencode-linux-x64"]);
+    ).toEqual([
+      "opencode-linux-x64-baseline-musl",
+      "opencode-linux-x64-musl",
+      "opencode-linux-x64-baseline",
+      "opencode-linux-x64",
+    ]);
   });
 
   it("linux arm64 → single candidate", () => {
