@@ -486,6 +486,13 @@ export interface ToolCallDelta {
   kind?: AgentToolKind;
   status?: AgentToolStatus;
   rawInput?: unknown;
+  /**
+   * Vendor-original tool result, forwarded verbatim by adapters that have one.
+   * Carries detail the normalized `content` cannot express — Claude Code's
+   * `originalFile` (the file's full pre-edit text) is the only field read
+   * today. Absent for backends whose wire protocol reports no raw result.
+   */
+  rawOutput?: unknown;
   content?: ToolCallContent[] | null;
   locations?: Array<{ path: string; line?: number | null }> | null;
   vendorToolName?: string;
@@ -941,6 +948,29 @@ export interface AgentChatMessage {
    * (`parseFanoutComposite`). When present, the UI renders the tab row.
    */
   fanout?: FanoutTurn;
+  /**
+   * Files this turn changed in the vault, one entry per file. LIVE in-memory
+   * only: chat persistence stores sender + text, so a reloaded chat shows none.
+   */
+  fileChanges?: TurnFileChange[];
+}
+
+/**
+ * One file the agent changed during a turn, captured by snapshotting the vault
+ * around the turn rather than by merging the agent's individual edits: the
+ * three backends report their edits too differently to combine, and a turn is
+ * the boundary the user reviews at.
+ */
+export interface TurnFileChange {
+  /** Vault-relative path with forward slashes. */
+  path: string;
+  status: "modified" | "created" | "deleted";
+  /** Content before the turn's first edit to this file; null when it did not exist. */
+  before: string | null;
+  /** Content when the turn ended; null when the file no longer exists. */
+  after: string | null;
+  additions: number;
+  deletions: number;
 }
 
 /** Creation shape — id is assigned by the store if absent. */

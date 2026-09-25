@@ -457,6 +457,7 @@ function translateUserMessage(
   const content = (msg.message as { content?: unknown }).content;
   if (!Array.isArray(content)) return [];
   const decision = state.backgroundTasks.accept({ kind: "sdk_message", message: msg });
+  const rawOutput = preEditContent(msg);
 
   const out: SessionEvent[] = [];
   for (const block of content) {
@@ -484,6 +485,7 @@ function translateUserMessage(
         toolCallId: b.tool_use_id,
         status,
         content: outputs,
+        ...(rawOutput ? { rawOutput } : {}),
       })
     );
     // A TaskCreate's result carries the task id; only ids pending in the
@@ -499,6 +501,19 @@ function translateUserMessage(
   }
   out.push(...taskUpdateEvents(sessionId, decision.updates));
   return out;
+}
+
+/**
+ * The file's full pre-edit text, which the SDK reports on an `Edit` / `Write`
+ * result and nowhere else. Diff capture uses it to replace the snapshot it read
+ * from the vault, which the in-process backend can otherwise take after the
+ * write has already landed. Returns undefined for every other tool result.
+ */
+function preEditContent(msg: SDKUserMessage): { originalFile: string } | undefined {
+  const result = (msg as { tool_use_result?: unknown }).tool_use_result;
+  if (typeof result !== "object" || result === null) return undefined;
+  const originalFile = (result as { originalFile?: unknown }).originalFile;
+  return typeof originalFile === "string" ? { originalFile } : undefined;
 }
 
 function makeToolCallUpdate(
