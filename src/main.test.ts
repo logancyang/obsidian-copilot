@@ -4,8 +4,11 @@
 // suite while letting the real `CopilotPlugin` class load.
 jest.mock("obsidian", () => {
   const actual = jest.requireActual<Record<string, unknown>>("obsidian");
+  const { StateField } =
+    jest.requireActual<typeof import("@codemirror/state")>("@codemirror/state");
   return {
     ...actual,
+    editorInfoField: StateField.define<unknown>({ create: () => null, update: (value) => value }),
     Plugin: class Plugin {},
     PluginSettingTab: class PluginSettingTab {},
   };
@@ -53,7 +56,8 @@ import { DEFAULT_SETTINGS } from "@/constants";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import type { WebSelectionTrackingOptions } from "@/services/webViewerService/webViewerServiceSelection";
 import { EditorView } from "@codemirror/view";
-import type { Extension } from "@codemirror/state";
+import type { Extension, StateField } from "@codemirror/state";
+import { editorInfoField, type MarkdownFileInfo } from "obsidian";
 
 const mockStartSelectionTracker = jest.fn();
 const mockSelectionTrackerOptions = jest.fn();
@@ -109,22 +113,25 @@ async function flushTeardown(): Promise<void> {
 describe("main", () => {
   describe("CopilotPlugin", () => {
     describe("initSelectionHandler()", () => {
-      it("attaches Reading view text, preserves it on chat focus, and clears it in the note (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
+      beforeEach(() => {
+        jest.useFakeTimers();
         setSelectedTextContexts([]);
-        const containerEl = document.createElement("div");
+      });
+      afterEach(() => {
+        jest.useRealTimers();
+        setSelectedTextContexts([]);
+      });
+
+      it("attaches Reading view text after the debounce even when chat takes the selection first, then clears it in the note (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
         const preview = document.createElement("div");
-        preview.className = "markdown-reading-view";
         preview.textContent = "Excerpt from the note";
-        containerEl.append(preview);
-        document.body.append(containerEl);
         const chat = document.createElement("div");
         chat.textContent = "Chat input";
-        document.body.append(chat);
+        document.body.append(preview, chat);
         const noteView = {
-          containerEl,
           file: { path: "Research.md", basename: "Research" },
           getMode: () => "preview",
-          editor: {},
+          previewMode: { containerEl: preview },
         };
         const cleanups: Array<() => void> = [];
         const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
@@ -135,22 +142,23 @@ describe("main", () => {
             cleanups.push(() => doc.removeEventListener(event, handler));
           },
           registerEvent: jest.fn(),
-          app: {
-            workspace: {
-              getLeavesOfType: () => [{ view: noteView }],
-              on: jest.fn(),
-            },
-          },
+          app: { workspace: { getActiveViewOfType: () => noteView, on: jest.fn() } },
         });
+        const select = (node: Node, end: number) => {
+          const range = document.createRange();
+          range.setStart(node, 0);
+          range.setEnd(node, end);
+          const selection = document.getSelection()!;
+          selection.removeAllRanges();
+          selection.addRange(range);
+          document.dispatchEvent(new Event("selectionchange"));
+        };
 
         plugin.initSelectionHandler();
-        const selection = document.getSelection()!;
-        const range = document.createRange();
-        range.setStart(preview.firstChild!, 0);
-        range.setEnd(preview.firstChild!, 7);
-        selection.removeAllRanges();
-        selection.addRange(range);
-        document.dispatchEvent(new Event("selectionchange"));
+        select(preview.firstChild!, 7);
+        select(chat.firstChild!, 0);
+        expect(getSelectedTextContexts()).toEqual([]);
+        jest.advanceTimersByTime(500);
         expect(getSelectedTextContexts()).toEqual([
           expect.objectContaining({
             content: "Excerpt",
@@ -160,56 +168,31 @@ describe("main", () => {
           }),
         ]);
 
-        const chatRange = document.createRange();
-        chatRange.setStart(chat.firstChild!, 0);
-        chatRange.collapse(true);
-        selection.removeAllRanges();
-        selection.addRange(chatRange);
-        document.dispatchEvent(new Event("selectionchange"));
-        expect(getSelectedTextContexts()).toHaveLength(1);
-
-        range.collapse(true);
-        selection.removeAllRanges();
-        selection.addRange(range);
-        document.dispatchEvent(new Event("selectionchange"));
+        select(preview.firstChild!, 0);
+        jest.advanceTimersByTime(500);
         expect(getSelectedTextContexts()).toEqual([]);
 
-        selection.removeAllRanges();
+        document.getSelection()!.removeAllRanges();
         cleanups.forEach((cleanup) => cleanup());
-        containerEl.remove();
+        preview.remove();
         chat.remove();
       });
 
-      it("attaches and clears a note excerpt from editor updates even when another view is active (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
-        setSelectedTextContexts([]);
+      it("attaches and clears a note excerpt from the focused editor's own note after the debounce (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
         let extension: Extension | undefined;
-        let noteView: { file: { path: string; basename: string }; editor: object };
         const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
         Object.assign(plugin, {
           registerEditorExtension: (value: Extension) => {
             extension = value;
           },
+          registerDomEvent: jest.fn(),
           registerEvent: jest.fn(),
-          app: {
-            workspace: {
-              getLeavesOfType: () => [{ view: noteView }],
-              getActiveViewOfType: () => null,
-              getActiveFile: () => ({ path: "Wrong.md", basename: "Wrong" }),
-              on: jest.fn(),
-            },
-          },
+          app: { workspace: { on: jest.fn() } },
         });
-
         plugin.initSelectionHandler();
-        const cm = new EditorView({
-          doc: "Excerpt from the note",
-          parent: document.body,
-          extensions: [extension!],
-        });
-        noteView = {
+        const noteInfo = {
           file: { path: "Research.md", basename: "Research" },
           editor: {
-            cm,
             listSelections: () => [
               {
                 anchor: { line: 0, ch: cm.state.selection.main.anchor },
@@ -219,17 +202,28 @@ describe("main", () => {
             getSelection: () =>
               cm.state.sliceDoc(cm.state.selection.main.from, cm.state.selection.main.to),
           },
-        };
-        cm.focus();
-        cm.dispatch({ selection: { anchor: 0, head: 7 } });
+        } as unknown as MarkdownFileInfo;
+        const cm = new EditorView({
+          doc: "Excerpt from the note",
+          parent: document.body,
+          extensions: [
+            extension!,
+            (editorInfoField as unknown as StateField<unknown>).init(() => noteInfo),
+          ],
+        });
 
+        cm.focus();
+        cm.dispatch({ selection: { anchor: 0, head: 3 } });
+        cm.dispatch({ selection: { anchor: 0, head: 7 } });
+        jest.advanceTimersByTime(500);
         expect(getSelectedTextContexts()).toEqual([
           expect.objectContaining({ content: "Excerpt", notePath: "Research.md" }),
         ]);
+
         cm.dispatch({ selection: { anchor: 7 } });
+        jest.advanceTimersByTime(500);
         expect(getSelectedTextContexts()).toEqual([]);
         cm.destroy();
-        setSelectedTextContexts([]);
       });
     });
 
@@ -241,21 +235,14 @@ describe("main", () => {
         });
         setSelectedTextContexts([]);
         const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
-        Object.assign(plugin, {
-          app: {
-            workspace: {
-              getActiveViewOfType: () => ({
-                editor: {
-                  listSelections: () => [{ anchor: { line: 1, ch: 0 }, head: { line: 2, ch: 7 } }],
-                  getSelection: () => "An excerpt from the note.",
-                },
-              }),
-              getActiveFile: () => ({ path: "Research.md", basename: "Research" }),
-            },
-          },
-        });
 
-        plugin.handleSelectionChange();
+        plugin.handleSelectionChange({
+          file: { path: "Research.md", basename: "Research" },
+          editor: {
+            listSelections: () => [{ anchor: { line: 1, ch: 0 }, head: { line: 2, ch: 7 } }],
+            getSelection: () => "An excerpt from the note.",
+          },
+        } as unknown as MarkdownFileInfo);
 
         expect(getSelectedTextContexts()).toEqual([
           expect.objectContaining({
@@ -265,33 +252,6 @@ describe("main", () => {
             startLine: 2,
             endLine: 3,
           }),
-        ]);
-        setSelectedTextContexts([]);
-      });
-      it("updates selected text when the content changes at the same editor range (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
-        setSelectedTextContexts([]);
-        let selectedText = "First";
-        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
-        Object.assign(plugin, {
-          app: {
-            workspace: {
-              getActiveViewOfType: () => ({
-                editor: {
-                  listSelections: () => [{ anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 5 } }],
-                  getSelection: () => selectedText,
-                },
-              }),
-              getActiveFile: () => ({ path: "Research.md", basename: "Research" }),
-            },
-          },
-        });
-
-        plugin.handleSelectionChange();
-        selectedText = "After";
-        plugin.handleSelectionChange();
-
-        expect(getSelectedTextContexts()).toEqual([
-          expect.objectContaining({ content: "After", notePath: "Research.md" }),
         ]);
         setSelectedTextContexts([]);
       });

@@ -668,7 +668,7 @@ export class ContextProcessor {
       } else {
         // Note selected text context (default for backward compatibility)
         const lineTags =
-          selectedText.startLine !== 0 || selectedText.endLine !== 0
+          selectedText.startLine > 0
             ? `\n<start_line>${selectedText.startLine}</start_line>\n<end_line>${selectedText.endLine}</end_line>`
             : "";
         additionalContext += `\n\n<${SELECTED_TEXT_TAG}>\n<title>${escapeXml(selectedText.noteTitle)}</title>\n<path>${escapeXml(selectedText.notePath)}</path>${lineTags}\n<content>\n${selectedText.content}\n</content>\n</${SELECTED_TEXT_TAG}>`;

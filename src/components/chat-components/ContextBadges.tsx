@@ -249,7 +249,7 @@ export function ContextSelectedTextBadge({
 
   const isWebSelection = isWebSelectedTextContext(selectedText);
   const location =
-    isWebSelection || (selectedText.startLine === 0 && selectedText.endLine === 0)
+    isWebSelection || selectedText.startLine === 0
       ? "Selection"
       : selectedText.startLine === selectedText.endLine
         ? `L${selectedText.startLine}`
