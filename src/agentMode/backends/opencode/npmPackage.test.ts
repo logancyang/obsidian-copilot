@@ -91,23 +91,6 @@ describe("npmPackage", () => {
       expect(asset.name).toBe("pkg.tgz");
     });
 
-    it(`${ISSUE} resolves an OpenCode 1 release from its unscoped platform package`, async () => {
-      jest.mocked(requestUrl).mockResolvedValue(
-        response(200, {
-          dist: {
-            tarball:
-              "https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.18.31.tgz",
-            integrity: INTEGRITY,
-          },
-        })
-      );
-      const asset = await resolveNpmAsset("1.18.31", ["opencode-darwin-arm64"]);
-      expect(requestUrl).toHaveBeenCalledWith(
-        expect.objectContaining({ url: "https://registry.npmjs.org/opencode-darwin-arm64/1.18.31" })
-      );
-      expect(asset.name).toBe("opencode-darwin-arm64-1.18.31.tgz");
-    });
-
     it(`${ISSUE} stops trying fallback packages once the install is cancelled`, async () => {
       const controller = new AbortController();
       jest.mocked(requestUrl).mockImplementation(() => {

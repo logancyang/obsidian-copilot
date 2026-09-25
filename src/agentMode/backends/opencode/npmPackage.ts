@@ -1,6 +1,5 @@
 import { ManagedInstallAbortError } from "@/agentMode/backends/shared/managedInstall";
 import { requireNodeModule } from "@/utils/desktopRuntime";
-import { compareSemver } from "@/utils/semver";
 import { requestUrl } from "obsidian";
 
 interface NpmMetadata {
@@ -26,13 +25,7 @@ export async function resolveNpmAsset(
 ): Promise<NpmAsset> {
   for (const candidate of candidates) {
     if (signal?.aborted) throw new ManagedInstallAbortError();
-    // OpenCode 1 publishes unscoped platform packages, and the managed pin stays on
-    // 1.x until the OpenCode 2 cutover, so both registries must stay installable.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/560
-    const packageName =
-      compareSemver(version, "2.0.0") >= 0
-        ? `@opencode/cli-${candidate.slice("opencode-".length)}`
-        : candidate;
+    const packageName = `@opencode/cli-${candidate.slice("opencode-".length)}`;
     const url = `https://registry.npmjs.org/${packageName.replace("/", "%2F")}/${encodeURIComponent(version)}`;
     const response = await requestUrl({ url, method: "GET", throw: false });
     // Hosts try a baseline or musl build first, and not every variant is published.
