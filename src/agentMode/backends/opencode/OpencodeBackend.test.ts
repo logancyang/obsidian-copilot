@@ -1202,7 +1202,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
               permissions: [
                 { action: "*", resource: "*", effect: "allow" },
                 { action: "websearch", resource: "*", effect: "allow" },
-                { action: "question", resource: "*", effect: "allow" },
               ],
               agents: {
                 build: {
@@ -1233,7 +1232,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     expect(cfg.permissions).toEqual([
       { action: "*", resource: "*", effect: "allow" },
       { action: "websearch", resource: "*", effect: "allow" },
-      { action: "question", resource: "*", effect: "allow" },
       ...denies,
     ]);
     expect(cfg.agents.build.permissions).toEqual([
