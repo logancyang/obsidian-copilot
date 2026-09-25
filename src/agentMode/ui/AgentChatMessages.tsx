@@ -5,6 +5,7 @@ import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
+import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
@@ -158,9 +159,15 @@ const AgentChatMessages = memo(
   }: AgentChatMessagesProps) => {
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
-    const { containerMinHeight, scrollContainerCallbackRef, getMessageKey } = useChatScrolling({
-      chatHistory: adapted,
-    });
+    const {
+      containerMinHeight,
+      scrollContainerCallbackRef,
+      contentCallbackRef,
+      onScroll,
+      isScrollPaused,
+      scrollToEnd,
+      getMessageKey,
+    } = useChatScrolling({ chatHistory: adapted });
 
     const showPlanCard = currentPlan != null && currentPlan.decision === "pending";
     const inlinePlanCard = showPlanCard ? (
@@ -185,10 +192,12 @@ const AgentChatMessages = memo(
 
     return (
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
-        <div
-          ref={scrollContainerCallbackRef}
-          data-testid="chat-messages"
-          className="tw-relative tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-scroll-smooth tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)]"
+        <ChatTranscriptViewport
+          scrollContainerRef={scrollContainerCallbackRef}
+          contentRef={contentCallbackRef}
+          onScroll={onScroll}
+          isScrollPaused={isScrollPaused}
+          scrollToEnd={scrollToEnd}
         >
           {visible.map((message, index) => {
             // A plan remains part of the transcript, so it supplies tail
@@ -214,7 +223,7 @@ const AgentChatMessages = memo(
             );
           })}
           {inlinePlanCard}
-        </div>
+        </ChatTranscriptViewport>
         {pendingActionId ? (
           <div
             role="region"
