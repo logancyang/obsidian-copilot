@@ -22,7 +22,6 @@ import {
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import {
   buildOpencodeConfig,
-  effortVariantsFor,
   OPENCODE_PROVIDER_MAP,
   OpencodeBackend,
   type OpencodeModelDeps,
@@ -1514,27 +1513,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
 // `COPILOT_PROMPT_BASE` and the full `buildAgentSystemPrompt` composition are
 // unit-tested in `backends/shared/agentSystemPrompt.test.ts`. The opencode tests
 // above only assert that the composed prompt reaches `cfg.agent.<id>.prompt`.
-
-describe("effortVariantsFor()", () => {
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 returns only published levels as OpenCode 2 variants", () => {
-    expect(effortVariantsFor(["high", "max"])).toEqual([
-      { id: "high", settings: { reasoningEffort: "high" } },
-      { id: "max", settings: { reasoningEffort: "max" } },
-    ]);
-  });
-
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 includes a published level that Copilot does not know yet", () => {
-    // The published list is the service's to extend; a client that dropped an
-    // unrecognized level would hide a level the model really has until it shipped again.
-    expect(effortVariantsFor(["ultra"])).toEqual([
-      { id: "ultra", settings: { reasoningEffort: "ultra" } },
-    ]);
-  });
-
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 returns no variants when nothing was published", () => {
-    expect(effortVariantsFor([])).toEqual([]);
-  });
-});
 
 describe("OPENCODE_PROVIDER_MAP", () => {
   it("maps the BYOK provider ids plus Copilot Plus to opencode provider ids", () => {

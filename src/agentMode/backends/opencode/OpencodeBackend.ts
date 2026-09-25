@@ -267,15 +267,6 @@ function denyNativeWebTools(permission: unknown): Record<string, unknown> {
   return { ...permissionRecord, websearch: "deny", webfetch: "deny" };
 }
 
-/**
- * OpenCode 2 effort choices for a model whose supported levels are known.
- *
- * @param levels - Levels the model supports, in the order to show them.
- */
-export function effortVariantsFor(levels: readonly string[]) {
-  return levels.map((level) => ({ id: level, settings: { reasoningEffort: level } }));
-}
-
 const FALLBACK_EFFORTS = ["low", "medium", "high"] as const;
 
 /** Mutable OpenCode provider config entry built into `OPENCODE_CONFIG_CONTENT`. */
@@ -399,12 +390,11 @@ export async function buildOpencodeConfig(
     // non-reasoning model does not inherit a selectable effort menu.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/557
     if (!hasCatalogIdentity) {
-      const levels = !info.reasoning
-        ? []
-        : origin.kind === "copilot-plus" && info.reasoningEfforts !== undefined
-          ? info.reasoningEfforts
-          : FALLBACK_EFFORTS;
-      modelConfig.variants = effortVariantsFor(levels);
+      const levels = info.reasoning ? (info.reasoningEfforts ?? FALLBACK_EFFORTS) : [];
+      modelConfig.variants = levels.map((level) => ({
+        id: level,
+        settings: { reasoningEffort: level },
+      }));
     }
     providerConfig.models[info.id] = modelConfig;
     injected.push(`${mapping.id}/${info.id}`);
