@@ -5,6 +5,7 @@ import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 import {
   AgentChatMessage,
   AgentMessagePart,
+  AgentToolKind,
   AgentPlanEntry,
   AgentQuestionAnswers,
   AgentTodoListEntry,
@@ -35,6 +36,7 @@ import {
   ToolCallContent,
   ToolCallDelta,
   ToolCallSnapshot,
+  TurnFileChange,
 } from "@/agentMode/session/types";
 import {
   isNoteSelectedTextContext,
@@ -43,8 +45,17 @@ import {
 } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
-import type { App } from "obsidian";
+import type { App, DataAdapter, EventRef } from "obsidian";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import {
+  diffTargetPaths,
+  editTargetPaths,
+  isCapturableVaultPath,
+  primaryEditTargetPath,
+} from "@/agentMode/session/editTargets";
+import { buildTurnFileChange } from "@/agentMode/session/turnFileChanges";
+import { revertReportedEdits, type ReportedEdit } from "@/agentMode/session/reportedEdits";
+import { getVaultBase, toVaultRelative } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
 import { ContextProcessor } from "@/contextProcessor";
 import type { ContextMaterializationResult } from "@/context/projectContextMaterializer";
@@ -105,6 +116,114 @@ const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 // Shared "no extra roots" array so a session created without project context
 // keeps a stable reference (no fresh `[]` allocation per construction).
 const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as string[];
+
+/**
+ * What one turn has learned about a single vault file while the turn runs.
+ * Three sources of its pre-turn content, in decreasing authority: the content
+ * the backend reported outright, the edits it reported making (undone against
+ * the end state), and the vault read issued the first time the file was named.
+ */
+interface TurnFileCapture {
+  /** False while only read-kind calls have named the file, which reports nothing. */
+  edited: boolean;
+  /** Vault read issued when the file was first named; post-write for agents that write first. */
+  snapshot: string | null;
+  snapshotRead: Promise<void>;
+  /** Pre-turn content stated by the backend itself; absent when it states none. */
+  reportedBefore?: string | null;
+  /** Tool call that first named the file — only its report describes the pre-turn state. */
+  firstToolCallId: string;
+  /** One reported substitution per edit tool call, in the order the calls arrived. */
+  edits: Map<string, ReportedEdit>;
+}
+
+/** Tool kinds whose calls change the vault, so their targets belong in the turn's changes. */
+const VAULT_CHANGING_KINDS: ReadonlySet<AgentToolKind> = new Set<AgentToolKind>(["edit", "delete"]);
+
+/** Tool kinds worth snapshotting: those that change a file, plus the reads that precede them. */
+const CAPTURED_KINDS: ReadonlySet<AgentToolKind> = new Set<AgentToolKind>([
+  "edit",
+  "delete",
+  "read",
+]);
+
+/** Canonical "this call reported no edits" map — no per-call allocation on the read path. */
+const EMPTY_REPORTED_EDITS: ReadonlyMap<string, ReportedEdit> = new Map();
+
+/**
+ * The substitutions one edit tool call reports, keyed by the file each is
+ * about. A call describes its edit twice over its lifetime — as the arguments
+ * it was given and, once it completes, as the diff it produced — and either
+ * form is a literal pair of texts that can be undone against the finished file.
+ */
+function reportedEditsByPath(
+  call: ToolCallSnapshot | ToolCallDelta,
+  vaultBase: string | null
+): ReadonlyMap<string, ReportedEdit> {
+  const edits = new Map<string, ReportedEdit>();
+  const input = call.rawInput as Record<string, unknown> | null | undefined;
+  const oldText = firstString(input, ["old_string", "oldString"]);
+  const newText = firstString(input, ["new_string", "newString"]);
+  if (oldText !== null && newText !== null) {
+    const path = primaryEditTargetPath({ input: call.rawInput }, vaultBase);
+    if (path) edits.set(path, { oldText, newText });
+  }
+  for (const item of call.content ?? []) {
+    if (item.type !== "diff") continue;
+    edits.set(toVaultRelative(item.path, vaultBase), {
+      oldText: item.oldText ?? null,
+      newText: item.newText,
+    });
+  }
+  return edits;
+}
+
+/** The first of `keys` present as a string on `input`, or null when none is. */
+function firstString(
+  input: Record<string, unknown> | null | undefined,
+  keys: readonly string[]
+): string | null {
+  for (const key of keys) {
+    const value = input?.[key];
+    if (typeof value === "string") return value;
+  }
+  return null;
+}
+
+/**
+ * Settle on a file's pre-turn content from what the turn learned about it. The
+ * backend's own statement wins; otherwise the reported edits are undone against
+ * the end state, which recovers the original even when the agent wrote the file
+ * before announcing the call; a file the vault watcher saw appear had no earlier
+ * content at all; and the snapshot read is the last resort, the only evidence
+ * for a tool that reports nothing about what it replaced.
+ *
+ * @param capture - Everything the turn learned about the file.
+ * @param after - The file's content when the turn ended.
+ * @param appearedDuringTurn - Whether Obsidian reported the file appearing while the turn ran.
+ */
+function resolveBefore(
+  capture: TurnFileCapture,
+  after: string | null,
+  appearedDuringTurn: boolean
+): string | null {
+  if (capture.reportedBefore !== undefined) return capture.reportedBefore;
+  if (capture.edits.size > 0) {
+    const reverted = revertReportedEdits([...capture.edits.values()], after);
+    if (reverted) return reverted.text;
+  }
+  if (appearedDuringTurn) return null;
+  return capture.snapshot;
+}
+
+/** A vault file's text, or null when it does not exist or cannot be read. */
+async function readVaultText(adapter: DataAdapter, path: string): Promise<string | null> {
+  try {
+    return await adapter.read(path);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Optimistically swap `state.model.current.baseModelId` for the persisted
@@ -375,6 +494,19 @@ export class AgentSession {
   // keep the QA context. LIVE-ONLY — never persisted.
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private placeholderId: string | null = null;
+  // What this turn has learned about each vault file its tool calls named, keyed
+  // by vault-relative path. Reset at the start of each turn; consumed when the
+  // turn ends to produce that turn's `TurnFileChange[]`.
+  private turnFiles = new Map<string, TurnFileCapture>();
+  // Paths each tool call named, so a backend's reported original content is
+  // attributed only to the file its own call was about.
+  private turnPathsByToolCall = new Map<string, Set<string>>();
+  // Vault-relative paths Obsidian's watcher saw appear while this turn ran. A
+  // tool that reports only what it wrote leaves no trace of whether the file
+  // existed, and the agent writes outside Obsidian, so the watcher is the
+  // remaining witness that the turn created the file.
+  private turnCreatedPaths = new Set<string>();
+  private turnCreateWatcher: EventRef | null = null;
   // A task update routed to an earlier turn still counts as activity consumed
   // by the current backend prompt, even though it adds nothing to this turn's
   // placeholder.
@@ -988,6 +1120,9 @@ export class AgentSession {
     this.placeholderId = this.store.addMessage(placeholder);
     this.currentMessageIds = new Set();
     this.currentTurnHadRoutedToolActivity = false;
+    this.turnFiles = new Map();
+    this.turnPathsByToolCall = new Map();
+    this.watchVaultCreations();
     this.notifyMessages();
 
     // Backends without a title summarizer (codex, Claude Code) have no usable
@@ -1183,6 +1318,10 @@ export class AgentSession {
         );
         this.store.markMessageError(placeholderId, message);
       }
+      // Publish before the turn is marked complete so the finished turn is never
+      // rendered without the changes it produced. A cancelled turn still reports
+      // what landed before the user stopped it.
+      if (placeholderId) await this.finalizeTurnFileChanges(placeholderId);
       if (
         placeholderId &&
         this.store.markTurnComplete(placeholderId, resp.stopReason, Date.now() - turnStartedAtMs)
@@ -1226,6 +1365,7 @@ export class AgentSession {
       // both the success path (no error) and the catch path (error set) so
       // listeners see the single transition out of the in-flight state.
       this.abortController = null;
+      this.unwatchVaultCreations();
       this.recomputeStatusIfChanged();
     }
   }
@@ -1318,6 +1458,7 @@ export class AgentSession {
         this.pendingFanoutContext.push({ question: originalPromptText, summary: replay });
       }
     }
+    await this.finalizeTurnFileChanges(placeholderId);
     if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAtMs)) {
       this.notifyMessages();
     }
@@ -1400,6 +1541,7 @@ export class AgentSession {
   /** Detach from the backend. Does not cancel — call `cancel()` first. */
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.unwatchVaultCreations();
     this.unregisterSessionHandler?.();
     this.unregisterSessionHandler = null;
     this.flushResolvers(this.pendingPlanResolvers);
@@ -1682,6 +1824,9 @@ export class AgentSession {
    */
   handleToolPermission(request: PermissionPrompt): Promise<PermissionDecision> {
     const toolCallId = request.toolCall.toolCallId;
+    // The earliest a file can be snapshotted: the agent is still waiting for an
+    // answer, so nothing has been written yet.
+    this.observeToolCall(request.toolCall, request.toolCall.kind);
     return new Promise<PermissionDecision>((resolve) => {
       this.pendingToolResolvers.set(toolCallId, { request, resolve });
       this.recomputeStatusIfChanged();
@@ -1697,6 +1842,15 @@ export class AgentSession {
     const entry = this.pendingToolResolvers.get(toolCallId);
     if (!entry) return;
     this.pendingToolResolvers.delete(toolCallId);
+    // Denied arguments describe intent, not a write that can be reversed.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+    if (
+      entry.request.options.some(
+        (option) => option.optionId === optionId && PERMISSION_REJECT_KINDS.includes(option.kind)
+      )
+    ) {
+      this.discardReportedEdits(toolCallId);
+    }
     entry.resolve({ outcome: { outcome: "selected", optionId } });
     this.recomputeStatusIfChanged();
     this.notifyMessages();
@@ -1799,6 +1953,7 @@ export class AgentSession {
     map: Map<string, { request: PermissionPrompt; resolve: (resp: PermissionDecision) => void }>
   ): void {
     for (const { request, resolve } of map.values()) {
+      this.discardReportedEdits(request.toolCall.toolCallId);
       resolve(decisionFor(request, PERMISSION_REJECT_KINDS));
     }
     map.clear();
@@ -1940,6 +2095,7 @@ export class AgentSession {
 
     switch (update.sessionUpdate) {
       case "tool_call": {
+        this.observeToolCall(update, update.kind);
         const exitPlan = tryReadExitPlanModeCall({
           kind: update.kind,
           rawInput: update.rawInput,
@@ -1964,6 +2120,13 @@ export class AgentSession {
         if (targetMessageId !== placeholderId) this.currentTurnHadRoutedToolActivity = true;
         const existing = this.findToolCallPart(targetMessageId, update.toolCallId);
         const merged = mergeToolCallUpdate(existing, update);
+        // An update normally omits the kind the opening `tool_call` declared, so
+        // take it from the call this update belongs to.
+        this.observeToolCall(
+          update,
+          update.kind ?? (merged.kind === "tool_call" ? merged.toolKind : undefined)
+        );
+        this.applyReportedPreEditContent(update);
         if (merged.kind === "tool_call") {
           const exitPlan = tryReadExitPlanModeCall({
             kind: update.kind ?? merged.toolKind,
@@ -2017,6 +2180,164 @@ export class AgentSession {
     if (!placeholderId) return null;
     if (messageId) this.currentMessageIds.add(messageId);
     return placeholderId;
+  }
+
+  /** The vault adapter this session reads file snapshots through, or null on mobile / in tests. */
+  private vaultAdapter(): DataAdapter | null {
+    return this.getApp?.()?.vault?.adapter ?? null;
+  }
+
+  /**
+   * Record the pre-turn content of every vault file an edit-kind tool call
+   * names. The read is issued the moment the call is announced, which is before
+   * the agent's write lands for every out-of-process backend; the in-process
+   * backend closes the remaining race by reporting the original content itself
+   * (see {@link applyReportedPreEditContent}). A file already snapshotted this
+   * turn keeps its first snapshot, so repeated edits to one file still compare
+   * against how the turn found it.
+   *
+   * @param update - The tool call or tool-call update announcing the edit.
+   * @param kind - Effective tool kind, taken from the opening call when an update omits it.
+   */
+  /** Follow the files appearing in the vault for the duration of one turn. */
+  private watchVaultCreations(): void {
+    this.unwatchVaultCreations();
+    this.turnCreatedPaths = new Set();
+    const vault = this.getApp?.()?.vault;
+    if (!vault) return;
+    this.turnCreateWatcher = vault.on("create", (file) => {
+      this.turnCreatedPaths.add(file.path);
+    });
+  }
+
+  private unwatchVaultCreations(): void {
+    const ref = this.turnCreateWatcher;
+    if (!ref) return;
+    this.turnCreateWatcher = null;
+    this.getApp?.()?.vault?.offref(ref);
+  }
+
+  /**
+   * Record what one tool call says about the vault files it names. Reads are
+   * followed as well as writes: an agent that reads a file before editing it
+   * hands us a snapshot taken before any write, which is the only reliable
+   * pre-turn content for backends that write a file before announcing the call.
+   * Only calls of a vault-changing kind mark a file as changed by the turn.
+   *
+   * @param call - The tool call, tool-call update, or permission request's tool call.
+   * @param kind - Effective tool kind, taken from the opening call when an update omits it.
+   */
+  private observeToolCall(
+    call: ToolCallSnapshot | ToolCallDelta,
+    kind: AgentToolKind | undefined
+  ): void {
+    // A failed substitution can match text that already existed, inventing a diff.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+    if (call.status === "failed") {
+      this.discardReportedEdits(call.toolCallId);
+      return;
+    }
+    if (!kind || !CAPTURED_KINDS.has(kind)) return;
+    const app = this.getApp?.();
+    const adapter = this.vaultAdapter();
+    if (!app || !adapter) return;
+    const vaultBase = getVaultBase(app);
+    const changes = VAULT_CHANGING_KINDS.has(kind);
+    const reported = changes ? reportedEditsByPath(call, vaultBase) : EMPTY_REPORTED_EDITS;
+    const paths = editTargetPaths(
+      {
+        locations: call.locations,
+        input: call.rawInput,
+        diffPaths: diffTargetPaths(call.content),
+      },
+      vaultBase
+    );
+    for (const path of paths) {
+      if (!isCapturableVaultPath(path)) continue;
+      let owned = this.turnPathsByToolCall.get(call.toolCallId);
+      if (!owned) {
+        owned = new Set();
+        this.turnPathsByToolCall.set(call.toolCallId, owned);
+      }
+      owned.add(path);
+      let capture = this.turnFiles.get(path);
+      if (!capture) {
+        capture = {
+          edited: false,
+          snapshot: null,
+          snapshotRead: Promise.resolve(),
+          firstToolCallId: call.toolCallId,
+          edits: new Map(),
+        };
+        this.turnFiles.set(path, capture);
+        const pending = capture;
+        capture.snapshotRead = readVaultText(adapter, path).then((text) => {
+          pending.snapshot = text;
+        });
+      }
+      if (!changes) continue;
+      capture.edited = true;
+      // A call reports its edit in stages (arguments first, then the resulting
+      // diff); the latest description of the same call replaces the earlier one.
+      const edit = reported.get(path);
+      if (edit) capture.edits.set(call.toolCallId, edit);
+    }
+  }
+
+  // Keep snapshots and other calls' evidence so partial writes still appear.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+  private discardReportedEdits(toolCallId: string): void {
+    const paths = this.turnPathsByToolCall.get(toolCallId);
+    if (!paths) return;
+    for (const path of paths) this.turnFiles.get(path)?.edits.delete(toolCallId);
+  }
+
+  /**
+   * Record the pre-turn content a backend states outright — the Claude Agent
+   * SDK reports the file's full text on the result of each `Edit` / `Write`.
+   * Only the call that first named the file describes the turn's starting
+   * point; a later call's original is mid-turn content. Applied only to a call
+   * about exactly one file, so the content can be attributed to a path.
+   */
+  private applyReportedPreEditContent(update: ToolCallDelta): void {
+    const raw = update.rawOutput as { originalFile?: unknown } | null | undefined;
+    const originalFile = raw?.originalFile;
+    if (typeof originalFile !== "string") return;
+    const owned = this.turnPathsByToolCall.get(update.toolCallId);
+    if (!owned || owned.size !== 1) return;
+    const [path] = owned;
+    const capture = this.turnFiles.get(path);
+    if (!capture || capture.firstToolCallId !== update.toolCallId) return;
+    capture.reportedBefore = originalFile;
+  }
+
+  /**
+   * Close the turn's capture: read each changed file's end state, settle on its
+   * pre-turn content, drop the files the turn left unchanged, and publish the
+   * rest on the turn's message. The turn is the review boundary, so a file
+   * rewritten by several tool calls yields one entry comparing how the turn
+   * found the file with how it left it.
+   */
+  private async finalizeTurnFileChanges(messageId: string): Promise<void> {
+    const files = this.turnFiles;
+    const created = this.turnCreatedPaths;
+    this.unwatchVaultCreations();
+    this.turnFiles = new Map();
+    this.turnPathsByToolCall = new Map();
+    this.turnCreatedPaths = new Set();
+    const adapter = this.vaultAdapter();
+    if (files.size === 0 || !adapter) return;
+    await Promise.all([...files.values()].map((capture) => capture.snapshotRead));
+    const changes: TurnFileChange[] = [];
+    for (const [path, capture] of files) {
+      if (!capture.edited) continue;
+      const after = await readVaultText(adapter, path);
+      const before = resolveBefore(capture, after, created.has(path));
+      const change = buildTurnFileChange(path, before, after);
+      if (change) changes.push(change);
+    }
+    if (changes.length === 0) return;
+    if (this.store.setFileChanges(messageId, changes)) this.notifyMessages();
   }
 
   private findToolCallPart(messageId: string, toolCallId: string): AgentMessagePart | undefined {
