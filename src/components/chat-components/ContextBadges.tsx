@@ -248,11 +248,12 @@ export function ContextSelectedTextBadge({
   const normalizedContent = selectedText.content.replace(/\s+/g, " ").trim();
 
   const isWebSelection = isWebSelectedTextContext(selectedText);
-  const location = isWebSelection
-    ? "Selection"
-    : selectedText.startLine === selectedText.endLine
-      ? `L${selectedText.startLine}`
-      : `L${selectedText.startLine}-${selectedText.endLine}`;
+  const location =
+    isWebSelection || (selectedText.startLine === 0 && selectedText.endLine === 0)
+      ? "Selection"
+      : selectedText.startLine === selectedText.endLine
+        ? `L${selectedText.startLine}`
+        : `L${selectedText.startLine}-${selectedText.endLine}`;
   const source = isWebSelection ? selectedText.url : `${selectedText.notePath} (${location})`;
   const tooltipContent = (
     <div className="tw-max-h-60 tw-overflow-y-auto tw-text-left">

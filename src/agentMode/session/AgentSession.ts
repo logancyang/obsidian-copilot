@@ -2414,7 +2414,9 @@ function buildContextEnvelope(context: MessageContext | undefined): string | nul
   if (excerpts.length > 0) {
     lines.push("", "Selected excerpts (already inlined; no need to re-read):");
     for (const e of excerpts) {
-      lines.push(`- ${e.notePath} (lines ${e.startLine}-${e.endLine}):`);
+      const location =
+        e.startLine !== 0 || e.endLine !== 0 ? ` (lines ${e.startLine}-${e.endLine})` : "";
+      lines.push(`- ${e.notePath}${location}:`);
       for (const l of e.content.split("\n")) lines.push(`  ${l}`);
     }
   }

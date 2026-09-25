@@ -109,6 +109,77 @@ async function flushTeardown(): Promise<void> {
 describe("main", () => {
   describe("CopilotPlugin", () => {
     describe("initSelectionHandler()", () => {
+      it("attaches Reading view text, preserves it on chat focus, and clears it in the note (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
+        setSelectedTextContexts([]);
+        const containerEl = document.createElement("div");
+        const preview = document.createElement("div");
+        preview.className = "markdown-reading-view";
+        preview.textContent = "Excerpt from the note";
+        containerEl.append(preview);
+        document.body.append(containerEl);
+        const chat = document.createElement("div");
+        chat.textContent = "Chat input";
+        document.body.append(chat);
+        const noteView = {
+          containerEl,
+          file: { path: "Research.md", basename: "Research" },
+          getMode: () => "preview",
+          editor: {},
+        };
+        const cleanups: Array<() => void> = [];
+        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
+        Object.assign(plugin, {
+          registerEditorExtension: jest.fn(),
+          registerDomEvent: (doc: Document, event: string, handler: EventListener) => {
+            doc.addEventListener(event, handler);
+            cleanups.push(() => doc.removeEventListener(event, handler));
+          },
+          registerEvent: jest.fn(),
+          app: {
+            workspace: {
+              getLeavesOfType: () => [{ view: noteView }],
+              on: jest.fn(),
+            },
+          },
+        });
+
+        plugin.initSelectionHandler();
+        const selection = document.getSelection()!;
+        const range = document.createRange();
+        range.setStart(preview.firstChild!, 0);
+        range.setEnd(preview.firstChild!, 7);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        document.dispatchEvent(new Event("selectionchange"));
+        expect(getSelectedTextContexts()).toEqual([
+          expect.objectContaining({
+            content: "Excerpt",
+            notePath: "Research.md",
+            startLine: 0,
+            endLine: 0,
+          }),
+        ]);
+
+        const chatRange = document.createRange();
+        chatRange.setStart(chat.firstChild!, 0);
+        chatRange.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(chatRange);
+        document.dispatchEvent(new Event("selectionchange"));
+        expect(getSelectedTextContexts()).toHaveLength(1);
+
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        document.dispatchEvent(new Event("selectionchange"));
+        expect(getSelectedTextContexts()).toEqual([]);
+
+        selection.removeAllRanges();
+        cleanups.forEach((cleanup) => cleanup());
+        containerEl.remove();
+        chat.remove();
+      });
+
       it("attaches and clears a note excerpt from editor updates even when another view is active (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
         setSelectedTextContexts([]);
         let extension: Extension | undefined;
@@ -118,11 +189,13 @@ describe("main", () => {
           registerEditorExtension: (value: Extension) => {
             extension = value;
           },
+          registerEvent: jest.fn(),
           app: {
             workspace: {
               getLeavesOfType: () => [{ view: noteView }],
               getActiveViewOfType: () => null,
               getActiveFile: () => ({ path: "Wrong.md", basename: "Wrong" }),
+              on: jest.fn(),
             },
           },
         });

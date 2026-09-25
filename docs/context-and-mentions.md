@@ -41,7 +41,7 @@ The manual selection command is available from the command palette or an assigne
 
 For text selected in the Web Viewer, run **Add web selection to chat context**. Copilot sends the selected excerpt instead of also attaching the full active web tab.
 
-Selected text in note editors is automatically added to chat context as you select it, and stays attached when you move to chat. On desktop, this also works with Web Viewer selections. Review or remove the selection badge before sending.
+Selected text in notes is automatically added to chat context as you select it in Reading or Edit view, and stays attached when you move to chat. Reading view selections show the note path without line numbers. On desktop, this also works with Web Viewer selections. Review or remove the selection badge before sending.
 
 ## Mention other agents
 

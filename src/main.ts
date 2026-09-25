@@ -825,6 +825,61 @@ export default class CopilotPlugin extends Plugin {
         if (leaf) this.handleSelectionChange(leaf.view as MarkdownView);
       })
     );
+
+    const watchedDocuments = new Set<Document>();
+    const watchLeaf = (leaf: WorkspaceLeaf | null) => {
+      const doc = leaf?.view?.containerEl?.doc;
+      if (!doc || watchedDocuments.has(doc)) return;
+      watchedDocuments.add(doc);
+      this.registerDomEvent(doc, "selectionchange", () => this.handleReadingSelectionChange(doc));
+    };
+    this.app.workspace.getLeavesOfType("markdown").forEach(watchLeaf);
+    this.registerEvent(this.app.workspace.on("active-leaf-change", watchLeaf));
+  }
+
+  private handleReadingSelectionChange(doc: Document): void {
+    const selection = doc.getSelection();
+    const anchor = selection?.anchorNode;
+    const focus = selection?.focusNode;
+    if (!anchor || !focus) return;
+
+    // Only rendered text inside one note is a note selection; a later chat selection leaves it attached.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/597
+    const noteView = this.app.workspace
+      .getLeavesOfType("markdown")
+      .map((leaf) => leaf.view as MarkdownView)
+      .find((view) => {
+        if (view.getMode() !== "preview") return false;
+        const readingView = view.containerEl.querySelector(".markdown-reading-view");
+        return readingView?.contains(anchor) && readingView.contains(focus);
+      });
+    if (!noteView?.file) return;
+
+    const selectedText = selection.toString();
+    const signature = `preview:${noteView.file.path}:${selectedText}`;
+    if (signature === this.lastSelectionSignature) return;
+    this.lastSelectionSignature = signature;
+
+    if (!selectedText.trim()) {
+      const currentContexts = getSelectedTextContexts();
+      const nonNoteContexts = currentContexts.filter((ctx) => ctx.sourceType !== "note");
+      if (currentContexts.length !== nonNoteContexts.length) {
+        setSelectedTextContexts(nonNoteContexts);
+      }
+      return;
+    }
+
+    // Rendered Markdown does not expose reliable source line numbers for every selection.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/597
+    this.setSelectionContext({
+      id: uuidv4(),
+      content: selectedText,
+      sourceType: "note",
+      noteTitle: noteView.file.basename,
+      notePath: noteView.file.path,
+      startLine: 0,
+      endLine: 0,
+    });
   }
 
   /**

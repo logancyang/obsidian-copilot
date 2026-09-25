@@ -25,6 +25,7 @@ export interface NoteSelectedTextContext extends BaseSelectedTextContext {
   sourceType: "note";
   noteTitle: string;
   notePath: string;
+  /** Both lines are zero when rendered text cannot be mapped to source lines. */
   startLine: number;
   endLine: number;
 }

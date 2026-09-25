@@ -667,7 +667,11 @@ export class ContextProcessor {
         additionalContext += `\n\n<${WEB_SELECTED_TEXT_TAG}>\n<title>${escapeXml(selectedText.title)}</title>\n<url>${escapeXml(selectedText.url)}</url>\n<content>\n${escapeXml(selectedText.content)}\n</content>\n</${WEB_SELECTED_TEXT_TAG}>`;
       } else {
         // Note selected text context (default for backward compatibility)
-        additionalContext += `\n\n<${SELECTED_TEXT_TAG}>\n<title>${escapeXml(selectedText.noteTitle)}</title>\n<path>${escapeXml(selectedText.notePath)}</path>\n<start_line>${selectedText.startLine.toString()}</start_line>\n<end_line>${selectedText.endLine.toString()}</end_line>\n<content>\n${selectedText.content}\n</content>\n</${SELECTED_TEXT_TAG}>`;
+        const lineTags =
+          selectedText.startLine !== 0 || selectedText.endLine !== 0
+            ? `\n<start_line>${selectedText.startLine}</start_line>\n<end_line>${selectedText.endLine}</end_line>`
+            : "";
+        additionalContext += `\n\n<${SELECTED_TEXT_TAG}>\n<title>${escapeXml(selectedText.noteTitle)}</title>\n<path>${escapeXml(selectedText.notePath)}</path>${lineTags}\n<content>\n${selectedText.content}\n</content>\n</${SELECTED_TEXT_TAG}>`;
       }
     }
 
