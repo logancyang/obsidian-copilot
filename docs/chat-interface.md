@@ -46,6 +46,8 @@ Manage saved commands under **Settings → Copilot → Command**. See [Copilot C
 
 Press **Enter** to send by default. You can switch this to **Shift + Enter** under **Settings → Copilot → Basic → General → Send Shortcut**. Use the stop button to interrupt a response.
 
+The chat follows the latest response as it grows. Scroll up to read earlier messages without being pulled back down. A round down-arrow appears near the bottom of the chat; select it, or scroll to the end, to follow the response again.
+
 Your sent messages display Markdown formatting, including headings, lists, code blocks, links, and image embeds. Copy and Edit keep the original Markdown text. Links and image embeds in saved chats resolve from the conversation note, even when another note is open.
 
 Hover over a message to use its actions:
@@ -62,6 +64,8 @@ After a response, the token counter in the top bar shows the context used for th
 Use **New Chat** in the top bar or run **New Copilot Quick Chat**. Starting over clears the current messages and resets context to the active note when automatic context is enabled.
 
 Use **Chat History** to search saved conversations, reopen one, rename it, open its Markdown source, or delete it. Continuing a reopened conversation updates its existing note, including after the note has been renamed or while its source is open.
+
+Select **Copy Chat Link** beside **New Chat** to copy an `obsidian://` link to the current saved conversation. Paste it into another note to reopen that chat in the same vault. The button becomes available after the chat is saved; the link still works if the conversation note is renamed.
 
 **Autosave Chat as Markdown** is enabled by default. Copilot saves after each user message and response under `<Copilot folder>/copilot-conversations/`. If autosave is off, use **Save Chat as Note** in the top bar. Change autosave and **Conversation Filename Template** under **Settings → Copilot → Basic → Saving conversations**.
 

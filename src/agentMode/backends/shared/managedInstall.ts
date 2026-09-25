@@ -1,11 +1,12 @@
+import type { ManagedInstallProgress } from "@/agentMode/backends/shared/installProgress";
 import { renameWithRetry } from "@/agentMode/skills/renameWithRetry";
 import { logError, logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
-export type ManagedInstallRuntimeState<TProgress> =
+export type ManagedInstallRuntimeState =
   | { kind: "idle" }
   | { kind: "detecting" }
-  | { kind: "installing"; progress: TProgress | null }
+  | { kind: "installing"; progress: ManagedInstallProgress | null }
   | { kind: "busy" }
   | { kind: "error"; message: string; operation: "install" | "configure" };
 

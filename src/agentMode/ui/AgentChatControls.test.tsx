@@ -70,5 +70,15 @@ describe("AgentChatControls", () => {
 
       expect(mockNavigateToPlusPage).toHaveBeenCalledWith("multi_agent");
     });
+
+    it("does not show a lone link control before a session exists https://github.com/logancyang/obsidian-copilot/issues/3271", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      render(
+        <TooltipProvider>
+          <AgentChatControls />
+        </TooltipProvider>
+      );
+      expect(screen.queryByTitle("Copy Chat Link")).toBeNull();
+    });
   });
 });

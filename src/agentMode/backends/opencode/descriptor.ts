@@ -36,7 +36,6 @@ import type {
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
 import { findModelEntry } from "@/agentMode/session/translateBackendState";
-import { phaseLabel } from "./installProgress";
 import type { ManagedInstallActionState } from "@/agentMode/session/types";
 
 /** Config option id OpenCode uses to switch the active agent at runtime. */
@@ -105,28 +104,6 @@ export function getOpencodeBinaryManager(plugin: CopilotPlugin): OpencodeBinaryM
  */
 export { detectOpencodeCliPath } from "./opencodeCliDetector";
 
-const IDLE_MANAGED_INSTALL_ACTION = Object.freeze({
-  kind: "idle" as const,
-}) satisfies ManagedInstallActionState;
-
-function managedInstallActionState(manager: OpencodeBinaryManager): ManagedInstallActionState {
-  const state = manager.getRuntimeState();
-  if (state.kind === "installing") {
-    return {
-      kind: "running",
-      label: phaseLabel(state.progress),
-    };
-  }
-  // Keep competing setup actions disabled, but only retry failed installs or upgrades.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
-  if (state.kind === "detecting" || state.kind === "busy") {
-    return { kind: "running", label: "Configuring…" };
-  }
-  if (state.kind === "error" && state.operation === "install")
-    return { kind: "error", message: state.message };
-  return IDLE_MANAGED_INSTALL_ACTION;
-}
-
 /**
  * Descriptor for the OpenCode backend. This is the contract `session/` and
  * `ui/` consume — the rest of Agent Mode never imports `OpencodeBackend`,
@@ -192,7 +169,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
   managedInstall: {
     getState(plugin: CopilotPlugin): ManagedInstallActionState {
-      return managedInstallActionState(getOpencodeBinaryManager(plugin));
+      return getOpencodeBinaryManager(plugin).getActionState();
     },
 
     subscribe(plugin: CopilotPlugin, onChange: () => void): () => void {

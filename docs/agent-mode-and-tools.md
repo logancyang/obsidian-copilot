@@ -2,6 +2,8 @@
 
 Agent Chat is the default Copilot experience on desktop. It gives an AI agent a working view of your vault so it can answer questions, use tools, and make permissioned changes while you follow the work in chat.
 
+Agent Chat follows a growing response until you scroll up to read earlier messages. Select the round down-arrow near the bottom of the chat, or scroll to the end, to follow new output again.
+
 Quick Chat remains available for lightweight conversation and is the main chat experience on mobile. For multi-step work, Projects, Skills, or file changes, start with Agent Chat.
 
 Your sent messages display Markdown formatting, including headings, lists, code blocks, links, and image embeds. Copy and Edit keep the original Markdown text. Links and image embeds in saved chats resolve from the conversation note, even when another note is open.
@@ -24,7 +26,7 @@ A one-agent chat can work without a Copilot license when you bring your own mode
 
 opencode is the most flexible choice because it can use Copilot-hosted, BYOK, and local models.
 
-1. In the **opencode** tab, open **Configure**, choose **Managed by Copilot**, then click **Download & install**.
+1. In the **opencode** tab, open **Configure**, choose **Managed by Copilot**, then click **Download & install**. Progress shows elapsed time while connecting, downloaded bytes during transfer, then extraction, verification, and activation.
 2. If you already installed it, choose **My own binary** in **Configure**, then select **Auto-detect** or enter the absolute path and click **Apply**.
 3. Enable the models you want to see and choose a **Default model**.
 
@@ -64,7 +66,7 @@ The archive format and extraction command are separate: bsdtar can unpack ZIP fi
 For an existing or manually installed `@agentclientprotocol/codex-acp` adapter, Copilot checks compatibility and reports any required update in **Configure**. The adapter version and bundled Codex CLI version are separate.
 
 1. Open **Basic → Agents → Codex → Configure**.
-2. Choose **Download & install** under **Managed by Copilot**. Copilot downloads Codex and its runtime, verifies the download, and keeps your current installation until the replacement is ready. You do not need Node.js or npm.
+2. Choose **Download & install** under **Managed by Copilot**. Copilot shows elapsed time while connecting, downloaded bytes during transfer, then labels extraction, verification, and activation while it prepares Codex. It keeps your current installation until the replacement is ready. You do not need Node.js or npm.
 3. Click **Sign in**, finish authentication in your browser, and return to Obsidian. If the browser does not open, click **Open sign-in page**. You can cancel or retry sign-in. Existing credentials are reused when you use the same Codex profile.
 4. If you prefer your own adapter, use **My own binary** to Auto-detect it or enter its absolute path. You remain responsible for upgrades to that binary.
 5. Enable the models you want and choose a default.
@@ -81,7 +83,7 @@ For Windows-specific installation help, see [Windows setup for Agent Chat](agent
 
 ### Start a chat
 
-Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** from the command palette. If the default agent is missing, its custom binary is outdated or unusable, or it is not signed in, Copilot opens **Select your agent** with the reason and a **Configure** action. You can also choose another working agent and select **Start chat**. If an agent is still starting, wait for that launch to finish before starting another agent. **Configure** remains available while you wait. If you already have a chat open, Copilot keeps the conversation and your unsent draft visible and shows a warning above the chat.
+Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** from the command palette. From an open note, select the Copilot icon beside the note's view controls to open Agent Chat with that note attached to your next message. If Agent Chat is already open, the icon brings it into view; otherwise, it opens in the right sidebar. If the default agent is missing, its custom binary is outdated or unusable, or it is not signed in, Copilot opens **Select your agent** with the reason and a **Configure** action. You can also choose another working agent and select **Start chat**. If an agent is still starting, wait for that launch to finish before starting another agent. **Configure** remains available while you wait. If you already have a chat open, Copilot keeps the conversation and your unsent draft visible and shows a warning above the chat.
 
 An empty Agent Chat shows a fixed hint: "Ask anything • @ to add context • / for commands".
 
@@ -133,6 +135,7 @@ Agent Chat keeps each conversation separate:
 - Select **New Chat** to reset the current tab.
 - Select **Stop** to cancel the current turn. Queued follow-ups return to the message box, with their notes, web pages, agent mentions, and images, so you can edit or resend them. Queued content comes before the current draft, and custom commands return as their expanded text.
 - Use **Recent Chats** from the Agent Chat home screen, or **Chat History** inside a conversation, to resume saved work. The **Recent Chats** list can be scrolled or searched.
+- Select **Copy Chat Link** beside **New Chat** to copy an `obsidian://` link to the current conversation. Paste it into another note to reopen the chat in the same vault. A saved conversation stays linked after its Markdown note is renamed; a conversation stored only by its agent can be linked once the agent has a session ID.
 - A spinner marks a chat while its agent is responding. When the response stops but the session remains live, a small blue dot appears on the bottom-right corner of the chat icon. Hover the row and select **Close session** to release that session. Saved history stays available to reopen, and other chats keep running. If the agent does not support closing individual sessions or release fails, the chat stays marked live with an error.
 - Add the active note, selected text, other notes, folders, a Copilot Web Viewer tab, or supported images. You can also mention a note with `[[Note title]]`.
 - Hover the context ring beside the send controls to see how much of the model's context window is in use. The ring stays empty until the agent reports usage, and a stopped response keeps the last reported reading. If the connected account reports usage limits, the same panel shows the available limit and reset time.

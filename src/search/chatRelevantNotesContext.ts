@@ -4,7 +4,6 @@ export interface ChatRelevantNotesContext {
   id: string;
   request: RelatedContextRequest;
   skippedAttachments: number;
-  addFile: (path: string) => void;
 }
 
 /** Owns the last focused chat for one vault; it never stores context on disk. */

@@ -758,6 +758,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           onDelete={safeAsyncHandler(handleDelete)}
         />
         <ChatControls
+          chatLinkId={sourcePath || undefined}
+          onCopyChatLink={(id) => plugin.copyChatLink(id)}
           onNewChat={() => void handleNewChat()}
           onSaveAsNote={() => handleSaveAsNote()}
           onLoadHistory={() => void handleLoadChatHistory()}

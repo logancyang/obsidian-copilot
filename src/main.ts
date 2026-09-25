@@ -1,9 +1,15 @@
 import { startReleaseUpdateCheck } from "@/services/releaseUpdateNotice";
 import { releaseCursorAssociation } from "@/editor/releaseCursorAssociation";
+import { registerNoteHeaderAction } from "@/editor/registerNoteHeaderAction";
 import type { AgentSessionManager, SkillManager } from "@/agentMode";
 // Deep import (not the barrel): these run on the load path for every
 // platform, and the barrel pulls Node-only modules that crash mobile.
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
+import {
+  buildChatDeepLink,
+  findChatFileByDeepLinkId,
+  getSavedChatDeepLinkId,
+} from "@/utils/chatDeepLink";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChainOwner from "@/LLMProviders/chainOwner";
 import { CustomModel, setSelectedTextContexts, getSelectedTextContexts } from "@/aiParams";
@@ -98,7 +104,9 @@ import {
 import {
   addIcon,
   Editor,
+  editorInfoField,
   FileSystemAdapter,
+  MarkdownFileInfo,
   MarkdownView,
   Menu,
   Notice,
@@ -130,6 +138,7 @@ import {
   trashFile,
 } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
+import { EditorView } from "@codemirror/view";
 import { OpenArtifactsPublisher } from "@/openArtifacts/OpenArtifactsPublisher";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
 import {
@@ -168,8 +177,6 @@ export default class CopilotPlugin extends Plugin {
   // never-focused-a-chat state is harmless.
   private lastActiveChatViewType: typeof CHAT_VIEWTYPE | typeof CHAT_AGENT_VIEWTYPE = CHAT_VIEWTYPE;
   private selectionDebounceTimer?: number;
-  private selectionChangeHandler?: () => void;
-  private selectionListenerDocument?: Document;
   private lastSelectionSignature?: string;
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
@@ -406,6 +413,8 @@ export default class CopilotPlugin extends Plugin {
     // Register the custom Agent Mode icon before any view/ribbon/command references it.
     addIcon(COPILOT_AGENT_ICON_ID, COPILOT_AGENT_ICON_SVG);
 
+    if (isDesktopRuntime()) registerNoteHeaderAction(this);
+
     this.safeRegisterView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
     this.safeRegisterView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
     this.safeRegisterView(
@@ -494,6 +503,13 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize web selection watcher (Desktop only)
     this.initWebSelectionWatcher();
+
+    // A queued URI may fire as soon as its handler is registered, so register
+    // after chat managers and views are ready to load a conversation.
+    // https://github.com/logancyang/obsidian-copilot/issues/3271
+    this.registerObsidianProtocolHandler("copilot-chat", (params) => {
+      void this.openChatDeepLink(params);
+    });
   }
 
   /** Collect one-time manual folder moves without opening a separate modal. */
@@ -699,8 +715,7 @@ export default class CopilotPlugin extends Plugin {
       }
     }
 
-    // Cleanup selection handler
-    this.cleanupSelectionHandler();
+    window.clearTimeout(this.selectionDebounceTimer);
     this.cleanupWebSelectionWatcher();
     this.clearSelectionContext();
 
@@ -815,43 +830,75 @@ export default class CopilotPlugin extends Plugin {
     );
   }
 
-  /**
-   * Initialize automatic text selection handler
-   * Listens to selectionchange events and automatically adds selected text to chat context
-   */
+  /** Capture note selections in Edit and Reading view before focus can move to chat. */
   initSelectionHandler() {
-    this.selectionChangeHandler = () => {
-      // Clear existing debounce timer
-      if (this.selectionDebounceTimer) {
-        window.clearTimeout(this.selectionDebounceTimer);
-      }
+    this.registerEditorExtension(
+      EditorView.updateListener.of((update) => {
+        if (!update.selectionSet || !update.view.hasFocus) return;
 
-      // Debounce selection changes to avoid excessive triggers
-      this.selectionDebounceTimer = window.setTimeout(() => {
-        this.handleSelectionChange();
-      }, 500);
-    };
+        // The originating editor identifies its note even in a popout, where
+        // the active leaf may differ. https://github.com/Brevilabs/obsidian-copilot-private/issues/597
+        const info = update.state.field(editorInfoField, false);
+        if (info) this.scheduleSelectionUpdate(() => this.handleSelectionChange(info));
+      })
+    );
 
-    // Capture the document at registration so removal targets the same one
-    // (activeDocument can change if the user focuses a popout window).
-    this.selectionListenerDocument = activeDocument;
-    this.selectionListenerDocument.addEventListener("selectionchange", this.selectionChangeHandler);
+    const watchDocument = (doc: Document) =>
+      this.registerDomEvent(doc, "selectionchange", () => this.handleReadingSelectionChange(doc));
+    watchDocument(activeDocument);
+    this.registerEvent(this.app.workspace.on("window-open", (win) => watchDocument(win.doc)));
   }
 
-  /**
-   * Clean up selection handler on plugin unload
-   */
-  cleanupSelectionHandler() {
-    if (this.selectionDebounceTimer) {
-      window.clearTimeout(this.selectionDebounceTimer);
+  /** Debounces selection updates so dragging a selection does not rewrite chat context on every step. */
+  private scheduleSelectionUpdate(update: () => void): void {
+    window.clearTimeout(this.selectionDebounceTimer);
+    this.selectionDebounceTimer = window.setTimeout(update, 500);
+  }
+
+  private handleReadingSelectionChange(doc: Document): void {
+    const selection = doc.getSelection();
+    const anchor = selection?.anchorNode;
+    const focus = selection?.focusNode;
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const file = view?.file;
+    if (!anchor || !focus || !file || view.getMode() !== "preview") return;
+
+    // Only rendered text inside the note is a note selection; a later chat
+    // selection leaves the pending one attached. https://github.com/Brevilabs/obsidian-copilot-private/issues/597
+    const readingEl = view.previewMode.containerEl;
+    if (!readingEl.contains(anchor) || !readingEl.contains(focus)) return;
+
+    const selectedText = selection.toString();
+    this.scheduleSelectionUpdate(() => {
+      const signature = `preview:${file.path}:${selectedText}`;
+      if (signature === this.lastSelectionSignature) return;
+      this.lastSelectionSignature = signature;
+
+      if (!selectedText.trim()) {
+        this.clearNoteSelectionContexts();
+        return;
+      }
+
+      // Rendered Markdown does not expose reliable source line numbers for every selection.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/597
+      this.setSelectionContext({
+        id: uuidv4(),
+        content: selectedText,
+        sourceType: "note",
+        noteTitle: file.basename,
+        notePath: file.path,
+        startLine: 0,
+        endLine: 0,
+      });
+    });
+  }
+
+  private clearNoteSelectionContexts(): void {
+    const currentContexts = getSelectedTextContexts();
+    const nonNoteContexts = currentContexts.filter((ctx) => ctx.sourceType !== "note");
+    if (currentContexts.length !== nonNoteContexts.length) {
+      setSelectedTextContexts(nonNoteContexts);
     }
-    if (this.selectionChangeHandler && this.selectionListenerDocument) {
-      this.selectionListenerDocument.removeEventListener(
-        "selectionchange",
-        this.selectionChangeHandler
-      );
-    }
-    this.selectionListenerDocument = undefined;
   }
 
   /**
@@ -883,27 +930,18 @@ export default class CopilotPlugin extends Plugin {
   }
 
   /**
-   * Handle text selection changes
-   * Only processes selections from markdown editors
+   * Updates chat context from a note editor's current selection.
+   * @param info - Editor and note that changed, including editors in popout windows.
    */
-  handleSelectionChange() {
-    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!activeView || !activeView.editor) {
-      return;
-    }
-
-    const editor = activeView.editor;
-    const activeFile = this.app.workspace.getActiveFile();
-
-    // Get selection range first to validate it exists
-    const selectionRange = editor.listSelections()[0];
-    if (!selectionRange) {
+  handleSelectionChange({ editor, file }: MarkdownFileInfo) {
+    const selectionRange = editor?.listSelections()[0];
+    if (!editor || !selectionRange) {
       return;
     }
 
     // Compute selection signature to avoid redundant updates
-    const signature = activeFile
-      ? `${activeFile.path}:${selectionRange.anchor.line}:${selectionRange.anchor.ch}:${selectionRange.head.line}:${selectionRange.head.ch}`
+    const signature = file
+      ? `${file.path}:${selectionRange.anchor.line}:${selectionRange.anchor.ch}:${selectionRange.head.line}:${selectionRange.head.ch}`
       : "";
 
     // Skip if selection hasn't changed
@@ -916,15 +954,11 @@ export default class CopilotPlugin extends Plugin {
 
     // If selection is empty, clear note-type contexts
     if (!selectedText || !selectedText.trim()) {
-      const currentContexts = getSelectedTextContexts();
-      const nonNoteContexts = currentContexts.filter((ctx) => ctx.sourceType !== "note");
-      if (currentContexts.length !== nonNoteContexts.length) {
-        setSelectedTextContexts(nonNoteContexts);
-      }
+      this.clearNoteSelectionContexts();
       return;
     }
 
-    if (!activeFile) {
+    if (!file) {
       return;
     }
 
@@ -938,8 +972,8 @@ export default class CopilotPlugin extends Plugin {
       id: uuidv4(),
       content: selectedText,
       sourceType: "note",
-      noteTitle: activeFile.basename,
-      notePath: activeFile.path,
+      noteTitle: file.basename,
+      notePath: file.path,
       startLine,
       endLine,
     };
@@ -1085,9 +1119,10 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  async activateAgentView(): Promise<WorkspaceLeaf | null> {
+  /** Open or reveal Agent Chat, optionally placing a new pane in the right sidebar. */
+  async activateAgentView(openInRightSidebar = false): Promise<WorkspaceLeaf | null> {
     if (!this.requireAgentView()) return null;
-    const leaf = await this.openOrRevealView(CHAT_AGENT_VIEWTYPE);
+    const leaf = await this.openOrRevealView(CHAT_AGENT_VIEWTYPE, openInRightSidebar);
     // Focus the composer on open. Latching the request on the view's event bus
     // (rather than a setTimeout) means a freshly-opened view drains it once its
     // React tree mounts and an already-open view focuses immediately — no
@@ -1100,6 +1135,23 @@ export default class CopilotPlugin extends Plugin {
     return leaf;
   }
 
+  /**
+   * Open or reveal Agent Chat with a note attached to its active draft.
+   * @param note - Note to send with the user's next Agent Chat message.
+   * @param openInRightSidebar - Place a newly opened pane in the right sidebar
+   *   instead of the user's default open area.
+   */
+  async addNoteToAgentChat(note: TFile, openInRightSidebar = false): Promise<void> {
+    try {
+      const leaf = await this.activateAgentView(openInRightSidebar);
+      if (!leaf) return;
+      await this.agentSessionManager?.addContextNoteToActiveChat(note);
+    } catch (error) {
+      logError("Failed to add a note to Agent Chat.", error);
+      new Notice("Could not add the note to Agent Chat. Check Copilot logs.");
+    }
+  }
+
   async deactivateAgentView() {
     this.app.workspace.detachLeavesOfType(CHAT_AGENT_VIEWTYPE);
   }
@@ -1109,32 +1161,30 @@ export default class CopilotPlugin extends Plugin {
   }
 
   /**
-   * Insert text (a `[[wikilink]]` from the Relevant Notes pane) into the chat view
-   * the user last focused (see `pickContextChatViewType`), opening that view if none
-   * is open. Routes via the target view's `eventTarget`, the same seam
-   * `processText`/`emitChatIsVisible` use, so the standalone pane never needs the
-   * chat's Lexical editor directly.
+   * Add a note to the chat view the user last focused (see `pickContextChatViewType`),
+   * opening that view if none is open.
+   * @param note - Note the Relevant Notes pane offers as chat context.
    */
-  async insertTextIntoActiveChat(text: string): Promise<void> {
-    const viewType = this.pickContextChatViewType();
-    let leaf = this.app.workspace.getLeavesOfType(viewType)[0] ?? null;
+  async addNoteToActiveChat(note: TFile): Promise<void> {
+    // Agent Chat attaches the note itself so the agent reads it as context,
+    // while Quick Chat keeps the [[wikilink]] its composer already resolves
+    // (https://github.com/Brevilabs/obsidian-copilot-private/issues/579).
+    if (this.pickContextChatViewType() === CHAT_AGENT_VIEWTYPE) {
+      await this.addNoteToAgentChat(note);
+      return;
+    }
+    let leaf = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0] ?? null;
     if (!leaf) {
-      if (viewType === CHAT_AGENT_VIEWTYPE) {
-        await this.activateAgentView();
-      } else {
-        await this.activateView();
-      }
-      leaf = this.app.workspace.getLeavesOfType(viewType)[0] ?? null;
+      await this.activateView();
+      leaf = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0] ?? null;
     }
     if (!leaf) return;
 
     this.app.workspace.revealLeaf(leaf);
-    const view = leaf.view;
     // The bus latches the text if the view's React tree hasn't mounted its
-    // listener yet, so a freshly-opened view drains it on mount — delivery no
-    // longer depends on guessing how long mounting takes.
-    if (view instanceof CopilotView || this.isCopilotAgentView(view)) {
-      view.eventTarget.queueInsertText(text);
+    // listener yet, so a freshly-opened view drains it on mount.
+    if (leaf.view instanceof CopilotView) {
+      leaf.view.eventTarget.queueInsertText(`[[${note.basename}]]`);
     }
   }
 
@@ -1166,18 +1216,24 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  private async openOrRevealView(viewType: string): Promise<WorkspaceLeaf | null> {
+  private async openOrRevealView(
+    viewType: string,
+    openInRightSidebar = false
+  ): Promise<WorkspaceLeaf | null> {
     const leaves = this.app.workspace.getLeavesOfType(viewType);
     if (leaves.length > 0) {
       this.app.workspace.revealLeaf(leaves[0]);
       return leaves[0];
     }
     const leaf =
-      getSettings().defaultOpenArea === DEFAULT_OPEN_AREA.VIEW
+      openInRightSidebar || getSettings().defaultOpenArea === DEFAULT_OPEN_AREA.VIEW
         ? this.app.workspace.getRightLeaf(false)
         : this.app.workspace.getLeaf(true);
     if (!leaf) return null;
     await leaf.setViewState({ type: viewType, active: true });
+    // A new right-sidebar leaf can exist while the sidebar remains collapsed.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/579
+    if (openInRightSidebar) this.app.workspace.revealLeaf(leaf);
     return leaf;
   }
 
@@ -1418,6 +1474,39 @@ export default class CopilotPlugin extends Plugin {
       return;
     }
     await this.loadChatHistory(file);
+  }
+
+  /** Copy a portable link to a saved note or a native agent session. */
+  async copyChatLink(chatId: string): Promise<void> {
+    try {
+      const id = isNativeChatId(chatId) ? chatId : await getSavedChatDeepLinkId(this.app, chatId);
+      if (!id) {
+        new Notice("Save this chat before copying a link.");
+        return;
+      }
+      await navigator.clipboard.writeText(buildChatDeepLink(this.app.vault.getName(), id));
+      new Notice("Chat link copied.");
+    } catch (error) {
+      logError("Failed to copy chat link", error);
+      new Notice("Could not copy chat link.");
+    }
+  }
+
+  /** Route a `copilot-chat` URI through the existing history loaders. */
+  async openChatDeepLink(params: Record<string, string>): Promise<void> {
+    const id = params.id ?? "";
+    try {
+      // Only epoch ids resolve to a file path, so a URI can never name an arbitrary path.
+      const chatId = isNativeChatId(id) ? id : (await findChatFileByDeepLinkId(this.app, id))?.path;
+      if (!chatId) {
+        new Notice("Chat link not found.");
+        return;
+      }
+      await this.loadChatById(chatId);
+    } catch (error) {
+      logError("Failed to open chat link", error);
+      new Notice("Could not open chat link.");
+    }
   }
 
   /**
