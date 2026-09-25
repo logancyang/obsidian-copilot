@@ -97,7 +97,6 @@ function selectChat(id: string, question: string) {
     id,
     request: { folder_name: "Vault", messages: [{ role: "user" as const, content: question }] },
     skippedAttachments: 0,
-    addFile: jest.fn(),
   };
   getChatRelevantNotesStore(mockApp).select(chat);
   return chat;
@@ -232,7 +231,6 @@ describe("RelevantNotes", () => {
         id: "old-miyo",
         request: { folder_name: "Vault", messages: [{ role: "user", content: "topic" }] },
         skippedAttachments: 0,
-        addFile: jest.fn(),
       });
       render(<RelevantNotes onAddToChat={jest.fn()} />);
       await screen.findByText("Target");
@@ -240,6 +238,15 @@ describe("RelevantNotes", () => {
       expect(screen.getByText("Source")).toBeTruthy();
       expect(mockFindRelevantNotes).toHaveBeenCalledWith({ app: mockApp, filePath: "Source.md" });
       act(() => getChatRelevantNotesStore(mockApp).select(null));
+    });
+
+    it("hands the result's note to the chat when Add to Chat is selected with an editor source", async () => {
+      const onAddToChat = jest.fn();
+      render(<RelevantNotes onAddToChat={onAddToChat} />);
+
+      fireEvent.click(await screen.findByTitle("Add to Chat"));
+
+      expect(onAddToChat).toHaveBeenCalledWith(expect.objectContaining({ path: "Target.md" }));
     });
 
     it("opens a result in a new leaf", async () => {
@@ -343,7 +350,6 @@ describe("RelevantNotes", () => {
         id: "reconnecting",
         request: { folder_name: "Vault", messages: [{ role: "user", content: "topic" }] },
         skippedAttachments: 0,
-        addFile: jest.fn(),
       });
       const findChat = jest.mocked(findChatRelevantNotes);
       findChat.mockResolvedValueOnce({ notes: [], status: "unavailable" }).mockResolvedValueOnce({

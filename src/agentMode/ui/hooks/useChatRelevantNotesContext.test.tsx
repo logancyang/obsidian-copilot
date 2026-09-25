@@ -55,7 +55,6 @@ describe("useChatRelevantNotesContext", () => {
         contextNotes: [],
         includeActiveNote: false,
         loading: false,
-        setContextNotes: jest.fn(),
       } as unknown as AgentInputDraftControls;
     });
     afterEach(() => {
@@ -418,7 +417,6 @@ describe("useChatRelevantNotesContext", () => {
         id: "other",
         request: { folder_name: "Vault", draft: "other topic" },
         skippedAttachments: 0,
-        addFile: jest.fn(),
       };
       const store = getChatRelevantNotesStore(app);
       store.select(other);
@@ -440,7 +438,6 @@ describe("useChatRelevantNotesContext", () => {
         id: "popout",
         request: { folder_name: "Vault", draft: "popout topic" },
         skippedAttachments: 0,
-        addFile: jest.fn(),
       };
       store.select(popout);
       const { rerender } = renderHook(
@@ -471,30 +468,6 @@ describe("useChatRelevantNotesContext", () => {
       });
     });
 
-    it("adds a recommended file to the new session's attachments after switching sessions (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
-      const firstSessionSetter = jest.fn();
-      const secondSessionSetter = jest.fn();
-      const { rerender } = renderHook(
-        ({ id, setContextNotes }) =>
-          useChatRelevantNotesContext(app, root, id, { ...draft, setContextNotes }, [], undefined),
-        { initialProps: { id: "first-chat", setContextNotes: firstSessionSetter } }
-      );
-      act(() => {
-        root.dispatchEvent(new Event("pointerdown"));
-      });
-      rerender({ id: "second-chat", setContextNotes: secondSessionSetter });
-      const existingNote = new (TFile as unknown as new (path: string) => TFile)("Existing.md");
-
-      getChatRelevantNotesStore(app).getSnapshot()!.addFile("Embeddings.md");
-
-      expect(firstSessionSetter).not.toHaveBeenCalled();
-      expect(secondSessionSetter).toHaveBeenCalledTimes(1);
-      const updateAttachments = secondSessionSetter.mock.calls[0][0];
-      expect(updateAttachments([existingNote]).map((note: TFile) => note.path)).toEqual([
-        "Existing.md",
-        "Embeddings.md",
-      ]);
-    });
     it("keeps the editor as the source when clicking the Relevant Notes popout control (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { getByRole } = render(
         <RelevantNotesShelfPanel onPopOut={jest.fn()}>

@@ -3,6 +3,7 @@ import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
+import { AgentInputDraftStore } from "@/agentMode/session/AgentInputDraftStore";
 import {
   agentProjectContextLoadAtom,
   type AgentInFlightSource,
@@ -330,10 +331,8 @@ export class AgentSessionManager {
   // Serializes replacements for one logical input even after its runtime session id changes.
   // The cursor retains the last successful owner when an individual replacement fails.
   private readonly replacementCursorByChatInputId = new Map<string, Promise<string>>();
-  // New-session drafts are keyed to the logical composer id, not the active
-  // session pointer. This prevents a handoff from landing in the prior chat
-  // while React commits the new active session.
-  private readonly initialDraftByChatInputId = new Map<string, string>();
+  /** Composer drafts for every live chat input, writable without a mounted view. */
+  readonly drafts: AgentInputDraftStore;
   // Native session identity is stable across markdown/native history surfaces.
   // Sharing one resume prevents duplicate AgentSessions and backend handlers
   // when the same row is opened again before the first load settles.
@@ -443,6 +442,9 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager is desktop only");
     }
     this.preloader = opts.modelPreloader;
+    this.drafts = new AgentInputDraftStore(app, (chatInputId) =>
+      this.getLiveChatInputIds().includes(chatInputId)
+    );
     this.fanoutOrchestrator = new FanoutOrchestrator(this.createFanoutHost());
     this.settingsUnsub = subscribeToSettingsChange((prev, next) =>
       this.onDefaultSelectionsChanged(prev, next)
@@ -1511,22 +1513,24 @@ export class AgentSessionManager {
     const projectId = GLOBAL_SCOPE;
     const previousActiveProjectId = this.activeProjectId;
     const scopeSeq = this.setActiveScope(projectId);
-    const chatInputId = uuidv4();
-    this.initialDraftByChatInputId.set(chatInputId, initialDraft);
+    let session: AgentSession;
     try {
-      return await this.createSession(undefined, projectId, undefined, chatInputId);
+      session = await this.createSession(undefined, projectId);
     } catch (error) {
-      this.initialDraftByChatInputId.delete(chatInputId);
       this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw error;
     }
+    this.drafts.update(session.chatInputId, (draft) => ({ ...draft, input: initialDraft }));
+    return session;
   }
 
-  /** Return and remove the initial draft assigned to one logical composer. */
-  consumeInitialDraft(chatInputId: string): string | undefined {
-    const initialDraft = this.initialDraftByChatInputId.get(chatInputId);
-    this.initialDraftByChatInputId.delete(chatInputId);
-    return initialDraft;
+  /**
+   * Attach a note to the active chat's composer, starting the scope's first chat if needed.
+   * @param note - Note to send with the user's next message.
+   */
+  async addContextNoteToActiveChat(note: TFile): Promise<void> {
+    const session = await this.getOrCreateActiveSession();
+    this.drafts.addContextNote(session.chatInputId, note);
   }
 
   /** Record a failure for the status surface, advancing the failure sequence. */
@@ -2722,7 +2726,6 @@ export class AgentSessionManager {
     }
     this.detachAutoSave(id);
     this.sessions.delete(id);
-    this.initialDraftByChatInputId.delete(session.chatInputId);
     this.chatUIStates.delete(id);
     this.landingCaptureSignatures.delete(id);
     this.lastSeenProjectContentEpochBySession.delete(id);
@@ -2942,6 +2945,7 @@ export class AgentSessionManager {
   }
 
   private notify(): void {
+    this.drafts.prune();
     for (const l of this.listeners) {
       try {
         l();
@@ -3002,7 +3006,6 @@ export class AgentSessionManager {
       })
     );
     this.sessions.clear();
-    this.initialDraftByChatInputId.clear();
     this.chatUIStates.clear();
     this.landingCaptureSignatures.clear();
     this.lastSeenProjectContentEpochBySession.clear();
@@ -3832,7 +3835,6 @@ export class AgentSessionManager {
       for (const s of dead) {
         this.detachAutoSave(s.internalId);
         this.sessions.delete(s.internalId);
-        this.initialDraftByChatInputId.delete(s.chatInputId);
         this.chatUIStates.delete(s.internalId);
         this.landingCaptureSignatures.delete(s.internalId);
         this.lastSeenProjectContentEpochBySession.delete(s.internalId);

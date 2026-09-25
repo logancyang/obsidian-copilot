@@ -8,7 +8,6 @@ const context = (id: string, draft: string): ChatRelevantNotesContext => ({
   id,
   request: { folder_name: "Vault", draft },
   skippedAttachments: 0,
-  addFile: jest.fn(),
 });
 
 describe("chatRelevantNotesContext", () => {

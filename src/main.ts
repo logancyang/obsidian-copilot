@@ -1,5 +1,6 @@
 import { startReleaseUpdateCheck } from "@/services/releaseUpdateNotice";
 import { releaseCursorAssociation } from "@/editor/releaseCursorAssociation";
+import { registerNoteHeaderAction } from "@/editor/registerNoteHeaderAction";
 import type { AgentSessionManager, SkillManager } from "@/agentMode";
 // Deep import (not the barrel): these run on the load path for every
 // platform, and the barrel pulls Node-only modules that crash mobile.
@@ -406,6 +407,8 @@ export default class CopilotPlugin extends Plugin {
 
     // Register the custom Agent Mode icon before any view/ribbon/command references it.
     addIcon(COPILOT_AGENT_ICON_ID, COPILOT_AGENT_ICON_SVG);
+
+    if (isDesktopRuntime()) registerNoteHeaderAction(this);
 
     this.safeRegisterView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
     this.safeRegisterView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
@@ -1104,9 +1107,10 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  async activateAgentView(): Promise<WorkspaceLeaf | null> {
+  /** Open or reveal Agent Chat, optionally placing a new pane in the right sidebar. */
+  async activateAgentView(openInRightSidebar = false): Promise<WorkspaceLeaf | null> {
     if (!this.requireAgentView()) return null;
-    const leaf = await this.openOrRevealView(CHAT_AGENT_VIEWTYPE);
+    const leaf = await this.openOrRevealView(CHAT_AGENT_VIEWTYPE, openInRightSidebar);
     // Focus the composer on open. Latching the request on the view's event bus
     // (rather than a setTimeout) means a freshly-opened view drains it once its
     // React tree mounts and an already-open view focuses immediately — no
@@ -1119,6 +1123,23 @@ export default class CopilotPlugin extends Plugin {
     return leaf;
   }
 
+  /**
+   * Open or reveal Agent Chat with a note attached to its active draft.
+   * @param note - Note to send with the user's next Agent Chat message.
+   * @param openInRightSidebar - Place a newly opened pane in the right sidebar
+   *   instead of the user's default open area.
+   */
+  async addNoteToAgentChat(note: TFile, openInRightSidebar = false): Promise<void> {
+    try {
+      const leaf = await this.activateAgentView(openInRightSidebar);
+      if (!leaf) return;
+      await this.agentSessionManager?.addContextNoteToActiveChat(note);
+    } catch (error) {
+      logError("Failed to add a note to Agent Chat.", error);
+      new Notice("Could not add the note to Agent Chat. Check Copilot logs.");
+    }
+  }
+
   async deactivateAgentView() {
     this.app.workspace.detachLeavesOfType(CHAT_AGENT_VIEWTYPE);
   }
@@ -1128,32 +1149,30 @@ export default class CopilotPlugin extends Plugin {
   }
 
   /**
-   * Insert text (a `[[wikilink]]` from the Relevant Notes pane) into the chat view
-   * the user last focused (see `pickContextChatViewType`), opening that view if none
-   * is open. Routes via the target view's `eventTarget`, the same seam
-   * `processText`/`emitChatIsVisible` use, so the standalone pane never needs the
-   * chat's Lexical editor directly.
+   * Add a note to the chat view the user last focused (see `pickContextChatViewType`),
+   * opening that view if none is open.
+   * @param note - Note the Relevant Notes pane offers as chat context.
    */
-  async insertTextIntoActiveChat(text: string): Promise<void> {
-    const viewType = this.pickContextChatViewType();
-    let leaf = this.app.workspace.getLeavesOfType(viewType)[0] ?? null;
+  async addNoteToActiveChat(note: TFile): Promise<void> {
+    // Agent Chat attaches the note itself so the agent reads it as context,
+    // while Quick Chat keeps the [[wikilink]] its composer already resolves
+    // (https://github.com/Brevilabs/obsidian-copilot-private/issues/579).
+    if (this.pickContextChatViewType() === CHAT_AGENT_VIEWTYPE) {
+      await this.addNoteToAgentChat(note);
+      return;
+    }
+    let leaf = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0] ?? null;
     if (!leaf) {
-      if (viewType === CHAT_AGENT_VIEWTYPE) {
-        await this.activateAgentView();
-      } else {
-        await this.activateView();
-      }
-      leaf = this.app.workspace.getLeavesOfType(viewType)[0] ?? null;
+      await this.activateView();
+      leaf = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0] ?? null;
     }
     if (!leaf) return;
 
     this.app.workspace.revealLeaf(leaf);
-    const view = leaf.view;
     // The bus latches the text if the view's React tree hasn't mounted its
-    // listener yet, so a freshly-opened view drains it on mount — delivery no
-    // longer depends on guessing how long mounting takes.
-    if (view instanceof CopilotView || this.isCopilotAgentView(view)) {
-      view.eventTarget.queueInsertText(text);
+    // listener yet, so a freshly-opened view drains it on mount.
+    if (leaf.view instanceof CopilotView) {
+      leaf.view.eventTarget.queueInsertText(`[[${note.basename}]]`);
     }
   }
 
@@ -1185,18 +1204,24 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  private async openOrRevealView(viewType: string): Promise<WorkspaceLeaf | null> {
+  private async openOrRevealView(
+    viewType: string,
+    openInRightSidebar = false
+  ): Promise<WorkspaceLeaf | null> {
     const leaves = this.app.workspace.getLeavesOfType(viewType);
     if (leaves.length > 0) {
       this.app.workspace.revealLeaf(leaves[0]);
       return leaves[0];
     }
     const leaf =
-      getSettings().defaultOpenArea === DEFAULT_OPEN_AREA.VIEW
+      openInRightSidebar || getSettings().defaultOpenArea === DEFAULT_OPEN_AREA.VIEW
         ? this.app.workspace.getRightLeaf(false)
         : this.app.workspace.getLeaf(true);
     if (!leaf) return null;
     await leaf.setViewState({ type: viewType, active: true });
+    // A new right-sidebar leaf can exist while the sidebar remains collapsed.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/579
+    if (openInRightSidebar) this.app.workspace.revealLeaf(leaf);
     return leaf;
   }
 

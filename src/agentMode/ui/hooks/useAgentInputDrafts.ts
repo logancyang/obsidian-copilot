@@ -1,68 +1,17 @@
-import type { BackendId, PromptContent } from "@/agentMode/session/types";
-import type { MessageContext } from "@/types/message";
+import type {
+  AgentInputDraft,
+  AgentInputDraftStore,
+  QueuedAgentMessage,
+} from "@/agentMode/session/AgentInputDraftStore";
 import { TFile } from "obsidian";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-// Snapshotted at enqueue time so context (active note, selections) doesn't
-// drift between when the user queues the message and when it actually flushes.
-export interface QueuedAgentMessage {
-  id: string;
-  text: string;
-  rawInput: string;
-  context?: MessageContext;
-  /**
-   * Why the message entered the queue, snapshotted at enqueue time — an
-   * enqueue reason, not a live "what's blocking now" (the blockers can evolve
-   * before the queue drains; the label deliberately doesn't chase them).
-   * Absent on combined flush items, which are sent immediately and never
-   * rendered as queue rows.
-   */
-  queueReason?: "context" | "busy";
-  /** Image blocks for the backend prompt. */
-  promptContent?: PromptContent[];
-  /**
-   * Resolved answerer selection (the deduped `@`-mentioned installed agents).
-   * Present only when the turn fans out; absent for the single-agent path (no
-   * qualifying mentions, or only the main agent `@`-ed). Snapshotted at enqueue
-   * time alongside the rest.
-   */
-  mentionedAgents?: ReadonlyArray<BackendId>;
-}
-
-/**
- * Per-chat-input compose state. Replaces the old `key={internalId}` remount of
- * the chat surface: instead of throwing away and rebuilding input state on
- * every tab switch, each logical input keeps its own draft so unsent text,
- * attachments, and queued follow-ups survive switching away and back.
- *
- * `loading` (turn in flight) and `queue` live here too — without the remount
- * to reset them per session, a single shared flag would bleed a backgrounded
- * session's running state onto whichever session is foregrounded.
- * `selectedTextContexts` is deliberately NOT here: it's a global ephemeral
- * atom, snapshotted into the queued item at send time.
- */
-export interface AgentInputDraft {
-  input: string;
-  images: File[];
-  contextNotes: TFile[];
-  includeActiveNote: boolean;
-  includeActiveWebTab: boolean;
-  loading: boolean;
-  queue: QueuedAgentMessage[];
-}
+import React, { useCallback, useMemo, useSyncExternalStore } from "react";
 
 interface UseAgentInputDraftsArgs {
-  /**
-   * Chat input whose draft the returned controls read and write, or null when
-   * no chat input is on screen — during a backend restart the old session is
-   * closed before its replacement exists. Reads fall back to an empty draft and
-   * writes are dropped, while stored drafts are left alone.
-   * https://github.com/Brevilabs/obsidian-copilot-private/issues/473
-   */
-  activeChatInputId: string | null;
-  /** Logical ids of all live chat inputs; drafts for ids not here are pruned. */
-  liveChatInputIds: readonly string[];
-  /** Seed for a fresh draft's include-active-note toggle (the user setting). */
+  /** Manager-owned drafts for every live chat input. */
+  store: AgentInputDraftStore;
+  /** Chat input whose draft the returned controls read and write. */
+  chatInputId: string;
+  /** Include-active-note toggle shown before the input's first edit (the user setting). */
   defaultIncludeActiveNote: boolean;
 }
 
@@ -79,75 +28,29 @@ export interface AgentInputDraftControls extends AgentInputDraft {
   resetCompose: () => void;
 }
 
-// Frozen empties so a missing-session read returns referentially stable
+// Frozen empties so a not-yet-edited draft reads as referentially stable
 // arrays (no fresh `[]` that would defeat memo/identity checks downstream).
 const EMPTY_IMAGES = Object.freeze([]) as unknown as File[];
 const EMPTY_CONTEXT_NOTES = Object.freeze([]) as unknown as TFile[];
 const EMPTY_QUEUE = Object.freeze([]) as unknown as QueuedAgentMessage[];
 
-const createDraft = (includeActiveNote: boolean): AgentInputDraft => ({
-  input: "",
-  images: [],
-  contextNotes: [],
-  includeActiveNote,
-  includeActiveWebTab: false,
-  loading: false,
-  queue: [],
-});
-
 const applyState = <T>(value: React.SetStateAction<T>, previous: T): T =>
   typeof value === "function" ? (value as (previous: T) => T)(previous) : value;
 
+/**
+ * Bind the composer to one chat input's draft in the manager-owned store, so
+ * switching tabs swaps drafts instead of remounting and discarding input.
+ */
 export function useAgentInputDrafts({
-  activeChatInputId,
-  liveChatInputIds,
+  store,
+  chatInputId,
   defaultIncludeActiveNote,
 }: UseAgentInputDraftsArgs): AgentInputDraftControls {
-  const [drafts, setDrafts] = useState<Record<string, AgentInputDraft>>({});
-
-  // Stable key so the prune effect only fires when the set of live chat inputs
-  // actually changes, not on every parent re-render (the array prop is a
-  // fresh reference each render).
-  const liveKey = liveChatInputIds.join("\0");
-  const liveSetRef = useRef<Set<string>>(new Set(liveChatInputIds));
-
-  useEffect(() => {
-    const live = new Set(liveChatInputIds);
-    liveSetRef.current = live;
-    setDrafts((prev) => {
-      let changed = false;
-      const next: Record<string, AgentInputDraft> = {};
-      for (const [sessionId, draft] of Object.entries(prev)) {
-        if (live.has(sessionId)) next[sessionId] = draft;
-        else changed = true;
-      }
-      return changed ? next : prev;
-    });
-    // liveChatInputIds is re-derived each render; gate on its stable join key.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- chat identity, not the storage callback, controls draft restoration
-  }, [liveKey]);
-
-  const updateDraft = useCallback(
-    (sessionId: string, updater: (draft: AgentInputDraft) => AgentInputDraft) => {
-      setDrafts((prev) => {
-        // A turn can resolve after its session was closed/replaced; don't let
-        // that late update resurrect a pruned draft.
-        if (!liveSetRef.current.has(sessionId)) return prev;
-        const current = prev[sessionId] ?? createDraft(defaultIncludeActiveNote);
-        const next = updater(current);
-        if (next === current) return prev;
-        return { ...prev, [sessionId]: next };
-      });
-    },
-    [defaultIncludeActiveNote]
-  );
+  const active = useSyncExternalStore(store.subscribe, () => store.get(chatInputId));
 
   const updateActive = useCallback(
-    (updater: (draft: AgentInputDraft) => AgentInputDraft) => {
-      if (!activeChatInputId) return;
-      updateDraft(activeChatInputId, updater);
-    },
-    [activeChatInputId, updateDraft]
+    (updater: (draft: AgentInputDraft) => AgentInputDraft) => store.update(chatInputId, updater),
+    [store, chatInputId]
   );
 
   const setInput = useCallback<React.Dispatch<React.SetStateAction<string>>>(
@@ -210,7 +113,7 @@ export function useAgentInputDrafts({
   //      that session's saved draft (toggle already false from its last send).
   //      This is the point of per-chat-input drafts: a chat reads back exactly
   //      as you left it, not silently re-toggled. A genuinely fresh session
-  //      still seeds from defaultIncludeActiveNote (see createDraft and the
+  //      still seeds from the setting (see the store's createDraft and the
   //      missing-draft fallback below), so "new chat" honors the setting.
   // If a future review flags "auto-add only works on the first message" or
   // "re-entering a session doesn't re-enable auto-add", point them at this note.
@@ -227,7 +130,6 @@ export function useAgentInputDrafts({
     [updateActive]
   );
 
-  const active = activeChatInputId ? drafts[activeChatInputId] : undefined;
   const fields = useMemo<AgentInputDraft>(
     () =>
       active ?? {
