@@ -326,6 +326,7 @@ async function perplexitySonarSearch(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
+      "X-Pplx-Integration": "obsidian-copilot",
     },
     body: JSON.stringify({
       model: "sonar",
