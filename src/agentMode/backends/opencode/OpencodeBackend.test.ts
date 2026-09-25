@@ -22,6 +22,7 @@ import {
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import {
   buildOpencodeConfig,
+  type GeneratedOpencodeConfig,
   OPENCODE_PROVIDER_MAP,
   OpencodeBackend,
   type OpencodeModelDeps,
@@ -228,12 +229,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, model)],
       keys: { "p-anthropic": "anth-123" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<
-        string,
-        { settings?: { apiKey?: string }; models?: Record<string, unknown> }
-      >;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg).not.toHaveProperty("provider");
     expect(cfg.providers.anthropic.settings).toEqual({ apiKey: "anth-123" });
     expect(cfg.providers.anthropic.models).toEqual({ "claude-sonnet-4-6": {} });
@@ -251,9 +247,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       ],
       keys: { "p-anthropic": "anth-123" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { models?: Record<string, unknown> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers.anthropic.models).toEqual({
       "claude-sonnet-4-6": {},
       "claude-haiku": {},
@@ -272,9 +266,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, model)],
       keys: { "p-anthropic": "anth-123" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { models?: Record<string, unknown> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers.anthropic.models).toEqual({
       "claude-sonnet-4-6": {
         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
@@ -294,9 +286,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, model)],
       keys: { "p-anthropic": "anth-123" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { models?: Record<string, unknown> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers.anthropic.models).toEqual({
       "deepseek-v4-flash": { capabilities: { tools: true, input: ["text"], output: ["text"] } },
     });
@@ -312,9 +302,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       keys: { "p-custom": "secret-key" },
     });
 
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { models?: Record<string, unknown> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
 
     expect(cfg.providers["p-custom"].models?.["vision-preview"]).toEqual({
       capabilities: { tools: false, input: ["text", "image"], output: ["text"] },
@@ -335,9 +323,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, model)],
       keys: { "p-anthropic": "anth-123" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { models?: Record<string, unknown> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers.anthropic.models).toEqual({
       "deepseek-v4-flash": {
         capabilities: { tools: true, input: ["text"], output: ["text"] },
@@ -354,9 +340,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("p-anthropic", "hand-typed-model"))],
       keys: { "p-anthropic": "anth-123" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { models?: Record<string, unknown> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers.anthropic.models).toEqual({ "hand-typed-model": {} });
   });
 
@@ -375,9 +359,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       keys: { "p-anthropic": "anth-123" },
     });
 
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { models?: Record<string, unknown> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
 
     expect(cfg.providers.anthropic.models).toEqual({ "input-only": {}, "unknown-tools": {} });
   });
@@ -394,9 +376,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       keys: { "p-anthropic": "anth-123" },
     });
 
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { models?: Record<string, unknown> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
 
     expect(cfg.providers.anthropic.models?.["claude-sonnet-4-6"]).toEqual({});
   });
@@ -414,12 +394,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       ],
       keys: { "p-anthropic": "anth-123", "p-openai": "oai-456" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<
-        string,
-        { settings?: { apiKey?: string }; models?: Record<string, unknown> }
-      >;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(Object.keys(cfg.providers).sort()).toEqual(["anthropic", "openai"]);
     expect(cfg.providers.openai.settings).toEqual({ apiKey: "oai-456" });
     expect(cfg.providers.openai.models).toEqual({ "gpt-5": {} });
@@ -431,16 +406,12 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("p-openai", "gpt-5"))],
       keys: { "p-openai": null },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, unknown>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers).toEqual({});
   });
 
   it("returns an empty provider map when no models are enabled", async () => {
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      providers: Record<string, unknown>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
     expect(cfg.providers).toEqual({});
   });
 
@@ -448,9 +419,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     const deps = makeDeps({
       resolved: [{ configuredModelId: "gone", state: "broken" }],
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, unknown>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers).toEqual({});
   });
 
@@ -463,9 +432,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("opencode-provider", "opencode/big-pickle"))],
       keys: { "opencode-provider": "should-not-be-read" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, unknown>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers).toEqual({});
   });
 
@@ -475,9 +442,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("p-google", "gemini-3-flash"))],
       keys: { "p-google": "google-key" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, unknown>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers).toEqual({});
   });
 
@@ -492,17 +457,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("p-ollama", "llama3.2"))],
       keys: { "p-ollama": null },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<
-        string,
-        {
-          package?: string;
-          name?: string;
-          settings?: { baseURL?: string; apiKey?: string };
-          models?: Record<string, unknown>;
-        }
-      >;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     const entry = cfg.providers["p-ollama"];
     expect(entry.package).toBe("aisdk:@ai-sdk/openai-compatible");
     expect(entry.name).toBe("Ollama");
@@ -523,9 +478,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("p-custom", "gpt-5.5"))],
       keys: { "p-custom": "secret-key" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { settings?: { apiKey?: string } }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers["p-custom"].settings?.apiKey).toBe("secret-key");
   });
 
@@ -544,9 +497,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("p-custom", "gpt-5.5"))],
       keys: { "p-custom": "secret-key" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { settings?: Record<string, unknown> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
 
     expect(cfg.providers["p-custom"]).not.toHaveProperty("enableCors");
     expect(cfg.providers["p-custom"].settings).not.toHaveProperty("enableCors");
@@ -557,9 +508,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     const deps = makeDeps({
       resolved: [okEntry(provider, makeModel("p-nobase", "some-model"))],
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, unknown>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers).toEqual({});
   });
 
@@ -569,9 +518,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("p-public", "gpt-5.5"))],
       keys: { "p-public": null },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, unknown>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers).toEqual({});
   });
 
@@ -586,9 +533,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("p-public-keyless", "qwen3.8-27b"))],
       keys: { "p-public-keyless": null },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { settings?: { baseURL?: string; apiKey?: string } }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
 
     expect(cfg.providers["p-public-keyless"].settings).toEqual({
       baseURL: "https://trusted-gateway.example.com/v1",
@@ -632,9 +577,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("p-ollama-catalog", "llama3.2"))],
       keys: { "p-ollama-catalog": null },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { models?: Record<string, unknown> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers.ollama?.models).toEqual({ "llama3.2": {} });
   });
 
@@ -654,9 +597,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("p-ollama-catalog", "llama3.2"))],
       keys: { "p-ollama-catalog": "" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { settings?: Record<string, unknown> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     const opts = cfg.providers.ollama?.settings ?? {};
     expect(opts).not.toHaveProperty("apiKey");
   });
@@ -674,12 +615,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("p-openai", "gpt-5"))],
       keys: { "p-openai": "oai-456" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<
-        string,
-        { package?: string; settings?: { baseURL?: string; apiKey?: string } }
-      >;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     const entry = cfg.providers.openai;
     expect(entry.package).toBeUndefined();
     expect(entry.settings).toEqual({
@@ -705,9 +641,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("p-google", "gemini-2.5-flash"))],
       keys: { "p-google": "g-123" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { settings?: { baseURL?: string; apiKey?: string } }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers.google.settings).toEqual({ apiKey: "g-123" });
   });
 
@@ -721,9 +655,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("p-groq", "llama-3.3-70b-versatile"))],
       keys: { "p-groq": "gq-123" },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { settings?: { baseURL?: string; apiKey?: string } }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     expect(cfg.providers.groq.settings).toEqual({ apiKey: "gq-123" });
   });
 
@@ -743,18 +675,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       keys: { "p-plus": "plus-token-123" },
     });
     deps.clientVersion = "4.0.0-preview-260802";
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<
-        string,
-        {
-          package?: string;
-          name?: string;
-          settings?: { baseURL?: string; apiKey?: string };
-          headers?: Record<string, string>;
-          models?: Record<string, unknown>;
-        }
-      >;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
     const cp = cfg.providers["copilot-plus"];
     expect(cp.package).toBe("aisdk:@ai-sdk/openai-compatible");
     expect(cp.name).toBe("Copilot Plus");
@@ -778,9 +699,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       keys: { "p-plus": "plus-token-123" },
     });
 
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { models?: Record<string, Record<string, unknown>> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
 
     expect(cfg.providers["copilot-plus"].models?.["copilot-plus-flash"]).toEqual({
       capabilities: { tools: true, input: ["text"], output: ["text"] },
@@ -797,9 +716,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       keys: { "p-plus": "plus-token-123" },
     });
 
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { models?: Record<string, Record<string, unknown>> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
 
     expect(cfg.providers["copilot-plus"].models?.["honors-no-level"]).toEqual({
       capabilities: { tools: true, input: ["text"], output: ["text"] },
@@ -816,9 +733,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       keys: { "p-plus": "plus-token-123" },
     });
 
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { models?: Record<string, Record<string, unknown>> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
 
     expect(cfg.providers["copilot-plus"].models?.["copilot-plus-flash"]).toEqual({
       capabilities: { tools: true, input: ["text"], output: ["text"] },
@@ -842,9 +757,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       keys: { "p-anthropic": "anth-123" },
     });
 
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { models?: Record<string, Record<string, unknown>> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
 
     expect(cfg.providers.anthropic.models?.["copilot-plus-flash"]).toEqual({});
   });
@@ -858,9 +771,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       keys: { "p-custom": "secret-key" },
     });
 
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, { models?: Record<string, unknown> }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
 
     expect(cfg.providers["p-custom"].models?.reasoner).toEqual({
       capabilities: { tools: true, input: ["text"], output: ["text"] },
@@ -887,13 +798,17 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       keys: { "p-plus": null },
     });
 
-    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
-      providers: Record<string, unknown>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
 
     expect(cfg.providers).toEqual({});
   });
 });
+
+/** `copilot-build`'s ask-before-write rules. */
+const ASK_BEFORE_WRITE = [
+  { action: "shell", resource: "*", effect: "ask" },
+  { action: "edit", resource: "*", effect: "ask" },
+];
 
 describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", () => {
   beforeEach(() => {
@@ -920,48 +835,39 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
         },
       },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as { model?: string };
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
     expect(cfg.model).toBeUndefined();
   });
 
   it("always spawns with canonical default agent (copilot-build)", async () => {
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      default_agent?: string;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
     expect(cfg.default_agent).toBe("copilot-build");
   });
 
   it("overrides system prompt on both build and copilot-build agents", async () => {
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      agent: Record<string, { prompt?: string; permission?: unknown; mode?: string }>;
-    };
-    expect(cfg.agent["copilot-build"].prompt?.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
-    expect(cfg.agent.build.prompt?.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
-    expect(cfg.agent["copilot-build"].prompt).toContain("{folder_name}");
-    expect(cfg.agent["copilot-build"].prompt).toContain("{activeNote}");
-    expect(cfg.agent.build.prompt).toContain("{folder_name}");
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+    expect(cfg.agents["copilot-build"].system?.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
+    expect(cfg.agents.build.system?.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
+    expect(cfg.agents["copilot-build"].system).toContain("{folder_name}");
+    expect(cfg.agents["copilot-build"].system).toContain("{activeNote}");
+    expect(cfg.agents.build.system).toContain("{folder_name}");
     // The prompt carries only the pill-syntax directive. Skill discovery is
     // automatic from `.opencode/skills/`, so the prompt never templates in
     // SKILL.md authoring instructions.
-    expect(cfg.agent["copilot-build"].prompt).not.toContain("metadata.copilot-enabled-agents");
-    expect(cfg.agent.build.prompt).not.toContain("metadata.copilot-enabled-agents");
-    // Regression guard: the copilot-build permission block must survive
-    // alongside the new prompt field — opencode's field-wise merge depends
-    // on us not stomping native fields.
-    expect(cfg.agent["copilot-build"].permission).toEqual({ bash: "ask", edit: "ask" });
-    expect(cfg.agent["copilot-build"].mode).toBe("primary");
+    expect(cfg.agents["copilot-build"].system).not.toContain("metadata.copilot-enabled-agents");
+    expect(cfg.agents.build.system).not.toContain("metadata.copilot-enabled-agents");
+    expect(cfg.agents["copilot-build"].permissions).toEqual(ASK_BEFORE_WRITE);
+    expect(cfg.agents["copilot-build"].mode).toBe("primary");
   });
 
   it("does not copy Chat mode custom prompts into either agent prompt", async () => {
     updateCachedSystemPrompts([makeSystemPrompt("Haiku", "respond in haiku")]);
     setSelectedPromptTitle("Haiku");
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      agent: Record<string, { prompt?: string }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
     for (const id of ["copilot-build", "build"]) {
-      expect(cfg.agent[id].prompt?.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
-      expect(cfg.agent[id].prompt).not.toContain("<user_custom_instructions>");
-      expect(cfg.agent[id].prompt).not.toContain("respond in haiku");
+      expect(cfg.agents[id].system?.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
+      expect(cfg.agents[id].system).not.toContain("<user_custom_instructions>");
+      expect(cfg.agents[id].system).not.toContain("respond in haiku");
     }
   });
 
@@ -969,33 +875,27 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     updateCachedSystemPrompts([makeSystemPrompt("Haiku", "respond in haiku")]);
     setSelectedPromptTitle("Haiku");
     setDisableBuiltinSystemPrompt(true);
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      agent: Record<string, { prompt?: string }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
     for (const id of ["copilot-build", "build"]) {
-      expect(cfg.agent[id].prompt).not.toContain(COPILOT_PROMPT_BASE);
-      expect(cfg.agent[id].prompt).not.toContain("You are Obsidian Copilot");
-      expect(cfg.agent[id].prompt).not.toContain("respond in haiku");
+      expect(cfg.agents[id].system).not.toContain(COPILOT_PROMPT_BASE);
+      expect(cfg.agents[id].system).not.toContain("You are Obsidian Copilot");
+      expect(cfg.agents[id].system).not.toContain("respond in haiku");
       // Pill directive is functional wiring, not builtin framing — always sent.
-      expect(cfg.agent[id].prompt).toContain("{folder_name}");
+      expect(cfg.agents[id].system).toContain("{folder_name}");
     }
   });
 
   it("gives both agents the shared product prompt, byte for byte", async () => {
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      agent: Record<string, { prompt?: string }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
     // `toBe`, not `startsWith`: this string is the provider cache prefix, and a
     // containment check passes while stray bytes push the rest out of the cache.
-    expect(cfg.agent["copilot-build"].prompt).toBe(buildAgentSystemPrompt());
-    expect(cfg.agent.build.prompt).toBe(buildAgentSystemPrompt());
+    expect(cfg.agents["copilot-build"].system).toBe(buildAgentSystemPrompt());
+    expect(cfg.agents.build.system).toBe(buildAgentSystemPrompt());
   });
 
   it("keeps those bytes identical when the model and binary path change", async () => {
-    const baseline = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      agent: Record<string, { prompt?: string }>;
-    };
+    const baseline = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
     setSettings({
       agentMode: {
@@ -1014,26 +914,21 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
         },
       },
     });
-    const after = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      agent: Record<string, { prompt?: string }>;
-    };
+    const after = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
-    expect(after.agent["copilot-build"].prompt).toBe(baseline.agent["copilot-build"].prompt);
-    expect(after.agent.build.prompt).toBe(baseline.agent.build.prompt);
+    expect(after.agents["copilot-build"].system).toBe(baseline.agents["copilot-build"].system);
+    expect(after.agents.build.system).toBe(baseline.agents.build.system);
   });
 
   it("leaves AGENTS.md discovery to opencode instead of inlining instruction text", async () => {
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      agent: Record<string, { prompt?: string }>;
-      instructions?: unknown;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
     // opencode walks up from the session cwd and collects every ancestor AGENTS.md on its
     // own. Configuring `instructions` would be dead weight — those paths merge into the same
     // Set discovery already filled — and inlining the text would put user bytes back in the
     // cache prefix this PR exists to stabilize.
     expect(cfg.instructions).toBeUndefined();
-    expect(cfg.agent["copilot-build"].prompt).not.toContain("AGENTS.md instructions:");
+    expect(cfg.agents["copilot-build"].system).not.toContain("AGENTS.md instructions:");
   });
 
   it("does not template a skills folder into the opencode prompts", async () => {
@@ -1049,54 +944,45 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
         backends: {},
       },
     });
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      agent: Record<string, { prompt?: string }>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
     // The pill directive doesn't reference the skills folder at all.
-    expect(cfg.agent["copilot-build"].prompt).not.toContain("team-skills");
-    expect(cfg.agent.build.prompt).not.toContain("team-skills");
+    expect(cfg.agents["copilot-build"].system).not.toContain("team-skills");
+    expect(cfg.agents.build.system).not.toContain("team-skills");
   });
 
   it("denies a skill enabled for Claude only (cross-discovered, not enabled for opencode)", async () => {
     seedSkills([makeSkill("foo", ["claude"])]);
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      permission?: { skill?: Record<string, string> };
-    };
-    expect(cfg.permission?.skill?.foo).toBe("deny");
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+    expect(cfg.permissions).toEqual([{ action: "skill", resource: "foo", effect: "deny" }]);
   });
 
   it("does not deny a skill enabled for both Claude and OpenCode", async () => {
     seedSkills([makeSkill("foo", ["claude", "opencode"])]);
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      permission?: { skill?: Record<string, string> };
-    };
-    expect(cfg.permission?.skill?.foo).toBeUndefined();
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+    expect(cfg.permissions).toBeUndefined();
   });
 
-  it("does not emit a permission.skill block when no skills need denying", async () => {
+  it("emits no top-level permission rules when no skills need denying", async () => {
     seedSkills([makeSkill("foo", ["opencode"])]);
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      permission?: { skill?: Record<string, string> };
-    };
-    expect(cfg.permission).toBeUndefined();
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+    expect(cfg.permissions).toBeUndefined();
   });
 
-  it("does not emit a permission.skill block when there are no skills at all", async () => {
+  it("emits no top-level permission rules when there are no skills at all", async () => {
     seedSkills([]);
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      permission?: unknown;
-    };
-    expect(cfg.permission).toBeUndefined();
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+    expect(cfg.permissions).toBeUndefined();
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 denies native web tools for every Self-Host opencode agent", async () => {
     setSettings({ enableSelfHostMode: true });
 
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      permission?: Record<string, string>;
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
-    expect(cfg.permission).toEqual({ websearch: "deny", webfetch: "deny" });
+    expect(cfg.permissions).toEqual([
+      { action: "websearch", resource: "*", effect: "deny" },
+      { action: "webfetch", resource: "*", effect: "deny" },
+    ]);
   });
 
   it("synthesises deny rules for a mix of skills (only cross-discovered + not-enabled wins)", async () => {
@@ -1107,21 +993,20 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
       makeSkill("d", ["opencode"]),
       makeSkill("e", ["codex"]),
     ]);
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      permission?: { skill?: Record<string, string> };
-    };
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
     // a is claude-only → denied. e is codex-only → denied (codex also
     // populates the cross-discovered `.agents/skills/` path). b/c/d not denied.
-    expect(cfg.permission?.skill).toEqual({ a: "deny", e: "deny" });
+    expect(cfg.permissions).toEqual([
+      { action: "skill", resource: "a", effect: "deny" },
+      { action: "skill", resource: "e", effect: "deny" },
+    ]);
   });
 
   it("skips deny synthesis when SkillManager has not initialised yet", async () => {
     mockSkills = [makeSkill("foo", ["claude"])];
     mockSkillManagerReady = false;
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
-      permission?: unknown;
-    };
-    expect(cfg.permission).toBeUndefined();
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+    expect(cfg.permissions).toBeUndefined();
   });
 });
 
@@ -1132,35 +1017,27 @@ describe("buildOpencodeConfig — context-cache external_directory allow", () =>
     resetPromptState();
   });
 
-  type AgentPerm = {
-    agent: Record<string, { permission?: Record<string, unknown> }>;
-  };
-
   it("injects a cacheRoot-scoped external_directory allow on both spawn agents", async () => {
-    const cfg = (await buildOpencodeConfig(
+    const cfg = await buildOpencodeConfig(
       getSettings(),
       NO_MODELS_DEPS,
       "/home/u/.obsidian-copilot/vaults/abc123/context-cache"
-    )) as AgentPerm;
+    );
     const allow = {
-      external_directory: {
-        "/home/u/.obsidian-copilot/vaults/abc123/context-cache/**": "allow",
-      },
+      action: "external_directory",
+      resource: "/home/u/.obsidian-copilot/vaults/abc123/context-cache/**",
+      effect: "allow",
     };
-    // build (auto) gets only the external_directory grant — no bash/edit asks.
-    expect(cfg.agent.build.permission).toEqual(allow);
-    // copilot-build (default) keeps its ask-before-write perms AND gains allow.
-    expect(cfg.agent["copilot-build"].permission).toEqual({
-      bash: "ask",
-      edit: "ask",
-      ...allow,
-    });
+    // build (auto) gets only the external_directory grant — no shell/edit asks.
+    expect(cfg.agents.build.permissions).toEqual([allow]);
+    // copilot-build (default) keeps its ask-before-write rules AND gains allow.
+    expect(cfg.agents["copilot-build"].permissions).toEqual([...ASK_BEFORE_WRITE, allow]);
   });
 
   it("injects nothing when no cacheRoot is provided (feature dormant)", async () => {
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as AgentPerm;
-    expect(cfg.agent.build.permission).toBeUndefined();
-    expect(cfg.agent["copilot-build"].permission).toEqual({ bash: "ask", edit: "ask" });
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+    expect(cfg.agents.build.permissions).toBeUndefined();
+    expect(cfg.agents["copilot-build"].permissions).toEqual(ASK_BEFORE_WRITE);
   });
 });
 
@@ -1224,7 +1101,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     expect(desc.cwd).toBe("/vault/abs");
     expect(desc.env[OPENARTIFACTS_WORKSPACE_ROOT_ENV]).toBe("/vault/abs");
     expect(desc.env.OPENCODE_CONFIG_CONTENT).toBeDefined();
-    const cfg = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
+    const cfg: GeneratedOpencodeConfig = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
     expect(cfg.providers.anthropic.settings).toEqual({ apiKey: "anth-xyz" });
     expect(cfg.providers.anthropic.models).toEqual({ "claude-sonnet-4-6": {} });
   });
@@ -1394,15 +1271,10 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     };
     const backend = new OpencodeBackend(deps);
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
-    const cfg = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
-    expect(cfg.agent.build.permission).toEqual({
-      external_directory: { "/cache/root/**": "allow" },
-    });
-    expect(cfg.agent["copilot-build"].permission).toEqual({
-      bash: "ask",
-      edit: "ask",
-      external_directory: { "/cache/root/**": "allow" },
-    });
+    const cfg: GeneratedOpencodeConfig = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
+    const allow = { action: "external_directory", resource: "/cache/root/**", effect: "allow" };
+    expect(cfg.agents.build.permissions).toEqual([allow]);
+    expect(cfg.agents["copilot-build"].permissions).toEqual([...ASK_BEFORE_WRITE, allow]);
     expect(logWarn).not.toHaveBeenCalled();
   });
 
@@ -1450,9 +1322,9 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     };
     const backend = new OpencodeBackend(deps);
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
-    const cfg = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
-    expect(cfg.agent.build.permission).toBeUndefined();
-    expect(cfg.agent["copilot-build"].permission).toEqual({ bash: "ask", edit: "ask" });
+    const cfg: GeneratedOpencodeConfig = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
+    expect(cfg.agents.build.permissions).toBeUndefined();
+    expect(cfg.agents["copilot-build"].permissions).toEqual(ASK_BEFORE_WRITE);
     expect(logWarn).not.toHaveBeenCalled();
   });
 
@@ -1512,7 +1384,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
 
 // `COPILOT_PROMPT_BASE` and the full `buildAgentSystemPrompt` composition are
 // unit-tested in `backends/shared/agentSystemPrompt.test.ts`. The opencode tests
-// above only assert that the composed prompt reaches `cfg.agent.<id>.prompt`.
+// above only assert that the composed prompt reaches `cfg.agents.<id>.system`.
 
 describe("OPENCODE_PROVIDER_MAP", () => {
   it("maps the BYOK provider ids plus Copilot Plus to opencode provider ids", () => {
