@@ -29,7 +29,7 @@ import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRunti
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { buildNativeChatId } from "@/utils/nativeChatId";
-import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
+import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
 import { useChatInputAutoFocus } from "@/agentMode/ui/hooks/useChatInputAutoFocus";
@@ -45,9 +45,8 @@ import { agentProjectContextLoadAtom, type ProjectConfig } from "@/aiParams";
 import { makeNewProjectConfig } from "@/agentMode/ui/AgentProjectCreateForm";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import { TruncatedText } from "@/components/TruncatedText";
-import { EVENT_NAMES } from "@/constants";
-import { AppContext, ChatViewEventTarget, EventTargetContext } from "@/context";
-import { ChatInputProvider, useChatInput } from "@/context/ChatInputContext";
+import { AppContext } from "@/context";
+import { ChatInputProvider } from "@/context/ChatInputContext";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
@@ -68,13 +67,6 @@ interface AgentHomeProps {
   sessionId: string;
   /** Logical identity of the active chat input surface. */
   chatInputId: string;
-  /**
-   * Compose draft for `chatInputId`. Owned by `AgentModeChat` because this
-   * component unmounts whenever there is no active session, which a backend
-   * restart causes mid-replacement.
-   * https://github.com/Brevilabs/obsidian-copilot-private/issues/473
-   */
-  draft: AgentInputDraftControls;
   manager: AgentSessionManager;
   plugin: CopilotPlugin;
   onSaveChat: (saveAsNote: () => Promise<void>) => void;
@@ -87,7 +79,7 @@ const EMPTY_PROJECT_NAMES_BY_ID: Readonly<Record<string, string>> = Object.freez
  * Agent Mode home surface for an active session. Persistent across tab switches
  * (the tab strip swaps `sessionId`/`backend` props), so switching tabs swaps the
  * active draft rather than discarding input. The draft store itself lives in
- * `AgentModeChat`, which outlives this component's no-session gaps.
+ * the session manager, which outlives this component's no-session gaps.
  *
  * Derives a per-session view state across three surfaces: a session with no
  * user-visible messages is a landing — global (no project scope: top-anchored
@@ -102,7 +94,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   backend,
   sessionId,
   chatInputId,
-  draft,
   manager,
   plugin,
   onSaveChat,
@@ -111,34 +102,18 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
   const settings = useSettingsValue();
-  const eventTarget = useContext(EventTargetContext);
-  const chatInput = useChatInput();
   const isRelevantNotesPaneOpen = useRelevantNotesPaneOpen(app);
+  const draft = useAgentInputDrafts({
+    store: manager.drafts,
+    chatInputId,
+    defaultIncludeActiveNote: settings.autoAddActiveContentToContext === true,
+  });
 
   // Place the caret in the composer when the agent view opens so the user can
   // type immediately. AgentHome only mounts once preload settles and a session
   // exists, so this fires when the input actually appears (and again on
   // close/reopen, which remounts this tree).
   useChatInputAutoFocus();
-
-  // Insert text routed from outside the chat (e.g. the Relevant Notes pane's
-  // "Add to Chat") into the active session's composer. The bus latches text
-  // queued before this listener attaches, so a freshly-opened view still
-  // receives it on mount.
-  useEffect(() => {
-    const bus = eventTarget instanceof ChatViewEventTarget ? eventTarget : null;
-    const handleInsertText = (e: Event) => {
-      bus?.consumePendingInsertText();
-      const text = (e as CustomEvent<{ text?: string }>).detail?.text;
-      if (typeof text === "string") chatInput.insertTextWithPills(text, true);
-    };
-    eventTarget?.addEventListener(EVENT_NAMES.INSERT_TEXT_TO_CHAT, handleInsertText);
-    const pending = bus?.consumePendingInsertText();
-    if (typeof pending === "string") chatInput.insertTextWithPills(pending, true);
-    return () => {
-      eventTarget?.removeEventListener(EVENT_NAMES.INSERT_TEXT_TO_CHAT, handleInsertText);
-    };
-  }, [eventTarget, chatInput]);
 
   const {
     messages,
@@ -392,17 +367,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (next.value !== value) onChange(next.value);
   }, [modePickerOverride]);
 
-  const setDraftInput = draft.setInput;
   useChatRelevantNotesContext(app, rootEl, chatInputId, draft, messages, activeProject);
-
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
-  // The manager binds a handoff draft to the new chat input before publishing
-  // that session. Consume it only after this input is live so the text cannot
-  // race into whichever composer was active before the session switch.
-  useEffect(() => {
-    const initialDraft = manager.consumeInitialDraft(chatInputId);
-    if (initialDraft !== undefined) setDraftInput(initialDraft);
-  }, [chatInputId, manager, setDraftInput]);
 
   // Whole chat area is the drop zone (bound to chatContainerRef), so files
   // dropped anywhere — not just on the composer — attach to the active draft.
@@ -604,7 +569,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 <RelevantNotesShelfPanel onPopOut={() => void plugin.activateRelevantNotesView()}>
                   <RelevantNotes
                     className={cn("[&>[data-relevant-notes-empty-state]]:tw-py-6")}
-                    onAddToChat={(text) => void plugin.insertTextIntoActiveChat(text)}
+                    onAddToChat={(note) => void plugin.addNoteToActiveChat(note)}
                   />
                 </RelevantNotesShelfPanel>
               ),

@@ -1,10 +1,12 @@
-import {
-  type AgentInputDraftControls,
-  type QueuedAgentMessage,
-  useAgentInputDrafts,
-} from "@/agentMode/ui/hooks/useAgentInputDrafts";
+import type { QueuedAgentMessage } from "@/agentMode/session/AgentInputDraftStore";
+import { AgentInputDraftStore } from "@/agentMode/session/AgentInputDraftStore";
+import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { act, renderHook } from "@testing-library/react";
-import type { TFile } from "obsidian";
+import type { App, TFile } from "obsidian";
+
+jest.mock("@/settings/model", () => ({
+  getSettings: () => ({ autoAddActiveContentToContext: false }),
+}));
 
 // eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- minimal path-only stub for draft state tests
 const file = (path: string): TFile => ({ path }) as unknown as TFile;
@@ -14,20 +16,25 @@ const queued = (id: string): QueuedAgentMessage => ({
   rawInput: id,
 });
 
+const app = { workspace: { getActiveFile: () => null } } as unknown as App;
+
 interface Props {
-  activeChatInputId: string;
-  liveChatInputIds: string[];
+  chatInputId: string;
   defaultIncludeActiveNote: boolean;
 }
 
-const renderDrafts = (initialProps: Props) =>
-  renderHook((props: Props) => useAgentInputDrafts(props), { initialProps });
+const renderDrafts = (initialProps: Props) => {
+  const store = new AgentInputDraftStore(app, () => true);
+  return {
+    store,
+    ...renderHook((props: Props) => useAgentInputDrafts({ store, ...props }), { initialProps }),
+  };
+};
 
 describe("useAgentInputDrafts", () => {
   it("seeds a fresh draft from the defaults with frozen empties", () => {
     const { result } = renderDrafts({
-      activeChatInputId: "a",
-      liveChatInputIds: ["a"],
+      chatInputId: "a",
       defaultIncludeActiveNote: true,
     });
 
@@ -42,8 +49,7 @@ describe("useAgentInputDrafts", () => {
 
   it("keeps each session's compose draft isolated across switches", () => {
     const { result, rerender } = renderDrafts({
-      activeChatInputId: "a",
-      liveChatInputIds: ["a", "b"],
+      chatInputId: "a",
       defaultIncludeActiveNote: false,
     });
 
@@ -52,8 +58,7 @@ describe("useAgentInputDrafts", () => {
 
     // Switch to b: its draft is fresh.
     rerender({
-      activeChatInputId: "b",
-      liveChatInputIds: ["a", "b"],
+      chatInputId: "b",
       defaultIncludeActiveNote: false,
     });
     expect(result.current.input).toBe("");
@@ -61,8 +66,7 @@ describe("useAgentInputDrafts", () => {
 
     // Back to a: the unsent text survived the round-trip.
     rerender({
-      activeChatInputId: "a",
-      liveChatInputIds: ["a", "b"],
+      chatInputId: "a",
       defaultIncludeActiveNote: false,
     });
     expect(result.current.input).toBe("draft for a");
@@ -70,8 +74,7 @@ describe("useAgentInputDrafts", () => {
 
   it("tracks loading per session so a background turn doesn't bleed", () => {
     const { result, rerender } = renderDrafts({
-      activeChatInputId: "a",
-      liveChatInputIds: ["a", "b"],
+      chatInputId: "a",
       defaultIncludeActiveNote: false,
     });
 
@@ -79,15 +82,13 @@ describe("useAgentInputDrafts", () => {
     expect(result.current.loading).toBe(true);
 
     rerender({
-      activeChatInputId: "b",
-      liveChatInputIds: ["a", "b"],
+      chatInputId: "b",
       defaultIncludeActiveNote: false,
     });
     expect(result.current.loading).toBe(false);
 
     rerender({
-      activeChatInputId: "a",
-      liveChatInputIds: ["a", "b"],
+      chatInputId: "a",
       defaultIncludeActiveNote: false,
     });
     expect(result.current.loading).toBe(true);
@@ -95,8 +96,7 @@ describe("useAgentInputDrafts", () => {
 
   it("applies functional updates to the input, attachments and queue", () => {
     const { result } = renderDrafts({
-      activeChatInputId: "a",
-      liveChatInputIds: ["a"],
+      chatInputId: "a",
       defaultIncludeActiveNote: false,
     });
 
@@ -114,8 +114,7 @@ describe("useAgentInputDrafts", () => {
 
   it("resetCompose clears compose fields but leaves loading and queue", () => {
     const { result } = renderDrafts({
-      activeChatInputId: "a",
-      liveChatInputIds: ["a"],
+      chatInputId: "a",
       defaultIncludeActiveNote: true,
     });
 
@@ -138,49 +137,15 @@ describe("useAgentInputDrafts", () => {
     expect(result.current.queue.map((q) => q.id)).toEqual(["q1"]);
   });
 
-  it("keeps stored drafts while no chat input is active, so a restart gap costs nothing (https://github.com/Brevilabs/obsidian-copilot-private/issues/473)", () => {
-    // A backend restart closes the old session before its replacement exists,
-    // so for that window the surface has no active chat input at all.
-    const { result, rerender } = renderHook<AgentInputDraftControls, { active: string | null }>(
-      ({ active }) =>
-        useAgentInputDrafts({
-          activeChatInputId: active,
-          liveChatInputIds: ["a"],
-          defaultIncludeActiveNote: false,
-        }),
-      { initialProps: { active: "a" } }
-    );
-    act(() => result.current.setInput("half-written question"));
-
-    rerender({ active: null });
-    expect(result.current.input).toBe("");
-
-    rerender({ active: "a" });
-    expect(result.current.input).toBe("half-written question");
-  });
-
-  it("prunes a draft once its session is no longer live", () => {
-    const { result, rerender } = renderDrafts({
-      activeChatInputId: "a",
-      liveChatInputIds: ["a", "b"],
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 shows a note attached through the store while the composer is mounted", () => {
+    const { result, store } = renderDrafts({
+      chatInputId: "a",
       defaultIncludeActiveNote: false,
     });
+    const note = file("Research.md");
 
-    act(() => result.current.setInput("a text"));
+    act(() => store.addContextNote("a", note));
 
-    // Close session a (e.g. tab closed / replaced); only b remains live.
-    rerender({
-      activeChatInputId: "b",
-      liveChatInputIds: ["b"],
-      defaultIncludeActiveNote: false,
-    });
-
-    // Revisiting a (were it ever reselected) yields a fresh draft, not the old.
-    rerender({
-      activeChatInputId: "a",
-      liveChatInputIds: ["b"],
-      defaultIncludeActiveNote: false,
-    });
-    expect(result.current.input).toBe("");
+    expect(result.current.contextNotes).toEqual([note]);
   });
 });

@@ -128,6 +128,29 @@ export const QueuedActions: StoryObj<AgentChatMessagesProps> = {
   render: () => <QueuedActionsDemo {...actionRailArgs} />,
 };
 
+/** Scroll upward through the long turn to pause following and show the return control. */
+export const LongResponse: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    currentPlan: null,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      { ...message, id: "long-request", sender: "user", message: "Review the project notes." },
+      {
+        ...message,
+        id: "long-response",
+        message: Array.from(
+          { length: 12 },
+          (_, index) => `Finding ${index + 1}: The notes clarify the next step for the project.`
+        ).join("\n\n"),
+      },
+    ],
+    isLoading: true,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};
+
 /** A verbose blocking question remains resolvable when the chat pane is shorter than the card. */
 export const TallQuestion: StoryObj<AgentChatMessagesProps> = {
   render: () => (

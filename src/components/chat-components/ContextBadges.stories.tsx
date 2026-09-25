@@ -60,6 +60,22 @@ export const ActiveNoteAndSelection: StoryObj<Props> = {
 export const SelectionOnly: StoryObj<Props> = {
   args: { includeActiveNote: false, selectedTextContexts: [selection] },
 };
+export const ReadingViewSelection: StoryObj<Props> = {
+  args: {
+    includeActiveNote: false,
+    selectedTextContexts: [
+      {
+        id: "reading-excerpt",
+        sourceType: "note",
+        notePath: note.path,
+        noteTitle: note.basename,
+        content: "Compare the interview findings with the survey results.",
+        startLine: 0,
+        endLine: 0,
+      },
+    ],
+  },
+};
 export const SelectionFromAnotherNote: StoryObj<Props> = {
   args: {
     selectedTextContexts: [{ ...selection, notePath: "Interviews.md", noteTitle: "Interviews" }],

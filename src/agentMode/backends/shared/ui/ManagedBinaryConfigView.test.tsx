@@ -227,6 +227,17 @@ describe("ManagedBinaryConfigView", () => {
       expect(actions.cancelInstall).toHaveBeenCalledTimes(1);
     });
 
+    it("exposes the measured install percentage to assistive technology (https://github.com/Brevilabs/obsidian-copilot-private/issues/578)", () => {
+      renderView({
+        managed: {
+          ...MANAGED,
+          run: { kind: "running", label: "Downloading Codex adapter…", percent: 42 },
+        },
+      });
+
+      expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("42");
+    });
+
     it("keeps the source choice disabled while a managed install is running (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       const { onSourceChange } = renderView({
         managed: {

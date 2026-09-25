@@ -47,6 +47,7 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
           assets: [
             {
               name: "opencode-darwin-arm64.zip",
+              size: "archive".length,
               browser_download_url: "https://example.invalid/release.zip",
             },
           ],
@@ -54,6 +55,7 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
       } as never);
       jest.mocked(https.get).mockImplementation(((
         _url: string,
+        _options: unknown,
         callback: (response: unknown) => void
       ) => {
         const response = Object.assign(Readable.from([Buffer.from("archive")]), {
@@ -61,7 +63,7 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
           headers: {},
         });
         callback(response);
-        return new EventEmitter();
+        return Object.assign(new EventEmitter(), { setTimeout: jest.fn() });
       }) as never);
       jest.mocked(extractArchive).mockImplementation(async (_archive, destination) => {
         fs.writeFileSync(

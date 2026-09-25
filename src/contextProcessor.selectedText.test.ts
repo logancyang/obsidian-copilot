@@ -64,6 +64,25 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
     expect(result).not.toContain("<url>");
   });
 
+  it("includes a Reading view excerpt and path without unknown line tags (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
+    const result = processor.processSelectedTextContexts([
+      {
+        id: "reading-excerpt",
+        sourceType: "note",
+        content: "Rendered note passage",
+        noteTitle: "Research",
+        notePath: "Projects/Research.md",
+        startLine: 0,
+        endLine: 0,
+      },
+    ]);
+
+    expect(result).toContain("<path>Projects/Research.md</path>");
+    expect(result).toContain("<content>\nRendered note passage\n</content>");
+    expect(result).not.toContain("<start_line>");
+    expect(result).not.toContain("<end_line>");
+  });
+
   it("should format web selected text with proper XML tags", () => {
     const webContext: WebSelectedTextContext = {
       id: "web-1",

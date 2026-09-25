@@ -8,14 +8,14 @@ import {
   type ChatRelevantNotesContext,
 } from "@/search/chatRelevantNotesContext";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
-import { App, MarkdownView, TFile } from "obsidian";
+import { App, MarkdownView } from "obsidian";
 import { useEffect, useMemo, useRef } from "react";
 
 /** Publish composition snapshots to the vault's last-focused source.
  * @param app - Vault owner.
  * @param root - Chat surface in its current window.
  * @param id - Logical input identity, isolated across session/project switches.
- * @param draft - Current composition and its attachment setters.
+ * @param draft - Current composition.
  * @param messages - Visible message store, including in-flight response state.
  * @param project - Current project's explicit source configuration.
  */
@@ -117,20 +117,7 @@ export function useChatRelevantNotesContext(
   // Equal retrieval content must keep its identity across streaming renders.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
   const key = JSON.stringify({ id, request: snapshot, skippedAttachments });
-  const { setContextNotes } = draft;
-  const current = useMemo<ChatRelevantNotesContext>(
-    () => ({
-      ...(JSON.parse(key) as Omit<ChatRelevantNotesContext, "addFile">),
-      addFile: (path) => {
-        const file = app.vault.getAbstractFileByPath(path);
-        if (file instanceof TFile)
-          setContextNotes((notes) =>
-            notes.some((note) => note.path === path) ? notes : [...notes, file]
-          );
-      },
-    }),
-    [key, app, setContextNotes]
-  );
+  const current = useMemo(() => JSON.parse(key) as ChatRelevantNotesContext, [key]);
   const currentRef = useRef(current);
   currentRef.current = current;
   const previousId = useRef(id);

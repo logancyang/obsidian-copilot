@@ -20,9 +20,9 @@ import {
   AbortError,
   OperationInFlightError,
   type OpencodeBinaryManager,
-  type ProgressEvent,
   type RuntimeState,
 } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
+import type { ManagedInstallProgress } from "@/agentMode/backends/shared/installProgress";
 import {
   OpencodeConfigContainer,
   OpencodeInstallModal,
@@ -43,7 +43,10 @@ interface Deferred<T> {
 
 const makeManager = (): {
   manager: OpencodeBinaryManager;
-  installCalls: Array<{ signal?: AbortSignal; onProgress?: (e: ProgressEvent) => void }>;
+  installCalls: Array<{
+    signal?: AbortSignal;
+    onProgress?: (progress: ManagedInstallProgress) => void;
+  }>;
   installDeferred: () => Deferred<{ version: string; path: string }>;
   publish: (state: RuntimeState) => void;
   cancelCurrentOperation: jest.Mock;
@@ -52,7 +55,10 @@ const makeManager = (): {
   setCustomBinaryPath: jest.Mock;
   uninstall: jest.Mock;
 } => {
-  const installCalls: Array<{ signal?: AbortSignal; onProgress?: (e: ProgressEvent) => void }> = [];
+  const installCalls: Array<{
+    signal?: AbortSignal;
+    onProgress?: (progress: ManagedInstallProgress) => void;
+  }> = [];
   const deferreds: Deferred<{ version: string; path: string }>[] = [];
   const upgradeManaged = jest.fn().mockResolvedValue({ version: "1.16.0", path: "/managed" });
   const upgradeCustomBinary = jest.fn().mockResolvedValue({ version: "1.16.0", path: "/custom" });
@@ -77,13 +83,15 @@ const makeManager = (): {
     },
     getRuntimeState: () => runtime,
     cancelCurrentOperation,
-    install: jest.fn((opts: { signal?: AbortSignal; onProgress?: (e: ProgressEvent) => void }) => {
-      installCalls.push(opts);
-      publish({ kind: "installing", progress: null });
-      return new Promise<{ version: string; path: string }>((resolve, reject) => {
-        deferreds.push({ resolve, reject });
-      });
-    }),
+    install: jest.fn(
+      (opts: { signal?: AbortSignal; onProgress?: (progress: ManagedInstallProgress) => void }) => {
+        installCalls.push(opts);
+        publish({ kind: "installing", progress: null });
+        return new Promise<{ version: string; path: string }>((resolve, reject) => {
+          deferreds.push({ resolve, reject });
+        });
+      }
+    ),
     upgradeManaged,
     upgradeCustomBinary,
     setCustomBinaryPath,
@@ -189,7 +197,7 @@ describe("OpencodeInstallModal", () => {
       expect(getSettings().agentMode.backends?.opencode?.binaryPath).toBe(EXISTING_BINARY_PATH);
     });
 
-    it("translates download progress events into the label and percent it renders", async () => {
+    it("renders the manager's shared install progress label and percent", async () => {
       const { manager, publish, installDeferred } = makeManager();
       renderContainer(manager);
 
@@ -200,16 +208,10 @@ describe("OpencodeInstallModal", () => {
       // and this dialog show the same run rather than each tracking its own.
       publish({
         kind: "installing",
-        progress: {
-          phase: "download",
-          received: 300,
-          total: 1000,
-          assetName: "opencode-darwin-arm64.zip",
-        },
+        progress: { label: "Downloading opencode — 300 B / 1000 B", percent: 29 },
       });
-      expect(
-        screen.getByText("Downloading opencode-darwin-arm64.zip — 300 B / 1000 B (30%)")
-      ).toBeTruthy();
+      expect(screen.getByText("Downloading opencode — 300 B / 1000 B")).toBeTruthy();
+      expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("29");
 
       await act(async () => {
         installDeferred().resolve({ version: "1.16.0", path: "/managed/opencode" });

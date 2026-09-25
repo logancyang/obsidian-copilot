@@ -1,4 +1,4 @@
-import type { QueuedAgentMessage } from "@/agentMode/ui/hooks/useAgentInputDrafts";
+import type { QueuedAgentMessage } from "@/agentMode/session/AgentInputDraftStore";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Clock, X } from "lucide-react";

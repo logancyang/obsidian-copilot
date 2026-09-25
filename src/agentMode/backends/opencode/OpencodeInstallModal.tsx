@@ -8,7 +8,6 @@ import {
   computeInstallState,
   OperationInFlightError,
   toOpencodeInstallState,
-  type ProgressEvent,
 } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
 import type { OpencodeBinaryManager } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
 import { detectOpencodeCliPath } from "@/agentMode/backends/opencode/descriptor";
@@ -22,36 +21,11 @@ import { useSettingsValue } from "@/settings/model";
 import { App, Notice } from "obsidian";
 import React from "react";
 
-/**
- * Turn a binary-manager progress event into the display-ready running state the
- * view renders. `null` is the moment between starting a call and its first event.
- */
-const runningState = (e: ProgressEvent | null): OpencodeRunState => {
-  if (!e) return { kind: "running", label: "Starting…", percent: 0 };
-  switch (e.phase) {
-    case "resolve":
-      return { kind: "running", label: e.message, percent: 0 };
-    case "download": {
-      if (!e.total) {
-        return {
-          kind: "running",
-          label: `Downloading ${e.assetName} — ${formatBytes(e.received)}`,
-          percent: 0,
-        };
-      }
-      const percent = Math.min(100, Math.floor((e.received / e.total) * 100));
-      return {
-        kind: "running",
-        label: `Downloading ${e.assetName} — ${formatBytes(e.received)} / ${formatBytes(e.total)} (${percent}%)`,
-        percent,
-      };
-    }
-    case "extract":
-      return { kind: "running", label: e.message, percent: 98 };
-    case "done":
-      return { kind: "running", label: "Done", percent: 100 };
-  }
-};
+const STARTING_RUN: OpencodeRunState = Object.freeze({
+  kind: "running",
+  label: "Starting…",
+  percent: 0,
+});
 
 const errorState = (err: unknown): OpencodeRunState => ({
   kind: "error",
@@ -105,7 +79,9 @@ export const OpencodeConfigContainer: React.FC<{
   // a Cancel button. Shared progress stays visible regardless of local outcomes.
   const installRun: OpencodeRunState =
     runtime.kind === "installing"
-      ? runningState(runtime.progress)
+      ? runtime.progress
+        ? { kind: "running", ...runtime.progress }
+        : STARTING_RUN
       : runtime.kind === "error"
         ? { kind: "error", message: runtime.message }
         : { kind: "idle" };
@@ -161,13 +137,15 @@ export const OpencodeConfigContainer: React.FC<{
   }, [app, manager, forgetUpgradeOutcome]);
 
   const upgrade = React.useCallback(() => {
-    setUpgradeRun(runningState(null));
+    setUpgradeRun(STARTING_RUN);
     // A user-supplied binary upgrades itself in place; the managed one is
     // re-downloaded at the pinned version. Different calls, same button.
     const action =
       activeSource === "custom"
         ? manager.upgradeCustomBinary()
-        : manager.upgradeManaged({ onProgress: (e) => setUpgradeRun(runningState(e)) });
+        : manager.upgradeManaged({
+            onProgress: (progress) => setUpgradeRun({ kind: "running", ...progress }),
+          });
     action
       .then(({ version }) => {
         setUpgradeRun({ kind: "idle" });

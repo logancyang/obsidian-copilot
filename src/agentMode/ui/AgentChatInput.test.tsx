@@ -2,6 +2,7 @@ import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomComma
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import { AgentInputDraftStore } from "@/agentMode/session/AgentInputDraftStore";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -192,10 +193,14 @@ function setupCancellation() {
     }),
   } as unknown as AgentChatBackend;
   let draft!: AgentInputDraftControls;
+  const store = new AgentInputDraftStore(
+    { workspace: { getActiveFile: () => null } } as unknown as App,
+    () => true
+  );
   function Composer() {
     draft = useAgentInputDrafts({
-      activeChatInputId: "input-1",
-      liveChatInputIds: ["input-1"],
+      store,
+      chatInputId: "input-1",
       defaultIncludeActiveNote: false,
     });
     return inputNode(backend, draft);

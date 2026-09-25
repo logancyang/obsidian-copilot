@@ -1,5 +1,6 @@
 import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
+import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
 import { ChatMessage } from "@/types/message";
@@ -47,9 +48,15 @@ const ChatMessages = memo(
     onDelete,
   }: ChatMessagesProps) => {
     // Chat scrolling behavior
-    const { containerMinHeight, scrollContainerCallbackRef, getMessageKey } = useChatScrolling({
-      chatHistory,
-    });
+    const {
+      containerMinHeight,
+      scrollContainerCallbackRef,
+      contentCallbackRef,
+      onScroll,
+      isScrollPaused,
+      scrollToEnd,
+      getMessageKey,
+    } = useChatScrolling({ chatHistory });
 
     if (isChatEmpty(chatHistory, currentAiMessage)) {
       // Height comes from the content, not the container: `Chat` centers the
@@ -64,10 +71,12 @@ const ChatMessages = memo(
 
     return (
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
-        <div
-          ref={scrollContainerCallbackRef}
-          data-testid="chat-messages"
-          className="tw-relative tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-scroll-smooth tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)]"
+        <ChatTranscriptViewport
+          scrollContainerRef={scrollContainerCallbackRef}
+          contentRef={contentCallbackRef}
+          onScroll={onScroll}
+          isScrollPaused={isScrollPaused}
+          scrollToEnd={scrollToEnd}
         >
           {chatHistory.map((message, index) => {
             const visibleMessages = chatHistory.filter((m) => m.isVisible);
@@ -129,7 +138,7 @@ const ChatMessages = memo(
               <BottomLoadingIndicator label={loadingMessage} />
             </div>
           ) : null}
-        </div>
+        </ChatTranscriptViewport>
       </div>
     );
   }

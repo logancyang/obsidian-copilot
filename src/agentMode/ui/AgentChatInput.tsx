@@ -2,11 +2,9 @@ import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
+import type { QueuedAgentMessage } from "@/agentMode/session/AgentInputDraftStore";
 import type { PromptContent } from "@/agentMode/session/types";
-import type {
-  AgentInputDraftControls,
-  QueuedAgentMessage,
-} from "@/agentMode/ui/hooks/useAgentInputDrafts";
+import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import {
   clearSelectedTextContexts,
   removeSelectedTextContext,

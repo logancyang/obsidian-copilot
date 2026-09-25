@@ -173,6 +173,27 @@ describe("buildPromptBlocks", () => {
     expect(text).toContain("  line two");
   });
 
+  it("inlines a Reading view excerpt without claiming source lines (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
+    const blocks = buildPromptBlocks("explain", {
+      notes: [],
+      urls: [],
+      selectedTextContexts: [
+        {
+          id: "reading-excerpt",
+          sourceType: "note",
+          notePath: "projects/copilot.md",
+          noteTitle: "copilot",
+          content: "Rendered note passage",
+          startLine: 0,
+          endLine: 0,
+        },
+      ],
+    });
+    const text = (blocks[0] as { type: "text"; text: string }).text;
+    expect(text).toContain("- projects/copilot.md:\n  Rendered note passage");
+    expect(text).not.toContain("(lines");
+  });
+
   it("appends image content blocks after the text envelope", () => {
     const blocks = buildPromptBlocks("here", undefined, [
       { type: "image", mimeType: "image/png", data: "aGVsbG8=" },
