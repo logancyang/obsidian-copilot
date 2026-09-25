@@ -963,10 +963,10 @@ describe("AcpBackendProcess", () => {
       return (backend as unknown as { connection: { prompt: jest.Mock } }).connection.prompt;
     }
 
-    async function makeBackend(config: Partial<AcpBackend> = {}): Promise<AcpBackendProcess> {
+    async function makeBackend(): Promise<AcpBackendProcess> {
       const backend = new AcpBackendProcess(
         buildApp(),
-        buildStubBackend(config),
+        buildStubBackend(),
         "1.0.0",
         buildStubDescriptor()
       );
@@ -1028,67 +1028,28 @@ describe("AcpBackendProcess", () => {
       });
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 requests one recovery after two consecutive OpenCode internal service failures", async () => {
-      const backend = await makeBackend({ recoverOnInternalServiceFailure: true });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 requests recovery and explains the failure when the internal service stops", async () => {
+      const backend = await makeBackend();
       const recover = jest.fn();
       backend.setUnhealthyHandler(recover);
-      const failure = new RequestError(-32603, "Internal error: Internal service failure");
-      promptMock(backend).mockRejectedValue(failure);
-
-      await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toBe(failure);
-      expect(recover).not.toHaveBeenCalled();
-      await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toThrow(
-        "OpenCode's internal service stopped"
+      promptMock(backend).mockRejectedValue(
+        new RequestError(-32603, "Internal error: Internal service failure")
       );
+
       await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toThrow(
-        "OpenCode's internal service stopped"
+        "opencode's internal service stopped. Please try again."
       );
       expect(recover).toHaveBeenCalledTimes(1);
-      expect(recover).toHaveBeenCalledWith();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 clears the service-failure streak after a successful prompt or different error", async () => {
-      const backend = await makeBackend({ recoverOnInternalServiceFailure: true });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 rethrows other internal errors without requesting recovery", async () => {
+      const backend = await makeBackend();
       const recover = jest.fn();
       backend.setUnhealthyHandler(recover);
-      const failure = new RequestError(-32603, "Internal error: Internal service failure");
-      const prompt = promptMock(backend);
-      prompt
-        .mockRejectedValueOnce(failure)
-        .mockResolvedValueOnce({ stopReason: "end_turn" })
-        .mockRejectedValueOnce(failure)
-        .mockRejectedValueOnce(new RequestError(-32603, "Internal error: Provider offline"))
-        .mockRejectedValueOnce(failure);
-
-      await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toBe(failure);
-      await expect(backend.prompt({ sessionId: "s1", prompt: [] })).resolves.toEqual({
-        stopReason: "end_turn",
-      });
-      await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toBe(failure);
-      await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toThrow(
-        "Provider offline"
-      );
-      await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toBe(failure);
-      expect(recover).not.toHaveBeenCalled();
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 leaves other agents and exited ACP processes outside OpenCode service recovery", async () => {
-      const backend = await makeBackend({ id: "codex" });
-      const recover = jest.fn();
-      backend.setUnhealthyHandler(recover);
-      const failure = new RequestError(-32603, "Internal error: Internal service failure");
+      const failure = new RequestError(-32603, "Internal error: Provider offline");
       promptMock(backend).mockRejectedValue(failure);
 
       await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toBe(failure);
-      await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toBe(failure);
-      expect(recover).not.toHaveBeenCalled();
-
-      const opencode = await makeBackend({ recoverOnInternalServiceFailure: true });
-      opencode.setUnhealthyHandler(recover);
-      promptMock(opencode).mockRejectedValue(failure);
-      mockProcessIsRunning = false;
-      await expect(opencode.prompt({ sessionId: "s1", prompt: [] })).rejects.toBe(failure);
-      await expect(opencode.prompt({ sessionId: "s1", prompt: [] })).rejects.toBe(failure);
       expect(recover).not.toHaveBeenCalled();
     });
   });
