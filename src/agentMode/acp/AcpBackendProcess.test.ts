@@ -956,6 +956,28 @@ describe("AcpBackendProcess", () => {
     });
   });
 
+  describe("newSession()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 requests recovery and explains the failure when a new chat finds the internal service stopped", async () => {
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        buildStubDescriptor()
+      );
+      await backend.start();
+      const recover = jest.fn();
+      backend.setUnhealthyHandler(recover);
+      mockNewSession.mockRejectedValueOnce(
+        new RequestError(-32603, "Internal error: Internal service failure")
+      );
+
+      await expect(backend.newSession({ cwd: "/vault" })).rejects.toThrow(
+        "opencode's internal service stopped. Please try again."
+      );
+      expect(recover).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("prompt()", () => {
     // Reach the mock connection's `prompt` jest.fn so a test can stub the
     // turn-level `usage` the backend reads after `prompt()` resolves.

@@ -406,7 +406,11 @@ export class AcpBackendProcess implements BackendProcess {
       mcpServers: [],
       ...this.additionalDirectoriesField(params.additionalDirectories),
     };
-    const wireResp = await this.requireConnection().agent.request("session/new", req);
+    const wireResp = await this.requireConnection()
+      .agent.request("session/new", req)
+      .catch((err: unknown) => {
+        throw this.serviceStoppedOr(err);
+      });
     this.recordWireState(wireResp.sessionId, {
       modes: wireResp.modes ?? null,
       configOptions: wireResp.configOptions ?? null,
@@ -418,28 +422,14 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async prompt(params: PromptInput): Promise<PromptOutput> {
-    let resp;
-    try {
-      resp = await this.requireConnection().agent.request("session/prompt", {
+    const resp = await this.requireConnection()
+      .agent.request("session/prompt", {
         sessionId: sessionIdToAcp(params.sessionId),
         prompt: promptContentToAcp(params.prompt),
+      })
+      .catch((err: unknown) => {
+        throw this.serviceStoppedOr(err);
       });
-    } catch (err) {
-      // OpenCode 2 leaves ACP alive when its private service dies, so the
-      // process must be replaced for later turns to succeed.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
-      if (
-        err instanceof RequestError &&
-        err.code === -32603 &&
-        err.message === INTERNAL_SERVICE_FAILURE
-      ) {
-        this.unhealthyHandler?.();
-        throw new Error(
-          `${this.backend.displayName}'s internal service stopped. Please try again.`
-        );
-      }
-      throw err;
-    }
     // Fallback usage source for agents that never push a live `usage_update`
     // notification: the prompt result may carry a turn `usage` with no context
     // window. `usage.totalTokens` is a cumulative session total (not current
@@ -810,6 +800,27 @@ export class AcpBackendProcess implements BackendProcess {
       }
       this.process = null;
     }
+  }
+
+  /**
+   * OpenCode 2 leaves ACP alive when its private service dies, so the process
+   * must be replaced before a prompt or a new chat can succeed again. Session
+   * creation is included because after an idle crash it is the first request,
+   * and a new chat is the user's natural retry.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/561
+   */
+  private serviceStoppedOr(err: unknown): unknown {
+    if (
+      !(
+        err instanceof RequestError &&
+        err.code === -32603 &&
+        err.message === INTERNAL_SERVICE_FAILURE
+      )
+    ) {
+      return err;
+    }
+    this.unhealthyHandler?.();
+    return new Error(`${this.backend.displayName}'s internal service stopped. Please try again.`);
   }
 
   private requireConnection(): ClientConnection {
