@@ -1,5 +1,44 @@
 # Release Notes
 
+# v4.0.12 - OpenCode 2 in your vault
+
+![OpenCode 2 — Copilot for Obsidian 4.0.12](https://github.com/user-attachments/assets/6a793773-91d3-4236-b9c7-69950efb6660)
+
+OpenCode, the agent runtime behind Copilot Plus and your own model providers, is getting a major update. It will allow Copilot to better control model context, permissions, and tool executions. More improvements to OpenCode will come soon.
+
+## ✨ Enhancements
+
+- Link back to a saved Quick Chat or Agent conversation from your notes. Click **Copy Chat Link** beside New Chat, then paste the link into a note to reopen the conversation. ([#3369](https://github.com/logancyang/obsidian-copilot/pull/3369), @zeroliu)
+
+  ![Copy Chat Link beside New Chat in the chat composer](https://github.com/user-attachments/assets/d8f285a5-6ee0-4338-8ff3-a458d5030d53)
+
+- Copilot agent is fine-tuned to work better with your frontier AI agent with our up-to-date system prompts. ([#3366](https://github.com/logancyang/obsidian-copilot/pull/3366), @zeroliu)
+- Copilot is now fully compatible with OpenCode 2. ([#3365](https://github.com/logancyang/obsidian-copilot/pull/3365), @zeroliu)
+- Use the new Copilot button in the note header to quickly access Agent Chat with the note attached. ([#3363](https://github.com/logancyang/obsidian-copilot/pull/3363), @zeroliu)
+
+  ![Copilot icon in the top-right corner of the note header](https://github.com/user-attachments/assets/6adba14e-c049-452b-9080-3b5486b5ad14)
+
+- Agent responses now auto-scroll. You can still scroll up to read at your own pace. ([#3358](https://github.com/logancyang/obsidian-copilot/pull/3358), @zeroliu)
+
+  ![Agent Chat automatically follows a streaming reply](https://github.com/user-attachments/assets/7d4f5626-71a7-452d-963f-ae1ff3dec6e4)
+
+- See what Codex installation is doing, with elapsed connection time, downloaded bytes, and named setup stages. ([#3361](https://github.com/logancyang/obsidian-copilot/pull/3361), @zeroliu)
+
+## 🛠️ Bug Fixes
+
+- Selected note text now reliably shows up as chat context. ([#3368](https://github.com/logancyang/obsidian-copilot/pull/3368), @zeroliu)
+
+## ⚠️ Compatibility Notes
+
+OpenCode users need version 2.0.3 or newer. OpenCode 1 and earlier 2.0.x versions no longer run; open OpenCode **Configure** and choose the Copilot-managed 2.0.3 version. Newer custom versions remain selectable, but affected releases can omit configured models when a chat starts. ([#3365](https://github.com/logancyang/obsidian-copilot/pull/3365), @zeroliu)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.11 - Plan together with Codex
 
 Work through an approach with Codex before it changes your notes. Plan mode now brings the plan back for your review, and Codex questions appear directly in Agent Chat so you can guide the next step.
