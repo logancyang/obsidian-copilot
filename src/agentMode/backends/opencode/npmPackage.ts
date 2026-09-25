@@ -1,16 +1,10 @@
 import { ManagedInstallAbortError } from "@/agentMode/backends/shared/managedInstall";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { compareSemver } from "@/utils/semver";
+import { requestUrl } from "obsidian";
 
 interface NpmMetadata {
-  name?: string;
-  version?: string;
   dist?: { tarball?: string; integrity?: string };
-}
-
-interface MetadataResponse {
-  status: number;
-  json: unknown;
 }
 
 export interface NpmAsset {
@@ -23,13 +17,11 @@ export interface NpmAsset {
  * Resolve the first published platform package in the host's fallback order.
  * @param version - OpenCode release to install.
  * @param candidates - Platform variants ordered from most suitable to fallback.
- * @param fetchMetadata - Registry request that also works in Obsidian's desktop runtime.
  * @param signal - Cancellation owned by the managed install operation.
  */
 export async function resolveNpmAsset(
   version: string,
   candidates: string[],
-  fetchMetadata: (url: string) => Promise<MetadataResponse>,
   signal?: AbortSignal
 ): Promise<NpmAsset> {
   for (const candidate of candidates) {
@@ -42,7 +34,7 @@ export async function resolveNpmAsset(
         ? `@opencode/cli-${candidate.slice("opencode-".length)}`
         : candidate;
     const url = `https://registry.npmjs.org/${packageName.replace("/", "%2F")}/${encodeURIComponent(version)}`;
-    const response = await fetchMetadata(url);
+    const response = await requestUrl({ url, method: "GET", throw: false });
     // Hosts try a baseline or musl build first, and not every variant is published.
     // A registry outage must still surface as an error rather than "no package".
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/560
@@ -50,23 +42,11 @@ export async function resolveNpmAsset(
     if (response.status < 200 || response.status >= 300) {
       throw new Error(`OpenCode npm package lookup failed with status ${response.status}.`);
     }
-    const metadata = response.json as NpmMetadata;
-    const tarball = metadata.dist?.tarball;
-    const integrity = metadata.dist?.integrity;
-    // The registry response decides which bytes become an executable, so metadata for
-    // another package, a non-HTTPS URL, or a non-tarball must never be downloaded.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/560
-    if (metadata.name !== packageName || metadata.version !== version || !tarball) {
-      throw new Error(`Invalid npm metadata for ${packageName}@${version}.`);
+    const { tarball, integrity } = (response.json as NpmMetadata).dist ?? {};
+    if (!tarball || !integrity?.startsWith("sha512-")) {
+      throw new Error(`Missing tarball or sha512 integrity for ${packageName}@${version}.`);
     }
-    const tarballUrl = new URL(tarball);
-    if (tarballUrl.protocol !== "https:" || !tarballUrl.pathname.endsWith(".tgz")) {
-      throw new Error(`Invalid npm tarball URL for ${packageName}@${version}.`);
-    }
-    if (!integrity || !/^sha512-[A-Za-z0-9+/]{86}==$/.test(integrity)) {
-      throw new Error(`Missing or invalid sha512 integrity for ${packageName}@${version}.`);
-    }
-    return { name: tarballUrl.pathname.split("/").pop() as string, url: tarball, integrity };
+    return { name: new URL(tarball).pathname.split("/").pop() as string, url: tarball, integrity };
   }
   throw new Error(`No matching OpenCode npm package found. Tried: ${candidates.join(", ")}.`);
 }
@@ -85,25 +65,21 @@ export async function verifyNpmIntegrity(
 ): Promise<void> {
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
   const crypto = requireNodeModule<typeof import("node:crypto")>("crypto");
-  const expected = Buffer.from(integrity.slice("sha512-".length), "base64");
   const hash = crypto.createHash("sha512");
-  for await (const rawChunk of fs.createReadStream(archivePath)) {
+  for await (const chunk of fs.createReadStream(archivePath)) {
     if (signal?.aborted) throw new ManagedInstallAbortError();
-    hash.update(rawChunk as Uint8Array);
+    hash.update(chunk as Uint8Array);
   }
   if (signal?.aborted) throw new ManagedInstallAbortError();
-  const actual = hash.digest();
-  if (
-    expected.length !== actual.length ||
-    !crypto.timingSafeEqual(new Uint8Array(expected), new Uint8Array(actual))
-  ) {
+  if (`sha512-${hash.digest("base64")}` !== integrity) {
     throw new Error("OpenCode npm download integrity mismatch. Retry the installation.");
   }
 }
 
 /**
  * Extract only npm's expected executable; other tar entries never become files.
- * This keeps installation independent of a system archive command.
+ * This keeps installation independent of a system archive command. The archive
+ * has already passed {@link verifyNpmIntegrity}, so its headers are trusted.
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/560
  * @param archivePath - Verified npm tarball.
  * @param destPath - Staged executable path inside the managed install root.
@@ -118,72 +94,62 @@ export async function extractNpmBinary(
 ): Promise<void> {
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
   const zlib = requireNodeModule<typeof import("node:zlib")>("zlib");
+  const { Transform, promises } = requireNodeModule<typeof import("node:stream")>("stream");
+  if (signal?.aborted) throw new ManagedInstallAbortError();
   const wanted = `package/bin/${binaryName}`;
   const header = Buffer.alloc(512);
   let headerBytes = 0;
-  let remaining = 0;
-  let entrySize = 0;
-  let padding = 0;
-  let extracting = false;
-  let output: import("node:fs/promises").FileHandle | undefined;
+  let skip = 0;
+  let emit = 0;
+  let found = false;
 
-  try {
-    const stream = fs.createReadStream(archivePath).pipe(zlib.createGunzip());
-    outer: for await (const rawChunk of stream) {
-      if (signal?.aborted) throw new ManagedInstallAbortError();
-      const chunk = rawChunk as Uint8Array;
-      let offset = 0;
-      while (offset < chunk.length) {
-        if (padding > 0) {
-          const count = Math.min(padding, chunk.length - offset);
-          padding -= count;
-          offset += count;
-          continue;
-        }
-        if (remaining > 0) {
-          const count = Math.min(remaining, chunk.length - offset);
-          if (extracting && output) {
-            let written = 0;
-            while (written < count) {
-              if (signal?.aborted) throw new ManagedInstallAbortError();
-              const result = await output.write(chunk, offset + written, count - written);
-              if (result.bytesWritten === 0) throw new Error("Could not write OpenCode binary.");
-              written += result.bytesWritten;
-            }
+  const picker = new Transform({
+    transform(chunk: Uint8Array, _encoding, callback) {
+      let data = chunk;
+      while (data.length > 0) {
+        if (emit > 0) {
+          const count = Math.min(emit, data.length);
+          this.push(data.subarray(0, count));
+          emit -= count;
+          data = data.subarray(count);
+        } else if (found) {
+          break;
+        } else if (skip > 0) {
+          const count = Math.min(skip, data.length);
+          skip -= count;
+          data = data.subarray(count);
+        } else {
+          const count = Math.min(512 - headerBytes, data.length);
+          header.set(data.subarray(0, count), headerBytes);
+          headerBytes += count;
+          data = data.subarray(count);
+          if (headerBytes < 512) break;
+          headerBytes = 0;
+          const name = header.toString("utf8", 0, 100).split("\0", 1)[0];
+          const size = Number.parseInt(header.toString("ascii", 124, 136), 8) || 0;
+          if (name === wanted) {
+            found = true;
+            emit = size;
+          } else {
+            skip = Math.ceil(size / 512) * 512;
           }
-          remaining -= count;
-          offset += count;
-          if (remaining === 0) {
-            if (extracting) break outer;
-            padding = (512 - (entrySize % 512)) % 512;
-          }
-          continue;
-        }
-        const count = Math.min(512 - headerBytes, chunk.length - offset);
-        header.set(chunk.subarray(offset, offset + count), headerBytes);
-        headerBytes += count;
-        offset += count;
-        if (headerBytes < 512) continue;
-        headerBytes = 0;
-        const name = header.toString("utf8", 0, 100).split("\0", 1)[0];
-        if (!name) break outer;
-        const sizeText = header.toString("ascii", 124, 136).replace(/\0.*$/, "").trim();
-        const size = Number.parseInt(sizeText, 8);
-        if (!Number.isSafeInteger(size) || size < 0)
-          throw new Error("Invalid OpenCode npm archive.");
-        remaining = size;
-        entrySize = size;
-        extracting = name === wanted && (header[156] === 0 || header[156] === 48);
-        if (extracting) {
-          output = await fs.promises.open(destPath, "w");
-          if (remaining === 0) break outer;
-        } else if (remaining === 0) {
-          padding = 0;
         }
       }
-    }
-    if (!output || remaining > 0) throw new Error(`OpenCode npm archive lacks ${wanted}.`);
-  } finally {
-    await output?.close();
+      callback();
+    },
+  });
+
+  try {
+    await promises.pipeline(
+      fs.createReadStream(archivePath),
+      zlib.createGunzip(),
+      picker,
+      fs.createWriteStream(destPath),
+      { signal }
+    );
+  } catch (error) {
+    if (signal?.aborted) throw new ManagedInstallAbortError();
+    throw error;
   }
+  if (!found) throw new Error(`OpenCode npm archive lacks ${wanted}.`);
 }

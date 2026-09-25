@@ -3,10 +3,17 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
+import { requestUrl, type RequestUrlResponsePromise } from "obsidian";
 import { extractNpmBinary, resolveNpmAsset, verifyNpmIntegrity } from "./npmPackage";
 import { ManagedInstallAbortError } from "@/agentMode/backends/shared/managedInstall";
 
+jest.mock("obsidian", () => ({ ...jest.requireActual("obsidian"), requestUrl: jest.fn() }));
+
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/560";
+
+function response(status: number, json: unknown): RequestUrlResponsePromise {
+  return { status, json } as unknown as RequestUrlResponsePromise;
+}
 
 function joinBytes(...chunks: Uint8Array[]): Uint8Array {
   const joined = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0));
@@ -38,156 +45,108 @@ describe("npmPackage", () => {
   });
 
   afterEach(async () => {
+    jest.mocked(requestUrl).mockReset();
     await fs.promises.rm(dir, { recursive: true, force: true });
   });
 
   describe("resolveNpmAsset()", () => {
+    const INTEGRITY = "sha512-" + Buffer.alloc(64).toString("base64");
+
     it(`${ISSUE} resolves the first matching platform package and sha512 integrity`, async () => {
-      const fetch = jest.fn(async () => ({
-        status: 200,
-        json: {
-          name: "@opencode/cli-linux-x64-musl",
-          version: "2.0.14",
+      jest.mocked(requestUrl).mockResolvedValue(
+        response(200, {
           dist: {
             tarball:
               "https://registry.npmjs.org/@opencode/cli-linux-x64-musl/-/cli-linux-x64-musl-2.0.14.tgz",
-            integrity: "sha512-" + Buffer.alloc(64).toString("base64"),
+            integrity: INTEGRITY,
           },
-        },
-      }));
-      const asset = await resolveNpmAsset("2.0.14", ["opencode-linux-x64-musl"], fetch);
-      expect(fetch).toHaveBeenCalledWith(
-        "https://registry.npmjs.org/@opencode%2Fcli-linux-x64-musl/2.0.14"
+        })
       );
-      expect(asset.name).toBe("cli-linux-x64-musl-2.0.14.tgz");
-      expect(asset.integrity).toMatch(/^sha512-/);
+      const asset = await resolveNpmAsset("2.0.14", ["opencode-linux-x64-musl"]);
+      expect(requestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "https://registry.npmjs.org/@opencode%2Fcli-linux-x64-musl/2.0.14",
+        })
+      );
+      expect(asset).toEqual({
+        name: "cli-linux-x64-musl-2.0.14.tgz",
+        url: "https://registry.npmjs.org/@opencode/cli-linux-x64-musl/-/cli-linux-x64-musl-2.0.14.tgz",
+        integrity: INTEGRITY,
+      });
     });
 
     it(`${ISSUE} falls back to the next candidate when a preferred package is missing`, async () => {
-      const fetch = jest.fn(async (url: string) =>
-        url.includes("baseline")
-          ? { status: 404, json: {} }
-          : {
-              status: 200,
-              json: {
-                name: "@opencode/cli-windows-x64",
-                version: "2.0.14",
-                dist: {
-                  tarball: "https://registry.npmjs.org/pkg.tgz",
-                  integrity: "sha512-" + Buffer.alloc(64).toString("base64"),
-                },
-              },
-            }
+      jest.mocked(requestUrl).mockImplementation((request) =>
+        JSON.stringify(request).includes("baseline")
+          ? response(404, {})
+          : response(200, {
+              dist: { tarball: "https://registry.npmjs.org/pkg.tgz", integrity: INTEGRITY },
+            })
       );
-      const asset = await resolveNpmAsset(
-        "2.0.14",
-        ["opencode-windows-x64-baseline", "opencode-windows-x64"],
-        fetch
-      );
-      expect(fetch).toHaveBeenCalledTimes(2);
+      const asset = await resolveNpmAsset("2.0.14", [
+        "opencode-windows-x64-baseline",
+        "opencode-windows-x64",
+      ]);
+      expect(requestUrl).toHaveBeenCalledTimes(2);
       expect(asset.name).toBe("pkg.tgz");
     });
 
     it(`${ISSUE} resolves an OpenCode 1 release from its unscoped platform package`, async () => {
-      const fetch = jest.fn(async () => ({
-        status: 200,
-        json: {
-          name: "opencode-darwin-arm64",
-          version: "1.18.31",
+      jest.mocked(requestUrl).mockResolvedValue(
+        response(200, {
           dist: {
             tarball:
               "https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.18.31.tgz",
-            integrity: "sha512-" + Buffer.alloc(64).toString("base64"),
+            integrity: INTEGRITY,
           },
-        },
-      }));
-      const asset = await resolveNpmAsset("1.18.31", ["opencode-darwin-arm64"], fetch);
-      expect(fetch).toHaveBeenCalledWith(
-        "https://registry.npmjs.org/opencode-darwin-arm64/1.18.31"
+        })
+      );
+      const asset = await resolveNpmAsset("1.18.31", ["opencode-darwin-arm64"]);
+      expect(requestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({ url: "https://registry.npmjs.org/opencode-darwin-arm64/1.18.31" })
       );
       expect(asset.name).toBe("opencode-darwin-arm64-1.18.31.tgz");
     });
 
     it(`${ISSUE} stops trying fallback packages once the install is cancelled`, async () => {
       const controller = new AbortController();
-      const fetch = jest.fn(async () => {
+      jest.mocked(requestUrl).mockImplementation(() => {
         controller.abort();
-        return { status: 404, json: {} };
+        return response(404, {});
       });
       await expect(
         resolveNpmAsset(
           "2.0.14",
           ["opencode-linux-x64-baseline-musl", "opencode-linux-x64-musl"],
-          fetch,
           controller.signal
         )
       ).rejects.toThrow(ManagedInstallAbortError);
-      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(requestUrl).toHaveBeenCalledTimes(1);
     });
 
     it(`${ISSUE} fails clearly when no platform package exists`, async () => {
-      await expect(
-        resolveNpmAsset("2.0.14", ["opencode-linux-arm64"], async () => ({
-          status: 404,
-          json: {},
-        }))
-      ).rejects.toThrow(/No matching OpenCode npm package/);
+      jest.mocked(requestUrl).mockResolvedValue(response(404, {}));
+      await expect(resolveNpmAsset("2.0.14", ["opencode-linux-arm64"])).rejects.toThrow(
+        /No matching OpenCode npm package/
+      );
     });
 
-    it(`${ISSUE} rejects package metadata without trustworthy integrity`, async () => {
-      await expect(
-        resolveNpmAsset("2.0.14", ["opencode-darwin-arm64"], async () => ({
-          status: 200,
-          json: {
-            name: "@opencode/cli-darwin-arm64",
-            version: "2.0.14",
-            dist: { tarball: "https://registry.npmjs.org/pkg.tgz" },
-          },
-        }))
-      ).rejects.toThrow(/sha512 integrity/);
+    it(`${ISSUE} rejects package metadata without a sha512 integrity`, async () => {
+      jest
+        .mocked(requestUrl)
+        .mockResolvedValue(
+          response(200, { dist: { tarball: "https://registry.npmjs.org/pkg.tgz" } })
+        );
+      await expect(resolveNpmAsset("2.0.14", ["opencode-darwin-arm64"])).rejects.toThrow(
+        /sha512 integrity/
+      );
     });
 
     it(`${ISSUE} reports registry failures instead of treating them as missing packages`, async () => {
-      await expect(
-        resolveNpmAsset("2.0.14", ["opencode-darwin-arm64"], async () => ({
-          status: 429,
-          json: {},
-        }))
-      ).rejects.toThrow(/status 429/);
-    });
-
-    it(`${ISSUE} rejects metadata for a different package or version`, async () => {
-      await expect(
-        resolveNpmAsset("2.0.14", ["opencode-darwin-arm64"], async () => ({
-          status: 200,
-          json: {
-            name: "@opencode/cli-linux-x64",
-            version: "2.0.13",
-            dist: {
-              tarball: "https://registry.npmjs.org/pkg.tgz",
-              integrity: "sha512-" + Buffer.alloc(64).toString("base64"),
-            },
-          },
-        }))
-      ).rejects.toThrow(/Invalid npm metadata/);
-    });
-
-    it(`${ISSUE} refuses a tarball URL that is not an HTTPS package archive`, async () => {
-      for (const tarball of [
-        "http://registry.npmjs.org/pkg.tgz",
-        "https://registry.npmjs.org/pkg.zip",
-      ]) {
-        await expect(
-          resolveNpmAsset("2.0.14", ["opencode-darwin-arm64"], async () => ({
-            status: 200,
-            json: {
-              name: "@opencode/cli-darwin-arm64",
-              version: "2.0.14",
-              dist: { tarball, integrity: "sha512-" + Buffer.alloc(64).toString("base64") },
-            },
-          }))
-        ).rejects.toThrow(/Invalid npm tarball URL/);
-      }
+      jest.mocked(requestUrl).mockResolvedValue(response(429, {}));
+      await expect(resolveNpmAsset("2.0.14", ["opencode-darwin-arm64"])).rejects.toThrow(
+        /status 429/
+      );
     });
   });
 

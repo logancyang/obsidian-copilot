@@ -3,7 +3,6 @@ import { OpencodeBinaryManager } from "./OpencodeBinaryManager";
 import { OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import * as npmPackage from "./npmPackage";
 import { getSettings, updateAgentModeBackendFields } from "@/settings/model";
-import { requestUrl } from "obsidian";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -12,7 +11,6 @@ import { Readable } from "node:stream";
 import { EventEmitter } from "node:events";
 
 jest.mock("https", () => ({ get: jest.fn() }));
-jest.mock("obsidian", () => ({ ...jest.requireActual("obsidian"), requestUrl: jest.fn() }));
 jest.mock("./npmPackage", () => ({
   resolveNpmAsset: jest.fn(),
   verifyNpmIntegrity: jest.fn(),
@@ -82,7 +80,6 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
         expect(jest.mocked(npmPackage.resolveNpmAsset)).toHaveBeenCalledWith(
           version,
           ["opencode-darwin-arm64"],
-          expect.any(Function),
           expect.any(AbortSignal)
         );
         expect(npmPackage.verifyNpmIntegrity).toHaveBeenCalledWith(
@@ -105,14 +102,13 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
       });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 rejects a managed pin below minimum without downloading or replacing the selected installation", async () => {
         const selected = { ...getSettings().agentMode.backends?.opencode };
-        jest.mocked(requestUrl).mockClear();
         const minimum = jest.replaceProperty<
           { OPENCODE_MIN_VERSION: string },
           "OPENCODE_MIN_VERSION"
         >(opencodeVersion, "OPENCODE_MIN_VERSION", "999.0.0");
         try {
           await expect(manager.install()).rejects.toThrow("requires");
-          expect(requestUrl).not.toHaveBeenCalled();
+          expect(npmPackage.resolveNpmAsset).not.toHaveBeenCalled();
           expect(getSettings().agentMode.backends?.opencode).toEqual(selected);
           expect(fs.readFileSync(previous, "utf8")).toBe("running process executable");
         } finally {

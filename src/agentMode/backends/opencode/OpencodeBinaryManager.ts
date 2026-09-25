@@ -14,7 +14,7 @@ import { OPENCODE_MIN_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVers
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { getSettings, setSettings, type OpencodeBackendSettings } from "@/settings/model";
-import { FileSystemAdapter, requestUrl } from "obsidian";
+import { FileSystemAdapter } from "obsidian";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { expectedBinaryName, resolveOpencodeTarget } from "./platformResolver";
@@ -361,12 +361,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     const { target, candidates } = await resolveOpencodeTarget();
     this.throwIfAborted(opts.signal);
 
-    const asset = await resolveNpmAsset(
-      version,
-      candidates,
-      (url) => requestUrl({ url, method: "GET", throw: false }),
-      opts.signal
-    );
+    const asset = await resolveNpmAsset(version, candidates, opts.signal);
     this.throwIfAborted(opts.signal);
 
     const binName = expectedBinaryName(target.platform);
