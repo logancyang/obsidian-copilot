@@ -268,8 +268,6 @@ function denyNativeWebTools(permission: unknown): Record<string, unknown> {
   return { ...permissionRecord, websearch: "deny", webfetch: "deny" };
 }
 
-const FALLBACK_EFFORTS = ["low", "medium", "high"] as const;
-
 /** The `OPENCODE_CONFIG_CONTENT` document, typed by OpenCode's published schema. */
 type OpencodeConfig = typeof Config.Info.Encoded;
 /** The generated document, which always registers providers and Copilot's agents. */
@@ -381,11 +379,11 @@ export async function buildOpencodeConfig(
     const declaresCapabilities =
       !hasCatalogIdentity ||
       (info.modalities?.input && info.modalities.output && info.toolCall !== undefined);
-    // Only Copilot Plus publishes authoritative levels. OpenCode's native
-    // catalog owns BYOK variants; custom models need an explicit list so a
-    // non-reasoning model does not inherit a selectable effort menu.
+    // OpenCode's native catalog owns BYOK variants. Otherwise only a published
+    // list is trusted: a guessed level either fails the turn or is silently
+    // ignored, so a model with no list stays at its default effort.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/557
-    const levels = info.reasoning ? (info.reasoningEfforts ?? FALLBACK_EFFORTS) : [];
+    const levels = info.reasoning ? (info.reasoningEfforts ?? []) : [];
     models[info.id] = {
       capabilities: declaresCapabilities
         ? {

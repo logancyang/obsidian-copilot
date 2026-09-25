@@ -724,7 +724,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     });
   });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 offers fallback effort levels when Copilot Plus levels are unknown", async () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 offers no effort levels when Copilot Plus levels are unknown, leaving the model at its default", async () => {
     // A row cached before the service published levels, or one reconciled from a
     // response that could not be read. Either way an imperfect menu beats
     // dropping a control that works.
@@ -737,11 +737,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
 
     expect(cfg.providers["copilot-plus"].models?.["copilot-plus-flash"]).toEqual({
       capabilities: { tools: true, input: ["text"], output: ["text"] },
-      variants: [
-        { id: "low", settings: { reasoningEffort: "low" } },
-        { id: "medium", settings: { reasoningEffort: "medium" } },
-        { id: "high", settings: { reasoningEffort: "high" } },
-      ],
+      variants: [],
     });
   });
 
@@ -762,7 +758,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     expect(cfg.providers.anthropic.models?.["copilot-plus-flash"]).toEqual({});
   });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 offers fallback effort levels for a custom BYOK reasoning model", async () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 offers no effort levels for a custom BYOK reasoning model, leaving it at its default", async () => {
     const provider = makeOpenAICompatibleProvider("p-custom", "https://my-endpoint/v1", "Custom");
     const model = makeModel("p-custom", "reasoner");
     model.info.reasoning = true;
@@ -775,11 +771,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
 
     expect(cfg.providers["p-custom"].models?.reasoner).toEqual({
       capabilities: { tools: true, input: ["text"], output: ["text"] },
-      variants: [
-        { id: "low", settings: { reasoningEffort: "low" } },
-        { id: "medium", settings: { reasoningEffort: "medium" } },
-        { id: "high", settings: { reasoningEffort: "high" } },
-      ],
+      variants: [],
     });
   });
 
