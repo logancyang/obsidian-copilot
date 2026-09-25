@@ -255,12 +255,17 @@ function normalizeCacheRoot(raw: string | undefined): string | undefined {
  * @param permission Existing shorthand or object permission policy.
  */
 function denyNativeWebTools(permission: unknown): Record<string, unknown> {
-  const permissionRecord =
+  const permissionRecord: Record<string, unknown> =
     typeof permission === "string"
       ? { "*": permission }
       : permission && typeof permission === "object" && !Array.isArray(permission)
-        ? (permission as Record<string, unknown>)
+        ? { ...(permission as Record<string, unknown>) }
         : {};
+  // OpenCode 2 converts these keys to rules in key order and applies the last
+  // match, so reassigning an existing key would leave a later `*` allow winning.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/558
+  delete permissionRecord.websearch;
+  delete permissionRecord.webfetch;
   return { ...permissionRecord, websearch: "deny", webfetch: "deny" };
 }
 
@@ -276,11 +281,7 @@ function agentConfigs(agents: unknown): Record<string, unknown>[] {
 // OpenCode 2 uses the last matching native rule.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/558
 function appendNativeWebDenies(permissions: unknown): unknown[] {
-  return [
-    ...(Array.isArray(permissions) ? permissions : []),
-    { action: "websearch", resource: "*", effect: "deny" },
-    { action: "webfetch", resource: "*", effect: "deny" },
-  ];
+  return [...(Array.isArray(permissions) ? permissions : []), ...NATIVE_WEB_DENIES];
 }
 
 /** The `OPENCODE_CONFIG_CONTENT` document, typed by OpenCode's published schema. */
@@ -292,6 +293,16 @@ type ProviderConfig = NonNullable<OpencodeConfig["providers"]>[string];
 type ModelConfig = NonNullable<ProviderConfig["models"]>[string];
 type ModelVariant = NonNullable<ModelConfig["variants"]>[number];
 type PermissionRule = NonNullable<OpencodeConfig["permissions"]>[number];
+
+/**
+ * Self-Host mode cannot rely on prompt steering because opencode's native web
+ * tools contact its own search/fetch services directly.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+ */
+const NATIVE_WEB_DENIES: readonly PermissionRule[] = [
+  { action: "websearch", resource: "*", effect: "deny" },
+  { action: "webfetch", resource: "*", effect: "deny" },
+];
 
 /**
  * Build the `OPENCODE_CONFIG_CONTENT` payload from the enabled opencode models.
@@ -430,15 +441,7 @@ export async function buildOpencodeConfig(
   // rules; the last rule matching a tool call decides it.
   const permissions: PermissionRule[] = [];
 
-  // Self-Host mode cannot rely on prompt steering because opencode's native
-  // tools contact its own search/fetch services directly.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
-  if (s.enableSelfHostMode === true) {
-    permissions.push(
-      { action: "websearch", resource: "*", effect: "deny" },
-      { action: "webfetch", resource: "*", effect: "deny" }
-    );
-  }
+  if (s.enableSelfHostMode === true) permissions.push(...NATIVE_WEB_DENIES);
 
   // Inject a managed `copilot-build` agent so the mode picker can offer the
   // canonical "default" semantic — let the agent edit, but ask first. The

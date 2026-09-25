@@ -1241,6 +1241,43 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     });
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/558 moves a legacy web allow behind the override's later wildcard so the web deny still matches last", async () => {
+    setSettings({ enableSelfHostMode: true });
+    updateSetting("agentMode", {
+      byok: {},
+      activeBackend: "opencode",
+      debugFullFrames: false,
+      notificationSound: false,
+      notificationSoundId: "piano",
+      welcomeDismissed: false,
+      skills: { folder: "copilot/skills" },
+      backends: {
+        opencode: {
+          binaryPath: "/path/to/opencode",
+          envOverrides: {
+            OPENCODE_CONFIG_CONTENT: JSON.stringify({
+              agent: { research: { permission: { websearch: "allow", "*": "allow" } } },
+            }),
+          },
+        },
+      },
+    });
+
+    const desc = await new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({
+      vaultBasePath: "/active-vault",
+      vaultName: "active-vault",
+    });
+    const cfg = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
+
+    // OpenCode 2 converts legacy permission keys to rules in key order and
+    // applies the last match, so the denies must follow the wildcard allow.
+    expect(Object.entries(cfg.agent.research.permission)).toEqual([
+      ["*", "allow"],
+      ["websearch", "deny"],
+      ["webfetch", "deny"],
+    ]);
+  });
+
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 refuses to start Self-Host OpenCode before the replacement search channel is available", async () => {
     setSettings({ enableSelfHostMode: true });
     updateSetting("agentMode", {
