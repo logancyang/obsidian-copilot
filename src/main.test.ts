@@ -365,6 +365,32 @@ describe("main", () => {
           "Could not add the note to Agent Chat. Check Copilot logs."
         );
       });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 reports a failure to open the Agent Chat pane without throwing", async () => {
+        const plugin = createPluginUnderTest([]);
+        const failure = new Error("view state rejected");
+        const addContextNoteToActiveChat = jest.fn();
+        Object.assign(plugin, {
+          CopilotAgentView: AgentView,
+          agentSessionManager: { addContextNoteToActiveChat },
+          app: {
+            workspace: {
+              getLeavesOfType: jest.fn(() => []),
+              getRightLeaf: jest.fn(() => ({ setViewState: jest.fn().mockRejectedValue(failure) })),
+            },
+          },
+        });
+
+        await expect(
+          plugin.addNoteToAgentChat(Object.assign(new TFile(), { path: "Research.md" }), true)
+        ).resolves.toBeUndefined();
+
+        expect(addContextNoteToActiveChat).not.toHaveBeenCalled();
+        expect(logError).toHaveBeenCalledWith("Failed to add a note to Agent Chat.", failure);
+        expect(Notice).toHaveBeenCalledWith(
+          "Could not add the note to Agent Chat. Check Copilot logs."
+        );
+      });
     });
 
     describe("addNoteToActiveChat()", () => {
@@ -372,7 +398,7 @@ describe("main", () => {
         jest.clearAllMocks();
       });
 
-      it("attaches the note to Agent Chat when Agent Chat is the target", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 attaches the note to Agent Chat as context when Agent Chat is the target", async () => {
         (isDesktopRuntime as jest.Mock).mockReturnValue(true);
         const plugin = createPluginUnderTest([]);
         const addNoteToAgentChat = jest
@@ -385,7 +411,7 @@ describe("main", () => {
         expect(addNoteToAgentChat).toHaveBeenCalledWith(note);
       });
 
-      it("inserts a wikilink into the legacy chat when it is the target", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 keeps inserting a wikilink into the legacy chat when it is the target", async () => {
         (isDesktopRuntime as jest.Mock).mockReturnValue(false);
         const plugin = createPluginUnderTest([]);
         const view = Object.assign(Object.create(CopilotView.prototype) as CopilotView, {

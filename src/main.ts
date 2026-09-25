@@ -1130,9 +1130,9 @@ export default class CopilotPlugin extends Plugin {
    *   instead of the user's default open area.
    */
   async addNoteToAgentChat(note: TFile, openInRightSidebar = false): Promise<void> {
-    const leaf = await this.activateAgentView(openInRightSidebar);
-    if (!leaf) return;
     try {
+      const leaf = await this.activateAgentView(openInRightSidebar);
+      if (!leaf) return;
       await this.agentSessionManager?.addContextNoteToActiveChat(note);
     } catch (error) {
       logError("Failed to add a note to Agent Chat.", error);
@@ -1154,6 +1154,9 @@ export default class CopilotPlugin extends Plugin {
    * @param note - Note the Relevant Notes pane offers as chat context.
    */
   async addNoteToActiveChat(note: TFile): Promise<void> {
+    // Agent Chat attaches the note itself so the agent reads it as context,
+    // while Quick Chat keeps the [[wikilink]] its composer already resolves
+    // (https://github.com/Brevilabs/obsidian-copilot-private/issues/579).
     if (this.pickContextChatViewType() === CHAT_AGENT_VIEWTYPE) {
       await this.addNoteToAgentChat(note);
       return;
