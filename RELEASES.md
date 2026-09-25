@@ -10,13 +10,7 @@ OpenCode, the agent runtime behind Copilot Plus and your own model providers, is
 
 - Link back to a saved Quick Chat or Agent conversation from your notes. Click **Copy Chat Link** beside New Chat, then paste the link into a note to reopen the conversation. ([#3369](https://github.com/logancyang/obsidian-copilot/pull/3369), @zeroliu)
 
-  Copy the chat link and use it as the destination of a Markdown link in your note:
-
-  ![Copy Chat Link beside New Chat, with the copied URI added to a Markdown link in a note](https://github.com/user-attachments/assets/6f5913e4-6ef9-4867-aaa7-522ac46d6c07)
-
-  In reading view, click the link to return to the conversation:
-
-  ![The note displays a clickable Reopen our weekend trip chat link beside the saved conversation](https://github.com/user-attachments/assets/c260d9e2-f17c-4dc4-9a23-3d9173c083b9)
+  ![Copy Chat Link beside New Chat in the chat composer](https://github.com/user-attachments/assets/d8f285a5-6ee0-4338-8ff3-a458d5030d53)
 
 - Copilot agent is fine-tuned to work better with your frontier AI agent with our up-to-date system prompts. ([#3366](https://github.com/logancyang/obsidian-copilot/pull/3366), @zeroliu)
 - Copilot is now fully compatible with OpenCode 2. ([#3365](https://github.com/logancyang/obsidian-copilot/pull/3365), @zeroliu)
