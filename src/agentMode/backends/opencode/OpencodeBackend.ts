@@ -490,6 +490,11 @@ export async function buildOpencodeConfig(
 
   return {
     providers,
+    // OpenCode's variant plugin guesses effort levels from model ids (glm-5.2
+    // gains `max`) and merges them over configured variants, which cannot be
+    // disabled individually. Only published levels are trusted, so drop it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/557
+    plugins: ["-opencode.variant"],
     permissions: permissions.length > 0 ? permissions : undefined,
     agents: {
       [OPENCODE_BUILTIN_BUILD_AGENT_ID]: {

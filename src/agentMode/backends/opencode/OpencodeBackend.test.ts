@@ -724,6 +724,21 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     });
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 disables OpenCode's model-id effort guesses so glm-5.2 offers only its published levels", async () => {
+    const deps = makeDeps({
+      resolved: [okEntry(makePlusProvider(), makePlusReasoningModel("glm-5.2", ["none", "high"]))],
+      keys: { "p-plus": "plus-token-123" },
+    });
+
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+    expect(cfg.plugins).toEqual(["-opencode.variant"]);
+    expect(cfg.providers["copilot-plus"].models?.["glm-5.2"]?.variants).toEqual([
+      { id: "none", settings: { reasoningEffort: "none" } },
+      { id: "high", settings: { reasoningEffort: "high" } },
+    ]);
+  });
+
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 offers no effort levels when Copilot Plus levels are unknown, leaving the model at its default", async () => {
     // A row cached before the service published levels, or one reconciled from a
     // response that could not be read. Either way an imperfect menu beats
