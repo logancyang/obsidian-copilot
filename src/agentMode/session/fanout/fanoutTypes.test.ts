@@ -8,6 +8,7 @@ import {
   EMPTY_PENDING_FANOUT_CONTEXT,
   FANOUT_HISTORY_MAX_CHARS,
   FANOUT_PERSISTED_ANSWER_MAX_CHARS,
+  FANOUT_READONLY_PREAMBLE,
   isDirectAnswerTurn,
   isVaultWriteToolKind,
   parseFanoutComposite,
@@ -28,6 +29,14 @@ const histMsg = (sender: string, message: string): AgentChatMessage => ({
 const upper = (id: string) => id.toUpperCase();
 
 describe("fanoutTypes", () => {
+  describe("FANOUT_READONLY_PREAMBLE", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3376 allows shell inspection while prohibiting state-changing commands", () => {
+      expect(FANOUT_READONLY_PREAMBLE).toMatch(/shell commands? to (?:list|read)/i);
+      expect(FANOUT_READONLY_PREAMBLE).toMatch(/do not .+commands that change state/i);
+      expect(FANOUT_READONLY_PREAMBLE).not.toMatch(/do not .+shell tools/i);
+    });
+  });
+
   describe("isDirectAnswerTurn()", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 identifies only a sole answer without a generated summary", () => {
       const direct: FanoutTurn = {
@@ -62,7 +71,7 @@ describe("fanoutTypes", () => {
 
     it("allows read/search/fetch/think/switch_mode/other/execute tool kinds", () => {
       // `execute` passes so Copilot's skill-script relay tools (web search/fetch)
-      // run in a read-only QA turn; the prompt + sandbox keep shell from writing.
+      // run in a read-only QA turn; the preamble asks agents to use reads.
       const allowed: AgentToolKind[] = [
         "read",
         "search",
