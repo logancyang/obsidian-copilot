@@ -220,13 +220,19 @@ export class OpencodeBackend implements AcpBackend {
 
     return {
       command: binaryPath,
-      args: ["acp"],
+      // The private server inherits stderr only when ACP enables log printing.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
+      args: ["acp", "--print-logs"],
       // OpenCode uses the process directory for project discovery; its ACP
       // command has no --cwd flag. https://github.com/Brevilabs/obsidian-copilot-private/issues/555
       cwd: ctx.vaultBasePath,
       env: {
         ...process.env,
         ...builtinSkillEnv,
+        // The private service logs at INFO by default; inherited stderr would
+        // flood Copilot's log during normal turns.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
+        OPENCODE_LOG_LEVEL: "WARN",
         // User overrides stay last for ordinary values. Copilot-owned Miyo
         // scope keys were removed above so they cannot widen Current vault.
         ...envOverrides,

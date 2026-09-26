@@ -3738,8 +3738,18 @@ export class AgentSessionManager {
    * when both the manager was configured with one and the backend advertises
    * the optional `setAskUserQuestionPrompter` surface.
    */
-  private wirePrompters(proc: BackendProcess): void {
+  private wirePrompters(backendId: BackendId, proc: BackendProcess): void {
     proc.setPermissionPrompter(this.opts.permissionPrompter);
+    proc.setUnhealthyHandler?.(() => {
+      if (this.disposed || this.backends.get(backendId) !== proc) return;
+      // The rejected turn must finish writing its error before replacement.
+      // restartBackend defers while that session is running.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
+      void this.restartBackend(backendId, "internal service stopped").catch((err) => {
+        this.setLastError(err2String(err));
+        logError(`[AgentMode] ${backendId} internal service restart failed`, err);
+      });
+    });
     if (this.opts.askUserQuestionPrompter) {
       proc.setAskUserQuestionPrompter?.(this.opts.askUserQuestionPrompter);
     }
@@ -3775,7 +3785,7 @@ export class AgentSessionManager {
       if (warm) {
         // Probe subprocess is already started + initialize-handshaken —
         // wire it into the manager without paying either cost again.
-        this.wirePrompters(warm.proc);
+        this.wirePrompters(backendId, warm.proc);
         this.installBackendExitHandler(backendId, warm.proc, descriptor);
         this.backends.set(backendId, warm.proc);
         return warm.proc;
@@ -3796,7 +3806,7 @@ export class AgentSessionManager {
       // ACP backends declare `start()` to spawn the subprocess and run the
       // initialize handshake. In-process adapters (Claude SDK) omit it.
       if (proc.start) await proc.start();
-      this.wirePrompters(proc);
+      this.wirePrompters(backendId, proc);
       this.installBackendExitHandler(backendId, proc, descriptor);
       this.backends.set(backendId, proc);
       return proc;
@@ -3999,6 +4009,8 @@ export class AgentSessionManager {
             label: session.getLabel(),
             labelSource: session.getLabelSource(),
             detached: this.detachedFromTabIds.has(session.internalId),
+            recoveryMessages:
+              session.getStatus() === "error" ? session.store.getDisplayMessages() : undefined,
           }))
         : [];
       for (const replacement of replacements) {
@@ -4033,6 +4045,15 @@ export class AgentSessionManager {
               replacement.label,
               replacement.labelSource
             );
+            // A fresh fallback has no backend history for these messages;
+            // displaying them there would imply the agent can see that context.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
+            if (
+              rebuilt.getBackendSessionId() === replacement.resumableSessionId &&
+              replacement.recoveryMessages?.length
+            ) {
+              rebuilt.loadDisplayMessages(replacement.recoveryMessages);
+            }
             if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
             if (replacement.internalId === activeSessionId) selectedId = rebuilt.internalId;
           }
