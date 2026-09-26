@@ -14,6 +14,13 @@ let requestUrlImpl = jest.fn().mockResolvedValue({
 
 module.exports = {
   moment: jest.requireActual("moment"),
+  prepareSimpleSearch: (query) => {
+    const words = query.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+    return (text) => {
+      const haystack = text.toLocaleLowerCase();
+      return words.every((word) => haystack.includes(word)) ? { score: 0, matches: [] } : null;
+    };
+  },
   requestUrl: (...args) => requestUrlImpl(...args),
   __setRequestUrlImpl: (impl) => {
     requestUrlImpl = impl;
@@ -73,6 +80,33 @@ module.exports = {
   parseYaml: jest.fn().mockImplementation((content) => {
     return parseYamlString(content);
   }),
+  parseFrontMatterAliases: (frontmatter) => {
+    const value = frontmatter?.aliases ?? frontmatter?.alias;
+    if (typeof value === "string") return [value];
+    if (Array.isArray(value)) return value.filter((alias) => typeof alias === "string");
+    return null;
+  },
+  setIcon: jest.fn((element, icon) => {
+    element.replaceChildren();
+    const svg = element.ownerDocument.createElement("svg");
+    svg.dataset.icon = icon;
+    element.appendChild(svg);
+  }),
+  getAllTags: (cache) => {
+    const frontmatterValue = cache?.frontmatter?.tags ?? cache?.frontmatter?.tag;
+    const frontmatterTags = Array.isArray(frontmatterValue)
+      ? frontmatterValue
+      : typeof frontmatterValue === "string"
+        ? frontmatterValue.split(/[\s,]+/)
+        : [];
+    const tags = [
+      ...frontmatterTags.filter((tag) => typeof tag === "string"),
+      ...(cache?.tags ?? []).map(({ tag }) => tag),
+    ]
+      .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`))
+      .filter(Boolean);
+    return tags.length ? Array.from(new Set(tags)) : null;
+  },
   Modal: class Modal {
     constructor(app) {
       this.app = app;
@@ -100,6 +134,10 @@ module.exports = {
     load() {}
     unload() {}
     register() {}
+    registerEvent() {}
+    registerDomEvent(el, type, callback, options) {
+      el.addEventListener(type, callback, options);
+    }
   },
   // Base class for FolderSearchModal & friends; subclasses only need it to be
   // constructable so suites that pull them into the module graph can load.

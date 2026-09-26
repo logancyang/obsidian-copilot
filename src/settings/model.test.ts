@@ -138,6 +138,27 @@ describe("sanitizeSettings - autoAddActiveContentToContext migration", () => {
   });
 });
 
+describe("sanitizeSettings - tag suggestion focus trigger", () => {
+  it("defaults click-triggered tag suggestions on for existing settings", () => {
+    const settings = { ...DEFAULT_SETTINGS } as unknown as Record<string, unknown>;
+    delete settings.suggestTagsOnPropertyFocus;
+
+    const sanitized = sanitizeSettings(settings as unknown as CopilotSettings);
+
+    expect(DEFAULT_SETTINGS.suggestTagsOnPropertyFocus).toBe(true);
+    expect(sanitized.suggestTagsOnPropertyFocus).toBe(true);
+  });
+
+  it("preserves an explicit opt-out", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      suggestTagsOnPropertyFocus: false,
+    });
+
+    expect(sanitized.suggestTagsOnPropertyFocus).toBe(false);
+  });
+});
+
 describe("sanitizeSettings - agentMode shape migration", () => {
   it("creates a default agentMode slice when missing", () => {
     const sanitized = sanitizeSettings({
@@ -400,6 +421,29 @@ describe("sanitizeEnvOverrides", () => {
 });
 
 describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
+  it(`defaults a missing AI boost preference on without overwriting an explicit choice (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, () => {
+    const missing = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      vaultSearchAiBoostEnabled: undefined,
+    } as unknown as CopilotSettings);
+    const disabled = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      vaultSearchAiBoostEnabled: false,
+    });
+
+    expect(missing.vaultSearchAiBoostEnabled).toBe(true);
+    expect(disabled.vaultSearchAiBoostEnabled).toBe(false);
+  });
+
+  it(`normalizes persisted vault-search exclusions without requiring a migration (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/515"})`, () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      vaultSearchExcludedFileTypes: [".PDF", " epub ", "pdf", 7],
+    } as unknown as CopilotSettings);
+
+    expect(sanitized.vaultSearchExcludedFileTypes).toEqual(["pdf", "epub"]);
+  });
+
   it("migrates legacy Miyo settings and strips obsolete remote vault path state", () => {
     const legacySettings = {
       ...DEFAULT_SETTINGS,

@@ -72,6 +72,19 @@ If your plugin does not need CSS, delete this file.
   padding: 0;
 }
 
+.modal.copilot-vault-search-modal {
+  width: min(52rem, calc(100vw - 3rem));
+  min-width: 0;
+  max-width: calc(100vw - 3rem);
+  overflow: hidden;
+}
+
+/* Obsidian owns the modal frame. Keep result updates scrolling inside the
+   React viewport instead of letting the native content box remeasure. */
+.modal.copilot-vault-search-modal .modal-content {
+  overflow: hidden;
+}
+
 /* The shell owns the title, so the native header must not reserve space, and a
    host that sets a title anyway must not stack a second heading above the
    shell's own. Suppressing it here rather than per host keeps every future
@@ -1070,4 +1083,42 @@ If your plugin does not need CSS, delete this file.
 /* Gradient fade mask for truncated content */
 .copilot-fade-mask-bottom {
   background: linear-gradient(to top, var(--background-primary), transparent);
+}
+
+/* This plain-DOM row swaps in for Obsidian's native tags property while focused. */
+.copilot-tag-suggestion-row + .metadata-property[data-property-key="tags"],
+.copilot-tag-suggestion-row + .metadata-property[data-property-key="tag"] {
+  display: none;
+}
+
+.copilot-tag-suggestion-row .multi-select-pill {
+  appearance: none;
+  background-color: var(--pill-background);
+  box-shadow: none;
+  color: var(--pill-color);
+  cursor: pointer;
+  font: inherit;
+  font-size: inherit;
+  height: auto;
+}
+
+.copilot-tag-suggestion-row .multi-select-pill-content {
+  margin-inline-end: var(--pill-padding-x);
+}
+
+.copilot-tag-suggestion-pill,
+.copilot-tag-suggestion-placeholder {
+  border: 0;
+  opacity: 0.55;
+  outline: 1px dashed currentcolor;
+  outline-offset: -1px;
+}
+
+.copilot-tag-suggestion-pill:hover,
+.copilot-tag-suggestion-pill:focus-visible {
+  opacity: 1;
+}
+
+.copilot-tag-suggestion-placeholder {
+  cursor: default;
 }

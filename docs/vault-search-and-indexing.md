@@ -4,6 +4,18 @@ Copilot V4 uses ordinary file tools for exact text and file lookup. For meaning-
 
 Miyo is a local-first knowledge service built for more than one plugin. It can search notes by meaning, process supported documents, search selected chat histories, and make the same knowledge available to the AI tools you choose. Your knowledge stays in a system you control instead of being locked inside one chat feature.
 
+## Search for a file directly
+
+Run **Open Copilot search** from Obsidian's command palette, or assign it a hotkey under **Settings → Hotkeys**. Type what you remember about a file to search its name and, when Miyo is connected, its indexed content. Results can include Markdown notes, PDFs, EPUBs, HTML, and any other file types present in the vault.
+
+Before you type, Copilot shows example content and filename searches instead of files from your vault. Turn on **AI boost** to see different examples for comparisons, decisions, and cross-language searches. Examples that mention a file type use types that are present and selected in the vault. Select any suggestion to put it in the search field and run it.
+
+Use the file-type filters to narrow the list. Copilot remembers unchecked types the next time you open the search. Press **Up** or **Down** to choose a result, **Enter** to open it, **Cmd+Enter** on macOS or **Ctrl+Enter** elsewhere to open it in a new tab, and **Escape** to close the search.
+
+When Miyo is disconnected or unavailable, filename matching still works and the search explains that Miyo is needed for content search. Files Obsidian cannot display open in their default desktop application; those files cannot be opened from this search on mobile.
+
+For licensed users, **AI boost** is on by default and reorders a bounded result set using the query, file metadata, and the best matching Miyo excerpts. If that optional ranking service is unavailable, Copilot keeps the Miyo results in their original order and shows **AI boost unavailable**.
+
 ## What moved from Copilot V3
 
 Semantic search from Copilot V3 has moved to Miyo. Connect Miyo and enable its semantic-search Skill for a more powerful local-first path. Copilot no longer exposes controls for its old in-plugin index.

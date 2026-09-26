@@ -1,5 +1,6 @@
 import { Markdown } from "@/components/Markdown";
 import { Button } from "@/components/ui/button";
+import { RelevanceMeter } from "@/components/chat-components/ui/RelevanceMeter";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { useApp } from "@/context";
 import { useNoteDrag } from "@/hooks/useNoteDrag";
@@ -8,54 +9,6 @@ import { type RelevantNoteEntry } from "@/search/findRelevantNotes";
 import { ArrowRight, FileInput, FileOutput, FileText, PlusCircle } from "lucide-react";
 import { TFile } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
-
-/** Map a 0–1 similarity score directly to the meter fill width (70% → 70%). */
-function meterWidth(score: number): string {
-  return `${Math.max(0, Math.min(100, score * 100))}%`;
-}
-
-/** Color-grade the meter: stronger matches lean fully into the theme accent. */
-function meterColor(score: number): string {
-  const pct = score * 100;
-  const k = Math.max(0, Math.min(1, (pct - 30) / 45));
-  return `color-mix(in srgb, var(--interactive-accent) ${Math.round(40 + 60 * k)}%, var(--text-faint))`;
-}
-
-function RelevanceMeter({
-  score,
-  animated,
-  className,
-}: {
-  score: number;
-  /** False when the reader has asked for reduced motion. */
-  animated: boolean;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "tw-h-[3px] tw-w-full tw-overflow-hidden tw-rounded-full tw-bg-modifier-hover",
-        className
-      )}
-    >
-      <div
-        className={cn(
-          "copilot-relevance-meter-fill tw-h-full tw-rounded-full",
-          // A live re-rank rewrites the score, and growing or shrinking the bar
-          // is what makes a note's rising relevance readable as it happens.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
-          animated && "tw-transition-[width,background-color] tw-duration-500 tw-ease-out"
-        )}
-        style={
-          {
-            "--relevance-meter-fill": meterWidth(score),
-            "--relevance-meter-color": meterColor(score),
-          } as React.CSSProperties
-        }
-      />
-    </div>
-  );
-}
 
 function LinkBadge({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
@@ -146,8 +99,8 @@ function RelevantNoteHoverCard({
         <div className="tw-flex tw-items-center tw-gap-2">
           <span className="tw-shrink-0 tw-text-xs tw-text-faint">Similarity</span>
           <RelevanceMeter score={similarity} animated={animated} className="tw-h-1 tw-flex-1" />
-          <span className="tw-shrink-0 tw-text-xs tw-font-medium tw-tabular-nums tw-text-normal">
-            {(similarity * 100).toFixed(1)}%
+          <span className="tw-shrink-0 tw-text-xs tw-font-medium tw-tabular-nums tw-text-muted">
+            {Math.round(similarity * 100)}%
           </span>
         </div>
 

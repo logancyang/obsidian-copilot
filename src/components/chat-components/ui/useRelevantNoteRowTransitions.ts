@@ -12,24 +12,24 @@ const ROW_MOVE_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
 /** A sub-pixel drift is layout noise, not a rank change worth animating. */
 const MOVE_THRESHOLD_PX = 0.5;
 
-const EMPTY_ROWS: readonly RelevantNoteRow[] = Object.freeze([]);
+const EMPTY_ROWS: readonly TransitionRow<never>[] = Object.freeze([]);
 
-export interface RelevantNoteRow {
-  note: RelevantNoteEntry;
+export interface TransitionRow<T> {
+  note: T;
   /** True while the note is still mounted only to play its removal. */
   exiting: boolean;
   /** True while the note should play its arrival. */
   entering: boolean;
 }
 
-interface TransitionState {
+interface TransitionState<T> {
   sourceKey: string | undefined;
-  notes: readonly RelevantNoteEntry[];
-  rows: readonly RelevantNoteRow[];
+  notes: readonly T[];
+  rows: readonly TransitionRow<T>[];
 }
 
 /** Render a list outright, with no row held back and no arrival to play. */
-function replaceRows(notes: readonly RelevantNoteEntry[]): readonly RelevantNoteRow[] {
+function replaceRows<T>(notes: readonly T[]): readonly TransitionRow<T>[] {
   return notes.map((note) => ({ note, exiting: false, entering: false }));
 }
 
@@ -38,22 +38,23 @@ function replaceRows(notes: readonly RelevantNoteEntry[]): readonly RelevantNote
  * removal can be seen, and keep rows already on their way out until their timer
  * drops them.
  */
-function mergeRows(
-  previousRows: readonly RelevantNoteRow[],
-  notes: readonly RelevantNoteEntry[]
-): readonly RelevantNoteRow[] {
-  const previousByPath = new Map(previousRows.map((row) => [row.note.note.path, row]));
-  const nextPaths = new Set(notes.map((note) => note.note.path));
-  const rows: RelevantNoteRow[] = notes.map((note) => ({
+function mergeRows<T>(
+  previousRows: readonly TransitionRow<T>[],
+  notes: readonly T[],
+  getPath: (note: T) => string
+): readonly TransitionRow<T>[] {
+  const previousByPath = new Map(previousRows.map((row) => [getPath(row.note), row]));
+  const nextPaths = new Set(notes.map(getPath));
+  const rows: TransitionRow<T>[] = notes.map((note) => ({
     note,
     exiting: false,
     // A row already on screen must keep whatever it was mounted with: turning
     // its arrival on now would replay the animation on a row that never left.
-    entering: previousByPath.get(note.note.path)?.entering ?? true,
+    entering: previousByPath.get(getPath(note))?.entering ?? true,
   }));
 
   previousRows.forEach((previousRow, previousIndex) => {
-    if (nextPaths.has(previousRow.note.note.path)) return;
+    if (nextPaths.has(getPath(previousRow.note))) return;
     rows.splice(Math.min(previousIndex, rows.length), 0, {
       note: previousRow.note,
       exiting: true,
@@ -82,15 +83,18 @@ function mergeRows(
  * @param animated - False when the reader has asked for reduced motion.
  * @returns The rows to render and the ref callback each row must register with.
  */
-export function useRelevantNoteRowTransitions(
-  notes: readonly RelevantNoteEntry[],
+export function useRelevantNoteRowTransitions<T = RelevantNoteEntry>(
+  notes: readonly T[],
   sourceKey: string | undefined,
-  animated: boolean
+  animated: boolean,
+  getPath: (note: T) => string = ((note: RelevantNoteEntry) => note.note.path) as (
+    note: T
+  ) => string
 ): {
-  rows: readonly RelevantNoteRow[];
+  rows: readonly TransitionRow<T>[];
   registerRow: (path: string) => (node: HTMLElement | null) => void;
 } {
-  const [state, setState] = useState<TransitionState>(() => ({
+  const [state, setState] = useState<TransitionState<T>>(() => ({
     sourceKey,
     notes,
     rows: replaceRows(notes),
@@ -110,7 +114,7 @@ export function useRelevantNoteRowTransitions(
     setState({
       sourceKey,
       notes,
-      rows: reranking ? mergeRows(state.rows, notes) : replaceRows(notes),
+      rows: reranking ? mergeRows(state.rows, notes, getPath) : replaceRows(notes),
     });
   }
 
@@ -165,5 +169,8 @@ export function useRelevantNoteRowTransitions(
     []
   );
 
-  return { rows: state.rows.length > 0 ? state.rows : EMPTY_ROWS, registerRow };
+  return {
+    rows: state.rows.length > 0 ? state.rows : EMPTY_ROWS,
+    registerRow,
+  };
 }

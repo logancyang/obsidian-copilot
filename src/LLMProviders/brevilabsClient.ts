@@ -130,6 +130,26 @@ export interface RerankResponse {
   elapsed_time_ms: number;
 }
 
+export interface BrocaResponse<TAnswer = unknown> {
+  response: {
+    model: string;
+    answers: Record<string, TAnswer>;
+    usage: Record<string, unknown>;
+  };
+  elapsed_time_ms: number;
+}
+
+/** Represents an HTTP failure returned by the Brevilabs API, not a local transport error. */
+export class BrevilabsApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number
+  ) {
+    super(message);
+    this.name = "BrevilabsApiError";
+  }
+}
+
 export interface ToolCall {
   tool: unknown;
   args: unknown;
@@ -234,6 +254,7 @@ export type LicenseCheckTrigger =
   | "legacy_chat_turn"
   | "multi_agent_per_turn"
   | "tool_call"
+  | "vault_search"
   | "model_gate";
 
 /** Product context attached to each license validation request. */
@@ -458,6 +479,23 @@ export class BrevilabsClient {
     }
 
     return data;
+  }
+
+  async broca<TState, TQuestion, TAnswer = unknown>(
+    state: TState,
+    questions: Record<string, TQuestion>
+  ): Promise<Record<string, TAnswer>> {
+    const { data, error, status } = await this.makeRequest<BrocaResponse<TAnswer>>("/broca", {
+      state,
+      questions,
+    });
+    if (error) {
+      throw new BrevilabsApiError(error.message, status);
+    }
+    if (!data) {
+      throw new BrevilabsApiError("No data returned from broca", status);
+    }
+    return data.response.answers;
   }
 
   /**

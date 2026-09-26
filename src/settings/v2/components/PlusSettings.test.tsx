@@ -77,6 +77,17 @@ describe("PlusSettings", () => {
       expect(screen.getByText("lite")).toBeTruthy();
     });
 
+    it("shows the default-on tag suggestion trigger beside the Plus license settings", () => {
+      render(<PlusSettings />);
+
+      expect(screen.getByText("Suggest tags when I click into the tags property")).toBeTruthy();
+      expect(screen.getByRole("switch").getAttribute("data-state")).toBe("checked");
+
+      act(() => screen.getByRole("switch").click());
+
+      expect(updateSetting).toHaveBeenCalledWith("suggestTagsOnPropertyFocus", false);
+    });
+
     it("reports a stored key that grants nothing as inactive, alongside the pitch", () => {
       mockLicenseState = { status: "inactive" };
 

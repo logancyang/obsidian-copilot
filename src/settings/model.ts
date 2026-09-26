@@ -110,6 +110,7 @@ export interface CopilotSettings {
   defaultConversationTag: string;
   autosaveChat: boolean;
   autoAddActiveContentToContext: boolean;
+  suggestTagsOnPropertyFocus: boolean;
   customPromptsFolder: string;
   chatNoteContextPath: string;
   chatNoteContextTags: string[];
@@ -157,6 +158,10 @@ export interface CopilotSettings {
   enableMiyoSearchSkill: boolean;
   /** When true, omit folder_name from Miyo search requests so all indexed content is searched */
   miyoSearchAll: boolean;
+  /** File extensions excluded in Open Copilot search; new extensions remain selected by default. */
+  vaultSearchExcludedFileTypes: string[];
+  /** Remembered modal-only preference for licensed Jev re-ranking. */
+  vaultSearchAiBoostEnabled: boolean;
   /**
    * Keep Relevant Notes in step with the note being written. Miyo re-embeds a
    * file a few seconds after it lands on disk, so the pane can re-rank itself
@@ -999,6 +1004,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     }
   }
 
+  if (typeof sanitizedSettings.suggestTagsOnPropertyFocus !== "boolean") {
+    sanitizedSettings.suggestTagsOnPropertyFocus = DEFAULT_SETTINGS.suggestTagsOnPropertyFocus;
+  }
+
   // Ensure enableMiyo has a default value
   if (typeof sanitizedSettings.enableMiyo !== "boolean") {
     sanitizedSettings.enableMiyo = DEFAULT_SETTINGS.enableMiyo;
@@ -1012,6 +1021,21 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure miyoSearchAll has a default value
   if (typeof sanitizedSettings.miyoSearchAll !== "boolean") {
     sanitizedSettings.miyoSearchAll = DEFAULT_SETTINGS.miyoSearchAll;
+  }
+
+  const rawVaultSearchExcludedTypes = rawSettings.vaultSearchExcludedFileTypes;
+  sanitizedSettings.vaultSearchExcludedFileTypes = Array.isArray(rawVaultSearchExcludedTypes)
+    ? [
+        ...new Set(
+          rawVaultSearchExcludedTypes
+            .filter((value): value is string => typeof value === "string")
+            .map((value) => value.trim().replace(/^\.+/, "").toLowerCase())
+            .filter(Boolean)
+        ),
+      ]
+    : DEFAULT_SETTINGS.vaultSearchExcludedFileTypes;
+  if (typeof sanitizedSettings.vaultSearchAiBoostEnabled !== "boolean") {
+    sanitizedSettings.vaultSearchAiBoostEnabled = DEFAULT_SETTINGS.vaultSearchAiBoostEnabled;
   }
 
   // Ensure relevantNotesLiveUpdate has a default value
