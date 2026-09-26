@@ -375,11 +375,10 @@ export class AgentSessionManager {
    */
   private readonly retainedChatInputIds = new Set<string>();
   /**
-   * `backendId:baseModelId` pairs already warned about, since the read that
-   * discovers them runs on every session create and default re-apply.
+   * `backendId:baseModelId` pairs already reported as unavailable.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
    */
-  private readonly warnedMissingDefaults = new Set<string>();
+  private readonly warnedUnavailableModels = new Set<string>();
   private readonly preloader: AgentModelPreloader;
   /**
    * Per-backend preload status. The chat UI gates its first render on the
@@ -2211,58 +2210,67 @@ export class AgentSessionManager {
   }
 
   /**
-   * The model to start a session on: the sticky preference, or an enabled
-   * stand-in when that preference names a model the backend no longer offers.
-   *
-   * A saved default outlives its model (Copilot Plus withdraws it, or its
-   * provider is deleted) because the removal cascade never touches this
-   * preference. Seeding the stale selection does not fail loudly: the backend
-   * rejects it and the session keeps whatever model the agent picked for
-   * itself. Substituting here rather than in {@link getDefaultSelection} keeps
-   * the saved value visible in settings and applying again if the model returns.
+   * Chooses a runnable startup model without changing the saved preference.
+   * A carried selection wins, then the saved default, then the first enabled
+   * model with credentials. With no explicit selection, the agent keeps its
+   * own default.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
+   * https://github.com/logancyang/obsidian-copilot/issues/3319
+   *
+   * @param backendId Agent whose enabled models constrain the selection.
+   * @param preferred Selection retained by a rebuilt tab.
+   * @param catalog Models advertised by the live session, when available.
    */
-  getSeedSelection(backendId: BackendId): ModelSelection | null {
+  getSeedSelection(
+    backendId: BackendId,
+    preferred?: ModelSelection | null,
+    catalog?: BackendModelCatalog | null
+  ): ModelSelection | null {
     const saved = this.getDefaultSelection(backendId);
-    if (!saved) return null;
-
     const offered = this.opts.resolveDescriptor(backendId)?.getEnabledModelEntries?.(getSettings());
-    // An empty list is not evidence the saved model is gone: an agent-native
-    // model stays routable whether or not Copilot's enabled list curates it.
-    if (!offered || offered.length === 0) return saved;
-    if (offered.some((entry) => entry.baseModelId === saved.baseModelId)) return saved;
+    const requested = preferred ?? saved;
+    // A missing accessor cannot validate agent-native models. An empty list is
+    // authoritative because it can mean the user just disabled the last model.
+    // https://github.com/logancyang/obsidian-copilot/issues/3319
+    if (!offered) return requested;
 
-    // Naming a replacement beats seeding nothing, since the agent's own default
-    // lands outside the enabled list in practice. Missing-key entries would be
-    // rejected like the withdrawn default; effort is left unset so the model's
-    // own default level applies.
-    const replacement = offered.find((entry) => entry.credentialState === "ok");
-    this.warnDefaultNoLongerOffered(backendId, saved.baseModelId, replacement?.name);
-    return replacement ? { baseModelId: replacement.baseModelId, effort: null } : null;
+    const runnable = offered.filter(
+      (entry) =>
+        entry.credentialState === "ok" &&
+        (!catalog?.availableModels?.length ||
+          catalog.availableModels.some((model) => model.baseModelId === entry.baseModelId))
+    );
+    if (!requested) return null;
+
+    const resolved =
+      [preferred, saved].find(
+        (selection): selection is ModelSelection =>
+          !!selection && runnable.some((entry) => entry.baseModelId === selection.baseModelId)
+      ) ?? (runnable[0] ? { baseModelId: runnable[0].baseModelId, effort: null } : null);
+    if (resolved?.baseModelId !== requested.baseModelId) {
+      const replacementName = runnable.find(
+        (entry) => entry.baseModelId === resolved?.baseModelId
+      )?.name;
+      this.warnSelectionNotRunnable(backendId, requested.baseModelId, replacementName);
+    }
+    return resolved;
   }
 
-  /**
-   * Tell the user once per withdrawn model that it is gone, since the session
-   * silently starting on a different one is the whole failure here.
-   *
-   * @param replacementName - Display name of the enabled model new chats now
-   *   start on, or undefined when the agent's own default takes over.
-   */
-  private warnDefaultNoLongerOffered(
+  private warnSelectionNotRunnable(
     backendId: BackendId,
     baseModelId: string,
     replacementName?: string
   ): void {
     const key = `${backendId}:${baseModelId}`;
-    if (this.warnedMissingDefaults.has(key)) return;
-    this.warnedMissingDefaults.add(key);
+    if (this.warnedUnavailableModels.has(key)) return;
+    this.warnedUnavailableModels.add(key);
     const agent = this.resolveDescriptor(backendId).displayName;
     const model = baseModelId.split("/").pop() || baseModelId;
-    logInfo(`[AgentMode] ${backendId} default model ${baseModelId} is no longer offered`);
+    logInfo(`[AgentMode] ${backendId} cannot start a chat on ${baseModelId}`);
     new Notice(
       replacementName
-        ? `${agent} no longer offers ${model}. New chats use ${replacementName} until you pick a new default.`
-        : `${agent} no longer offers ${model}. Pick a model to make it your default again.`
+        ? `${agent} couldn't use ${model}. Using ${replacementName} instead.`
+        : `${agent} couldn't use ${model}. Enable a model ${agent} can run.`
     );
   }
 
@@ -3267,7 +3275,8 @@ export class AgentSessionManager {
     backendId: BackendId,
     sessionId: SessionId,
     projectId: ProjectScopeId,
-    chatInputId?: string
+    chatInputId?: string,
+    seedSelection?: ModelSelection
   ): Promise<AgentSession | null> {
     const existing = this.findLiveSession(backendId, sessionId);
     if (existing) return existing;
@@ -3280,7 +3289,8 @@ export class AgentSessionManager {
       backendId,
       sessionId,
       projectId,
-      chatInputId
+      chatInputId,
+      seedSelection
     ).finally(() => {
       if (this.resumedSessionPromiseById.get(key) === resume) {
         this.resumedSessionPromiseById.delete(key);
@@ -3291,15 +3301,21 @@ export class AgentSessionManager {
   }
 
   /**
+   * @param backendId Agent that owns the stored conversation.
+   * @param sessionId Conversation to restore from the backend store.
+   * @param projectId Scope whose instructions and context the session uses.
    * @param chatInputId Composer the resumed session should keep owning. Set
    *   only when an on-screen chat is being rebuilt in place (a backend
    *   restart); a resume opened from history mints its own.
+   * @param seedSelection Selection retained by an open tab across a restart;
+   *   absent for a resume opened from history, which keeps the backend's own.
    */
   private async resumeSessionFromHistory(
     backendId: BackendId,
     sessionId: SessionId,
     projectId: ProjectScopeId,
-    chatInputId?: string
+    chatInputId?: string,
+    seedSelection?: ModelSelection
   ): Promise<AgentSession | null> {
     // Same instruction ensure as `createSession` — a resumed session still derives its cwd
     // from the scope, so the backend needs the file present before cwd is read.
@@ -3402,6 +3418,12 @@ export class AgentSessionManager {
       return null;
     }
 
+    // Restarted tabs carry their selection; history opens keep the loaded model.
+    // https://github.com/logancyang/obsidian-copilot/issues/3319
+    const resolvedSeed = seedSelection
+      ? (this.getSeedSelection(backendId, seedSelection, resumeResult.state.model) ?? undefined)
+      : undefined;
+
     const internalId = uuidv4();
     const session = new AgentSession({
       backend,
@@ -3411,6 +3433,7 @@ export class AgentSessionManager {
       backendId,
       projectId,
       initialState: resumeResult.state,
+      defaultModelSelection: resolvedSeed,
       cwd,
       getDescriptor: () => this.opts.resolveDescriptor(backendId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),
@@ -3430,6 +3453,9 @@ export class AgentSessionManager {
         : {}),
     });
 
+    // Apply the seed before replaying backend-specific startup config.
+    await session.ready;
+
     // ACP backends rebuild the visible transcript from the frames the agent
     // replays during `loadSession`; `resumeSession` (Claude) returns none and
     // is hydrated from its own store further down instead.
@@ -3439,7 +3465,7 @@ export class AgentSessionManager {
 
     if (descriptor.applyInitialSessionConfig) {
       try {
-        await descriptor.applyInitialSessionConfig(session, getSettings());
+        await descriptor.applyInitialSessionConfig(session, getSettings(), resolvedSeed);
       } catch (e) {
         logWarn(
           `[AgentMode] applyInitialSessionConfig failed for resumed ${backendId} session; continuing`,
@@ -3919,6 +3945,7 @@ export class AgentSessionManager {
    * @param resumableSessionId Backend session id the replaced tab was bound to.
    * @param label Replaced tab's title, reapplied when the resume comes back untitled.
    * @param labelSource Whether that title was the user's or the agent's.
+   * @param seedSelection Model and effort retained by the replaced tab.
    */
   private async rebuildReplacedSession(
     backendId: BackendId,
@@ -3926,14 +3953,16 @@ export class AgentSessionManager {
     chatInputId: string | undefined,
     resumableSessionId: SessionId | undefined,
     label: string | null,
-    labelSource: "user" | "agent" | null
+    labelSource: "user" | "agent" | null,
+    seedSelection?: ModelSelection
   ): Promise<AgentSession> {
     if (resumableSessionId) {
       const resumed = await this.tryResumeSessionFromHistory(
         backendId,
         resumableSessionId,
         projectId,
-        chatInputId
+        chatInputId,
+        seedSelection
       ).catch((e) => {
         logWarn(`[AgentMode] resume after ${backendId} restart failed`, e);
         return null;
@@ -3947,7 +3976,13 @@ export class AgentSessionManager {
         return resumed;
       }
     }
-    return this.createSession(backendId, projectId, undefined, chatInputId);
+    // A model-setting change can trigger this restart, so validate the seed
+    // before creating the fallback session.
+    // https://github.com/logancyang/obsidian-copilot/issues/3319
+    const fallbackSeed = seedSelection
+      ? (this.getSeedSelection(backendId, seedSelection) ?? undefined)
+      : undefined;
+    return this.createSession(backendId, projectId, fallbackSeed, chatInputId);
   }
 
   /** Immediately tear down `backendId` and rebuild its tabs with their composers. */
@@ -3998,6 +4033,9 @@ export class AgentSessionManager {
             resumableSessionId: session.getBackendSessionId() ?? undefined,
             label: session.getLabel(),
             labelSource: session.getLabelSource(),
+            // The displayed selection is otherwise lost when the process restarts.
+            // https://github.com/logancyang/obsidian-copilot/issues/3319
+            seedSelection: session.getState()?.model?.current,
             detached: this.detachedFromTabIds.has(session.internalId),
           }))
         : [];
@@ -4031,7 +4069,8 @@ export class AgentSessionManager {
               replacement.chatInputId,
               replacement.resumableSessionId,
               replacement.label,
-              replacement.labelSource
+              replacement.labelSource,
+              replacement.seedSelection
             );
             if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
             if (replacement.internalId === activeSessionId) selectedId = rebuilt.internalId;
