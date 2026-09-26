@@ -71,6 +71,7 @@ import {
   isUsingLicensedModels,
   canUseMultiAgent,
   checkIsPaidUser,
+  checkIsPlusUser,
   isPlusEnabled,
   isSelfHostModeValid,
   markPaidPendingEntitlement,
@@ -841,6 +842,38 @@ describe("plusUtils", () => {
       expect(mockValidateLicenseKey).toHaveBeenCalled();
       expect(mockSetSettings).not.toHaveBeenCalled();
       expect(mockUpdateSetting).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("checkIsPlusUser()", () => {
+    it("allows a cached Plus entitlement without another license request", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({ isPlusUser: true }));
+
+      await expect(checkIsPlusUser(undefined, "tool_call")).resolves.toBe(true);
+
+      expect(mockValidateLicenseKey).not.toHaveBeenCalled();
+    });
+
+    it("revalidates once and allows a stale cache when the license confirms Plus", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({ isPlusUser: false }));
+      mockValidateLicenseKey.mockImplementation(async () => {
+        mockGetSettings.mockReturnValue(buildSettings({ isPlusUser: true }));
+        return { isValid: true };
+      });
+
+      await expect(checkIsPlusUser(undefined, "tool_call")).resolves.toBe(true);
+
+      expect(mockValidateLicenseKey).toHaveBeenCalledWith(undefined, { trigger: "tool_call" });
+    });
+
+    it("blocks Lite after validation confirms paid access below Plus", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({ isPaidUser: false, isPlusUser: false }));
+      mockValidateLicenseKey.mockImplementation(async () => {
+        mockGetSettings.mockReturnValue(buildSettings({ isPaidUser: true, isPlusUser: false }));
+        return { isValid: true };
+      });
+
+      await expect(checkIsPlusUser(undefined, "tool_call")).resolves.toBe(false);
     });
   });
 

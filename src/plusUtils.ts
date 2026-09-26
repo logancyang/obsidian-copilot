@@ -2,7 +2,11 @@ import { setModelKey } from "@/aiParams";
 import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredModal";
 import { ChatModelProviders, ChatModels } from "@/constants";
 import { EntitlementFeature, verifyEntitlement } from "@/entitlement";
-import { BrevilabsClient, LicenseCheckContext } from "@/LLMProviders/brevilabsClient";
+import {
+  BrevilabsClient,
+  LicenseCheckContext,
+  LicenseCheckTrigger,
+} from "@/LLMProviders/brevilabsClient";
 import { createProductUrl, PRODUCT_URLS, ProductUtmMedium } from "@/lib/productLinks";
 import { logError, logInfo, logWarn } from "@/logger";
 import {
@@ -226,6 +230,25 @@ export function canUseMultiAgent(): boolean {
 }
 
 /**
+ * Confirm strict Plus access at a service boundary. Cached Plus access avoids
+ * a network request; every other state is revalidated once before the freshly
+ * applied entitlement is read.
+ *
+ * @param app - Obsidian app used by license-expiry UI when available.
+ * @param trigger - Product action that caused the validation request.
+ */
+export async function checkIsPlusUser(
+  app: App | undefined,
+  trigger: LicenseCheckTrigger
+): Promise<boolean> {
+  if (isPlusEnabled()) {
+    return true;
+  }
+  await BrevilabsClient.getInstance().validateLicenseKey(app, { trigger });
+  return isPlusEnabled();
+}
+
+/**
  * Authoritative send-boundary entitlement check for the fan-out feature — the
  * single source of truth the non-React session calls before dispatching, so a UI
  * bypass can't evade the paywall.
@@ -237,15 +260,7 @@ export function canUseMultiAgent(): boolean {
  * HARD block (no single-agent fallback).
  */
 export async function ensureMultiAgentEntitlement(app?: App): Promise<boolean> {
-  if (isPlusEnabled()) {
-    return true;
-  }
-  // Re-verify so a stale-false cache for a real Plus user still gets through;
-  // `validateLicenseKey` applies the signed entitlement or paid-pending state.
-  await BrevilabsClient.getInstance().validateLicenseKey(app, {
-    trigger: "multi_agent_per_turn",
-  });
-  return isPlusEnabled();
+  return checkIsPlusUser(app, "multi_agent_per_turn");
 }
 
 /**

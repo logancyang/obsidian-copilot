@@ -8,6 +8,8 @@ import { waitFor } from "@testing-library/react";
 import { Notice, TFile, type Command } from "obsidian";
 
 const mockRequestMiyoIndexRefresh = jest.fn();
+const mockSuggestTagsForCurrentNote = jest.fn();
+const mockTagSuggestionRow = { show: jest.fn() };
 
 jest.mock("@/commands/CustomCommandChatModal", () => ({
   CustomCommandChatModal: jest.fn(),
@@ -25,6 +27,11 @@ jest.mock("@/miyo/miyoUtils", () => ({
 jest.mock("@/miyo/miyoIndex", () => ({
   requestMiyoIndexRefresh: async (app: unknown): Promise<void> => {
     await mockRequestMiyoIndexRefresh(app);
+  },
+}));
+jest.mock("@/tagSuggestions/tagSuggestionCommand", () => ({
+  suggestTagsForCurrentNote: async (app: unknown, row: unknown): Promise<void> => {
+    await mockSuggestTagsForCurrentNote(app, row);
   },
 }));
 jest.mock("@/miyo/MiyoClient", () => {
@@ -62,6 +69,7 @@ describe("commands", () => {
       const plugin = {
         addCommand: jest.fn((command: Command) => commands.push(command)),
         app: { workspace: { getActiveFile: jest.fn(() => null) } },
+        tagSuggestionRow: mockTagSuggestionRow,
       } as unknown as CopilotPlugin;
 
       registerCommands(plugin, jest.fn());
@@ -69,6 +77,22 @@ describe("commands", () => {
       const command = commands.find(({ id }) => id === COMMAND_IDS.NEW_CHAT);
       expect(command?.name).toBe("New Copilot Quick Chat");
       expect(command?.name).not.toBe(COMMAND_NAMES[COMMAND_IDS.NEW_AGENT_CHAT]);
+    });
+
+    it("registers the tag suggestion command and passes it the plugin app", async () => {
+      const commands: Command[] = [];
+      const plugin = {
+        addCommand: jest.fn((command: Command) => commands.push(command)),
+        app: { workspace: { getActiveFile: jest.fn(() => null) } },
+        tagSuggestionRow: mockTagSuggestionRow,
+      } as unknown as CopilotPlugin;
+
+      registerCommands(plugin, jest.fn());
+      commands.find(({ id }) => id === COMMAND_IDS.SUGGEST_TAGS)?.callback?.();
+
+      await waitFor(() =>
+        expect(mockSuggestTagsForCurrentNote).toHaveBeenCalledWith(plugin.app, mockTagSuggestionRow)
+      );
     });
 
     it("registers the OpenArtifacts palette command and publishes the active Markdown file", () => {
