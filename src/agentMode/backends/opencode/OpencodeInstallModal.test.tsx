@@ -267,7 +267,7 @@ describe("OpencodeInstallModal", () => {
       renderContainer(manager);
 
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to latest" }));
+        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.3" }));
       });
 
       expect(upgradeManaged).toHaveBeenCalledTimes(1);
@@ -284,7 +284,7 @@ describe("OpencodeInstallModal", () => {
       upgradeManaged.mockRejectedValue(new Error("tar exited with 1"));
       renderContainer(manager);
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to latest" }));
+        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.3" }));
       });
       expect(screen.getByText("tar exited with 1")).toBeTruthy();
 
@@ -313,7 +313,7 @@ describe("OpencodeInstallModal", () => {
       // owns the run, so it must not take the run's display with it.
       fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to latest" }));
+        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.3" }));
       });
 
       expect(screen.getAllByRole("progressbar")).toHaveLength(1);
@@ -331,13 +331,13 @@ describe("OpencodeInstallModal", () => {
       renderContainer(manager);
 
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to latest" }));
+        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.3" }));
       });
 
       // Cancel is the user's own doing; the strip must go back to offering the
       // upgrade rather than reporting "Aborted" as a failure.
       expect(screen.queryByText("Aborted")).toBeNull();
-      expect(screen.getByRole("button", { name: "Upgrade to latest" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Upgrade to v2.0.3" })).toBeTruthy();
     });
 
     it("drops a failed upgrade's reason once another binary is applied", async () => {
@@ -350,7 +350,7 @@ describe("OpencodeInstallModal", () => {
       upgradeManaged.mockRejectedValue(new Error("GitHub API rate-limited"));
       renderContainer(manager);
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to latest" }));
+        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.3" }));
       });
       expect(screen.getByText("GitHub API rate-limited")).toBeTruthy();
 
