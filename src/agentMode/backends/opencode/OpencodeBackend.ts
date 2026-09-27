@@ -177,12 +177,18 @@ export class OpencodeBackend implements AcpBackend {
       } catch {
         throw new Error("opencode OPENCODE_CONFIG_CONTENT must be a JSON object.");
       }
-      overriddenConfig.permission = denyNativeWebTools(overriddenConfig.permission);
-      overriddenConfig.permissions = appendNativeWebDenies(overriddenConfig.permissions);
-      // OpenCode 2 reads both the legacy and native permission shapes.
-      for (const agent of agentConfigs(overriddenConfig.agent)) {
-        agent.permission = denyNativeWebTools(agent.permission);
+      // OpenCode 2 still migrates these 1.x keys into rules and agents the
+      // appended denies cannot reach, so Self-Host accepts only the native shape.
+      const legacyKeys = OPENCODE_1_PERMISSION_KEYS.filter(
+        (key) => overriddenConfig[key] !== undefined
+      );
+      if (legacyKeys.length > 0) {
+        throw new Error(
+          `opencode OPENCODE_CONFIG_CONTENT uses OpenCode 1 keys (${legacyKeys.join(", ")}); ` +
+            "Self-Host Mode requires the OpenCode 2 `permissions` and `agents` keys."
+        );
       }
+      overriddenConfig.permissions = appendNativeWebDenies(overriddenConfig.permissions);
       for (const agent of agentConfigs(overriddenConfig.agents)) {
         agent.permissions = appendNativeWebDenies(agent.permissions);
       }
@@ -248,27 +254,6 @@ function normalizeCacheRoot(raw: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-/**
- * Preserve an OpenCode permission policy while making native web access non-overridable.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/165
- *
- * @param permission Existing shorthand or object permission policy.
- */
-function denyNativeWebTools(permission: unknown): Record<string, unknown> {
-  const permissionRecord: Record<string, unknown> =
-    typeof permission === "string"
-      ? { "*": permission }
-      : permission && typeof permission === "object" && !Array.isArray(permission)
-        ? { ...(permission as Record<string, unknown>) }
-        : {};
-  // OpenCode 2 converts these keys to rules in key order and applies the last
-  // match, so reassigning an existing key would leave a later `*` allow winning.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/558
-  delete permissionRecord.websearch;
-  delete permissionRecord.webfetch;
-  return { ...permissionRecord, websearch: "deny", webfetch: "deny" };
-}
-
 /** Agent entries of a user config's agent map, skipping values OpenCode would reject. */
 function agentConfigs(agents: unknown): Record<string, unknown>[] {
   if (!agents || typeof agents !== "object" || Array.isArray(agents)) return [];
@@ -303,6 +288,9 @@ const NATIVE_WEB_DENIES: readonly PermissionRule[] = [
   { action: "websearch", resource: "*", effect: "deny" },
   { action: "webfetch", resource: "*", effect: "deny" },
 ];
+
+/** OpenCode 1 config keys that OpenCode 2 migrates into permission rules or agents. */
+const OPENCODE_1_PERMISSION_KEYS = ["permission", "tools", "agent", "mode"] as const;
 
 /**
  * Build the `OPENCODE_CONFIG_CONTENT` payload from the enabled opencode models.

@@ -180,7 +180,7 @@ Built-in skill preferences record only your changes to the defaults. New skills 
 
 In Self-Host Mode with OpenCode selected, Agent Chat's built-in web-search Skill uses the search provider selected under **Settings → Copilot → Self-Host**. Provider credentials stay inside Obsidian rather than being passed to OpenCode, and the feature does not require Obsidian's command line interface. Copilot disables OpenCode's native web-search and web-fetch tools so they cannot bypass that route. Full-page web fetching is unavailable through OpenCode in Self-Host Mode because the supported search providers do not share a page-fetch interface; Agent Chat can still use the configured provider's search results.
 
-If you set a custom `OPENCODE_CONFIG_CONTENT` for OpenCode, Self-Host Mode adds final deny rules for the native web tools in its top-level and per-agent permissions. Other permission rules in your custom configuration remain in their original order.
+If you set a custom `OPENCODE_CONFIG_CONTENT` for OpenCode, Self-Host Mode adds final deny rules for the native web tools in its top-level and per-agent `permissions`. Other permission rules in your custom configuration remain in their original order. Self-Host Mode does not start OpenCode with a custom configuration that uses the OpenCode 1 `permission`, `tools`, `agent`, or `mode` keys; write those settings as OpenCode 2 `permissions` and `agents` instead.
 
 On Windows, creating the folder links may require **Developer Mode** or administrator access. If a sync service replaces a link, toggle that Skill off and on for the affected agent to recreate it.
 
