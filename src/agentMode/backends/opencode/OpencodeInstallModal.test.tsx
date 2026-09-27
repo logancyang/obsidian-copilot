@@ -60,7 +60,7 @@ const makeManager = (): {
     onProgress?: (progress: ManagedInstallProgress) => void;
   }> = [];
   const deferreds: Deferred<{ version: string; path: string }>[] = [];
-  const upgradeManaged = jest.fn().mockResolvedValue({ version: "1.16.0", path: "/managed" });
+  const upgradeManaged = jest.fn().mockResolvedValue({ version: "2.0.3", path: "/managed" });
   const upgradeCustomBinary = jest.fn().mockResolvedValue({ version: "1.16.0", path: "/custom" });
   const setCustomBinaryPath = jest.fn().mockResolvedValue(undefined);
   const uninstall = jest.fn().mockResolvedValue(undefined);
@@ -214,10 +214,10 @@ describe("OpencodeInstallModal", () => {
       expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("29");
 
       await act(async () => {
-        installDeferred().resolve({ version: "1.16.0", path: "/managed/opencode" });
+        installDeferred().resolve({ version: "2.0.3", path: "/managed/opencode" });
       });
       publish({ kind: "idle" });
-      expect(noticeMessages()).toContain("opencode v1.16.0 installed.");
+      expect(noticeMessages()).toContain("opencode v2.0.3 installed.");
       expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();
     });
 
@@ -272,7 +272,7 @@ describe("OpencodeInstallModal", () => {
 
       expect(upgradeManaged).toHaveBeenCalledTimes(1);
       expect(upgradeCustomBinary).not.toHaveBeenCalled();
-      expect(noticeMessages()).toContain("opencode upgraded to v1.16.0.");
+      expect(noticeMessages()).toContain("opencode upgraded to v2.0.3.");
     });
     it("drops a failed upgrade's reason once an install has replaced the binary", async () => {
       setOpencodeSettings({
@@ -290,7 +290,7 @@ describe("OpencodeInstallModal", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
       await act(async () => {
-        installDeferred().resolve({ version: "1.16.0", path: "/managed" });
+        installDeferred().resolve({ version: "2.0.3", path: "/managed" });
       });
       publish({ kind: "idle" });
 
