@@ -3733,12 +3733,12 @@ export class AgentSessionManager {
   }
 
   /**
-   * Register the session-domain prompters on a freshly-adopted backend. The
-   * permission prompter is required; the ask-question prompter is wired only
-   * when both the manager was configured with one and the backend advertises
-   * the optional `setAskUserQuestionPrompter` surface.
+   * Register the manager's callbacks on a freshly-adopted backend: the
+   * permission prompter (required), the unhealthy-process restart hook, and the
+   * ask-question prompter when both the manager was configured with one and the
+   * backend advertises the optional `setAskUserQuestionPrompter` surface.
    */
-  private wirePrompters(backendId: BackendId, proc: BackendProcess): void {
+  private wireProcessCallbacks(backendId: BackendId, proc: BackendProcess): void {
     proc.setPermissionPrompter(this.opts.permissionPrompter);
     proc.setUnhealthyHandler?.(() => {
       if (this.disposed || this.backends.get(backendId) !== proc) return;
@@ -3785,7 +3785,7 @@ export class AgentSessionManager {
       if (warm) {
         // Probe subprocess is already started + initialize-handshaken —
         // wire it into the manager without paying either cost again.
-        this.wirePrompters(backendId, warm.proc);
+        this.wireProcessCallbacks(backendId, warm.proc);
         this.installBackendExitHandler(backendId, warm.proc, descriptor);
         this.backends.set(backendId, warm.proc);
         return warm.proc;
@@ -3806,7 +3806,7 @@ export class AgentSessionManager {
       // ACP backends declare `start()` to spawn the subprocess and run the
       // initialize handshake. In-process adapters (Claude SDK) omit it.
       if (proc.start) await proc.start();
-      this.wirePrompters(backendId, proc);
+      this.wireProcessCallbacks(backendId, proc);
       this.installBackendExitHandler(backendId, proc, descriptor);
       this.backends.set(backendId, proc);
       return proc;

@@ -965,6 +965,7 @@ describe("AcpBackendProcess", () => {
         buildStubDescriptor()
       );
       await backend.start();
+      await backend.newSession({ cwd: "/vault" });
       const recover = jest.fn();
       backend.setUnhealthyHandler(recover);
       mockNewSession.mockRejectedValueOnce(
@@ -975,6 +976,26 @@ describe("AcpBackendProcess", () => {
         "opencode's internal service stopped. Please try again."
       );
       expect(recover).toHaveBeenCalledTimes(1);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 reports a start failure without requesting recovery when the service fails before serving any session", async () => {
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        buildStubDescriptor()
+      );
+      await backend.start();
+      const recover = jest.fn();
+      backend.setUnhealthyHandler(recover);
+      mockNewSession.mockRejectedValueOnce(
+        new RequestError(-32603, "Internal error: Internal service failure")
+      );
+
+      await expect(backend.newSession({ cwd: "/vault" })).rejects.toThrow(
+        "opencode's internal service failed to start. Check the Copilot log for its error."
+      );
+      expect(recover).not.toHaveBeenCalled();
     });
   });
 
@@ -1052,6 +1073,7 @@ describe("AcpBackendProcess", () => {
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 requests recovery and explains the failure when the internal service stops", async () => {
       const backend = await makeBackend();
+      await backend.newSession({ cwd: "/vault" });
       const recover = jest.fn();
       backend.setUnhealthyHandler(recover);
       promptMock(backend).mockRejectedValue(

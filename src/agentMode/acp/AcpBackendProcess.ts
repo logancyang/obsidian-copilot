@@ -138,6 +138,10 @@ export class AcpBackendProcess implements BackendProcess {
     | null = null;
   private exitListeners = new Set<() => void>();
   private unhealthyHandler: (() => void) | null = null;
+  // Set once any session request succeeds, so a service that is dead from
+  // spawn is reported instead of restarted forever.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
+  private hasServedSession = false;
   private capabilities = new Map<AcpCapability, boolean>();
   private readonly sessionWireState = new Map<SessionId, SessionWireState>();
   // Tool-call ids first seen as a `todowrite`-titled call, so later
@@ -411,6 +415,7 @@ export class AcpBackendProcess implements BackendProcess {
       .catch((err: unknown) => {
         throw this.serviceStoppedOr(err);
       });
+    this.hasServedSession = true;
     this.recordWireState(wireResp.sessionId, {
       modes: wireResp.modes ?? null,
       configOptions: wireResp.configOptions ?? null,
@@ -430,6 +435,7 @@ export class AcpBackendProcess implements BackendProcess {
       .catch((err: unknown) => {
         throw this.serviceStoppedOr(err);
       });
+    this.hasServedSession = true;
     // Fallback usage source for agents that never push a live `usage_update`
     // notification: the prompt result may carry a turn `usage` with no context
     // window. `usage.totalTokens` is a cumulative session total (not current
@@ -716,6 +722,7 @@ export class AcpBackendProcess implements BackendProcess {
         }),
       { mustBeAdvertised: true }
     );
+    this.hasServedSession = true;
     this.recordWireState(sessionIdToAcp(params.sessionId), {
       modes: wireResp.modes ?? null,
       configOptions: wireResp.configOptions ?? null,
@@ -745,6 +752,7 @@ export class AcpBackendProcess implements BackendProcess {
           }),
         { mustBeAdvertised: true }
       );
+      this.hasServedSession = true;
       this.recordWireState(sessionIdToAcp(sessionId), {
         modes: wireResp.modes ?? null,
         configOptions: wireResp.configOptions ?? null,
@@ -806,7 +814,9 @@ export class AcpBackendProcess implements BackendProcess {
    * OpenCode 2 leaves ACP alive when its private service dies, so the process
    * must be replaced before a prompt or a new chat can succeed again. Session
    * creation is included because after an idle crash it is the first request,
-   * and a new chat is the user's natural retry.
+   * and a new chat is the user's natural retry. A process that never served a
+   * session request is not replaced: its replacement would start the same way,
+   * and each failed rebuild would schedule another restart.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/561
    */
   private serviceStoppedOr(err: unknown): unknown {
@@ -818,6 +828,11 @@ export class AcpBackendProcess implements BackendProcess {
       )
     ) {
       return err;
+    }
+    if (!this.hasServedSession) {
+      return new Error(
+        `${this.backend.displayName}'s internal service failed to start. Check the Copilot log for its error.`
+      );
     }
     this.unhealthyHandler?.();
     return new Error(`${this.backend.displayName}'s internal service stopped. Please try again.`);
