@@ -1405,6 +1405,34 @@ describe("AgentSessionManager", () => {
 
     describe("saveActiveSession()", () => {
       setupSavedNoteTests();
+      it("keeps a tab rename made during the first manual save in the saved note https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+        const { mgr, saveSession, updateTopic } = savedNoteFixture();
+        let finishSave!: (result: { path: string }) => void;
+        saveSession.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finishSave = resolve;
+            })
+        );
+        const session = await mgr.createSession();
+        let liveLabel: string | null = null;
+        jest.spyOn(session, "getLabel").mockImplementation(() => liveLabel);
+        jest.mocked(session.setLabel).mockImplementation((next) => {
+          liveLabel = next;
+        });
+        getSessionTestHandle(session).setMessages([{ message: "Original prompt" }]);
+
+        const saving = mgr.saveActiveSession();
+        await jest.advanceTimersByTimeAsync(0);
+        await mgr.renameSession(session.internalId, "Useful title");
+        finishSave({ path: "chats/saved.md" });
+        await saving;
+
+        expect(updateTopic).toHaveBeenCalledWith("chats/saved.md", "Useful title");
+        expect(mgr.getSessionSourcePath(session.internalId)).toBe("chats/saved.md");
+        await mgr.shutdown();
+      });
+
       it("persists changes during the first manual save for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
         const { mgr, saveSession } = savedNoteFixture();
         let finishSave!: (result: { path: string }) => void;

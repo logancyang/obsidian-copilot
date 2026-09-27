@@ -3696,6 +3696,11 @@ export class AgentSessionManager {
     if (result) {
       state.source = this.app.vault.getAbstractFileByPath(result.path) ?? result;
       state.signature = signature;
+      // A tab can be renamed before its first manual save finishes; that
+      // rename has no note path to update until this write completes.
+      // https://github.com/logancyang/obsidian-copilot/issues/3378
+      const latestLabel = session.getLabel();
+      if (latestLabel !== label) await this.updateChatTitle(result.path, latestLabel ?? "");
       // The first successful save changes relative-link resolution in the mounted chat.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/539
       if (previousSourcePath !== result.path) this.notify();
