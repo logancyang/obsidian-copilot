@@ -168,7 +168,7 @@ export class OpencodeBackend implements AcpBackend {
     if (settings.enableSelfHostMode === true && configOverride !== undefined) {
       // An explicit config override must not reopen agent-native web tools while
       // Self-Host mode promises that queries stay on the configured route.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/558
       let overriddenConfig: Record<string, unknown>;
       try {
         const parsed = JSON.parse(configOverride) as unknown;
@@ -177,18 +177,20 @@ export class OpencodeBackend implements AcpBackend {
       } catch {
         throw new Error("opencode OPENCODE_CONFIG_CONTENT must be a JSON object.");
       }
-      overriddenConfig.permission = denyNativeWebTools(overriddenConfig.permission);
-      const overriddenAgents = overriddenConfig.agent;
-      if (
-        overriddenAgents &&
-        typeof overriddenAgents === "object" &&
-        !Array.isArray(overriddenAgents)
-      ) {
-        for (const agent of Object.values(overriddenAgents)) {
-          if (!agent || typeof agent !== "object" || Array.isArray(agent)) continue;
-          const agentConfig = agent as Record<string, unknown>;
-          agentConfig.permission = denyNativeWebTools(agentConfig.permission);
-        }
+      // OpenCode 2 still migrates these 1.x keys into rules and agents the
+      // appended denies cannot reach, so Self-Host accepts only the native shape.
+      const legacyKeys = OPENCODE_1_PERMISSION_KEYS.filter(
+        (key) => overriddenConfig[key] !== undefined
+      );
+      if (legacyKeys.length > 0) {
+        throw new Error(
+          `opencode OPENCODE_CONFIG_CONTENT uses OpenCode 1 keys (${legacyKeys.join(", ")}); ` +
+            "Self-Host Mode requires the OpenCode 2 `permissions` and `agents` keys."
+        );
+      }
+      overriddenConfig.permissions = appendNativeWebDenies(overriddenConfig.permissions);
+      for (const agent of agentConfigs(overriddenConfig.agents)) {
+        agent.permissions = appendNativeWebDenies(agent.permissions);
       }
       configContent = JSON.stringify(overriddenConfig);
     }
@@ -252,20 +254,19 @@ function normalizeCacheRoot(raw: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-/**
- * Preserve an OpenCode permission policy while making native web access non-overridable.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/165
- *
- * @param permission Existing shorthand or object permission policy.
- */
-function denyNativeWebTools(permission: unknown): Record<string, unknown> {
-  const permissionRecord =
-    typeof permission === "string"
-      ? { "*": permission }
-      : permission && typeof permission === "object" && !Array.isArray(permission)
-        ? (permission as Record<string, unknown>)
-        : {};
-  return { ...permissionRecord, websearch: "deny", webfetch: "deny" };
+/** Agent entries of a user config's agent map, skipping values OpenCode would reject. */
+function agentConfigs(agents: unknown): Record<string, unknown>[] {
+  if (!agents || typeof agents !== "object" || Array.isArray(agents)) return [];
+  return Object.values(agents).filter(
+    (agent): agent is Record<string, unknown> =>
+      !!agent && typeof agent === "object" && !Array.isArray(agent)
+  );
+}
+
+// OpenCode 2 uses the last matching native rule.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/558
+function appendNativeWebDenies(permissions: unknown): unknown[] {
+  return [...(Array.isArray(permissions) ? permissions : []), ...NATIVE_WEB_DENIES];
 }
 
 /** The `OPENCODE_CONFIG_CONTENT` document, typed by OpenCode's published schema. */
@@ -277,6 +278,19 @@ type ProviderConfig = NonNullable<OpencodeConfig["providers"]>[string];
 type ModelConfig = NonNullable<ProviderConfig["models"]>[string];
 type ModelVariant = NonNullable<ModelConfig["variants"]>[number];
 type PermissionRule = NonNullable<OpencodeConfig["permissions"]>[number];
+
+/**
+ * Self-Host mode cannot rely on prompt steering because opencode's native web
+ * tools contact its own search/fetch services directly.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+ */
+const NATIVE_WEB_DENIES: readonly PermissionRule[] = [
+  { action: "websearch", resource: "*", effect: "deny" },
+  { action: "webfetch", resource: "*", effect: "deny" },
+];
+
+/** OpenCode 1 config keys that OpenCode 2 migrates into permission rules or agents. */
+const OPENCODE_1_PERMISSION_KEYS = ["permission", "tools", "agent", "mode"] as const;
 
 /**
  * Build the `OPENCODE_CONFIG_CONTENT` payload from the enabled opencode models.
@@ -415,15 +429,7 @@ export async function buildOpencodeConfig(
   // rules; the last rule matching a tool call decides it.
   const permissions: PermissionRule[] = [];
 
-  // Self-Host mode cannot rely on prompt steering because opencode's native
-  // tools contact its own search/fetch services directly.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
-  if (s.enableSelfHostMode === true) {
-    permissions.push(
-      { action: "websearch", resource: "*", effect: "deny" },
-      { action: "webfetch", resource: "*", effect: "deny" }
-    );
-  }
+  if (s.enableSelfHostMode === true) permissions.push(...NATIVE_WEB_DENIES);
 
   // Inject a managed `copilot-build` agent so the mode picker can offer the
   // canonical "default" semantic — let the agent edit, but ask first. The
