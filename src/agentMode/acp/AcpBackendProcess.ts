@@ -98,6 +98,7 @@ function isMethodNotFoundError(err: unknown): boolean {
 }
 
 const COPILOT_CLIENT_NAME = "obsidian-copilot";
+const JSONRPC_INTERNAL_ERROR = -32603;
 
 /**
  * Per-session bookkeeping for the latest known wire-shaped catalogs. We keep
@@ -136,6 +137,11 @@ export class AcpBackendProcess implements BackendProcess {
     | ((req: AskUserQuestionPrompt) => Promise<AgentQuestionAnswers>)
     | null = null;
   private exitListeners = new Set<() => void>();
+  private unhealthyHandler: (() => void) | null = null;
+  // Set once any session request succeeds, so a service that is dead from
+  // spawn is reported instead of restarted forever.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
+  private hasServedSession = false;
   private capabilities = new Map<AcpCapability, boolean>();
   private readonly sessionWireState = new Map<SessionId, SessionWireState>();
   // Tool-call ids first seen as a `todowrite`-titled call, so later
@@ -346,6 +352,13 @@ export class AcpBackendProcess implements BackendProcess {
     this.askUserQuestionPrompter = fn;
   }
 
+  /** Notify the owner when this ACP process needs replacement.
+   * @param fn Schedules replacement of the failing process.
+   */
+  setUnhealthyHandler(fn: () => void): void {
+    this.unhealthyHandler = fn;
+  }
+
   registerSessionHandler(sessionId: SessionId, handler: DomainSessionUpdateHandler): () => void {
     this.domainHandlers.set(sessionId, handler);
     const buffered = this.pendingUpdates.get(sessionId);
@@ -397,7 +410,12 @@ export class AcpBackendProcess implements BackendProcess {
       mcpServers: [],
       ...this.additionalDirectoriesField(params.additionalDirectories),
     };
-    const wireResp = await this.requireConnection().agent.request("session/new", req);
+    const wireResp = await this.requireConnection()
+      .agent.request("session/new", req)
+      .catch(async (err: unknown) => {
+        throw await this.serviceStoppedOr(err);
+      });
+    this.hasServedSession = true;
     this.recordWireState(wireResp.sessionId, {
       modes: wireResp.modes ?? null,
       configOptions: wireResp.configOptions ?? null,
@@ -409,10 +427,15 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async prompt(params: PromptInput): Promise<PromptOutput> {
-    const resp = await this.requireConnection().agent.request("session/prompt", {
-      sessionId: sessionIdToAcp(params.sessionId),
-      prompt: promptContentToAcp(params.prompt),
-    });
+    const resp = await this.requireConnection()
+      .agent.request("session/prompt", {
+        sessionId: sessionIdToAcp(params.sessionId),
+        prompt: promptContentToAcp(params.prompt),
+      })
+      .catch(async (err: unknown) => {
+        throw await this.serviceStoppedOr(err);
+      });
+    this.hasServedSession = true;
     // Fallback usage source for agents that never push a live `usage_update`
     // notification: the prompt result may carry a turn `usage` with no context
     // window. `usage.totalTokens` is a cumulative session total (not current
@@ -699,6 +722,7 @@ export class AcpBackendProcess implements BackendProcess {
         }),
       { mustBeAdvertised: true }
     );
+    this.hasServedSession = true;
     this.recordWireState(sessionIdToAcp(params.sessionId), {
       modes: wireResp.modes ?? null,
       configOptions: wireResp.configOptions ?? null,
@@ -728,6 +752,7 @@ export class AcpBackendProcess implements BackendProcess {
           }),
         { mustBeAdvertised: true }
       );
+      this.hasServedSession = true;
       this.recordWireState(sessionIdToAcp(sessionId), {
         modes: wireResp.modes ?? null,
         configOptions: wireResp.configOptions ?? null,
@@ -783,6 +808,43 @@ export class AcpBackendProcess implements BackendProcess {
       }
       this.process = null;
     }
+  }
+
+  /**
+   * OpenCode 2 leaves ACP alive when its private service dies, so the process
+   * must be replaced before a prompt or a new chat can succeed again. Session
+   * creation is included because after an idle crash it is the first request,
+   * and a new chat is the user's natural retry. A process that never served a
+   * session request is not replaced: its replacement would start the same way,
+   * and each failed rebuild would schedule another restart.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/561
+   *
+   * A healthy service reports some request failures (such as a missing cwd)
+   * with the same error as a dead one, so a failed `session/list` probe is what
+   * marks the service as stopped.
+   * https://github.com/anomalyco/opencode/issues/51716
+   */
+  private async serviceStoppedOr(err: unknown): Promise<unknown> {
+    if (
+      !(err instanceof RequestError && err.code === JSONRPC_INTERNAL_ERROR) ||
+      !this.hasCapability("session/list")
+    ) {
+      return err;
+    }
+    const serviceAnswers = await this.requireConnection()
+      .agent.request("session/list", {})
+      .then(
+        () => true,
+        () => false
+      );
+    if (serviceAnswers) return err;
+    if (!this.hasServedSession) {
+      return new Error(
+        `${this.backend.displayName}'s internal service failed to start. Check the Copilot log for its error.`
+      );
+    }
+    this.unhealthyHandler?.();
+    return new Error(`${this.backend.displayName}'s internal service stopped. Please try again.`);
   }
 
   private requireConnection(): ClientConnection {
