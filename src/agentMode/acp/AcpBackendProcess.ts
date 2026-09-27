@@ -98,7 +98,7 @@ function isMethodNotFoundError(err: unknown): boolean {
 }
 
 const COPILOT_CLIENT_NAME = "obsidian-copilot";
-const INTERNAL_SERVICE_FAILURE = "Internal error: Internal service failure";
+const JSONRPC_INTERNAL_ERROR = -32603;
 
 /**
  * Per-session bookkeeping for the latest known wire-shaped catalogs. We keep
@@ -412,8 +412,8 @@ export class AcpBackendProcess implements BackendProcess {
     };
     const wireResp = await this.requireConnection()
       .agent.request("session/new", req)
-      .catch((err: unknown) => {
-        throw this.serviceStoppedOr(err);
+      .catch(async (err: unknown) => {
+        throw await this.serviceStoppedOr(err);
       });
     this.hasServedSession = true;
     this.recordWireState(wireResp.sessionId, {
@@ -432,8 +432,8 @@ export class AcpBackendProcess implements BackendProcess {
         sessionId: sessionIdToAcp(params.sessionId),
         prompt: promptContentToAcp(params.prompt),
       })
-      .catch((err: unknown) => {
-        throw this.serviceStoppedOr(err);
+      .catch(async (err: unknown) => {
+        throw await this.serviceStoppedOr(err);
       });
     this.hasServedSession = true;
     // Fallback usage source for agents that never push a live `usage_update`
@@ -818,17 +818,26 @@ export class AcpBackendProcess implements BackendProcess {
    * session request is not replaced: its replacement would start the same way,
    * and each failed rebuild would schedule another restart.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/561
+   *
+   * A healthy service reports some request failures (such as a missing cwd)
+   * with the same error as a dead one, so a failed `session/list` probe is what
+   * marks the service as stopped.
+   * https://github.com/anomalyco/opencode/issues/51716
    */
-  private serviceStoppedOr(err: unknown): unknown {
+  private async serviceStoppedOr(err: unknown): Promise<unknown> {
     if (
-      !(
-        err instanceof RequestError &&
-        err.code === -32603 &&
-        err.message === INTERNAL_SERVICE_FAILURE
-      )
+      !(err instanceof RequestError && err.code === JSONRPC_INTERNAL_ERROR) ||
+      !this.hasCapability("session/list")
     ) {
       return err;
     }
+    const serviceAnswers = await this.requireConnection()
+      .agent.request("session/list", {})
+      .then(
+        () => true,
+        () => false
+      );
+    if (serviceAnswers) return err;
     if (!this.hasServedSession) {
       return new Error(
         `${this.backend.displayName}'s internal service failed to start. Check the Copilot log for its error.`

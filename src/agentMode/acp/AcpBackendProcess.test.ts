@@ -25,6 +25,7 @@ const mockSetSessionConfigOption = jest.fn(async (params: { value: string }) => 
   configOptions: modelOptions(params.value),
 }));
 const mockLoadSession = jest.fn(async (..._args: unknown[]) => ({}));
+const mockListSessions = jest.fn(async (..._args: unknown[]) => ({ sessions: [] }));
 const mockInitializeRequest = jest.fn();
 
 jest.mock("@agentclientprotocol/sdk", () => {
@@ -61,6 +62,7 @@ jest.mock("@agentclientprotocol/sdk", () => {
           "session/resume": mockResumeSession,
           "session/close": mockCloseSession,
           "session/load": mockLoadSession,
+          "session/list": mockListSessions,
           "session/prompt": prompt,
           "session/set_config_option": (params) =>
             mockSetSessionConfigOption(params as { value: string }),
@@ -108,6 +110,11 @@ jest.mock("./AcpProcessManager", () => ({
     shutdown: jest.fn().mockResolvedValue(undefined),
   })),
 }));
+
+/** The error OpenCode 2 returns both for a dead private service and for some ordinary failures. */
+function serviceFailure(): RequestError {
+  return new RequestError(-32603, "Internal error: Internal service failure");
+}
 
 function buildApp(basePath = "/vault"): App {
   const adapter = new (FileSystemAdapter as unknown as new (basePath: string) => unknown)(basePath);
@@ -180,6 +187,8 @@ describe("AcpBackendProcess", () => {
     mockResumeSession.mockResolvedValue({});
     mockCloseSession.mockReset();
     mockCloseSession.mockResolvedValue({});
+    mockListSessions.mockReset();
+    mockListSessions.mockResolvedValue({ sessions: [] });
     mockSetSessionConfigOption.mockReset();
     mockSetSessionConfigOption.mockImplementation(async ({ value }) => ({
       configOptions: modelOptions(value),
@@ -957,7 +966,49 @@ describe("AcpBackendProcess", () => {
   });
 
   describe("newSession()", () => {
+    // OpenCode 2 advertises session/list, which recovery uses as its liveness probe.
+    async function makeListingBackend(): Promise<AcpBackendProcess> {
+      mockInitializeResult = {
+        protocolVersion: 1,
+        agentCapabilities: { sessionCapabilities: { list: {} } },
+      };
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        buildStubDescriptor()
+      );
+      await backend.start();
+      return backend;
+    }
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 requests recovery and explains the failure when a new chat finds the internal service stopped", async () => {
+      const backend = await makeListingBackend();
+      await backend.newSession({ cwd: "/vault" });
+      const recover = jest.fn();
+      backend.setUnhealthyHandler(recover);
+      mockNewSession.mockRejectedValueOnce(serviceFailure());
+      mockListSessions.mockRejectedValueOnce(serviceFailure());
+
+      await expect(backend.newSession({ cwd: "/vault" })).rejects.toThrow(
+        "opencode's internal service stopped. Please try again."
+      );
+      expect(recover).toHaveBeenCalledTimes(1);
+    });
+
+    it("https://github.com/anomalyco/opencode/issues/51716 rethrows the original error without recovery when the service still answers a session list", async () => {
+      const backend = await makeListingBackend();
+      await backend.newSession({ cwd: "/vault" });
+      const recover = jest.fn();
+      backend.setUnhealthyHandler(recover);
+      const failure = serviceFailure();
+      mockNewSession.mockRejectedValueOnce(failure);
+
+      await expect(backend.newSession({ cwd: "/missing" })).rejects.toBe(failure);
+      expect(recover).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/anomalyco/opencode/issues/51716 rethrows internal errors without probing when the agent cannot list sessions", async () => {
       const backend = new AcpBackendProcess(
         buildApp(),
         buildStubBackend(),
@@ -968,29 +1019,20 @@ describe("AcpBackendProcess", () => {
       await backend.newSession({ cwd: "/vault" });
       const recover = jest.fn();
       backend.setUnhealthyHandler(recover);
-      mockNewSession.mockRejectedValueOnce(
-        new RequestError(-32603, "Internal error: Internal service failure")
-      );
+      const failure = serviceFailure();
+      mockNewSession.mockRejectedValueOnce(failure);
 
-      await expect(backend.newSession({ cwd: "/vault" })).rejects.toThrow(
-        "opencode's internal service stopped. Please try again."
-      );
-      expect(recover).toHaveBeenCalledTimes(1);
+      await expect(backend.newSession({ cwd: "/vault" })).rejects.toBe(failure);
+      expect(mockListSessions).not.toHaveBeenCalled();
+      expect(recover).not.toHaveBeenCalled();
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 reports a start failure without requesting recovery when the service fails before serving any session", async () => {
-      const backend = new AcpBackendProcess(
-        buildApp(),
-        buildStubBackend(),
-        "1.0.0",
-        buildStubDescriptor()
-      );
-      await backend.start();
+      const backend = await makeListingBackend();
       const recover = jest.fn();
       backend.setUnhealthyHandler(recover);
-      mockNewSession.mockRejectedValueOnce(
-        new RequestError(-32603, "Internal error: Internal service failure")
-      );
+      mockNewSession.mockRejectedValueOnce(serviceFailure());
+      mockListSessions.mockRejectedValueOnce(serviceFailure());
 
       await expect(backend.newSession({ cwd: "/vault" })).rejects.toThrow(
         "opencode's internal service failed to start. Check the Copilot log for its error."
@@ -1007,6 +1049,10 @@ describe("AcpBackendProcess", () => {
     }
 
     async function makeBackend(): Promise<AcpBackendProcess> {
+      mockInitializeResult = {
+        protocolVersion: 1,
+        agentCapabilities: { sessionCapabilities: { list: {} } },
+      };
       const backend = new AcpBackendProcess(
         buildApp(),
         buildStubBackend(),
@@ -1076,9 +1122,8 @@ describe("AcpBackendProcess", () => {
       await backend.newSession({ cwd: "/vault" });
       const recover = jest.fn();
       backend.setUnhealthyHandler(recover);
-      promptMock(backend).mockRejectedValue(
-        new RequestError(-32603, "Internal error: Internal service failure")
-      );
+      promptMock(backend).mockRejectedValue(serviceFailure());
+      mockListSessions.mockRejectedValueOnce(serviceFailure());
 
       await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toThrow(
         "opencode's internal service stopped. Please try again."
@@ -1086,7 +1131,7 @@ describe("AcpBackendProcess", () => {
       expect(recover).toHaveBeenCalledTimes(1);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 rethrows other internal errors without requesting recovery", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 rethrows internal errors without requesting recovery while the service still answers a session list", async () => {
       const backend = await makeBackend();
       const recover = jest.fn();
       backend.setUnhealthyHandler(recover);
