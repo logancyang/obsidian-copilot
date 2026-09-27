@@ -1,7 +1,6 @@
 import { waitFor } from "@testing-library/react";
 jest.mock("obsidian", () => ({
-  // pickMatchingAsset is pure; FileSystemAdapter and requestUrl are
-  // referenced by the manager class but not by these tests.
+  // FileSystemAdapter and requestUrl are referenced by the manager class.
   FileSystemAdapter: class {},
   requestUrl: jest.fn(),
   // requireNodeModule() gates the Node built-ins these paths resolve through.
@@ -71,7 +70,6 @@ import {
   OpencodeBinaryManager,
   OperationInFlightError,
   parseVersionFromStdout,
-  pickMatchingAsset,
   toOpencodeInstallState,
   verifyOpencodeBinary,
 } from "./OpencodeBinaryManager";
@@ -116,59 +114,6 @@ function vaultPlugin(vaultBase = "/vault", pluginId = "copilot-test"): never {
     manifest: { id: pluginId },
   } as never;
 }
-
-describe("pickMatchingAsset", () => {
-  const release = {
-    tag_name: `v${OPENCODE_PINNED_VERSION}`,
-    assets: [
-      {
-        name: "opencode-darwin-arm64.zip",
-        size: 100,
-        browser_download_url: "https://example.com/opencode-darwin-arm64.zip",
-      },
-      {
-        name: "opencode-linux-x64.tar.gz",
-        size: 100,
-        browser_download_url: "https://example.com/opencode-linux-x64.tar.gz",
-      },
-      {
-        name: "opencode-linux-x64-musl.tar.gz",
-        size: 100,
-        browser_download_url: "https://example.com/opencode-linux-x64-musl.tar.gz",
-      },
-      {
-        name: "opencode-windows-x64.zip",
-        size: 100,
-        browser_download_url: "https://example.com/opencode-windows-x64.zip",
-      },
-    ],
-  };
-
-  it("picks the first matching candidate stem", () => {
-    const asset = pickMatchingAsset(release, ["opencode-darwin-arm64"]);
-    expect(asset.name).toBe("opencode-darwin-arm64.zip");
-  });
-
-  it("falls back to the next candidate when the preferred one is missing", () => {
-    const asset = pickMatchingAsset(release, [
-      "opencode-linux-x64-musl-baseline",
-      "opencode-linux-x64-musl",
-      "opencode-linux-x64",
-    ]);
-    expect(asset.name).toBe("opencode-linux-x64-musl.tar.gz");
-  });
-
-  it("strips .tar.gz before matching stems", () => {
-    const asset = pickMatchingAsset(release, ["opencode-linux-x64"]);
-    expect(asset.name).toBe("opencode-linux-x64.tar.gz");
-  });
-
-  it("throws when no candidate matches", () => {
-    expect(() => pickMatchingAsset(release, ["opencode-windows-arm64"])).toThrow(
-      /No matching opencode release asset/
-    );
-  });
-});
 
 describe("verifyOpencodeBinary", () => {
   // We use the running Node binary as a stand-in for any executable that

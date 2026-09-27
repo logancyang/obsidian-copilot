@@ -1,9 +1,8 @@
 import * as opencodeVersion from "./ui/opencodeVersion";
 import { OpencodeBinaryManager } from "./OpencodeBinaryManager";
 import { OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
-import { extractArchive } from "@/agentMode/backends/shared/extractArchive";
+import * as npmPackage from "./npmPackage";
 import { getSettings, updateAgentModeBackendFields } from "@/settings/model";
-import { requestUrl } from "obsidian";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -12,8 +11,11 @@ import { Readable } from "node:stream";
 import { EventEmitter } from "node:events";
 
 jest.mock("https", () => ({ get: jest.fn() }));
-jest.mock("obsidian", () => ({ ...jest.requireActual("obsidian"), requestUrl: jest.fn() }));
-jest.mock("@/agentMode/backends/shared/extractArchive", () => ({ extractArchive: jest.fn() }));
+jest.mock("./npmPackage", () => ({
+  resolveNpmAsset: jest.fn(),
+  verifyNpmIntegrity: jest.fn(),
+  extractNpmBinary: jest.fn(),
+}));
 jest.mock("./platformResolver", () => ({
   resolveOpencodeTarget: async () => ({
     target: { platform: "darwin", arch: "arm64" },
@@ -30,6 +32,9 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
     let manager: OpencodeBinaryManager;
     let previous: string;
     beforeEach(() => {
+      jest.mocked(npmPackage.resolveNpmAsset).mockReset();
+      jest.mocked(npmPackage.verifyNpmIntegrity).mockReset();
+      jest.mocked(npmPackage.extractNpmBinary).mockReset();
       root = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-publication-"));
       manager = new OpencodeBinaryManager({} as never);
       jest.spyOn(manager, "getDataDir").mockReturnValue(root);
@@ -41,18 +46,6 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
         binaryVersion: "0.1.0",
         binarySource: "managed",
       });
-      jest.mocked(requestUrl).mockResolvedValue({
-        status: 200,
-        json: {
-          assets: [
-            {
-              name: "opencode-darwin-arm64.zip",
-              size: "archive".length,
-              browser_download_url: "https://example.invalid/release.zip",
-            },
-          ],
-        },
-      } as never);
       jest.mocked(https.get).mockImplementation(((
         _url: string,
         _options: unknown,
@@ -60,16 +53,18 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
       ) => {
         const response = Object.assign(Readable.from([Buffer.from("archive")]), {
           statusCode: 200,
-          headers: {},
+          headers: { "content-length": String("archive".length) },
         });
         callback(response);
         return Object.assign(new EventEmitter(), { setTimeout: jest.fn() });
       }) as never);
-      jest.mocked(extractArchive).mockImplementation(async (_archive, destination) => {
-        fs.writeFileSync(
-          path.join(destination, "opencode"),
-          `#!${process.execPath}\nprocess.stdout.write("${OPENCODE_PINNED_VERSION}");\n`
-        );
+      jest.mocked(npmPackage.resolveNpmAsset).mockResolvedValue({
+        name: "cli-darwin-arm64-2.0.14.tgz",
+        url: "https://registry.npmjs.org/package.tgz",
+        integrity: "sha512-" + Buffer.alloc(64).toString("base64"),
+      });
+      jest.mocked(npmPackage.extractNpmBinary).mockImplementation(async (_archive, destination) => {
+        fs.writeFileSync(destination, `#!${process.execPath}\nprocess.stdout.write("2.0.14");\n`);
       });
     });
     afterEach(() => {
@@ -77,45 +72,78 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
       fs.rmSync(root, { recursive: true, force: true });
     });
     describe("install()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/560 installs a verified OpenCode 2 npm binary without a system archive command", async () => {
+        const version = "2.0.14";
+        const result = await manager.install({ version });
+        expect(result.version).toBe(version);
+        expect(fs.existsSync(result.path)).toBe(true);
+        expect(jest.mocked(npmPackage.resolveNpmAsset)).toHaveBeenCalledWith(
+          version,
+          ["opencode-darwin-arm64"],
+          expect.any(AbortSignal)
+        );
+        expect(npmPackage.verifyNpmIntegrity).toHaveBeenCalledWith(
+          expect.stringContaining(".tgz"),
+          expect.stringMatching(/^sha512-/),
+          expect.any(AbortSignal)
+        );
+        expect(npmPackage.extractNpmBinary).toHaveBeenCalled();
+        expect(getSettings().agentMode.backends?.opencode?.binaryPath).toBe(result.path);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/560 leaves a working install selected when npm integrity verification fails", async () => {
+        jest
+          .mocked(npmPackage.verifyNpmIntegrity)
+          .mockRejectedValue(new Error("OpenCode npm download integrity mismatch"));
+        await expect(manager.install({ version: "2.0.14" })).rejects.toThrow(/integrity mismatch/);
+        expect(npmPackage.extractNpmBinary).not.toHaveBeenCalled();
+        expect(fs.readFileSync(previous, "utf8")).toBe("running process executable");
+        expect(getSettings().agentMode.backends?.opencode?.binaryPath).toBe(previous);
+      });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 rejects a managed pin below minimum without downloading or replacing the selected installation", async () => {
         const selected = { ...getSettings().agentMode.backends?.opencode };
-        jest.mocked(requestUrl).mockClear();
         const minimum = jest.replaceProperty<
           { OPENCODE_MIN_VERSION: string },
           "OPENCODE_MIN_VERSION"
         >(opencodeVersion, "OPENCODE_MIN_VERSION", "999.0.0");
         try {
           await expect(manager.install()).rejects.toThrow("requires");
-          expect(requestUrl).not.toHaveBeenCalled();
+          expect(npmPackage.resolveNpmAsset).not.toHaveBeenCalled();
           expect(getSettings().agentMode.backends?.opencode).toEqual(selected);
           expect(fs.readFileSync(previous, "utf8")).toBe("running process executable");
         } finally {
           minimum.restore();
         }
       });
-      it(`${issue} verifies the staged executable before selecting the pinned installation`, async () => {
-        const result = await manager.install();
-        expect(result.version).toBe(OPENCODE_PINNED_VERSION);
-        expect(result.path).toBe(previous);
-        expect(fs.readFileSync(result.path, "utf8")).toContain(OPENCODE_PINNED_VERSION);
+      it(`${issue} verifies the staged OpenCode 2 executable before selecting it`, async () => {
+        const result = await manager.install({ version: "2.0.14" });
+        expect(result.version).toBe("2.0.14");
+        expect(result.path).not.toBe(previous);
+        expect(fs.readFileSync(result.path, "utf8")).toContain("2.0.14");
         expect(getSettings().agentMode.backends?.opencode?.binaryPath).toBe(result.path);
       });
       it(`${issue} rejects a runnable download reporting the wrong version`, async () => {
-        jest.mocked(extractArchive).mockImplementation(async (_archive, destination) => {
-          fs.writeFileSync(
-            path.join(destination, "opencode"),
-            `#!${process.execPath}\nprocess.stdout.write("0.0.1");\n`
-          );
-        });
-        await expect(manager.install()).rejects.toThrow("did not report version");
+        jest
+          .mocked(npmPackage.extractNpmBinary)
+          .mockImplementation(async (_archive, destination) => {
+            fs.writeFileSync(
+              destination,
+              `#!${process.execPath}\nprocess.stdout.write("0.0.1");\n`
+            );
+          });
+        await expect(manager.install({ version: "2.0.14" })).rejects.toThrow(
+          "did not report version"
+        );
         expect(fs.readFileSync(previous, "utf8")).toBe("running process executable");
         expect(getSettings().agentMode.backends?.opencode?.binaryPath).toBe(previous);
       });
       it(`${issue} rejects a broken staged executable without replacing the published directory or pointer`, async () => {
-        jest.mocked(extractArchive).mockImplementation(async (_archive, destination) => {
-          fs.writeFileSync(path.join(destination, "opencode"), "broken binary");
-        });
-        await expect(manager.install()).rejects.toThrow();
+        jest
+          .mocked(npmPackage.extractNpmBinary)
+          .mockImplementation(async (_archive, destination) => {
+            fs.writeFileSync(destination, "broken binary");
+          });
+        await expect(manager.install({ version: "2.0.14" })).rejects.toThrow();
         expect(fs.readFileSync(previous, "utf8")).toBe("running process executable");
         expect(getSettings().agentMode.backends?.opencode?.binaryPath).toBe(previous);
       });

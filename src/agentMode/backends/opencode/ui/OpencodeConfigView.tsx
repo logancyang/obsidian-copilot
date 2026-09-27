@@ -18,7 +18,7 @@ export const OpencodeConfigView: React.FC<OpencodeConfigViewProps> = (props) => 
     {...props}
     title="Configure opencode"
     binaryName="opencode"
-    managedDescription="Let Copilot download and manage the official opencode binary from its GitHub repo."
+    managedDescription="Let Copilot download and manage the official opencode binary."
     customDescription="Point Agent Mode at a binary you already have on disk. Useful for self-builders or air-gapped machines."
     customPathPlaceholder="/absolute/path/to/opencode"
     customPathNotFoundHint="opencode not found. Install it natively (`~/.opencode/bin/opencode[.exe]`), via bun/npm, or paste a custom path manually."

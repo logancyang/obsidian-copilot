@@ -82,10 +82,11 @@ export const ManagedInstalling: StoryObj<OpencodeConfigViewProps> = {
   args: {
     managed: {
       ...MANAGED,
+      version: "2.0.14",
       run: {
         kind: "running",
-        label: "Downloading opencode — 12.4 MB / 41.0 MB",
-        percent: 29,
+        label: "Downloading opencode — 24.1 MB / 75.8 MB",
+        percent: 30,
       },
     },
   },
