@@ -443,10 +443,11 @@ function setupSavedNoteTests() {
 
 function savedNoteFixture() {
   const saveSession = jest.fn(async () => ({ path: "chats/saved.md" }));
-  const mgr = buildManager({}, { saveSession } as unknown as ConstructorParameters<
+  const updateTopic = jest.fn(async () => undefined);
+  const mgr = buildManager({}, { saveSession, updateTopic } as unknown as ConstructorParameters<
     typeof AgentSessionManager
   >[2]["persistenceManager"]);
-  return { mgr, saveSession };
+  return { mgr, saveSession, updateTopic };
 }
 
 describe("AgentSessionManager", () => {
@@ -1363,6 +1364,41 @@ describe("AgentSessionManager", () => {
         expect(mgr.getSessionSourcePath(loaded.internalId)).toBe(file.path);
         file.path = "archive/Loaded.md";
         expect(mgr.getSessionSourcePath(loaded.internalId)).toBe(file.path);
+        await mgr.shutdown();
+      });
+
+      it("reopens a history rename in the tab ahead of an older saved label https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+        const file = mockTFile({ path: "chat/Loaded.md" });
+        const loadFile = jest.fn().mockResolvedValue({
+          backendId: "opencode",
+          projectId: GLOBAL_SCOPE,
+          messages: [{ message: "Loaded" }],
+          topic: "Current history title",
+          label: "Older tab title",
+        });
+        const mgr = buildManager({}, { loadFile } as never);
+        const loaded = await mgr.loadSessionFromHistory(file);
+        expect(loaded.setLabel).toHaveBeenCalledWith("Current history title");
+        await mgr.shutdown();
+      });
+    });
+
+    describe("renameSession()", () => {
+      setupSavedNoteTests();
+      it("lets a later tab rename replace a history rename with autosave off https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+        const { mgr, updateTopic } = savedNoteFixture();
+        const session = await mgr.createSession();
+        getSessionTestHandle(session).setMessages([{ message: "Original prompt" }]);
+        await mgr.saveActiveSession();
+
+        await mgr.updateChatTitle("chats/saved.md", "Alpha");
+        await mgr.renameSession(session.internalId, "Meaningful name");
+
+        expect(updateTopic.mock.calls).toEqual([
+          ["chats/saved.md", "Alpha"],
+          ["chats/saved.md", "Meaningful name"],
+        ]);
+        expect(session.setLabel).toHaveBeenLastCalledWith("Meaningful name");
         await mgr.shutdown();
       });
     });
@@ -3387,6 +3423,7 @@ describe("AgentSessionManager chat history aggregation", () => {
   interface FakeFrontmatter {
     epoch?: number;
     topic?: string;
+    agentLabel?: string;
     backendId?: string;
     sessionId?: string;
     lastAccessedAt?: number;
@@ -3412,6 +3449,7 @@ describe("AgentSessionManager chat history aggregation", () => {
     files?: Record<string, FakeFrontmatter>;
     /** Hidden-folder files: never in the metadata cache, read via adapter. */
     hiddenFiles?: Record<string, string>;
+    diskFiles?: Record<string, string>;
     listSessions?: jest.Mock;
     /** When set, the preloader exposes a warm opencode probe proc with this listSessions. */
     warmListSessions?: jest.Mock;
@@ -3436,7 +3474,7 @@ describe("AgentSessionManager chat history aggregation", () => {
       "/vault"
     ) as { read: jest.Mock };
     adapter.read.mockImplementation(async (p: string) => {
-      const content = hiddenByPath[p];
+      const content = hiddenByPath[p] ?? opts?.diskFiles?.[p];
       if (content === undefined) throw new Error(`ENOENT: ${p}`);
       return content;
     });
@@ -3559,6 +3597,83 @@ describe("AgentSessionManager chat history aggregation", () => {
     expect(native?.backendId).toBe("opencode");
   });
 
+  it("shows a saved tab rename when the note has no topic https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+    const { manager } = buildHistoryHarness({
+      files: {
+        "chats/agent__a.md": {
+          backendId: "opencode",
+          agentLabel: "Quarterly planning",
+        },
+      },
+    });
+    expect((await manager.getChatHistoryItems())[0]?.title).toBe("Quarterly planning");
+  });
+
+  it("shows an explicit history title ahead of an older tab label https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+    const { manager } = buildHistoryHarness({
+      files: {
+        "chats/agent__a.md": {
+          backendId: "opencode",
+          sessionId: "s1",
+          topic: "Current name",
+          agentLabel: "Older name",
+        },
+      },
+    });
+    expect((await manager.getChatHistoryItems())[0]?.title).toBe("Current name");
+  });
+
+  it("shows a just-renamed title while Obsidian's metadata cache is stale https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+    const path = "chats/agent__a.md";
+    const frontmatter = {
+      backendId: "opencode",
+      sessionId: "s1",
+      topic: "Old title",
+      agentLabel: "Old title",
+    };
+    const { manager } = buildHistoryHarness({
+      files: { [path]: frontmatter },
+      diskFiles: {
+        [path]:
+          '---\nbackendId: opencode\nsessionId: "s1"\ntopic: "New title"\nagentLabel: "New title"\n---\n',
+      },
+    });
+    await manager.updateChatTitle(path, "New title");
+    expect((await manager.getChatHistoryItems())[0]?.title).toBe("New title");
+    frontmatter.topic = "New title";
+    frontmatter.agentLabel = "New title";
+    expect((await manager.getChatHistoryItems())[0]?.title).toBe("New title");
+  });
+
+  it("falls back to the filename after clearing a saved title while metadata is stale https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+    const path = "chats/agent__a.md";
+    const { manager } = buildHistoryHarness({
+      files: {
+        [path]: {
+          backendId: "opencode",
+          sessionId: "s1",
+          topic: "Old title",
+          agentLabel: "Old title",
+        },
+      },
+      diskFiles: {
+        [path]: '---\nbackendId: opencode\nsessionId: "s1"\ntopic: ""\nagentLabel: ""\n---\n',
+      },
+    });
+    await manager.updateChatTitle(path, "");
+    expect((await manager.getChatHistoryItems())[0]?.title).toBe("a");
+  });
+
+  it("shows a tab rename in an unindexed hidden save folder https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+    const { manager } = buildHistoryHarness({
+      hiddenFiles: {
+        ".copilot/chats/agent__hidden.md":
+          '---\nbackendId: opencode\nsessionId: "s1"\nagentLabel: "Hidden title"\n---\n',
+      },
+    });
+    expect((await manager.getChatHistoryItems())[0]?.title).toBe("Hidden title");
+  });
+
   it("de-duplicates hidden-folder chats via the adapter frontmatter fallback", async () => {
     // Hidden save folders (e.g. under the config dir) are never indexed by
     // the metadata cache; the session ref must come from an adapter read or
@@ -3671,6 +3786,28 @@ describe("AgentSessionManager chat history aggregation", () => {
     });
     await manager.updateChatTitle(buildNativeChatId("opencode", "s1"), "New title");
     expect((await index.getEntry("opencode", "s1"))?.title).toBe("New title");
+  });
+
+  it("keeps a saved history rename in its native twin https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+    const { manager, index, persistence } = buildHistoryHarness({
+      files: {
+        "chats/agent__a.md": {
+          backendId: "opencode",
+          sessionId: "s1",
+          agentLabel: "Older tab title",
+        },
+      },
+    });
+    await index.recordSession({
+      backendId: "opencode",
+      sessionId: "s1",
+      title: "Older tab title",
+      createdAtMs: 1_000,
+      lastAccessedAtMs: 2_000,
+    });
+    await manager.updateChatTitle("chats/agent__a.md", "New history title");
+    expect(persistence.updateTopic).toHaveBeenCalledWith("chats/agent__a.md", "New history title");
+    expect((await index.getEntry("opencode", "s1"))?.title).toBe("New history title");
   });
 
   it("native rename matches the live session by backend, not session id alone", async () => {

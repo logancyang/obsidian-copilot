@@ -1,6 +1,6 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
+import { patchFrontmatter, readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage } from "./types";
@@ -42,6 +42,7 @@ jest.mock("@/utils", () => ({
 jest.mock("@/utils/vaultAdapterUtils", () => ({
   isInVaultCache: jest.fn(() => false),
   listMarkdownFiles: jest.fn().mockResolvedValue([]),
+  patchFrontmatter: jest.fn(),
   readFrontmatterViaAdapter: jest.fn().mockResolvedValue(null),
 }));
 
@@ -131,6 +132,65 @@ describe("AgentChatPersistenceManager", () => {
   });
 
   describe("saveSession()", () => {
+    it("keeps a renamed title when metadata cache lags the next save https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+      const messages = [makeMessage(USER_SENDER, "Original prompt")];
+      const saved = await manager.saveSession(messages, "opencode", { label: "Old label" });
+      const file = app.files.get(saved!.path)!;
+      Object.setPrototypeOf(file, TFile.prototype);
+      file.contents = file.contents!.replace("---\n", '---\ntopic: "Current title"\n');
+      app.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { topic: "Old title", agentLabel: "Old label" },
+      } as never);
+
+      await manager.saveSession(messages, "opencode", {
+        existingPath: saved!.path,
+        label: "Current title",
+      });
+
+      expect(file.contents).toContain('topic: "Current title"');
+      expect(file.contents).toContain('agentLabel: "Current title"');
+    });
+
+    it("keeps the latest tab rename after an in-flight autosave and reload https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+      const messages = [makeMessage(USER_SENDER, "Original prompt")];
+      const saved = await manager.saveSession(messages, "opencode", { label: "Alpha" });
+      const file = app.files.get(saved!.path)!;
+      Object.setPrototypeOf(file, TFile.prototype);
+      file.contents = file.contents!.replace("---\n", '---\ntopic: "Alpha"\n');
+      let finishRead!: (content: string) => void;
+      let readStarted!: () => void;
+      const started = new Promise<void>((resolve) => (readStarted = resolve));
+      app.vault.adapter.read.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRead = resolve;
+            readStarted();
+          })
+      );
+      (patchFrontmatter as jest.Mock).mockImplementationOnce(async (_app, path, updates) => {
+        const target = app.files.get(path)!;
+        target.contents = target.contents!.replace(/^topic:.*$/m, `topic: "${updates.topic}"`);
+      });
+
+      const saving = manager.saveSession(messages, "opencode", {
+        existingPath: saved!.path,
+        label: "Alpha",
+      });
+      await started;
+      const renaming = manager.updateTopic(saved!.path, "Beta");
+      expect(patchFrontmatter).not.toHaveBeenCalled();
+      finishRead(file.contents);
+      await saving;
+      await renaming;
+      await manager.saveSession(messages, "opencode", {
+        existingPath: saved!.path,
+        label: "Beta",
+      });
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.topic).toBe("Beta");
+      expect(loaded.label).toBe("Beta");
+    });
     it("preserves organizer links after native rehydration, reopening and later deletion (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
       const message = {
         ...makeMessage(USER_SENDER, "image"),

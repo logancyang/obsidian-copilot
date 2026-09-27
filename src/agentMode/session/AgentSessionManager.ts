@@ -32,7 +32,11 @@ import type {
 } from "@/context/contextCacheStore";
 import { err2String } from "@/utils";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
-import { fileToHistoryItem, readChatPathProjectId } from "@/utils/chatHistoryUtils";
+import {
+  extractChatTitle,
+  fileToHistoryItem,
+  readChatPathProjectId,
+} from "@/utils/chatHistoryUtils";
 import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
@@ -49,6 +53,7 @@ import {
   type MarkdownChatEntry,
 } from "./chatHistoryMerge";
 import { MethodUnsupportedError } from "./errors";
+import { unescapeYamlString } from "./agentChatYaml";
 import { replayPersistedMode } from "./replayPersistedMode";
 import { applyModeSpec } from "./modeApply";
 import {
@@ -265,6 +270,7 @@ export interface AgentSessionManagerOptions {
  * injected so this file stays out of the UI layer.
  */
 export class AgentSessionManager {
+  private readonly pendingTitleRefreshPaths = new Set<string>();
   private backends = new Map<BackendId, BackendProcess>();
   private starting = new Map<BackendId, Promise<BackendProcess>>();
   private sessions = new Map<string, AgentSession>();
@@ -774,6 +780,10 @@ export class AgentSessionManager {
           // their native twins.
           const ref = await this.readSessionRefFromFile(file.path);
           const item = fileToHistoryItem(this.app, file, tracker);
+          // A cleared title must use the filename even while the metadata
+          // cache still holds the old topic and agent label.
+          // https://github.com/logancyang/obsidian-copilot/issues/3378
+          if (ref) item.title = ref.title ?? extractChatTitle(this.app, file, {});
           return {
             item: liveAttentionPaths.has(item.id) ? { ...item, needsAttention: true } : item,
             backendId: ref?.backendId,
@@ -964,16 +974,35 @@ export class AgentSessionManager {
     if (native) {
       const index = this.opts.sessionIndex;
       if (!index) throw new Error("Agent session index is not configured.");
+      const live = this.findLiveSession(native.backendId, native.sessionId);
+      const sourcePath = live ? this.getSessionSourcePath(live.internalId) : "";
+      // A native row can still represent an open chat with a saved note.
+      // https://github.com/logancyang/obsidian-copilot/issues/3378
+      if (sourcePath) {
+        await this.opts.persistenceManager?.updateTopic(sourcePath, newTitle);
+        this.pendingTitleRefreshPaths.add(sourcePath);
+      }
       await index.setTitle(native.backendId, native.sessionId, newTitle);
       // Match the (backendId, sessionId) pair, not the id alone: on a
       // cross-backend id collision, renaming by id could relabel the wrong
       // backend's live tab (and its index entry via the label autosave).
-      this.findLiveSession(native.backendId, native.sessionId)?.setLabel(newTitle);
+      live?.setLabel(newTitle);
       return;
     }
     const persistence = this.opts.persistenceManager;
     if (!persistence) throw new Error("Agent chat persistence is not configured.");
+    const ref = await this.readSessionRefFromFile(fileId);
     await persistence.updateTopic(fileId, newTitle);
+    this.pendingTitleRefreshPaths.add(fileId);
+    // The note, native index, and any open tab must agree after either rename
+    // entry point. Otherwise the next reopen can restore a stale label.
+    // https://github.com/logancyang/obsidian-copilot/issues/3378
+    if (ref?.backendId && ref.sessionId) {
+      await this.opts.sessionIndex?.setTitle(ref.backendId, ref.sessionId, newTitle);
+    }
+    for (const [internalId, session] of this.sessions) {
+      if (this.getSessionSourcePath(internalId) === fileId) session.setLabel(newTitle);
+    }
   }
 
   /**
@@ -996,7 +1025,7 @@ export class AgentSessionManager {
     if (!persistence) throw new Error("Agent chat persistence is not configured.");
     if (index) {
       const ref = await this.readSessionRefFromFile(fileId);
-      if (ref) {
+      if (ref?.backendId && ref.sessionId) {
         this.cancelPendingIndexTouch(ref.backendId, ref.sessionId);
         await index.deleteSession(ref.backendId, ref.sessionId);
       }
@@ -1027,29 +1056,51 @@ export class AgentSessionManager {
   }
 
   /**
-   * Read the backend session identity from a saved chat's frontmatter, via
-   * the metadata cache with an adapter fallback for hidden-directory files.
-   * Returns null when the file predates session-id persistence.
+   * Read a saved chat's title and backend identity from frontmatter, including
+   * hidden-directory files that Obsidian does not index in its metadata cache.
    */
   private async readSessionRefFromFile(
     fileId: string
-  ): Promise<{ backendId: BackendId; sessionId: string } | null> {
-    let fm: Record<string, unknown> | undefined;
+  ): Promise<{ backendId?: BackendId; sessionId?: string; title?: string } | null> {
+    let cached: Record<string, unknown> | undefined;
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file instanceof TFile) {
-      fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      cached = this.app.metadataCache.getFileCache(file)?.frontmatter;
     }
-    if (!fm) {
+    let disk: Record<string, string> | null = null;
+    if (!cached || this.pendingTitleRefreshPaths.has(fileId)) {
       try {
-        fm = (await readFrontmatterViaAdapter(this.app, fileId)) ?? undefined;
+        disk = await readFrontmatterViaAdapter(this.app, fileId);
       } catch {
-        return null;
+        if (!cached) return null;
       }
     }
-    const backendId = typeof fm?.backendId === "string" ? fm.backendId.trim() : "";
-    const sessionId = typeof fm?.sessionId === "string" ? fm.sessionId.trim() : "";
-    if (!backendId || !sessionId) return null;
-    return { backendId, sessionId };
+    // A rename can be on disk before Obsidian refreshes the cache. Read that
+    // one note directly until its cache catches up; other rows keep the fast path.
+    // https://github.com/logancyang/obsidian-copilot/issues/3378
+    if (
+      disk &&
+      cached &&
+      unescapeYamlString(disk.topic ?? "") === (cached.topic ?? "") &&
+      unescapeYamlString(disk.agentLabel ?? "") === (cached.agentLabel ?? "")
+    ) {
+      this.pendingTitleRefreshPaths.delete(fileId);
+    }
+    const fm = disk ?? cached;
+    if (!fm) return null;
+    const backendId = typeof fm.backendId === "string" ? fm.backendId.trim() : undefined;
+    const sessionId = typeof fm.sessionId === "string" ? fm.sessionId.trim() : undefined;
+    const topic = typeof fm.topic === "string" ? fm.topic.trim() : "";
+    const agentLabel = typeof fm.agentLabel === "string" ? fm.agentLabel.trim() : "";
+    // Saved tabs can predate a history rename, so their label must remain
+    // visible in the list even when no explicit topic was written yet.
+    // https://github.com/logancyang/obsidian-copilot/issues/3378
+    const title = topic || agentLabel;
+    return {
+      backendId,
+      sessionId,
+      title: title ? (disk ? unescapeYamlString(title) : title) : undefined,
+    };
   }
 
   /**
@@ -2849,10 +2900,20 @@ export class AgentSessionManager {
   }
 
   /** Update a session's user-visible label. No-op if `id` is unknown. */
-  renameSession(id: string, label: string | null): void {
+  async renameSession(id: string, label: string | null): Promise<void> {
     const session = this.sessions.get(id);
     if (!session) return;
-    session.setLabel(label);
+    const sourcePath = this.getSessionSourcePath(id);
+    // A saved tab must update the same note title that Recent Chats reads.
+    // https://github.com/logancyang/obsidian-copilot/issues/3378
+    if (sourcePath) {
+      await this.updateChatTitle(sourcePath, label ?? "");
+    } else {
+      session.setLabel(label);
+      const sessionId = session.getBackendSessionId();
+      if (sessionId)
+        await this.opts.sessionIndex?.setTitle(session.backendId, sessionId, label ?? "");
+    }
     this.notify();
   }
 
@@ -3106,7 +3167,10 @@ export class AgentSessionManager {
 
     session.loadDisplayMessages(loaded.messages);
     session.seedSessionUsage(loaded.usage);
-    if (loaded.label) session.setLabel(loaded.label);
+    // A history rename is newer than a previously saved tab label.
+    // https://github.com/logancyang/obsidian-copilot/issues/3378
+    if (loaded.topic) session.setLabel(loaded.topic);
+    else if (loaded.label) session.setLabel(loaded.label);
     this.getSessionState(session.internalId).source = file;
     if (loaded.sessionId) {
       // Keep the native twin's recency in step with the markdown side so the

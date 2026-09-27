@@ -22,7 +22,6 @@ import {
   isNameTooLongError,
   listMarkdownFiles,
   patchFrontmatter,
-  readFrontmatterViaAdapter,
   trashFile,
 } from "@/utils/vaultAdapterUtils";
 import { joinPosix } from "@/utils/pathUtils";
@@ -115,8 +114,20 @@ interface ExistingMeta {
  */
 export class AgentChatPersistenceManager {
   private readonly loadedTranscripts = new Map<TAbstractFile | string, string>();
+  private readonly pendingFileWrites = new Map<string, Promise<unknown>>();
 
   constructor(private readonly app: App) {}
+
+  private async serializeFileWrite<T>(path: string, write: () => Promise<T>): Promise<T> {
+    const previous = this.pendingFileWrites.get(path);
+    const result = previous ? previous.catch(() => undefined).then(write) : write();
+    this.pendingFileWrites.set(path, result);
+    try {
+      return await result;
+    } finally {
+      if (this.pendingFileWrites.get(path) === result) this.pendingFileWrites.delete(path);
+    }
+  }
 
   private async updateTranscript(path: string, content: string): Promise<void> {
     const key = this.app.vault.getAbstractFileByPath(path) ?? path;
@@ -157,6 +168,22 @@ export class AgentChatPersistenceManager {
       usage?: SessionUsage;
     }
   ): Promise<{ path: string } | null> {
+    // A rename and an already-running autosave can otherwise write the same
+    // note out of order and restore its previous title.
+    // https://github.com/logancyang/obsidian-copilot/issues/3378
+    if (options?.existingPath) {
+      return this.serializeFileWrite(options.existingPath, () =>
+        this.saveSessionNow(messages, backendId, options)
+      );
+    }
+    return this.saveSessionNow(messages, backendId, options);
+  }
+
+  private async saveSessionNow(
+    messages: AgentChatMessage[],
+    backendId: BackendId,
+    options?: Parameters<AgentChatPersistenceManager["saveSession"]>[2]
+  ): Promise<{ path: string } | null> {
     if (messages.length === 0) return null;
 
     try {
@@ -172,24 +199,19 @@ export class AgentChatPersistenceManager {
       const existingFile = options?.existingPath
         ? this.resolveExistingFile(options.existingPath)
         : null;
-      const existingMeta = existingFile ? await this.readExistingMeta(existingFile) : {};
-
       const preferredFileName = existingFile
         ? existingFile.path
-        : this.generateFileName(
-            messages,
-            firstMessageEpoch,
-            conversationsFolder,
-            existingMeta.topic
-          );
+        : this.generateFileName(messages, firstMessageEpoch, conversationsFolder);
+      const previousContent = (await this.app.vault.adapter.exists(preferredFileName))
+        ? await this.app.vault.adapter.read(preferredFileName)
+        : "";
+      const existingMeta = existingFile ? this.readExistingMeta(previousContent) : {};
 
       const preparedMessages = await prepareChatImagesForSave(
         this.app,
         messages,
         conversationsFolder,
-        (await this.app.vault.adapter.exists(preferredFileName))
-          ? await this.app.vault.adapter.read(preferredFileName)
-          : "",
+        previousContent,
         preferredFileName
       );
       const chatContent = this.formatChatContent(preparedMessages);
@@ -199,7 +221,9 @@ export class AgentChatPersistenceManager {
         firstMessageEpoch,
         backendId,
         topic: existingMeta.topic,
-        label: options?.label ?? existingMeta.label,
+        // An explicit cleared tab name must not resurrect the old saved label.
+        // https://github.com/logancyang/obsidian-copilot/issues/3378
+        label: options?.label === undefined ? existingMeta.label : options.label,
         modelKey: options?.modelKey,
         lastAccessedAt: existingMeta.lastAccessedAt,
         sessionId: options?.sessionId ?? existingMeta.sessionId,
@@ -303,7 +327,12 @@ export class AgentChatPersistenceManager {
 
   /** Update the user-visible topic in frontmatter. */
   async updateTopic(fileId: string, newTopic: string): Promise<void> {
-    await patchFrontmatter(this.app, fileId, { topic: newTopic.trim() });
+    await this.serializeFileWrite(fileId, () =>
+      patchFrontmatter(this.app, fileId, {
+        topic: newTopic.trim(),
+        agentLabel: newTopic.trim(),
+      })
+    );
   }
 
   async deleteFile(fileId: string): Promise<void> {
@@ -326,34 +355,21 @@ export class AgentChatPersistenceManager {
     return file instanceof TFile ? file : null;
   }
 
-  private async readExistingMeta(file: TFile): Promise<ExistingMeta> {
-    const cached = this.app.metadataCache.getFileCache(file)?.frontmatter;
-    if (cached) {
-      return {
-        topic: cached.topic,
-        label: cached.agentLabel,
-        lastAccessedAt:
-          typeof cached.lastAccessedAt === "number" ? cached.lastAccessedAt : undefined,
-        sessionId: typeof cached.sessionId === "string" ? cached.sessionId : undefined,
-        projectId: coerceProjectId(cached.projectId),
-        usage: parseUsageJson(cached.usage),
-      };
-    }
-    try {
-      const fm = await readFrontmatterViaAdapter(this.app, file.path);
-      if (!fm) return {};
-      const lastAccessed = fm.lastAccessedAt ? Number(fm.lastAccessedAt) : undefined;
-      return {
-        topic: fm.topic,
-        label: fm.agentLabel,
-        lastAccessedAt: lastAccessed && Number.isFinite(lastAccessed) ? lastAccessed : undefined,
-        sessionId: typeof fm.sessionId === "string" ? fm.sessionId : undefined,
-        projectId: coerceProjectId(fm.projectId),
-        usage: parseUsageJson(fm.usage),
-      };
-    } catch {
-      return {};
-    }
+  private readExistingMeta(content: string): ExistingMeta {
+    // A rename can reach disk before Obsidian refreshes metadataCache.
+    // Autosave must round-trip the current topic instead of restoring its
+    // previous value from that stale cache.
+    // https://github.com/logancyang/obsidian-copilot/issues/3378
+    const { frontmatter: current } = this.splitFrontmatter(content);
+    const lastAccessed = current.lastAccessedAt ? Number(current.lastAccessedAt) : undefined;
+    return {
+      topic: current.topic,
+      label: current.agentLabel,
+      lastAccessedAt: lastAccessed && Number.isFinite(lastAccessed) ? lastAccessed : undefined,
+      sessionId: typeof current.sessionId === "string" ? current.sessionId : undefined,
+      projectId: coerceProjectId(current.projectId),
+      usage: parseUsageJson(current.usage),
+    };
   }
 
   private formatChatContent(messages: AgentChatMessage[]): string {
@@ -456,30 +472,24 @@ export class AgentChatPersistenceManager {
   private generateFileName(
     messages: AgentChatMessage[],
     firstMessageEpoch: number,
-    folder: string,
-    topic?: string
+    folder: string
   ): string {
     const settings = getSettings();
     const formatted = formatDateTime(new Date(firstMessageEpoch));
     const timestampFileName = formatted.fileName;
 
-    let topicForFilename: string;
-    if (topic) {
-      topicForFilename = topic;
-    } else {
-      const firstUser = messages.find((m) => m.sender === USER_SENDER);
-      topicForFilename = firstUser
-        ? firstUser.message
-            .replace(/\[\[([^\]]+)\]\]/g, "$1")
-            .replace(/[{}[\]]/g, "")
-            .split(/\s+/)
-            .slice(0, 10)
-            .join(" ")
-            // eslint-disable-next-line no-control-regex -- serialized frontmatter must reject embedded control bytes
-            .replace(/[\\/:*?"<>|\x00-\x1F]/g, "")
-            .trim() || "Untitled Agent Chat"
-        : "Untitled Agent Chat";
-    }
+    const firstUser = messages.find((m) => m.sender === USER_SENDER);
+    const topicForFilename = firstUser
+      ? firstUser.message
+          .replace(/\[\[([^\]]+)\]\]/g, "$1")
+          .replace(/[{}[\]]/g, "")
+          .split(/\s+/)
+          .slice(0, 10)
+          .join(" ")
+          // eslint-disable-next-line no-control-regex -- serialized frontmatter must reject embedded control bytes
+          .replace(/[\\/:*?"<>|\x00-\x1F]/g, "")
+          .trim() || "Untitled Agent Chat"
+      : "Untitled Agent Chat";
 
     let customFileName = settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}";
     const filePrefix = AGENT_FILENAME_PREFIX;
