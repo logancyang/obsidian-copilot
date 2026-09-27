@@ -273,6 +273,17 @@ describe("agentMode", () => {
       );
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 offers an OpenCode reload when enabled model tool support changes", () => {
+      createAgentSessionManager({} as App, plugin);
+
+      emitSettingsChange(settingsWith({ toolCall: true }), settingsWith({ toolCall: false }));
+
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
+        "opencode",
+        "model config changed"
+      );
+    });
+
     it(`leaves a running agent alone when only a model's display metadata changes ${LINEUP_ISSUE}`, () => {
       // The agent is asked to reload for this, which a reworded description is
       // not worth: the spawn config never carries it.
