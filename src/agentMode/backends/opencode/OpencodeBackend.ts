@@ -428,7 +428,12 @@ export async function buildOpencodeConfig(
   // OpenCode appends top-level rules to every agent, then each agent's own
   // rules; the last rule matching a tool call decides it.
   const permissions: PermissionRule[] = [
-    // OpenCode's ACP bridge cancels native questions before Copilot can show them.
+    // OpenCode's ACP bridge cancels every native question (session form) before
+    // Copilot can show them, so the turn ends as if the user pressed Stop:
+    // https://github.com/anomalyco/opencode/blob/04f4b0610c79e3692f3b91bd7e4489c2c7010e4b/packages/cli/src/acp/event.ts#L178-L183
+    // Remove this deny once OpenCode forwards questions as ACP elicitations
+    // (https://github.com/anomalyco/opencode/issues/38121) and Copilot renders
+    // them (https://github.com/Brevilabs/obsidian-copilot-private/issues/551).
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/559
     { action: "question", resource: "*", effect: "deny" },
   ];
