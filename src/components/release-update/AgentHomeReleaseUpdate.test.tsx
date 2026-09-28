@@ -85,7 +85,7 @@ describe("AgentHomeReleaseUpdate", () => {
       fireEvent.click(screen.getByRole("button", { name: "See what’s new" }));
       fireEvent.click(screen.getByRole("button", { name: "Dismiss release update" }));
 
-      expect(ReleaseNotesModal).toHaveBeenCalledWith(app, RELEASE);
+      expect(ReleaseNotesModal).toHaveBeenCalledWith(app, RELEASE, "4.0.3");
       expect(mockOpen).toHaveBeenCalledTimes(1);
       expect(updateSetting).toHaveBeenCalledWith("lastDismissedVersion", RELEASE.version);
     });
