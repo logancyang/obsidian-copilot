@@ -1,5 +1,6 @@
 import { AgentHomeReleaseUpdatePrompt } from "@/components/release-update/AgentHomeReleaseUpdatePrompt";
 import { ReleaseNotesModal } from "@/components/release-update/ReleaseNotesDialog";
+import { findReleaseVideo } from "@/components/release-update/releaseNotes";
 import { useApp } from "@/context";
 import { useLatestVersion } from "@/hooks/useLatestVersion";
 import { updateSetting, useSettingsValue } from "@/settings/model";
@@ -31,6 +32,7 @@ export function AgentHomeReleaseUpdate({
       onDismiss={() => updateSetting("lastDismissedVersion", latestRelease.version)}
       onOpen={() => new ReleaseNotesModal(app, latestRelease, currentVersion).open()}
       version={latestRelease.version}
+      video={findReleaseVideo(latestRelease.body)}
     />
   );
 }

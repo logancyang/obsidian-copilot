@@ -6,6 +6,28 @@ import { requestUrl } from "obsidian";
 const GITHUB_REFERENCE_URL =
   /^https:\/\/github\.com\/logancyang\/obsidian-copilot\/(?:pull|issues)\/(\d+)$/;
 
+// A release's demo video is a thumbnail linked to the video, whose alt text starts
+// with this keyword: `[![Demo video: <title>](<thumbnail>)](<video>)`. The keyword
+// singles it out from screenshots so the update banner can preview it.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/603
+const DEMO_VIDEO = /\[!\[Demo video:\s*([^\]]*)\]\(([^)\s]+)\)\]\(([^)\s]+)\)/;
+
+/** A release's demo video, as its notes link it from a thumbnail. */
+export interface ReleaseVideo {
+  thumbnailUrl: string;
+  title: string;
+  url: string;
+}
+
+/**
+ * Finds the demo video a release body leads with, so the update banner can show its thumbnail.
+ * @param markdown - Release body as published on GitHub.
+ */
+export function findReleaseVideo(markdown: string): ReleaseVideo | null {
+  const match = DEMO_VIDEO.exec(markdown);
+  return match ? { title: match[1], thumbnailUrl: match[2], url: match[3] } : null;
+}
+
 /**
  * Compacts URL-only GitHub links after Obsidian has safely parsed the Markdown.
  * @param container - Rendered release-note content whose link labels may be shortened.
