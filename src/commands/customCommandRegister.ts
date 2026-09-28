@@ -129,7 +129,7 @@ export class CustomCommandRegister {
     }
     try {
       let customCommand = await parseCustomCommandFile(this.app, file);
-      if (!hasOrderFrontmatter(this.app, file)) {
+      if (!(await hasOrderFrontmatter(this.app, file))) {
         const newOrder = getNextCustomCommandOrder();
         customCommand = { ...customCommand, order: newOrder };
       }

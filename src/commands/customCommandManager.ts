@@ -1,4 +1,4 @@
-import { App, TFile } from "obsidian";
+import { App } from "obsidian";
 import {
   getCommandFilePath,
   getCustomCommandsFolder,
@@ -21,7 +21,11 @@ import {
   updateCachedCommands,
 } from "./state";
 import { ensureFolderExists } from "@/utils";
-import { trashFile } from "@/utils/vaultAdapterUtils";
+import {
+  deleteFrontmatterMarkdownFile,
+  renameFrontmatterMarkdownFile,
+  writeFrontmatterMarkdownFile,
+} from "@/utils/frontmatterMarkdownFile";
 
 export class CustomCommandManager {
   private static instance: CustomCommandManager;
@@ -60,25 +64,13 @@ export class CustomCommandManager {
       const folderPath = getCustomCommandsFolder();
       await ensureFolderExists(this.app.vault, folderPath);
 
-      const existingFile = this.app.vault.getAbstractFileByPath(filePath);
-      let commandFile: TFile;
-      if (existingFile instanceof TFile) {
-        await this.app.vault.modify(existingFile, command.content);
-        commandFile = existingFile;
-      } else {
-        commandFile = await this.app.vault.create(filePath, command.content);
-      }
-
-      await this.app.fileManager.processFrontMatter(
-        commandFile,
-        (frontmatter: Record<string, unknown>) => {
-          frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
-          frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.showInSlashMenu;
-          frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = command.order;
-          frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
-          frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
-        }
-      );
+      await writeFrontmatterMarkdownFile(this.app, filePath, command.content, {
+        [COPILOT_COMMAND_CONTEXT_MENU_ENABLED]: command.showInContextMenu,
+        [COPILOT_COMMAND_SLASH_ENABLED]: command.showInSlashMenu,
+        [COPILOT_COMMAND_CONTEXT_MENU_ORDER]: command.order,
+        [COPILOT_COMMAND_MODEL_KEY]: command.modelKey,
+        [COPILOT_COMMAND_LAST_USED]: command.lastUsedMs,
+      });
 
       if (!mergedOptions.skipStoreUpdate) {
         updateCachedCommand(command, command.title);
@@ -104,39 +96,28 @@ export class CustomCommandManager {
       if (!skipStoreUpdate) {
         updateCachedCommand(command, prevCommandTitle);
       }
-      let commandFile = this.app.vault.getAbstractFileByPath(filePath);
       if (isRename) {
-        const newFileExists = this.app.vault.getAbstractFileByPath(filePath);
-        if (newFileExists) {
+        if (await this.app.vault.adapter.exists(filePath)) {
           throw new CustomError(
             "Error saving custom prompt. Please check if the title already exists."
           );
         }
-        const prevCommandFile = this.app.vault.getAbstractFileByPath(prevFilePath);
-        if (prevCommandFile instanceof TFile) {
-          await this.app.vault.rename(prevCommandFile, filePath);
-          commandFile = this.app.vault.getAbstractFileByPath(filePath);
+        if (await this.app.vault.adapter.exists(prevFilePath)) {
+          await renameFrontmatterMarkdownFile(this.app, prevFilePath, filePath);
         }
       }
 
-      if (!commandFile) {
+      if (!(await this.app.vault.adapter.exists(filePath))) {
         await this.createCommand(command, { skipStoreUpdate, autoOrder: true });
-        commandFile = this.app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
+        return;
       }
-
-      if (commandFile instanceof TFile) {
-        await this.app.vault.modify(commandFile, command.content);
-        await this.app.fileManager.processFrontMatter(
-          commandFile,
-          (frontmatter: Record<string, unknown>) => {
-            frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
-            frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.showInSlashMenu;
-            frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = command.order;
-            frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
-            frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
-          }
-        );
-      }
+      await writeFrontmatterMarkdownFile(this.app, filePath, command.content, {
+        [COPILOT_COMMAND_CONTEXT_MENU_ENABLED]: command.showInContextMenu,
+        [COPILOT_COMMAND_SLASH_ENABLED]: command.showInSlashMenu,
+        [COPILOT_COMMAND_CONTEXT_MENU_ORDER]: command.order,
+        [COPILOT_COMMAND_MODEL_KEY]: command.modelKey,
+        [COPILOT_COMMAND_LAST_USED]: command.lastUsedMs,
+      });
     } finally {
       removePendingFileWrite(filePath);
       if (isRename) {
@@ -163,10 +144,7 @@ export class CustomCommandManager {
     try {
       addPendingFileWrite(filePath);
       deleteCachedCommand(command.title);
-      const file = this.app.vault.getAbstractFileByPath(filePath);
-      if (file instanceof TFile) {
-        await trashFile(this.app, file);
-      }
+      await deleteFrontmatterMarkdownFile(this.app, filePath);
     } finally {
       removePendingFileWrite(filePath);
     }

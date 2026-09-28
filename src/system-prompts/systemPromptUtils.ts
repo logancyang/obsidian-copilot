@@ -8,6 +8,11 @@ import {
 import { UserSystemPrompt } from "@/system-prompts/type";
 import { App, normalizePath, TAbstractFile, TFile } from "obsidian";
 import { getEffectiveSystemPromptsFolder } from "@/settings/copilotFolder";
+import {
+  listFrontmatterMarkdownFiles,
+  readFrontmatterMarkdownFile,
+  updateFrontmatterMarkdownFile,
+} from "@/utils/frontmatterMarkdownFile";
 import { stripFrontmatter } from "@/utils";
 import {
   updateCachedSystemPrompts,
@@ -58,10 +63,10 @@ function coerceFrontmatterNumber(value: unknown, fallback: number): number {
 }
 
 export async function parseSystemPromptFile(app: App, file: TFile): Promise<UserSystemPrompt> {
-  const rawContent = await app.vault.read(file);
-  const content = stripFrontmatter(rawContent);
-  const metadata = app.metadataCache.getFileCache(file);
-  const frontmatter = metadata?.frontmatter;
+  const parsed = await readFrontmatterMarkdownFile(app, file.path);
+  const raw = parsed ? parsed.content : await app.vault.read(file);
+  const content = parsed ? raw : stripFrontmatter(raw);
+  const frontmatter = parsed?.frontmatter ?? app.metadataCache.getFileCache(file)?.frontmatter;
 
   const createdMs = coerceFrontmatterNumber(
     frontmatter?.[COPILOT_SYSTEM_PROMPT_CREATED],
@@ -86,7 +91,9 @@ export async function parseSystemPromptFile(app: App, file: TFile): Promise<User
 }
 
 export async function fetchAllSystemPrompts(app: App): Promise<UserSystemPrompt[]> {
-  const files = app.vault.getFiles().filter((file) => isSystemPromptFile(file));
+  const files = (await listFrontmatterMarkdownFiles(app, getSystemPromptsFolder())).filter((file) =>
+    isSystemPromptFile(file)
+  );
   return await Promise.all(files.map((file) => parseSystemPromptFile(app, file)));
 }
 
@@ -97,7 +104,8 @@ export async function loadAllSystemPrompts(app: App): Promise<UserSystemPrompt[]
 }
 
 export async function ensurePromptFrontmatter(app: App, file: TFile, prompt: UserSystemPrompt) {
-  const alreadyPending = isPendingFileWrite(file.path);
+  const filePath = file.path;
+  const alreadyPending = isPendingFileWrite(filePath);
   const now = Date.now();
 
   const createdMs =
@@ -109,9 +117,9 @@ export async function ensurePromptFrontmatter(app: App, file: TFile, prompt: Use
 
   try {
     if (!alreadyPending) {
-      addPendingFileWrite(file.path);
+      addPendingFileWrite(filePath);
     }
-    await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+    await updateFrontmatterMarkdownFile(app, filePath, (frontmatter: Record<string, unknown>) => {
       if (frontmatter[COPILOT_SYSTEM_PROMPT_CREATED] == null) {
         frontmatter[COPILOT_SYSTEM_PROMPT_CREATED] = createdMs;
       }
@@ -124,7 +132,7 @@ export async function ensurePromptFrontmatter(app: App, file: TFile, prompt: Use
     });
   } finally {
     if (!alreadyPending) {
-      removePendingFileWrite(file.path);
+      removePendingFileWrite(filePath);
     }
   }
 }
@@ -136,19 +144,17 @@ export async function updatePromptDefaultFlag(
   folder?: string
 ): Promise<void> {
   const filePath = getPromptFilePathInFolder(title, folder);
-  const file = app.vault.getAbstractFileByPath(filePath);
-
-  if (!(file instanceof TFile)) {
+  if (!(await app.vault.adapter.exists(filePath))) {
     logWarn(`System prompt file not found for default flag update: ${filePath}`);
     return;
   }
 
-  const alreadyPending = isPendingFileWrite(file.path);
+  const alreadyPending = isPendingFileWrite(filePath);
   try {
     if (!alreadyPending) {
-      addPendingFileWrite(file.path);
+      addPendingFileWrite(filePath);
     }
-    await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+    await updateFrontmatterMarkdownFile(app, filePath, (frontmatter: Record<string, unknown>) => {
       if (isDefault) {
         frontmatter[COPILOT_SYSTEM_PROMPT_DEFAULT] = true;
       } else {
@@ -157,7 +163,7 @@ export async function updatePromptDefaultFlag(
     });
   } finally {
     if (!alreadyPending) {
-      removePendingFileWrite(file.path);
+      removePendingFileWrite(filePath);
     }
   }
 }
