@@ -264,7 +264,7 @@ export const BasicSettings: React.FC = () => {
             <Button
               variant="secondary"
               size="icon"
-              onClick={() => revealFolderInExplorer(app, settings.copilotFolder)}
+              onClick={() => void revealFolderInExplorer(app, settings.copilotFolder)}
               aria-label="Open Copilot folder"
               title="Open Copilot folder"
             >

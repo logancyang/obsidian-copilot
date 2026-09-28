@@ -9,6 +9,16 @@ import {
 } from "@/projects/state";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
+jest.mock("obsidian", () => {
+  const actual = jest.requireActual<typeof import("obsidian")>("obsidian");
+  return Object.assign({}, actual, {
+    stringifyYaml: (value: Record<string, unknown>) =>
+      Object.entries(value)
+        .map(([key, item]) => `${key}: ${String(item)}`)
+        .join("\n") + "\n",
+  });
+});
+
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(() => ({ copilotFolder: "vault-copilot" })),
   updateSetting: jest.fn(),
@@ -57,13 +67,19 @@ interface TestVault {
   frontmatter: Record<string, unknown>;
 }
 
-function makeTestVault(options: { existingPaths?: string[] } = {}): TestVault {
+function makeTestVault(
+  options: { existingPaths?: string[]; hiddenFolder?: boolean } = {}
+): TestVault {
   const frontmatter: Record<string, unknown> = {};
   const vault = {
     create: jest.fn(async (path: string) => mockTFile({ path })),
-    getAbstractFileByPath: jest.fn(() => null),
+    getAbstractFileByPath: jest.fn(() => (options.hiddenFolder ? null : {})),
     adapter: {
       exists: jest.fn(async (path: string) => options.existingPaths?.includes(path) ?? false),
+      write: jest.fn(async () => {}),
+      list: jest.fn(async () => ({ files: [], folders: [] })),
+      rmdir: jest.fn(async () => {}),
+      remove: jest.fn(async () => {}),
     },
   } as unknown as jest.Mocked<Vault>;
   const app = {
@@ -168,6 +184,39 @@ describe("ProjectFileManager", () => {
       expect(vault.create).not.toHaveBeenCalled();
       expect(getCachedProjectRecords()).toEqual([]);
       expect(isPendingFileWrite(filePath)).toBe(false);
+    });
+
+    it("writes project frontmatter directly when the project folder is hidden from the vault index for https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
+      const { app, vault } = makeTestVault({ hiddenFolder: true });
+      const manager = ProjectFileManager.getInstance(app);
+
+      const record = await manager.createProject(
+        makeConfig({ id: "agent-memory", name: "Agent Memory Research", systemPrompt: "Research" })
+      );
+
+      expect(record.filePath).toBe("vault-copilot/projects/Agent Memory Research/project.md");
+      expect(vault.create).not.toHaveBeenCalled();
+      expect(vault.adapter.write).toHaveBeenCalledWith(
+        record.filePath,
+        expect.stringContaining("copilot-project-id: agent-memory")
+      );
+      expect(vault.adapter.write).toHaveBeenCalledWith(
+        record.filePath,
+        expect.stringContaining("Research")
+      );
+    });
+
+    it("removes the empty project folder when writing a hidden project file fails", async () => {
+      const folderPath = "vault-copilot/projects/Failed Project";
+      const { app, vault } = makeTestVault({ hiddenFolder: true, existingPaths: [folderPath] });
+      (vault.adapter.write as jest.Mock).mockRejectedValue(new Error("disk full"));
+      const manager = ProjectFileManager.getInstance(app);
+
+      await expect(
+        manager.createProject(makeConfig({ id: "failed", name: "Failed Project" }))
+      ).rejects.toThrow("disk full");
+
+      expect(vault.adapter.rmdir).toHaveBeenCalledWith(folderPath, false);
     });
   });
 });
