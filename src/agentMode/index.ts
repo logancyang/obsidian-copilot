@@ -128,23 +128,6 @@ function collectAgentSkillsDirsProjectRel(): Record<string, string> {
 }
 
 /**
- * The exact system prompt every backend bakes in — i.e. `buildAgentSystemPrompt`'s
- * real output, not a hand-picked subset. Used as the per-backend restart dedup
- * key so a restart fires iff the composed prompt actually changes: the "disable
- * builtin" toggle, the base framing, tool guidance, and the pill directive.
- * Keying on the builder's actual output means the key can't silently drift from
- * what the backend sends.
- *
- * The prompt is provider-agnostic, so the key is the same for every `backendId`
- * and does not vary with the sticky default model — switching models never
- * needs a prompt-driven restart. The parameter is kept so the call site can key
- * per-backend should that ever change.
- */
-function backendSystemPromptKey(_backendId: BackendId): string {
-  return buildAgentSystemPrompt();
-}
-
-/**
  * Order-independent dedup key for a backend's env overrides, so the restart
  * subscription fires iff the effective record actually changes (not on key
  * reordering or unrelated settings writes).
@@ -183,6 +166,7 @@ function spawnModelConfigKey(
         model.info.reasoning,
         model.info.reasoningEfforts,
         model.info.modalities,
+        model.info.toolCall,
       ])
     )
     .sort()
@@ -355,18 +339,19 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // when its effective content changes; Claude re-reads it per `newSession()`.
   //
   // The system-prompt store also emits for Chat mode prompt changes, so dedupe
-  // on the builder's real output. On initial load this is a harmless no-op:
-  // nothing is running yet, so the refresh has neither a proc nor a session.
+  // on each backend's real prompt (it names only that backend's enabled skills).
+  // On initial load this is a harmless no-op: nothing is running yet, so the
+  // refresh has neither a proc nor a session.
   const lastSystemPromptKeys = new Map<BackendId, string>();
   for (const descriptor of listBackendDescriptors()) {
     if (descriptor.restartOnSystemPromptChange) {
-      lastSystemPromptKeys.set(descriptor.id, backendSystemPromptKey(descriptor.id));
+      lastSystemPromptKeys.set(descriptor.id, buildAgentSystemPrompt(descriptor.id));
     }
   }
   const refreshSystemPromptAffected = (): void => {
     for (const descriptor of listBackendDescriptors()) {
       if (!descriptor.restartOnSystemPromptChange) continue;
-      const key = backendSystemPromptKey(descriptor.id);
+      const key = buildAgentSystemPrompt(descriptor.id);
       if (key === lastSystemPromptKeys.get(descriptor.id)) continue;
       lastSystemPromptKeys.set(descriptor.id, key);
       void manager
@@ -453,11 +438,12 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       miyoAvailabilityChanged ||
       prev.agentMode.skills.builtinPreferences !== next.agentMode.skills.builtinPreferences
     ) {
-      // Miyo availability also gates the `miyo-search` system-prompt steering
-      // (see `buildAgentSystemPrompt`). codex/opencode bake the prompt at spawn,
-      // so a mid-session flip needs a restart to apply. Chain the restart AFTER
-      // the seed + `skillManager.refresh()` resolve so the skill is written and
-      // reconciled into the agent dirs before the agent respawns — otherwise
+      // The Miyo gates and builtin opt-outs also decide which skills the system
+      // prompt names for each backend (see `buildAgentSystemPrompt`).
+      // codex/opencode bake the prompt at spawn, so a mid-session change needs a
+      // restart to apply. Chain the restart AFTER the seed +
+      // `skillManager.refresh()` resolve so the skill is written and reconciled
+      // into the agent dirs before the agent respawns — otherwise
       // codex (which has `restartOnManagedSkillsChange: false`) could come back
       // with steering pointing at a skill that isn't on disk yet. The seed pass
       // swallows its own errors and always refreshes, so this normally runs
@@ -465,7 +451,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       // key, so it's a no-op when the rebuilt prompt is unchanged.
       void seedManagedBuiltins()
         .then(() => {
-          if (!miyoAvailabilityChanged) return;
           refreshSystemPromptAffected();
           if (prev.docProcessorBackend === next.docProcessorBackend) return;
           // Backends skipped above rebuild the prompt per `newSession()`, so a new

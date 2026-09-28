@@ -32,7 +32,9 @@ jest.mock("@/utils/appPaths", () => ({
   getVaultId: () => "test-vault",
 }));
 jest.mock("./backends/shared/agentSystemPrompt", () => ({
-  buildAgentSystemPrompt: () => "prompt",
+  // Like the real prompt, varies per backend with the builtin skill opt-outs.
+  buildAgentSystemPrompt: (id: string) =>
+    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}`,
 }));
 jest.mock("./backends/shared/builtinSkillEnv", () => ({
   getBuiltinSkillEnvRestartPolicy: () => "none",
@@ -100,6 +102,7 @@ const mockDescriptors = ["claude", "opencode"].map((id) => ({
   skillsProjectDir: `.${id}/skills`,
   // Only subprocess backends bake provider and model config into their spawn.
   restartOnProviderConfigChange: id === "opencode",
+  restartOnSystemPromptChange: id === "opencode",
   getInstallState: () => mockStates[id],
   subscribeInstallState: (_plugin: unknown, listener: () => void) => {
     mockInstallListeners[id] = listener;
@@ -255,6 +258,35 @@ describe("agentMode", () => {
       expect(mockManager.onInstallStateChanged).toHaveBeenCalledWith("opencode");
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 offers an OpenCode reload after a builtin skill opt-out is reconciled and changes its system prompt", async () => {
+      createAgentSessionManager({} as App, plugin);
+      await mockManager.registerPreload.mock.calls[0][1];
+      const reconciled = deferred();
+      const noted = deferred();
+      reconcile.mockReturnValueOnce(reconciled.promise);
+      mockManager.noteSpawnConfigChanged.mockImplementationOnce(async () => noted.resolve());
+
+      emitSettingsChange(mockSettings, {
+        ...mockSettings,
+        agentMode: {
+          ...mockSettings.agentMode,
+          skills: {
+            builtinPreferences: { "copilot-web-search": { disabledAgents: ["opencode"] } },
+          },
+        },
+      } as unknown as CopilotSettings);
+
+      // The skill must leave the agent's folder before the new prompt stops naming it.
+      expect(mockManager.noteSpawnConfigChanged).not.toHaveBeenCalled();
+      reconciled.resolve();
+      await noted.promise;
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledTimes(1);
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
+        "opencode",
+        "system prompt changed"
+      );
+    });
+
     it(`refreshes a spawn-config backend when a model's published effort levels change ${LINEUP_ISSUE}`, () => {
       // The Plus lineup reconcile rewrites the row in place, so no provider or
       // enabled-list emission fires; without this the live agent keeps offering
@@ -267,6 +299,17 @@ describe("agentMode", () => {
       );
 
       expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledTimes(1);
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
+        "opencode",
+        "model config changed"
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 offers an OpenCode reload when enabled model tool support changes", () => {
+      createAgentSessionManager({} as App, plugin);
+
+      emitSettingsChange(settingsWith({ toolCall: true }), settingsWith({ toolCall: false }));
+
       expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
         "opencode",
         "model config changed"

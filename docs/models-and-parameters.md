@@ -44,6 +44,11 @@ New BYOK chat models start enabled for both Quick Chat and opencode. You can
 turn either copy off without affecting the other. Models newly reported by an
 agent may also appear switched off until you enable them.
 
+For Copilot-hosted models in opencode, the effort picker shows the levels that
+model supports. BYOK model choices follow opencode's model catalog; a custom
+endpoint with no published levels uses low, medium, and high when its model is
+marked as reasoning-capable.
+
 ## Choose a model while chatting
 
 Locked Copilot models link to the pricing page rather than selecting a model.

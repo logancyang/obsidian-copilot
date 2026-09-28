@@ -30,6 +30,10 @@ opencode is the most flexible choice because it can use Copilot-hosted, BYOK, an
 2. If you already installed it, choose **My own binary** in **Configure**, then select **Auto-detect** or enter the absolute path and click **Apply**.
 3. Enable the models you want to see and choose a **Default model**.
 
+Managed installs download and verify OpenCode 2.0.3 directly. You do not need to install npm, Bun, Node, or a separate archive tool. Copilot accepts your own OpenCode 2.0.3 or newer binary; some later 2.0.x releases have an upstream bug that can hide configured models when a chat starts.
+
+If OpenCode's internal service stops responding, Copilot refreshes it. The failed turn explains the problem; send the message again when the agent is ready. If OpenCode cannot reopen the conversation, Copilot starts a new chat. If the service fails before it answers any chat, Copilot stops retrying and shows the error; check the Copilot log for the cause.
+
 There are three ways to provide model access:
 
 - **Copilot-hosted:** add your license under **Basic → Copilot License**. Models included with your plan appear automatically.
@@ -123,6 +127,8 @@ When Claude or Codex asks a set of questions, answer the current tab and select 
 
 Codex can ask questions while the permission picker is on **Safe**, **Plan**, or **Auto**. You do not need to switch to Plan to answer a question.
 
+OpenCode does not show question cards yet. If it asks a clarifying question in chat, answer in the message box.
+
 Permission and question cards stay in a scrolling action area above the message box until you answer them, even while the response continues streaming.
 
 Your vault or project is the agent's working directory, not a security sandbox. Auto or bypass permissions can reach other files and services available to the agent or your account. Use **Safe** for unfamiliar work and review persistent permissions carefully.
@@ -178,6 +184,8 @@ Custom Skills and built-in Obsidian Skills are free. Active Plus access adds clo
 Built-in skill preferences record only your changes to the defaults. New skills use the defaults, and content updates keep your saved choices. Copilot fully manages built-in skill folders. Updating a built-in skill replaces its entire folder; removing it deletes the folder. Both operations remove any files you added inside it. Keep custom skills and files in separate folders. When a skill is retired, Copilot also clears its saved preferences. A renamed skill starts with fresh defaults. If file permissions prevent removal, Copilot reports the failure and keeps your disabled preference. After you restore access, Copilot retries cleanup when skills refresh or the plugin reloads.
 
 In Self-Host Mode with OpenCode selected, Agent Chat's built-in web-search Skill uses the search provider selected under **Settings → Copilot → Self-Host**. Provider credentials stay inside Obsidian rather than being passed to OpenCode, and the feature does not require Obsidian's command line interface. Copilot disables OpenCode's native web-search and web-fetch tools so they cannot bypass that route. Full-page web fetching is unavailable through OpenCode in Self-Host Mode because the supported search providers do not share a page-fetch interface; Agent Chat can still use the configured provider's search results.
+
+If you set a custom `OPENCODE_CONFIG_CONTENT` for OpenCode, Self-Host Mode adds final deny rules for the native web tools in its top-level and per-agent `permissions`. Other permission rules in your custom configuration remain in their original order. Self-Host Mode does not start OpenCode with a custom configuration that uses the OpenCode 1 `permission`, `tools`, `agent`, or `mode` keys; write those settings as OpenCode 2 `permissions` and `agents` instead.
 
 On Windows, creating the folder links may require **Developer Mode** or administrator access. If a sync service replaces a link, toggle that Skill off and on for the affected agent to recreate it.
 

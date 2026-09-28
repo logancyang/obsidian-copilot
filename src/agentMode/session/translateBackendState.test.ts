@@ -283,6 +283,33 @@ describe("translateBackendState", () => {
         ]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 hides the agent's unset `default` entry and reports no current level while it is selected", () => {
+        const modelOpt = selectOption(
+          "model",
+          [{ value: "copilot-plus/glm-5.2" }],
+          undefined,
+          "model"
+        );
+        const effortOpt = selectOption(
+          "effort",
+          [{ value: "none" }, { value: "high" }, { value: "default", name: "Default" }],
+          "default",
+          "thought_level"
+        );
+        const state = translateBackendState(
+          { models: null, modes: null, configOptions: [modelOpt, effortOpt] },
+          suffixDescriptor()
+        );
+        expect(state.model?.availableModels[0]?.effortOptions).toEqual([
+          { value: "none", label: "none" },
+          { value: "high", label: "high" },
+        ]);
+        expect(state.model?.current).toEqual({
+          baseModelId: "copilot-plus/glm-5.2",
+          effort: null,
+        });
+      });
+
       it("keeps levels outside the canonical vocabulary in the agent's order, after the ranked ones", () => {
         const modelOpt = selectOption("model", [{ value: "p/m" }], undefined, "model");
         const effortOpt = selectOption(

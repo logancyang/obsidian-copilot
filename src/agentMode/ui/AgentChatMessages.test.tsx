@@ -58,8 +58,11 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
 }));
 
 jest.mock("@/agentMode/ui/ToolPermissionCard", () => ({
-  ToolPermissionCard: ({ request }: { request: PermissionPrompt }) => (
-    <div>Permission {request.toolCall.toolCallId}</div>
+  ToolPermissionCard: ({ request, toolName }: { request: PermissionPrompt; toolName?: string }) => (
+    <div>
+      Permission {request.toolCall.toolCallId}
+      {toolName ? ` via ${toolName}` : ""}
+    </div>
   ),
 }));
 
@@ -283,6 +286,22 @@ describe("AgentChatMessages", () => {
         ["Permission permission-first"]
       );
       expect(rail.querySelector("[data-action-id]")).not.toBe(firstAction);
+    });
+
+    it("passes the pending permission the tool name its chat tool call shows for https://github.com/Brevilabs/obsidian-copilot-private/issues/599", () => {
+      const toolTurn = assistantMessage("answer-1", 62_000, {
+        parts: [
+          { kind: "tool_call", id: "search-1", title: "websearch", status: "pending" },
+        ] as AgentChatMessage["parts"],
+      });
+
+      renderMessages([toolTurn], true, {
+        pendingToolPermissions: [permission("search-1")],
+      });
+
+      expect(screen.getByRole("region", { name: "Pending agent actions" }).textContent).toBe(
+        "Permission search-1 via websearch"
+      );
     });
 
     it("bounds and scrolls a tall action rail so controls remain reachable for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
