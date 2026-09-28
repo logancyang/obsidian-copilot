@@ -44,7 +44,7 @@ export function startReleaseUpdateCheck(
       button.addEventListener("click", () => {
         if (!active) return;
         notice?.hide();
-        new ReleaseNotesModal(app, release).open();
+        new ReleaseNotesModal(app, release, currentVersion).open();
       });
       notice = new Notice(fragment, 15000);
       onShown(release.version);

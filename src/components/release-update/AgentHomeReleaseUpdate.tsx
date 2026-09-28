@@ -29,7 +29,7 @@ export function AgentHomeReleaseUpdate({
   return (
     <AgentHomeReleaseUpdatePrompt
       onDismiss={() => updateSetting("lastDismissedVersion", latestRelease.version)}
-      onOpen={() => new ReleaseNotesModal(app, latestRelease).open()}
+      onOpen={() => new ReleaseNotesModal(app, latestRelease, currentVersion).open()}
       version={latestRelease.version}
     />
   );

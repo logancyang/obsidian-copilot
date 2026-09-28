@@ -39,7 +39,7 @@ describe("releaseUpdateNotice", () => {
       const fragment = jest.mocked(Notice).mock.calls[0][0] as DocumentFragment;
       expect(fragment.textContent).toContain("Copilot 4.1.0 is available");
       fragment.querySelector("button")!.click();
-      expect(ReleaseNotesModal).toHaveBeenCalledWith(app, release);
+      expect(ReleaseNotesModal).toHaveBeenCalledWith(app, release, "4.0.0");
       const modal = jest.mocked(ReleaseNotesModal).mock.results[0].value as ReleaseNotesModal;
       expect(modal.open).toHaveBeenCalledTimes(1);
       cleanup();

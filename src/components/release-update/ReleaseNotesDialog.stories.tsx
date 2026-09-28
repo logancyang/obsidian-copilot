@@ -31,6 +31,12 @@ Update Copilot from **Obsidian → Community Plugins**. On BRAT? 4.0.4 is mirror
 Report issues via **Copilot Settings → Advanced → Report an Issue**.
 `;
 
+const LATEST_RELEASE = {
+  version: "4.0.4",
+  body: RELEASE_BODY,
+  htmlUrl: "https://github.com/logancyang/obsidian-copilot/releases/tag/4.0.4",
+};
+
 const meta = {
   title: "Release/Release Notes Dialog",
   component: ReleaseNotesDialogContent,
@@ -54,11 +60,34 @@ export const ReadyWithImage: StoryObj<ReleaseNotesDialogContentProps> = {
   args: {
     state: {
       status: "ready",
-      release: {
-        version: "4.0.4",
-        body: RELEASE_BODY,
-        htmlUrl: "https://github.com/logancyang/obsidian-copilot/releases/tag/4.0.4",
-      },
+      releases: [LATEST_RELEASE],
+    },
+  },
+};
+
+export const SkippedReleases: StoryObj<ReleaseNotesDialogContentProps> = {
+  args: {
+    state: {
+      status: "ready",
+      releases: [
+        LATEST_RELEASE,
+        {
+          version: "4.0.3",
+          body: `# v4.0.3 - Faster Agent Home
+
+## 🛠️ Bug Fixes
+
+- **Agent Home opens faster.** Recent chats load in the background. (https://github.com/logancyang/obsidian-copilot/pull/2950)`,
+          htmlUrl: "https://github.com/logancyang/obsidian-copilot/releases/tag/4.0.3",
+        },
+        {
+          version: "4.0.2",
+          body: `# v4.0.2 - Steadier sync
+
+- **Settings survive Obsidian Sync.** Agent paths no longer reset on a second device. (https://github.com/logancyang/obsidian-copilot/pull/2931)`,
+          htmlUrl: "https://github.com/logancyang/obsidian-copilot/releases/tag/4.0.2",
+        },
+      ],
     },
   },
 };

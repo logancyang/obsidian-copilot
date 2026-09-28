@@ -97,6 +97,8 @@ Copilot checks for updates in the background when the plugin loads, including wh
 
 Copilot also checks for the latest release whenever you create a new Agent Chat tab with **+**, so you can discover updates without reloading the plugin. When a newer Copilot release is available, the global Agent Chat home shows an update banner along the bottom of the pane. The banner stays above the home tabs when space is tight. Select **See what’s new** to read the release notes, or dismiss the banner for that release. Project homes and active conversations do not show it.
 
+The release notes open with the newest release. If you skipped earlier stable releases, their notes follow below it, newest first, so you can catch up on every change since your installed version. The dialog shows up to ten releases and leaves out prereleases. If GitHub’s release list can’t be loaded, only the newest release appears.
+
 ## Models, effort, and permissions
 
 Each agent has its own model list. The models shown in one agent do not automatically appear in another.
