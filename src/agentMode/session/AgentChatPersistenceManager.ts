@@ -25,7 +25,7 @@ import {
   trashFile,
 } from "@/utils/vaultAdapterUtils";
 import { joinPosix } from "@/utils/pathUtils";
-import { TFile, type App } from "obsidian";
+import { parseYaml, TFile, type App } from "obsidian";
 import { Notice } from "obsidian";
 import { coerceProjectId, escapeYamlString, unescapeYamlString } from "./agentChatYaml";
 import { GLOBAL_SCOPE } from "./scope";
@@ -358,13 +358,17 @@ export class AgentChatPersistenceManager {
   private readExistingMeta(content: string): ExistingMeta {
     // A rename can reach disk before Obsidian refreshes metadataCache.
     // Autosave must round-trip the current topic instead of restoring its
-    // previous value from that stale cache.
+    // previous value from that stale cache. Full YAML parsing preserves
+    // multiline values and externally edited notes with a UTF-8 BOM.
     // https://github.com/logancyang/obsidian-copilot/issues/3378
-    const { frontmatter: current } = this.splitFrontmatter(content);
+    const yaml = content
+      .replace(/^\uFEFF/, "")
+      .match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
+    const current = (parseYaml(yaml ?? "") ?? {}) as Record<string, unknown>;
     const lastAccessed = current.lastAccessedAt ? Number(current.lastAccessedAt) : undefined;
     return {
-      topic: current.topic,
-      label: current.agentLabel,
+      topic: typeof current.topic === "string" ? current.topic : undefined,
+      label: typeof current.agentLabel === "string" ? current.agentLabel : undefined,
       lastAccessedAt: lastAccessed && Number.isFinite(lastAccessed) ? lastAccessed : undefined,
       sessionId: typeof current.sessionId === "string" ? current.sessionId : undefined,
       projectId: coerceProjectId(current.projectId),

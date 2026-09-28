@@ -13,6 +13,7 @@ jest.mock("obsidian", () => ({
   normalizePath: (path: string) => path,
   Notice: jest.fn(),
   TFile: jest.fn(),
+  parseYaml: (content: string) => jest.requireActual("yaml").parse(content),
 }));
 jest.mock("@/logger");
 jest.mock("@/settings/model", () => ({
@@ -132,6 +133,39 @@ describe("AgentChatPersistenceManager", () => {
   });
 
   describe("saveSession()", () => {
+    it("preserves a BOM-prefixed note's title and recency during autosave https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+      const messages = [makeMessage(USER_SENDER, "Original prompt")];
+      const saved = await manager.saveSession(messages, "opencode");
+      const file = app.files.get(saved!.path)!;
+      Object.setPrototypeOf(file, TFile.prototype);
+      file.contents =
+        "\uFEFF" +
+        file.contents!.replace("---\n", '---\ntopic: "Useful workflow"\nlastAccessedAt: 123456\n');
+      app.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { topic: "Useful workflow", lastAccessedAt: 123456 },
+      } as never);
+
+      await manager.saveSession(messages, "opencode", { existingPath: saved!.path });
+
+      expect(file.contents).toContain('topic: "Useful workflow"');
+      expect(file.contents).toContain("lastAccessedAt: 123456");
+    });
+
+    it("preserves a valid folded YAML title during autosave https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+      const messages = [makeMessage(USER_SENDER, "Original prompt")];
+      const saved = await manager.saveSession(messages, "opencode");
+      const file = app.files.get(saved!.path)!;
+      Object.setPrototypeOf(file, TFile.prototype);
+      file.contents = file.contents!.replace("---\n", "---\ntopic: >-\n  Useful\n  workflow\n");
+      app.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { topic: "Useful workflow" },
+      } as never);
+
+      await manager.saveSession(messages, "opencode", { existingPath: saved!.path });
+
+      expect(file.contents).toContain('topic: "Useful workflow"');
+    });
+
     it("keeps a renamed title when metadata cache lags the next save https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
       const messages = [makeMessage(USER_SENDER, "Original prompt")];
       const saved = await manager.saveSession(messages, "opencode", { label: "Old label" });
