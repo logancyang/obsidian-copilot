@@ -132,13 +132,7 @@ function SkippedReleaseNotes({
   const [releases, setReleases] = React.useState<ReleaseNotes[]>(() => [latest]);
 
   React.useEffect(() => {
-    let active = true;
-    void requestReleaseNotesSince(currentVersion, latest).then((loaded) => {
-      if (active) setReleases(loaded);
-    });
-    return () => {
-      active = false;
-    };
+    void requestReleaseNotesSince(currentVersion, latest).then(setReleases);
   }, [currentVersion, latest]);
 
   return <ReleaseNotesDialogContent onClose={onClose} state={{ status: "ready", releases }} />;

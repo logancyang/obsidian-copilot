@@ -97,9 +97,43 @@ describe("releaseNotes", () => {
         },
       ]);
       expect(requestUrl).toHaveBeenCalledWith({
-        url: "https://api.github.com/repos/logancyang/obsidian-copilot/releases?per_page=30",
+        url: "https://api.github.com/repos/logancyang/obsidian-copilot/releases?per_page=30&page=1",
         method: "GET",
       });
+    });
+
+    it(`reads further pages when prereleases fill the first page, stopping at the installed version, for ${ISSUE_600_URL}`, async () => {
+      const canaries = Array.from({ length: 29 }, (_, index) =>
+        listItem(`4.0.11-canary.${index}`, { prerelease: true })
+      );
+      jest
+        .mocked(requestUrl)
+        .mockResolvedValueOnce(respond([...canaries, listItem("4.0.10")]))
+        .mockResolvedValueOnce(respond([listItem("4.0.9"), listItem("4.0.8")]));
+
+      const releases = await requestReleaseNotesSince("4.0.8", LATEST);
+
+      expect(releases.map((release) => release.version)).toEqual(["4.0.11", "4.0.10", "4.0.9"]);
+      expect(requestUrl).toHaveBeenCalledTimes(2);
+      expect(requestUrl).toHaveBeenLastCalledWith({
+        url: "https://api.github.com/repos/logancyang/obsidian-copilot/releases?per_page=30&page=2",
+        method: "GET",
+      });
+    });
+
+    it(`leaves out the latest release by its URL when its tag differs from its manifest version for ${ISSUE_600_URL}`, async () => {
+      const latest = {
+        body: "# v4.0.4",
+        htmlUrl: "https://github.com/logancyang/obsidian-copilot/releases/tag/4.0.3",
+        version: "4.0.4",
+      };
+      jest
+        .mocked(requestUrl)
+        .mockResolvedValue(respond([listItem("4.0.3"), listItem("4.0.2"), listItem("4.0.1")]));
+
+      const releases = await requestReleaseNotesSince("4.0.1", latest);
+
+      expect(releases.map((release) => release.version)).toEqual(["4.0.4", "4.0.2"]);
     });
 
     it(`caps the notes at ten releases for a user many versions behind for ${ISSUE_600_URL}`, async () => {

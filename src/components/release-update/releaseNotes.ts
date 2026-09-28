@@ -27,9 +27,9 @@ export function formatReleaseNotesForObsidian(container: HTMLElement): void {
   }
 }
 
-// Canary prereleases share this list, so fetch past them to reach the stable releases.
-const RELEASES_API_URL =
-  "https://api.github.com/repos/logancyang/obsidian-copilot/releases?per_page=30";
+// Canary prereleases share this list, so page past them to reach the stable releases.
+const RELEASES_PAGE_SIZE = 30;
+const RELEASES_API_URL = `https://api.github.com/repos/logancyang/obsidian-copilot/releases?per_page=${RELEASES_PAGE_SIZE}`;
 const MAX_RELEASE_NOTES = 10;
 
 interface GitHubReleaseListItem {
@@ -52,24 +52,34 @@ export async function requestReleaseNotesSince(
   latest: LatestRelease
 ): Promise<LatestRelease[]> {
   try {
-    const response = await requestUrl({ url: RELEASES_API_URL, method: "GET" });
-    const items: GitHubReleaseListItem[] = Array.isArray(response.json) ? response.json : [];
-    const skipped = items.flatMap((item): LatestRelease[] => {
-      // Only stable releases the user skipped belong here; the latest already leads the
-      // list under its manifest version, which can differ from its tag.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/600
-      if (item.draft || item.prerelease || typeof item.tag_name !== "string") return [];
-      const version = item.tag_name.replace(/^v/, "");
-      if (compareSemver(version, currentVersion) <= 0) return [];
-      if (compareSemver(version, latest.version) >= 0) return [];
-      return [
-        {
+    const skipped: LatestRelease[] = [];
+    // Accumulated prereleases can fill whole pages, so keep reading until the notes are
+    // full, an installed-or-older release appears, or the list ends.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/600
+    for (let page = 1; skipped.length < MAX_RELEASE_NOTES - 1; page++) {
+      const response = await requestUrl({ url: `${RELEASES_API_URL}&page=${page}`, method: "GET" });
+      const items: GitHubReleaseListItem[] = Array.isArray(response.json) ? response.json : [];
+      let reachedInstalled = false;
+      for (const item of items) {
+        // Only stable releases the user skipped belong here. The latest already leads the
+        // list and is matched by URL, since its tag can differ from its manifest version.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/600
+        if (item.draft || item.prerelease || typeof item.tag_name !== "string") continue;
+        if (item.html_url === latest.htmlUrl) continue;
+        const version = item.tag_name.replace(/^v/, "");
+        if (compareSemver(version, currentVersion) <= 0) {
+          reachedInstalled = true;
+          continue;
+        }
+        if (compareSemver(version, latest.version) >= 0) continue;
+        skipped.push({
           body: typeof item.body === "string" ? item.body : "",
           htmlUrl: typeof item.html_url === "string" ? item.html_url : latest.htmlUrl,
           version,
-        },
-      ];
-    });
+        });
+      }
+      if (reachedInstalled || items.length < RELEASES_PAGE_SIZE) break;
+    }
     skipped.sort((a, b) => compareSemver(b.version, a.version));
     return [latest, ...skipped].slice(0, MAX_RELEASE_NOTES);
   } catch (error) {
