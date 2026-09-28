@@ -2,7 +2,7 @@
 
 # v4.0.12 - OpenCode 2 in your vault
 
-[![OpenCode 2 in Your Vault: Obsidian Copilot 4.0.12](https://github.com/user-attachments/assets/76f592d9-74ce-43cc-85f9-a8312fe16fc9)](https://www.youtube.com/shorts/IjjXVFNFO0k)
+[![Demo video: OpenCode 2 in Your Vault: Obsidian Copilot 4.0.12](https://github.com/user-attachments/assets/76f592d9-74ce-43cc-85f9-a8312fe16fc9)](https://www.youtube.com/shorts/IjjXVFNFO0k)
 
 OpenCode, the agent runtime behind Copilot Plus and your own model providers, is getting a major update. It will allow Copilot to better control model context, permissions, and tool executions. More improvements to OpenCode will come soon.
 
