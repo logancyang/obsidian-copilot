@@ -3,7 +3,6 @@ import {
   assertBinaryCompatible,
 } from "@/agentMode/backends/shared/binaryCompatibility";
 import { downloadFile } from "@/agentMode/backends/shared/downloadFile";
-import { extractArchive } from "@/agentMode/backends/shared/extractArchive";
 import {
   ManagedBinaryManager,
   type BinarySettings,
@@ -12,14 +11,14 @@ import {
   type ManagedBinaryPipelineOptions,
 } from "@/agentMode/backends/shared/ManagedBinaryManager";
 import { OPENCODE_MIN_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
-import { OPENCODE_RELEASE_API_URL_TEMPLATE } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { getSettings, setSettings, type OpencodeBackendSettings } from "@/settings/model";
-import { FileSystemAdapter, requestUrl } from "obsidian";
+import { FileSystemAdapter } from "obsidian";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { expectedBinaryName, resolveOpencodeTarget } from "./platformResolver";
+import { extractNpmBinary, resolveNpmAsset, verifyNpmIntegrity } from "./npmPackage";
 import type { InstallState as BackendInstallState } from "@/agentMode/session/types";
 import {
   ManagedInstallAbortError,
@@ -80,17 +79,6 @@ export class OperationInFlightError extends ManagedInstallOperationInFlightError
   }
 }
 
-interface GithubAsset {
-  name: string;
-  size: number;
-  browser_download_url: string;
-}
-
-interface GithubRelease {
-  tag_name: string;
-  assets: GithubAsset[];
-}
-
 interface InstallManifest {
   version: string;
   assetName: string;
@@ -102,31 +90,6 @@ export class AbortError extends ManagedInstallAbortError {
     super();
     this.name = "AbortError";
   }
-}
-
-export function pickMatchingAsset(release: GithubRelease, candidates: string[]): GithubAsset {
-  const ARCHIVE_EXTS = [".zip", ".tar.gz", ".tar.xz", ".tgz"];
-  const stemOf = (name: string): string => {
-    for (const ext of ARCHIVE_EXTS) {
-      if (name.endsWith(ext)) return name.slice(0, -ext.length);
-    }
-    return name;
-  };
-
-  const byStem = new Map<string, GithubAsset>();
-  for (const a of release.assets) {
-    byStem.set(stemOf(a.name), a);
-  }
-
-  for (const stem of candidates) {
-    const asset = byStem.get(stem);
-    if (asset) return asset;
-  }
-
-  throw new Error(
-    `No matching opencode release asset found. Tried: ${candidates.join(", ")}. ` +
-      `Available: ${release.assets.map((a) => a.name).join(", ")}`
-  );
 }
 
 /**
@@ -246,7 +209,7 @@ export function legacyVaultDataDir(
 
 /**
  * Manages the lifecycle of the opencode binary on disk: platform-aware
- * download from GitHub releases, extraction into a per-user OS-local dir
+ * download from npm, extraction into a per-user OS-local dir
  * (outside the vault, see {@link opencodeManagedDataDir}), and persistence of
  * the install location into `settings.agentMode`. Desktop-only.
  */
@@ -398,10 +361,8 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     const { target, candidates } = await resolveOpencodeTarget();
     this.throwIfAborted(opts.signal);
 
-    const release = await this.fetchReleaseMetadata(version);
+    const asset = await resolveNpmAsset(version, candidates, opts.signal);
     this.throwIfAborted(opts.signal);
-
-    const asset = pickMatchingAsset(release, candidates);
 
     const binName = expectedBinaryName(target.platform);
     const finalBinPath = nodePath().join(versionDir, "bin", binName);
@@ -446,9 +407,8 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
 
     try {
       const archivePath = nodePath().join(tmpDir, asset.name);
-      await downloadFile(asset.browser_download_url, archivePath, {
+      await downloadFile(asset.url, archivePath, {
         displayName: "opencode",
-        bytes: asset.size,
         signal: opts.signal,
         onProgress: (received, total) => opts.progress.download(received, total),
       });
@@ -456,10 +416,16 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
       opts.progress.extracting();
       const extractDir = nodePath().join(tmpDir, "extract");
       await nodeFs().promises.mkdir(extractDir, { recursive: true });
-      await extractArchive(archivePath, extractDir);
+      await verifyNpmIntegrity(archivePath, asset.integrity, opts.signal);
+      await extractNpmBinary(
+        archivePath,
+        nodePath().join(extractDir, binName),
+        binName,
+        opts.signal
+      );
       this.throwIfAborted(opts.signal);
 
-      const extractedBin = await locateFile(extractDir, binName);
+      const extractedBin = nodePath().join(extractDir, binName);
       if (target.platform !== "windows") {
         await nodeFs().promises.chmod(extractedBin, 0o755);
       }
@@ -620,28 +586,6 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     return { version, path: p };
   }
 
-  private async fetchReleaseMetadata(version: string): Promise<GithubRelease> {
-    const url = OPENCODE_RELEASE_API_URL_TEMPLATE.replace("{version}", version);
-    const res = await requestUrl({
-      url,
-      method: "GET",
-      headers: { Accept: "application/vnd.github+json" },
-      throw: false,
-    });
-    if (res.status === 403) {
-      throw new Error(
-        "GitHub API rate-limited (60/hour for unauthenticated requests). Set GITHUB_TOKEN or retry later."
-      );
-    }
-    if (res.status === 404) {
-      throw new Error(`opencode release v${version} not found on GitHub.`);
-    }
-    if (res.status < 200 || res.status >= 300) {
-      throw new Error(`GitHub release fetch failed with status ${res.status}`);
-    }
-    return res.json as GithubRelease;
-  }
-
   private throwIfAborted(signal: AbortSignal): void {
     if (signal?.aborted) throw new AbortError();
   }
@@ -674,22 +618,6 @@ async function readManifest(p: string): Promise<InstallManifest | null> {
 
 async function removeDir(p: string): Promise<void> {
   await nodeFs().promises.rm(p, { recursive: true, force: true });
-}
-
-// BFS because the binary's depth inside the upstream archive varies across
-// opencode releases — first match wins.
-async function locateFile(root: string, name: string): Promise<string> {
-  const queue: string[] = [root];
-  while (queue.length > 0) {
-    const dir = queue.shift() as string;
-    const entries = await nodeFs().promises.readdir(dir, { withFileTypes: true });
-    for (const e of entries) {
-      const full = nodePath().join(dir, e.name);
-      if (e.isDirectory()) queue.push(full);
-      else if (e.isFile() && e.name === name) return full;
-    }
-  }
-  throw new Error(`File "${name}" not found anywhere under ${root}`);
 }
 
 export async function verifyOpencodeBinary(p: string): Promise<{ stdout: string }> {

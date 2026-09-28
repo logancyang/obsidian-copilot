@@ -273,8 +273,15 @@ function optionsFromConfigOption(opt: BackendConfigOption | null): EffortOption[
       flat.push({ value: entry.value, name: entry.name });
     }
   }
+  // OpenCode appends `default` to every effort menu to mean "send no level".
+  // It is not a level the user can compare against the others, so a model with
+  // real levels offers only those.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/557
   return sortEffortOptions(
-    flat.map((o) => ({ value: o.value, label: (o.name || o.value).toLowerCase() }))
+    flat.map((o) => ({
+      value: o.value === "default" ? null : o.value,
+      label: (o.name || o.value).toLowerCase(),
+    }))
   );
 }
 
