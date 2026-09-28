@@ -97,6 +97,27 @@ describe("engine", () => {
       expect(lastHarness().prompt).toHaveBeenCalledWith("hello", { images });
     });
 
+    it.each([
+      ["invalid key", "401 Invalid API key"],
+      ["auth failure", "403 Authentication failed"],
+      ["rate limit", "429 Rate limit exceeded"],
+    ])(
+      "returns the %s failure for a visible turn error (https://github.com/Brevilabs/obsidian-copilot-private/issues/340)",
+      async (_case, errorMessage) => {
+        const engine = createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
+        lastHarness().prompt.mockResolvedValueOnce({
+          role: "assistant",
+          stopReason: "error",
+          errorMessage,
+        });
+
+        await expect(engine.prompt("hello")).resolves.toEqual({
+          stopReason: "error",
+          errorMessage,
+        });
+      }
+    );
+
     it("waits for the run to settle after aborting", async () => {
       const engine = createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
 
@@ -156,7 +177,7 @@ describe("engine", () => {
       });
       lastHarness().compact.mockRejectedValueOnce(new Error("summary failed"));
 
-      await expect(engine.prompt("hi")).resolves.toBeUndefined();
+      await expect(engine.prompt("hi")).resolves.toEqual({ stopReason: "end_turn" });
     });
 
     it("stamps provider requests with the conversation's cache key when given one", () => {

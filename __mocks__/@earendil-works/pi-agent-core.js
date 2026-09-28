@@ -18,7 +18,7 @@ class AgentHarness {
     this.options = options;
     this.model = options.model;
     this.listeners = new Set();
-    this.prompt = jest.fn(async () => ({ role: "assistant" }));
+    this.prompt = jest.fn(async () => ({ role: "assistant", stopReason: "stop" }));
     this.abort = jest.fn(async () => ({ aborted: true }));
     this.waitForIdle = jest.fn(async () => undefined);
     this.compact = jest.fn(async () => ({}));

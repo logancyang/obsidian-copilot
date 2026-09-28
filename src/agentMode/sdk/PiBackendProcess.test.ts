@@ -1,5 +1,6 @@
 import type { BackendDescriptor, SessionEvent } from "@/agentMode/session/types";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
+import type { PiTurnResult } from "@/pi/engine";
 import { PiBackendProcess } from "./PiBackendProcess";
 
 jest.mock("@/logger", () => ({
@@ -11,7 +12,7 @@ jest.mock("@/logger", () => ({
 const refresh = jest.fn(async () => ({ aborted: false, errors: new Map() }));
 const listeners: Array<(e: AgentEvent) => void> = [];
 const engine = {
-  prompt: jest.fn(async () => undefined),
+  prompt: jest.fn<Promise<PiTurnResult>, []>(async () => ({ stopReason: "end_turn" })),
   abort: jest.fn(async () => undefined),
   setModel: jest.fn(async (id: string) => {
     engine.modelId = id;
@@ -222,6 +223,23 @@ describe("PiBackendProcess", () => {
       expect(result.stopReason).toBe("end_turn");
     });
 
+    it.each([
+      ["invalid key", "401 Invalid API key"],
+      ["auth failure", "403 Authentication failed"],
+      ["rate limit", "429 Rate limit exceeded"],
+    ])(
+      "shows the %s as an error instead of an empty reply (https://github.com/Brevilabs/obsidian-copilot-private/issues/340)",
+      async (_case, errorMessage) => {
+        const proc = createProcess();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        engine.prompt.mockResolvedValueOnce({ stopReason: "error", errorMessage });
+
+        await expect(
+          proc.prompt({ sessionId, prompt: [{ type: "text", text: "hello" }] })
+        ).rejects.toThrow(errorMessage);
+      }
+    );
+
     it("forwards image blocks alongside the text", async () => {
       const proc = createProcess();
       const { sessionId } = await proc.newSession({ cwd: "/vault" });
@@ -296,6 +314,7 @@ describe("PiBackendProcess", () => {
       const { sessionId } = await proc.newSession({ cwd: "/vault" });
       engine.prompt.mockImplementationOnce(async () => {
         await proc.cancel({ sessionId });
+        return { stopReason: "cancelled" };
       });
 
       const result = await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });

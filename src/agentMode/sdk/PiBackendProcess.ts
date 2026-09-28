@@ -205,7 +205,13 @@ export class PiBackendProcess implements BackendProcess {
       .map((block) => ({ type: "image" as const, data: block.data, mimeType: block.mimeType }));
     session.cancelled = false;
     try {
-      await session.engine.prompt(text, images.length > 0 ? images : undefined);
+      const result = await session.engine.prompt(text, images.length > 0 ? images : undefined);
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/340:
+      // pi can resolve a failed provider turn instead of rejecting it. Throwing
+      // here lets AgentSession display the provider's error on the message.
+      if (result.stopReason === "error" && !session.cancelled) {
+        throw new Error(result.errorMessage || "Pi provider request failed");
+      }
     } catch (error) {
       // A turn the user stopped surfaces as a cancellation, not a failure —
       // the engine may either resolve with the partial message or reject,

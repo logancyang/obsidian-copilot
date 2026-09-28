@@ -4,6 +4,12 @@ import type { TFile } from "obsidian";
 import { createPiToolContext } from "./piToolContext";
 
 const webSearch = jest.fn();
+const getRelevantDocuments = jest.fn();
+jest.mock("@/search/RetrieverFactory", () => ({
+  RetrieverFactory: {
+    createRetriever: jest.fn(async () => ({ retriever: { getRelevantDocuments } })),
+  },
+}));
 jest.mock("@/LLMProviders/brevilabsClient", () => ({
   BrevilabsClient: { getInstance: () => ({ webSearch }) },
 }));
@@ -18,11 +24,12 @@ interface PluginStub {
   activeFile: TFile | null;
   byPath: Record<string, unknown>;
   contents: Record<string, string>;
-  searchDocs: Array<{ content: string; metadata: Record<string, unknown> }>;
+  searchDocs: Array<{ pageContent: string; metadata: Record<string, unknown> }>;
 }
 
 function pluginWith(stub: Partial<PluginStub> = {}): CopilotPlugin {
   const { activeFile = null, byPath = {}, contents = {}, searchDocs = [] } = stub;
+  getRelevantDocuments.mockResolvedValue(searchDocs);
   return {
     app: {
       workspace: { getActiveFile: () => activeFile },
@@ -31,7 +38,6 @@ function pluginWith(stub: Partial<PluginStub> = {}): CopilotPlugin {
         cachedRead: async (file: TFile) => contents[file.path] ?? "",
       },
     },
-    customSearchDB: jest.fn(async () => searchDocs),
   } as unknown as CopilotPlugin;
 }
 
@@ -82,7 +88,7 @@ describe("piToolContext", () => {
       it("returns each hit's path with a bounded excerpt", async () => {
         const context = createPiToolContext(
           pluginWith({
-            searchDocs: [{ content: "x".repeat(600), metadata: { path: "Big.md" } }],
+            searchDocs: [{ pageContent: "x".repeat(600), metadata: { path: "Big.md" } }],
           })
         );
 
@@ -97,7 +103,7 @@ describe("piToolContext", () => {
         const context = createPiToolContext(
           pluginWith({
             searchDocs: Array.from({ length: 25 }, (_, i) => ({
-              content: "c",
+              pageContent: "c",
               metadata: { path: `N${i}.md` },
             })),
           })

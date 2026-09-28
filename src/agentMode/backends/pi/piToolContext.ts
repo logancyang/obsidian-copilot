@@ -1,6 +1,7 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import type CopilotPlugin from "@/main";
 import type { PiNote, PiSearchHit, PiToolContext } from "@/pi/tools";
+import { RetrieverFactory } from "@/search/RetrieverFactory";
 import { TFile } from "obsidian";
 
 /** How many search hits the model is given before it has to narrow the query. */
@@ -25,10 +26,10 @@ function metadataString(value: unknown): string {
 /**
  * Bind the read-only pi tools to this vault. Each method is the thinnest
  * possible bridge to something the plugin already owns — the vault adapter,
- * the existing search pipeline, and the Plus web-search relay — so the tool
+ * the existing retriever, and the Plus web-search relay — so the tool
  * definitions themselves stay platform-neutral and testable.
  *
- * @param plugin the plugin instance owning the vault and the search pipeline
+ * @param plugin the plugin instance owning the vault
  */
 export function createPiToolContext(plugin: CopilotPlugin): PiToolContext {
   const readFile = async (file: TFile): Promise<PiNote> => ({
@@ -48,10 +49,14 @@ export function createPiToolContext(plugin: CopilotPlugin): PiToolContext {
     },
 
     searchVault: async (query: string) => {
-      const docs = await plugin.customSearchDB(query, [query], 0.5);
+      const { retriever } = await RetrieverFactory.createRetriever(plugin.app, {
+        maxK: MAX_SEARCH_HITS,
+        salientTerms: [query],
+      });
+      const docs = await retriever.getRelevantDocuments(query);
       const hits = docs.slice(0, MAX_SEARCH_HITS).map((doc) => ({
         path: metadataString(doc.metadata.path) || metadataString(doc.metadata.title),
-        excerpt: excerpt(doc.content),
+        excerpt: excerpt(doc.pageContent),
       }));
       return hits.length > 0 ? hits : NO_HITS;
     },

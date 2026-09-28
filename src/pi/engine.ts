@@ -37,13 +37,18 @@ const AGENT_EVENT_TYPES: ReadonlySet<string> = new Set<AgentEvent["type"]>([
  * not know about Obsidian, chat history persistence, or tools.
  */
 export interface PiEngine {
-  prompt(text: string, images?: ImageContent[]): Promise<void>;
+  prompt(text: string, images?: ImageContent[]): Promise<PiTurnResult>;
   abort(): Promise<void>;
   setModel(id: string): Promise<void>;
   getModelId(): string;
   subscribe(fn: (e: AgentEvent) => void): () => void;
   compact(): Promise<void>;
   usage(): PiUsage;
+}
+
+export interface PiTurnResult {
+  stopReason: "end_turn" | "cancelled" | "error";
+  errorMessage?: string;
 }
 
 function isAgentEvent(event: AgentHarnessEvent): event is AgentEvent {
@@ -115,8 +120,16 @@ export function createPiEngine(options: PiEngineOptions): PiEngine {
 
   return {
     prompt: async (text, images) => {
-      await harness.prompt(text, { images });
+      const message = await harness.prompt(text, { images });
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/340:
+      // pi resolves provider failures as assistant messages; a void result
+      // would make invalid credentials and rate limits look like empty replies.
+      if (message.stopReason === "error") {
+        return { stopReason: "error", errorMessage: message.errorMessage };
+      }
+      if (message.stopReason === "aborted") return { stopReason: "cancelled" };
       await compactIfNeeded();
+      return { stopReason: "end_turn" };
     },
     abort: async () => {
       await harness.abort();
