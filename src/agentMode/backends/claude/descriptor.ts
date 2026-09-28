@@ -403,7 +403,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
       // symlink fanout already enforces visibility (no link = not seen). If the
       // Claude Agent SDK ever grows a per-skill deny hook, wire
       // `composeDenyList(getManagedSkills(), "claude")` in here.
-      getSystemPromptAppend: () => buildAgentSystemPrompt(),
+      getSystemPromptAppend: () => buildAgentSystemPrompt("claude"),
     });
   },
 

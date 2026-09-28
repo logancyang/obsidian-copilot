@@ -59,3 +59,19 @@ export const MultipleFiles: StoryObj<ToolPermissionCardProps> = {
     },
   },
 };
+
+/** An agent that titles its request with only the tool's argument gets the tool named. */
+export const WebSearchQuery: StoryObj<ToolPermissionCardProps> = {
+  args: {
+    toolName: "websearch",
+    request: {
+      ...request,
+      toolCall: {
+        ...request.toolCall,
+        title: "latest stable version of Node.js 2026",
+        kind: "other",
+        rawInput: { query: "latest stable version of Node.js 2026" },
+      },
+    },
+  },
+};

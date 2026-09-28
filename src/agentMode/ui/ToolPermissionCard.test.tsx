@@ -30,6 +30,28 @@ describe("ToolPermissionCard", () => {
       expect(container.firstElementChild?.classList.contains("tw-w-full")).toBe(true);
     });
 
+    it("names the tool when the request title carries only its argument for https://github.com/Brevilabs/obsidian-copilot-private/issues/599", () => {
+      const request = makeRequest([]);
+      request.toolCall.title = "latest stable Node.js version";
+
+      render(<ToolPermissionCard request={request} onResolve={jest.fn()} toolName="websearch" />);
+
+      expect(screen.getByText(/Agent Mode wants to use/).textContent).toBe(
+        "Agent Mode wants to use websearch: latest stable Node.js version."
+      );
+    });
+
+    it("keeps the run sentence when the request title already names the tool", () => {
+      const request = makeRequest([]);
+      request.toolCall.title = "Edit launch brief.md";
+
+      render(<ToolPermissionCard request={request} onResolve={jest.fn()} toolName="Edit" />);
+
+      expect(screen.getByText(/Agent Mode wants to run/).textContent).toBe(
+        "Agent Mode wants to run Edit launch brief.md."
+      );
+    });
+
     it("keeps duplicate described actions together and numbers their tooltip triggers", async () => {
       const onResolve = jest.fn();
       const firstRule = "Allow commands starting with mkdir";

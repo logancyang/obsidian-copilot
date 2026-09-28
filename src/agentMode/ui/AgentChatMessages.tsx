@@ -51,6 +51,19 @@ function toChatMessageView(m: AgentChatMessage): ChatMessage {
 }
 
 /** The last non-user (assistant) message, or `undefined` if none. */
+/**
+ * Title of the tool call the chat already renders for `toolCallId`, newest
+ * message first, so a permission card can name the tool its request omits.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/599
+ */
+function findToolCallTitle(messages: AgentChatMessage[], toolCallId: string): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const part = messages[i].parts?.find((p) => p.kind === "tool_call" && p.id === toolCallId);
+    if (part?.kind === "tool_call") return part.title;
+  }
+  return undefined;
+}
+
 function lastAssistant(visible: AgentChatMessage[]): AgentChatMessage | undefined {
   for (let i = visible.length - 1; i >= 0; i--) {
     if (visible[i].sender !== USER_SENDER) return visible[i];
@@ -175,6 +188,13 @@ const AgentChatMessages = memo(
     ) : null;
     const pendingQuestion = pendingAskUserQuestions[0];
     const pendingPermission = pendingQuestion ? undefined : pendingToolPermissions[0];
+    const pendingToolName = useMemo(
+      () =>
+        pendingPermission
+          ? findToolCallTitle(messages, pendingPermission.toolCall.toolCallId)
+          : undefined,
+      [messages, pendingPermission]
+    );
     // Questions take priority so the separate resolver queues have a stable
     // presentation policy without carrying cross-type sequencing state.
     // https://github.com/logancyang/obsidian-copilot/issues/2948
@@ -243,6 +263,7 @@ const AgentChatMessages = memo(
               ) : pendingPermission ? (
                 <ToolPermissionCard
                   request={pendingPermission}
+                  toolName={pendingToolName}
                   onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
                 />
               ) : null}

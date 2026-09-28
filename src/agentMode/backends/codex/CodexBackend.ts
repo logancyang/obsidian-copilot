@@ -60,7 +60,7 @@ export class CodexBackend implements AcpBackend {
     // prompt, so this adds the Obsidian-vault framing on top. Read at spawn
     // time; the host restarts Codex on prompt changes via
     // `restartOnSystemPromptChange`.
-    const directive = buildAgentSystemPrompt();
+    const directive = buildAgentSystemPrompt("codex");
     descriptor.env.CODEX_CONFIG = mergeCodexConfigEnv(descriptor.env.CODEX_CONFIG, directive);
     // Deliberately no `project_doc_fallback_filenames=["project.md"]`: project.md is metadata,
     // while Codex discovers the canonical AGENTS.md instructions from the session cwd.
