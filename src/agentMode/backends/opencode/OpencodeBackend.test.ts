@@ -212,6 +212,20 @@ function makePlusReasoningModel(wireId: string, efforts?: readonly string[]): Co
 
 const NO_MODELS_DEPS = makeDeps({ resolved: [] });
 
+/**
+ * The rule OpenCode applies to `action` for `agentId`: top-level rules come
+ * first, then the agent's own, and the last match decides.
+ */
+function lastRuleFor(
+  cfg: GeneratedOpencodeConfig,
+  agentId: string,
+  action: string
+): { action: string; effect: string } | undefined {
+  return [...(cfg.permissions ?? []), ...(cfg.agents[agentId]?.permissions ?? [])]
+    .filter((rule) => rule.action === action)
+    .at(-1);
+}
+
 describe("buildOpencodeConfig — provider/model injection", () => {
   beforeEach(() => {
     resetSettings();
@@ -815,9 +829,10 @@ describe("buildOpencodeConfig — provider/model injection", () => {
 const QUESTION_DENY = { action: "question", resource: "*", effect: "deny" };
 
 /** `copilot-build`'s ask-before-write rules. */
-const ASK_BEFORE_WRITE = [
+const COPILOT_BUILD_ASKS = [
   { action: "shell", resource: "*", effect: "ask" },
   { action: "edit", resource: "*", effect: "ask" },
+  { action: "websearch", resource: "*", effect: "ask" },
 ];
 
 describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", () => {
@@ -872,7 +887,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     // SKILL.md authoring instructions.
     expect(cfg.agents["copilot-build"].system).not.toContain("metadata.copilot-enabled-agents");
     expect(cfg.agents.build.system).not.toContain("metadata.copilot-enabled-agents");
-    expect(cfg.agents["copilot-build"].permissions).toEqual(ASK_BEFORE_WRITE);
+    expect(cfg.agents["copilot-build"].permissions).toEqual(COPILOT_BUILD_ASKS);
     expect(cfg.agents["copilot-build"].mode).toBe("primary");
   });
 
@@ -906,8 +921,26 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
 
     // `toBe`, not `startsWith`: this string is the provider cache prefix, and a
     // containment check passes while stray bytes push the rest out of the cache.
-    expect(cfg.agents["copilot-build"].system).toBe(buildAgentSystemPrompt());
-    expect(cfg.agents.build.system).toBe(buildAgentSystemPrompt());
+    expect(cfg.agents["copilot-build"].system).toBe(buildAgentSystemPrompt("opencode"));
+    expect(cfg.agents.build.system).toBe(buildAgentSystemPrompt("opencode"));
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 names only the builtin skills enabled for OpenCode in both agent prompts", async () => {
+    const agentMode = getSettings().agentMode;
+    updateSetting("agentMode", {
+      ...agentMode,
+      skills: {
+        ...agentMode.skills,
+        builtinPreferences: { "copilot-web-search": { disabledAgents: ["opencode"] } },
+      },
+    });
+
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+
+    for (const id of ["copilot-build", "build"]) {
+      expect(cfg.agents[id].system).not.toContain("copilot-web-search");
+      expect(cfg.agents[id].system).toContain("copilot-web-fetch for pages/URLs");
+    }
   });
 
   it("keeps those bytes identical when the model and binary path change", async () => {
@@ -1005,6 +1038,28 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     ]);
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 selects OpenCode's rotating keyless web search provider so native search never stops to ask for one", async () => {
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+
+    expect(cfg.websearch).toEqual({ provider: "random" });
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 asks before native web search in the ask-first agent while Auto keeps it allowed", async () => {
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+
+    expect(lastRuleFor(cfg, "copilot-build", "websearch")?.effect).toBe("ask");
+    expect(lastRuleFor(cfg, "build", "websearch")).toBeUndefined();
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 keeps native web search denied for the ask-first agent in Self-Host Mode", async () => {
+    setSettings({ enableSelfHostMode: true });
+
+    const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+
+    expect(lastRuleFor(cfg, "copilot-build", "websearch")?.effect).toBe("deny");
+    expect(lastRuleFor(cfg, "build", "websearch")?.effect).toBe("deny");
+  });
+
   it("synthesises deny rules for a mix of skills (only cross-discovered + not-enabled wins)", async () => {
     seedSkills([
       makeSkill("a", ["claude"]),
@@ -1052,13 +1107,13 @@ describe("buildOpencodeConfig — context-cache external_directory allow", () =>
     // build (auto) gets only the external_directory grant — no shell/edit asks.
     expect(cfg.agents.build.permissions).toEqual([allow]);
     // copilot-build (default) keeps its ask-before-write rules AND gains allow.
-    expect(cfg.agents["copilot-build"].permissions).toEqual([...ASK_BEFORE_WRITE, allow]);
+    expect(cfg.agents["copilot-build"].permissions).toEqual([...COPILOT_BUILD_ASKS, allow]);
   });
 
   it("injects nothing when no cacheRoot is provided (feature dormant)", async () => {
     const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
     expect(cfg.agents.build.permissions).toBeUndefined();
-    expect(cfg.agents["copilot-build"].permissions).toEqual(ASK_BEFORE_WRITE);
+    expect(cfg.agents["copilot-build"].permissions).toEqual(COPILOT_BUILD_ASKS);
   });
 });
 
@@ -1360,7 +1415,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     const cfg: GeneratedOpencodeConfig = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
     const allow = { action: "external_directory", resource: "/cache/root/**", effect: "allow" };
     expect(cfg.agents.build.permissions).toEqual([allow]);
-    expect(cfg.agents["copilot-build"].permissions).toEqual([...ASK_BEFORE_WRITE, allow]);
+    expect(cfg.agents["copilot-build"].permissions).toEqual([...COPILOT_BUILD_ASKS, allow]);
     expect(logWarn).not.toHaveBeenCalled();
   });
 
@@ -1410,7 +1465,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
     const cfg: GeneratedOpencodeConfig = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
     expect(cfg.agents.build.permissions).toBeUndefined();
-    expect(cfg.agents["copilot-build"].permissions).toEqual(ASK_BEFORE_WRITE);
+    expect(cfg.agents["copilot-build"].permissions).toEqual(COPILOT_BUILD_ASKS);
     expect(logWarn).not.toHaveBeenCalled();
   });
 

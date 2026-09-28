@@ -1,4 +1,5 @@
 import type { BackendId } from "@/agentMode";
+import type { CopilotSettings } from "@/settings/model";
 import {
   OPENARTIFACTS_AGENT_HANDOFF_DIR,
   OPENARTIFACTS_API_ORIGIN,
@@ -300,11 +301,25 @@ exit /b %errorlevel%
 }
 
 /**
- * The SKILL.md "How to run" section shared by every builtin skill. Ships one
- * runnable script per OS — `sh` for macOS/Linux, a `.cmd` wrapper for Windows —
- * each backed by a runtime that is always present (no Git Bash, no Node), so the
- * agent never dead-ends on a missing runtime. `extraNote` appends a
- * skill-specific sentence (e.g. PDF's "pass an absolute path") at the end.
+ * Names the tool that runs a skill's command. OpenCode exposes a code-execution
+ * tool (`execute`) beside its shell tool, and a model handed the bare command
+ * passes it there as code, which fails to parse. Codex reaches its shell tool
+ * from inside its own code tool, so the rule forbids shell text as code rather
+ * than forbidding code tools. Tool names differ per agent, so examples cover each.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/599
+ */
+const SHELL_TOOL_SENTENCE = `Run it as a shell command with your shell command tool (for example
+\`Bash\` in Claude Code, \`shell\` in OpenCode, \`exec_command\` in Codex). The command
+is shell syntax, not JavaScript or TypeScript: never pass it as the code of a
+code-execution tool.`;
+
+/**
+ * The SKILL.md "How to run" section shared by every script-backed builtin
+ * skill that takes one argument. Ships one runnable script per OS — `sh` for
+ * macOS/Linux, a `.cmd` wrapper for Windows — each backed by a runtime that is
+ * always present (no Git Bash, no Node), so the agent never dead-ends on a
+ * missing runtime. `extraNote` appends a skill-specific sentence (e.g. PDF's
+ * "pass an absolute path") at the end.
  */
 function howToRunSection(opts: {
   shFile: string;
@@ -316,8 +331,9 @@ function howToRunSection(opts: {
   return `## How to run
 
 Find the absolute path to this SKILL.md file on disk, then run the script next
-to it that matches the operating system. No extra runtime is needed — \`sh\`
-(macOS/Linux) and \`cmd\`/PowerShell (Windows) are always present.
+to it that matches the operating system. ${SHELL_TOOL_SENTENCE}
+No extra runtime is needed — \`sh\` (macOS/Linux) and \`cmd\`/PowerShell (Windows)
+are always present.
 
 On macOS or Linux:
 
@@ -375,7 +391,7 @@ function relaySkill(opts: {
   const [argKey, argPlaceholder] = opts.arg;
   const cmdFile = opts.scriptFile.replace(/\.sh$/, ".cmd");
   const ps1File = opts.scriptFile.replace(/\.sh$/, ".ps1");
-  const version = 6;
+  const version = 7;
   // Self-host search crosses back into the owning Obsidian renderer so API
   // keys never enter the agent process; fetch fails closed because there is no
   // provider-neutral page-fetch contract.
@@ -502,7 +518,7 @@ fetch tool. Use \`copilot-web-search\` when search results can answer the reques
 otherwise tell the user that fetching the page is unavailable.`,
 });
 
-const READ_PDF_VERSION = 6;
+const READ_PDF_VERSION = 7;
 const READ_PDF: BuiltinSkill = {
   name: "copilot-read-pdf",
   version: READ_PDF_VERSION,
@@ -589,7 +605,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 5;
+const OPENARTIFACTS_PUBLISH_VERSION = 6;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 /** Where the wrapper sends requests unless a test or self-host points it elsewhere. */
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
@@ -692,8 +708,8 @@ ask once. Never simulate the user's approval.
 ## 3. Publish
 
 Run the wrapper next to this SKILL.md with the HTML file, its filename-derived title, and
-the existing \`docId\` when updating a Markdown note. On macOS or Linux, the Markdown path
-uses its generated handoff:
+the existing \`docId\` when updating a Markdown note. ${SHELL_TOOL_SENTENCE}
+On macOS or Linux, the Markdown path uses its generated handoff:
 
 \`\`\`bash
 sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" publish "$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html" "Note title" [docId]
@@ -982,8 +998,8 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   ...OBSIDIAN_SKILLS,
 ];
 
-const MIYO_SEARCH_VERSION = 3;
-const MIYO_PARSE_VERSION = 1;
+const MIYO_SEARCH_VERSION = 4;
+const MIYO_PARSE_VERSION = 2;
 
 /** Shared by both Miyo wrappers; the host script must define `die` before it. */
 const MIYO_POSIX_RESOLVER = `# Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
@@ -1146,32 +1162,18 @@ When to use it: for any vault-search intent, reach for Miyo when your builtin
 \`grep\` search is too slow or doesn't surface enough relevant notes, or when
 the user explicitly asks for Miyo search.
 
-## How to run
+${howToRunSection({
+  shFile: "miyo-search.sh",
+  cmdFile: "miyo-search.cmd",
+  argPlaceholder: "<the user's question>",
+  extraNote: "Pass the user's full question as the query.",
+})}
 
-Find the absolute path to this SKILL.md file on disk, then run the script next
-to it that matches the operating system, passing the user's full question as the
-query. No extra runtime is needed — \`sh\` (macOS/Linux) and \`cmd\` (Windows) are
-always present.
-
-On macOS or Linux:
-
-\`\`\`bash
-sh "/absolute/path/to/this/skill/directory/miyo-search.sh" "<the user's question>"
-\`\`\`
-
-On Windows, run the \`.cmd\` wrapper. In PowerShell you must prefix it with the
-call operator \`&\` (PowerShell treats a quoted path on its own as a string and
-won't run it); from cmd, run the quoted path without the \`&\`:
-
-\`\`\`powershell
-& "/absolute/path/to/this/skill/directory/miyo-search.cmd" "<the user's question>"
-\`\`\`
-
-The script locates the Miyo binary itself and prints JSON to stdout — you do
-not need to know where Miyo is installed or which shell you are in. Run the
-script as your single search step; do not fall back to other search tools
-unless it reports that Miyo is unavailable. Read the JSON straight from stdout;
-do not pipe it through other tools (no \`jq\`, no \`|\`).
+The script locates the Miyo binary itself — you do not need to know where Miyo
+is installed or which shell you are in. Run the script as your single search
+step; do not fall back to other search tools unless it reports that Miyo is
+unavailable. Read the JSON straight from stdout; do not pipe it through other
+tools (no \`jq\`, no \`|\`).
 
 Search scope comes from Copilot settings. **Current vault** applies Miyo's exact
 folder boundary for the active vault, including from Project chats.
@@ -1224,25 +1226,12 @@ Use Miyo to extract Markdown/text from one PDF or EPUB. Parsing runs locally,
 works for files anywhere on the filesystem, and does not require the Miyo
 service to be running.
 
-## How to run
-
-Find the absolute path to this SKILL.md file, then run the adjacent wrapper
-with exactly one quoted file path.
-
-On macOS or Linux:
-
-\`\`\`bash
-sh "/absolute/path/to/this/skill/directory/miyo-parse.sh" "/absolute/path/to/document.pdf"
-\`\`\`
-
-On Windows PowerShell:
-
-\`\`\`powershell
-& "/absolute/path/to/this/skill/directory/miyo-parse.cmd" "C:\\absolute\\path\\to\\document.pdf"
-\`\`\`
-
-The wrapper prints the parsed Markdown/text to stdout. Use that output to
-answer the user's question.
+${howToRunSection({
+  shFile: "miyo-parse.sh",
+  cmdFile: "miyo-parse.cmd",
+  argPlaceholder: "/absolute/path/to/document.pdf",
+  extraNote: "Pass exactly one quoted path to the PDF or EPUB file.",
+})} Use that Markdown/text to answer the user's question.
 
 ## If it reports a problem
 
@@ -1298,4 +1287,27 @@ export function planManagedBuiltins(gates: { search: boolean; documents: boolean
     seed,
     prune: ALL_MANAGED_SKILLS.filter((skill) => !seed.includes(skill)).map((skill) => skill.name),
   };
+}
+
+/**
+ * Whether a managed builtin is installed for an agent: it passes the Miyo gates
+ * and the user has not opted out of it globally or for that agent. Installation
+ * and the agent system prompt both read this, so the prompt never names a skill
+ * the agent cannot load.
+ *
+ * @param settings Current settings holding the Miyo gates and builtin opt-outs.
+ * @param skillName Managed builtin folder name, e.g. `copilot-web-search`.
+ * @param agentId Backend id as stored in `disabledAgents`, e.g. `opencode`.
+ */
+export function isBuiltinSkillEnabledFor(
+  settings: CopilotSettings,
+  skillName: string,
+  agentId: string
+): boolean {
+  const pref = settings.agentMode.skills.builtinPreferences?.[skillName];
+  if (pref?.disabled || pref?.disabledAgents?.includes(agentId)) return false;
+  return planManagedBuiltins({
+    search: settings.enableMiyoSearchSkill === true,
+    documents: settings.docProcessorBackend === "miyo",
+  }).seed.some((skill) => skill.name === skillName);
 }

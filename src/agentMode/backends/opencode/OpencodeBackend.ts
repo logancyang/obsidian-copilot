@@ -444,7 +444,8 @@ export async function buildOpencodeConfig(
     { action: "question", resource: "*", effect: "deny" },
   ];
 
-  if (s.enableSelfHostMode === true) permissions.push(...NATIVE_WEB_DENIES);
+  const selfHost = s.enableSelfHostMode === true;
+  if (selfHost) permissions.push(...NATIVE_WEB_DENIES);
 
   // Inject a managed `copilot-build` agent so the mode picker can offer the
   // canonical "default" semantic — let the agent edit, but ask first. The
@@ -463,7 +464,7 @@ export async function buildOpencodeConfig(
   // prompt. the host restarts opencode on prompt changes via
   // `restartOnSystemPromptChange`.
   const skillManagerReady = SkillManager.hasInstance();
-  const system = buildAgentSystemPrompt();
+  const system = buildAgentSystemPrompt(OpencodeBackendDescriptor.id);
 
   // Pre-allow reads of the off-vault shared conversions cache so opencode
   // doesn't fire an `external_directory` ask on every snapshot the manifest
@@ -516,6 +517,13 @@ export async function buildOpencodeConfig(
     // disabled individually. Only published levels are trusted, so drop it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/557
     plugins: ["-opencode.variant"],
+    // Without a configured provider, native web search asks the user to pick
+    // one through OpenCode's form service, and OpenCode's ACP bridge cancels
+    // every form, so each search ends as "Web search cancelled". "random" is
+    // OpenCode's own keyless rotation across its built-in providers.
+    // https://github.com/anomalyco/opencode/issues/38121
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/599
+    websearch: { provider: "random" },
     permissions,
     agents: {
       [OPENCODE_BUILTIN_BUILD_AGENT_ID]: {
@@ -528,6 +536,12 @@ export async function buildOpencodeConfig(
         permissions: [
           { action: "shell", resource: "*", effect: "ask" },
           { action: "edit", resource: "*", effect: "ask" },
+          // Native web search contacts third-party providers, so the ask-first
+          // agent asks through an ordinary ACP permission request. Agent rules
+          // follow top-level ones and the last match wins, so Self-Host leaves
+          // this out to keep its top-level deny decisive.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/599
+          ...(selfHost ? [] : [{ action: "websearch", resource: "*", effect: "ask" } as const]),
           ...cacheRules,
         ],
       },

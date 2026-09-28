@@ -1,5 +1,9 @@
+import { DEFAULT_SETTINGS } from "@/constants";
+import type { CopilotSettings } from "@/settings/model";
 import {
+  ALL_MANAGED_SKILLS,
   BUILTIN_SKILLS,
+  isBuiltinSkillEnabledFor,
   MIYO_PARSE_SKILL,
   MIYO_SEARCH_SKILL,
   planManagedBuiltins,
@@ -25,6 +29,23 @@ function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
 }
 
 const RELAY_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
+
+const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
+
+/** Default settings with the given builtin opt-outs and Miyo gates applied. */
+function settingsWith(
+  builtinPreferences: NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>,
+  overrides: Partial<CopilotSettings> = {}
+): CopilotSettings {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...overrides,
+    agentMode: {
+      ...DEFAULT_SETTINGS.agentMode,
+      skills: { ...DEFAULT_SETTINGS.agentMode.skills, builtinPreferences },
+    },
+  };
+}
 
 describe("builtinSkills", () => {
   describe("BUILTIN_SKILLS", () => {
@@ -234,7 +255,7 @@ describe("builtinSkills", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes over HTTPS with the injected license key and never touches the Obsidian CLI", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(5);
+      expect(skill!.version).toBe(6);
 
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",
@@ -508,6 +529,30 @@ describe("builtinSkills", () => {
     });
   });
 
+  describe("ALL_MANAGED_SKILLS", () => {
+    it(`tells every script-backed skill to run through the agent's shell tool, never as code-execution code (${ISSUE_599})`, () => {
+      const scripted = ALL_MANAGED_SKILLS.filter((skill) =>
+        skill.files.some((file) => file.path.endsWith(".sh"))
+      );
+      expect(scripted.map((skill) => skill.name)).toEqual([
+        "copilot-web-search",
+        "copilot-web-fetch",
+        "copilot-read-pdf",
+        "copilot-youtube-transcript",
+        "copilot-fetch-x",
+        "openartifacts-publish",
+        "miyo-search",
+        "miyo-parse",
+      ]);
+      for (const skill of scripted) {
+        expect(skill.skillMd).toContain(
+          "`Bash` in Claude Code, `shell` in OpenCode, `exec_command` in Codex"
+        );
+        expect(skill.skillMd).toContain("never pass it as the code of a\ncode-execution tool");
+      }
+    });
+  });
+
   describe("planManagedBuiltins()", () => {
     const names = (skills: readonly { name: string }[]): string[] => skills.map((s) => s.name);
 
@@ -543,6 +588,44 @@ describe("builtinSkills", () => {
         "miyo-search",
         "miyo-parse",
       ]);
+    });
+  });
+
+  describe("isBuiltinSkillEnabledFor()", () => {
+    it("enables every seeded builtin for every agent under default settings", () => {
+      const settings = settingsWith({});
+      for (const agent of ["claude", "codex", "opencode"]) {
+        expect(isBuiltinSkillEnabledFor(settings, "copilot-web-search", agent)).toBe(true);
+        expect(isBuiltinSkillEnabledFor(settings, "copilot-read-pdf", agent)).toBe(true);
+      }
+    });
+
+    it("disables a skill only for the agents the user opted out", () => {
+      const settings = settingsWith({ "copilot-web-search": { disabledAgents: ["opencode"] } });
+      expect(isBuiltinSkillEnabledFor(settings, "copilot-web-search", "opencode")).toBe(false);
+      expect(isBuiltinSkillEnabledFor(settings, "copilot-web-search", "claude")).toBe(true);
+    });
+
+    it("disables a skill for every agent when the user turned it off entirely", () => {
+      const settings = settingsWith({ "copilot-fetch-x": { disabled: true } });
+      for (const agent of ["claude", "codex", "opencode"]) {
+        expect(isBuiltinSkillEnabledFor(settings, "copilot-fetch-x", agent)).toBe(false);
+      }
+    });
+
+    it("follows the Miyo gates: Miyo skills need their setting, and Miyo documents drop the cloud PDF skill", () => {
+      const off = settingsWith({});
+      expect(isBuiltinSkillEnabledFor(off, "miyo-search", "claude")).toBe(false);
+      expect(isBuiltinSkillEnabledFor(off, "miyo-parse", "claude")).toBe(false);
+
+      const on = settingsWith({}, { enableMiyoSearchSkill: true, docProcessorBackend: "miyo" });
+      expect(isBuiltinSkillEnabledFor(on, "miyo-search", "claude")).toBe(true);
+      expect(isBuiltinSkillEnabledFor(on, "miyo-parse", "claude")).toBe(true);
+      expect(isBuiltinSkillEnabledFor(on, "copilot-read-pdf", "claude")).toBe(false);
+    });
+
+    it("reports a name that is not a managed builtin as disabled", () => {
+      expect(isBuiltinSkillEnabledFor(settingsWith({}), "user-authored", "claude")).toBe(false);
     });
   });
 });
