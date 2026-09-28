@@ -207,13 +207,21 @@ export class ProjectFileManager {
           ? project.UsageTimestamps
           : 0;
 
-      const file = await this.vault.create(filePath, project.systemPrompt || "");
-
       try {
-        await writeProjectFrontmatter(this.app, file, project, folderName, {
-          createdMs,
-          lastUsedMs,
-        });
+        if (isInVaultCache(this.app, folderPath)) {
+          const file = await this.vault.create(filePath, project.systemPrompt || "");
+          await writeProjectFrontmatter(this.app, file, project, folderName, {
+            createdMs,
+            lastUsedMs,
+          });
+        } else {
+          // Hidden folders are not indexed, so processFrontMatter cannot create their project metadata.
+          // https://github.com/logancyang/obsidian-copilot/issues/3075
+          await this.vault.adapter.write(
+            filePath,
+            this.buildProjectFileContent(project, folderName, { createdMs, lastUsedMs })
+          );
+        }
       } catch (fmError) {
         await this.rollbackCreatedFile(filePath, folderPath);
         throw fmError;

@@ -9,7 +9,10 @@ function makeApp(options: {
 }): App {
   const instance = options.hasReveal ? { revealInFolder: options.revealInFolder } : {};
   return {
-    vault: { getAbstractFileByPath: () => options.resolved },
+    vault: {
+      getAbstractFileByPath: () => options.resolved,
+      adapter: { exists: jest.fn(async () => false) },
+    },
     internalPlugins: {
       getPluginById: (id: string) =>
         id === "file-explorer" ? { enabled: options.explorerEnabled ?? true, instance } : undefined,
@@ -21,10 +24,10 @@ describe("revealFolderInExplorer", () => {
   describe("revealFolderInExplorer()", () => {
     beforeEach(() => jest.clearAllMocks());
 
-    it("reveals the folder when it resolves to a TFolder and the explorer is enabled", () => {
+    it("reveals the folder when it resolves to a TFolder and the explorer is enabled", async () => {
       const revealInFolder = jest.fn();
       const folder = new (TFolder as unknown as new (p: string) => TFolder)("copilot");
-      revealFolderInExplorer(
+      await revealFolderInExplorer(
         makeApp({ resolved: folder, explorerEnabled: true, hasReveal: true, revealInFolder }),
         "copilot"
       );
@@ -32,14 +35,26 @@ describe("revealFolderInExplorer", () => {
       expect(Notice).not.toHaveBeenCalled();
     });
 
-    it("shows a Notice when the folder is not in the vault cache", () => {
-      revealFolderInExplorer(makeApp({ resolved: null }), "copilot");
+    it("shows a Notice when the folder is not in the vault cache", async () => {
+      await revealFolderInExplorer(makeApp({ resolved: null }), "copilot");
       expect(Notice).toHaveBeenCalledTimes(1);
     });
 
-    it("shows a Notice when the File Explorer plugin is disabled", () => {
+    it("explains that an existing hidden folder cannot be shown in Obsidian for https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
+      const app = makeApp({ resolved: null });
+      (app.vault.adapter.exists as jest.Mock).mockResolvedValue(true);
+
+      await revealFolderInExplorer(app, ".copilot");
+
+      expect(Notice).toHaveBeenCalledWith(
+        `Folder ".copilot" is hidden and can't be shown in Obsidian's File Explorer.`,
+        5000
+      );
+    });
+
+    it("shows a Notice when the File Explorer plugin is disabled", async () => {
       const folder = new (TFolder as unknown as new (p: string) => TFolder)("copilot");
-      revealFolderInExplorer(
+      await revealFolderInExplorer(
         makeApp({
           resolved: folder,
           explorerEnabled: false,
