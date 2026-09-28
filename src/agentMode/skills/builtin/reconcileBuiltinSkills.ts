@@ -4,7 +4,7 @@ import { joinPosix } from "@/utils/pathUtils";
 import {
   ALL_MANAGED_SKILLS,
   RETIRED_BUILTIN_SKILLS,
-  planManagedBuiltins,
+  isBuiltinSkillEnabledFor,
 } from "@/builtinSkills/builtinSkills";
 import {
   inspectBuiltinSkill,
@@ -30,7 +30,6 @@ export interface ReconcileBuiltinOptions {
  */
 export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): Promise<void> {
   const { folder, fs, settings, availableAgents, registeredAgents } = options;
-  const preferences = settings.agentMode.skills.builtinPreferences;
   const errors: string[] = [];
   // Retired skills must stop being discoverable even when no replacement or agent
   // is enabled. Keep file ownership independent of user overrides so cleanup retries.
@@ -39,19 +38,11 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
     const result = await removeSeededBuiltin(folder, skill.name, fs);
     if (result === "failed") errors.push(`Could not remove retired built-in skill ${skill.name}.`);
   }
-  const gated = new Set(
-    planManagedBuiltins({
-      search: settings.enableMiyoSearchSkill === true,
-      documents: settings.docProcessorBackend === "miyo",
-    }).seed.map((skill) => skill.name)
-  );
   const enabledAgents: Record<string, string[]> = {};
   for (const skill of ALL_MANAGED_SKILLS) {
-    const pref = preferences?.[skill.name];
-    enabledAgents[skill.name] =
-      !gated.has(skill.name) || pref?.disabled
-        ? []
-        : registeredAgents.filter((agent) => !pref?.disabledAgents?.includes(agent));
+    enabledAgents[skill.name] = registeredAgents.filter((agent) =>
+      isBuiltinSkillEnabledFor(settings, skill.name, agent)
+    );
   }
   // No effective consumer means no canonical files, including on a fresh vault.
   // https://github.com/logancyang/obsidian-copilot/issues/3022

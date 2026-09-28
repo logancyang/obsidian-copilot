@@ -13,6 +13,13 @@ import React, { useMemo, useState } from "react";
 interface ToolPermissionCardProps {
   request: PermissionPrompt;
   onResolve: (toolCallId: string, optionId: string) => void;
+  /**
+   * Name of the tool as the chat already shows it. Some agents send only the
+   * tool's argument as the request title (OpenCode's web search sends the bare
+   * query), which reads as if the query itself were a command.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/599
+   */
+  toolName?: string;
 }
 
 const EMPTY_OPTION_NAMES: readonly string[] = Object.freeze([]);
@@ -29,7 +36,11 @@ const EMPTY_OPTION_NAMES: readonly string[] = Object.freeze([]);
  * `optionId`; this component only displays the domain prompt and forwards that
  * identifier.
  */
-export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request, onResolve }) => {
+export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
+  request,
+  onResolve,
+  toolName,
+}) => {
   const { toolCall, options } = request;
   const [busy, setBusy] = useState(false);
   const orderedOptions = useMemo(() => sortOptions(options), [options]);
@@ -37,6 +48,8 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
   const diffContents = useMemo(() => extractDiffContents(toolCall.content), [toolCall.content]);
   const inputJson = useMemo(() => formatAgentInput(toolCall.rawInput), [toolCall.rawInput]);
   const title = toolCall.title ?? "Tool call";
+  const namedTool =
+    toolName && !title.toLowerCase().includes(toolName.toLowerCase()) ? toolName : undefined;
 
   const choose = (optionId: string) => {
     if (busy) return;
@@ -53,7 +66,15 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
 
       <div className="tw-flex tw-flex-col tw-gap-2 tw-px-3 tw-py-2">
         <p className="tw-m-0 tw-text-sm">
-          Agent Mode wants to run <strong>{title}</strong>.
+          {namedTool ? (
+            <>
+              Agent Mode wants to use <strong>{namedTool}</strong>: {title}.
+            </>
+          ) : (
+            <>
+              Agent Mode wants to run <strong>{title}</strong>.
+            </>
+          )}
         </p>
         {toolCall.kind ? (
           <p className="tw-m-0 tw-text-xs tw-text-muted">

@@ -1,4 +1,4 @@
-import { resetSettings, setSettings, updateSetting } from "@/settings/model";
+import { getSettings, resetSettings, setSettings, updateSetting } from "@/settings/model";
 import {
   setDisableBuiltinSystemPrompt,
   setSelectedPromptTitle,
@@ -190,11 +190,28 @@ describe("CodexBackend", () => {
 
       it("encodes the shared product prompt byte for byte", async () => {
         const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
-        const shared = buildAgentSystemPrompt();
+        const shared = buildAgentSystemPrompt("codex");
 
         // `toBe`, not `toContain`: this string is the provider cache prefix, and a containment
         // check passes while stray bytes push everything after it out of the cache.
         expect(JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions).toBe(shared);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 names only the builtin skills enabled for Codex", async () => {
+        const agentMode = getSettings().agentMode;
+        updateSetting("agentMode", {
+          ...agentMode,
+          skills: {
+            ...agentMode.skills,
+            builtinPreferences: { "copilot-web-search": { disabledAgents: ["codex"] } },
+          },
+        });
+
+        const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+        const prompt = JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions;
+
+        expect(prompt).not.toContain("copilot-web-search");
+        expect(prompt).toContain("copilot-web-fetch for pages/URLs");
       });
 
       it("keeps those bytes identical when the vault path changes", async () => {

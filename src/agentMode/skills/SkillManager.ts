@@ -1,5 +1,5 @@
 import type { BuiltinPreferences } from "./builtin/reconcileBuiltinSkills";
-import { ALL_MANAGED_SKILLS, planManagedBuiltins } from "@/builtinSkills/builtinSkills";
+import { ALL_MANAGED_SKILLS, isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
 import { getEffectiveSkillsFolder } from "@/settings/copilotFolder";
@@ -353,24 +353,16 @@ export class SkillManager {
       }
 
       const settings = getSettings();
-      const eligible = new Set(
-        planManagedBuiltins({
-          search: settings.enableMiyoSearchSkill === true,
-          documents: settings.docProcessorBackend === "miyo",
-        }).seed.map((skill) => skill.name)
-      );
       const availableAgents = this.builtinRuntime?.availableAgents();
       const skills = mergeDiscovery(canonicalDiscovery.accepted, projectCandidates).map((skill) => {
         // Failed cleanup must never reactivate an opted-out skill through stale metadata.
         // https://github.com/logancyang/obsidian-copilot/issues/3022
         if (!skill.builtin || !availableAgents) return skill;
-        const pref = settings.agentMode.skills.builtinPreferences?.[skill.name];
         return {
           ...skill,
-          enabledAgents:
-            pref?.disabled || !eligible.has(skill.name)
-              ? []
-              : availableAgents.filter((agent) => !pref?.disabledAgents?.includes(agent)),
+          enabledAgents: availableAgents.filter((agent) =>
+            isBuiltinSkillEnabledFor(settings, skill.name, agent)
+          ),
         };
       });
       const rejectedSkills =
