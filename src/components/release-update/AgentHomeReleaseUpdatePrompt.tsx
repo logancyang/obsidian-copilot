@@ -1,3 +1,4 @@
+import type { ReleaseVideo } from "@/components/release-update/releaseNotes";
 import { Button } from "@/components/ui/button";
 import { ArrowUpCircle, XIcon } from "lucide-react";
 import * as React from "react";
@@ -6,6 +7,7 @@ export interface AgentHomeReleaseUpdatePromptProps {
   onDismiss: () => void;
   onOpen: () => void;
   version: string;
+  video: ReleaseVideo | null;
 }
 
 /** Presents the selected release update treatment inside the empty Agent Home. */
@@ -13,6 +15,7 @@ export function AgentHomeReleaseUpdatePrompt({
   onDismiss,
   onOpen,
   version,
+  video,
 }: AgentHomeReleaseUpdatePromptProps): React.ReactElement {
   return (
     <section
@@ -42,6 +45,22 @@ export function AgentHomeReleaseUpdatePrompt({
           </p>
         </div>
       </div>
+      {video && (
+        // Width-capped so a wide pane's 16:9 thumbnail cannot push the banner past the top of the home.
+        <a
+          aria-label={`Watch demo video: ${video.title}`}
+          className="tw-mx-auto tw-mt-3 tw-block tw-max-w-sm tw-overflow-hidden tw-rounded-md tw-border tw-border-solid tw-border-border"
+          href={video.url}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <img
+            alt=""
+            className="tw-block tw-aspect-video tw-w-full tw-object-cover"
+            src={video.thumbnailUrl}
+          />
+        </a>
+      )}
       <Button className="tw-mt-3 tw-w-full" onClick={onOpen} size="sm" type="button">
         See what’s new
       </Button>

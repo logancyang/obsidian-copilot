@@ -21,6 +21,7 @@ jest.mock("@/settings/model", () => ({
 }));
 
 const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/317";
+const VIDEO_ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/603";
 const RELEASE = {
   body: "# Copilot 4.0.4",
   htmlUrl: "https://github.com/logancyang/obsidian-copilot/releases/tag/4.0.4",
@@ -88,6 +89,23 @@ describe("AgentHomeReleaseUpdate", () => {
       expect(ReleaseNotesModal).toHaveBeenCalledWith(app, RELEASE, "4.0.3");
       expect(mockOpen).toHaveBeenCalledTimes(1);
       expect(updateSetting).toHaveBeenCalledWith("lastDismissedVersion", RELEASE.version);
+    });
+
+    it(`shows the latest release's demo video thumbnail in the banner for ${VIDEO_ISSUE_URL}`, () => {
+      jest.mocked(useLatestVersion).mockReturnValue({
+        hasUpdate: true,
+        latestRelease: {
+          ...RELEASE,
+          body: "# Copilot 4.0.12\n\n[![Demo video: OpenCode 2](https://github.com/user-attachments/assets/thumb)](https://www.youtube.com/shorts/IjjXVFNFO0k)",
+        },
+        latestVersion: RELEASE.version,
+      });
+
+      renderUpdate();
+
+      expect(
+        screen.getByRole("link", { name: "Watch demo video: OpenCode 2" }).getAttribute("href")
+      ).toBe("https://www.youtube.com/shorts/IjjXVFNFO0k");
     });
   });
 });

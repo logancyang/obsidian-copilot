@@ -1,4 +1,5 @@
 import {
+  findReleaseVideo,
   formatReleaseNotesForObsidian,
   requestReleaseNotesSince,
 } from "@/components/release-update/releaseNotes";
@@ -9,8 +10,32 @@ jest.mock("obsidian", () => ({ requestUrl: jest.fn() }));
 const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/317";
 const ISSUE_600_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/600";
 const REFERENCE_URL = "https://github.com/logancyang/obsidian-copilot/pull/2988";
+const VIDEO_ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/603";
 
 describe("releaseNotes", () => {
+  describe("findReleaseVideo()", () => {
+    it(`returns the thumbnail, title, and link of the image whose alt text starts with "Demo video:" for ${VIDEO_ISSUE_URL}`, () => {
+      const body = [
+        "# v4.0.12 - OpenCode 2 in your vault",
+        "[![Demo video: OpenCode 2 in Your Vault](https://github.com/user-attachments/assets/thumb)](https://www.youtube.com/shorts/IjjXVFNFO0k)",
+        "![Copilot icon in the note header](https://github.com/user-attachments/assets/screenshot)",
+      ].join("\n\n");
+
+      expect(findReleaseVideo(body)).toEqual({
+        thumbnailUrl: "https://github.com/user-attachments/assets/thumb",
+        title: "OpenCode 2 in Your Vault",
+        url: "https://www.youtube.com/shorts/IjjXVFNFO0k",
+      });
+    });
+
+    it(`returns null when no linked image carries the "Demo video:" keyword for ${VIDEO_ISSUE_URL}`, () => {
+      const body =
+        "[![OpenCode 2 in Your Vault](https://github.com/user-attachments/assets/thumb)](https://www.youtube.com/shorts/IjjXVFNFO0k)";
+
+      expect(findReleaseVideo(body)).toBeNull();
+    });
+  });
+
   describe("formatReleaseNotesForObsidian()", () => {
     it(`compacts only rendered URL labels without rewriting Markdown syntax for ${ISSUE_URL}`, () => {
       const container = document.createElement("div");

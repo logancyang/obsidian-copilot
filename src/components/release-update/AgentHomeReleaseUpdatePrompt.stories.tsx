@@ -14,6 +14,7 @@ const meta = {
     onDismiss: () => undefined,
     onOpen: () => undefined,
     version: "4.0.4",
+    video: null,
   },
   parameters: { gallery: { host: "leaf", layout: "fullscreen" } },
 } satisfies Meta<StoryProps>;
@@ -33,5 +34,18 @@ function HomeFrame(props: Partial<StoryProps>): React.ReactElement {
 }
 
 export const LargeBottomBanner: StoryObj<StoryProps> = {
+  render: HomeFrame,
+};
+
+export const WithDemoVideo: StoryObj<StoryProps> = {
+  args: {
+    version: "4.0.12",
+    video: {
+      thumbnailUrl:
+        "https://github.com/user-attachments/assets/76f592d9-74ce-43cc-85f9-a8312fe16fc9",
+      title: "OpenCode 2 in Your Vault: Obsidian Copilot 4.0.12",
+      url: "https://www.youtube.com/shorts/IjjXVFNFO0k",
+    },
+  },
   render: HomeFrame,
 };
