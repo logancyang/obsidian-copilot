@@ -783,6 +783,23 @@ describe("buildUserDisplayContent", () => {
   });
 });
 
+describe("AgentSession.getLastTurn", () => {
+  it("is null before any prompt and is the latest prompt's turn afterwards", async () => {
+    const session = new AgentSession({
+      backend: makeMockBackend().asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    expect(session.getLastTurn()).toBeNull();
+
+    const { turn } = session.sendPrompt("Hi there");
+
+    expect(session.getLastTurn()).toBe(turn);
+    await turn;
+  });
+});
+
 describe("AgentSession.sendPrompt", () => {
   it("appends user + placeholder synchronously and resolves on stopReason", async () => {
     const mock = makeMockBackend();

@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { logWarn } from "@/logger";
-import { useSessionSelector } from "@/agentMode/protocol/react";
 import type { SessionClient } from "@/agentMode/protocol/SessionClient";
 import type { SessionState } from "@/agentMode/protocol/state";
 import type { CurrentPlan, PlanDecisionAction, SessionId } from "@/agentMode/session/types";
 import { useSessionCommands } from "@/agentMode/ui/hooks/useSessionCommands";
+import { useSessionSlice } from "@/agentMode/ui/hooks/useSessionSlice";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { Check, FileText, X as XIcon } from "lucide-react";
 import { renderMarkdown } from "@/utils/renderMarkdown";
@@ -98,8 +98,7 @@ export const PlanPreviewRoot: React.FC<PlanPreviewRootProps> = ({ app, state }) 
   const { client, sessionId } = state;
   const commands = useSessionCommands(client, sessionId);
 
-  useEffect(() => client.watchSession(sessionId), [client, sessionId]);
-  const selectedPlan = useSessionSelector(client, sessionId, selectPlan, samePlan);
+  const selectedPlan = useSessionSlice(client, sessionId, selectPlan, samePlan);
   const currentPlan = selectedPlan?.plan ?? null;
 
   const planMarkdown = currentPlan ? currentPlan.body : state.planMarkdown;

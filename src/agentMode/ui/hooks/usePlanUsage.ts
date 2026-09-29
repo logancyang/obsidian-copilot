@@ -1,26 +1,11 @@
-import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import type { SessionClient } from "@/agentMode/protocol/SessionClient";
+import type { SessionState } from "@/agentMode/protocol/state";
 import type { PlanUsage } from "@/agentMode/session/planUsage";
-import { useEffect, useRef, useState } from "react";
+import type { SessionId } from "@/agentMode/session/types";
+import { useSessionSlice } from "@/agentMode/ui/hooks/useSessionSlice";
 
-export function usePlanUsage(backend: AgentChatBackend): PlanUsage | null {
-  const [planUsage, setPlanUsage] = useState<PlanUsage | null>(() => backend.getPlanUsage());
+const selectPlanUsage = (session: SessionState) => session.planUsage;
 
-  const isMountedRef = useRef(false);
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const sync = () => setPlanUsage(backend.getPlanUsage());
-    sync();
-    return backend.subscribe(() => {
-      if (!isMountedRef.current) return;
-      sync();
-    });
-  }, [backend]);
-
-  return planUsage;
+export function usePlanUsage(client: SessionClient, sessionId: SessionId): PlanUsage | null {
+  return useSessionSlice(client, sessionId, selectPlanUsage) ?? null;
 }

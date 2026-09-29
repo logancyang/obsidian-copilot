@@ -71,12 +71,10 @@ export const AgentModeChat: React.FC<Props> = ({
   if (!manager) return null;
 
   const activeSession = manager.getActiveSession();
-  const backend = manager.getActiveChatUIState();
-  if (activeSession && backend && client) {
+  if (activeSession && client) {
     return (
       <AgentHome
         client={client}
-        backend={backend}
         sessionId={activeSession.internalId}
         chatInputId={activeSession.chatInputId}
         manager={manager}

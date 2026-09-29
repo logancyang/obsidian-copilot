@@ -1,4 +1,4 @@
-import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
+import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendId, BackendState } from "@/agentMode/session/types";
 import type { AgentModePickerOverride } from "./useAgentModePicker";
@@ -7,18 +7,17 @@ import { handlePickerSwitchError } from "./agentModelPickerHelpers";
 interface ModeActiveContext {
   activeBackendId: BackendId | null;
   activeMode: BackendState["mode"];
-  activeChatUIState: AgentChatUIState | null;
+  activeSession: AgentSession | null;
 }
 
 function collectModeActiveContext(manager: AgentSessionManager): ModeActiveContext {
   const activeSession = manager.getActiveSession();
-  const activeChatUIState = manager.getActiveChatUIState();
   const activeBackendId = activeSession?.backendId ?? null;
   const activeState = activeSession?.getState() ?? null;
   return {
     activeBackendId,
     activeMode: activeState?.mode ?? null,
-    activeChatUIState,
+    activeSession,
   };
 }
 
@@ -28,12 +27,12 @@ export function buildAgentModePicker(args: {
   const { manager } = args;
   if (!manager) return null;
   const ctx = collectModeActiveContext(manager);
-  const { activeBackendId, activeMode, activeChatUIState } = ctx;
+  const { activeBackendId, activeMode, activeSession } = ctx;
   if (!activeBackendId || !activeMode) return null;
   return {
     options: activeMode.options,
     value: activeMode.current,
-    disabled: activeChatUIState?.canSwitchMode() === false,
+    disabled: activeSession?.canSwitchMode() === false,
     onChange: (value) => {
       const spec = activeMode.apply[value];
       if (!spec) return;

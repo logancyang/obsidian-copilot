@@ -1,7 +1,6 @@
 import type { ServerFrame } from "@/agentMode/protocol/frames";
 import { SessionClient } from "@/agentMode/protocol/SessionClient";
 import type { ClientTransport } from "@/agentMode/protocol/transport";
-import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import type { SessionHostManager } from "@/agentMode/session/host/commandHandlers";
@@ -92,24 +91,20 @@ export function makeTestSession(
 export class FakeManager implements SessionHostManager {
   private sessions = new Map<string, AgentSession>();
   private detached = new Set<string>();
-  private uiStates = new Map<string, AgentChatUIState>();
   private listeners = new Set<() => void>();
 
   add(session: AgentSession): void {
     this.sessions.set(session.internalId, session);
-    this.uiStates.set(session.internalId, new AgentChatUIState(session));
     this.notify();
   }
 
   replace(session: AgentSession): void {
     this.sessions.set(session.internalId, session);
-    this.uiStates.set(session.internalId, new AgentChatUIState(session));
     this.notify();
   }
 
   remove(id: string): void {
     this.sessions.delete(id);
-    this.uiStates.delete(id);
     this.detached.delete(id);
     this.notify();
   }
@@ -140,10 +135,6 @@ export class FakeManager implements SessionHostManager {
 
   getSession(id: string): AgentSession | null {
     return this.sessions.get(id) ?? null;
-  }
-
-  getChatUIState(id: string): AgentChatUIState | null {
-    return this.uiStates.get(id) ?? null;
   }
 
   subscribe(listener: () => void): () => void {

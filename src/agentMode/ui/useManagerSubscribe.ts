@@ -8,13 +8,20 @@ export function useManagerSubscribe(
     (cb: () => void) => {
       if (!manager) return () => {};
       let unsubActive: (() => void) | null = null;
-      let lastUI: ReturnType<typeof manager.getActiveChatUIState> = null;
+      let lastSession: ReturnType<typeof manager.getActiveSession> = null;
       const rewireActive = (): void => {
-        const cur = manager.getActiveChatUIState();
-        if (cur === lastUI) return;
+        const cur = manager.getActiveSession();
+        if (cur === lastSession) return;
         unsubActive?.();
-        lastUI = cur;
-        unsubActive = cur?.subscribe(cb) ?? null;
+        lastSession = cur;
+        unsubActive =
+          cur?.subscribe({
+            onMessagesChanged: cb,
+            onStatusChanged: cb,
+            onModelChanged: cb,
+            onCurrentPlanChanged: cb,
+            onCurrentTodoListChanged: cb,
+          }) ?? null;
       };
       rewireActive();
       const unsubManager = manager.subscribe(() => {

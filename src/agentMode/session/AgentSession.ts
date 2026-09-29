@@ -184,6 +184,7 @@ export class AgentSession {
   private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private placeholderId: string | null = null;
+  private lastTurn: Promise<StopReason> | null = null;
   private currentTurnHadRoutedToolActivity = false;
   private currentMessageIds = new Set<string>();
   private settledStream: {
@@ -590,7 +591,12 @@ export class AgentSession {
     this.recomputeStatusIfChanged();
 
     const turn = this.runTurn(displayText, userMessageId, context, turnStartedAtMs, promptContent);
+    this.lastTurn = turn;
     return { userMessageId, turn };
+  }
+
+  getLastTurn(): Promise<StopReason> | null {
+    return this.lastTurn;
   }
 
   getLastMentionedAgents(): ReadonlyArray<BackendId> {

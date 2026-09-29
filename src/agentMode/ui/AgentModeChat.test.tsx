@@ -72,7 +72,6 @@ function makeManager({
     getIsStarting: jest.fn(() => starting),
     getLastError: jest.fn(() => lastError),
     getActiveSession: jest.fn(() => null),
-    getActiveChatUIState: jest.fn(() => null),
     getOrCreateActiveSession,
   } as unknown as AgentSessionManager & { getOrCreateActiveSession: jest.Mock };
   return { manager, getOrCreateActiveSession };
@@ -287,7 +286,6 @@ describe("AgentModeChat", () => {
           poolSessions: [active],
         });
         (manager.getActiveSession as jest.Mock).mockReturnValue(active);
-        (manager.getActiveChatUIState as jest.Mock).mockReturnValue({});
         const { rerender } = renderChat(manager);
         const home = screen.getByTestId("agent-home");
         mockInstallState = state;

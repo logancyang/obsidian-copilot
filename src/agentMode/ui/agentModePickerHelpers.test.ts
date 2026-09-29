@@ -1,6 +1,5 @@
 import { buildAgentModePicker } from "./agentModePickerHelpers";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendState } from "@/agentMode/session/types";
 
@@ -16,12 +15,6 @@ jest.mock("@/agentMode/backends/registry", () => ({
   getActiveBackendDescriptor: () => undefined,
 }));
 
-function makeUIState(canSwitchMode: boolean | null): AgentChatUIState {
-  return {
-    canSwitchMode: () => canSwitchMode,
-  } as unknown as AgentChatUIState;
-}
-
 function makeManager(opts: {
   backendId: string | null;
   state: BackendState | null;
@@ -32,11 +25,11 @@ function makeManager(opts: {
     ? ({
         backendId: opts.backendId,
         getState: () => opts.state,
+        canSwitchMode: () => opts.canSwitchMode ?? null,
       } as unknown as AgentSession)
     : null;
   return {
     getActiveSession: () => session,
-    getActiveChatUIState: () => makeUIState(opts.canSwitchMode ?? null),
     applyMode: opts.applyMode ?? jest.fn().mockResolvedValue(undefined),
   } as unknown as AgentSessionManager;
 }

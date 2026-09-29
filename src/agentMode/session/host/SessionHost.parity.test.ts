@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { selectChatRuntime } from "@/agentMode/protocol/selectors";
 import type { SessionClient } from "@/agentMode/protocol/SessionClient";
-import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
+import type { AgentSession } from "@/agentMode/session/AgentSession";
 import {
   buildHost,
   FakeManager,
@@ -37,17 +37,18 @@ function expectSameSession(client: SessionClient, host: SessionHost, id: string)
   expect(client.getHost()).toEqual(host.getHostState());
 }
 
-function expectRuntimeMatchesUiState(client: SessionClient, ui: AgentChatUIState, id: string) {
+function expectRuntimeMatchesSession(client: SessionClient, session: AgentSession, id: string) {
   const runtime = selectChatRuntime(client.getHost()!, client.getSession(id)!, id);
-  expect(runtime.messages).toEqual(ui.getMessages());
-  expect(runtime.isStarting).toBe(ui.isStarting());
-  expect(runtime.isTurnInFlight).toBe(ui.isTurnInFlight());
-  expect(runtime.hasPendingPlanPermission).toBe(ui.hasPendingPlanPermission());
-  expect(runtime.currentPlan).toEqual(ui.getCurrentPlan());
-  expect(runtime.currentTodoList).toEqual(ui.getCurrentTodoList());
-  expect(runtime.pendingToolPermissions).toEqual(ui.getPendingToolPermissions());
+  const status = session.getStatus();
+  expect(runtime.messages).toEqual(session.store.getDisplayMessages());
+  expect(runtime.isStarting).toBe(status === "starting");
+  expect(runtime.isTurnInFlight).toBe(status === "running" || status === "awaiting_permission");
+  expect(runtime.hasPendingPlanPermission).toBe(session.hasPendingPlanPermission());
+  expect(runtime.currentPlan).toEqual(session.getCurrentPlan());
+  expect(runtime.currentTodoList).toEqual(session.getCurrentTodoList());
+  expect(runtime.pendingToolPermissions).toEqual(session.getPendingToolPermissions());
   expect(runtime.pendingAskUserQuestions.map((q) => q.requestId)).toEqual(
-    ui.getPendingAskUserQuestions().map((q) => q.requestId)
+    session.getPendingAskUserQuestions().map((q) => q.requestId)
   );
 }
 
@@ -74,13 +75,12 @@ describe("SessionHost parity", () => {
       const { client } = host.createClient({ serialize: true });
       client.watchSession("s1");
       await settle();
-      const ui = new AgentChatUIState(session);
       const snapshots: { late: SessionClient | null } = { late: null };
       const midpoint = Math.floor(script.steps.length / 2);
 
       const observe = () => {
         expectSameSession(client, host, "s1");
-        expectRuntimeMatchesUiState(client, ui, "s1");
+        expectRuntimeMatchesSession(client, session, "s1");
         const state = client.getSession("s1")!;
         seen.permission ||= state.pending.permissions.length > 0;
         seen.question ||= state.pending.questions.length > 0;

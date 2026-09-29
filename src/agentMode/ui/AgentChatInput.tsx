@@ -1,4 +1,5 @@
-import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import type { ComposerCommands } from "@/agentMode/ui/hooks/useComposerCommands";
+import { checkImageLimits, decodedBase64Bytes } from "@/agentMode/protocol/limits";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
@@ -48,7 +49,7 @@ import { v4 as uuidv4 } from "uuid";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface AgentChatInputProps {
-  backend: AgentChatBackend;
+  composer: ComposerCommands;
   plugin: CopilotPlugin;
   chatInputId: string;
   draft: AgentInputDraftControls;
@@ -139,7 +140,7 @@ function imageBlockToFile(block: PromptContent, index: number): File | null {
 }
 
 export const AgentChatInput = memo(function AgentChatInput({
-  backend,
+  composer,
   plugin,
   chatInputId,
   draft,
@@ -236,17 +237,17 @@ export const AgentChatInput = memo(function AgentChatInput({
       if (images.length > 0) setSelectedImages((previous) => [...images, ...previous]);
     }
     try {
-      await backend.cancel();
+      await composer.cancel();
     } catch (e) {
       logError("[AgentMode] cancel failed", e);
     }
-  }, [backend, queuedMessages, setContextNotes, setSelectedImages, setQueuedMessages]);
+  }, [composer, queuedMessages, setContextNotes, setSelectedImages, setQueuedMessages]);
 
   const runSend = useCallback(
     async (item: QueuedAgentMessage) => {
       setLoading(true);
       try {
-        const { turn } = backend.sendMessage(
+        const { turn } = await composer.sendMessage(
           item.text,
           item.context,
           item.promptContent,
@@ -261,7 +262,7 @@ export const AgentChatInput = memo(function AgentChatInput({
         setLoading(false);
       }
     },
-    [backend, setLoading, updateUserMessageHistory]
+    [composer, setLoading, updateUserMessageHistory]
   );
 
   const handleSendMessage = useCallback(
@@ -305,6 +306,14 @@ export const AgentChatInput = memo(function AgentChatInput({
         new Notice(
           `${unsupportedImageModelLabel} doesn't support images. Switch to a vision-capable model to send images.`
         );
+        return;
+      }
+
+      const imageViolation = checkImageLimits(
+        selectedImages.map((file) => ({ mimeType: file.type || "image/png", bytes: file.size }))
+      );
+      if (imageViolation) {
+        new Notice(imageViolation.message);
         return;
       }
 
@@ -384,6 +393,17 @@ export const AgentChatInput = memo(function AgentChatInput({
       new Notice(
         `${unsupportedImageModelLabel} doesn't support images. Switch to a vision-capable model to send images.`
       );
+      return;
+    }
+    const queuedImageViolation = checkImageLimits(
+      (combined.promptContent ?? []).flatMap((content) =>
+        content.type === "image"
+          ? [{ mimeType: content.mimeType, bytes: decodedBase64Bytes(content.data) }]
+          : []
+      )
+    );
+    if (queuedImageViolation) {
+      new Notice(queuedImageViolation.message);
       return;
     }
     setQueuedMessages([]);
