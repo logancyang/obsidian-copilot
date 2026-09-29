@@ -315,9 +315,7 @@ export class OpenArtifactsPublisher {
         try {
           currentDocId = await getOpenArtifactsDocId(this.app, file);
           if (currentDocId === docId) saved = await saveOpenArtifactsLink(this.app, file, receipt);
-        } catch {
-          // Remote success is still partial success when the local identity cannot be verified.
-        }
+        } catch {}
         if (!saved) {
           const result: OpenArtifactsPersistenceResult = {
             kind: "persistence",
@@ -383,9 +381,7 @@ export class OpenArtifactsPublisher {
         let currentDocId: string | null | undefined;
         try {
           currentDocId = await getOpenArtifactsDocId(this.app, file);
-        } catch {
-          // A successful POST must stay blocked when no valid identity can route reopen to Update.
-        }
+        } catch {}
         if (currentDocId) {
           this.blockedPublishResults.delete(file);
         } else {

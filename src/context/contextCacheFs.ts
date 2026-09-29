@@ -55,9 +55,7 @@ export function createNodeContextCacheFs(root: string): NodeContextCacheFs {
   const removeBestEffort = async (target: string, recursive: boolean): Promise<void> => {
     try {
       await fs.promises.rm(target, { recursive, force: true });
-    } catch {
-      // Best-effort: the cache is regenerable and deletes are idempotent.
-    }
+    } catch {}
   };
 
   return {

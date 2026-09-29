@@ -47,9 +47,7 @@ function parseUsageJson(raw: unknown): SessionUsage | undefined {
     ) {
       return parsed as SessionUsage;
     }
-  } catch {
-    // Malformed JSON — fall through to undefined.
-  }
+  } catch {}
   return undefined;
 }
 

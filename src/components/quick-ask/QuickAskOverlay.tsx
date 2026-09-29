@@ -100,9 +100,7 @@ export class QuickAskOverlay {
     for (const cleanup of this.cleanupCallbacks) {
       try {
         cleanup();
-      } catch {
-        // Ignore cleanup errors
-      }
+      } catch {}
     }
     this.cleanupCallbacks = [];
 

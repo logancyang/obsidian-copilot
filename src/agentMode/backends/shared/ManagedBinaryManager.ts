@@ -158,9 +158,7 @@ export abstract class ManagedBinaryManager<
         let failure: { pin?: string; minimumVersion?: string; failedAt?: number } = {};
         try {
           failure = JSON.parse(await fs.promises.readFile(failurePath, "utf8"));
-        } catch {
-          /* First attempt or invalid local metadata. */
-        }
+        } catch {}
         // A failed network request must not repeat on every reload; a changed pin can retry immediately.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
         if (

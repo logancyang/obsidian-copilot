@@ -37,9 +37,7 @@ export async function findLatestOpencodeLog(
           newestMtime = mtimeMs;
           newestPath = full;
         }
-      } catch {
-        // File vanished between readdir and stat; skip it.
-      }
+      } catch {}
     }
     return newestPath;
   } catch {

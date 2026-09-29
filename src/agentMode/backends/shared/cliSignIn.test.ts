@@ -284,9 +284,7 @@ describe("cliSignIn", () => {
             if (proxy.pid) {
               try {
                 process.kill(-proxy.pid, "SIGKILL");
-              } catch {
-                /* Already stopped. */
-              }
+              } catch {}
             }
           }
         }

@@ -171,6 +171,38 @@ async function main() {
     ),
     "browser polyfills or guarded/type-only Node access were rejected"
   );
+  const issuelessComments = [
+    "// Explains the next line\nexport const a = 1;",
+    "/** Documents a without an issue */\nexport const a = 1;",
+    "export const a = 1; // trailing note",
+    "// global cache warms lazily\nexport const a = 1;",
+    "// eslint rejects the obvious shape here\nexport const a = 1;",
+    "// See https://github.com/logancyang/obsidian-copilot/pull/1\nexport const a = 1;",
+  ];
+  for (const code of issuelessComments) {
+    const result = await lintSourceFixture(code, "src/utils.ts");
+    assert(
+      result.messages.some((message) => message.ruleId === "copilot/issue-linked-comments"),
+      `issue-less comment was accepted: ${code}`
+    );
+  }
+  const allowedComments = [
+    "// Needed for https://github.com/logancyang/obsidian-copilot/issues/1\nexport const a = 1;",
+    "// A decision spanning lines\n// https://github.com/Brevilabs/obsidian-copilot-private/issues/1\nexport const a = 1;",
+    "// eslint-disable-next-line no-restricted-syntax -- fixture\nexport const a = 1;",
+    "// prettier-ignore\nexport const a = [1,2];",
+    "/* global activeWindow */\nexport const a = 1;",
+    "export function parse(text: string): unknown {\n  try {\n    return JSON.parse(text);\n  } catch {}\n  return undefined;\n}",
+  ];
+  for (const code of allowedComments) {
+    const result = await lintSourceFixture(code, "src/utils.ts");
+    assert(
+      result.messages.every(
+        (message) => !["copilot/issue-linked-comments", "no-empty"].includes(message.ruleId)
+      ),
+      `issue-linked comment, tool directive, or empty catch was rejected: ${code}`
+    );
+  }
   const browserStorageAccesses = [
     'localStorage.getItem("key")',
     'sessionStorage.setItem("key", "value")',

@@ -38,9 +38,7 @@ function wireInternalLinks(
     let href = raw;
     try {
       href = decodeURIComponent(raw);
-    } catch {
-      // keep raw on malformed percent escapes
-    }
+    } catch {}
     const newLeaf = e.button === 1 || e.ctrlKey || e.metaKey;
     openVaultPath(app, href, { newLeaf, sourcePath });
   };

@@ -590,9 +590,7 @@ export default class CopilotPlugin extends Plugin {
     try {
       const webViewerService = getWebViewerService(this.app);
       webViewerService.stopActiveWebTabTracking();
-    } catch {
-      // Ignore errors if service not available
-    }
+    } catch {}
 
     this.modelManagement?.dispose();
 
@@ -1208,9 +1206,7 @@ export default class CopilotPlugin extends Plugin {
       try {
         const fm = await readFrontmatterViaAdapter(this.app, file.path);
         if (typeof fm?.mode === "string") mode = fm.mode;
-      } catch {
-        // Leave mode undefined; routes to the legacy loader below.
-      }
+      } catch {}
     }
     if (mode === AGENT_CHAT_MODE) {
       await this.loadAgentChatHistory(file);

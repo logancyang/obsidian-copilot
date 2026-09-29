@@ -282,9 +282,7 @@ function CustomCommandChatModalContent({
         lastInputPromptRef.current = "";
       }
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        // Silently ignore abort errors
-      } else {
+      if (!(error instanceof Error && error.name === "AbortError")) {
         logError("Error in follow-up submit:", error);
         if (isMountedRef.current) {
           new Notice("Failed to send message. Please try again.");

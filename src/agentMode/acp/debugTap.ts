@@ -64,9 +64,7 @@ function tapReadable(
         if (value) splitter.push(value);
       }
       splitter.flush();
-    } catch {
-      // Stream closed/aborted; nothing for the tap to do.
-    }
+    } catch {}
   })();
   return forConsumer;
 }
@@ -96,9 +94,7 @@ export class NdjsonLineSplitter {
   private emit(line: string): void {
     try {
       this.onLine(line);
-    } catch {
-      // Logging must never break the protocol stream.
-    }
+    } catch {}
   }
 }
 

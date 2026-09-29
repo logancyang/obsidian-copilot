@@ -77,9 +77,7 @@ function resolveBrowserWindow(
         bestDelta = delta;
         best = w;
       }
-    } catch {
-      // A window may have been destroyed mid-iteration; skip it.
-    }
+    } catch {}
   }
   return best ?? current;
 }

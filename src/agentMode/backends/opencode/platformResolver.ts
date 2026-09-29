@@ -61,9 +61,7 @@ export async function detectMusl(): Promise<boolean> {
   try {
     await fs.promises.access("/etc/alpine-release");
     return true;
-  } catch {
-    // not alpine; try ldd
-  }
+  } catch {}
   try {
     const { stdout, stderr } = await execFile("ldd", ["--version"]);
     return /musl/i.test(`${stdout}\n${stderr}`);
@@ -96,9 +94,7 @@ export async function detectAvx2(): Promise<boolean> {
       ]);
       return /true/i.test(stdout);
     }
-  } catch {
-    // probe failed → assume modern
-  }
+  } catch {}
   return true;
 }
 

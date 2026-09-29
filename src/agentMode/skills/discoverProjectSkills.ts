@@ -56,9 +56,7 @@ export async function discoverProjectSkills(
           let isLink = false;
           try {
             isLink = await fs.isSymlink(entryAbs);
-          } catch {
-            // Treat unreadable lstat as "not a link" and let isDirectory decide.
-          }
+          } catch {}
           if (isLink) return null;
 
           if (!(await safeIsDirectory(fs, entryAbs))) return null;

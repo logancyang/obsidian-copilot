@@ -228,9 +228,7 @@ function summarizeExplanation(explanation: unknown): string {
     ) {
       parts.push(`Score: ${exp.baseScore.toFixed(4)}→${exp.finalScore.toFixed(4)}`);
     }
-  } catch {
-    // Ignore explanation parsing errors, leave parts as-is
-  }
+  } catch {}
 
   return parts.join(" | ");
 }

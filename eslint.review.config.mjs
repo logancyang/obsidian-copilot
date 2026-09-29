@@ -13,9 +13,6 @@ export default [
   {
     files: sourceFiles,
     rules: {
-      // Reproduces the scorecard's deprecation findings locally, so a dependency
-      // bump cannot reintroduce them unnoticed. Promote to "error" once the
-      // remaining families outside this gate's scope are cleared.
       "@typescript-eslint/no-deprecated": "warn",
       "@typescript-eslint/no-misused-promises": ["warn", { checksVoidReturn: true }],
       "no-restricted-globals": [
@@ -40,15 +37,11 @@ export default [
     },
     plugins: { obsidianmd },
     rules: {
-      // The upstream rule combines schema failures with copy guidance. The
-      // package gate promotes only its schema findings to blocking errors.
       "obsidianmd/validate-manifest": "warn",
     },
   },
   {
     files: ["**/*LICENSE"],
-    // eslint-plugin-obsidianmd does not yet export a flat config for LICENSE,
-    // so use the plain-text parser bundled with the pinned plugin version.
     languageOptions: {
       parser: PlainTextParser,
     },
