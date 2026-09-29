@@ -94,6 +94,12 @@ export class FakeManager implements SessionHostManager {
     this.notify();
   }
 
+  replace(session: AgentSession): void {
+    this.sessions.set(session.internalId, session);
+    this.uiStates.set(session.internalId, new AgentChatUIState(session));
+    this.notify();
+  }
+
   remove(id: string): void {
     this.sessions.delete(id);
     this.uiStates.delete(id);

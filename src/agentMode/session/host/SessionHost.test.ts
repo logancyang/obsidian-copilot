@@ -346,10 +346,13 @@ describe("SessionHost", () => {
       r.one.session.sendPrompt("old");
       await settle();
       const replacement = makeTestSession("s1");
-      r.manager.remove("s1");
-      r.manager.add(replacement.session);
+      r.frames.length = 0;
+      r.manager.replace(replacement.session);
       await settle();
       expect(r.client.getSession("s1")?.transcript).toEqual([]);
+      expect(
+        r.frames.filter((f) => f.type === "snapshot" && f.scope === "session:s1")
+      ).toHaveLength(1);
       expectReplicaEqualsHost(r);
     });
   });

@@ -142,17 +142,19 @@ export class SessionHost {
     if (this.disposed) return;
     const { manager } = this.options;
     const live = new Map(manager.getSessions().map((session) => [session.internalId, session]));
+    const changed = new Set<string>();
     for (const [id, binding] of [...this.bindings]) {
       if (live.get(id) === binding.session) continue;
       binding.release();
       this.bindings.delete(id);
-      this.announceScope(sessionScope(id));
+      changed.add(id);
     }
     for (const [id, session] of live) {
       if (this.bindings.has(id)) continue;
       this.bindings.set(id, this.bind(session));
-      this.announceScope(sessionScope(id));
+      changed.add(id);
     }
+    for (const id of changed) this.announceScope(sessionScope(id));
     this.tabs.reconcile(manager.getTabSessions());
   }
 
