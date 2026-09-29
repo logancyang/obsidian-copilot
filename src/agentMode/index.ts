@@ -1,4 +1,4 @@
-import { type App, Platform } from "obsidian";
+import { type App, normalizePath, Platform, TFile } from "obsidian";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
 import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
@@ -15,6 +15,7 @@ import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
+import { SessionHost } from "./session/host/SessionHost";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
 import { SkillManager } from "./skills";
 import {
@@ -45,6 +46,7 @@ export type { AgentModelPickerOverride } from "./ui/useAgentModelPicker";
 export { useAgentModePicker } from "./ui/useAgentModePicker";
 export type { AgentModePickerOverride } from "./ui/useAgentModePicker";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
+export type { SessionHost } from "./session/host/SessionHost";
 export type {
   AgentBrand,
   BackendDescriptor,
@@ -371,6 +373,28 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   }
 
   return manager;
+}
+
+export function resolveVaultNote(app: App, path: string): TFile | null {
+  const file = app.vault.getAbstractFileByPath(normalizePath(path));
+  return file instanceof TFile ? file : null;
+}
+
+export function isRegisteredBackend(id: string): boolean {
+  return Object.keys(backendRegistry).includes(id);
+}
+
+export function createAgentSessionHost(
+  app: App,
+  plugin: CopilotPlugin,
+  manager: AgentSessionManager
+): SessionHost {
+  return new SessionHost({
+    manager,
+    resolveNote: (path) => resolveVaultNote(app, path),
+    isKnownBackend: isRegisteredBackend,
+    appVersion: plugin.manifest.version,
+  });
 }
 
 export { AgentBackendHeader } from "./backends/shared/ui/AgentBackendHeader";

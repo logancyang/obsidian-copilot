@@ -453,6 +453,20 @@ describe("AgentSessionManager", () => {
       });
     });
 
+    describe("getTabSessions()", () => {
+      it("lists attached sessions in creation order and omits a session detached from its tab", async () => {
+        const mgr = buildManager();
+        const first = await mgr.createSession();
+        const second = await mgr.createSession();
+        expect(mgr.getTabSessions()).toEqual([first, second]);
+
+        mgr.detachSessionFromTab(first.internalId);
+
+        expect(mgr.getTabSessions()).toEqual([second]);
+        expect(mgr.getSessions()).toContain(first);
+      });
+    });
+
     describe("closeChatSession()", () => {
       it("closes by saved or stale native identity and retains the saved transcript for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
         for (const useNativeId of [false, true]) {

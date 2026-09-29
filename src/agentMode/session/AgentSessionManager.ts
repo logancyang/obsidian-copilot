@@ -1876,6 +1876,12 @@ export class AgentSessionManager {
     return Array.from(this.sessions.values());
   }
 
+  getTabSessions(): AgentSession[] {
+    return Array.from(this.sessions.values()).filter(
+      (session) => !this.detachedFromTabIds.has(session.internalId)
+    );
+  }
+
   /**
    * Prune composer drafts against this rather than `getSessions()`, which omits tabs
    * mid-replacement during a backend restart.

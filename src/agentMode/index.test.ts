@@ -3,7 +3,15 @@ import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
 import type { InstallState } from "./session/types";
 import type { BuiltinSkillRuntime } from "./skills/SkillManager";
-import { createAgentSessionManager } from "./index";
+import { TFile } from "obsidian";
+import { backendRegistry } from "./backends/registry";
+import {
+  createAgentSessionHost,
+  createAgentSessionManager,
+  isRegisteredBackend,
+  resolveVaultNote,
+} from "./index";
+import type { AgentSessionManager } from "./session/AgentSessionManager";
 import { reconcileBuiltinSkills } from "./skills/builtin/reconcileBuiltinSkills";
 import { BackendConfigRegistry } from "@/modelManagement";
 
@@ -455,6 +463,57 @@ describe("agentMode", () => {
       expect(reconcile).toHaveBeenLastCalledWith(
         expect.objectContaining({ availableAgents: ["claude"] })
       );
+    });
+  });
+
+  describe("resolveVaultNote()", () => {
+    const app = (entry: unknown) =>
+      ({ vault: { getAbstractFileByPath: () => entry } }) as unknown as App;
+
+    it("returns the file for a vault path that names a note", () => {
+      const file = Object.assign(new TFile(), { path: "Projects/plan.md" });
+      expect(resolveVaultNote(app(file), "Projects//plan.md")).toBe(file);
+    });
+
+    it("returns null for a missing path or a path that names a folder", () => {
+      expect(resolveVaultNote(app(null), "nope.md")).toBeNull();
+      expect(resolveVaultNote(app({ path: "Projects", children: [] }), "Projects")).toBeNull();
+    });
+  });
+
+  describe("isRegisteredBackend()", () => {
+    it("recognizes registered backend ids and rejects inherited object keys", () => {
+      (backendRegistry as Record<string, unknown>).claude = {};
+      expect(isRegisteredBackend("claude")).toBe(true);
+      expect(isRegisteredBackend("toString")).toBe(false);
+      expect(isRegisteredBackend("mystery")).toBe(false);
+    });
+  });
+
+  describe("createAgentSessionHost()", () => {
+    const manager = {
+      subscribe: jest.fn(() => () => {}),
+      getSessions: () => [],
+      getTabSessions: () => [],
+    } as unknown as AgentSessionManager;
+
+    function build(entries: Record<string, unknown>) {
+      const app = {
+        vault: { getAbstractFileByPath: (path: string) => entries[path] ?? null },
+      } as unknown as App;
+      const host = createAgentSessionHost(
+        app,
+        { manifest: { version: "9.9.9" } } as CopilotPlugin,
+        manager
+      );
+      return host;
+    }
+
+    it("hosts the manager's sessions and announces the plugin version in hello", () => {
+      const host = build({});
+      const sent: unknown[] = [];
+      host.connect((frame) => sent.push(frame)).receive({ type: "hello", v: 1, app: "phone" });
+      expect(sent[0]).toMatchObject({ type: "hello", app: "9.9.9", ok: true });
     });
   });
 });
