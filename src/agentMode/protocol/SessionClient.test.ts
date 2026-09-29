@@ -301,6 +301,44 @@ describe("SessionClient", () => {
     });
   });
 
+  describe("setFocus()", () => {
+    it("sends the focused session once and ignores an unchanged value", () => {
+      const { transport, client } = connect();
+      client.setFocus("s1");
+      client.setFocus("s1");
+      client.setFocus(null);
+      expect(transport.sentOfType("focus")).toEqual([
+        { type: "focus", sessionId: "s1" },
+        { type: "focus", sessionId: null },
+      ]);
+    });
+
+    it("holds the value until the connection is live and sends it after the host accepts hello https://github.com/Brevilabs/obsidian-copilot-private/issues/612", () => {
+      const transport = new FakeTransport();
+      const client = new SessionClient(transport, { app: "1.0.0" });
+      client.setFocus("s1");
+      transport.setOpen(true);
+      expect(transport.sentOfType("focus")).toEqual([]);
+      transport.deliver({ type: "hello", v: PROTOCOL_VERSION, app: "h", hostId: "h1", ok: true });
+      expect(transport.sentOfType("focus")).toEqual([{ type: "focus", sessionId: "s1" }]);
+    });
+
+    it("sends the focus again after a reconnect because the host forgets it with the connection", () => {
+      const { transport, client } = connect();
+      client.setFocus("s1");
+      transport.setOpen(false);
+      transport.setOpen(true);
+      transport.deliver({
+        type: "hello",
+        v: PROTOCOL_VERSION,
+        app: "h",
+        hostId: "host-1",
+        ok: true,
+      });
+      expect(transport.sentOfType("focus")).toHaveLength(2);
+    });
+  });
+
   describe("command()", () => {
     it("sends the command with a fresh id and resolves with the matching result", async () => {
       const { transport, client } = connect();

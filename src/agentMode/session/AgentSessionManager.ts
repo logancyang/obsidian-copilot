@@ -1,3 +1,4 @@
+import { ClientView } from "@/agentMode/protocol/ClientView";
 import type { BackendState } from "@/agentMode/session/types";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -58,12 +59,7 @@ import {
 import type { FanoutTurn } from "./fanout/fanoutTypes";
 import { modelCatalogSignature } from "./translateBackendState";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "./scope";
-import {
-  OrphanedProjectError,
-  pickScopeNeighbor,
-  resolveProjectIdForCwd,
-  resolveScopeCwd,
-} from "./sessionScope";
+import { OrphanedProjectError, resolveProjectIdForCwd, resolveScopeCwd } from "./sessionScope";
 import {
   getCachedProjectRecordById,
   getCachedProjectRecords,
@@ -176,6 +172,13 @@ export interface ReplaceSessionOptions {
 }
 
 export interface AgentSessionManagerOptions {
+  /**
+   * The desktop panel's view state. The manager reads it for the flows only the desktop has
+   * (history, projects, saving the shown chat) and writes it only from those flows, so a session
+   * that a client asks it to create, close or replace never moves anyone's visible tab.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+   */
+  view?: ClientView;
   permissionPrompter: PermissionPrompter;
   askUserQuestionPrompter?: AskUserQuestionPrompter;
   resolveDescriptor: DescriptorResolver;
@@ -189,10 +192,10 @@ export class AgentSessionManager {
   private backends = new Map<BackendId, BackendProcess>();
   private starting = new Map<BackendId, Promise<BackendProcess>>();
   private sessions = new Map<string, AgentSession>();
-  private activeSessionId: string | null = null;
-  private activeProjectId: ProjectScopeId = GLOBAL_SCOPE;
+  private readonly view: ClientView;
+  private readonly viewUnsubscribe: () => void;
+  private isFocusedByAnyClient = (id: string): boolean => this.view.getActiveTabId() === id;
   private scopeSeq = 0;
-  private readonly lastActiveByScope = new Map<ProjectScopeId, string>();
   private readonly detachedFromTabIds = new Set<string>();
   private readonly contextDirtySignatures = new Map<ProjectScopeId, string>();
   private readonly landingCaptureSignatures = new Map<string, string>();
@@ -271,6 +274,19 @@ export class AgentSessionManager {
     if (Platform.isMobile) {
       throw new Error("AgentSessionManager is desktop only");
     }
+    this.view = opts.view ?? new ClientView(GLOBAL_SCOPE);
+    // Any change to the shown project scope, from a flow here or from the panel, supersedes an
+    // optimistic scope switch still awaiting its session, so it must invalidate the rollback.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+    let seenScope = this.view.getProjectScope();
+    this.viewUnsubscribe = this.view.subscribe(() => {
+      const scope = this.view.getProjectScope();
+      if (scope !== seenScope) {
+        seenScope = scope;
+        this.scopeSeq++;
+      }
+      this.notify();
+    });
     this.preloader = opts.modelPreloader;
     this.drafts = new AgentInputDraftStore(app, (chatInputId) =>
       this.getLiveChatInputIds().includes(chatInputId)
@@ -325,6 +341,15 @@ export class AgentSessionManager {
         }
       });
     this.defaultApplyChains.set(session.internalId, next);
+  }
+
+  /**
+   * Lets the host say which sessions any connected client is showing, so a finished turn marks
+   * only a session no client is looking at. Without a host, the panel's own view decides.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+   */
+  setFocusProbe(probe: (id: string) => boolean): void {
+    this.isFocusedByAnyClient = probe;
   }
 
   isReadOnlyFanoutSession(backendSessionId: SessionId): boolean {
@@ -386,7 +411,7 @@ export class AgentSessionManager {
       const projectId = nextRecord.project.id;
       this.contentTracker.bumpEpoch(projectId);
       this.markProjectContextDirty(projectId, nextRecord);
-      if (projectId === this.activeProjectId) this.warmProjectContext(projectId);
+      if (projectId === this.view.getProjectScope()) this.warmProjectContext(projectId);
     }
   }
 
@@ -564,22 +589,7 @@ export class AgentSessionManager {
   detachSessionFromTab(id: string): void {
     const session = this.sessions.get(id);
     if (!session || this.detachedFromTabIds.has(id)) return;
-    const scopeIdsBefore = this.getSessionIdsForScope(session.projectId);
-    const closedIndex = scopeIdsBefore.indexOf(id);
     this.detachedFromTabIds.add(id);
-
-    if (this.lastActiveByScope.get(session.projectId) === id) {
-      this.lastActiveByScope.delete(session.projectId);
-    }
-    if (this.activeSessionId === id) {
-      const nextId = pickScopeNeighbor(
-        this.getSessionIdsForScope(session.projectId),
-        closedIndex,
-        this.lastActiveByScope.get(session.projectId)
-      );
-      this.activeSessionId = nextId;
-      if (nextId) this.lastActiveByScope.set(session.projectId, nextId);
-    }
     this.notify();
   }
 
@@ -785,14 +795,17 @@ export class AgentSessionManager {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
+    const scope = this.view.getProjectScope();
     const active = this.getActiveSession();
-    if (active && active.projectId === this.activeProjectId && active.getStatus() !== "closed") {
+    if (active && active.projectId === scope && active.getStatus() !== "closed") {
       return active;
     }
-    const scope = this.activeProjectId;
     const pending = this.firstSessionPromiseByScope.get(scope);
     if (pending) return pending;
-    const promise = this.createSession(undefined, scope);
+    const promise = this.createSession(undefined, scope).then((session) => {
+      if (session.projectId === this.view.getProjectScope()) this.surface(session);
+      return session;
+    });
     this.firstSessionPromiseByScope.set(scope, promise);
     try {
       return await promise;
@@ -803,7 +816,7 @@ export class AgentSessionManager {
 
   async createSession(
     backendId?: BackendId,
-    projectId: ProjectScopeId = this.activeProjectId,
+    projectId: ProjectScopeId = this.view.getProjectScope(),
     seedSelection?: ModelSelection,
     chatInputId?: string
   ): Promise<AgentSession> {
@@ -893,10 +906,6 @@ export class AgentSessionManager {
       this.landingCaptureSignatures.delete(session.internalId);
     }
     this.detachedFromTabIds.delete(session.internalId);
-    this.lastActiveByScope.set(projectId, session.internalId);
-    if (projectId === this.activeProjectId) {
-      this.activeSessionId = session.internalId;
-    }
     this.attachAutoSave(session);
     this.attachAttentionTracking(session);
     this.notify();
@@ -955,7 +964,7 @@ export class AgentSessionManager {
 
   async createGlobalSessionWithDraft(initialDraft: string): Promise<AgentSession> {
     const projectId = GLOBAL_SCOPE;
-    const previousActiveProjectId = this.activeProjectId;
+    const previousActiveProjectId = this.view.getProjectScope();
     const scopeSeq = this.setActiveScope(projectId);
     let session: AgentSession;
     try {
@@ -964,6 +973,7 @@ export class AgentSessionManager {
       this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw error;
     }
+    this.surface(session);
     this.drafts.update(session.chatInputId, (draft) => ({ ...draft, input: initialDraft }));
     return session;
   }
@@ -1169,7 +1179,7 @@ export class AgentSessionManager {
   }
 
   getActiveProjectId(): ProjectScopeId {
-    return this.activeProjectId;
+    return this.view.getProjectScope();
   }
 
   getSessionsForScope(projectId: ProjectScopeId): AgentSession[] {
@@ -1200,7 +1210,7 @@ export class AgentSessionManager {
     }
     const current = this.getActiveSession();
     if (
-      projectId === this.activeProjectId &&
+      projectId === this.view.getProjectScope() &&
       current &&
       current.projectId === projectId &&
       current.getStatus() !== "closed"
@@ -1208,8 +1218,8 @@ export class AgentSessionManager {
       return;
     }
 
-    const previousActiveProjectId = this.activeProjectId;
-    const previousActiveSessionId = this.activeSessionId;
+    const previousActiveProjectId = this.view.getProjectScope();
+    const previousActiveSessionId = this.view.getActiveTabId();
     const scopeSeq = this.setActiveScope(projectId);
 
     if (projectId !== GLOBAL_SCOPE) {
@@ -1218,15 +1228,12 @@ export class AgentSessionManager {
       const reusable = dirty ? null : this.pickReusableLandingSession(projectId);
       this.detachSessionsForProjectEntry(projectId, { includeEmpty: !reusable });
       if (reusable) {
-        this.detachedFromTabIds.delete(reusable.internalId);
-        this.activeSessionId = reusable.internalId;
-        this.lastActiveByScope.set(projectId, reusable.internalId);
-        reusable.clearNeedsAttention();
+        this.surface(reusable);
         this.notify();
         this.touchProjectUsage(projectId);
         return;
       }
-      this.activeSessionId = null;
+      this.view.clearActive();
       this.notify();
       await this.spawnEnteredScopeOrRollback(
         previousActiveProjectId,
@@ -1239,15 +1246,13 @@ export class AgentSessionManager {
 
     const restored = this.restoreScopeActiveSession(projectId);
     if (restored) {
-      this.activeSessionId = restored.internalId;
-      this.lastActiveByScope.set(projectId, restored.internalId);
-      restored.clearNeedsAttention();
+      this.surface(restored);
       this.notify();
       this.touchProjectUsage(projectId);
       return;
     }
 
-    this.activeSessionId = null;
+    this.view.clearActive();
     this.notify();
     await this.getOrCreateActiveSession();
     this.touchProjectUsage(projectId);
@@ -1273,7 +1278,7 @@ export class AgentSessionManager {
       !this.detachedFromTabIds.has(session.internalId) &&
       this.landingCaptureSignatures.get(session.internalId) === expected;
 
-    const mruId = this.lastActiveByScope.get(projectId);
+    const mruId = this.view.getLastActive(projectId);
     const mru = mruId ? this.sessions.get(mruId) : undefined;
     if (mru && isReusable(mru)) return mru;
 
@@ -1317,7 +1322,9 @@ export class AgentSessionManager {
   }
 
   private touchProjectUsage(projectId: ProjectScopeId): void {
-    if (this.disposed || projectId === GLOBAL_SCOPE || this.activeProjectId !== projectId) return;
+    if (this.disposed || projectId === GLOBAL_SCOPE || this.view.getProjectScope() !== projectId) {
+      return;
+    }
     void ProjectFileManager.getInstance(this.app).touchProjectLastUsed(projectId);
   }
 
@@ -1325,15 +1332,8 @@ export class AgentSessionManager {
     await this.enterProject(GLOBAL_SCOPE);
   }
 
-  private parkActiveScope(): void {
-    const active = this.getActiveSession();
-    if (active && active.getStatus() !== "closed") {
-      this.lastActiveByScope.set(active.projectId, active.internalId);
-    }
-  }
-
   private restoreScopeActiveSession(projectId: ProjectScopeId): AgentSession | null {
-    const mruId = this.lastActiveByScope.get(projectId);
+    const mruId = this.view.getLastActive(projectId);
     if (mruId) {
       const mru = this.sessions.get(mruId);
       if (mru && mru.getStatus() !== "closed") return mru;
@@ -1343,10 +1343,9 @@ export class AgentSessionManager {
   }
 
   private setActiveScope(projectId: ProjectScopeId): number {
-    if (projectId === this.activeProjectId) return this.scopeSeq;
-    this.parkActiveScope();
-    this.activeProjectId = projectId;
-    return ++this.scopeSeq;
+    if (projectId === this.view.getProjectScope()) return this.scopeSeq;
+    this.view.setProjectScope(projectId);
+    return this.scopeSeq;
   }
 
   private rollbackOptimisticScopeSwitch(
@@ -1354,8 +1353,7 @@ export class AgentSessionManager {
     attemptedScopeVersion: number
   ): void {
     if (this.scopeSeq === attemptedScopeVersion) {
-      this.activeProjectId = previousProjectId;
-      this.scopeSeq++;
+      this.view.setProjectScope(previousProjectId);
       this.notify();
     }
   }
@@ -1369,9 +1367,8 @@ export class AgentSessionManager {
       await this.getOrCreateActiveSession();
     } catch (err) {
       if (this.scopeSeq === attemptedScopeVersion) {
-        this.activeProjectId = previousProjectId;
-        this.scopeSeq++;
-        this.activeSessionId = previousActiveSessionId;
+        this.view.setProjectScope(previousProjectId);
+        this.restoreActive(previousActiveSessionId);
         this.notify();
       }
       throw err;
@@ -1732,9 +1729,6 @@ export class AgentSessionManager {
   async closeSession(id: string, options?: { releaseBackend: boolean }): Promise<void> {
     const session = this.sessions.get(id);
     if (!session) return;
-    const closedScope = session.projectId;
-    const scopeIdsBefore = this.getSessionIdsForScope(closedScope);
-    const closedIdx = scopeIdsBefore.indexOf(id);
     // User-requested release must block new sends before cancellation and saving.
     // Internal teardown also works when the whole backend is being restarted.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
@@ -1758,19 +1752,6 @@ export class AgentSessionManager {
     this.landingCaptureSignatures.delete(id);
     this.lastSeenProjectContentEpochBySession.delete(id);
     this.detachedFromTabIds.delete(id);
-    if (this.lastActiveByScope.get(closedScope) === id) {
-      this.lastActiveByScope.delete(closedScope);
-    }
-    if (this.activeSessionId === id) {
-      const scopeIdsAfter = this.getSessionIdsForScope(closedScope);
-      const nextId = pickScopeNeighbor(
-        scopeIdsAfter,
-        closedIdx,
-        this.lastActiveByScope.get(closedScope)
-      );
-      this.activeSessionId = nextId;
-      if (nextId) this.lastActiveByScope.set(closedScope, nextId);
-    }
     this.notify();
   }
 
@@ -1784,18 +1765,34 @@ export class AgentSessionManager {
     this.notify();
   }
 
-  setActiveSession(id: string): void {
-    const session = this.sessions.get(id);
-    if (!session) return;
-    if (this.activeSessionId === id) return;
-    if (session.projectId !== this.activeProjectId) {
-      this.setActiveScope(session.projectId);
-    }
-    this.detachedFromTabIds.delete(id);
-    this.activeSessionId = id;
-    this.lastActiveByScope.set(session.projectId, id);
+  /**
+   * Shows `session` in the desktop panel: puts it back in the tab set if it was closed, moves the
+   * panel's view to it and clears its attention mark. Flows only the desktop has (history,
+   * projects, backend restarts) end here; a command from any client never does.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+   */
+  private surface(session: AgentSession): void {
+    this.detachedFromTabIds.delete(session.internalId);
+    this.view.activate({
+      id: session.internalId,
+      projectId: session.projectId,
+      chatInputId: session.chatInputId,
+    });
     session.clearNeedsAttention();
     this.notify();
+  }
+
+  private restoreActive(id: string | null): void {
+    const session = id ? this.sessions.get(id) : undefined;
+    if (!session) {
+      this.view.clearActive();
+      return;
+    }
+    this.view.activate({
+      id: session.internalId,
+      projectId: session.projectId,
+      chatInputId: session.chatInputId,
+    });
   }
 
   async replaceSessionInPlace(
@@ -1830,7 +1827,7 @@ export class AgentSessionManager {
   ): Promise<AgentSession> {
     const oldIdx = Array.from(this.sessions.keys()).indexOf(oldId);
     const replaced = this.sessions.get(oldId);
-    const replacedProjectId = replaced?.projectId ?? this.activeProjectId;
+    const replacedProjectId = replaced?.projectId ?? this.view.getProjectScope();
     const chatInputId = options.preserveChatInput ? replaced?.chatInputId : undefined;
     const created = await this.createSession(
       backendId,
@@ -1900,7 +1897,8 @@ export class AgentSessionManager {
   }
 
   getActiveSession(): AgentSession | null {
-    return this.activeSessionId ? (this.sessions.get(this.activeSessionId) ?? null) : null;
+    const id = this.view.getActiveTabId();
+    return id ? (this.sessions.get(id) ?? null) : null;
   }
 
   getSessions(): AgentSession[] {
@@ -1948,6 +1946,7 @@ export class AgentSessionManager {
     if (this.disposed) return;
     this.disposed = true;
     this.settingsUnsub();
+    this.viewUnsubscribe();
     this.projectRecordsUnsubscriber?.();
     this.projectRecordsUnsubscriber = undefined;
     this.contentTrackerUnsubscribe?.();
@@ -1980,10 +1979,9 @@ export class AgentSessionManager {
     this.sessions.clear();
     this.landingCaptureSignatures.clear();
     this.lastSeenProjectContentEpochBySession.clear();
-    this.activeSessionId = null;
-    this.activeProjectId = GLOBAL_SCOPE;
+    this.view.clearActive();
+    this.view.setProjectScope(GLOBAL_SCOPE);
     this.scopeSeq++;
-    this.lastActiveByScope.clear();
     this.detachedFromTabIds.clear();
     this.contextDirtySignatures.clear();
     this.firstSessionPromiseByScope.clear();
@@ -2020,13 +2018,13 @@ export class AgentSessionManager {
       if (this.getSessionSourcePath(internalId) !== file.path) continue;
       const existing = this.sessions.get(internalId);
       if (existing && existing.getStatus() !== "closed") {
-        this.setActiveSession(internalId);
+        this.surface(existing);
         return existing;
       }
       state.source = undefined;
     }
 
-    const previousActiveId = this.activeSessionId;
+    const previousActiveId = this.view.getActiveTabId();
 
     const loaded = await this.opts.persistenceManager.loadFile(file);
     const projectId = loaded.projectId;
@@ -2034,7 +2032,7 @@ export class AgentSessionManager {
       new Notice("This chat belongs to a project that no longer exists.");
       throw new OrphanedProjectError(projectId);
     }
-    const previousActiveProjectId = this.activeProjectId;
+    const previousActiveProjectId = this.view.getProjectScope();
     const scopeSeq = this.setActiveScope(projectId);
 
     let session: AgentSession;
@@ -2056,7 +2054,7 @@ export class AgentSessionManager {
       void this.opts.sessionIndex?.touch(loaded.backendId, loaded.sessionId);
     }
     if (requestId === this.latestHistoryLoadRequestId) {
-      this.setActiveSession(session.internalId);
+      this.surface(session);
       this.absorbIntoEmptyActiveTab(session, previousActiveId);
       this.notify();
     }
@@ -2086,10 +2084,10 @@ export class AgentSessionManager {
     const requestId = ++this.latestHistoryLoadRequestId;
     const existing = this.findLiveSession(backendId, sessionId);
     if (existing) {
-      this.setActiveSession(existing.internalId);
+      this.surface(existing);
       return existing;
     }
-    const previousActiveId = this.activeSessionId;
+    const previousActiveId = this.view.getActiveTabId();
     const index = this.opts.sessionIndex;
     const entry = index ? await index.getEntry(backendId, sessionId) : null;
     const projectId: ProjectScopeId = entry?.projectId ?? GLOBAL_SCOPE;
@@ -2097,7 +2095,7 @@ export class AgentSessionManager {
       new Notice("This chat belongs to a project that no longer exists.");
       throw new OrphanedProjectError(projectId);
     }
-    const previousActiveProjectId = this.activeProjectId;
+    const previousActiveProjectId = this.view.getProjectScope();
     const scopeSeq = this.setActiveScope(projectId);
     let session: AgentSession;
     try {
@@ -2118,7 +2116,7 @@ export class AgentSessionManager {
     }
     if (index) await index.touch(backendId, sessionId);
     if (requestId === this.latestHistoryLoadRequestId) {
-      this.setActiveSession(session.internalId);
+      this.surface(session);
       this.absorbIntoEmptyActiveTab(session, previousActiveId);
       this.notify();
     }
@@ -2501,7 +2499,7 @@ export class AgentSessionManager {
   }
 
   private isSessionFocused(session: AgentSession): boolean {
-    if (this.activeSessionId !== session.internalId) return false;
+    if (this.view.getActiveTabId() !== session.internalId) return false;
     // A sidebar input can own keyboard focus while Obsidian keeps the center
     // editor as its most recent leaf. https://github.com/logancyang/obsidian-copilot/issues/2987
     return this.app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE).some((leaf) => {
@@ -2515,7 +2513,7 @@ export class AgentSessionManager {
   private signalSessionNeedsAttention(session: AgentSession): void {
     // The dot identifies a different Agent tab that wants the user; keyboard
     // focus does not change which tab is selected. https://github.com/logancyang/obsidian-copilot/issues/2987
-    if (this.activeSessionId !== session.internalId) session.markNeedsAttention();
+    if (!this.isFocusedByAnyClient(session.internalId)) session.markNeedsAttention();
     // Sound follows real focus so a selected but unattended chat can still
     // call the user back. https://github.com/logancyang/obsidian-copilot/issues/2987
     if (this.isSessionFocused(session)) return;
@@ -2615,25 +2613,8 @@ export class AgentSessionManager {
         this.landingCaptureSignatures.delete(s.internalId);
         this.lastSeenProjectContentEpochBySession.delete(s.internalId);
         this.detachedFromTabIds.delete(s.internalId);
-        if (this.lastActiveByScope.get(s.projectId) === s.internalId) {
-          this.lastActiveByScope.delete(s.projectId);
-        }
         s.cancel().catch(() => {});
         s.dispose().catch(() => {});
-      }
-      if (this.activeSessionId && !this.sessions.has(this.activeSessionId)) {
-        let next: AgentSession | undefined;
-        for (const s of this.sessions.values()) {
-          if (!this.detachedFromTabIds.has(s.internalId)) {
-            next = s;
-            break;
-          }
-        }
-        this.activeSessionId = next?.internalId ?? null;
-        if (next) {
-          this.activeProjectId = next.projectId;
-          this.scopeSeq++;
-        }
       }
       this.setLastError(`${descriptor.displayName} backend exited unexpectedly.`);
       this.notify();
@@ -2688,7 +2669,7 @@ export class AgentSessionManager {
       if (resumed) {
         await this.hydrateResumedTranscript(resumed, backendId, resumableSessionId);
         if (label && !resumed.getLabel()) resumed.restoreLabel(label, labelSource ?? "agent");
-        this.setActiveSession(resumed.internalId);
+        this.surface(resumed);
         return resumed;
       }
     }
@@ -2723,8 +2704,8 @@ export class AgentSessionManager {
     const retainedChatInputIds: string[] = [];
     try {
       const affected = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
-      const activeSessionId = this.activeSessionId;
-      const activeProjectId = this.activeProjectId;
+      const activeSessionId = this.view.getActiveTabId();
+      const activeProjectId = this.view.getProjectScope();
       // Every affected composer must stay owned across the gap, including tabs
       // outside the active scope, or the draft store prunes their unsent text.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
@@ -2781,10 +2762,10 @@ export class AgentSessionManager {
             if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
             if (replacement.internalId === activeSessionId) selectedId = rebuilt.internalId;
           }
-          if (selectedId) this.setActiveSession(selectedId);
+          if (selectedId) this.restoreActive(selectedId);
           else {
-            this.activeSessionId = null;
-            this.activeProjectId = activeProjectId;
+            this.view.clearActive();
+            this.view.setProjectScope(activeProjectId);
           }
         }
       }

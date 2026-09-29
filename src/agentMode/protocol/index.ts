@@ -1,4 +1,5 @@
 export * from "@/agentMode/protocol/apply";
+export * from "@/agentMode/protocol/ClientView";
 export * from "@/agentMode/protocol/applyTranscript";
 export * from "@/agentMode/protocol/commands";
 export * from "@/agentMode/protocol/frames";

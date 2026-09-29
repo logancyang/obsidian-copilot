@@ -1,6 +1,7 @@
 import { FileSystemAdapter, App, Notice, TFile } from "obsidian";
 import { mockTFile } from "@/__tests__/mockObsidian";
 import { join } from "node:path";
+import { ClientView } from "@/agentMode/protocol/ClientView";
 import { waitFor } from "@testing-library/react";
 import { AgentSession } from "./AgentSession";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
@@ -344,6 +345,19 @@ function modelCatalog(baseModelId: string): BackendModelCatalog {
   };
 }
 
+function show(mgr: AgentSessionManager, session: AgentSession): void {
+  mgr["view"].activate({ id: session.internalId, projectId: session.projectId });
+}
+
+async function createShown(
+  mgr: AgentSessionManager,
+  ...args: Parameters<AgentSessionManager["createSession"]>
+): Promise<AgentSession> {
+  const session = await mgr.createSession(...args);
+  show(mgr, session);
+  return session;
+}
+
 function buildManager(
   modelPreloaderOverrides: Partial<AgentModelPreloader> = {},
   persistenceManager?: ConstructorParameters<typeof AgentSessionManager>[2]["persistenceManager"],
@@ -424,8 +438,8 @@ describe("AgentSessionManager", () => {
         const mgr = buildManager();
         const empty = mgr.getOpenChatIds();
         expect(mgr.getOpenChatIds()).toBe(empty);
-        const idle = await mgr.createSession();
-        const running = await mgr.createSession();
+        const idle = await createShown(mgr);
+        const running = await createShown(mgr);
         getSessionTestHandle(running).setStatus("running");
         const idleId = buildNativeChatId(idle.backendId, idle.getBackendSessionId()!);
         const runningId = buildNativeChatId(running.backendId, running.getBackendSessionId()!);
@@ -438,7 +452,7 @@ describe("AgentSessionManager", () => {
     describe("detachSessionFromTab()", () => {
       it("keeps the backend session open and discoverable in history for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
         const mgr = buildManager();
-        const session = await mgr.createSession();
+        const session = await createShown(mgr);
         const historyId = buildNativeChatId(session.backendId, session.getBackendSessionId()!);
         const proc = mgr.getBackendProcess(session.backendId)!;
 
@@ -456,8 +470,8 @@ describe("AgentSessionManager", () => {
     describe("getTabSessions()", () => {
       it("lists attached sessions in creation order and omits a session detached from its tab", async () => {
         const mgr = buildManager();
-        const first = await mgr.createSession();
-        const second = await mgr.createSession();
+        const first = await createShown(mgr);
+        const second = await createShown(mgr);
         expect(mgr.getTabSessions()).toEqual([first, second]);
 
         mgr.detachSessionFromTab(first.internalId);
@@ -483,7 +497,7 @@ describe("AgentSessionManager", () => {
               typeof AgentSessionManager
             >[2]["persistenceManager"]
           );
-          const session = await mgr.createSession();
+          const session = await createShown(mgr);
           getSessionTestHandle(session).setMessages([{ message: "Initial answer" }]);
           await mgr.saveActiveSession();
           const nativeId = buildNativeChatId(session.backendId, session.getBackendSessionId()!);
@@ -497,8 +511,8 @@ describe("AgentSessionManager", () => {
 
       it("releases only the selected backend session while preserving another active chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
         const mgr = buildManager();
-        const selected = await mgr.createSession();
-        const sibling = await mgr.createSession();
+        const selected = await createShown(mgr);
+        const sibling = await createShown(mgr);
         const proc = mgr.getBackendProcess(selected.backendId)!;
         const id = buildNativeChatId(selected.backendId, selected.getBackendSessionId()!);
         await mgr.closeChatSession(id);
@@ -514,7 +528,7 @@ describe("AgentSessionManager", () => {
     describe("noteSpawnConfigChanged()", () => {
       it("keeps an open session alive and holds the restart for the user (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const mgr = buildManager();
-        const session = await mgr.createSession();
+        const session = await createShown(mgr);
 
         await mgr.noteSpawnConfigChanged("opencode", "managed skills changed");
 
@@ -525,7 +539,7 @@ describe("AgentSessionManager", () => {
 
       it("restarts straight away when no session is open on the backend (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const mgr = buildManager();
-        const session = await mgr.createSession();
+        const session = await createShown(mgr);
         await mgr.closeSession(session.internalId);
 
         await mgr.noteSpawnConfigChanged("opencode", "byok key saved");
@@ -546,7 +560,7 @@ describe("AgentSessionManager", () => {
 
       it("reports one held change however many times config changes (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const mgr = buildManager();
-        await mgr.createSession();
+        await createShown(mgr);
         const listener = jest.fn();
         mgr.subscribe(listener);
 
@@ -559,7 +573,7 @@ describe("AgentSessionManager", () => {
 
       it("leaves a privacy-boundary restart free to run immediately (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const mgr = buildManager();
-        await mgr.createSession();
+        await createShown(mgr);
 
         await mgr.noteSpawnConfigChanged("opencode", "managed skills changed");
         await mgr.restartBackend("opencode", "Miyo Search scope changed", {
@@ -574,7 +588,7 @@ describe("AgentSessionManager", () => {
     describe("applyHeldConfigChange()", () => {
       it("restarts the backend and clears the offer (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const mgr = buildManager();
-        const first = await mgr.createSession();
+        const first = await createShown(mgr);
         await mgr.noteSpawnConfigChanged("opencode", "managed skills changed");
 
         await mgr.applyHeldConfigChange("opencode");
@@ -593,7 +607,7 @@ describe("AgentSessionManager", () => {
           })
         );
         const mgr = buildManager();
-        const failed = await mgr.createSession();
+        const failed = await createShown(mgr);
         getSessionTestHandle(failed).setStatus("error");
         await new Promise((resolve) => window.setTimeout(resolve, 0));
         expect(mgr.getLastError()).toContain("Invalid API key");
@@ -643,7 +657,7 @@ describe("AgentSessionManager", () => {
 
       it("clears the held config after a backend exit so retry does not offer another reload (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const mgr = buildManager();
-        await mgr.createSession();
+        await createShown(mgr);
         await mgr.noteSpawnConfigChanged("opencode", "key corrected");
         for (const exit of mockBackendExitListeners) exit();
         expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
@@ -655,9 +669,9 @@ describe("AgentSessionManager", () => {
 
       it("keeps every tab's composer live throughout reload and restores the selected tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const mgr = buildManager();
-        const first = await mgr.createSession();
-        const second = await mgr.createSession();
-        mgr.setActiveSession(first.internalId);
+        const first = await createShown(mgr);
+        const second = await createShown(mgr);
+        show(mgr, first);
         const ids = [first.chatInputId, second.chatInputId];
         const drafts = new Map([
           [first.chatInputId, "First unsent draft"],
@@ -676,7 +690,7 @@ describe("AgentSessionManager", () => {
 
       it("does nothing when the backend has no held change (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const mgr = buildManager();
-        await mgr.createSession();
+        await createShown(mgr);
 
         await mgr.applyHeldConfigChange("opencode");
 
@@ -685,7 +699,7 @@ describe("AgentSessionManager", () => {
 
       it("reports the restart as pending until a running turn releases it (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const mgr = buildManager();
-        const first = await mgr.createSession();
+        const first = await createShown(mgr);
         await mgr.noteSpawnConfigChanged("opencode", "managed skills changed");
         getSessionTestHandle(first).setStatus("running");
         const listener = jest.fn();
@@ -745,7 +759,7 @@ describe("AgentSessionManager", () => {
           resolveDescriptor: () => descriptor,
           modelPreloader: { takeWarm: jest.fn(() => null) } as unknown as AgentModelPreloader,
         });
-        await mgr.createSession();
+        await createShown(mgr);
         (descriptor.getInstallState as jest.Mock).mockReturnValue({
           kind: "incompatible",
           message: "Upgrade required",
@@ -769,15 +783,15 @@ describe("AgentSessionManager", () => {
       });
       it("creates a session and sets it as the active one", async () => {
         const mgr = buildManager();
-        const session = await mgr.createSession();
+        const session = await createShown(mgr);
         expect(mgr.getSessions()).toEqual([session]);
         expect(mgr.getActiveSession()).toBe(session);
       });
 
       it("creating a second session sets it as active but keeps the first in the pool", async () => {
         const mgr = buildManager();
-        const a = await mgr.createSession();
-        const b = await mgr.createSession();
+        const a = await createShown(mgr);
+        const b = await createShown(mgr);
         expect(mgr.getSessions()).toEqual([a, b]);
         expect(mgr.getActiveSession()).toBe(b);
       });
@@ -792,9 +806,9 @@ describe("AgentSessionManager", () => {
 
       it("only spawns the backend once across multiple createSession calls", async () => {
         const mgr = buildManager();
-        await mgr.createSession();
-        await mgr.createSession();
-        await mgr.createSession();
+        await createShown(mgr);
+        await createShown(mgr);
+        await createShown(mgr);
         expect(mockBackendStart).toHaveBeenCalledTimes(1);
       });
 
@@ -803,7 +817,7 @@ describe("AgentSessionManager", () => {
           getCachedModelCatalog: jest.fn(() => modelCatalog("catalog-first")),
         });
 
-        await mgr.createSession();
+        await createShown(mgr);
         expect(sessionCreateSpy).toHaveBeenCalledWith(
           expect.objectContaining({ defaultModelSelection: undefined })
         );
@@ -811,7 +825,7 @@ describe("AgentSessionManager", () => {
 
       it("leaves the seed unset when no default is stored and no catalog is probed", async () => {
         const mgr = buildManager();
-        await mgr.createSession();
+        await createShown(mgr);
         expect(sessionCreateSpy).toHaveBeenCalledWith(
           expect.objectContaining({ defaultModelSelection: undefined })
         );
@@ -839,8 +853,8 @@ describe("AgentSessionManager", () => {
             })
           );
 
-        const failingSession = await mgr.createSession();
-        const succeedingSession = await mgr.createSession();
+        const failingSession = await createShown(mgr);
+        const succeedingSession = await createShown(mgr);
         await failingSession.ready.catch(() => undefined);
         await succeedingSession.ready;
         await Promise.resolve();
@@ -948,7 +962,7 @@ describe("AgentSessionManager", () => {
           const globalSession = await mgr.createSession(undefined, GLOBAL_SCOPE);
           const projectBSession = await mgr.createSession(undefined, "project-b");
           const projectASession = await mgr.createSession(undefined, "project-a");
-          mgr.setActiveSession(projectASession.internalId);
+          show(mgr, projectASession);
 
           let releaseInstructionEnsure: (() => void) | undefined;
           ensureAgentsFileForDiscoverySpy.mockImplementationOnce(
@@ -963,8 +977,8 @@ describe("AgentSessionManager", () => {
 
           const pendingDraft = mgr.createGlobalSessionWithDraft("Review this repair");
           await waitFor(() => expect(releaseInstructionEnsure).toBeDefined());
-          mgr.setActiveSession(projectBSession.internalId);
-          mgr.setActiveSession(globalSession.internalId);
+          show(mgr, projectBSession);
+          show(mgr, globalSession);
           releaseInstructionEnsure?.();
 
           await expect(pendingDraft).rejects.toThrow("session creation failed");
@@ -979,7 +993,7 @@ describe("AgentSessionManager", () => {
     describe("addContextNoteToActiveChat()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 attaches the note to the active chat's draft", async () => {
         const mgr = buildManager();
-        const session = await mgr.createSession();
+        const session = await createShown(mgr);
         const note = mockTFile({ path: "Research.md" });
 
         await mgr.addContextNoteToActiveChat(note);
@@ -1003,7 +1017,7 @@ describe("AgentSessionManager", () => {
       setupSavedNoteTests();
       it("never writes an unsaved chat with autosave off for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
         const { mgr, saveSession } = savedNoteFixture();
-        const session = await mgr.createSession();
+        const session = await createShown(mgr);
         getSessionTestHandle(session).setMessages([{ message: "Unsaved turn" }], true);
         await jest.advanceTimersByTimeAsync(2000);
         await mgr.closeSession(session.internalId);
@@ -1016,7 +1030,7 @@ describe("AgentSessionManager", () => {
       setupSavedNoteTests();
       it("updates the manually saved file and drains later turns on New Chat with autosave off for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
         const { mgr, saveSession } = savedNoteFixture();
-        const session = await mgr.createSession();
+        const session = await createShown(mgr);
         const handle = getSessionTestHandle(session);
         const first = [
           { message: "Image question\n\n![](/image.png)" },
@@ -1261,9 +1275,10 @@ describe("AgentSessionManager", () => {
         jest.mocked(app.vault.getAbstractFileByPath).mockReturnValue(file);
         const saveSession = jest.fn().mockResolvedValue({ path: file.path });
         const mgr = buildManager({}, { saveSession } as never, app);
-        const first = await mgr.createSession();
+        const first = await createShown(mgr);
         expect(mgr.getSessionSourcePath(first.internalId)).toBe("");
         getSessionTestHandle(first).setMessages([{ message: "Hello" }]);
+        await waitFor(() => expect(mgr.getIsStarting()).toBe(false));
         const listener = jest.fn();
         mgr.subscribe(listener);
         await mgr.saveActiveSession();
@@ -1272,9 +1287,9 @@ describe("AgentSessionManager", () => {
         file.path = "archive/Conversation.md";
         expect(mgr.getSessionSourcePath(first.internalId)).toBe(file.path);
         expect(await mgr.saveActiveSession()).toEqual({ path: file.path });
-        const second = await mgr.createSession();
+        const second = await createShown(mgr);
         expect(mgr.getSessionSourcePath(second.internalId)).toBe("");
-        mgr.setActiveSession(first.internalId);
+        show(mgr, first);
         getSessionTestHandle(first).setMessages([{ message: "Changed" }]);
         saveSession.mockResolvedValue(null);
         await mgr.saveActiveSession();
@@ -1313,7 +1328,7 @@ describe("AgentSessionManager", () => {
               finishSave = resolve;
             })
         );
-        const session = await mgr.createSession();
+        const session = await createShown(mgr);
         const handle = getSessionTestHandle(session);
         handle.setMessages([{ message: "Question" }, { message: "Partial answer" }], true);
         const saving = mgr.saveActiveSession();
@@ -1342,7 +1357,7 @@ describe("AgentSessionManager", () => {
           autosaveChat: true,
         });
         const { mgr, saveSession } = savedNoteFixture();
-        const session = await mgr.createSession();
+        const session = await createShown(mgr);
         const messages = [{ message: "Automatically saved turn" }];
         getSessionTestHandle(session).setMessages(messages, true);
         await jest.advanceTimersByTimeAsync(2000);
@@ -1400,7 +1415,7 @@ describe("AgentSessionManager warm-backend reuse", () => {
     const warmProc = makeMockBackendProcess();
     const { mgr, descriptor } = buildManagerWithWarm(warmProc);
 
-    await mgr.createSession();
+    await createShown(mgr);
 
     expect(mockBackendStart).not.toHaveBeenCalled();
     expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
@@ -1412,7 +1427,7 @@ describe("AgentSessionManager warm-backend reuse", () => {
     const warmProc = makeMockBackendProcess();
     const { mgr } = buildManagerWithWarm(warmProc);
 
-    await mgr.createSession();
+    await createShown(mgr);
 
     expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
     const opts = sessionCreateSpy.mock.calls[0][0];
@@ -1469,7 +1484,7 @@ describe("AgentSessionManager warm-backend reuse", () => {
 
   it("falls back to a fresh spawn when no warm entry is available", async () => {
     const mgr = buildManager();
-    await mgr.createSession();
+    await createShown(mgr);
 
     expect(mockBackendStart).toHaveBeenCalledTimes(1);
     expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
@@ -1573,12 +1588,55 @@ describe("AgentSessionManager.getOrCreateActiveSession", () => {
     expect(again).toBe(a);
     expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
   });
+
+  it("shows the session it starts in the panel's view https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+    const mgr = buildManager();
+    const created = await mgr.getOrCreateActiveSession();
+    expect(mgr.getActiveSession()).toBe(created);
+  });
+});
+
+describe("AgentSessionManager view", () => {
+  it("does not change the shown tab when a session is created, so a session another client asks for never moves the panel https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+    const mgr = buildManager();
+    const shown = await createShown(mgr);
+    const other = await mgr.createSession();
+    expect(mgr.getSessions()).toEqual([shown, other]);
+    expect(mgr.getActiveSession()).toBe(shown);
+  });
+
+  it("notifies subscribers when the panel's view changes", async () => {
+    const mgr = buildManager();
+    const a = await createShown(mgr);
+    const listener = jest.fn();
+    mgr.subscribe(listener);
+    mgr["view"].clearActive();
+    expect(mgr.getActiveSession()).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(1);
+    show(mgr, a);
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads the shown project scope from the injected view https://github.com/Brevilabs/obsidian-copilot-private/issues/612", () => {
+    const view = new ClientView("project-x");
+    const descriptor = buildDescriptor();
+    const mgr = new AgentSessionManager(buildApp(), buildPlugin() as never, {
+      view,
+      permissionPrompter: jest.fn(),
+      resolveDescriptor: () => descriptor,
+      modelPreloader: {
+        takeWarm: jest.fn(() => null),
+        shutdown: jest.fn(),
+      } as unknown as AgentModelPreloader,
+    });
+    expect(mgr.getActiveProjectId()).toBe("project-x");
+  });
 });
 
 describe("AgentSessionManager.closeSession", () => {
   it("removes the session from the pool and cancels + disposes it", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
+    const a = await createShown(mgr);
     await mgr.closeSession(a.internalId);
     expect(mgr.getSessions()).toEqual([]);
     expect(mgr.getActiveSession()).toBeNull();
@@ -1586,30 +1644,22 @@ describe("AgentSessionManager.closeSession", () => {
     expect(mockSessionDispose).toHaveBeenCalled();
   });
 
-  it("when the active session is closed, picks the right neighbor as active", async () => {
+  it("does not pick another tab when the shown session closes, since each client moves its own view https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    const c = await mgr.createSession();
-    mgr.setActiveSession(b.internalId);
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    const c = await createShown(mgr);
+    show(mgr, b);
     await mgr.closeSession(b.internalId);
-    expect(mgr.getActiveSession()).toBe(c);
     expect(mgr.getSessions()).toEqual([a, c]);
-  });
-
-  it("when the rightmost active session is closed, falls back to the new last", async () => {
-    const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    expect(mgr.getActiveSession()).toBe(b);
-    await mgr.closeSession(b.internalId);
-    expect(mgr.getActiveSession()).toBe(a);
+    expect(mgr.getActiveSession()).toBeNull();
+    expect(mgr["view"].getActiveTabId()).toBe(b.internalId);
   });
 
   it("closing a non-active session leaves the active pointer alone", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
     await mgr.closeSession(a.internalId);
     expect(mgr.getActiveSession()).toBe(b);
     expect(mgr.getSessions()).toEqual([b]);
@@ -1622,29 +1672,11 @@ describe("AgentSessionManager.closeSession", () => {
   });
 });
 
-describe("AgentSessionManager.setActiveSession", () => {
-  it("moves the active pointer to the given id", async () => {
-    const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    expect(mgr.getActiveSession()).toBe(b);
-    mgr.setActiveSession(a.internalId);
-    expect(mgr.getActiveSession()).toBe(a);
-  });
-
-  it("is a silent no-op on unknown id", async () => {
-    const mgr = buildManager();
-    const a = await mgr.createSession();
-    expect(() => mgr.setActiveSession("nope")).not.toThrow();
-    expect(mgr.getActiveSession()).toBe(a);
-  });
-});
-
 describe("AgentSessionManager.openTab", () => {
   it("puts a detached session back in the tab set without selecting it https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
     mgr.detachSessionFromTab(a.internalId);
     expect(mgr.getTabSessions()).toEqual([b]);
 
@@ -1656,7 +1688,7 @@ describe("AgentSessionManager.openTab", () => {
 
   it("does not notify for an id that is unknown or already in the tab set", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
+    const a = await createShown(mgr);
     const listener = jest.fn();
     mgr.subscribe(listener);
 
@@ -1768,7 +1800,7 @@ describe("AgentSessionManager.restartBackend", () => {
       }
     );
 
-    const session = await mgr.createSession();
+    const session = await createShown(mgr);
     await mgr.closeSession(session.internalId);
     preload.mockClear();
 
@@ -1780,7 +1812,7 @@ describe("AgentSessionManager.restartBackend", () => {
 
   it("restarts an idle backend and replaces the active affected session", async () => {
     const mgr = buildManager();
-    const first = await mgr.createSession();
+    const first = await createShown(mgr);
 
     await expect(mgr.restartBackend("opencode", "skills changed")).resolves.toBe(true);
 
@@ -1794,7 +1826,7 @@ describe("AgentSessionManager.restartBackend", () => {
 
   it("gives the replacement the replaced session's chat input so the composer draft survives (https://github.com/Brevilabs/obsidian-copilot-private/issues/473)", async () => {
     const mgr = buildManager();
-    const first = await mgr.createSession();
+    const first = await createShown(mgr);
     const chatInputId = first.chatInputId;
     mgr.drafts.update(chatInputId, (draft) => ({ ...draft, input: "half-written question" }));
 
@@ -1812,7 +1844,7 @@ describe("AgentSessionManager.restartBackend", () => {
         liveDuringGap.push([...mgr.getLiveChatInputIds()]);
       }) as unknown as AgentModelPreloader["preload"],
     });
-    const first = await mgr.createSession();
+    const first = await createShown(mgr);
     const chatInputId = first.chatInputId;
 
     await mgr.restartBackend("opencode", "byok key saved");
@@ -1849,7 +1881,7 @@ describe("AgentSessionManager.restartBackend", () => {
       }
     );
 
-    const first = await mgr.createSession();
+    const first = await createShown(mgr);
     preload.mockClear();
     sessionCreateSpy.mockClear();
 
@@ -1869,7 +1901,7 @@ describe("AgentSessionManager.restartBackend", () => {
 
   it("defers restart until an active turn leaves running", async () => {
     const mgr = buildManager();
-    const first = await mgr.createSession();
+    const first = await createShown(mgr);
     getSessionTestHandle(first).setStatus("running");
 
     await expect(mgr.restartBackend("opencode", "skills changed")).resolves.toBe(true);
@@ -1890,7 +1922,7 @@ describe("AgentSessionManager.restartBackend", () => {
         state: { model: null, mode: null },
       })),
     });
-    const first = await mgr.createSession();
+    const first = await createShown(mgr);
     const firstHandle = getSessionTestHandle(first);
     firstHandle.setStatus("running");
 
@@ -1923,8 +1955,8 @@ describe("AgentSessionManager.restartBackend", () => {
         state: { model: null, mode: null },
       })),
     });
-    const first = await mgr.createSession();
-    const second = await mgr.createSession();
+    const first = await createShown(mgr);
+    const second = await createShown(mgr);
     getSessionTestHandle(first).setStatus("running");
     getSessionTestHandle(second).setStatus("running");
 
@@ -1962,7 +1994,7 @@ describe("AgentSessionManager.restartBackend", () => {
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 leaves ordinary restarts to replay the backend transcript", async () => {
     const mgr = buildManager();
-    const first = await mgr.createSession();
+    const first = await createShown(mgr);
     getSessionTestHandle(first).setMessages([{ message: "Local draft transcript" }]);
 
     await mgr.restartBackend("opencode", "models changed");
@@ -1972,7 +2004,7 @@ describe("AgentSessionManager.restartBackend", () => {
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 keeps a fresh fallback free of messages the new backend never received", async () => {
     const mgr = buildManager();
-    const first = await mgr.createSession();
+    const first = await createShown(mgr);
     const handle = getSessionTestHandle(first);
     handle.setStatus("running");
     mockUnhealthyHandler?.();
@@ -1989,7 +2021,7 @@ describe("AgentSessionManager.restartBackend", () => {
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 interrupts a busy turn when a privacy-boundary restart cannot be deferred", async () => {
     const mgr = buildManager();
-    const first = await mgr.createSession();
+    const first = await createShown(mgr);
     getSessionTestHandle(first).setStatus("running");
 
     await expect(
@@ -2003,7 +2035,7 @@ describe("AgentSessionManager.restartBackend", () => {
 
   it("queues a second concurrent restart so the latest settings are not lost", async () => {
     const mgr = buildManager();
-    await mgr.createSession();
+    await createShown(mgr);
 
     let releaseShutdown!: () => void;
     const shutdownStarted = new Promise<void>((resolveStarted) => {
@@ -2028,7 +2060,7 @@ describe("AgentSessionManager.restartBackend", () => {
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 keeps a queued privacy-boundary restart non-deferrable", async () => {
     const mgr = buildManager();
-    await mgr.createSession();
+    await createShown(mgr);
 
     sessionCreateSpy.mockImplementationOnce((opts) => {
       const replacement = makeMockSession({
@@ -2097,7 +2129,7 @@ describe("AgentSessionManager.restartBackend", () => {
       state: { model: null, mode: null },
     }));
     const mgr = buildManagerWithReplay({ loadSession });
-    const first = await mgr.createSession();
+    const first = await createShown(mgr);
     const backendSessionId = first.getBackendSessionId();
     const chatInputId = first.chatInputId;
 
@@ -2120,7 +2152,7 @@ describe("AgentSessionManager.restartBackend", () => {
         state: { model: null, mode: null },
       })),
     });
-    const first = await mgr.createSession();
+    const first = await createShown(mgr);
     first.restoreLabel("Refactor the importer", "user");
 
     await mgr.restartBackend("opencode", "managed skills changed");
@@ -2137,7 +2169,7 @@ describe("AgentSessionManager.restartBackend", () => {
         throw new MethodUnsupportedError("session/resume");
       }),
     });
-    const first = await mgr.createSession();
+    const first = await createShown(mgr);
     const chatInputId = first.chatInputId;
 
     await mgr.restartBackend("opencode", "managed skills changed");
@@ -2153,9 +2185,9 @@ describe("AgentSessionManager.restartBackend", () => {
 describe("AgentSessionManager attention tracking", () => {
   it("flags a backgrounded session that finishes a turn", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    mgr.setActiveSession(a.internalId);
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    show(mgr, a);
     const bHandle = getSessionTestHandle(b);
     bHandle.setStatus("running");
     bHandle.setStatus("idle");
@@ -2165,9 +2197,9 @@ describe("AgentSessionManager attention tracking", () => {
 
   it("flags a backgrounded session that errors out", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    mgr.setActiveSession(a.internalId);
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    show(mgr, a);
     const bHandle = getSessionTestHandle(b);
     bHandle.setStatus("running");
     bHandle.setStatus("error");
@@ -2176,9 +2208,9 @@ describe("AgentSessionManager attention tracking", () => {
 
   it("flags a backgrounded session when it starts awaiting permission (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    mgr.setActiveSession(a.internalId);
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    show(mgr, a);
     const bHandle = getSessionTestHandle(b);
 
     bHandle.setStatus("running");
@@ -2189,7 +2221,7 @@ describe("AgentSessionManager attention tracking", () => {
 
   it("does not flag the active session even when its chat is not focused (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
+    const a = await createShown(mgr);
     expect(mgr.getActiveSession()).toBe(a);
     const aHandle = getSessionTestHandle(a);
     aHandle.setStatus("running");
@@ -2199,7 +2231,7 @@ describe("AgentSessionManager attention tracking", () => {
 
   it("chimes when a turn ends (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
+    const a = await createShown(mgr);
     expect(mgr.getActiveSession()).toBe(a);
     const aHandle = getSessionTestHandle(a);
 
@@ -2217,7 +2249,7 @@ describe("AgentSessionManager attention tracking", () => {
     async (_label, focus) => {
       mockAgentChatFocus = focus;
       const mgr = buildManager();
-      const session = await mgr.createSession();
+      const session = await createShown(mgr);
       const handle = getSessionTestHandle(session);
 
       handle.setStatus("running");
@@ -2237,7 +2269,7 @@ describe("AgentSessionManager attention tracking", () => {
     async (_label, focus) => {
       mockAgentChatFocus = focus;
       const mgr = buildManager();
-      const session = await mgr.createSession();
+      const session = await createShown(mgr);
       const handle = getSessionTestHandle(session);
 
       handle.setStatus("running");
@@ -2250,7 +2282,7 @@ describe("AgentSessionManager attention tracking", () => {
 
   it("chimes when a session starts awaiting permission (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
+    const a = await createShown(mgr);
     const aHandle = getSessionTestHandle(a);
 
     aHandle.setStatus("running");
@@ -2263,7 +2295,7 @@ describe("AgentSessionManager attention tracking", () => {
   it("stays silent when the focused Agent Chat starts awaiting permission (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     mockAgentChatFocus = "inside";
     const mgr = buildManager();
-    const session = await mgr.createSession();
+    const session = await createShown(mgr);
     const handle = getSessionTestHandle(session);
 
     handle.setStatus("running");
@@ -2276,9 +2308,9 @@ describe("AgentSessionManager attention tracking", () => {
   it("chimes when a backgrounded session finishes (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     mockAgentChatFocus = "inside";
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    mgr.setActiveSession(a.internalId);
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    show(mgr, a);
     const bHandle = getSessionTestHandle(b);
 
     bHandle.setStatus("running");
@@ -2291,9 +2323,9 @@ describe("AgentSessionManager attention tracking", () => {
   it("stays silent when the notification sound setting is off (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     mockNotificationSound = false;
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    mgr.setActiveSession(a.internalId);
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    show(mgr, a);
     const bHandle = getSessionTestHandle(b);
 
     bHandle.setStatus("running");
@@ -2305,7 +2337,7 @@ describe("AgentSessionManager attention tracking", () => {
 
   it("stays silent on the starting → idle transition of a fresh session (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
+    const a = await createShown(mgr);
     const aHandle = getSessionTestHandle(a);
 
     aHandle.setStatus("starting");
@@ -2316,26 +2348,49 @@ describe("AgentSessionManager attention tracking", () => {
 
   it("does not flag the starting → idle transition", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    mgr.setActiveSession(a.internalId);
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    show(mgr, a);
     const bHandle = getSessionTestHandle(b);
     bHandle.setStatus("starting");
     bHandle.setStatus("idle");
     expect(b.getNeedsAttention()).toBe(false);
   });
 
-  it("clears the flag when the user activates the tab", async () => {
+  it("clears the flag when the user opens the flagged chat from history", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    mgr.setActiveSession(a.internalId);
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    show(mgr, a);
     const bHandle = getSessionTestHandle(b);
     bHandle.setStatus("running");
     bHandle.setStatus("idle");
     expect(b.getNeedsAttention()).toBe(true);
-    mgr.setActiveSession(b.internalId);
+    await mgr.loadNativeSessionFromHistory(b.backendId, b.getBackendSessionId()!);
     expect(b.getNeedsAttention()).toBe(false);
+    expect(mgr.getActiveSession()).toBe(b);
+  });
+
+  it("skips the flag for a session that any client reports as focused https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+    const mgr = buildManager();
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    show(mgr, a);
+    mgr.setFocusProbe((id) => id === b.internalId);
+    const bHandle = getSessionTestHandle(b);
+    bHandle.setStatus("running");
+    bHandle.setStatus("idle");
+    expect(b.getNeedsAttention()).toBe(false);
+  });
+
+  it("flags a finished session no client shows, even when the panel's own view is on it https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+    const mgr = buildManager();
+    const a = await createShown(mgr);
+    mgr.setFocusProbe(() => false);
+    const aHandle = getSessionTestHandle(a);
+    aHandle.setStatus("running");
+    aHandle.setStatus("idle");
+    expect(a.getNeedsAttention()).toBe(true);
   });
 });
 
@@ -2370,7 +2425,7 @@ describe("AgentSessionManager.getRunningChatIds", () => {
 
   it("returns the same frozen empty set when nothing is running", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
+    const a = await createShown(mgr);
     getSessionTestHandle(a).setStatus("idle");
     const first = mgr.getRunningChatIds();
     expect(first.size).toBe(0);
@@ -2379,7 +2434,7 @@ describe("AgentSessionManager.getRunningChatIds", () => {
 
   it("keys a running saved session by its markdown path", async () => {
     const mgr = buildManagerWithPersistence();
-    const a = await mgr.createSession();
+    const a = await createShown(mgr);
     getSessionTestHandle(a).setMessages([{ message: "hi" }]);
     await mgr.saveActiveSession();
     getSessionTestHandle(a).setStatus("running");
@@ -2388,7 +2443,7 @@ describe("AgentSessionManager.getRunningChatIds", () => {
 
   it("keys a running native session by its native chat id", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
+    const a = await createShown(mgr);
     getSessionTestHandle(a).setStatus("running");
     const expected = buildNativeChatId(a.backendId, a.getBackendSessionId()!);
     expect(mgr.getRunningChatIds().has(expected)).toBe(true);
@@ -2396,8 +2451,8 @@ describe("AgentSessionManager.getRunningChatIds", () => {
 
   it("excludes idle / starting / closed sessions", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
     getSessionTestHandle(a).setStatus("running");
     getSessionTestHandle(b).setStatus("starting");
     const ids = mgr.getRunningChatIds();
@@ -2407,7 +2462,7 @@ describe("AgentSessionManager.getRunningChatIds", () => {
 
   it("notifies subscribers when a session's running membership flips", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
+    const a = await createShown(mgr);
     const listener = jest.fn();
     mgr.subscribe(listener);
     getSessionTestHandle(a).setStatus("running");
@@ -2419,12 +2474,13 @@ describe("AgentSessionManager.getRunningChatIds", () => {
 
   it("keeps both ids when a running session's first save re-keys it (dual-id)", async () => {
     const mgr = buildManagerWithPersistence();
-    const a = await mgr.createSession();
+    const a = await createShown(mgr);
     getSessionTestHandle(a).setMessages([{ message: "hi" }]);
     getSessionTestHandle(a).setStatus("running");
     const nativeId = buildNativeChatId(a.backendId, a.getBackendSessionId()!);
     expect(mgr.getRunningChatIds().has(nativeId)).toBe(true);
 
+    await waitFor(() => expect(mgr.getIsStarting()).toBe(false));
     const listener = jest.fn();
     mgr.subscribe(listener);
     await mgr.saveActiveSession();
@@ -2439,7 +2495,7 @@ describe("AgentSessionManager.getRunningChatIds", () => {
 describe("AgentSessionManager.getAttentionChatIds", () => {
   it("returns the same frozen empty set when nothing needs attention", async () => {
     const mgr = buildManager();
-    await mgr.createSession();
+    await createShown(mgr);
     const first = mgr.getAttentionChatIds();
     expect(first.size).toBe(0);
     expect(mgr.getAttentionChatIds()).toBe(first);
@@ -2447,9 +2503,9 @@ describe("AgentSessionManager.getAttentionChatIds", () => {
 
   it("hands a backgrounded finished session over from running to attention", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    mgr.setActiveSession(a.internalId);
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    show(mgr, a);
     const bHandle = getSessionTestHandle(b);
     const nativeId = buildNativeChatId(b.backendId, b.getBackendSessionId()!);
 
@@ -2464,24 +2520,24 @@ describe("AgentSessionManager.getAttentionChatIds", () => {
 
   it("does not include the active session even when its chat is not focused (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
+    const a = await createShown(mgr);
     const aHandle = getSessionTestHandle(a);
     aHandle.setStatus("running");
     aHandle.setStatus("idle");
     expect(mgr.getAttentionChatIds().size).toBe(0);
   });
 
-  it("drops the id once the user activates the flagged tab", async () => {
+  it("drops the id once the flagged chat is opened from history", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    mgr.setActiveSession(a.internalId);
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    show(mgr, a);
     const bHandle = getSessionTestHandle(b);
     bHandle.setStatus("running");
     bHandle.setStatus("idle");
     const nativeId = buildNativeChatId(b.backendId, b.getBackendSessionId()!);
     expect(mgr.getAttentionChatIds().has(nativeId)).toBe(true);
-    mgr.setActiveSession(b.internalId);
+    await mgr.loadNativeSessionFromHistory(b.backendId, b.getBackendSessionId()!);
     expect(mgr.getAttentionChatIds().has(nativeId)).toBe(false);
   });
 });
@@ -2493,29 +2549,35 @@ describe("AgentSessionManager.replaceSessionInPlace", () => {
 
   it("inserts the replacement at the old session's tab-strip index", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    const c = await mgr.createSession();
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    const c = await createShown(mgr);
     const replacement = await mgr.replaceSessionInPlace(b.internalId);
     await flushBackgroundClose();
     expect(mgr.getSessions()).toEqual([a, replacement, c]);
-    expect(mgr.getActiveSession()).toBe(replacement);
   });
 
   it("preserves the leftmost slot when replacing the first tab", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    mgr.setActiveSession(a.internalId);
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    show(mgr, a);
     const replacement = await mgr.replaceSessionInPlace(a.internalId);
     await flushBackgroundClose();
     expect(mgr.getSessions()).toEqual([replacement, b]);
-    expect(mgr.getActiveSession()).toBe(replacement);
+  });
+
+  it("does not select the replacement, so the requesting client shows it https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+    const mgr = buildManager();
+    const a = await createShown(mgr);
+    await mgr.replaceSessionInPlace(a.internalId);
+    await flushBackgroundClose();
+    expect(mgr["view"].getActiveTabId()).toBe(a.internalId);
   });
 
   it("preserves the logical chat input only when explicitly requested", async () => {
     const mgr = buildManager();
-    const freshSource = await mgr.createSession();
+    const freshSource = await createShown(mgr);
     expect(freshSource.chatInputId).not.toBe(freshSource.internalId);
     const freshReplacement = await mgr.replaceSessionInPlace(freshSource.internalId);
     expect(freshReplacement.chatInputId).not.toBe(freshSource.chatInputId);
@@ -2531,7 +2593,7 @@ describe("AgentSessionManager.replaceSessionInPlace", () => {
 
   it("keeps the last successful replacement when a queued replacement fails", async () => {
     const mgr = buildManager();
-    const source = await mgr.createSession();
+    const source = await createShown(mgr);
     const createSession = mgr.createSession.bind(mgr);
     let releaseSecond!: () => void;
     let markSecondStarted!: () => void;
@@ -2579,7 +2641,7 @@ describe("AgentSessionManager.replaceSessionInPlace", () => {
 
   it("closes the old session in the background", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
+    const a = await createShown(mgr);
     await mgr.replaceSessionInPlace(a.internalId);
     await flushBackgroundClose();
     expect(mockSessionCancel).toHaveBeenCalled();
@@ -2589,24 +2651,22 @@ describe("AgentSessionManager.replaceSessionInPlace", () => {
 
   it("forwards the explicit backendId to createSession", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    await mgr.replaceSessionInPlace(a.internalId, "opencode");
-    const replacement = mgr.getActiveSession();
-    expect(replacement?.backendId).toBe("opencode");
+    const a = await createShown(mgr);
+    const replacement = await mgr.replaceSessionInPlace(a.internalId, "opencode");
+    expect(replacement.backendId).toBe("opencode");
   });
 
   it("falls back to plain create when the old id is unknown", async () => {
     const mgr = buildManager();
     const replacement = await mgr.replaceSessionInPlace("does-not-exist");
     expect(mgr.getSessions()).toEqual([replacement]);
-    expect(mgr.getActiveSession()).toBe(replacement);
   });
 
   it("the replacement takes the replaced session's position in the pool", async () => {
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    mgr.setActiveSession(a.internalId);
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    show(mgr, a);
     const replacement = await mgr.replaceSessionInPlace(a.internalId);
     await flushBackgroundClose();
     expect(mgr.getSessions().map((session) => session.internalId)).toEqual([
@@ -2622,9 +2682,9 @@ describe("AgentSessionManager.subscribe / shutdown", () => {
     const listener = jest.fn();
     mgr.subscribe(listener);
 
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    mgr.setActiveSession(a.internalId);
+    const a = await createShown(mgr);
+    const b = await createShown(mgr);
+    show(mgr, a);
     await mgr.closeSession(b.internalId);
 
     expect(listener.mock.calls.length).toBeGreaterThanOrEqual(4);
@@ -2632,8 +2692,8 @@ describe("AgentSessionManager.subscribe / shutdown", () => {
 
   it("shutdown cancels and disposes every session and clears state", async () => {
     const mgr = buildManager();
-    await mgr.createSession();
-    await mgr.createSession();
+    await createShown(mgr);
+    await createShown(mgr);
     expect(mgr.getSessions()).toHaveLength(2);
 
     await mgr.shutdown();
@@ -2648,8 +2708,8 @@ describe("AgentSessionManager.subscribe / shutdown", () => {
     const mgr = buildManager();
     const listener = jest.fn();
     mgr.subscribe(listener);
-    await mgr.createSession();
-    await mgr.createSession();
+    await createShown(mgr);
+    await createShown(mgr);
 
     for (const fn of mockBackendExitListeners) fn();
 
@@ -2660,22 +2720,7 @@ describe("AgentSessionManager.subscribe / shutdown", () => {
   });
 });
 
-describe("AgentSessionManager.applySelection", () => {
-  it("no-ops when no session is active", async () => {
-    const mgr = buildManager();
-    await expect(
-      mgr.applySelection({ effort: "high" }, { expectBackendId: "opencode" })
-    ).resolves.toBeUndefined();
-  });
-
-  it("no-ops when the active session is on a different backend", async () => {
-    const mgr = buildManager();
-    await mgr.createSession();
-    await expect(
-      mgr.applySelection({ effort: "high" }, { expectBackendId: "claude" })
-    ).resolves.toBeUndefined();
-  });
-
+describe("AgentSessionManager.applySelectionTo (dispatch)", () => {
   it("delegates dispatch to descriptor.applySelection with the resolved selection", async () => {
     const applySelectionMock = jest.fn(async () => {});
     const descriptor = {
@@ -2735,10 +2780,10 @@ describe("AgentSessionManager.applySelection", () => {
       });
       return s;
     });
-    const session = await mgr.createSession();
+    const session = await createShown(mgr);
 
     (mockedSetSettings as jest.Mock).mockClear();
-    await mgr.applySelection({ effort: "high" }, { expectBackendId: "opencode" });
+    await mgr.applySelectionTo(session.internalId, { effort: "high" });
     expect(applySelectionMock).toHaveBeenCalledWith(session, {
       baseModelId: "anthropic/sonnet",
       effort: "high",
@@ -2747,7 +2792,7 @@ describe("AgentSessionManager.applySelection", () => {
 
     applySelectionMock.mockClear();
     (mockedSetSettings as jest.Mock).mockClear();
-    await mgr.applySelection({ baseModelId: "anthropic/opus", effort: null });
+    await mgr.applySelectionTo(session.internalId, { baseModelId: "anthropic/opus", effort: null });
     expect(applySelectionMock).toHaveBeenCalledWith(session, {
       baseModelId: "anthropic/opus",
       effort: null,
@@ -2789,8 +2834,8 @@ describe("AgentSessionManager.applySelectionTo", () => {
       });
       return s;
     });
-    const first = await mgr.createSession();
-    const second = await mgr.createSession();
+    const first = await createShown(mgr);
+    const second = await createShown(mgr);
     expect(mgr.getActiveSession()).toBe(second);
 
     await mgr.applySelectionTo(first.internalId, { effort: "high" });
@@ -2803,7 +2848,7 @@ describe("AgentSessionManager.applySelectionTo", () => {
 
   it("resolves without applying anything for an unknown session id", async () => {
     const mgr = buildManager();
-    await mgr.createSession();
+    await createShown(mgr);
     await expect(mgr.applySelectionTo("nope", { effort: "high" })).resolves.toBeUndefined();
   });
 });
@@ -2811,7 +2856,7 @@ describe("AgentSessionManager.applySelectionTo", () => {
 describe("AgentSessionManager.applyModeTo", () => {
   it("applies the mode spec the session's backend reported and leaves the persisted default alone https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
     const mgr = buildManager();
-    const session = await mgr.createSession();
+    const session = await createShown(mgr);
     (session as unknown as { getState: () => unknown }).getState = () => ({
       model: null,
       mode: {
@@ -2830,14 +2875,72 @@ describe("AgentSessionManager.applyModeTo", () => {
 
   it("resolves without applying anything when the session has no spec for the mode", async () => {
     const mgr = buildManager();
-    const session = await mgr.createSession();
+    const session = await createShown(mgr);
     await expect(mgr.applyModeTo(session.internalId, "auto")).resolves.toBeUndefined();
     await expect(mgr.applyModeTo("nope", "auto")).resolves.toBeUndefined();
     expect(session.setMode).not.toHaveBeenCalled();
   });
 });
 
+describe("AgentSessionManager.applySelection", () => {
+  it("no-ops without a shown session or when the shown session runs another agent", async () => {
+    const mgr = buildManager();
+    await expect(
+      mgr.applySelection({ effort: "high" }, { expectBackendId: "opencode" })
+    ).resolves.toBeUndefined();
+    await createShown(mgr);
+    await expect(
+      mgr.applySelection({ effort: "high" }, { expectBackendId: "claude" })
+    ).resolves.toBeUndefined();
+  });
+
+  it("applies to the shown session through applySelectionTo", async () => {
+    const mgr = buildManager();
+    const shown = await createShown(mgr);
+    const applyTo = jest.spyOn(mgr, "applySelectionTo").mockResolvedValue();
+    await mgr.applySelection({ effort: "high" }, { expectBackendId: "opencode" });
+    expect(applyTo).toHaveBeenCalledWith(shown.internalId, { effort: "high" });
+  });
+});
+
 describe("AgentSessionManager.applyMode", () => {
+  it("applies the mode to the shown session and persists it as the agent's default", async () => {
+    const mgr = buildManager();
+    const shown = await createShown(mgr);
+    (shown as unknown as { getState: () => unknown }).getState = () => ({
+      model: null,
+      mode: { current: "default", options: [], apply: {} },
+    });
+    (mockedSetSettings as jest.Mock).mockClear();
+    await mgr.applyMode("opencode", "plan", { kind: "setMode", nativeId: "plan-native" });
+    expect(shown.setMode).toHaveBeenCalledWith("plan-native");
+    expect(mockedSetSettings).toHaveBeenCalled();
+  });
+
+  it("no-ops when the shown session runs another agent", async () => {
+    const mgr = buildManager();
+    const shown = await createShown(mgr);
+    await mgr.applyMode("claude", "plan", { kind: "setMode", nativeId: "plan-native" });
+    expect(shown.setMode).not.toHaveBeenCalled();
+  });
+});
+
+describe("AgentSessionManager.applyModeTo (native mapping)", () => {
+  function reportMode(
+    session: AgentSession,
+    mode: "default" | "plan" | "auto",
+    spec: Record<string, unknown>
+  ): void {
+    (session as unknown as { getState: () => unknown }).getState = () => ({
+      model: null,
+      mode: {
+        current: "default",
+        options: [{ value: mode, label: mode }],
+        apply: { [mode]: spec },
+      },
+    });
+  }
+
   function buildModeManager(
     getModeMapping: BackendDescriptor["getModeMapping"]
   ): AgentSessionManager {
@@ -2878,10 +2981,8 @@ describe("AgentSessionManager.applyMode", () => {
     }));
     const session = await manager.createSession("claude");
 
-    await manager.applyMode("claude", "auto", {
-      kind: "setMode",
-      nativeId: "bypassPermissions",
-    });
+    reportMode(session, "auto", { kind: "setMode", nativeId: "bypassPermissions" });
+    await manager.applyModeTo(session.internalId, "auto");
 
     expect(session.setMode).toHaveBeenCalledWith("auto");
   });
@@ -2897,10 +2998,8 @@ describe("AgentSessionManager.applyMode", () => {
     );
     const session = await manager.createSession("claude");
 
-    await manager.applyMode("claude", "auto", {
-      kind: "setMode",
-      nativeId: "cached-auto",
-    });
+    reportMode(session, "auto", { kind: "setMode", nativeId: "cached-auto" });
+    await manager.applyModeTo(session.internalId, "auto");
 
     expect(session.setMode).toHaveBeenCalledWith("cached-auto");
   });
@@ -2913,7 +3012,8 @@ describe("AgentSessionManager.applyMode", () => {
       ["default", "read-only"],
       ["auto", "agent"],
     ] as const) {
-      await manager.applyMode("claude", mode, { kind: "setMode", nativeId });
+      reportMode(session, mode, { kind: "setMode", nativeId });
+      await manager.applyModeTo(session.internalId, mode);
     }
 
     expect(session.setMode).toHaveBeenNthCalledWith(1, "read-only");
@@ -2924,13 +3024,14 @@ describe("AgentSessionManager.applyMode", () => {
     const manager = buildModeManager(buildCodexModeMapping);
     const session = await manager.createSession("claude");
 
-    await manager.applyMode("claude", "plan", {
+    reportMode(session, "plan", {
       kind: "sequence",
       steps: [
         { kind: "setMode", nativeId: "agent" },
         { kind: "setConfigOption", configId: "collaboration_mode", value: "plan" },
       ],
     });
+    await manager.applyModeTo(session.internalId, "plan");
 
     expect(session.setMode).toHaveBeenCalledWith("agent");
     expect(session.setConfigOption).toHaveBeenCalledWith("collaboration_mode", "plan");
@@ -3021,7 +3122,7 @@ describe("AgentSessionManager default-model settings subscription", () => {
           >[2]["modelPreloader"],
         }
       );
-      await mgr.createSession();
+      await createShown(mgr);
       await flushApplyChain();
       expect(readPersistedDefault(mockedSetSettings as jest.Mock, "opencode")).toEqual(
         expected === undefined ? undefined : { baseModelId: "opus", effort: expected }
@@ -3047,7 +3148,7 @@ describe("AgentSessionManager default-model settings subscription", () => {
         >[2]["modelPreloader"],
       }
     );
-    const session = await mgr.createSession();
+    const session = await createShown(mgr);
 
     const prev = { agentMode: { backends: { opencode: { defaultModel: null } } } };
     const next = {
@@ -3084,7 +3185,7 @@ describe("AgentSessionManager default-model settings subscription", () => {
         >[2]["modelPreloader"],
       }
     );
-    await mgr.createSession();
+    await createShown(mgr);
 
     const same = { baseModelId: "opus", effort: "high" };
     emitSettingsChange(
@@ -3113,7 +3214,7 @@ describe("AgentSessionManager default-model settings subscription", () => {
         >[2]["modelPreloader"],
       }
     );
-    await mgr.createSession();
+    await createShown(mgr);
 
     const settingsReadsBeforeChange = (mockedGetSettings as jest.Mock).mock.calls.length;
     emitSettingsChange(
@@ -3156,7 +3257,7 @@ describe("AgentSessionManager default-model settings subscription", () => {
         >[2]["modelPreloader"],
       }
     );
-    const session = await mgr.createSession();
+    const session = await createShown(mgr);
 
     const latest = { baseModelId: "opus", effort: "low" };
     (mockedGetSettings as jest.Mock).mockReturnValue({
@@ -3205,7 +3306,7 @@ describe("AgentSessionManager default-model settings subscription", () => {
         >[2]["modelPreloader"],
       }
     );
-    await mgr.createSession();
+    await createShown(mgr);
 
     const first = { baseModelId: "first", effort: null };
     (mockedGetSettings as jest.Mock).mockReturnValue({
@@ -3300,7 +3401,7 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     const { mgr, preloader } = buildInstallStateManager({
       installState: { kind: "ready", source: "custom" },
     });
-    await mgr.createSession();
+    await createShown(mgr);
     mockBackendShutdown.mockClear();
     preloader.preload.mockClear();
 
@@ -3314,7 +3415,7 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     const { mgr, preloader, setInstallState } = buildInstallStateManager({
       installState: { kind: "ready", source: "custom" },
     });
-    await mgr.createSession();
+    await createShown(mgr);
     mockBackendShutdown.mockClear();
     sessionCreateSpy.mockClear();
 
@@ -3364,7 +3465,7 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     const { mgr, preloader } = buildInstallStateManager({
       installState: { kind: "checking", source: "custom" },
     });
-    await mgr.createSession();
+    await createShown(mgr);
     mockBackendShutdown.mockClear();
 
     await mgr.onInstallStateChanged("opencode");
@@ -4383,13 +4484,13 @@ describe("AgentSessionManager fresh-visit tab detach", () => {
     expect(mgr.getAttentionChatIds().size).toBeGreaterThan(0);
   });
 
-  it("re-attaches a detached session when it is surfaced via setActiveSession", async () => {
+  it("re-attaches a detached session when it is opened from history", async () => {
     const mgr = buildManager();
     const old = await enterWithConversation(mgr);
     await mgr.enterProject(PROJECT_ID);
     expect(mgr.getSessionsForScope(PROJECT_ID)).not.toContain(old);
 
-    mgr.setActiveSession(old.internalId);
+    await mgr.loadNativeSessionFromHistory(old.backendId, old.getBackendSessionId()!);
 
     expect(mgr.getSessionsForScope(PROJECT_ID)).toContain(old);
     expect(mgr.getActiveSession()).toBe(old);
@@ -4731,7 +4832,7 @@ describe("AgentSessionManager context-source dirty tracking", () => {
 
     await mgr.exitProject();
     sessionCreateSpy.mockClear();
-    await mgr.createSession();
+    await createShown(mgr);
     const globalOpts = sessionCreateSpy.mock.calls[0][0];
     expect(globalOpts.getProjectContextUpdates).toBeUndefined();
     expect(globalOpts.markProjectContextUpdatesDelivered).toBeUndefined();

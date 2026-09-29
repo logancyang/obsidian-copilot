@@ -10,7 +10,8 @@ import {
   type SessionState,
   type TabSummary,
 } from "@/agentMode/protocol/state";
-import { buildHostState, buildTab } from "@/agentMode/protocol/testBuilders";
+import { ClientView } from "@/agentMode/protocol/ClientView";
+import { buildBackendSummary, buildHostState, buildTab } from "@/agentMode/protocol/testBuilders";
 import type { AgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
 import type { SessionId } from "@/agentMode/session/types";
 
@@ -20,6 +21,7 @@ import type { SessionId } from "@/agentMode/session/types";
 export interface FixtureClientOptions {
   sessionId: SessionId;
   tab?: Partial<TabSummary>;
+  host?: Partial<HostState>;
   session?: Partial<SessionState>;
   onCommand?: (command: Command, fixture: FixtureClient) => CommandResult<unknown>;
 }
@@ -27,6 +29,7 @@ export interface FixtureClientOptions {
 export interface FixtureClient {
   client: SessionClient;
   commands: Command[];
+  focused: Array<SessionId | null>;
   getSession(): SessionState;
   emitSession(...ops: SessionOp[]): void;
   emitHost(...ops: HostOp[]): void;
@@ -36,7 +39,10 @@ const HOST_ID = "fixture-host";
 
 export function createFixtureClient(options: FixtureClientOptions): FixtureClient {
   const { sessionId } = options;
-  let host: HostState = buildHostState({ tabs: [buildTab({ id: sessionId, ...options.tab })] });
+  let host: HostState = buildHostState({
+    tabs: [buildTab({ id: sessionId, ...options.tab })],
+    ...options.host,
+  });
   let session: SessionState = { ...INITIAL_SESSION_STATE, ...options.session };
   let hostSeq = 0;
   let sessionSeq = 0;
@@ -46,10 +52,12 @@ export function createFixtureClient(options: FixtureClientOptions): FixtureClien
     for (const listener of [...frameListeners]) listener(frame);
   };
   const commands: Command[] = [];
+  const focused: Array<SessionId | null> = [];
 
   const fixture: FixtureClient = {
     client: undefined as unknown as SessionClient,
     commands,
+    focused,
     getSession: () => session,
     emitSession(...ops) {
       const from = sessionSeq + 1;
@@ -82,6 +90,9 @@ export function createFixtureClient(options: FixtureClientOptions): FixtureClien
         return;
       case "unsubscribe":
         subscribed.delete(frame.scope);
+        return;
+      case "focus":
+        focused.push(frame.sessionId);
         return;
       case "command":
         commands.push(frame.command);
@@ -123,3 +134,15 @@ export const inertPaneCapabilities: AgentPaneCapabilities = {
   openPlanPreview: async () => undefined,
   closePlanPreview: () => undefined,
 };
+
+// Builders and a view for stories, which may not import protocol values themselves.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+export const fixtureTab = buildTab;
+export const fixtureBackend = buildBackendSummary;
+
+export function createFixtureView(fixture: FixtureClient, activeId: SessionId): ClientView {
+  const view = new ClientView("__global__");
+  view.reconcile(fixture.client.getHost());
+  view.activate({ id: activeId, projectId: "__global__" });
+  return view;
+}

@@ -25,12 +25,15 @@ import {
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
 import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel";
 import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpen";
-import { EMPTY_CHAT_RUNTIME } from "@/agentMode/protocol/selectors";
+import type { ClientView } from "@/agentMode/protocol/ClientView";
+import { useClientView } from "@/agentMode/protocol/react";
+import { EMPTY_CHAT_RUNTIME, selectVisibleMessages } from "@/agentMode/protocol/selectors";
 import type { SessionClient } from "@/agentMode/protocol/SessionClient";
 import { AgentPaneCapabilitiesProvider } from "@/agentMode/ui/AgentPaneContext";
 import { createDesktopPaneCapabilities } from "@/agentMode/ui/desktopPaneCapabilities";
 import { useChatRuntime } from "@/agentMode/ui/hooks/useChatRuntime";
 import { useComposerCommands } from "@/agentMode/ui/hooks/useComposerCommands";
+import { useTabCommands } from "@/agentMode/ui/hooks/useTabCommands";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { buildNativeChatId } from "@/utils/nativeChatId";
@@ -53,6 +56,7 @@ import { AppContext } from "@/context";
 import { ChatInputProvider } from "@/context/ChatInputContext";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { cn } from "@/lib/utils";
+import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
@@ -67,6 +71,7 @@ import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface AgentHomeProps {
   client: SessionClient;
+  view: ClientView;
   sessionId: string;
   chatInputId: string;
   manager: AgentSessionManager;
@@ -79,6 +84,7 @@ const EMPTY_PROJECT_NAMES_BY_ID: Readonly<Record<string, string>> = Object.freez
 
 const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   client,
+  view,
   sessionId,
   chatInputId,
   manager,
@@ -101,6 +107,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const { messages, isStarting, isTurnInFlight, hasPendingPlanPermission, currentTodoList } =
     useChatRuntime(client, sessionId) ?? EMPTY_CHAT_RUNTIME;
   const composer = useComposerCommands(client, sessionId);
+  const { host, activeTab, view: viewState } = useClientView(client, view);
+  const tabs = useTabCommands(client, view);
+  const isCreating = host?.host.startingBackendId != null;
   const isLoading = draft.loading || isTurnInFlight;
 
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
@@ -127,19 +136,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   }, [manager]);
 
   const handleNewChat = useCallback(() => {
-    if (manager.getIsStarting()) return;
-    const active = manager.getActiveSession();
-    if (!active || !active.hasUserVisibleMessages()) return;
-    const oldId = active.internalId;
-    void (async () => {
-      try {
-        await manager.replaceSessionInPlace(oldId, active.backendId);
-      } catch (e) {
-        logError("[AgentMode] new chat failed", e);
-        new Notice("Failed to start a new chat. Please try again.");
-      }
-    })();
-  }, [manager]);
+    if (isCreating || !activeTab || messages.length === 0) return;
+    void tabs.replaceTab(activeTab.id, { backendId: activeTab.backendId }).then((result) => {
+      if (!result.ok) new Notice("Failed to start a new chat. Please try again.");
+    });
+  }, [isCreating, activeTab, messages.length, tabs]);
 
   const descriptor = useSessionBackendDescriptor(manager);
   const handleInstall = useCallback(() => {
@@ -157,7 +158,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     [app]
   );
 
-  const activeProjectId = manager.getActiveProjectId();
+  const activeProjectId = viewState.projectScope;
   const isProjectScope = activeProjectId !== GLOBAL_SCOPE;
   const activeProject = isProjectScope ? projects.find((p) => p.id === activeProjectId) : undefined;
   const isOrphanedProject = isProjectScope && !activeProject;
@@ -218,13 +219,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const handleProjectDeleted = useCallback(
     (deletedId: string) => {
-      if (manager.getActiveProjectId() === deletedId) {
+      if (view.getProjectScope() === deletedId) {
         manager.exitProject().catch((e) => {
           logError("[AgentMode] exit after delete failed", e);
         });
       }
     },
-    [manager]
+    [manager, view]
   );
 
   const handleSelectProject = useCallback(
@@ -288,28 +289,26 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     containerRef: chatContainerRef,
   });
 
-  const isLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
+  const isLanding = messages.length === 0;
   const isProjectLanding = isLanding && isProjectScope;
 
   const refreshContextForEmptyLanding = useCallback(async (): Promise<boolean> => {
-    const active = manager.getActiveSession();
-    if (!active || active.hasUserVisibleMessages()) return false;
+    const live = client.getSession(sessionId);
+    const tab = client.getHost()?.tabs.find((candidate) => candidate.id === sessionId);
+    if (!live || !tab || selectVisibleMessages(live).length > 0) return false;
     const draftEmpty =
       draft.input.trim() === "" &&
       draft.images.length === 0 &&
       draft.contextNotes.length === 0 &&
       draft.queue.length === 0;
     if (!draftEmpty) return false;
-    try {
-      await manager.replaceSessionInPlace(active.internalId, active.backendId, {
-        preserveChatInput: true,
-      });
-      return true;
-    } catch (e) {
-      logError("[AgentMode] refresh landing context failed", e);
-      return false;
-    }
-  }, [manager, draft]);
+    const result = await tabs.replaceTab(sessionId, {
+      backendId: tab.backendId,
+      preserveChatInput: true,
+    });
+    if (!result.ok) logError(`[AgentMode] refresh landing context failed (${result.code})`);
+    return result.ok;
+  }, [client, sessionId, tabs, draft]);
 
   const draftIsEmpty =
     draft.input.trim() === "" &&
@@ -614,7 +613,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         </div>
       </div>
-      <AgentTabStrip manager={manager} />
+      <AgentTabStrip client={client} view={view} onCreated={refreshLatestVersion} />
       {createAnchor && (
         <CreateProjectPanel
           anchorEl={createAnchor}

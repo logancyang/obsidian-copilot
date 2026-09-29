@@ -1,7 +1,13 @@
 import { startReleaseUpdateCheck } from "@/services/releaseUpdateNotice";
 import { releaseCursorAssociation } from "@/editor/releaseCursorAssociation";
 import { registerNoteHeaderAction } from "@/editor/registerNoteHeaderAction";
-import type { AgentSessionManager, SessionClient, SessionHost, SkillManager } from "@/agentMode";
+import type {
+  AgentSessionManager,
+  ClientView,
+  SessionClient,
+  SessionHost,
+  SkillManager,
+} from "@/agentMode";
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import {
   buildChatDeepLink,
@@ -157,6 +163,7 @@ export default class CopilotPlugin extends Plugin {
   agentSessionManager?: AgentSessionManager;
   agentSessionHost?: SessionHost;
   agentSessionClient?: SessionClient;
+  agentSessionView?: ClientView;
   skills?: SkillManager;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
@@ -276,6 +283,7 @@ export default class CopilotPlugin extends Plugin {
         createAgentSessionClient,
         createAgentSessionHost,
         createAgentSessionManager,
+        createAgentSessionView,
         setFrameSinkVaultBasePath,
         SkillManager,
       } = await import("@/agentMode");
@@ -292,9 +300,13 @@ export default class CopilotPlugin extends Plugin {
       // frame logging is off. https://github.com/logancyang/obsidian-copilot-preview/issues/250
       void acpFrameSink.narrowLegacyLogs();
 
-      this.agentSessionManager = createAgentSessionManager(this.app, this);
+      this.agentSessionView = createAgentSessionView();
+      this.agentSessionManager = createAgentSessionManager(this.app, this, this.agentSessionView);
       this.agentSessionHost = createAgentSessionHost(this.app, this, this.agentSessionManager);
-      this.agentSessionClient = createAgentSessionClient(this.agentSessionHost);
+      this.agentSessionClient = createAgentSessionClient(
+        this.agentSessionHost,
+        this.agentSessionView
+      );
       this.skills = SkillManager.getInstance();
       this.agentModelDiscoveryUnsubscriber = wireAgentModelDiscovery(
         this,
@@ -987,7 +999,15 @@ export default class CopilotPlugin extends Plugin {
     if (!manager) return;
     await this.activateAgentView();
     try {
-      await manager.createSession();
+      const session = await manager.createSession(
+        undefined,
+        this.agentSessionView?.getProjectScope()
+      );
+      this.agentSessionView?.activate({
+        id: session.internalId,
+        projectId: session.projectId,
+        chatInputId: session.chatInputId,
+      });
     } catch (error) {
       logWarn("[CopilotPlugin] Failed to create agent session", error);
       new Notice("Failed to create agent session. Check Copilot logs.");

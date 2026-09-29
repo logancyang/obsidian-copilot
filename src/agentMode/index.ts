@@ -21,7 +21,9 @@ import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { createCatalogSource } from "./session/host/catalogSource";
 import { SessionHost } from "./session/host/SessionHost";
+import { ClientView } from "./protocol/ClientView";
 import type { SessionClient } from "./protocol/SessionClient";
+import { GLOBAL_SCOPE } from "./session/scope";
 import { watchAttachedTabs } from "./ui/watchAttachedTabs";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
 import { SkillManager } from "./skills";
@@ -55,6 +57,7 @@ export type { AgentModePickerOverride } from "./ui/useAgentModePicker";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
 export type { SessionHost } from "./session/host/SessionHost";
 export type { SessionClient } from "./protocol/SessionClient";
+export type { ClientView } from "./protocol/ClientView";
 export type {
   AgentBrand,
   BackendDescriptor,
@@ -149,7 +152,20 @@ function spawnModelConfigKey(
     .join("\n");
 }
 
-export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
+/**
+ * The desktop panel's view state: which tab it shows and in which project scope. The plugin owns
+ * it so the panel keeps its place across closing and reopening the chat view.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+ */
+export function createAgentSessionView(): ClientView {
+  return new ClientView(GLOBAL_SCOPE);
+}
+
+export function createAgentSessionManager(
+  app: App,
+  plugin: CopilotPlugin,
+  view: ClientView
+): AgentSessionManager {
   const os = requireNodeModule<typeof import("node:os")>("os");
   const path = requireNodeModule<typeof import("node:path")>("path");
   let lastAvailableSkillAgents: readonly string[] = [];
@@ -205,6 +221,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     (id) => managerRef?.getSessionByBackendId(id) ?? null
   );
   const manager = new AgentSessionManager(app, plugin, {
+    view,
     permissionPrompter: prompter,
     askUserQuestionPrompter,
     resolveDescriptor: (id) => backendRegistry[id],
@@ -397,7 +414,7 @@ export function createAgentSessionHost(
   plugin: CopilotPlugin,
   manager: AgentSessionManager
 ): SessionHost {
-  return new SessionHost({
+  const host = new SessionHost({
     manager,
     catalog: createCatalogSource({
       descriptors: listBackendDescriptors,
@@ -412,14 +429,19 @@ export function createAgentSessionHost(
     isKnownBackend: isRegisteredBackend,
     appVersion: plugin.manifest.version,
   });
+  manager.setFocusProbe((id) => host.isSessionFocused(id));
+  return host;
 }
 
 // The desktop panel is a client of the host through the in-process transport. It keeps every
-// attached tab's session subscribed so a tab switch finds its replica ready.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/611
-export function createAgentSessionClient(host: SessionHost): SessionClient {
+// attached tab's session subscribed so a tab switch finds its replica ready, a choice only this
+// client makes: another client watches just the tab it shows. Its view state follows the shared
+// tab set and reports the tab it shows to the host.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+export function createAgentSessionClient(host: SessionHost, view: ClientView): SessionClient {
   const { client } = host.createClient();
   watchAttachedTabs(client);
+  view.attach(client);
   return client;
 }
 

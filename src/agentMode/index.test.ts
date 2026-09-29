@@ -9,10 +9,12 @@ import {
   createAgentSessionClient,
   createAgentSessionHost,
   createAgentSessionManager,
+  createAgentSessionView,
   isRegisteredBackend,
   resolveVaultNote,
 } from "./index";
 import type { AgentSessionManager } from "./session/AgentSessionManager";
+import type { AgentSession } from "./session/AgentSession";
 import { reconcileBuiltinSkills } from "./skills/builtin/reconcileBuiltinSkills";
 import { BackendConfigRegistry } from "@/modelManagement";
 
@@ -168,6 +170,33 @@ function deferred() {
   return { promise, resolve };
 }
 
+function fakeSession(id: string): AgentSession {
+  return {
+    internalId: id,
+    chatInputId: `input-${id}`,
+    backendId: "claude",
+    projectId: "__global__",
+    getStatus: () => "idle",
+    getLabel: () => null,
+    getLabelSource: () => null,
+    getNeedsAttention: () => false,
+    clearNeedsAttention: jest.fn(),
+    canSwitchModel: () => null,
+    canSwitchEffort: () => null,
+    canSwitchMode: () => null,
+    subscribe: () => () => {},
+    store: { onOp: () => () => {}, getMessages: () => [] },
+    getState: () => null,
+    getCurrentPlan: () => null,
+    getCurrentTodoList: () => null,
+    getSessionUsage: () => null,
+    getPlanUsage: () => null,
+    getPendingToolPermissions: () => [],
+    getPendingAskUserQuestions: () => [],
+    hasPendingPlanPermission: () => false,
+  } as unknown as AgentSession;
+}
+
 function hostableManager(): AgentSessionManager {
   return {
     subscribe: jest.fn(() => () => {}),
@@ -180,6 +209,7 @@ function hostableManager(): AgentSessionManager {
     getEffortCatalog: () => null,
     getPreloadStatus: () => "absent",
     getDefaultSelection: () => null,
+    setFocusProbe: jest.fn(),
   } as unknown as AgentSessionManager;
 }
 
@@ -208,7 +238,7 @@ describe("agentMode", () => {
       const upgrade = deferred();
       mockStates.opencode = { kind: "ready", source: "managed" };
       mockDescriptors[1].onPluginLoad.mockReturnValueOnce(upgrade.promise);
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
       await mockManager.registerPreload.mock.calls.find(([id]) => id === "claude")![1];
       expect(mockManager.preloadModels).toHaveBeenCalledWith("claude");
       expect(mockManager.preloadModels).not.toHaveBeenCalledWith("opencode");
@@ -220,7 +250,7 @@ describe("agentMode", () => {
     it("does not restart a backend for installation writes while its upgrade owns startup (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", async () => {
       const upgrade = deferred();
       mockDescriptors[1].onPluginLoad.mockReturnValueOnce(upgrade.promise);
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
       mockInstallListeners.opencode();
       upgrade.resolve();
       await mockManager.registerPreload.mock.calls.find(([id]) => id === "opencode")![1];
@@ -237,14 +267,16 @@ describe("agentMode", () => {
       mockDescriptors[1].onPluginLoad.mockImplementationOnce(async () => {
         mockStates.opencode = { kind: "ready", source: "managed" };
       });
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
       await mockManager.registerPreload.mock.calls.find(([id]) => id === "opencode")![1];
       expect(mockManager.preloadModels).toHaveBeenCalledWith("opencode");
     });
     it(`waits for initial skill reconciliation before preloading ready agents ${ISSUE}`, async () => {
       const gate = deferred();
       reconcile.mockReturnValue(gate.promise);
-      expect(createAgentSessionManager({} as App, plugin)).toBe(mockManager);
+      expect(createAgentSessionManager({} as App, plugin, createAgentSessionView())).toBe(
+        mockManager
+      );
       expect(reconcile).toHaveBeenCalledWith(
         expect.objectContaining({ availableAgents: ["claude"] })
       );
@@ -260,14 +292,14 @@ describe("agentMode", () => {
       async (failure) => {
         if (failure === "reported") mockRefresh.mockResolvedValueOnce({ ok: false });
         else mockRefresh.mockRejectedValueOnce(new Error("Disk unavailable"));
-        createAgentSessionManager({} as App, plugin);
+        createAgentSessionManager({} as App, plugin, createAgentSessionView());
         await mockManager.registerPreload.mock.calls[0][1];
         expect(mockManager.preloadModels).toHaveBeenCalledWith("claude");
       }
     );
 
     it(`settles new-agent skills before refreshing that agent's installation ${ISSUE}`, async () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
       await mockManager.registerPreload.mock.calls[0][1];
       const gate = deferred();
       const handled = deferred();
@@ -285,7 +317,7 @@ describe("agentMode", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 offers an OpenCode reload after a builtin skill opt-out is reconciled and changes its system prompt", async () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
       await mockManager.registerPreload.mock.calls[0][1];
       const reconciled = deferred();
       const noted = deferred();
@@ -313,7 +345,7 @@ describe("agentMode", () => {
     });
 
     it(`refreshes a spawn-config backend when a model's published effort levels change ${LINEUP_ISSUE}`, () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
 
       emitSettingsChange(
         settingsWith({ reasoning: true, reasoningEfforts: ["none", "low", "high"] }),
@@ -328,7 +360,7 @@ describe("agentMode", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 offers an OpenCode reload when enabled model tool support changes", () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
 
       emitSettingsChange(settingsWith({ toolCall: true }), settingsWith({ toolCall: false }));
 
@@ -339,7 +371,7 @@ describe("agentMode", () => {
     });
 
     it(`leaves a running agent alone when only a model's display metadata changes ${LINEUP_ISSUE}`, () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
 
       emitSettingsChange(
         settingsWith({ reasoning: true, description: "A frontier open model." }),
@@ -351,7 +383,7 @@ describe("agentMode", () => {
     });
 
     it(`offers an OpenCode reload when its enabled models change ${RELOAD_ISSUE}`, async () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
 
       await plugin.modelManagement.backendConfigRegistry.disableModel("opencode", "configured-1");
 
@@ -363,7 +395,7 @@ describe("agentMode", () => {
     });
 
     it(`does not offer an OpenCode reload when a Claude model is disabled or re-enabled ${RELOAD_ISSUE}`, async () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
 
       await plugin.modelManagement.backendConfigRegistry.disableModel("claude", "claude-haiku");
       expect(plugin.modelManagement.backendConfigRegistry.get("claude").enabledModels).toEqual([]);
@@ -374,7 +406,7 @@ describe("agentMode", () => {
     });
 
     it(`ignores model metadata changes outside OpenCode's enabled list ${RELOAD_ISSUE}`, () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
       const prev = settingsWith({ reasoning: true });
       const next = {
         ...prev,
@@ -399,7 +431,7 @@ describe("agentMode", () => {
         configuredModelId: "native-model",
         providerId: "native",
       });
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
 
       await plugin.modelManagement.backendConfigRegistry.enableModel("opencode", "native-model");
       await plugin.modelManagement.backendConfigRegistry.disableModel("opencode", "native-model");
@@ -428,7 +460,7 @@ describe("agentMode", () => {
           }
         );
         mockSettings.backends.opencode!.enabledModels.push("native-model");
-        createAgentSessionManager({} as App, plugin);
+        createAgentSessionManager({} as App, plugin, createAgentSessionView());
         const notifyProvider = jest.mocked(plugin.modelManagement.providerRegistry.subscribe).mock
           .calls[0][0];
 
@@ -446,7 +478,7 @@ describe("agentMode", () => {
     );
 
     it(`offers a reload when an injected provider is removed ${RELOAD_ISSUE}`, () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
 
       emitSettingsChange(mockSettings, { ...mockSettings, providers: {} });
 
@@ -457,7 +489,7 @@ describe("agentMode", () => {
     });
 
     it(`routes a Claude environment change only to Claude ${RELOAD_ISSUE}`, () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
       const next = {
         ...mockSettings,
         agentMode: {
@@ -476,7 +508,7 @@ describe("agentMode", () => {
     });
 
     it(`retains only previously ready agents during compatibility checks ${ISSUE}`, async () => {
-      createAgentSessionManager({} as App, plugin);
+      createAgentSessionManager({} as App, plugin, createAgentSessionView());
       await mockManager.registerPreload.mock.calls[0][1];
       mockStates.claude = { kind: "checking", source: "custom" };
       mockStates.opencode = { kind: "checking", source: "custom" };
@@ -537,7 +569,38 @@ describe("agentMode", () => {
     });
   });
 
+  describe("createAgentSessionView()", () => {
+    it("starts on the global scope with no tab shown https://github.com/Brevilabs/obsidian-copilot-private/issues/612", () => {
+      expect(createAgentSessionView().getState()).toEqual({
+        activeTabId: null,
+        projectScope: "__global__",
+      });
+    });
+  });
+
   describe("createAgentSessionClient()", () => {
+    it("reports the tab the panel shows to the host as its focus, and moves with the shared tab set https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+      const sessions = [fakeSession("s1"), fakeSession("s2")];
+      const manager = hostableManager();
+      manager.getSessions = () => sessions;
+      manager.getTabSessions = () => sessions;
+      manager.getSession = (id) => sessions.find((session) => session.internalId === id) ?? null;
+      const host = createAgentSessionHost(
+        {} as App,
+        { manifest: { version: "9.9.9" } } as CopilotPlugin,
+        manager
+      );
+      const view = createAgentSessionView();
+      const client = createAgentSessionClient(host, view);
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+      expect(view.getActiveTabId()).toBe("s2");
+      expect(host.isSessionFocused("s2")).toBe(true);
+      expect(host.isSessionFocused("s1")).toBe(false);
+      client.dispose();
+      host.dispose();
+    });
+
     it("connects the desktop panel to the host and receives the tab set https://github.com/Brevilabs/obsidian-copilot-private/issues/611", async () => {
       const manager = hostableManager();
       const host = createAgentSessionHost(
@@ -545,7 +608,8 @@ describe("agentMode", () => {
         { manifest: { version: "9.9.9" } } as CopilotPlugin,
         manager
       );
-      const client = createAgentSessionClient(host);
+      const view = createAgentSessionView();
+      const client = createAgentSessionClient(host, view);
 
       await new Promise((resolve) => window.setTimeout(resolve, 0));
 

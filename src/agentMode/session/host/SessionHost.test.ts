@@ -375,6 +375,44 @@ describe("SessionHost", () => {
     });
   });
 
+  describe("focus", () => {
+    it("clears a session's attention mark when a client reports it focused", async () => {
+      const r = await rig();
+      r.one.session.markNeedsAttention();
+      await settle();
+      expect(r.client.getHost()?.tabs[0].needsAttention).toBe(true);
+      r.client.setFocus("s1");
+      await settle();
+      expect(r.client.getHost()?.tabs[0].needsAttention).toBe(false);
+    });
+
+    it("reports a session focused only while some connected client shows it https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+      const r = await rig();
+      const other = createFaultyClient(r.host);
+      await settle();
+      expect(r.host.isSessionFocused("s1")).toBe(false);
+      r.client.setFocus("s1");
+      other.client.setFocus("s1");
+      await settle();
+      expect(r.host.isSessionFocused("s1")).toBe(true);
+      r.client.setFocus(null);
+      await settle();
+      expect(r.host.isSessionFocused("s1")).toBe(true);
+      other.client.dispose();
+      await settle();
+      expect(r.host.isSessionFocused("s1")).toBe(false);
+    });
+
+    it("ignores a focus frame with a malformed session id", async () => {
+      const manager = new FakeManager();
+      const host = buildHost(manager);
+      const connection = host.connect(() => {});
+      connection.receive({ type: "hello", v: PROTOCOL_VERSION, app: "x" });
+      connection.receive({ type: "focus", sessionId: 7 as unknown as string });
+      expect(host.isSessionFocused("7")).toBe(false);
+    });
+  });
+
   describe("catalog and flags", () => {
     async function catalogRig() {
       const catalog = new FakeCatalog();
