@@ -5,11 +5,21 @@ import { renderHook } from "@testing-library/react";
 
 jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
 
+const mockNotice = jest.fn();
+jest.mock("obsidian", () => ({
+  Notice: function Notice(message: string) {
+    mockNotice(message);
+  },
+}));
+
 const SESSION_ID = "s1";
 
 describe("useSessionCommands", () => {
   describe("useSessionCommands()", () => {
-    beforeEach(() => jest.mocked(logWarn).mockClear());
+    beforeEach(() => {
+      jest.mocked(logWarn).mockClear();
+      mockNotice.mockClear();
+    });
 
     it("sends each pane action as the matching command for its session", async () => {
       const fixture = createFixtureClient({ sessionId: SESSION_ID });
@@ -51,6 +61,7 @@ describe("useSessionCommands", () => {
         value: undefined,
       });
       expect(logWarn).not.toHaveBeenCalled();
+      expect(mockNotice).not.toHaveBeenCalled();
     });
 
     it("stays silent when another device already answered the prompt (stale)", async () => {
@@ -65,6 +76,7 @@ describe("useSessionCommands", () => {
         code: "stale",
       });
       expect(logWarn).not.toHaveBeenCalled();
+      expect(mockNotice).not.toHaveBeenCalled();
     });
 
     it("warns with the failure code when the host rejects a command for another reason", async () => {
@@ -78,6 +90,20 @@ describe("useSessionCommands", () => {
 
       expect(logWarn).toHaveBeenCalledWith(
         "[AgentMode] resolvePermission command failed (invalid): Unknown option nope"
+      );
+    });
+
+    it("tells the user their action did not go through when the host rejects a command", async () => {
+      const fixture = createFixtureClient({
+        sessionId: SESSION_ID,
+        onCommand: () => ({ ok: false, code: "failed", message: "disconnected" }),
+      });
+      const { result } = renderHook(() => useSessionCommands(fixture.client, SESSION_ID));
+
+      await result.current.resolvePlan("plan-1", "approve");
+
+      expect(mockNotice).toHaveBeenCalledWith(
+        "Could not send your answer to the agent (disconnected). Try again."
       );
     });
   });

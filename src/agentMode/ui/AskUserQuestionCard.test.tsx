@@ -1,6 +1,6 @@
 import { AskUserQuestionCard } from "@/agentMode/ui/AskUserQuestionCard";
 import type { AskUserQuestionPrompt, SessionId } from "@/agentMode/session/types";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 const SESSION_ID = "s1" as SessionId;
@@ -271,6 +271,21 @@ describe("AskUserQuestionCard", () => {
       fireEvent.click(submitButton());
 
       expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, { mcp_install: "Skip" });
+    });
+
+    it("re-enables Submit and Cancel when the command is rejected so the user can retry", async () => {
+      const onResolve = jest
+        .fn()
+        .mockResolvedValue({ ok: false, code: "failed", message: "disconnected" });
+      renderCard(makeRequest([{ question: "Continue?", options: [{ label: "Yes" }] }]), onResolve);
+
+      fireEvent.click(screen.getByRole("radio", { name: "Yes" }));
+      fireEvent.click(submitButton());
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(true);
+      await act(async () => undefined);
+
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(false);
+      expect((cancelButton() as HTMLButtonElement).disabled).toBe(false);
     });
   });
 });

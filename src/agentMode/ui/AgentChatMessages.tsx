@@ -238,17 +238,13 @@ const AgentChatMessages = memo(
               {pendingQuestion ? (
                 <AskUserQuestionCard
                   request={pendingQuestion}
-                  onResolve={(requestId, answers) =>
-                    void commands.answerQuestion(requestId, answers)
-                  }
+                  onResolve={commands.answerQuestion}
                 />
               ) : pendingPermission ? (
                 <ToolPermissionCard
                   request={pendingPermission}
                   toolName={pendingToolName}
-                  onResolve={(toolCallId, optionId) =>
-                    void commands.resolvePermission(toolCallId, optionId)
-                  }
+                  onResolve={commands.resolvePermission}
                 />
               ) : null}
             </div>

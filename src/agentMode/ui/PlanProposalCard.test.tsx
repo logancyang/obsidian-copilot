@@ -1,3 +1,4 @@
+import type { CommandResult } from "@/agentMode/protocol/commands";
 import type { CurrentPlan, SessionId } from "@/agentMode/session/types";
 import {
   AgentPaneCapabilitiesProvider,
@@ -21,11 +22,14 @@ const PLAN: CurrentPlan = {
   decision: "pending",
 };
 
+const REJECTED: CommandResult = { ok: false, code: "failed", message: "disconnected" };
+
 function renderCard(
   capabilities: AgentPaneCapabilities = NO_PANE_CAPABILITIES,
-  plan: CurrentPlan = PLAN
+  plan: CurrentPlan = PLAN,
+  onCommand?: () => CommandResult
 ) {
-  const fixture = createFixtureClient({ sessionId: SESSION_ID, session: { plan } });
+  const fixture = createFixtureClient({ sessionId: SESSION_ID, session: { plan }, onCommand });
   render(
     <AgentPaneCapabilitiesProvider value={capabilities}>
       <PlanProposalCard plan={plan} client={fixture.client} sessionId={SESSION_ID} />
@@ -106,6 +110,28 @@ describe("PlanProposalCard", () => {
       expect(screen.getByText("Approved")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Reject" })).toBeNull();
+    });
+
+    it("keeps the plan preview open and the controls usable when an approval is rejected", async () => {
+      const closePlanPreview = jest.fn();
+      renderCard({ ...NO_PANE_CAPABILITIES, closePlanPreview }, PLAN, () => REJECTED);
+
+      fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+      await act(async () => undefined);
+
+      expect(closePlanPreview).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Approve" })).toHaveProperty("disabled", false);
+    });
+
+    it("keeps the typed feedback when the feedback decision is rejected", async () => {
+      renderCard(NO_PANE_CAPABILITIES, PLAN, () => REJECTED);
+      const field = screen.getByPlaceholderText("Give feedback to redirect the plan…");
+
+      fireEvent.change(field, { target: { value: "Cover the risks first" } });
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      await act(async () => undefined);
+
+      expect((field as HTMLTextAreaElement).value).toBe("Cover the risks first");
     });
   });
 });

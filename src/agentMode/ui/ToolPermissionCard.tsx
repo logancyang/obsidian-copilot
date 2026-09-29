@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { extractDiffContents, formatAgentInput, renderDiff } from "@/agentMode/ui/diffRender";
+import type { CommandResult } from "@/agentMode/protocol/commands";
 import type {
   PermissionOption,
   PermissionOptionKind,
@@ -12,7 +13,11 @@ import React, { useMemo, useState } from "react";
 
 interface ToolPermissionCardProps {
   request: PermissionPrompt;
-  onResolve: (toolCallId: string, optionId: string) => void;
+  /**
+   * A rejected command re-enables the actions so the user can answer again.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/611
+   */
+  onResolve: (toolCallId: string, optionId: string) => Promise<CommandResult> | void;
   /**
    * Name of the tool as the chat already shows it. Some agents send only the
    * tool's argument as the request title (OpenCode's web search sends the bare
@@ -39,10 +44,11 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
   const namedTool =
     toolName && !title.toLowerCase().includes(toolName.toLowerCase()) ? toolName : undefined;
 
-  const choose = (optionId: string) => {
+  const choose = async (optionId: string) => {
     if (busy) return;
     setBusy(true);
-    onResolve(toolCall.toolCallId, optionId);
+    const result = await onResolve(toolCall.toolCallId, optionId);
+    if (result && !result.ok) setBusy(false);
   };
 
   return (
@@ -105,7 +111,7 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
                 size="sm"
                 className="tw-h-auto tw-min-h-6 tw-min-w-0 tw-max-w-full tw-whitespace-normal"
                 disabled={busy}
-                onClick={() => choose(option.optionId)}
+                onClick={() => void choose(option.optionId)}
               >
                 <span className="tw-min-w-0 tw-break-all">{optionNames[index]}</span>
               </Button>

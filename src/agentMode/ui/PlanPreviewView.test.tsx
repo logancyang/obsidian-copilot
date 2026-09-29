@@ -1,3 +1,4 @@
+import type { CommandResult } from "@/agentMode/protocol/commands";
 import type { CurrentPlan, SessionId } from "@/agentMode/session/types";
 import { createFixtureClient } from "@/agentMode/ui/agentPane.fixtures";
 import { PlanPreviewRoot, PLAN_PREVIEW_VIEW_TYPE } from "@/agentMode/ui/PlanPreviewView";
@@ -32,8 +33,12 @@ function makeApp(detach = jest.fn()) {
   return { app, detach };
 }
 
-function renderPreview(plan: CurrentPlan | null, detach?: jest.Mock) {
-  const fixture = createFixtureClient({ sessionId: SESSION_ID, session: { plan } });
+function renderPreview(
+  plan: CurrentPlan | null,
+  detach?: jest.Mock,
+  onCommand?: () => CommandResult
+) {
+  const fixture = createFixtureClient({ sessionId: SESSION_ID, session: { plan }, onCommand });
   const { app, detach: detachLeaf } = makeApp(detach);
   render(
     <PlanPreviewRoot
@@ -107,6 +112,21 @@ describe("PlanPreviewView", () => {
       );
 
       expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    });
+
+    it("keeps the preview open and the decision controls visible when a decision is rejected", async () => {
+      const { detach } = renderPreview(PLAN, undefined, () => ({
+        ok: false,
+        code: "failed",
+        message: "disconnected",
+      }));
+
+      fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+      await act(async () => undefined);
+
+      expect(detach).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Reject" })).toBeTruthy();
     });
   });
 });

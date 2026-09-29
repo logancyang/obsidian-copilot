@@ -135,7 +135,11 @@ export const PlanPreviewRoot: React.FC<PlanPreviewRootProps> = ({ app, state }) 
     setDecided(true);
     if (!currentPlan) return;
     const proposalId = currentPlan.id;
-    await commands.resolvePlan(proposalId, decision);
+    const result = await commands.resolvePlan(proposalId, decision);
+    if (!result.ok) {
+      setDecided(false);
+      return;
+    }
     if (decision === "approve") closePlanPreview(app, proposalId);
   };
 

@@ -48,12 +48,13 @@ export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, client
     }
   };
 
-  const decide = async (decision: PlanDecisionAction, text?: string) => {
-    if (busy) return;
+  const decide = async (decision: PlanDecisionAction, text?: string): Promise<boolean> => {
+    if (busy) return false;
     setBusy(true);
     try {
-      await commands.resolvePlan(plan.id, decision, text);
-      if (decision === "approve") closePlanPreview?.(plan.id);
+      const result = await commands.resolvePlan(plan.id, decision, text);
+      if (result.ok && decision === "approve") closePlanPreview?.(plan.id);
+      return result.ok;
     } finally {
       setBusy(false);
     }
@@ -62,8 +63,7 @@ export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, client
   const handleFeedbackSubmit = async () => {
     const text = feedback.trim();
     if (!text) return;
-    await decide("feedback", text);
-    setFeedback("");
+    if (await decide("feedback", text)) setFeedback("");
   };
 
   return (
