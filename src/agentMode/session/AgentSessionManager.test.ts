@@ -2882,49 +2882,6 @@ describe("AgentSessionManager.applyModeTo", () => {
   });
 });
 
-describe("AgentSessionManager.applySelection", () => {
-  it("no-ops without a shown session or when the shown session runs another agent", async () => {
-    const mgr = buildManager();
-    await expect(
-      mgr.applySelection({ effort: "high" }, { expectBackendId: "opencode" })
-    ).resolves.toBeUndefined();
-    await createShown(mgr);
-    await expect(
-      mgr.applySelection({ effort: "high" }, { expectBackendId: "claude" })
-    ).resolves.toBeUndefined();
-  });
-
-  it("applies to the shown session through applySelectionTo", async () => {
-    const mgr = buildManager();
-    const shown = await createShown(mgr);
-    const applyTo = jest.spyOn(mgr, "applySelectionTo").mockResolvedValue();
-    await mgr.applySelection({ effort: "high" }, { expectBackendId: "opencode" });
-    expect(applyTo).toHaveBeenCalledWith(shown.internalId, { effort: "high" });
-  });
-});
-
-describe("AgentSessionManager.applyMode", () => {
-  it("applies the mode to the shown session and persists it as the agent's default", async () => {
-    const mgr = buildManager();
-    const shown = await createShown(mgr);
-    (shown as unknown as { getState: () => unknown }).getState = () => ({
-      model: null,
-      mode: { current: "default", options: [], apply: {} },
-    });
-    (mockedSetSettings as jest.Mock).mockClear();
-    await mgr.applyMode("opencode", "plan", { kind: "setMode", nativeId: "plan-native" });
-    expect(shown.setMode).toHaveBeenCalledWith("plan-native");
-    expect(mockedSetSettings).toHaveBeenCalled();
-  });
-
-  it("no-ops when the shown session runs another agent", async () => {
-    const mgr = buildManager();
-    const shown = await createShown(mgr);
-    await mgr.applyMode("claude", "plan", { kind: "setMode", nativeId: "plan-native" });
-    expect(shown.setMode).not.toHaveBeenCalled();
-  });
-});
-
 describe("AgentSessionManager.applyModeTo (native mapping)", () => {
   function reportMode(
     session: AgentSession,

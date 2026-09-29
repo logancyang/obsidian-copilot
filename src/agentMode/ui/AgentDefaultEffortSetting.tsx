@@ -4,7 +4,7 @@ import React from "react";
 
 export interface AgentDefaultEffortSettingProps {
   value: string | null;
-  options: EffortOption[];
+  options: readonly EffortOption[];
   disabledLabel: string;
   onChange: (effort: string | null) => void;
 }

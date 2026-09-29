@@ -5,15 +5,18 @@ import type { SessionId } from "@/agentMode/session/types";
 import { useEffect } from "react";
 
 // Reads part of one session's replica and keeps that session subscribed while the caller is
-// mounted. It is null until the session's snapshot arrives. `select` must be stable across
-// renders.
+// mounted. It is null until the session's snapshot arrives, and stays null while `sessionId` is
+// null. `select` must be stable across renders.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/611
 export function useSessionSlice<T>(
   client: SessionClient,
-  sessionId: SessionId,
+  sessionId: SessionId | null,
   select: (session: SessionState, host: HostState) => T,
   eq?: (a: T, b: T) => boolean
 ): T | null {
-  useEffect(() => client.watchSession(sessionId), [client, sessionId]);
+  useEffect(
+    () => (sessionId === null ? undefined : client.watchSession(sessionId)),
+    [client, sessionId]
+  );
   return useSessionSelector(client, sessionId, select, eq);
 }

@@ -1487,16 +1487,6 @@ export class AgentSessionManager {
     this.repairDefaultEffort(session.backendId, session.getState());
   }
 
-  async applySelection(
-    patch: { baseModelId?: string; effort?: string | null },
-    opts?: { expectBackendId?: BackendId }
-  ): Promise<void> {
-    const session = this.getActiveSession();
-    if (!session) return;
-    if (opts?.expectBackendId && session.backendId !== opts.expectBackendId) return;
-    await this.applySelectionTo(session.internalId, patch);
-  }
-
   /**
    * Applies `mode` to the session `id` using the apply spec that session's backend reported for
    * it. Persisting the mode as the backend's default is a desktop-only choice made by the caller.
@@ -1507,13 +1497,6 @@ export class AgentSessionManager {
     const spec = session?.getState()?.mode?.apply[mode];
     if (!session || !spec) return;
     await this.applyModeSpecTo(session, mode, spec);
-  }
-
-  async applyMode(backendId: BackendId, mode: CopilotMode, spec: ModeApplySpec): Promise<void> {
-    const session = this.getActiveSession();
-    if (!session || session.backendId !== backendId) return;
-    await this.applyModeSpecTo(session, mode, spec);
-    await this.persistDefaultMode(backendId, mode);
   }
 
   private async applyModeSpecTo(
