@@ -1,8 +1,25 @@
+import { parseYaml } from "obsidian";
+
+const EMPTY_FRONTMATTER: Record<string, unknown> = Object.freeze({});
+
 /**
- * Tiny YAML-frontmatter helpers shared by `AgentChatPersistenceManager`. Kept
- * in their own module so the manager stays focused on persistence flow and
- * under the file-size budget. All functions are pure and side-effect free.
+ * Read complete YAML values for saved-chat loading, autosaving, and history.
+ * Folded titles and UTF-8 BOMs must survive all three paths.
+ * https://github.com/logancyang/obsidian-copilot/issues/3378
+ * @param content Saved chat note including its frontmatter and transcript.
  */
+export function splitAgentChatFrontmatter(content: string): {
+  frontmatter: Record<string, unknown>;
+  body: string;
+} {
+  const normalized = content.replace(/^\uFEFF/, "");
+  const match = normalized.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  if (!match) return { frontmatter: EMPTY_FRONTMATTER, body: content };
+  return {
+    frontmatter: (parseYaml(match[1]) ?? EMPTY_FRONTMATTER) as Record<string, unknown>,
+    body: normalized.slice(match[0].length).trim(),
+  };
+}
 
 /**
  * Escape a string for a safe YAML double-quoted value. Strips control chars
@@ -17,28 +34,6 @@ export function escapeYamlString(str: string): string {
       .replace(/\\/g, "\\\\")
       .replace(/"/g, '\\"')
   );
-}
-
-/**
- * Inverse of {@link escapeYamlString} for the values our hand-rolled
- * frontmatter parser extracts. Only handles the two escapes we emit (`\\` and
- * `\"`).
- */
-export function unescapeYamlString(str: string): string {
-  let out = "";
-  for (let i = 0; i < str.length; i++) {
-    const c = str[i];
-    if (c === "\\" && i + 1 < str.length) {
-      const next = str[i + 1];
-      if (next === "\\" || next === '"') {
-        out += next;
-        i++;
-        continue;
-      }
-    }
-    out += c;
-  }
-  return out;
 }
 
 /**

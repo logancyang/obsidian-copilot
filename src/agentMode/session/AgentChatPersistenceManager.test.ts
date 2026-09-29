@@ -1,6 +1,6 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import { patchFrontmatter, readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
+import { patchFrontmatter } from "@/utils/vaultAdapterUtils";
 import { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage } from "./types";
@@ -44,7 +44,6 @@ jest.mock("@/utils/vaultAdapterUtils", () => ({
   isInVaultCache: jest.fn(() => false),
   listMarkdownFiles: jest.fn().mockResolvedValue([]),
   patchFrontmatter: jest.fn(),
-  readFrontmatterViaAdapter: jest.fn().mockResolvedValue(null),
 }));
 
 interface FakeFile {
@@ -130,6 +129,31 @@ describe("AgentChatPersistenceManager", () => {
   beforeEach(() => {
     app = makeApp();
     manager = new AgentChatPersistenceManager(app as unknown as App);
+  });
+
+  describe("loadFile()", () => {
+    it.each([
+      ["a folded title", ""],
+      ["a BOM-prefixed folded title", "\uFEFF"],
+    ])(
+      "reopens %s with its original transcript https://github.com/logancyang/obsidian-copilot/issues/3378",
+      async (_case, prefix) => {
+        const saved = await manager.saveSession(
+          [makeMessage(USER_SENDER, "Original prompt")],
+          "opencode",
+          { label: "Useful workflow" }
+        );
+        const file = app.files.get(saved!.path)!;
+        file.contents =
+          prefix + file.contents!.replace("---\n", "---\ntopic: >-\n  Useful\n  workflow\n");
+
+        const loaded = await manager.loadFile(file as unknown as TFile);
+
+        expect(loaded.topic).toBe("Useful workflow");
+        expect(loaded.label).toBe("Useful workflow");
+        expect(loaded.messages.map((message) => message.message)).toEqual(["Original prompt"]);
+      }
+    );
   });
 
   describe("saveSession()", () => {
@@ -527,12 +551,6 @@ describe("AgentChatPersistenceManager", () => {
   });
 
   describe("usage frontmatter", () => {
-    afterEach(() => {
-      // Restore the default no-metadata behavior for the adapter helper so a
-      // per-test override (round-trip-on-omit) doesn't leak into other suites.
-      (readFrontmatterViaAdapter as jest.Mock).mockResolvedValue(null);
-    });
-
     it("round-trips a SessionUsage snapshot through save/load", async () => {
       const messages = [makeMessage(USER_SENDER, "hi")];
       const usage = {
@@ -560,21 +578,6 @@ describe("AgentChatPersistenceManager", () => {
       // the mocked prototype so the resave takes the existing-file path (where
       // usage round-trips) instead of treating it as a brand-new write.
       Object.setPrototypeOf(app.files.get(first!.path)!, TFile.prototype);
-      // Mirror production: `readExistingMeta` reads the prior file's frontmatter
-      // to round-trip fields the caller didn't re-supply. The default mock
-      // returns null (no metadata), so parse the stored file here — quote-strip
-      // matches the real adapter helper so the JSON value comes back intact.
-      (readFrontmatterViaAdapter as jest.Mock).mockImplementation(async (_app, path: string) => {
-        const raw = app.files.get(path)?.contents ?? "";
-        const yaml = raw.match(/^---\n([\s\S]*?)\n---/)?.[1];
-        if (!yaml) return null;
-        const fm: Record<string, string> = {};
-        for (const line of yaml.split("\n")) {
-          const m = line.match(/^([\w-]+):\s*(.+)/);
-          if (m) fm[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
-        }
-        return fm;
-      });
       // A save with no usage option must not drop the stored snapshot.
       const second = await manager.saveSession(messages, "claude", {
         existingPath: first!.path,

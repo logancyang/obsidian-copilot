@@ -37,7 +37,6 @@ import {
   fileToHistoryItem,
   readChatPathProjectId,
 } from "@/utils/chatHistoryUtils";
-import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "./AgentSession";
@@ -53,7 +52,7 @@ import {
   type MarkdownChatEntry,
 } from "./chatHistoryMerge";
 import { MethodUnsupportedError } from "./errors";
-import { unescapeYamlString } from "./agentChatYaml";
+import { splitAgentChatFrontmatter } from "./agentChatYaml";
 import { replayPersistedMode } from "./replayPersistedMode";
 import { applyModeSpec } from "./modeApply";
 import {
@@ -1067,10 +1066,10 @@ export class AgentSessionManager {
     if (file instanceof TFile) {
       cached = this.app.metadataCache.getFileCache(file)?.frontmatter;
     }
-    let disk: Record<string, string> | null = null;
+    let disk: Record<string, unknown> | null = null;
     if (!cached || this.pendingTitleRefreshPaths.has(fileId)) {
       try {
-        disk = await readFrontmatterViaAdapter(this.app, fileId);
+        disk = splitAgentChatFrontmatter(await this.app.vault.adapter.read(fileId)).frontmatter;
       } catch {
         if (!cached) return null;
       }
@@ -1081,8 +1080,8 @@ export class AgentSessionManager {
     if (
       disk &&
       cached &&
-      unescapeYamlString(disk.topic ?? "") === (cached.topic ?? "") &&
-      unescapeYamlString(disk.agentLabel ?? "") === (cached.agentLabel ?? "")
+      (disk.topic ?? "") === (cached.topic ?? "") &&
+      (disk.agentLabel ?? "") === (cached.agentLabel ?? "")
     ) {
       this.pendingTitleRefreshPaths.delete(fileId);
     }
@@ -1099,7 +1098,7 @@ export class AgentSessionManager {
     return {
       backendId,
       sessionId,
-      title: title ? (disk ? unescapeYamlString(title) : title) : undefined,
+      title: title || undefined,
     };
   }
 
@@ -3167,10 +3166,14 @@ export class AgentSessionManager {
 
     session.loadDisplayMessages(loaded.messages);
     session.seedSessionUsage(loaded.usage);
-    // A history rename is newer than a previously saved tab label.
+    // Prefer the explicit history title when legacy tab and history names differ.
     // https://github.com/logancyang/obsidian-copilot/issues/3378
     if (loaded.topic) session.setLabel(loaded.topic);
     else if (loaded.label) session.setLabel(loaded.label);
+    // A cleared saved title uses the same fallback in its tab and history.
+    // Keep the fallback agent-sourced so later agent titles can still replace it.
+    // https://github.com/logancyang/obsidian-copilot/issues/3378
+    else session.restoreLabel(extractChatTitle(this.app, file, {}), "agent");
     this.getSessionState(session.internalId).source = file;
     if (loaded.sessionId) {
       // Keep the native twin's recency in step with the markdown side so the

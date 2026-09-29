@@ -1358,7 +1358,7 @@ describe("AgentSessionManager", () => {
         await mgr.shutdown();
       });
       it("uses the loaded conversation file before any save https://github.com/Brevilabs/obsidian-copilot-private/issues/539", async () => {
-        const file = mockTFile({ path: "chat/Loaded.md" });
+        const file = mockTFile({ path: "chat/Loaded.md", basename: "Loaded" });
         const loadFile = jest.fn().mockResolvedValue({
           backendId: "opencode",
           projectId: GLOBAL_SCOPE,
@@ -1373,7 +1373,7 @@ describe("AgentSessionManager", () => {
       });
 
       it("reopens a history rename in the tab ahead of an older saved label https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
-        const file = mockTFile({ path: "chat/Loaded.md" });
+        const file = mockTFile({ path: "chat/Loaded.md", basename: "Loaded" });
         const loadFile = jest.fn().mockResolvedValue({
           backendId: "opencode",
           projectId: GLOBAL_SCOPE,
@@ -1385,6 +1385,30 @@ describe("AgentSessionManager", () => {
         const loaded = await mgr.loadSessionFromHistory(file);
         expect(loaded.setLabel).toHaveBeenCalledWith("Current history title");
         await mgr.shutdown();
+      });
+    });
+
+    describe("loadSessionFromHistory()", () => {
+      it("restores the filename fallback after both saved title fields are cleared https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+        const file = mockTFile({
+          path: "chat/agent__Useful_workflow.md",
+          basename: "agent__Useful_workflow",
+        });
+        const loadFile = jest.fn().mockResolvedValue({
+          backendId: "opencode",
+          projectId: GLOBAL_SCOPE,
+          messages: [{ message: "Original prompt" }],
+          topic: undefined,
+          label: undefined,
+        });
+        const mgr = buildManager({}, { loadFile } as never);
+        try {
+          const loaded = await mgr.loadSessionFromHistory(file);
+          expect(loaded.getLabel()).toBe("Useful workflow");
+          expect(loaded.getLabelSource()).toBe("agent");
+        } finally {
+          await mgr.shutdown();
+        }
       });
     });
 
@@ -3799,6 +3823,16 @@ describe("AgentSessionManager chat history aggregation", () => {
     });
     await manager.updateChatTitle(path, "");
     expect((await manager.getChatHistoryItems())[0]?.title).toBe("a");
+  });
+
+  it("shows a valid folded YAML title in hidden-folder history https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+    const { manager } = buildHistoryHarness({
+      hiddenFiles: {
+        ".copilot/chats/agent__hidden.md":
+          "---\nbackendId: opencode\ntopic: >-\n  Useful\n  workflow\n---\n",
+      },
+    });
+    expect((await manager.getChatHistoryItems())[0]?.title).toBe("Useful workflow");
   });
 
   it("shows a tab rename in an unindexed hidden save folder https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {

@@ -25,9 +25,9 @@ import {
   trashFile,
 } from "@/utils/vaultAdapterUtils";
 import { joinPosix } from "@/utils/pathUtils";
-import { parseYaml, TFile, type App } from "obsidian";
+import { TFile, type App } from "obsidian";
 import { Notice } from "obsidian";
-import { coerceProjectId, escapeYamlString, unescapeYamlString } from "./agentChatYaml";
+import { coerceProjectId, escapeYamlString, splitAgentChatFrontmatter } from "./agentChatYaml";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage, BackendId, SessionUsage } from "./types";
 
@@ -205,7 +205,11 @@ export class AgentChatPersistenceManager {
       const previousContent = (await this.app.vault.adapter.exists(preferredFileName))
         ? await this.app.vault.adapter.read(preferredFileName)
         : "";
-      const existingMeta = existingFile ? this.readExistingMeta(previousContent) : {};
+      // A rename can reach disk before Obsidian refreshes its metadata cache.
+      // https://github.com/logancyang/obsidian-copilot/issues/3378
+      const existingMeta = existingFile
+        ? this.readExistingMeta(splitAgentChatFrontmatter(previousContent).frontmatter)
+        : {};
 
       const preparedMessages = await prepareChatImagesForSave(
         this.app,
@@ -295,18 +299,19 @@ export class AgentChatPersistenceManager {
 
     const key = this.app.vault.getAbstractFileByPath(file.path) ?? file.path;
     this.loadedTranscripts.set(key, content);
-    const { frontmatter, body } = this.splitFrontmatter(content);
-    const backendId = (frontmatter.backendId ?? "").trim();
+    const { frontmatter, body } = splitAgentChatFrontmatter(content);
+    const backendId = typeof frontmatter.backendId === "string" ? frontmatter.backendId.trim() : "";
     if (!backendId) {
       throw new Error(`Missing backendId in agent chat frontmatter: ${file.path}`);
     }
-    const topic = frontmatter.topic?.trim() || undefined;
-    const label = frontmatter.agentLabel?.trim() || undefined;
-    const sessionId = frontmatter.sessionId?.trim() || undefined;
+    const meta = this.readExistingMeta(frontmatter);
+    const topic = meta.topic?.trim() || undefined;
+    const label = meta.label?.trim() || undefined;
+    const sessionId = meta.sessionId?.trim() || undefined;
     // HARD CONTRACT: absent/blank projectId → GLOBAL_SCOPE, so legacy `agent__`
     // chats stay in the global history. Never inferred from the filename.
-    const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
-    const usage = parseUsageJson(frontmatter.usage);
+    const projectId = meta.projectId ?? GLOBAL_SCOPE;
+    const usage = meta.usage;
     const messages = this.parseChatBody(body);
 
     logInfo(
@@ -355,16 +360,7 @@ export class AgentChatPersistenceManager {
     return file instanceof TFile ? file : null;
   }
 
-  private readExistingMeta(content: string): ExistingMeta {
-    // A rename can reach disk before Obsidian refreshes metadataCache.
-    // Autosave must round-trip the current topic instead of restoring its
-    // previous value from that stale cache. Full YAML parsing preserves
-    // multiline values and externally edited notes with a UTF-8 BOM.
-    // https://github.com/logancyang/obsidian-copilot/issues/3378
-    const yaml = content
-      .replace(/^\uFEFF/, "")
-      .match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
-    const current = (parseYaml(yaml ?? "") ?? {}) as Record<string, unknown>;
+  private readExistingMeta(current: Record<string, unknown>): ExistingMeta {
     const lastAccessed = current.lastAccessedAt ? Number(current.lastAccessedAt) : undefined;
     return {
       topic: typeof current.topic === "string" ? current.topic : undefined,
@@ -445,32 +441,6 @@ export class AgentChatPersistenceManager {
       });
     }
     return messages;
-  }
-
-  private splitFrontmatter(content: string): {
-    frontmatter: Record<string, string>;
-    body: string;
-  } {
-    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    if (!match) return { frontmatter: {}, body: content };
-    const frontmatter: Record<string, string> = {};
-    for (const line of match[1].split("\n")) {
-      const m = line.match(/^(\w+):\s*(.+)/);
-      if (!m) continue;
-      const raw = m[2].trim();
-      // Unquote and unescape: only double-quoted values were escaped on save,
-      // so single-quoted / unquoted values are returned verbatim.
-      let value: string;
-      if (raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2) {
-        value = unescapeYamlString(raw.slice(1, -1));
-      } else if (raw.startsWith("'") && raw.endsWith("'") && raw.length >= 2) {
-        value = raw.slice(1, -1);
-      } else {
-        value = raw;
-      }
-      frontmatter[m[1]] = value;
-    }
-    return { frontmatter, body: content.slice(match[0].length).trim() };
   }
 
   private generateFileName(
