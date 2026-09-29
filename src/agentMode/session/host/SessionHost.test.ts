@@ -413,6 +413,17 @@ describe("SessionHost", () => {
   });
 
   describe("dispose()", () => {
+    it("closes connected clients so they go offline and fail later commands with disconnected", async () => {
+      const r = await rig();
+      r.host.dispose();
+      await settle();
+      expect(r.client.getConnection()).not.toBe("live");
+      await expect(r.client.command({ name: "cancel", sessionId: "s1" })).resolves.toMatchObject({
+        ok: false,
+        message: "disconnected",
+      });
+    });
+
     it("detaches from the manager and sessions so later changes produce no frames", async () => {
       const r = await rig();
       r.host.dispose();

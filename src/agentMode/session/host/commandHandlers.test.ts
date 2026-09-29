@@ -269,6 +269,9 @@ describe("commandHandlers", () => {
       ["stale", { requestId: "gone", answers: {} }],
       ["invalid", { requestId: "q1", answers: { "Not asked": "A" } }],
       ["invalid", { requestId: "q1", answers: { "Which?": 3 as unknown as string } }],
+      ["invalid", { requestId: "q1", answers: undefined as never }],
+      ["invalid", { requestId: "q1", answers: null as never }],
+      ["invalid", { requestId: "q1", answers: ["A"] as never }],
     ])("answerQuestion answers %s and leaves the question pending (%#)", async (code, args) => {
       const t = setup();
       t.one.backend.holdPrompt();

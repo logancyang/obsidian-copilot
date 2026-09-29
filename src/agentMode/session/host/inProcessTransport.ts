@@ -24,6 +24,14 @@ export function createInProcessTransport(
     for (const listener of [...openListeners]) listener(open);
   };
 
+  const close = (): void => {
+    if (closed) return;
+    closed = true;
+    connection?.close();
+    connection = null;
+    if (isOpen) setOpen(false);
+  };
+
   const hostConnection = (): HostConnection => {
     connection ??= host.connect((frame) => {
       const delivered = carry(frame);
@@ -31,7 +39,7 @@ export function createInProcessTransport(
         if (closed) return;
         for (const listener of [...frameListeners]) listener(delivered);
       });
-    });
+    }, close);
     return connection;
   };
 
@@ -58,12 +66,6 @@ export function createInProcessTransport(
         openListeners.delete(cb);
       };
     },
-    close() {
-      if (closed) return;
-      closed = true;
-      connection?.close();
-      connection = null;
-      if (isOpen) setOpen(false);
-    },
+    close,
   };
 }

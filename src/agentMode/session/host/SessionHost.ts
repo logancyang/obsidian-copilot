@@ -55,6 +55,7 @@ interface Binding {
 
 interface Connection {
   send: (frame: ServerFrame) => void;
+  onClose?: () => void;
   sent: Map<Scope, number>;
   greeted: boolean;
 }
@@ -89,8 +90,8 @@ export class SessionHost {
     return this.hostId;
   }
 
-  connect(send: (frame: ServerFrame) => void): HostConnection {
-    const connection: Connection = { send, sent: new Map(), greeted: false };
+  connect(send: (frame: ServerFrame) => void, onClose?: () => void): HostConnection {
+    const connection: Connection = { send, onClose, sent: new Map(), greeted: false };
     this.connections.add(connection);
     return {
       receive: (frame) => this.receive(connection, frame),
@@ -115,6 +116,7 @@ export class SessionHost {
     this.unsubscribeManager();
     for (const binding of this.bindings.values()) binding.release();
     this.bindings.clear();
+    for (const connection of [...this.connections]) connection.onClose?.();
     this.connections.clear();
     if (this.flushTimer !== null) window.clearTimeout(this.flushTimer);
     this.flushTimer = null;

@@ -169,11 +169,15 @@ function answerQuestionCommand(
     .find((candidate) => candidate.requestId === command.requestId);
   if (!request) return failure("stale", "That question is no longer pending");
   const allowedKeys = new Set(request.questions.map((q) => q.answerKey ?? q.question));
-  const entries = Object.entries(command.answers ?? {});
+  const { answers } = command;
+  if (typeof answers !== "object" || answers === null || Array.isArray(answers)) {
+    return failure("invalid", "Answers must be an object keyed by question");
+  }
+  const entries = Object.entries(answers);
   if (entries.some(([key, value]) => !allowedKeys.has(key) || typeof value !== "string")) {
     return failure("invalid", "Answers must match the question keys and be strings");
   }
-  target.ui.resolveAskUserQuestion(command.requestId, command.answers);
+  target.ui.resolveAskUserQuestion(command.requestId, answers);
   return ok(undefined);
 }
 
