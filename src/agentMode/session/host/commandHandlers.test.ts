@@ -498,6 +498,20 @@ describe("commandHandlers", () => {
       });
     });
 
+    it("applySelection to another agent's model answers stale and keeps the chat when the session already has messages https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+      const t = setup();
+      await t.run({ name: "send", sessionId: "s1", text: "hello" });
+      t.manager.calls.length = 0;
+      const { result } = await t.run({
+        name: "applySelection",
+        sessionId: "s1",
+        backendId: "codex",
+        baseModelId: "gpt-5",
+      });
+      expect(result).toMatchObject({ ok: false, code: "stale" });
+      expect(t.manager.calls).toEqual([]);
+    });
+
     it("applySelection with only an effort for another agent answers stale https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
       const t = setup();
       const { result } = await t.run({

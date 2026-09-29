@@ -317,6 +317,12 @@ async function applySelectionCommand(
     // to seed and means the client was looking at a session that has since been replaced.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/612
     if (baseModelId === undefined) return failure("stale", "The session's agent changed");
+    // A chat cannot change agents once it holds messages. The pick was drawn while the tab was
+    // empty and another client has sent a message since, so replacing would drop that chat.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+    if (session.hasUserVisibleMessages()) {
+      return failure("stale", "A chat that has messages cannot change agents");
+    }
     const created = await ctx.manager.replaceSessionInPlace(session.internalId, backendId, {
       preserveChatInput: true,
       seedSelection: { baseModelId, effort: effort ?? null },
