@@ -2603,6 +2603,28 @@ describe("AgentSessionManager.subscribe / shutdown", () => {
     expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
   });
 
+  it("shutdown keeps the recorded prompt of a turn it cancels (https://github.com/Brevilabs/obsidian-copilot-private/issues/607)", async () => {
+    const storage = new Map<string, unknown>();
+    const app = buildApp() as unknown as {
+      loadLocalStorage: jest.Mock;
+      saveLocalStorage: jest.Mock;
+    };
+    app.loadLocalStorage = jest.fn((key: string) => storage.get(key) ?? null);
+    app.saveLocalStorage = jest.fn((key: string, value: unknown) => {
+      if (value === null) storage.delete(key);
+      else storage.set(key, value);
+    });
+    const mgr = buildManager({}, undefined, app as unknown as App);
+    await mgr.createSession();
+    const journal = sessionCreateSpy.mock.calls[0][0].turnJournal!;
+    journal.record("copilot-agent-session://opencode/s-1", { text: "in flight" });
+
+    await mgr.shutdown();
+    journal.clear("copilot-agent-session://opencode/s-1");
+
+    expect([...storage.values()].join()).toContain("in flight");
+  });
+
   it("backend exit drops every session and surfaces lastError", async () => {
     const mgr = buildManager();
     const listener = jest.fn();
@@ -3312,6 +3334,7 @@ describe("AgentSessionManager chat history aggregation", () => {
     installState?: InstallState;
     createBackendProcess?: jest.Mock;
     applyInitialSessionConfig?: BackendDescriptor["applyInitialSessionConfig"];
+    journal?: Record<string, unknown>;
   }) {
     const frontmatterByPath = opts?.files ?? {};
     const hiddenByPath = opts?.hiddenFiles ?? {};
@@ -3344,6 +3367,12 @@ describe("AgentSessionManager chat history aggregation", () => {
         on: jest.fn(() => ({}) as never),
         offref: jest.fn(),
       },
+      loadLocalStorage: jest.fn((key: string) =>
+        key === "copilot:agent-turn-journal:v1" && opts?.journal
+          ? JSON.stringify(opts.journal)
+          : null
+      ),
+      saveLocalStorage: jest.fn(),
     } as unknown as App;
     const plugin = {
       manifest: { version: "1.0.0" },
@@ -3598,6 +3627,31 @@ describe("AgentSessionManager chat history aggregation", () => {
 
       await expect(manager.loadNativeSessionFromHistory("codex", liveId)).rejects.toThrow();
       expect(manager.getActiveSession()).toBe(session);
+    });
+
+    it("marks a chat opened from history as interrupted when its turn was still recorded at shutdown (https://github.com/Brevilabs/obsidian-copilot-private/issues/607)", async () => {
+      const backend = {
+        ...makeMockBackendProcess(),
+        loadSession: jest.fn(async () => {
+          throw new MethodUnsupportedError("session/load");
+        }),
+        resumeSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+          sessionId,
+          state: { model: null, mode: null },
+        })),
+      };
+      const { manager } = buildHistoryHarness({
+        createBackendProcess: jest.fn(() => backend),
+        journal: {
+          [buildNativeChatId("opencode", "cut-off-chat")]: { text: "Refactor the parser" },
+        },
+      });
+
+      const interrupted = await manager.loadNativeSessionFromHistory("opencode", "cut-off-chat");
+      const finished = await manager.loadNativeSessionFromHistory("opencode", "finished-chat");
+
+      expect(interrupted.getInterruptedTurn()).toMatchObject({ text: "Refactor the parser" });
+      expect(finished.getInterruptedTurn()).toBeNull();
     });
 
     it("applies persisted backend config and mode before returning a resumed session", async () => {

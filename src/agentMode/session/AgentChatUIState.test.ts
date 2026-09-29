@@ -1,4 +1,9 @@
-import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
+import {
+  AgentChatUIState,
+  RESUME_INTERRUPTED_TURN_PROMPT,
+} from "@/agentMode/session/AgentChatUIState";
+import { mockTFile } from "@/__tests__/mockObsidian";
+import type { RecordedPrompt } from "@/agentMode/session/InterruptedTurnJournal";
 import { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendDescriptor } from "@/agentMode/session/descriptor";
 import type {
@@ -231,6 +236,79 @@ describe("AgentChatUIState", () => {
       review.finishFirstTurn();
       await review.firstTurn;
       expect(review.chat.isTurnInFlight()).toBe(false);
+    });
+  });
+
+  describe("interrupted turn actions", () => {
+    function interruptedChat(prompt: RecordedPrompt = { text: "Refactor the parser" }) {
+      const promptMock = jest.fn().mockResolvedValue({ stopReason: "end_turn" });
+      const backend = {
+        isRunning: () => true,
+        onExit: () => () => undefined,
+        registerSessionHandler: () => () => undefined,
+        prompt: promptMock,
+      } as unknown as BackendProcess;
+      const session = new AgentSession({
+        backend,
+        backendSessionId: "claude-session",
+        internalId: "interrupted",
+        backendId: "claude",
+      });
+      session.setInterruptedTurn(prompt);
+      return { chat: new AgentChatUIState(session), session, promptMock };
+    }
+
+    it("exposes the interrupted prompt and notifies subscribers when it changes", () => {
+      const { chat, session } = interruptedChat();
+      const listener = jest.fn();
+      chat.subscribe(listener);
+
+      session.setInterruptedTurn(null);
+
+      expect(listener).toHaveBeenCalled();
+      expect(chat.getInterruptedTurn()).toBeNull();
+    });
+
+    it("Resume asks the agent to continue and clears the interrupted mark", async () => {
+      const { chat, promptMock } = interruptedChat();
+
+      const resumed = chat.resumeInterruptedTurn();
+      await Promise.resolve();
+
+      expect(resumed).toBeUndefined();
+      expect(promptMock).toHaveBeenCalledWith({
+        sessionId: "claude-session",
+        prompt: [{ type: "text", text: RESUME_INTERRUPTED_TURN_PROMPT }],
+      });
+      expect(chat.getInterruptedTurn()).toBeNull();
+    });
+
+    it("Retry re-sends the recorded prompt with its context and images", async () => {
+      const images = [{ type: "image" as const, mimeType: "image/png", data: "aGVsbG8=" }];
+      const { chat, promptMock } = interruptedChat({
+        text: "Describe this",
+        context: { notes: [mockTFile({ path: "notes/spec.md" })], urls: [] },
+        promptContent: images,
+      });
+
+      chat.retryInterruptedTurn();
+      await Promise.resolve();
+
+      const sent = promptMock.mock.calls[0][0].prompt;
+      expect(sent[0].text).toContain("Describe this");
+      expect(sent[0].text).toContain("notes/spec.md");
+      expect(sent.slice(1)).toEqual(images);
+      expect(chat.getInterruptedTurn()).toBeNull();
+    });
+
+    it("Retry does nothing when no turn is marked interrupted", () => {
+      const { chat, promptMock } = interruptedChat();
+      chat.retryInterruptedTurn();
+      promptMock.mockClear();
+
+      chat.retryInterruptedTurn();
+
+      expect(promptMock).not.toHaveBeenCalled();
     });
   });
 });

@@ -19,6 +19,7 @@ interface FakeBackendState {
   currentTodoList?: AgentTodoListEntry[] | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
+  interruptedTurn: { text: string } | null;
 }
 
 function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
@@ -31,6 +32,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     currentTodoList: initial.currentTodoList ?? null,
     pendingToolPermissions: initial.pendingToolPermissions ?? [],
     pendingAskUserQuestions: initial.pendingAskUserQuestions ?? [],
+    interruptedTurn: initial.interruptedTurn ?? null,
   };
   const listeners = new Set<() => void>();
 
@@ -47,6 +49,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     getCurrentTodoList: () => state.currentTodoList ?? null,
     getPendingToolPermissions: () => state.pendingToolPermissions,
     getPendingAskUserQuestions: () => state.pendingAskUserQuestions,
+    getInterruptedTurn: () => state.interruptedTurn,
   } as unknown as AgentChatBackend;
 
   return {
@@ -70,6 +73,19 @@ describe("useAgentChatRuntimeState", () => {
     expect(result.current.hasPendingPlanPermission).toBe(false);
     expect(result.current.currentPlan).toBeNull();
     expect(result.current.pendingToolPermissions).toEqual([]);
+  });
+
+  it("exposes whether the chat has an interrupted turn", () => {
+    const fake = makeFakeBackend({ interruptedTurn: { text: "cut off" } });
+    const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
+    expect(result.current.hasInterruptedTurn).toBe(true);
+
+    act(() => {
+      fake.state.interruptedTurn = null;
+      fake.emit();
+    });
+
+    expect(result.current.hasInterruptedTurn).toBe(false);
   });
 
   it("shows an externally started plan implementation as running until the turn finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", () => {

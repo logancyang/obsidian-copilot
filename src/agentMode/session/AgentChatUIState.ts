@@ -15,7 +15,10 @@ import type {
   PlanUsage,
   SessionUsage,
 } from "@/agentMode/session/types";
+import type { RecordedPrompt } from "@/agentMode/session/InterruptedTurnJournal";
 import type { MessageContext } from "@/types/message";
+
+export const RESUME_INTERRUPTED_TURN_PROMPT = "Continue from where you left off.";
 
 export class AgentChatUIState implements AgentChatBackend {
   private listeners = new Set<() => void>();
@@ -28,6 +31,7 @@ export class AgentChatUIState implements AgentChatBackend {
       onModelChanged: () => this.notifyListeners(),
       onCurrentPlanChanged: () => this.notifyListeners(),
       onCurrentTodoListChanged: () => this.notifyListeners(),
+      onInterruptedTurnChanged: () => this.notifyListeners(),
     });
   }
 
@@ -103,6 +107,20 @@ export class AgentChatUIState implements AgentChatBackend {
     // loading flag, so the session remains the authority for active work.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/41
     return status === "running" || status === "awaiting_permission";
+  }
+
+  getInterruptedTurn(): RecordedPrompt | null {
+    return this.session.getInterruptedTurn();
+  }
+
+  resumeInterruptedTurn(): void {
+    this.sendMessage(RESUME_INTERRUPTED_TURN_PROMPT);
+  }
+
+  retryInterruptedTurn(): void {
+    const prompt = this.session.getInterruptedTurn();
+    if (!prompt) return;
+    this.sendMessage(prompt.text, prompt.context, prompt.promptContent, prompt.mentionedAgents);
   }
 
   getBackendState(): BackendState | null {

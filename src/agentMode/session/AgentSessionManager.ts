@@ -37,6 +37,7 @@ import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "./AgentSession";
+import { InterruptedTurnJournal } from "./InterruptedTurnJournal";
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
@@ -255,6 +256,7 @@ export class AgentSessionManager {
   private readonly defaultApplyChains = new Map<string, Promise<void>>();
   private readonly fanoutOrchestrator: FanoutOrchestrator;
   private readonly settingsUnsub: () => void;
+  private readonly turnJournal: InterruptedTurnJournal;
 
   private getSessionState(internalId: string) {
     let entry = this.sessionState.get(internalId);
@@ -274,6 +276,7 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager is desktop only");
     }
     this.preloader = opts.modelPreloader;
+    this.turnJournal = new InterruptedTurnJournal(app);
     this.drafts = new AgentInputDraftStore(app, (chatInputId) =>
       this.getLiveChatInputIds().includes(chatInputId)
     );
@@ -879,6 +882,7 @@ export class AgentSessionManager {
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getApp: () => this.app,
+      turnJournal: this.turnJournal,
       contextReady,
       ...(projectId !== GLOBAL_SCOPE
         ? {
@@ -1910,6 +1914,7 @@ export class AgentSessionManager {
   async shutdown(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
+    this.turnJournal.seal();
     this.settingsUnsub();
     this.projectRecordsUnsubscriber?.();
     this.projectRecordsUnsubscriber = undefined;
@@ -2240,6 +2245,7 @@ export class AgentSessionManager {
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (id) => this.resolveDescriptor(id).displayName,
       getApp: () => this.app,
+      turnJournal: this.turnJournal,
       ...(projectId !== GLOBAL_SCOPE
         ? {
             getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
@@ -2272,6 +2278,8 @@ export class AgentSessionManager {
     if (projectId !== GLOBAL_SCOPE) {
       this.lastSeenProjectContentEpochBySession.set(internalId, RESUMED_SESSION_BEHIND_EPOCH);
     }
+    const interrupted = this.turnJournal.read(buildNativeChatId(backendId, sessionId));
+    if (interrupted) session.setInterruptedTurn(interrupted);
     this.sessions.set(session.internalId, session);
     this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
     this.detachedFromTabIds.delete(session.internalId);

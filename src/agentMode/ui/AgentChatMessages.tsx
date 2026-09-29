@@ -1,5 +1,6 @@
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import { AskUserQuestionCard } from "@/agentMode/ui/AskUserQuestionCard";
+import { InterruptedTurnCard } from "@/agentMode/ui/InterruptedTurnCard";
 import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
@@ -16,7 +17,9 @@ import type {
   PermissionPrompt,
 } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
-import { App } from "obsidian";
+import { logError } from "@/logger";
+import { err2String } from "@/utils";
+import { App, Notice } from "obsidian";
 import React, { memo, useMemo } from "react";
 
 interface AgentChatMessagesProps {
@@ -28,6 +31,7 @@ interface AgentChatMessagesProps {
   pendingAskUserQuestions: AskUserQuestionPrompt[];
   chatBackend: AgentChatBackend;
   isLoading: boolean;
+  hasInterruptedTurn?: boolean;
 }
 
 function toChatMessageView(m: AgentChatMessage): ChatMessage {
@@ -51,6 +55,15 @@ function findToolCallTitle(messages: AgentChatMessage[], toolCallId: string): st
     if (part?.kind === "tool_call") return part.title;
   }
   return undefined;
+}
+
+function resendInterruptedTurn(send: () => void): void {
+  try {
+    send();
+  } catch (e) {
+    logError("[AgentMode] could not continue the interrupted turn", e);
+    new Notice(err2String(e));
+  }
 }
 
 function lastAssistant(visible: AgentChatMessage[]): AgentChatMessage | undefined {
@@ -156,6 +169,7 @@ const AgentChatMessages = memo(
     pendingAskUserQuestions,
     chatBackend,
     isLoading,
+    hasInterruptedTurn = false,
   }: AgentChatMessagesProps) => {
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
@@ -224,6 +238,12 @@ const AgentChatMessages = memo(
             );
           })}
           {inlinePlanCard}
+          {hasInterruptedTurn && !isLoading ? (
+            <InterruptedTurnCard
+              onResume={() => resendInterruptedTurn(() => chatBackend.resumeInterruptedTurn())}
+              onRetry={() => resendInterruptedTurn(() => chatBackend.retryInterruptedTurn())}
+            />
+          ) : null}
         </ChatTranscriptViewport>
         {pendingActionId ? (
           <div

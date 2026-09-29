@@ -86,6 +86,8 @@ const QueuedActionsDemo: React.FC<AgentChatMessagesProps> = (props) => {
             current.filter((request) => request.requestId !== requestId)
           );
         },
+        resumeInterruptedTurn: () => undefined,
+        retryInterruptedTurn: () => undefined,
       }) as unknown as AgentChatBackend,
     []
   );
@@ -177,6 +179,25 @@ export const RunningAfterStop: StoryObj<AgentChatMessagesProps> = {
       { ...message, id: "running-response", message: "" },
     ],
     isLoading: true,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};
+
+export const InterruptedTurn: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      { ...message, id: "long-task", sender: "user", message: "Rename every note tagged #draft." },
+      {
+        ...message,
+        id: "partial-response",
+        message: "I found 14 notes tagged #draft and started renaming them.",
+      },
+    ],
+    isLoading: false,
+    hasInterruptedTurn: true,
   },
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };
