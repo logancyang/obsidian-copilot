@@ -96,7 +96,7 @@ describe("remote/host index", () => {
       const { app, secrets } = makeApp();
       const keychain = KeychainService.getInstance(app);
       keychain.setVaultId(VAULT_ID);
-      const phone = createRemoteClient();
+      const phone = createRemoteClient(app);
 
       phone.store.add({
         id: "d",
@@ -110,7 +110,7 @@ describe("remote/host index", () => {
 
       expect([...secrets.keys()]).toEqual([expect.stringContaining(`copilot-v${VAULT_ID}-`)]);
       keychain.setVaultId("a1b2c3d4");
-      expect(createRemoteClient().store.list()).toEqual([]);
+      expect(createRemoteClient(app).store.list()).toEqual([]);
     });
   });
 });

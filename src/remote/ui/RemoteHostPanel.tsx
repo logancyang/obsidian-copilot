@@ -56,6 +56,30 @@ const PairingInstructions: React.FC<{
   </div>
 );
 
+const PairedPhones: React.FC<{
+  devices: readonly PairedDeviceView[];
+  onRevoke: (deviceId: string) => void;
+}> = ({ devices, onRevoke }) => (
+  <SettingSection label="Paired phones">
+    {devices.length === 0 ? (
+      <div className="tw-py-3 tw-text-sm tw-text-muted">No phones are paired with this vault.</div>
+    ) : (
+      devices.map((device) => (
+        <SettingItem
+          key={device.id}
+          type="custom"
+          title={device.name}
+          description={describeDevice(device)}
+        >
+          <Button variant="secondary" size="sm" onClick={() => onRevoke(device.id)}>
+            Revoke
+          </Button>
+        </SettingItem>
+      ))
+    )}
+  </SettingSection>
+);
+
 export const RemoteHostPanel: React.FC<RemoteHostPanelProps> = ({
   state,
   onStartPairing,
@@ -66,18 +90,23 @@ export const RemoteHostPanel: React.FC<RemoteHostPanelProps> = ({
   onUpgrade,
 }) => {
   if (!state.plus) {
+    // A phone stays paired after Plus lapses and pairs again when Plus returns, so it must stay
+    // revocable. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
     return (
-      <SettingSection label="Remote access">
-        <SettingItem
-          type="custom"
-          title="Steer agents from your phone"
-          description="Remote access needs Copilot Plus. Without it this vault never listens on your network."
-        >
-          <Button size="sm" onClick={onUpgrade}>
-            See Copilot Plus
-          </Button>
-        </SettingItem>
-      </SettingSection>
+      <div className="tw-flex tw-flex-col tw-gap-4">
+        <SettingSection label="Remote access">
+          <SettingItem
+            type="custom"
+            title="Steer agents from your phone"
+            description="Remote access needs Copilot Plus. Without it this vault never listens on your network."
+          >
+            <Button size="sm" onClick={onUpgrade}>
+              See Copilot Plus
+            </Button>
+          </SettingItem>
+        </SettingSection>
+        {state.devices.length > 0 && <PairedPhones devices={state.devices} onRevoke={onRevoke} />}
+      </div>
     );
   }
 
@@ -121,26 +150,7 @@ export const RemoteHostPanel: React.FC<RemoteHostPanelProps> = ({
         )}
       </SettingSection>
 
-      <SettingSection label="Paired phones">
-        {state.devices.length === 0 ? (
-          <div className="tw-py-3 tw-text-sm tw-text-muted">
-            No phones are paired with this vault.
-          </div>
-        ) : (
-          state.devices.map((device) => (
-            <SettingItem
-              key={device.id}
-              type="custom"
-              title={device.name}
-              description={describeDevice(device)}
-            >
-              <Button variant="secondary" size="sm" onClick={() => onRevoke(device.id)}>
-                Revoke
-              </Button>
-            </SettingItem>
-          ))
-        )}
-      </SettingSection>
+      <PairedPhones devices={state.devices} onRevoke={onRevoke} />
     </div>
   );
 };

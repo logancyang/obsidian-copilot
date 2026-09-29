@@ -35,6 +35,24 @@ export const WithoutPlus: StoryObj<RemoteHostPanelProps> = {
   args: { state: { ...READY, plus: false } },
 };
 
+export const WithoutPlusPhonesStillPaired: StoryObj<RemoteHostPanelProps> = {
+  args: {
+    state: {
+      ...READY,
+      plus: false,
+      devices: [
+        {
+          id: "a",
+          name: "iPhone",
+          createdAt: NOW - 86_400_000,
+          lastSeenAt: NOW - 3_600_000,
+          connected: false,
+        },
+      ],
+    },
+  },
+};
+
 export const TailscaleNotDetected: StoryObj<RemoteHostPanelProps> = {
   args: { state: { ...READY, tailscaleAddress: null } },
 };

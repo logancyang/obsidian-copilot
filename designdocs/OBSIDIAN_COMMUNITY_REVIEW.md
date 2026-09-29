@@ -32,8 +32,8 @@ The same command runs in pull-request CI and in the release workflow before pack
 Desktop Copilot opens a network listener for phone pairing ([`REMOTE_PAIRING.md`](./REMOTE_PAIRING.md)). Reviewers should expect the following, all enforced by unit tests:
 
 - It listens only with Copilot Plus, and only while a phone is paired or a pairing is open. With neither, no socket exists.
-- It binds one address, the machine's Tailscale IPv4 in `100.64.0.0/10` on a Tailscale adapter. It never binds `0.0.0.0`, loopback or a LAN address, and it does not start when no Tailscale address exists.
-- The first frame of every connection must be a valid device token or the single-use, five-minute pairing secret within five seconds. Unauthenticated connections are capped and size-limited.
+- It binds one address, the machine's Tailscale IPv4 in `100.64.0.0/10` on a Tailscale adapter (on macOS, a `utunN` adapter that also carries Tailscale's `fd7a:115c:a1e0::/48` address). It never binds `0.0.0.0`, loopback or a LAN address, it does not start when no Tailscale address exists, and it closes the port within 15 seconds of the address disappearing.
+- The first frame of every connection must be a valid device token or the single-use, five-minute pairing secret within five seconds of connecting. Unauthenticated connections are capped in total and per source address, and size-limited.
 - Tokens and the paired-device list live in Obsidian `SecretStorage`, never in `data.json` or the vault. The desktop stores only token hashes.
 - It sends no telemetry and logs no token, secret or frame content.
 - It is desktop-only. The phone side uses the browser `WebSocket` and imports no Node module; `scripts/mobile-load-smoke.cjs` fails if a phone-loaded file imports Node or the desktop listener.

@@ -3,6 +3,8 @@ import React from "react";
 import type { RemoteHostViewState } from "@/remote/hostState";
 import { RemoteHostPanel } from "@/remote/ui/RemoteHostPanel";
 
+const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/610";
+
 const LINK =
   "obsidian://copilot-pair?host=100.64.0.7&port=52341&vault=Work+notes&vaultId=3f9a1c2e&secret=k3Jd8sLq0Zt5vXw9bN2mRa7Y";
 
@@ -39,6 +41,24 @@ describe("RemoteHostPanel", () => {
         expect(screen.queryByRole("button", { name: "Pair a phone" })).toBeNull();
         fireEvent.click(screen.getByRole("button", { name: "See Copilot Plus" }));
         expect(props.onUpgrade).toHaveBeenCalledTimes(1);
+      });
+
+      it(`still lists paired phones with Revoke so a lost phone can be cut off after Plus lapsed (${ISSUE})`, () => {
+        const props = renderPanel({
+          plus: false,
+          devices: [{ id: "a", name: "iPhone", createdAt: 1, lastSeenAt: null, connected: false }],
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+
+        expect(screen.getByText("iPhone")).toBeTruthy();
+        expect(props.onRevoke).toHaveBeenCalledWith("a");
+      });
+
+      it(`shows no paired-phone list when Plus lapsed and no phone is paired (${ISSUE})`, () => {
+        renderPanel({ plus: false, devices: [] });
+
+        expect(screen.queryByText("No phones are paired with this vault.")).toBeNull();
       });
 
       it("says nothing listens on the network", () => {

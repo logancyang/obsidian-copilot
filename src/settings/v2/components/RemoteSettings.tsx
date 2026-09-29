@@ -65,6 +65,8 @@ const PhoneRemote: React.FC<{ client: RemoteClient }> = ({ client }) => {
         outcome.channel.close();
         return `Connected to ${desktop.desktopName}.`;
       }
+      // A revoked phone keeps its saved token, so the person is told to remove and pair again
+      // instead of retrying. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
       if (outcome.reason === "token-rejected") {
         return "The desktop no longer accepts this phone. Remove it here and pair again.";
       }

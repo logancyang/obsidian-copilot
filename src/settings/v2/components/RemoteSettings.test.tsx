@@ -58,6 +58,8 @@ function renderWith(plugin: Partial<CopilotPlugin>) {
   );
 }
 
+const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/610";
+
 describe("RemoteSettings", () => {
   const original = { ...Platform };
 
@@ -215,7 +217,7 @@ describe("RemoteSettings", () => {
         expect(close).toHaveBeenCalledTimes(1);
       });
 
-      it("tells the user to pair again when the desktop rejects the token", async () => {
+      it(`tells the user to pair again when the desktop rejects the token (${ISSUE})`, async () => {
         const { client, mocks, store } = makeClient();
         store.add({
           id: "d1",
