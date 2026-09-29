@@ -5073,20 +5073,21 @@ describe("AgentSessionManager open-chat restore", () => {
       });
     });
 
-    it(`forgets recorded prompts of chats that are not among the restored tabs (${ISSUE})`, async () => {
+    it(`keeps the recorded prompt of a chat that is not a restored tab, such as a running chat whose tab was closed, so reopening it from history still shows the interruption (${ISSUE})`, async () => {
+      const closedTabKey = buildNativeChatId("opencode", "closed-tab-chat");
       const { manager, storage } = buildRestoreHarness({
         ...TWO_TABS,
         journal: {
-          [buildNativeChatId("opencode", "chat-b")]: { text: "kept" },
-          [buildNativeChatId("opencode", "closed-chat")]: { text: "stale" },
+          [buildNativeChatId("opencode", "chat-b")]: { text: "restored tab" },
+          [closedTabKey]: { text: "closed while running" },
         },
       });
 
       await manager.restoreOpenChats();
 
-      expect(Object.keys(JSON.parse(storage.get(JOURNAL_KEY) as string))).toEqual([
-        buildNativeChatId("opencode", "chat-b"),
-      ]);
+      expect(Object.keys(JSON.parse(storage.get(JOURNAL_KEY) as string)).sort()).toEqual(
+        [buildNativeChatId("opencode", "chat-b"), closedTabKey].sort()
+      );
     });
 
     it(`reopens read-only with an explanation when the agent cannot resume the session (${ISSUE})`, async () => {
@@ -5113,6 +5114,46 @@ describe("AgentSessionManager open-chat restore", () => {
       await waitFor(() => expect(manager.getActiveSession()?.getReadOnlyReason()).not.toBeNull());
 
       expect(loadSession).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("tabs that have not been resumed yet", () => {
+    it(`do not hold a backend restart back the way a running turn does (${ISSUE})`, async () => {
+      const { manager } = buildRestoreHarness(TWO_TABS);
+      await manager.restoreOpenChats();
+      await waitFor(() => expect(manager.getActiveSession()?.isDormant()).toBe(false));
+      expect(manager.getSessionsForScope(GLOBAL_SCOPE)[0].isDormant()).toBe(true);
+
+      await manager.restartBackend("opencode", "skills changed");
+
+      expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+      expect(manager.isBackendRestartPending("opencode")).toBe(false);
+    });
+
+    it(`resume when closing the selected tab makes them the selected tab (${ISSUE})`, async () => {
+      const { manager, loadSession } = buildRestoreHarness(TWO_TABS);
+      await manager.restoreOpenChats();
+      await waitFor(() => expect(manager.getActiveSession()?.isDormant()).toBe(false));
+
+      await manager.closeSession(manager.getActiveSession()!.internalId);
+
+      await waitFor(() => expect(manager.getActiveSession()?.hasAgent()).toBe(true));
+      expect(manager.getActiveSession()?.getBackendSessionId()).toBe("chat-a");
+      expect(loadSession).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "chat-a" }));
+    });
+
+    it(`survive their backend process exiting, since they hold no process (${ISSUE})`, async () => {
+      const { manager, savedRecord } = buildRestoreHarness(TWO_TABS);
+      await manager.restoreOpenChats();
+      await waitFor(() => expect(manager.getActiveSession()?.isDormant()).toBe(false));
+
+      for (const fn of mockBackendExitListeners) fn();
+
+      const remaining = manager.getSessionsForScope(GLOBAL_SCOPE);
+      expect(remaining.map((tab) => tab.getBackendSessionId())).toEqual(["chat-a"]);
+      expect(manager.getActiveSession()).toBe(remaining[0]);
+      expect(savedRecord().map((tab: { sessionId: string }) => tab.sessionId)).toEqual(["chat-a"]);
+      await waitFor(() => expect(manager.getActiveSession()?.hasAgent()).toBe(true));
     });
   });
 

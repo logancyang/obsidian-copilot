@@ -1780,7 +1780,6 @@ export class AgentSessionManager {
     this.lastActiveByScope.set(session.projectId, id);
     session.clearNeedsAttention();
     this.notify();
-    void this.wakeRestoredSession(session);
   }
 
   async replaceSessionInPlace(
@@ -1920,6 +1919,10 @@ export class AgentSessionManager {
   private notify(): void {
     this.drafts.prune();
     this.syncOpenChatRecord();
+    // Whatever path made a tab active, an unresumed one must start its agent session.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/607
+    const active = this.getActiveSession();
+    if (active) void this.wakeRestoredSession(active);
     for (const l of this.listeners) {
       try {
         l();
@@ -1948,24 +1951,20 @@ export class AgentSessionManager {
   }
 
   private async runRestoreOpenChats(): Promise<void> {
-    const restoredKeys = new Set<string>();
     let active: AgentSession | null = null;
     let last: AgentSession | null = null;
     for (const tab of this.openChats.load()) {
       if (this.disposed) return;
       const shell = await this.buildRestoredSession(tab);
       if (!shell) continue;
-      restoredKeys.add(buildNativeChatId(tab.backendId, tab.sessionId));
       if (tab.active) active = shell;
       last = shell;
     }
     if (this.disposed) return;
-    this.turnJournal.retainOnly(restoredKeys);
     const shown = active ?? last;
     if (!shown) return;
     this.activeSessionId = shown.internalId;
     this.lastActiveByScope.set(GLOBAL_SCOPE, shown.internalId);
-    void this.wakeRestoredSession(shown);
   }
 
   private async buildRestoredSession(tab: OpenChatEntry): Promise<AgentSession | null> {
@@ -2767,7 +2766,11 @@ export class AgentSessionManager {
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
         this.heldConfigChanges.delete(backendId);
       }
-      const dead = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
+      // A tab that has not been resumed holds no process, so the exit takes nothing from it.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/607
+      const dead = Array.from(this.sessions.values()).filter(
+        (s) => s.backendId === backendId && s.hasAgent()
+      );
       if (dead.length === 0) return;
       for (const s of dead) {
         this.detachAutoSave(s.internalId);
@@ -2803,7 +2806,7 @@ export class AgentSessionManager {
 
   private hasBusySession(backendId: BackendId): boolean {
     return Array.from(this.sessions.values()).some((session) => {
-      if (session.backendId !== backendId) return false;
+      if (session.backendId !== backendId || !session.hasAgent()) return false;
       const status = session.getStatus();
       return status === "starting" || status === "running" || status === "awaiting_permission";
     });

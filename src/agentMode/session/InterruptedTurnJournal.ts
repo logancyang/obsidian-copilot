@@ -97,13 +97,6 @@ export class InterruptedTurnJournal implements TurnJournalSink {
     };
   }
 
-  retainOnly(chatKeys: ReadonlySet<string>): void {
-    if (this.sealed) return;
-    const journal = this.readAll();
-    const kept = Object.fromEntries(Object.entries(journal).filter(([key]) => chatKeys.has(key)));
-    if (Object.keys(kept).length !== Object.keys(journal).length) this.writeAll(kept);
-  }
-
   // Shutdown cancels running turns; those cancellations are not the turn ending on its own, so
   // they must not erase the record of what was in flight.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/607
