@@ -120,6 +120,16 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
   };
 };
 
+function queuedImageViolation(item: QueuedAgentMessage) {
+  return checkImageLimits(
+    (item.promptContent ?? []).flatMap((content) =>
+      content.type === "image"
+        ? [{ mimeType: content.mimeType, bytes: decodedBase64Bytes(content.data) }]
+        : []
+    )
+  );
+}
+
 async function fileToImageBlock(file: File): Promise<PromptContent | null> {
   try {
     const buf = await file.arrayBuffer();
@@ -385,7 +395,14 @@ export const AgentChatInput = memo(function AgentChatInput({
 
   useEffect(() => {
     if (disabled || loading || isStarting || holdForContext || queuedMessages.length === 0) return;
-    const combined = combineQueuedMessages(queuedMessages);
+    // Follow-ups that together exceed a message's image limits go out one at a time.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/611
+    let batch = queuedMessages;
+    let combined = combineQueuedMessages(batch);
+    if (batch.length > 1 && queuedImageViolation(combined)) {
+      batch = batch.slice(0, 1);
+      combined = batch[0];
+    }
     if (
       combined.promptContent?.some((content) => content.type === "image") &&
       unsupportedImageModelLabel
@@ -395,18 +412,12 @@ export const AgentChatInput = memo(function AgentChatInput({
       );
       return;
     }
-    const queuedImageViolation = checkImageLimits(
-      (combined.promptContent ?? []).flatMap((content) =>
-        content.type === "image"
-          ? [{ mimeType: content.mimeType, bytes: decodedBase64Bytes(content.data) }]
-          : []
-      )
-    );
-    if (queuedImageViolation) {
-      new Notice(queuedImageViolation.message);
+    const violation = queuedImageViolation(combined);
+    if (violation) {
+      new Notice(violation.message);
       return;
     }
-    setQueuedMessages([]);
+    setQueuedMessages((current) => current.slice(batch.length));
     void runSend(combined);
   }, [
     disabled,

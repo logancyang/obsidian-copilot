@@ -364,14 +364,47 @@ describe("AgentChatInput", () => {
       }
     );
 
-    it("keeps queued follow-ups queued and warns when together they carry more images than a message may https://github.com/Brevilabs/obsidian-copilot-private/issues/611", async () => {
+    it("sends queued follow-ups one at a time when together they carry more images than a message may https://github.com/Brevilabs/obsidian-copilot-private/issues/611", async () => {
+      jest.mocked(Notice).mockClear();
+      const composer = {
+        sendMessage: jest.fn(async () => ({ turn: new Promise<void>(() => undefined) })),
+        cancel: jest.fn(),
+      } as unknown as ComposerCommands;
+      const block = { type: "image" as const, mimeType: "image/png", data: "AQID" };
+      const queue = [
+        { id: "a", text: "one", rawInput: "one", promptContent: [block, block, block] },
+        { id: "b", text: "two", rawInput: "two", promptContent: [block, block] },
+      ];
+      const draft = makeDraft({ queue });
+
+      renderInput(composer, draft);
+      await act(async () => {});
+
+      expect(composer.sendMessage).toHaveBeenCalledTimes(1);
+      expect(jest.mocked(composer.sendMessage).mock.calls[0].slice(0, 3)).toEqual([
+        "one",
+        undefined,
+        [block, block, block],
+      ]);
+      const applyQueueUpdate = jest.mocked(draft.setQueue).mock.calls[0][0] as (
+        current: typeof queue
+      ) => typeof queue;
+      expect(applyQueueUpdate(queue)).toEqual([queue[1]]);
+      expect(Notice).not.toHaveBeenCalled();
+    });
+
+    it("keeps a single queued follow-up queued and warns when it alone carries more images than a message may https://github.com/Brevilabs/obsidian-copilot-private/issues/611", async () => {
       jest.mocked(Notice).mockClear();
       const composer = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as ComposerCommands;
       const block = { type: "image" as const, mimeType: "image/png", data: "AQID" };
       const draft = makeDraft({
         queue: [
-          { id: "a", text: "one", rawInput: "one", promptContent: [block, block, block] },
-          { id: "b", text: "two", rawInput: "two", promptContent: [block, block] },
+          {
+            id: "a",
+            text: "one",
+            rawInput: "one",
+            promptContent: [block, block, block, block, block],
+          },
         ],
       });
 
