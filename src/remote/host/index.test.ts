@@ -1,4 +1,5 @@
 import type { App } from "obsidian";
+import { createRemoteClient, CLIENT_DESKTOPS_SECRET_KEY } from "@/remote/client";
 import { createPortSlot, createRemoteHost, HOST_DEVICES_SECRET_KEY } from "@/remote/host";
 import { KeychainService } from "@/services/keychainService";
 
@@ -65,17 +66,6 @@ describe("remote/host index", () => {
   });
 
   describe("createRemoteHost()", () => {
-    it("stores the paired-device list in the Obsidian keychain, scoped to the synced vault id", () => {
-      const { app, secrets } = makeApp();
-      const keychain = KeychainService.getInstance(app);
-      keychain.setVaultId(VAULT_ID);
-      keychain.setSecret(HOST_DEVICES_SECRET_KEY, "host-list");
-
-      expect([...secrets.keys()]).toEqual([
-        expect.stringContaining(`copilot-v${VAULT_ID}-remote-host-devices`),
-      ]);
-    });
-
     it("builds a service that starts idle: no paired device, nothing listening", () => {
       const { app } = makeApp();
       KeychainService.getInstance(app).setVaultId(VAULT_ID);
@@ -84,6 +74,43 @@ describe("remote/host index", () => {
 
       expect(host.getState()).toMatchObject({ listening: false, pairing: null, devices: [] });
       return host.dispose();
+    });
+  });
+
+  describe("secret keys", () => {
+    it("stores the desktop's device list and the phone's desktop list under different keychain entries so a shared keychain never mixes them (https://github.com/Brevilabs/obsidian-copilot-private/issues/610)", () => {
+      const { app, secrets } = makeApp();
+      const keychain = KeychainService.getInstance(app);
+      keychain.setVaultId(VAULT_ID);
+
+      keychain.setSecret(HOST_DEVICES_SECRET_KEY, "host-list");
+      keychain.setSecret(CLIENT_DESKTOPS_SECRET_KEY, "phone-list");
+
+      expect(HOST_DEVICES_SECRET_KEY).not.toBe(CLIENT_DESKTOPS_SECRET_KEY);
+      expect(secrets.size).toBe(2);
+      expect(keychain.getSecret(HOST_DEVICES_SECRET_KEY)).toBe("host-list");
+      expect(keychain.getSecret(CLIENT_DESKTOPS_SECRET_KEY)).toBe("phone-list");
+    });
+
+    it("scopes both entries to the synced vault id so a phone offers only desktops paired for the open vault", () => {
+      const { app, secrets } = makeApp();
+      const keychain = KeychainService.getInstance(app);
+      keychain.setVaultId(VAULT_ID);
+      const phone = createRemoteClient(app);
+
+      phone.store.add({
+        id: "d",
+        host: "100.64.0.1",
+        port: 5000,
+        token: "t",
+        desktopName: "Mac",
+        vaultName: "Work",
+        pairedAt: 1,
+      });
+
+      expect([...secrets.keys()]).toEqual([expect.stringContaining(`copilot-v${VAULT_ID}-`)]);
+      keychain.setVaultId("a1b2c3d4");
+      expect(createRemoteClient(app).store.list()).toEqual([]);
     });
   });
 });

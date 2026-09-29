@@ -10,13 +10,14 @@ import { resetSettings } from "@/settings/model";
 import { COPILOT_SETTINGS_TAB_IDS, type CopilotSettingsTabId } from "@/settings/settingsTabs";
 import { useSkillLoadErrorCount } from "@/settings/skillLoadErrorState";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { Cog, Command, Cpu, ShieldCheck, Sigma, Sparkle, Wrench } from "lucide-react";
+import { Cog, Command, Cpu, ShieldCheck, Sigma, Smartphone, Sparkle, Wrench } from "lucide-react";
 import React from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
 import { DesktopOnlySettingsPanel } from "./components/DesktopOnlySettingsPanel";
 import { MiyoSettings } from "./components/MiyoSettings";
+import { RemoteSettings } from "./components/RemoteSettings";
 import { SelfHostSettings } from "./components/SelfHostSettings";
 
 const LazySkillsSettings = React.lazy(() =>
@@ -38,6 +39,7 @@ const icons: Record<CopilotSettingsTabId, JSX.Element> = {
   basic: <Cog className="tw-size-5" />,
   byok: <Cpu className="tw-size-5" />,
   miyo: <Sigma className="tw-size-5" />,
+  remote: <Smartphone className="tw-size-5" />,
   selfhost: <ShieldCheck className="tw-size-5" />,
   command: <Command className="tw-size-5" />,
   skills: <Sparkle className="tw-size-5" />,
@@ -48,6 +50,7 @@ const components: Record<CopilotSettingsTabId, React.FC> = {
   basic: () => <BasicSettings />,
   byok: () => <ByokPanel />,
   miyo: () => <MiyoSettings />,
+  remote: () => <RemoteSettings />,
   selfhost: () => <SelfHostSettings />,
   command: () => <CommandSettings />,
   skills: SkillsSettingsPanel,
@@ -58,6 +61,7 @@ const TAB_LABELS: Record<CopilotSettingsTabId, string> = {
   basic: "Basic",
   byok: "BYOK",
   miyo: "Miyo",
+  remote: "Remote",
   selfhost: "Self-Host",
   command: "Command",
   skills: "Skills",

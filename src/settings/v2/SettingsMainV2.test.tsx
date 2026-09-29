@@ -71,6 +71,7 @@ describe("SettingsMainV2", () => {
         "Basic",
         "BYOK",
         "Miyo",
+        "Remote",
         "Skills",
         "Command",
         "Self-Host",
