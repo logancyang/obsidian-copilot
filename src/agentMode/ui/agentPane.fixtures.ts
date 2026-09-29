@@ -10,7 +10,7 @@ import {
   type SessionState,
   type TabSummary,
 } from "@/agentMode/protocol/state";
-import { buildTab } from "@/agentMode/protocol/testBuilders";
+import { buildHostState, buildTab } from "@/agentMode/protocol/testBuilders";
 import type { AgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
 import type { SessionId } from "@/agentMode/session/types";
 
@@ -36,7 +36,7 @@ const HOST_ID = "fixture-host";
 
 export function createFixtureClient(options: FixtureClientOptions): FixtureClient {
   const { sessionId } = options;
-  let host: HostState = { tabs: [buildTab({ id: sessionId, ...options.tab })] };
+  let host: HostState = buildHostState({ tabs: [buildTab({ id: sessionId, ...options.tab })] });
   let session: SessionState = { ...INITIAL_SESSION_STATE, ...options.session };
   let hostSeq = 0;
   let sessionSeq = 0;

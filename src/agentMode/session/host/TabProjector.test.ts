@@ -1,4 +1,6 @@
+import { applyHostOp } from "@/agentMode/protocol/apply";
 import type { HostOp } from "@/agentMode/protocol/ops";
+import { INITIAL_HOST_STATE, type HostState } from "@/agentMode/protocol/state";
 import { makeTestSession } from "@/agentMode/session/host/hostTestHarness";
 import { summarizeTab, TabProjector } from "@/agentMode/session/host/TabProjector";
 
@@ -13,9 +15,16 @@ jest.mock("@/plusUtils", () => ({
 
 function build() {
   const ops: HostOp[] = [];
-  const projector = new TabProjector((op) => ops.push(op));
+  let state: HostState = INITIAL_HOST_STATE;
+  const projector = new TabProjector(
+    () => state,
+    (op) => {
+      state = applyHostOp(state, op);
+      ops.push(op);
+    }
+  );
   const sessions = ["a", "b", "c"].map((id) => makeTestSession(id).session);
-  return { ops, projector, sessions };
+  return { ops, projector, sessions, getState: () => state };
 }
 
 describe("TabProjector", () => {
@@ -37,10 +46,10 @@ describe("TabProjector", () => {
 
   describe("reconcile()", () => {
     it("adds tabs in order and emits nothing when the set is unchanged", () => {
-      const { ops, projector, sessions } = build();
+      const { ops, projector, sessions, getState } = build();
       projector.reconcile(sessions);
       expect(ops.map((op) => op.t)).toEqual(["tab.add", "tab.add", "tab.add"]);
-      expect(projector.getState().tabs.map((t) => t.id)).toEqual(["a", "b", "c"]);
+      expect(getState().tabs.map((t) => t.id)).toEqual(["a", "b", "c"]);
       ops.length = 0;
       projector.reconcile(sessions);
       expect(ops).toEqual([]);
@@ -55,11 +64,11 @@ describe("TabProjector", () => {
     });
 
     it("moves a tab by re-adding it at its new index", () => {
-      const { ops, projector, sessions } = build();
+      const { ops, projector, sessions, getState } = build();
       projector.reconcile(sessions);
       ops.length = 0;
       projector.reconcile([sessions[2], sessions[0], sessions[1]]);
-      expect(projector.getState().tabs.map((t) => t.id)).toEqual(["c", "a", "b"]);
+      expect(getState().tabs.map((t) => t.id)).toEqual(["c", "a", "b"]);
       expect(ops.every((op) => op.t === "tab.add")).toBe(true);
     });
 
@@ -85,12 +94,6 @@ describe("TabProjector", () => {
       projector.refresh(sessions[0]);
       projector.refresh(sessions[1]);
       expect(ops).toEqual([{ t: "tab.patch", id: "a", patch: { needsAttention: true } }]);
-    });
-  });
-
-  describe("getState()", () => {
-    it("starts as the shared empty host state", () => {
-      expect(build().projector.getState().tabs).toEqual([]);
     });
   });
 });

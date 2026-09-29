@@ -3,7 +3,7 @@ import { PROTOCOL_VERSION } from "@/agentMode/protocol/frames";
 import { useHostSelector, useSessionSelector } from "@/agentMode/protocol/react";
 import { SessionClient } from "@/agentMode/protocol/SessionClient";
 import { INITIAL_SESSION_STATE, type HostState } from "@/agentMode/protocol/state";
-import { buildTab, FakeTransport } from "@/agentMode/protocol/testBuilders";
+import { buildHostState, buildTab, FakeTransport } from "@/agentMode/protocol/testBuilders";
 
 function liveClient() {
   const transport = new FakeTransport();
@@ -13,7 +13,9 @@ function liveClient() {
   return { transport, client };
 }
 
-const HOST: HostState = { tabs: [buildTab({ id: "s1" }), buildTab({ id: "s2" })] };
+const HOST: HostState = buildHostState({
+  tabs: [buildTab({ id: "s1" }), buildTab({ id: "s2" })],
+});
 
 describe("react", () => {
   describe("useHostSelector()", () => {

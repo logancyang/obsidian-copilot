@@ -1,8 +1,10 @@
 import { PROTOCOL_VERSION, type ServerFrame } from "@/agentMode/protocol/frames";
 import type { SessionClient } from "@/agentMode/protocol/SessionClient";
+import { buildBackendSummary } from "@/agentMode/protocol/testBuilders";
 import {
   buildHost,
   createFaultyClient,
+  FakeCatalog,
   FakeManager,
   fakeNote,
   makeTestSession,
@@ -370,6 +372,68 @@ describe("SessionHost", () => {
         r.frames.filter((f) => f.type === "snapshot" && f.scope === "session:s1")
       ).toHaveLength(1);
       expectReplicaEqualsHost(r);
+    });
+  });
+
+  describe("catalog and flags", () => {
+    async function catalogRig() {
+      const catalog = new FakeCatalog();
+      catalog.backends = [buildBackendSummary({ id: "claude" })];
+      catalog.flags = { defaultBackendId: "claude", startingBackendId: null, startFailed: false };
+      const r = await rig({ catalog });
+      return { ...r, catalog };
+    }
+
+    it("includes the picker catalog and host flags in the host snapshot https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+      const r = await catalogRig();
+      expect(r.client.getHost()?.backends.map((b) => b.id)).toEqual(["claude"]);
+      expect(r.client.getHost()?.host).toEqual({
+        defaultBackendId: "claude",
+        startingBackendId: null,
+        startFailed: false,
+      });
+      expectReplicaEqualsHost(r);
+    });
+
+    it("replaces a backend on the replica when its catalog changes and leaves the others alone", async () => {
+      const r = await catalogRig();
+      r.catalog.change({
+        backends: [
+          buildBackendSummary({ id: "claude", preload: "pending" }),
+          buildBackendSummary({ id: "codex" }),
+        ],
+      });
+      await settle();
+      expect(r.client.getHost()?.backends.map((b) => [b.id, b.preload])).toEqual([
+        ["claude", "pending"],
+        ["codex", "ready"],
+      ]);
+      expectReplicaEqualsHost(r);
+    });
+
+    it("patches the flags when the manager reports a session starting and a failed start", async () => {
+      const r = await catalogRig();
+      r.catalog.flags = { ...r.catalog.flags, startingBackendId: "codex" };
+      r.manager.notify();
+      await settle();
+      expect(r.client.getHost()?.host.startingBackendId).toBe("codex");
+      r.catalog.flags = { ...r.catalog.flags, startingBackendId: null, startFailed: true };
+      r.manager.notify();
+      await settle();
+      expect(r.client.getHost()?.host).toMatchObject({
+        startingBackendId: null,
+        startFailed: true,
+      });
+      expectReplicaEqualsHost(r);
+    });
+
+    it("stops following the catalog after dispose", async () => {
+      const r = await catalogRig();
+      const before = r.frames.length;
+      r.host.dispose();
+      r.catalog.change({ backends: [buildBackendSummary({ id: "claude", preload: "error" })] });
+      await settle();
+      expect(r.frames).toHaveLength(before);
     });
   });
 

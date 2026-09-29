@@ -8,13 +8,18 @@ import { copilotAppDataDir, getVaultId } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
-import { backendRegistry, listBackendDescriptors } from "./backends/registry";
+import {
+  backendNeedsSelfHostWarning,
+  backendRegistry,
+  listBackendDescriptors,
+} from "./backends/registry";
 import type { BackendId } from "./session/types";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
+import { createCatalogSource } from "./session/host/catalogSource";
 import { SessionHost } from "./session/host/SessionHost";
 import type { SessionClient } from "./protocol/SessionClient";
 import { watchAttachedTabs } from "./ui/watchAttachedTabs";
@@ -394,6 +399,15 @@ export function createAgentSessionHost(
 ): SessionHost {
   return new SessionHost({
     manager,
+    catalog: createCatalogSource({
+      descriptors: listBackendDescriptors,
+      getSettings,
+      subscribeSettings: (listener) => subscribeToSettingsChange(() => listener()),
+      subscribeInstallState: (descriptor, listener) =>
+        descriptor.subscribeInstallState(plugin, listener),
+      needsSelfHostWarning: backendNeedsSelfHostWarning,
+      manager,
+    }),
     resolveNote: (path) => resolveVaultNote(app, path),
     isKnownBackend: isRegisteredBackend,
     appVersion: plugin.manifest.version,

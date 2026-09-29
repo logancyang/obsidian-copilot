@@ -1,7 +1,12 @@
 import { PROTOCOL_VERSION } from "@/agentMode/protocol/frames";
 import { SessionClient } from "@/agentMode/protocol/SessionClient";
 import { INITIAL_SESSION_STATE, type SessionState } from "@/agentMode/protocol/state";
-import { buildMessage, buildTab, FakeTransport } from "@/agentMode/protocol/testBuilders";
+import {
+  buildHostState,
+  buildMessage,
+  buildTab,
+  FakeTransport,
+} from "@/agentMode/protocol/testBuilders";
 import { useChatRuntime } from "@/agentMode/ui/hooks/useChatRuntime";
 import { act, renderHook } from "@testing-library/react";
 
@@ -14,7 +19,7 @@ function liveClient() {
     type: "snapshot",
     scope: "host",
     seq: 0,
-    state: { tabs: [buildTab({ id: "s1", status: "running" })] },
+    state: buildHostState({ tabs: [buildTab({ id: "s1", status: "running" })] }),
   });
   return { transport, client };
 }

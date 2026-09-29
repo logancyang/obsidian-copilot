@@ -1,6 +1,6 @@
 import { PROTOCOL_VERSION } from "@/agentMode/protocol/frames";
 import { SessionClient } from "@/agentMode/protocol/SessionClient";
-import { buildTab, FakeTransport } from "@/agentMode/protocol/testBuilders";
+import { buildHostState, buildTab, FakeTransport } from "@/agentMode/protocol/testBuilders";
 import { watchAttachedTabs } from "@/agentMode/ui/watchAttachedTabs";
 
 function liveClient(tabIds: string[]) {
@@ -12,7 +12,7 @@ function liveClient(tabIds: string[]) {
     type: "snapshot",
     scope: "host",
     seq: 0,
-    state: { tabs: tabIds.map((id) => buildTab({ id })) },
+    state: buildHostState({ tabs: tabIds.map((id) => buildTab({ id })) }),
   });
   return { transport, client };
 }
