@@ -111,7 +111,6 @@ describe("useInstalledAgentBrands", () => {
     const { result, unmount } = renderHook(() => useInstalledAgentBrands({} as CopilotPlugin));
     expect(result.current).toBe(EMPTY_AGENT_BRANDS);
 
-    // The compatibility probe settles ready — no settings write involved.
     act(() => {
       install = { kind: "ready", source: "managed" };
       listeners.forEach((cb) => cb());
@@ -152,12 +151,9 @@ describe("resolveAnswerers", () => {
 });
 
 describe("isFanout", () => {
-  // Claude is the session main agent in these cases.
   it("routes single-vs-fan-out: collapses to single-agent only when no non-main answerer exists", () => {
-    // No answerers, or the only answerer IS the main agent → single-agent.
     expect(isFanout([], "claude")).toBe(false);
     expect(isFanout(["claude"], "claude")).toBe(false);
-    // A non-main answerer uses the fan-out path; the main summarizes only 2+.
     expect(isFanout(["opencode"], "claude")).toBe(true);
     expect(isFanout(["opencode", "codex"], "claude")).toBe(true);
     expect(isFanout(["claude", "opencode"], "claude")).toBe(true);

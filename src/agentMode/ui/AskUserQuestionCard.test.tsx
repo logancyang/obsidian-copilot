@@ -26,10 +26,6 @@ function renderCard(request: AskUserQuestionPrompt, onResolve: jest.Mock) {
   return render(<AskUserQuestionCard request={request} onResolve={onResolve} />);
 }
 
-// The "Other" row's accessible name is its label plus the "Type your own
-// response" description (jsdom concatenates them with no separator), so anchor
-// on the leading "Other" rather than an exact match. Preset labels here are
-// A/B/C, so this can't collide with a preset.
 function getOtherControl(role: "radio" | "checkbox"): HTMLElement {
   return screen.getByRole(role, { name: /^other/i });
 }
@@ -61,7 +57,6 @@ describe("AskUserQuestionCard", () => {
       renderCard(request, onResolve);
 
       fireEvent.click(getOtherControl("radio"));
-      // Surrounding whitespace proves the answer is trimmed on submit.
       fireEvent.change(otherTextarea(), { target: { value: "  ship it Friday  " } });
       fireEvent.click(submitButton());
 

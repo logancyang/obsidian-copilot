@@ -34,7 +34,6 @@ function seedProject(project: ProjectConfig) {
   ]);
 }
 
-/** App whose vault resolves the given path-keyed abstract files. */
 function makeApp(byPath: Record<string, TFile | TFolder>): App {
   return {
     vault: {

@@ -5,8 +5,6 @@ import { ChatInputProvider, useChatInput } from "@/context/ChatInputContext";
 import { act, renderHook } from "@testing-library/react";
 import React, { useEffect } from "react";
 
-// Stands in for LexicalEditor's FocusPlugin wiring: registers a focus handler
-// with the context once mounted, exactly as the real editor does.
 function FocusRegistrar({ onFocus }: { onFocus: () => void }) {
   const { registerFocusHandler } = useChatInput();
   useEffect(() => {
@@ -41,12 +39,10 @@ describe("useChatInputAutoFocus", () => {
   it("drains a visibility queued before mount (view opened while still mounting)", () => {
     const focus = jest.fn();
     const eventTarget = new ChatViewEventTarget();
-    eventTarget.queueVisible(); // latched before the listener / focus handler exist
+    eventTarget.queueVisible();
 
     renderHook(() => useChatInputAutoFocus(), { wrapper: makeWrapper(focus, eventTarget) });
 
-    // Drained on attach; the context's focus latch fires once the handler
-    // registers — no timer.
     expect(focus).toHaveBeenCalledTimes(1);
   });
 

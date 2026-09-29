@@ -3,7 +3,6 @@ import type { SessionUsage } from "@/agentMode/session/types";
 import { useSessionUsage } from "@/agentMode/ui/hooks/useSessionUsage";
 import { act, renderHook } from "@testing-library/react";
 
-/** Stand-in exposing only `getSessionUsage` + `subscribe`; rest cast away. */
 function makeFakeBackend(initial: SessionUsage | null = null) {
   const state: { usage: SessionUsage | null } = { usage: initial };
   const listeners = new Set<() => void>();

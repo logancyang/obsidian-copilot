@@ -3,8 +3,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
-// The tooltip portal targets Obsidian's `activeDocument` global (popout-safe);
-// jsdom has no such global, so point it at the test document.
 beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
 });

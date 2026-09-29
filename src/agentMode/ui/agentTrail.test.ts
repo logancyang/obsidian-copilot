@@ -22,8 +22,6 @@ function text(value: string): AgentMessagePart {
   return { kind: "text", text: value };
 }
 
-/** Wrap tool_call parts as children of a sub-agent (Task) so the trail builder
- *  treats them as depth-1 peers. */
 function withSubagent(parent: string, children: AgentMessagePart[]): AgentMessagePart[] {
   return [
     tool(parent, { vendorToolName: "Task" }),
@@ -61,8 +59,6 @@ describe("buildAgentTrail", () => {
   });
 
   it("groups a background (childless) sub-agent launch as a subagent node", () => {
-    // A launch can still be childless when no complete nested frame arrived;
-    // the card remains a group so the final report has a home.
     const parts = [
       tool("launch", {
         vendorToolName: "Agent",
@@ -117,7 +113,6 @@ describe("buildAgentTrail", () => {
   });
 
   it("caps recursion depth", () => {
-    // depth 0: t0 -> depth 1: t1 -> depth 2: t2 (truncated when maxDepth=2)
     const parts = [
       tool("t0", { vendorToolName: "Task" }),
       tool("t1", { vendorToolName: "Task", parentToolCallId: "t0" }),
@@ -128,7 +123,6 @@ describe("buildAgentTrail", () => {
     expect(tree).toHaveLength(1);
     expect(tree[0].type).toBe("subagent");
     if (tree[0].type === "subagent") {
-      // depth 1 sub-agent rendered with no children (depth+1 === maxDepth)
       const inner = tree[0].children;
       expect(inner).toHaveLength(1);
       expect(inner[0].type).toBe("subagent");
@@ -224,8 +218,6 @@ describe("agentResponseText", () => {
       tool("b", { vendorToolName: "Read" }),
       text("The wrap-up after the research."),
     ];
-    // Both prose segments are captured — the earlier one is no longer dropped
-    // just because a tool_call follows it.
     expect(agentResponseText(parts)).toBe(
       "Early prose emitted before the research finished.\n\nThe wrap-up after the research."
     );
@@ -251,8 +243,6 @@ describe("agentResponseText", () => {
       tool("a"),
       text("<think>internal</think>The answer.\n\n\n\nMore.   "),
     ];
-    // removeThinkTags strips the think block, 3+ newlines collapse to 2, and
-    // trailing whitespace is trimmed — matching `cleanMessageForCopy`.
     expect(agentResponseText(parts)).toBe("The answer.\n\nMore.");
   });
 

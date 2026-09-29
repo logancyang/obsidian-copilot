@@ -12,28 +12,17 @@ import { Notice } from "obsidian";
 import React from "react";
 
 interface Props {
-  /** Plugin's AgentSessionManager. May be undefined on mobile. */
   manager?: AgentSessionManager;
-  /** The plugin — needed to drive the install/upgrade actions. */
   plugin: CopilotPlugin;
-  /** Click handler for the "Install …" CTA when the backend isn't installed. */
   onInstallClick: () => void;
 }
 
-/**
- * Leads users from Agent Mode failures to the relevant recovery action, and from a held
- * configuration change to the reload that applies it, without adding noise to healthy sessions.
- * @param manager - The session manager that exposes startup failures, held config changes, and retry behavior.
- * @param plugin - The plugin instance needed to run backend recovery actions.
- * @param onInstallClick - The action to start setup when the selected backend is absent.
- */
 export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallClick }) => {
   const descriptor = useSessionBackendDescriptor(manager);
   const installState = useBackendInstallState(descriptor, plugin);
   const managedInstall = useManagedInstallActionState(descriptor, plugin);
   const auth = useBackendAuthState(descriptor);
 
-  // Re-render on manager notify so `lastError` and held-config flips are picked up.
   const [, setTick] = React.useState(0);
   React.useEffect(() => {
     if (!manager) return;
@@ -81,8 +70,6 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
 
   if (installState.kind === "incompatible") {
     const canUpgrade = descriptor.managedInstall !== undefined;
-    // Shared progress prevents duplicate updates; shared errors keep Retry available across surfaces.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     const upgrading = managedInstall.kind === "running";
     const failed = managedInstall.kind === "error";
     return (
@@ -129,9 +116,6 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
     );
   }
 
-  // Installed but the CLI isn't signed in: surface a recoverable Sign-in CTA
-  // instead of letting a sent chat fail silently. While signing in, the CLI
-  // opens the browser itself; we show its printed URL as a clickable fallback.
   if (descriptor.auth && auth.status && !auth.status.signedIn) {
     return (
       <AgentStatusCard

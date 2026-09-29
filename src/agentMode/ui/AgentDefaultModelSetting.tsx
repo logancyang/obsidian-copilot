@@ -18,25 +18,11 @@ interface Props {
   manager: AgentSessionManager;
 }
 
-/** Sentinel option representing "no stored default — let the agent choose". */
 const AGENT_DEFAULT_VALUE = "__agent_default__";
 const AGENT_DEFAULT_LABEL = "Agent default";
 const EFFORT_NOT_SUPPORTED_LABEL = "Not supported";
 
-/**
- * Per-agent "Default model" picker shown in each toggled-on agent's settings
- * section. Sources its options from the agent's enabled (toggled-on) models,
- * and writes the chosen (model, effort) as that backend's durable default via
- * `persistDefaultSelection` — the only writer of `defaultModel` besides
- * `applyCopilotDefaultModel`, which seeds it on license activation. Every new
- * session and fan-out answerer on this backend starts from it, and an open
- * chat picks it up on the next turn (see `AgentSessionManager`).
- */
 export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager }) => {
-  // Re-render when the model cache settles so freshly-probed effort options
-  // and model names appear without a settings-tab reopen. The snapshot is a
-  // cache signature, not just the preload status, so the post-`"ready"`
-  // effort-catalog prefetch still triggers a rerender.
   const subscribe = useManagerSubscribe(manager);
   useSyncExternalStore(
     subscribe,
@@ -47,24 +33,12 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
   const settings = useSettingsValue();
   const enabled = descriptor.getEnabledModelEntries?.(settings) ?? null;
 
-  // No stored default → the agent's own native default is used for new chats
-  // and fan-out (see `AgentSessionManager.createSession`). Represent that
-  // explicitly with a sentinel rather than showing a real model as "selected"
-  // (which would also let an effort-only change silently persist that model).
   const current = manager.getDefaultSelection(descriptor.id);
   const hasExplicitDefault = current !== null;
 
-  // Hide the control only when there's nothing to manage: no enabled models
-  // AND no stored default. A stored default whose model was later disabled
-  // must stay visible so the user can clear it — new chats and fan-out still
-  // read it via `getDefaultSelection`, so silently hiding it would strand
-  // sessions on a model the agent no longer offers.
   if ((!enabled || enabled.length === 0) && !hasExplicitDefault) return null;
 
   const selectedBaseId = current?.baseModelId ?? AGENT_DEFAULT_VALUE;
-  // Only a concrete default can expose effort options. The row itself stays
-  // mounted so async catalog refreshes and model toggles cannot shift the
-  // settings below it; unsupported states disable the control instead.
   const rawEffortOptions = hasExplicitDefault
     ? resolveEffortOptions(manager, descriptor.id, selectedBaseId)
     : EMPTY_EFFORT_OPTIONS;
@@ -76,8 +50,6 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
         .catch((e) => logError(`[AgentMode] clear default model for ${descriptor.id} failed`, e));
       return;
     }
-    // Keep a valid effort across model changes, otherwise select the lowest offered.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
     const effort = resolveEffort(
       current?.effort,
       resolveEffortOptions(manager, descriptor.id, baseModelId)
@@ -98,9 +70,6 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
     label: modelOptionLabel(e),
     value: e.baseModelId,
   }));
-  // A stored default whose model is no longer enabled must still appear as a
-  // selectable option, or the select would render blank and the user couldn't
-  // see what they're clearing.
   const defaultMissingFromEnabled =
     hasExplicitDefault && !enabledOptions.some((o) => o.value === selectedBaseId);
   const modelOptions = defaultMissingFromEnabled
@@ -133,7 +102,5 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
 
 function modelOptionLabel(entry: EnabledModelEntry): string {
   const base = entry.name || entry.baseModelId;
-  // Keep a missing-key model selectable (a default can be set before the key
-  // is added) but flag it, mirroring the chat picker's `MISSING_KEY_LABEL`.
   return entry.credentialState === "missing_key" ? `${base} (${MISSING_KEY_LABEL})` : base;
 }

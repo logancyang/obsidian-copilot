@@ -3,7 +3,6 @@ import { cn } from "@/lib/utils";
 import React, { useEffect, useRef, useState } from "react";
 
 interface TurnDurationLayoutProps {
-  /** Remove block spacing when the duration shares a response footer row. */
   inline?: boolean;
 }
 
@@ -19,7 +18,6 @@ interface CompletedTurnDurationProps extends TurnDurationLayoutProps {
 
 type AgentTurnDurationIndicatorProps = RunningTurnDurationProps | CompletedTurnDurationProps;
 
-/** Format elapsed turn time while preserving seconds and omitting leading zero units. */
 export function formatWorkedDuration(durationMs: number): string {
   const safeDurationMs = Number.isFinite(durationMs) ? Math.max(0, durationMs) : 0;
   const totalSeconds = Math.floor(safeDurationMs / 1000);
@@ -32,10 +30,6 @@ export function formatWorkedDuration(durationMs: number): string {
   return `${seconds}s`;
 }
 
-/**
- * Shows whole-turn elapsed time, animating only while the agent is active and
- * retaining a quiet, static icon and duration after the turn completes.
- */
 export const AgentTurnDurationIndicator: React.FC<AgentTurnDurationIndicatorProps> = (props) => {
   const [now, setNow] = useState(() => Date.now());
   const rootRef = useRef<HTMLDivElement>(null);

@@ -5,48 +5,21 @@ import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import { formatDuration } from "@/lib/duration";
 import { isAbsolutePath, toVaultRelative } from "@/utils/vaultPath";
 
-/**
- * Render-time context passed through to the summary callbacks that need
- * vault-relative path resolution. Resolved once by the rendering layer (which
- * can call `getVaultBase(app)`), so the summary objects themselves stay free
- * of any reach into the global `app`.
- */
 export interface ToolSummaryContext {
-  /** Vault root absolute path, or null when unavailable (mobile, tests). */
   vaultBase: string | null;
 }
 
-/**
- * Tool-aware presentation for one or more tool_call parts. Each tool
- * family contributes one entry; lookup order is `vendorToolName` →
- * `toolKind` → generic fallback. The summary functions are pure — no
- * React, no I/O — so they can be unit-tested cheaply.
- */
 export interface ToolSummary {
-  /** Lucide icon component shown in the collapsed line. */
   icon: LucideIcon;
-  /** Single-line "Edited practice-log.md" style verb · target. */
   collapsedLine: (part: ToolCallPart, ctx?: ToolSummaryContext) => string;
-  /** Optional muted line below the title — counts/sizes/duration. Null hides. */
   outcome: (part: ToolCallPart) => string | null;
-  /** Full tool input shown only in the expanded card. Null hides. */
   expandedDetails?: (part: ToolCallPart) => string | null;
-  /**
-   * Vault-relative path of the note this tool call targets, or null when the
-   * tool has no single file target. When set and the call has completed,
-   * `ActionCard` renders the collapsed line as a clickable internal link.
-   */
   targetPath?: (part: ToolCallPart, ctx?: ToolSummaryContext) => string | null;
 }
 
-/** The presentation for one tool_call part: vendor name → tool kind → generic. */
 export function lookupToolSummary(part: ToolCallPart): ToolSummary {
   const base = selectToolSummary(part);
   if (!part.mcpServer) return base;
-  // An MCP tool whose bare name collides with a native tool (e.g.
-  // `mcp__srv__read` → bare `read` → the Read/kind summary) would otherwise
-  // masquerade as that native tool. Prepend the server so it always reads as
-  // `server · …`.
   const server = part.mcpServer;
   return {
     ...base,
@@ -59,9 +32,6 @@ function selectToolSummary(part: ToolCallPart): ToolSummary {
   // update retains the original tool kind or vendor name.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/41
   if (part.userResponse) return USER_RESPONSE_SUMMARY;
-  // Heuristic: opencode's `task` tool is a sub-agent invocation but
-  // surfaces no `vendorToolName` and maps to `kind: "other"`. Recognize
-  // it by data shape so the registry stays backend-id-free.
   if (isOpencodeTaskTool(part)) return TASK_SUMMARY;
   if (part.vendorToolName) {
     const v = VENDOR_SUMMARIES[part.vendorToolName];
@@ -88,19 +58,10 @@ export function pluralize(n: number, singular: string, plural?: string): string 
 function targetFromTitle(part: ToolCallPart): string {
   const t = part.title;
   if (!t) return "…";
-  // SDK seeds title to the vendor tool name (e.g. "Read", "Edit") in the brief
-  // window between content_block_start and the first complete input-JSON parse.
-  // Treat that as a placeholder so verb-prefixed summaries don't render
-  // "Read Read" / "Edited Edit".
   if (part.vendorToolName && t.toLowerCase() === part.vendorToolName.toLowerCase()) return "…";
   return t;
 }
 
-/**
- * Turn a tool identifier into a readable label: split camelCase / PascalCase /
- * snake_case / kebab-case into words, lowercase, then capitalize the first
- * letter. "AskUserQuestion" → "Ask user question"; "query-docs" → "Query docs".
- */
 function humanizeToolName(name: string): string {
   const words = name
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
@@ -111,27 +72,12 @@ function humanizeToolName(name: string): string {
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : "";
 }
 
-/**
- * Readable label for a tool with no dedicated summary (MCP tools,
- * AskUserQuestion before its summary matches, unknown vendor tools). Never
- * returns the "…" placeholder: a humanized identifier, or the verbatim
- * friendly title for ACP tools that supply one, falling back to "Tool call".
- * The `server ·` prefix for MCP tools is applied uniformly in
- * `lookupToolSummary` so it survives even when an MCP tool routes to a
- * native summary — see that function.
- */
 function genericToolLabel(part: ToolCallPart): string {
-  // ACP backends with no vendor identity may supply a friendly multi-word
-  // title — show it verbatim rather than mangling it.
   if (!part.vendorToolName && /\s/.test(part.title)) return part.title;
   const bare = part.vendorToolName ?? part.title;
   return humanizeToolName(bare) || "Tool call";
 }
 
-/**
- * The first question's short header (preferred) or full text from an
- * AskUserQuestion tool input. Null until the input has streamed in.
- */
 function firstQuestionText(part: ToolCallPart): string | null {
   const input = part.input as
     | { questions?: Array<{ question?: unknown; header?: unknown }> }
@@ -145,12 +91,6 @@ function firstQuestionText(part: ToolCallPart): string | null {
   return question || null;
 }
 
-/**
- * Pick the verb form that matches the tool call's current status. Tool calls
- * still pending / in_progress render with the present participle so the trail
- * reflects what the agent is doing right now; completed and failed calls flip
- * to the past tense.
- */
 function verb(part: ToolCallPart, progressive: string, past: string): string {
   return part.status === "completed" || part.status === "failed" ? past : progressive;
 }
@@ -185,11 +125,6 @@ function displayTargetFromPath(part: ToolCallPart, vaultBase: string | null): st
   return leaf ? `…/${leaf}` : "…";
 }
 
-/**
- * The skill identifier from a `Skill` tool call's input (Claude Code logs the
- * slash-command name as `input.skill`, e.g. "copilot-read-pdf"). Returns the
- * trimmed name, or null while the input is still streaming in.
- */
 function skillNameFromInput(part: ToolCallPart): string | null {
   const input = part.input as { skill?: unknown } | null | undefined;
   const skill = input?.skill;
@@ -230,8 +165,6 @@ function approxTokens(part: ToolCallPart): number {
   }
   return Math.round(chars / 4);
 }
-
-// ---- Vendor (Claude Code) entries ----
 
 const READ_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "Read" }),
@@ -349,8 +282,6 @@ const TASK_SUMMARY: ToolSummary = {
     const progress = p.progress;
     if (!progress) return null;
     const bits: string[] = [];
-    // The SDK's task_progress descriptions are already verb-prefixed status
-    // lines ("Running X", "Reading Y") — don't stack another verb on top.
     if ((p.status === "pending" || p.status === "in_progress") && progress.description?.trim()) {
       bits.push(progress.description.trim());
     }
@@ -413,9 +344,6 @@ const VENDOR_SUMMARIES: Record<string, ToolSummary> = {
   WebSearch: WEB_SEARCH_SUMMARY,
   WebFetch: WEB_FETCH_SUMMARY,
   Task: TASK_SUMMARY,
-  // Claude Code reports the parent sub-agent invocation as
-  // `vendorToolName: "Agent"` — register the same summary so it doesn't
-  // fall through to KIND_THINK_SUMMARY ("Thought" + Brain).
   Agent: TASK_SUMMARY,
   TodoWrite: TODO_SUMMARY,
   ExitPlanMode: EXIT_PLAN_SUMMARY,
@@ -423,8 +351,6 @@ const VENDOR_SUMMARIES: Record<string, ToolSummary> = {
   LS: LIST_SUMMARY,
   Skill: SKILL_SUMMARY,
 };
-
-// ---- ACP-kind fallbacks (work for opencode, codex, future backends) ----
 
 const KIND_SEARCH_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ toolKind: "search" }),
@@ -494,11 +420,6 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-/**
- * Extract the prompt the parent agent sent to a sub-agent. Sourced from
- * `part.input.prompt` (Claude Code's Agent tool and opencode's task tool
- * both surface the prompt this way). Returns null when absent or empty.
- */
 export function extractSubAgentInputPrompt(part: ToolCallPart): string | null {
   const input = part.input as { prompt?: unknown } | null | undefined;
   const prompt = input?.prompt;
@@ -507,10 +428,6 @@ export function extractSubAgentInputPrompt(part: ToolCallPart): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-/**
- * Selects the user-visible delegated-work report without repeating an echoed prompt.
- * @param part - The subagent tool call whose displayable report is needed.
- */
 export function extractSubAgentReturnText(part: ToolCallPart): string | null {
   if (!part.output) return null;
   const textChunks = part.output.filter((o) => o.type === "text") as { text: string }[];

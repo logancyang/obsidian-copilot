@@ -26,9 +26,6 @@ const mockState: AgentSelectState = {
   runCta: jest.fn(),
 };
 
-// The panel owns no derivation, so stubbing the hook leaves exactly the wiring
-// under test. The mock factory name must match the real export, so the no-hook
-// `use` prefix is expected here.
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/agentMode/ui/useAgentSelect", () => ({
   useAgentSelect: () => mockState,

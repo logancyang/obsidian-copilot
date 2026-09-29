@@ -123,12 +123,10 @@ const meta = {
 } satisfies Meta<AgentChatMessagesProps>;
 export default meta;
 
-/** Resolve questions first, then each full-width permission in queue order. */
 export const QueuedActions: StoryObj<AgentChatMessagesProps> = {
   render: () => <QueuedActionsDemo {...actionRailArgs} />,
 };
 
-/** Scroll upward through the long turn to pause following and show the return control. */
 export const LongResponse: StoryObj<AgentChatMessagesProps> = {
   args: {
     ...actionRailArgs,
@@ -151,7 +149,6 @@ export const LongResponse: StoryObj<AgentChatMessagesProps> = {
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };
 
-/** A verbose blocking question remains resolvable when the chat pane is shorter than the card. */
 export const TallQuestion: StoryObj<AgentChatMessagesProps> = {
   render: () => (
     <QueuedActionsDemo
@@ -162,7 +159,6 @@ export const TallQuestion: StoryObj<AgentChatMessagesProps> = {
   ),
 };
 
-/** A new turn keeps its running indicator after the preceding turn was stopped. */
 export const RunningAfterStop: StoryObj<AgentChatMessagesProps> = {
   args: {
     ...actionRailArgs,
@@ -185,7 +181,6 @@ export const RunningAfterStop: StoryObj<AgentChatMessagesProps> = {
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };
 
-/** An approved plan keeps a running indicator while the agent implements it. */
 export const ApprovedPlanRunning: StoryObj<AgentChatMessagesProps> = {
   args: {
     ...actionRailArgs,
@@ -205,7 +200,6 @@ export const ApprovedPlanRunning: StoryObj<AgentChatMessagesProps> = {
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };
 
-/** Submitted decisions and answers remain readable after their action cards close. */
 export const PlanResponses: StoryObj<AgentChatMessagesProps> = {
   args: {
     ...actionRailArgs,

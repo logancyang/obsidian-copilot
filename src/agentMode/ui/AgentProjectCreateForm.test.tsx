@@ -6,8 +6,6 @@ import {
 } from "@/agentMode/ui/AgentProjectCreateForm";
 
 beforeAll(() => {
-  // jsdom's `crypto` has no `randomUUID`; `makeNewProjectConfig` needs it. Use a
-  // counter so each call is unique (the real runtime is Electron/Obsidian).
   const cryptoObj = window.crypto as { randomUUID?: () => string };
   if (typeof cryptoObj.randomUUID !== "function") {
     let counter = 0;
@@ -63,7 +61,6 @@ describe("makeNewProjectConfig", () => {
   it("builds a name-only config with the Agent-Mode-empty defaults", () => {
     const project = makeNewProjectConfig("Research");
     expect(project.name).toBe("Research");
-    // Agent Mode never reads the CAG model selector → left empty, not defaulted.
     expect(project.systemPrompt).toBe("");
     expect(project.projectModelKey).toBe("");
     expect(project.modelConfigs).toEqual({});

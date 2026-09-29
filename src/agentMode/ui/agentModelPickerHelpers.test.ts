@@ -34,10 +34,6 @@ jest.mock("obsidian", () => ({
   App: class {},
 }));
 
-// Stub out the registry so the test doesn't pull in real backend descriptors
-// (which would drag in install modals and other unrelated UI). Backends whose id
-// is in `mockSelfHostWarnIds` report a self-host cloud-egress warning; the set is
-// empty by default so every existing test sees the unwarned path.
 const mockSelfHostWarnIds = new Set<string>();
 jest.mock("@/agentMode/backends/registry", () => {
   const stub = (id: string) => ({
@@ -108,8 +104,6 @@ describe("collectModelActiveContext", () => {
     expect(collectModelActiveContext(manager).activeModelState).toBeNull();
   });
 });
-
-// ---- helpers for builder tests ----------------------------------------
 
 function makeDescriptor(
   id: "codex" | "claude" | "opencode",
@@ -187,8 +181,6 @@ function makeManager(opts: {
 
 const emptySettings = {
   providers: {},
-  // The lineup the locked preview advertises, as the catalog cache holds it.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
   copilotPlusCatalog: {
     models: [
       { id: "copilot-plus-flash", displayName: "Copilot Plus Flash" },
@@ -223,8 +215,6 @@ function managerWithSonnet(): AgentSessionManager {
   return makeManager({ catalogById: { claude: makeCatalog([makeModelEntry("sonnet")]) } });
 }
 
-// ---- buildPickerEntries ----
-
 describe("buildPickerEntries", () => {
   it("previews the locked Copilot lineup above a routing agent's own models when unlicensed", () => {
     const entry = makeModelEntry("catalog-model");
@@ -247,7 +237,6 @@ describe("buildPickerEntries", () => {
 
     const locked = entries.filter((model) => model._needsLicense);
     expect(locked.length).toBeGreaterThan(0);
-    // Locked rows lead the section, so the offer is the first thing read.
     expect(entries.slice(0, locked.length).every((model) => model._needsLicense)).toBe(true);
     expect(entries[entries.length - 1].name).toBe("catalog-model");
     expect(locked.every((model) => model._group === descriptor.displayName)).toBe(true);
@@ -305,8 +294,6 @@ describe("buildPickerEntries", () => {
   });
 
   it("still shows a loading placeholder for a routing agent whose preload has not settled", () => {
-    // The locked rows must not satisfy the "section produced nothing" check, or
-    // an unlicensed user loses the per-agent loading row.
     const descriptor = {
       ...makeDescriptor("opencode"),
       routesCopilotModels: true,
@@ -430,8 +417,6 @@ describe("buildPickerEntries", () => {
     const codex = makeDescriptor("codex");
     const stranded = makeModelEntry("ghost-model", "Ghost");
     const visible = makeModelEntry("real-model");
-    // Only the "visible" model is in the discovered catalog — the active "ghost"
-    // is not, so synth-fallback should fire.
     const manager = makeManager({
       catalogById: {
         codex: makeCatalog([visible]),
@@ -477,8 +462,6 @@ describe("buildPickerEntries", () => {
   it("filters to the enabled set via getEnabledModelEntries", () => {
     const enabled = makeModelEntry("anthropic/claude-sonnet-4-6");
     const disabled = makeModelEntry("anthropic/claude-haiku");
-    // Only the first model is enabled; the second must be dropped from the
-    // picker even though the agent reports it.
     const opencode = {
       ...makeDescriptor("opencode"),
       getEnabledModelEntries: () => [
@@ -508,8 +491,6 @@ describe("buildPickerEntries", () => {
   });
 
   it("drops every model not in the enabled set except the kept one", () => {
-    // An empty enabled set curates nothing in, so only keepBaseModelId
-    // survives. `dropped` is neither enabled nor kept.
     const kept = makeModelEntry("kept-model");
     const dropped = makeModelEntry("dropped-model");
     const opencode = {
@@ -595,13 +576,9 @@ describe("buildPickerEntries", () => {
   });
 
   it("keeps the sticky active model even when the enabled set excludes it", () => {
-    // The active (sticky) model is no longer in the enabled set, but
-    // keepBaseModelId must preserve it so curation never strands the
-    // running selection.
     const sticky = makeModelEntry("anthropic/claude-haiku");
     const opencode = {
       ...makeDescriptor("opencode"),
-      // Empty enabled set — nothing curated in.
       getEnabledModelEntries: () => [],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
@@ -650,9 +627,6 @@ describe("buildPickerEntries", () => {
   });
 
   it("flags a warned cloud backend's preload placeholder row", () => {
-    // No discovered catalog yet + a settled preload → the loop synthesizes a
-    // placeholder; the self-host pass must reach it too (it lives in the same
-    // section, after the placeholder push).
     mockSelfHostWarnIds.add("claude");
     const claude = {
       ...makeDescriptor("claude"),
@@ -679,8 +653,6 @@ describe("buildPickerEntries", () => {
   });
 
   it("flags the stranded active row when its cloud backend is warned", () => {
-    // The synth row is created after per-section marking, so it carries its own
-    // self-host flag from `ctx.activeDescriptor`.
     mockSelfHostWarnIds.add("codex");
     const codex = makeDescriptor("codex");
     const stranded = makeModelEntry("ghost-model", "Ghost");
@@ -767,15 +739,10 @@ describe("buildPickerEntries", () => {
       emptySettings
     );
 
-    // "Add API key" would send the user to the wrong fix while the agent that
-    // would consume the key isn't installed at all.
     expect(entries[0]._disabledReason).toBe("Not set up");
   });
 
   it("regression: never disables the running backend's own rows when its binary goes missing", () => {
-    // The merged picker seeds its draft from selectable rows only, so disabling
-    // the active session's rows would silently draft a different backend's model
-    // and commit it when the popover closes.
     const claude = claudeWithInstallState({ kind: "absent" });
     const ctx: ModelActiveContext = {
       ...noSessionContext(),
@@ -789,8 +756,6 @@ describe("buildPickerEntries", () => {
     expect(entries.map((entry) => entry._disabledReason)).toEqual([undefined]);
   });
 });
-
-// ---- appendBackendSection (enabled-driven credential flags) ----
 
 describe("appendBackendSection — getEnabledModelEntries path", () => {
   function opencodeWithEntries(enabled: EnabledModelEntry[]): BackendDescriptor {
@@ -808,7 +773,6 @@ describe("appendBackendSection — getEnabledModelEntries path", () => {
     ];
     const entries: ModelSelectorEntry[] = [];
     appendBackendSection(entries, opencodeWithEntries(enabled), {
-      // Only `c` is reported by the agent; `d` is keyed+ok but unreported.
       backendModels: [makeModelEntry("openrouter/c", "Reported C")],
       keepBaseModelId: null,
       settings: emptySettings,
@@ -817,7 +781,6 @@ describe("appendBackendSection — getEnabledModelEntries path", () => {
     expect(byId["openrouter/a"]._disabledReason).toBe("Add API key");
     expect(byId["openrouter/c"]._disabledReason).toBeUndefined();
     expect(byId["openrouter/d"]._disabledReason).toBe("Not offered by agent");
-    // Reported metadata enriches the row name when present.
     expect(byId["openrouter/c"].displayName).toBe("Reported C");
   });
 
@@ -851,8 +814,6 @@ describe("appendBackendSection — getEnabledModelEntries path", () => {
   });
 
   it("flags a stale, unreported agent-native model as 'not offered by agent'", () => {
-    // claude/codex entries are always credentialState "ok"; an enabled id the
-    // agent no longer reports renders flagged rather than silently hidden.
     const claude = {
       ...makeDescriptor("claude"),
       getEnabledModelEntries: () => [
@@ -894,12 +855,9 @@ describe("appendBackendSection — getEnabledModelEntries path", () => {
       opencodeWithEntries([{ baseModelId: "openrouter/a", name: "A", credentialState: "ok" }]),
       { backendModels: null, keepBaseModelId: null, settings: emptySettings }
     );
-    // No flags before the catalog loads — buildPickerEntries shows "Loading…".
     expect(entries).toHaveLength(0);
   });
 });
-
-// ---- buildEffortSibling ----
 
 describe("buildEffortSibling", () => {
   function ctxWith(opts: {
@@ -954,8 +912,6 @@ describe("buildEffortSibling", () => {
     ).toBe(false);
   });
 });
-
-// ---- buildModelOnChange ----
 
 describe("buildModelOnChange", () => {
   function pickerEntry(backendId: string, baseModelId: string) {
@@ -1017,14 +973,11 @@ describe("buildModelOnChange", () => {
       replaceSessionInPlace,
       setDefaultBackend,
       closeSession,
-      // The legacy single-arg path seeds effort from the target's persisted
-      // (settings-managed) default, but must not write it back.
       defaultSelectionById: { claude: { baseModelId: "old", effort: "low" } },
     });
     const entries = [pickerEntry("claude", "opus")];
     const onChange = buildModelOnChange(manager, ctxFor("codex"), entries);
     onChange("claude:opus|agent");
-    // Allow the IIFE to run.
     await new Promise((r) => window.setTimeout(r, 0));
     expect(persistDefaultSelection).not.toHaveBeenCalled();
     expect(replaceSessionInPlace).toHaveBeenCalledWith("tab-1", "claude", {
@@ -1043,14 +996,11 @@ describe("buildModelOnChange", () => {
       { name: "no-backend", provider: "agent", enabled: true, isBuiltIn: false, displayName: "x" },
     ];
     const onChange = buildModelOnChange(manager, ctxFor("codex"), entries);
-    // Bare `name|provider` form — entry has no `_backendId`.
     onChange("no-backend|agent");
     expect(setDefaultBackend).not.toHaveBeenCalled();
     expect(applySelection).not.toHaveBeenCalled();
   });
 });
-
-// ---- buildEffortOptionsByModelKey ----
 
 describe("buildEffortOptionsByModelKey", () => {
   const ACTIVE = "github-copilot/gpt-5.4";
@@ -1080,7 +1030,7 @@ describe("buildEffortOptionsByModelKey", () => {
       },
       effortCatalogById: {
         opencode: {
-          [ACTIVE]: [{ value: "low", label: "low" }], // ignored — catalog wins
+          [ACTIVE]: [{ value: "low", label: "low" }],
           [OTHER]: [
             { value: "minimal", label: "minimal" },
             { value: "max", label: "max" },
@@ -1113,8 +1063,6 @@ describe("buildEffortOptionsByModelKey", () => {
     expect(out[getModelKeyFromModel(entries[0])]).toEqual([]);
   });
 });
-
-// ---- capability propagation --------------------------------------------
 
 describe("buildPickerEntries — persisted capability propagation", () => {
   function reported(baseModelId: string, provider: string | null): ModelEntry {
@@ -1190,8 +1138,6 @@ describe("backendReadinessReason()", () => {
 
   it("leaves rows selectable while the backend is ready or still being checked", () => {
     expect(backendReadinessReason({ kind: "ready", source: "custom" })).toBeUndefined();
-    // Transient: labelling a backend "not set up" for the moment a version probe
-    // takes would be wrong more often than right.
     expect(backendReadinessReason({ kind: "checking", source: "custom" })).toBeUndefined();
   });
 });

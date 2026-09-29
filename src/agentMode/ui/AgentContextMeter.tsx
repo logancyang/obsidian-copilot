@@ -14,21 +14,17 @@ interface AgentContextMeterProps {
   backend: AgentChatBackend;
 }
 
-/** Usage fraction at/above which the ring flips to the warning color. */
 const WARNING_THRESHOLD = 0.85;
 
-/** SVG donut geometry — sized to match the composer's `tw-size-4` glyphs. */
 const RING_RADIUS = 6;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
-/** One-decimal token count with a k/M suffix (e.g. `248.0k`, `1.0M`). */
 function formatTokens(count: number): string {
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
   if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
   return count.toLocaleString();
 }
 
-/** SVG donut whose arc fills to `fraction` (0–1). Color comes from `currentColor`. */
 function ContextRing({ fraction }: { fraction: number }) {
   const dashOffset = RING_CIRCUMFERENCE * (1 - fraction);
   return (
@@ -62,11 +58,6 @@ function ContextRing({ fraction }: { fraction: number }) {
   );
 }
 
-/**
- * `resets in 2h 14m` — coarse on purpose. These windows run for hours or days, so
- * ticking seconds would be noise, and this does not re-render on a timer. Returns null
- * once the reset is in the past rather than counting up.
- */
 function formatResetsIn(resetsAt: number | undefined, now: number): string | null {
   if (resetsAt === undefined) return null;
   const ms = resetsAt - now;
@@ -83,11 +74,6 @@ function formatResetsIn(resetsAt: number | undefined, now: number): string | nul
   return restHours === 0 ? `resets in ${days}d` : `resets in ${days}d ${restHours}h`;
 }
 
-/**
- * The account's plan caps, one row per window. They sit under the context bar because
- * they answer a different question: the context bar is about this conversation, these
- * are about how much of the plan is left before work stops entirely.
- */
 function PlanUsageRows({ planUsage }: { planUsage: PlanUsage }) {
   const now = Date.now();
   // Filtered at render, not only when a snapshot arrives or replays: a chat left open
@@ -119,9 +105,6 @@ function PlanUsageRows({ planUsage }: { planUsage: PlanUsage }) {
                 {percent}%
               </span>
             </div>
-            {/* Clamped for the bar only — a bar cannot render past full, while the
-                number above it still shows the real figure for an account being
-                served past its cap. */}
             <Progress value={Math.min(100, percent)} className="tw-h-1.5" />
           </div>
         );
@@ -130,14 +113,6 @@ function PlanUsageRows({ planUsage }: { planUsage: PlanUsage }) {
   );
 }
 
-/**
- * The meter itself: a trigger in the control row, and a hover tooltip holding a context
- * row plus any plan-cap rows.
- *
- * `contextWindow` is optional because not every backend reports one. When it is absent
- * the context row falls back to a bare token count, and the plan caps still render —
- * they are account-level and do not depend on knowing the window.
- */
 export interface UsageMeterProps {
   usage: SessionUsage | null;
   contextWindow: number | null;
@@ -145,8 +120,6 @@ export interface UsageMeterProps {
 }
 
 export function UsageMeter({ usage, contextWindow, planUsage }: UsageMeterProps) {
-  // Guard a non-finite `usedTokens` (e.g. NaN from a malformed upstream value)
-  // so it can't propagate into the rendered percent or the SVG dashoffset.
   const hasUsage = !!usage;
   const hasContext = contextWindow !== null;
   const used = hasUsage && Number.isFinite(usage.usedTokens) ? usage.usedTokens : 0;
@@ -154,8 +127,6 @@ export function UsageMeter({ usage, contextWindow, planUsage }: UsageMeterProps)
   const percent = Math.round(fraction * 100);
   const isWarning = hasContext && fraction >= WARNING_THRESHOLD;
 
-  // Radix Tooltip handles hover/focus open/close and hoverable content natively,
-  // so no manual open state or close timer is needed.
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -195,18 +166,6 @@ export function UsageMeter({ usage, contextWindow, planUsage }: UsageMeterProps)
   );
 }
 
-/**
- * Usage meter for the agent control bar: a single icon-sized control beside the other
- * row buttons, whose tooltip carries the session's context occupancy and the account's
- * plan caps.
- *
- * The two are independent. A backend can report a context window with no caps (a key-
- * authenticated Claude session), caps with no window (Copilot Plus models, whose window
- * the agent does not advertise), both, or neither. Each is rendered when present, so
- * caps are never dropped just because there is nothing to measure the context against.
- *
- * With nothing to report the control disappears rather than showing an empty meter.
- */
 export default function AgentContextMeter({ backend }: AgentContextMeterProps) {
   const usage = useSessionUsage(backend);
   const planUsage = usePlanUsage(backend);
@@ -226,7 +185,6 @@ export default function AgentContextMeter({ backend }: AgentContextMeterProps) {
     );
   }
 
-  // Nothing but a raw count to show: the long-standing count-only chip.
   if (!hasTokens) return null;
   return <TokenCounter tokenCount={usage.usedTokens} />;
 }

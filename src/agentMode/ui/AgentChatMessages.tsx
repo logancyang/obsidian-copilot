@@ -27,16 +27,9 @@ interface AgentChatMessagesProps {
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
   chatBackend: AgentChatBackend;
-  /** True while a turn is in flight. The last assistant message in the
-   *  visible list is treated as the streaming placeholder. */
   isLoading: boolean;
 }
 
-/**
- * Maps an AgentChatMessage to the subset of ChatMessage fields that
- * `ChatSingleMessage` consumes. Lets us reuse the leaf message renderer
- * without coupling Agent Mode types to the legacy `ChatMessage` shape.
- */
 function toChatMessageView(m: AgentChatMessage): ChatMessage {
   return {
     id: m.id,
@@ -50,12 +43,8 @@ function toChatMessageView(m: AgentChatMessage): ChatMessage {
   };
 }
 
-/** The last non-user (assistant) message, or `undefined` if none. */
-/**
- * Title of the tool call the chat already renders for `toolCallId`, newest
- * message first, so a permission card can name the tool its request omits.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/599
- */
+// A permission card names the tool its request omits from the chat's own tool call.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/599
 function findToolCallTitle(messages: AgentChatMessage[], toolCallId: string): string | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     const part = messages[i].parts?.find((p) => p.kind === "tool_call" && p.id === toolCallId);
@@ -142,8 +131,6 @@ const AgentMessageRow = memo(function AgentMessageRow({
           />
         </div>
       ) : (
-        // Agent Mode has no per-message regenerate / edit / delete flow yet
-        // (ACP owns conversation history server-side), so only copy / insert apply.
         <>
           <ChatSingleMessage
             sourcePath={sourcePath}
@@ -204,9 +191,6 @@ const AgentChatMessages = memo(
         ? `permission:${pendingPermission.toolCall.toolCallId}`
         : null;
 
-    // The latest assistant message owns both timer states: it ticks while that
-    // turn is in flight, then retains the frozen duration until the next turn
-    // appends a newer placeholder and naturally retires this row.
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);
     const streamingMessageId = isLoading ? latestAssistant?.id : undefined;
 
@@ -220,9 +204,6 @@ const AgentChatMessages = memo(
           scrollToEnd={scrollToEnd}
         >
           {visible.map((message, index) => {
-            // A plan remains part of the transcript, so it supplies tail
-            // content. Blocking actions live in their own rail and do not
-            // change the transcript's scroll headroom.
             const shouldApplyMinHeight =
               index === visible.length - 1 && message.sender !== USER_SENDER && !showPlanCard;
             const messageKey = getMessageKey(adapted[index], index);

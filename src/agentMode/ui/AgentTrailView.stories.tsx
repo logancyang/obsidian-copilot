@@ -25,11 +25,6 @@ function tool(
 const think = (text: string): AgentMessagePart => ({ kind: "thought", text });
 const say = (text: string): AgentMessagePart => ({ kind: "text", text });
 
-/**
- * The shape a real turn takes: long runs of interleaved tool calls and
- * reasoning, split by the prose that actually answers the question. Modelled on
- * a recorded turn whose trail rendered 34 rows before grouping.
- */
 const TURN: AgentMessagePart[] = [
   think("The conference is probably on the calendar rather than in a note."),
   tool("s1", "Skill", { input: { skill: "gcal" } }),
@@ -54,7 +49,6 @@ const TURN: AgentMessagePart[] = [
   say("Saved to [[Agentic AI Summit 2026]] with the schedule and the two talks you flagged."),
 ];
 
-/** The same turn caught mid-flight, with its last group still working. */
 const STREAMING: AgentMessagePart[] = [
   ...TURN.slice(0, 8),
   tool("b6", "Bash", {
@@ -63,7 +57,6 @@ const STREAMING: AgentMessagePart[] = [
   }),
 ];
 
-/** Every expandable activity family sharing one header and folding treatment. */
 const UNIFIED_CARDS: AgentMessagePart[] = [
   think("I should inspect the source before changing it."),
   say("The reasoning row uses the same inset and disclosure treatment as the work below."),
@@ -85,12 +78,6 @@ const UNIFIED_CARDS: AgentMessagePart[] = [
   say("Reasoning, individual tools, grouped work, and delegated work now align."),
 ];
 
-/**
- * `AgentTrail` renders markdown, so it needs the host's real `App`. The
- * `TooltipProvider` is the story's own scaffolding: a completed turn renders
- * the Copy / Insert row, whose `MessageActionButton` expects a provider from an
- * ancestor rather than supplying its own.
- */
 const TrailDemo: React.FC<{
   parts: AgentMessagePart[];
   isStreaming?: boolean;
@@ -119,22 +106,18 @@ const meta = {
 } satisfies Meta<AgentTrailProps>;
 export default meta;
 
-/** Work collapses into groups; every sentence the agent wrote stays visible. */
 export const GroupedTurn: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={TURN} />,
 };
 
-/** The last group shows the step in flight; earlier groups stay quiet. */
 export const Streaming: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={STREAMING} isStreaming />,
 };
 
-/** Reasoning and every tool-card family share one inset, chevron, and expanded rail. */
 export const UnifiedCardStyles: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={UNIFIED_CARDS} />,
 };
 
-/** A restored structured turn falls back to its timestamp when no duration was persisted. */
 export const CompletedWithoutDuration: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={UNIFIED_CARDS} showCompletedDuration={false} />,
 };

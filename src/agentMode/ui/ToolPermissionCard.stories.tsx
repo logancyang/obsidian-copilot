@@ -30,7 +30,6 @@ const meta = {
 } satisfies Meta<ToolPermissionCardProps>;
 export default meta;
 
-/** The action footer has one top divider inside the card's outer border. */
 export const Default: StoryObj<ToolPermissionCardProps> = {};
 
 export const MultipleFiles: StoryObj<ToolPermissionCardProps> = {
@@ -60,7 +59,6 @@ export const MultipleFiles: StoryObj<ToolPermissionCardProps> = {
   },
 };
 
-/** An agent that titles its request with only the tool's argument gets the tool named. */
 export const WebSearchQuery: StoryObj<ToolPermissionCardProps> = {
   args: {
     toolName: "websearch",

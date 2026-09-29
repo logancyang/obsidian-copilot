@@ -20,24 +20,14 @@ import { logError } from "@/logger";
 import React from "react";
 import type CopilotPlugin from "@/main";
 
-/** Everything the agent select view renders and the one action it commits. */
 export interface AgentSelectState {
   rows: readonly AgentSelectRow[];
   selectedId: BackendId;
-  /** Highlight a different agent. Local only — nothing is persisted until `runCta`. */
   select: (id: BackendId) => void;
   cta: AgentSelectCta;
-  /** Start a chat on the selected agent, or open its Configure dialog. */
   runCta: () => void;
 }
 
-/**
- * Wire the agent select view to the registry, live install states, and the
- * session manager. Derivation lives in `agentSelectModel`; this hook only owns
- * the transient selection and turns the resolved call to action into an effect.
- * @param plugin - Plugin instance backing readiness subscriptions and Configure dialogs.
- * @param manager - Session manager that commits the choice and spawns the chat.
- */
 export function useAgentSelect(
   plugin: CopilotPlugin,
   manager: AgentSessionManager | null | undefined
@@ -50,8 +40,6 @@ export function useAgentSelect(
   const isStarting = React.useSyncExternalStore(subscribe, getIsStarting, getIsStarting);
   const descriptors = backendDisplayOrder();
   const states = useBackendInstallStates(plugin);
-  // Until the user picks a row, the selection follows whichever backend would
-  // actually run, so the view opens on the agent the CTA would act upon.
   const sessionBackendId = useSessionBackendDescriptor(manager).id;
   const [pickedId, setPickedId] = React.useState<BackendId | null>(null);
   const selectedId = pickedId ?? sessionBackendId;
@@ -100,11 +88,7 @@ export function useAgentSelect(
       backendRegistry[id].openInstallUI(plugin);
       return;
     }
-    // Recheck at click time in case another pane started a launch after render.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/532
     if (!manager || manager.getIsStarting()) return;
-    // Persisting the choice is the point: without it the next launch would drop
-    // the user back here instead of on the agent they deliberately picked.
     manager.setDefaultBackend(id);
     manager.getOrCreateActiveSession().catch((e) => {
       logError("[AgentMode] agent select start failed", e);

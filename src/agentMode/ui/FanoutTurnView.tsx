@@ -15,7 +15,6 @@ import { App } from "obsidian";
 import { AlertTriangle, Check, CircleSlash, Loader2 } from "lucide-react";
 import React, { memo, useCallback, useMemo } from "react";
 
-/** The app's animated sigma spinner, sized to sit inline with a status label. */
 const ThinkingSpinner: React.FC = () => (
   <span className="tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center">
     <CopilotSpinner />
@@ -23,10 +22,8 @@ const ThinkingSpinner: React.FC = () => (
 );
 
 interface FanoutTurnViewProps {
-  /** Fan-out turn for a multi-agent assistant message (live or reloaded). */
   turn: FanoutTurn;
   app: App;
-  /** Selected tab — controlled by the card so its action bar can copy/insert it. */
   value: FanoutOptionValue;
   onSelect: (value: FanoutOptionValue) => void;
 }
@@ -37,7 +34,6 @@ interface FanoutTabProps {
   onSelect: (value: FanoutOptionValue) => void;
 }
 
-/** One segmented-row tab: brand icon, label, and live status dot. */
 const FanoutTab: React.FC<FanoutTabProps> = ({ option, selected, onSelect }) => {
   const { value, Icon, label, state } = option;
   const handleClick = useCallback(() => onSelect(value), [onSelect, value]);
@@ -49,9 +45,6 @@ const FanoutTab: React.FC<FanoutTabProps> = ({ option, selected, onSelect }) => 
       onClick={handleClick}
       className={cn(
         "tw-flex tw-items-center tw-gap-1.5 tw-rounded-md tw-border tw-border-solid tw-border-transparent tw-px-2 tw-py-1 tw-text-sm tw-transition-colors",
-        // Active tab: accent border + faint accent tint + normal-weight text,
-        // matching AgentTabStrip's active-tab treatment. The accent border is the
-        // reliable highlight; a background-only swap reads as "no active tab".
         selected
           ? "tw-border-interactive-accent tw-font-medium tw-text-normal tw-bg-interactive-accent/10"
           : "tw-text-muted hover:tw-bg-interactive-hover hover:tw-text-normal"
@@ -65,11 +58,9 @@ const FanoutTab: React.FC<FanoutTabProps> = ({ option, selected, onSelect }) => 
 };
 
 interface FanoutStatusDotProps {
-  /** Agent live state; `undefined` for the summary tab (it has its own state). */
   state: FanoutAgentState | undefined;
 }
 
-/** The trailing status indicator on an agent tab; the summary tab renders nothing. */
 const FanoutStatusDot: React.FC<FanoutStatusDotProps> = ({ state }) => {
   if (state === "streaming") {
     return <Loader2 className="tw-size-3 tw-shrink-0 tw-animate-spin tw-text-loading" />;
@@ -86,13 +77,6 @@ const FanoutStatusDot: React.FC<FanoutStatusDotProps> = ({ state }) => {
   return null;
 };
 
-/**
- * Render a fan-out turn as one assistant turn: a segmented tab row switching
- * between the summary and each agent's answer, with a direct agent-only view for
- * a sole answer. Each tab reflects its live state. Renders for BOTH a live turn
- * and a reloaded composite. Controlled — the owning card holds the selected tab
- * so its action bar can Copy/Insert the tab in view.
- */
 export const FanoutTurnView: React.FC<FanoutTurnViewProps> = memo(
   ({ turn, app, value, onSelect }) => {
     const options = useMemo(() => buildFanoutOptions(turn), [turn]);
@@ -122,11 +106,6 @@ interface FanoutTurnBodyProps {
   app: App;
 }
 
-/**
- * The body for the current selection: the summary (or its placeholder), else the
- * chosen agent's answer — streaming, finished, an error chip, or a cancelled
- * state. Partial text that streamed before a failure/cancel is shown above the chip.
- */
 const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => {
   if (value === FANOUT_SUMMARY_OPTION) {
     // Partial summary text must not hide an actionable setup or stream failure.
@@ -201,8 +180,6 @@ const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => 
     );
   }
 
-  // Finished with no text — terminal "did not answer", NOT a spinner (a `done`
-  // slot must never read as still thinking).
   if (answer.status === "done") {
     return (
       <FanoutStatusLine
@@ -212,32 +189,24 @@ const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => 
     );
   }
 
-  // Running with no text yet — the in-place thinking spinner.
   return <FanoutStatusLine icon={<ThinkingSpinner />} text="Thinking…" shimmer />;
 };
 
 interface FanoutSlotBodyProps {
-  /** The selected slot's markdown text. */
   text: string;
   app: App;
 }
 
-/** The selected slot's rendered markdown; Copy/Insert lives on the card's action bar. */
 const FanoutSlotBody: React.FC<FanoutSlotBodyProps> = ({ text, app }) => (
   <AgentMarkdownText text={text} app={app} />
 );
 
 interface FanoutTerminalStateProps {
-  /** Whatever prose streamed before the agent errored or was cancelled. */
   partialText: string;
   app: App;
   children: React.ReactNode;
 }
 
-/**
- * A terminal (error/cancelled) agent body: any partial answer that streamed
- * before stopping, then the status chip, so a mid-stream stop discards no tokens.
- */
 const FanoutTerminalState: React.FC<FanoutTerminalStateProps> = ({
   partialText,
   app,
@@ -256,11 +225,9 @@ interface FanoutStatusLineProps {
   icon: React.ReactNode;
   text: string;
   tone?: "error";
-  /** Animate the label with the shared running-gradient "thinking" shimmer. */
   shimmer?: boolean;
 }
 
-/** A small icon + label line used for streaming / pending / error states. */
 const FanoutStatusLine: React.FC<FanoutStatusLineProps> = ({ icon, text, tone, shimmer }) => (
   <div
     className={cn(

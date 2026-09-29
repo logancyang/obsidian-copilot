@@ -88,17 +88,14 @@ const meta = {
 } satisfies Meta<ProjectPickerListProps>;
 export default meta;
 
-/** Project identities use the same neutral folder treatment in every row. */
 export const Default: StoryObj<ProjectPickerListProps> = {
   render: () => <ProjectPickerDemo projects={projects} />,
 };
 
-/** Projects scroll within the shelf while search and creation stay available. */
 export const Overflow: StoryObj<ProjectPickerListProps> = {
   render: () => <ProjectPickerDemo projects={overflowProjects} />,
 };
 
-/** Multiple pages exercise scrolling and search beyond the initial fifty rows. */
 export const LongList: StoryObj<ProjectPickerListProps> = {
   render: () => (
     <ProjectPickerDemo

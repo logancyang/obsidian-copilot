@@ -43,7 +43,6 @@ const meta = {
 } satisfies Meta<ChatRowFrameProps>;
 export default meta;
 
-/** Project ownership remains visible in the right-aligned timestamp cluster. */
 export const ProjectBadge: StoryObj<ChatRowFrameProps> = {
   args: {
     title: PROJECT_TITLE,
@@ -52,7 +51,6 @@ export const ProjectBadge: StoryObj<ChatRowFrameProps> = {
   render: ({ title = PROJECT_TITLE, ...args }) => <ChatRowFrame title={title} {...args} />,
 };
 
-/** Long titles fill the space before a capped project badge and timestamp. */
 export const OverflowStress: StoryObj<ChatRowFrameProps> = {
   args: {
     title: OVERFLOW_TITLE,

@@ -20,30 +20,11 @@ interface PlanProposalCardProps {
   chatBackend: AgentChatBackend;
 }
 
-/**
- * Inline plan-review card. Rendered at the tail of the chat scroll
- * container while a plan is awaiting the user's decision; scrolls with
- * the conversation. Visible only while `plan.decision === "pending"` —
- * the parent gates the render so the user never sees a terminal
- * "Approved/Rejected" chip after acting.
- *
- * The card stays mounted across in-place plan revisions (`plan.id`
- * unchanged, `plan.revision` bumped) so the user's half-typed feedback
- * survives refreshed plan-exit signals. Transient state resets only when
- * the plan id changes (a new plan-mode review).
- *
- * The orchestration (resolving the ACP permission, switching modes for
- * non-gated backends, dispatching follow-up messages) lives in
- * `AgentChatBackend.resolvePlanProposal` — this component is purely
- * presentational + invokes that one entry point.
- */
 export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, app, chatBackend }) => {
   const [feedback, setFeedback] = useState("");
   const [busy, setBusy] = useState(false);
   const isPending = plan.decision === "pending";
 
-  // Reset transient state when the user enters a fresh plan-mode review
-  // (different `plan.id`). In-place revisions keep the typed feedback.
   useEffect(() => {
     // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- reset on plan-identity change; in-place revisions deliberately keep typed feedback so a key-prop remount would lose user input
     setFeedback("");
@@ -176,11 +157,6 @@ const PlanTeaser: React.FC<{ plan: CurrentPlan }> = ({ plan }) => (
   </pre>
 );
 
-/**
- * Pull a 4-line teaser out of the markdown body, skipping leading blank
- * lines. Showing the heading + a few bullets is usually enough to convey
- * what the plan is about; the full text lives in the editor preview.
- */
 function teaserFromMarkdown(md: string): string {
   const lines = md.split("\n").filter((l, i) => !(i === 0 && l.trim() === ""));
   return lines.slice(0, 4).join("\n");

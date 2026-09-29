@@ -1,7 +1,6 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-// activeDocument global (Radix popover portals into it).
 beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
 });
@@ -22,7 +21,6 @@ jest.mock("@/projects/projectPaths", () => ({
     projectsRoot: configPath.split("/").slice(0, -2).join("/"),
   }),
 }));
-// Keep the edit/reveal collaborators inert — exercised elsewhere.
 jest.mock("@/components/modals/project/AddProjectModal", () => ({
   AddProjectModal: jest.fn().mockImplementation(() => ({ open: jest.fn() })),
 }));
@@ -33,7 +31,6 @@ jest.mock("@/agentMode/ui/AgentProjectRowActions", () => ({
 const openAgentsFile = jest.fn().mockResolvedValue(undefined);
 jest.mock("@/instructions/agentsFile", () => ({
   openAgentsFile: (...args: unknown[]) => openAgentsFile(...args),
-  // Real predicate: CLAUDE.md visibility below asserts on its actual behavior.
   isClaudeImportOnly: jest.requireActual("@/instructions/agentsFile").isClaudeImportOnly,
 }));
 const moveProjectPromptToAgentsFile = jest.fn().mockResolvedValue(undefined);
@@ -68,8 +65,6 @@ function renderPopover(
   folderNames: string[] = [],
   fileContents: Record<string, string> = {}
 ) {
-  // The popover resolves the folder from the record's own config path, so the record must
-  // carry one — the live projects root is deliberately not consulted.
   getCachedProjectRecordById.mockReturnValue({
     folderName: "proj-1",
     filePath: "copilot/projects/proj-1/project.md",
@@ -84,7 +79,6 @@ function renderPopover(
     workspace: { getLeaf: jest.fn().mockReturnValue({ openFile }) },
   } as unknown as Parameters<typeof ProjectInfoPopover>[0]["app"];
   render(<ProjectInfoPopover app={app} project={PROJECT} todoList={todoList} />);
-  // Open the popover.
   fireEvent.click(screen.getByLabelText("Project info for My Research"));
   return { openFile };
 }
@@ -124,7 +118,6 @@ describe("ProjectInfoPopover", () => {
   });
 
   it("lists a CLAUDE.md that carries the user's own rules", async () => {
-    // Claude reads that content as live instructions, so the file must stay reachable.
     renderPopover(null, ["CLAUDE.md", "draft.md"], {
       "CLAUDE.md": "# My rules\nAlways answer in French.\n\n@AGENTS.md\n",
     });
@@ -148,8 +141,6 @@ describe("ProjectInfoPopover", () => {
       expect.anything(),
       expect.objectContaining({ folderName: "proj-1" })
     );
-    // Empty content: the move already put the real text on disk, and this must never
-    // overwrite a file the user wrote themselves.
     expect(openAgentsFile).toHaveBeenCalledWith(
       expect.anything(),
       "copilot/projects/proj-1",

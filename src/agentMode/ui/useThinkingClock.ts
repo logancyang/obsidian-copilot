@@ -1,14 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-/**
- * Measure only the group's active reasoning span. Completed spans are frozen
- * on their thought parts by the session store, so a batched React render
- * cannot skip them.
- *
- * @param active - Whether the group is reasoning at this moment.
- * @param startedAtMs - Event time for the active thought's first chunk.
- * @returns Milliseconds spent in the current reasoning span.
- */
 export function useThinkingClock(active: boolean, startedAtMs?: number): number {
   const fallbackStartedAtRef = useRef(Date.now());
   const [, setTick] = useState(0);

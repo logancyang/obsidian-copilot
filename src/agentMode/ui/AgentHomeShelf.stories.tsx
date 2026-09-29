@@ -35,5 +35,4 @@ const meta = {
 } satisfies Meta<AgentHomeShelfProps>;
 export default meta;
 
-/** Recent Chats omits its unbounded history total; Projects keeps its useful tally. */
 export const Default: StoryObj<AgentHomeShelfProps> = {};

@@ -11,10 +11,6 @@ function action(id: string): ActivityMember {
   };
 }
 
-/**
- * Stands in for the trail: state above the node list, groups addressed by their
- * trail-ordinal id. Growing `members` is what a streaming turn does.
- */
 const Trail: React.FC<{ members: ActivityMember[] }> = ({ members }) => {
   const { isOpen, toggle } = useTrailExpansion();
   return (
@@ -69,13 +65,10 @@ describe("useTrailExpansion", () => {
       fireEvent.click(screen.getByRole("button"));
       expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe("true");
 
-      // A new member arrives: the group's node identity is unchanged, so it
-      // must not snap shut on the user mid-read.
       rerender(<Trail members={[...members, action("c")]} />);
       expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe("true");
       expect(screen.getByText("c")).not.toBeNull();
 
-      // The turn settles and the trail re-renders: still the user's call.
       rerender(<Trail members={[...members, action("c")]} />);
       expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe("true");
     });

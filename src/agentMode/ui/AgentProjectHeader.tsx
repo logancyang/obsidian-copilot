@@ -6,30 +6,13 @@ import { ChevronLeft } from "lucide-react";
 import React, { memo } from "react";
 
 interface AgentProjectHeaderProps {
-  /** Live project name (read from `useProjects` by the parent so renames reflect). */
   projectName: string;
-  /** Leave the project workspace back to the global scope. */
   onExit: () => void;
-  /**
-   * Per-project options control (the `⋯` overflow menu: Edit / Reveal / Delete),
-   * rendered in the trailing slot. Passed as a node so this stays presentational
-   * — the parent owns the menu component and its handlers. Omitted when orphaned.
-   */
   menu?: React.ReactNode;
-  /**
-   * The active project's record is gone (folder/`project.md` deleted while the
-   * user was inside it). Degrades to just the `‹` escape hatch — no stale
-   * name, tile, or menu pointing at a project that no longer exists.
-   */
   orphaned?: boolean;
   className?: string;
 }
 
-/**
- * Thin workspace header shown above the chat surface whenever a project scope is
- * active (both the project landing and an in-project conversation). Presentational
- * only: the parent owns scope state and feeds the live `projectName`.
- */
 export const AgentProjectHeader = memo(
   ({
     projectName,

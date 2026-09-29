@@ -156,12 +156,10 @@ const meta = {
 } satisfies Meta<AgentLandingStackProps>;
 export default meta;
 
-/** The ten-row preview exercises the landing's full-height centered composition. */
 export const FullPreview: StoryObj<AgentLandingStackProps> = {
   render: (args) => <LandingStackCanvas args={args} />,
 };
 
-/** The Relevant Notes tab exercises a content-rich shelf inside the shared body viewport. */
 export const RelevantNotesPreview: StoryObj<AgentLandingStackProps> = {
   render: (args) => <RelevantNotesPreviewCanvas args={args} />,
 };

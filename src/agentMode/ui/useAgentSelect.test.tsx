@@ -150,7 +150,6 @@ describe("useAgentSelect", () => {
         manager
       );
 
-      // Configure remains usable while another launch is settling.
       act(() => result.current.runCta());
       expect(openInstallUI).toHaveBeenCalledWith(plugin);
       act(() => result.current.select("claude"));

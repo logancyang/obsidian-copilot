@@ -7,24 +7,12 @@ import { Notice } from "obsidian";
 import React, { useState } from "react";
 
 interface AgentProjectCreateFormProps {
-  /**
-   * Optional card title + one-line subtitle. The anchored create panel renders
-   * the form as a titled card (design B.1); when `title` is set the name input
-   * drops its "Name" label, since the subtitle already prompts for it.
-   */
   title?: string;
   subtitle?: string;
-  /** Resolve to close the panel; reject to surface a Notice and stay open. */
   onSave: (data: { name: string }) => Promise<void>;
   onCancel: () => void;
 }
 
-/**
- * Name-only "new project" form body, hosted by the anchored create panel
- * ({@link CreateProjectPanel}). Full project editing lives in AddProjectModal
- * (agent variant) — this form only creates. Exported for unit tests; the caller
- * owns persistence (mapping the name onto a {@link ProjectConfig}).
- */
 export function AgentProjectCreateForm({
   title,
   subtitle,
@@ -42,8 +30,6 @@ export function AgentProjectCreateForm({
     try {
       await onSave({ name: name.trim() });
     } catch (e) {
-      // Reason: createProject rejects on duplicate name etc. — keep the panel
-      // open so the user can correct the field instead of losing input.
       new Notice(err2String(e));
     } finally {
       setIsSaving(false);
@@ -58,7 +44,6 @@ export function AgentProjectCreateForm({
       placeholder="Project name"
       autoFocus
       onKeyDown={(e) => {
-        // Enter submits straight from the single name field.
         if (e.key === "Enter") {
           e.preventDefault();
           void handleSave();
@@ -76,8 +61,6 @@ export function AgentProjectCreateForm({
           {subtitle && <div className="tw-text-sm tw-text-muted">{subtitle}</div>}
         </div>
       )}
-      {/* With a title card (create panel) the subtitle is the prompt, so the
-          input drops the redundant "Name" label; otherwise keep the field. */}
       {title ? (
         nameInput
       ) : (
@@ -98,12 +81,6 @@ export function AgentProjectCreateForm({
   );
 }
 
-/**
- * Build a fresh, valid {@link ProjectConfig} for a name-only create. Agent Mode
- * ignores the CAG model selector, so it's left empty rather than forcing a
- * meaningless choice at creation time. The single source of truth for the
- * new-project shape, used by the anchored create panel (`CreateProjectPanel`).
- */
 export function makeNewProjectConfig(name: string): ProjectConfig {
   const now = Date.now();
   return {

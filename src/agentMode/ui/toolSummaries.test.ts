@@ -5,9 +5,6 @@ import {
 } from "@/agentMode/ui/toolSummaries";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 
-// Fixed ctx for every test — mirrors what `ActionCard` would resolve via
-// `getVaultBase(app)`. Lets us exercise vault-relative path rendering
-// without mocking the entire `app` object.
 const CTX = { vaultBase: "/Users/me/vault" };
 
 function tool(overrides: Partial<ToolCallPart> = {}): ToolCallPart {
@@ -78,11 +75,6 @@ describe("lookupToolSummary", () => {
   });
 
   it('routes Claude Code\'s "Agent" vendor name to the sub-agent summary', () => {
-    // Claude Code surfaces the parent Task call with
-    // `vendorToolName: "Agent"` (NOT "Task"). Without this alias the
-    // lookup falls through to KIND_THINK_SUMMARY (Brain icon,
-    // "Thought" line) which makes the sub-agent card look like a
-    // reasoning block containing tool calls.
     const t = tool({
       vendorToolName: "Agent",
       toolKind: "think",
@@ -97,7 +89,6 @@ describe("lookupToolSummary", () => {
     expect(s.collapsedLine(t, CTX)).toBe(
       'Explore · "Map user-facing features of obsidian-copilot"'
     );
-    // Same summary as the Task vendor name — the alias just routes through.
     const taskEquiv = lookupToolSummary({ ...t, vendorToolName: "Task" });
     expect(s).toBe(taskEquiv);
   });
@@ -125,8 +116,6 @@ describe("lookupToolSummary", () => {
   });
 
   it("humanizes a generic tool name instead of rendering '…'", () => {
-    // SDK seeds title to the (bare) tool name, so title === vendorToolName.
-    // Without the generic label this collapsed to "…".
     const t = tool({ vendorToolName: "do_thing", title: "do_thing" });
     expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Do thing");
   });
@@ -141,9 +130,6 @@ describe("lookupToolSummary", () => {
   });
 
   it("keeps the 'server ·' prefix when an MCP tool's bare name collides with a native tool", () => {
-    // `mcp__srv__read` strips to bare `read`, which resolves to the Read/kind
-    // summary; the server prefix must still surface so it doesn't masquerade
-    // as the native Read tool.
     const t = tool({
       vendorToolName: "Read",
       title: "read notes/x.md",
@@ -248,8 +234,6 @@ describe("lookupToolSummary", () => {
   });
 
   it("hides the duplicated vendor name while Read input is still streaming", () => {
-    // SDK seeds title to the vendor name before any input-JSON has been
-    // parsed. Should render "Reading …" rather than "Reading Read".
     const t = tool({ vendorToolName: "Read", title: "Read", status: "in_progress" });
     expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Reading …");
   });
@@ -365,7 +349,7 @@ describe("BASH_SUMMARY.expandedDetails", () => {
       "cd ~/Developer/obsidian-copilot && rg --multiline 'foo bar baz' src/**/*.ts | head -50";
     const t = tool({ vendorToolName: "Bash", input: { command: longCmd } });
     const s = lookupToolSummary(t);
-    expect(s.collapsedLine(t, CTX).length).toBeLessThan(longCmd.length); // collapsed truncates
+    expect(s.collapsedLine(t, CTX).length).toBeLessThan(longCmd.length);
     expect(s.expandedDetails?.(t)).toBe(longCmd);
   });
 
@@ -417,9 +401,6 @@ describe("extractSubAgentReturnText", () => {
   });
 
   it("returns null when output is identical to the input prompt", () => {
-    // Claude Code echoes the prompt as the Agent tool's `content` before
-    // the sub-agent has produced anything. That echo should not render
-    // as the sub-agent's response.
     const t = tool({
       input: { prompt: "do the research" },
       output: [{ type: "text", text: "do the research" }],

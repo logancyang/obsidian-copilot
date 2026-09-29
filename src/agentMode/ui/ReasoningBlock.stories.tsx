@@ -32,7 +32,6 @@ export const Active: StoryObj<ReasoningBlockProps> = {
   },
 };
 
-/** Matches the completed trail order so the response footer can be inspected as one row. */
 const ReasoningResponseDurationDemo: React.FC = () => {
   const app = useApp();
   return (

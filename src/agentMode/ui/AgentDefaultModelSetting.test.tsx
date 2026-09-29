@@ -100,9 +100,7 @@ describe("AgentDefaultModelSetting", () => {
       effortByModel: { opus: [{ value: "high", label: "High" }] },
     });
     render(<AgentDefaultModelSetting descriptor={makeDescriptor()} manager={manager} />);
-    // The model select shows the sentinel, not the first enabled model.
     expect(getSettingSelect("Default model").value).toBe("__agent_default__");
-    // No concrete default → the agent picks effort, but the row keeps its layout space.
     expect(getSettingSelect("Default effort").disabled).toBe(true);
   });
 
@@ -159,9 +157,7 @@ describe("AgentDefaultModelSetting", () => {
       defaultSelection: { baseModelId: "opus", effort: "high" },
       persist,
     });
-    // The enable list no longer contains the stored default's model.
     render(<AgentDefaultModelSetting descriptor={makeDescriptor([])} manager={manager} />);
-    // The stale default is shown as a disabled option, not hidden.
     expect(screen.getByDisplayValue("opus (disabled)")).not.toBeNull();
     fireEvent.change(screen.getByDisplayValue("opus (disabled)"), {
       target: { value: "__agent_default__" },

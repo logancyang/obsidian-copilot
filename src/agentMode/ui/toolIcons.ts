@@ -16,15 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-/**
- * Icon map keyed by `vendorToolName` (richer; populated by backend
- * adapters at their translation seam) and ACP `toolKind` (portable
- * fallback). Lookup order: vendor → kind → generic. No per-backend
- * overrides — adding an entry here is a UI-layer concern, not a
- * backend boundary leak.
- */
 const VENDOR_ICONS: Record<string, LucideIcon> = {
-  // Claude Code
   Read: FileText,
   Edit: Pencil,
   MultiEdit: Pencil,
@@ -36,9 +28,6 @@ const VENDOR_ICONS: Record<string, LucideIcon> = {
   WebSearch: Globe,
   WebFetch: Globe,
   Task: Bot,
-  // Claude Code's Task tool surfaces as `vendorToolName: "Agent"` (NOT
-  // "Task"); the title-only "Task" we put in this map is mostly
-  // defensive — both should resolve to the same sub-agent visual.
   Agent: Bot,
   TodoWrite: ListChecks,
   ExitPlanMode: ClipboardList,

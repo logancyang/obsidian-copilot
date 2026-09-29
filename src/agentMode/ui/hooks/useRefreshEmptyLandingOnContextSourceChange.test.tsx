@@ -12,8 +12,6 @@ interface Props {
   refresh: () => Promise<boolean>;
 }
 
-/** Drives the hook through a real component so effects + ref updates run as in
- * production. Each render passes the current props verbatim. */
 function Harness(props: Props) {
   useRefreshEmptyLandingOnContextSourceChange(props);
   return null;
@@ -28,7 +26,6 @@ const BASE: Props = {
   refresh: async () => true,
 };
 
-/** Flush the microtasks the hook's then/finally chain schedules. */
 async function flush() {
   await act(async () => {
     await Promise.resolve();
@@ -67,11 +64,9 @@ describe("useRefreshEmptyLandingOnContextSourceChange", () => {
     const refresh = jest.fn(async () => true);
     const { rerender } = render(<Harness {...BASE} refresh={refresh} />);
     await flush();
-    // Source changes while the user is typing — no refresh yet.
     rerender(<Harness {...BASE} signature="sig-b" draftEmpty={false} refresh={refresh} />);
     await flush();
     expect(refresh).not.toHaveBeenCalled();
-    // User clears the input — the deferred change is now picked up.
     rerender(<Harness {...BASE} signature="sig-b" draftEmpty={true} refresh={refresh} />);
     await flush();
     expect(refresh).toHaveBeenCalledTimes(1);
@@ -93,12 +88,9 @@ describe("useRefreshEmptyLandingOnContextSourceChange", () => {
     const refresh = jest.fn(async () => true);
     const { rerender } = render(<Harness {...BASE} refresh={refresh} />);
     await flush();
-    // Not a landing: accept silently (next New Chat reads fresh config)…
     rerender(<Harness {...BASE} signature="sig-b" isLanding={false} refresh={refresh} />);
     await flush();
     expect(refresh).not.toHaveBeenCalled();
-    // …and because the baseline advanced, returning to a landing at the SAME
-    // signature must not retroactively refresh.
     rerender(<Harness {...BASE} signature="sig-b" isLanding={true} refresh={refresh} />);
     await flush();
     expect(refresh).not.toHaveBeenCalled();
@@ -108,7 +100,6 @@ describe("useRefreshEmptyLandingOnContextSourceChange", () => {
     const refresh = jest.fn(async () => true);
     const { rerender } = render(<Harness {...BASE} refresh={refresh} />);
     await flush();
-    // A different project with a different signature is a switch, not an edit.
     rerender(<Harness {...BASE} activeProjectId="p2" signature="sig-z" refresh={refresh} />);
     await flush();
     expect(refresh).not.toHaveBeenCalled();
@@ -128,21 +119,16 @@ describe("useRefreshEmptyLandingOnContextSourceChange", () => {
   });
 
   it("does not tight-loop when a refresh keeps failing", async () => {
-    // A guarded no-op / failure resolves false; the baseline must stay put
-    // WITHOUT self-ticking, so it retries only on a real dependency change.
     const refresh = jest.fn(async () => false);
     const { rerender } = render(<Harness {...BASE} refresh={refresh} />);
     await flush();
     rerender(<Harness {...BASE} signature="sig-b" refresh={refresh} />);
     await flush();
     await flush();
-    // Exactly one attempt for the one signature change — no self-driven retries.
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   it("converges to the final signature when it changes again mid-flight", async () => {
-    // Hold the first refresh open so the single-flight guard is active while a
-    // newer edit lands; on settle the hook must catch up to the LATEST signature.
     let releaseFirst!: () => void;
     const gate = new Promise<void>((resolve) => {
       releaseFirst = resolve;
@@ -150,21 +136,17 @@ describe("useRefreshEmptyLandingOnContextSourceChange", () => {
     let call = 0;
     const refresh = jest.fn(async () => {
       call += 1;
-      if (call === 1) await gate; // first replace stays in flight
+      if (call === 1) await gate;
       return true;
     });
 
     const { rerender } = render(<Harness {...BASE} refresh={refresh} />);
     await flush();
-    // sig-a → sig-b kicks off the first (held) refresh.
     rerender(<Harness {...BASE} signature="sig-b" refresh={refresh} />);
     await flush();
-    // While it's in flight, sig-b → sig-c arrives — gated, no second call yet.
     rerender(<Harness {...BASE} signature="sig-c" refresh={refresh} />);
     await flush();
     expect(refresh).toHaveBeenCalledTimes(1);
-    // Release the first replace; the success tick re-evaluates and, since the
-    // live signature is now sig-c (≠ the captured sig-b baseline), refreshes again.
     await act(async () => {
       releaseFirst();
       await Promise.resolve();

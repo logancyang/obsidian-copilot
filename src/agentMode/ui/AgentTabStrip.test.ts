@@ -18,13 +18,10 @@ describe("AgentTabStrip", () => {
     });
 
     it("shows all tabs when they fit alongside the + button", () => {
-      // 3 fixed tabs + 2 gaps + plus button = 128+4+128+4+128+32 = 424
       expect(computeVisibleCount(424, 3)).toBe(3);
     });
 
     it("reserves overflow button space when not all tabs fit", () => {
-      // With overflow, tab budget is 460 - plus(32) - overflow(32) = 396,
-      // which fits 3 fixed tabs and 2 inter-tab gaps.
       expect(computeVisibleCount(460, 5)).toBe(3);
     });
 
@@ -33,13 +30,11 @@ describe("AgentTabStrip", () => {
     });
 
     it("treats the + button as always reserved", () => {
-      // One fixed tab + plus button = 128 + 32.
       expect(computeVisibleCount(160, 1)).toBe(1);
       expect(computeVisibleCount(159, 1)).toBe(1);
     });
 
     it("accounts for inter-tab gaps", () => {
-      // 2 fixed tabs + 1 gap + plus button = 128+4+128+32 = 292.
       expect(computeVisibleCount(292, 2)).toBe(2);
       expect(computeVisibleCount(291, 2)).toBe(1);
     });
@@ -73,7 +68,6 @@ describe("AgentTabStrip", () => {
         visibleCount: 2,
         activeId: "d",
       });
-      // 'd' takes the last visible slot; 'b' is displaced to the front of overflow.
       expect(visibleSessions.map((x) => x.internalId)).toEqual(["a", "d"]);
       expect(overflowSessions.map((x) => x.internalId)).toEqual(["b", "c"]);
     });

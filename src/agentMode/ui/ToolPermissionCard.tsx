@@ -24,18 +24,6 @@ interface ToolPermissionCardProps {
 
 const EMPTY_OPTION_NAMES: readonly string[] = Object.freeze([]);
 
-/**
- * Permission card rendered in the chat's action rail while a tool call is
- * awaiting the user's decision. Replaces the modal that
- * used to sit on top of every chat — modals are easy to dismiss by accident
- * (click-outside resolves as deny) and they steal focus across concurrent
- * sessions. The card stays visible until the user picks an option or the
- * turn is cancelled.
- *
- * The backend translates one-time and persistent decisions from the selected
- * `optionId`; this component only displays the domain prompt and forwards that
- * identifier.
- */
 export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
   request,
   onResolve,
@@ -143,12 +131,6 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
   );
 };
 
-/**
- * Map `PermissionOptionKind` to a Button variant. "Once" actions stay neutral
- * so neither answer feels pre-selected. "Always" actions get visual weight
- * (accent for allow, red for deny) — those are the choices the user should
- * think harder about, since they persist beyond this turn.
- */
 function variantForKind(kind: PermissionOptionKind): "default" | "secondary" | "destructive" {
   switch (kind) {
     case "allow_once":
@@ -161,10 +143,6 @@ function variantForKind(kind: PermissionOptionKind): "default" | "secondary" | "
   }
 }
 
-/**
- * Show allow_once first (the safe default), then allow_always, then reject
- * variants. Keeps the most-used action under the user's mouse.
- */
 function sortOptions(options: PermissionOption[]): PermissionOption[] {
   return [...options].sort(
     (a, b) => PERMISSION_OPTION_KINDS.indexOf(a.kind) - PERMISSION_OPTION_KINDS.indexOf(b.kind)
