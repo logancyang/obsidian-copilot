@@ -1,25 +1,19 @@
-/**
- * Core document structure for search indexing
- */
 export interface NoteDoc {
-  id: string; // vault-relative path
-  title: string; // filename or front-matter title
-  headings: string[]; // H1..H6 plain text (indexed)
-  tags: string[]; // inline + frontmatter via getAllTags(cache) (indexed)
-  props: Record<string, unknown>; // frontmatter key/values (values indexed, keys ignored)
-  linksOut: string[]; // outgoing link full paths (extracted and indexed as basenames)
-  linksIn: string[]; // backlink full paths (extracted and indexed as basenames)
-  body: string; // full markdown text (indexed)
+  id: string;
+  title: string;
+  headings: string[];
+  tags: string[];
+  props: Record<string, unknown>;
+  linksOut: string[];
+  linksIn: string[];
+  body: string;
 }
 
-/**
- * Explanation for why a note ranked high in search results
- */
 export interface SearchExplanation {
   lexicalMatches?: {
-    field: string; // title, path, tags, body, etc.
-    query: string; // which query matched
-    weight: number; // field weight used
+    field: string;
+    query: string;
+    weight: number;
   }[];
   folderBoost?: {
     folder: string;
@@ -32,30 +26,24 @@ export interface SearchExplanation {
     connections: number;
     boostFactor: number;
   };
-  baseScore: number; // score before boosts
-  finalScore: number; // score after all adjustments
+  baseScore: number;
+  finalScore: number;
 }
 
-/**
- * Simplified structure for ranking results
- */
 export interface NoteIdRank {
-  id: string; // note path
-  score: number; // relevance score
-  engine?: string; // source engine (l1, semantic, grepPrior)
-  explanation?: SearchExplanation; // explanation of scoring factors
+  id: string;
+  score: number;
+  engine?: string;
+  explanation?: SearchExplanation;
 }
 
 export interface SearchOptions {
   maxResults?: number;
   l1ByteCap?: number;
   candidateLimit?: number;
-  salientTerms?: string[]; // Additional terms to enhance the search
-  /** Enable lexical boosts (folder and graph) - default: true */
+  salientTerms?: string[];
   enableLexicalBoosts?: boolean;
-  /** When true, bypasses max result ceilings and returns every matching chunk */
   returnAll?: boolean;
-  /** Pre-expanded query data to skip QueryExpander call (avoids double expansion) */
   preExpandedQuery?: {
     originalQuery: string;
     queries: string[];

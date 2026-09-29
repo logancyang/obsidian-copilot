@@ -25,10 +25,6 @@ describe("projectPaths", () => {
 
   describe("getProjectAnchorFromConfigPath()", () => {
     it("resolves a project's tree from its own config path, ignoring the live root", () => {
-      // The two disagree for at least a second after a Copilot root change: the
-      // root activates immediately while ProjectRegister reloads its cache on a
-      // 1s trailing debounce. An operation holding a record from the old tree must
-      // keep acting on that tree.
       const anchor = getProjectAnchorFromConfigPath("old-root/projects/My Project/project.md");
 
       expect(anchor.projectFolderPath).toBe("old-root/projects/My Project");
@@ -36,10 +32,6 @@ describe("projectPaths", () => {
     });
 
     it("throws on a path too shallow to name a tree instead of inventing one", () => {
-      // Unreachable from a real record (isProjectConfigFile enforces the shape).
-      // Throwing beats both alternatives: a naive slice truncates ("project.md" to
-      // "project."), and defaulting to the live root reintroduces the dependency
-      // this helper removes. Either hands the caller a path pointing nowhere.
       expect(() => getProjectAnchorFromConfigPath("project.md")).toThrow(
         'Not a project config path: "project.md"'
       );
@@ -53,14 +45,11 @@ describe("projectPaths", () => {
 
         expect(anchor.projectsRoot).toBe("old-root/projects");
       } finally {
-        // Restore: this mock is module-level, and the suites below derive paths
-        // from it.
         mockedRoot.mockReturnValue("copilot-projects");
       }
     });
   });
 
-  // AGENTS.md is deliberately not a config file — see the guard's own note.
   describe("isProjectConfigFile()", () => {
     it("recognizes project.md", () => {
       expect(

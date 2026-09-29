@@ -21,7 +21,6 @@ describe("L2ContextCompactor", () => {
       const text =
         "First sentence. Second sentence. Third sentence that goes on and on to make it longer.";
       const result = truncateWithEllipsis(text, 50);
-      // Should break after "Second sentence." since it's the last sentence ending > 50% mark
       expect(result).toContain("First sentence.");
       expect(result).toContain("Second sentence.");
       expect(result).toContain("...");
@@ -70,7 +69,6 @@ Here are the results of the study. They show interesting findings.`;
       expect(result).toContain("## Introduction");
       expect(result).toContain("## Methodology");
       expect(result).toContain("## Results");
-      // Should truncate long sections
       expect(result.length).toBeLessThan(content.length);
     });
 
@@ -395,7 +393,6 @@ ${"Y".repeat(3000)}`;
         verbatimThreshold: 1000,
       });
 
-      // Should return verbatim, not compacted
       expect(result).toBe(xml);
       expect(result).not.toContain("prior_context");
     });
@@ -412,7 +409,6 @@ ${"Y".repeat(3000)}`;
         verbatimThreshold: 1000,
       });
 
-      // Should return verbatim, not compacted
       expect(result).toBe(xml);
       expect(result).not.toContain("prior_context");
     });
@@ -430,7 +426,6 @@ ${"Y".repeat(3000)}`;
 
   describe("real-world scenarios", () => {
     it("should handle a typical research note with large sections", () => {
-      // Generate a realistic large research note where each section has substantial content
       const longParagraph = (topic: string) =>
         `This section discusses ${topic} in great detail. `.repeat(30);
 
@@ -481,7 +476,6 @@ ${longParagraph("summary and future work")}`;
         previewCharsPerSection: 300,
       });
 
-      // Should preserve all major sections
       expect(result).toContain("## Abstract");
       expect(result).toContain("## 1. Introduction");
       expect(result).toContain("### 1.1 Background");
@@ -490,10 +484,8 @@ ${longParagraph("summary and future work")}`;
       expect(result).toContain("## 4. Discussion");
       expect(result).toContain("## 5. Conclusion");
 
-      // Should be significantly smaller (each section was ~1500 chars, now ~300)
       expect(result.length).toBeLessThan(xml.length * 0.3);
 
-      // Should be wrapped in prior_context
       expect(result).toContain("prior_context");
     });
 
@@ -539,7 +531,6 @@ Some concluding remarks.`;
 
       const result = compactBySection(content, 400, 20);
 
-      // Should preserve structure
       expect(result).toContain("## Overview");
       expect(result).toContain("## Code Examples");
       expect(result).toContain("```python");
@@ -634,7 +625,7 @@ Here's what I found in the note.`;
       const resultArray = result as Array<{ type: string; text: string }>;
       expect(resultArray[0].type).toBe("text");
       expect(resultArray[0].text.length).toBeLessThan(originalText.length);
-      expect(resultArray[1]).toEqual(content[1]); // Image unchanged
+      expect(resultArray[1]).toEqual(content[1]);
     });
 
     it("should keep small tool results verbatim", () => {
@@ -650,7 +641,7 @@ Here's what I found in the note.`;
       const content = `Tool 'readNote' result: ${readNoteResult}`;
       const result = compactChatHistoryContent(content);
 
-      expect(result).toBe(content); // Unchanged
+      expect(result).toBe(content);
     });
 
     it("should handle multiple tool results in one message", () => {

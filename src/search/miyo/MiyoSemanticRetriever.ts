@@ -18,10 +18,8 @@ import {
 import { createCopilotPatternFilter } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
 
-/** Number of chunks to return when the caller does not request a specific limit. */
 const DEFAULT_FINAL_K = 20;
 
-/** Largest candidate pool exposed by Miyo's search endpoint. */
 const MIYO_SEARCH_CANDIDATE_LIMIT = 1000;
 
 type MiyoSemanticRetrieverOptions = {
@@ -34,24 +32,14 @@ type MiyoSemanticRetrieverOptions = {
   useRerankerThreshold?: number;
 };
 
-/**
- * Semantic retriever that delegates hybrid search to Miyo.
- */
 export class MiyoSemanticRetriever extends BaseRetriever {
   public lc_namespace = ["miyo_semantic_retriever"];
 
   private client: MiyoClient;
   private readonly returnAll: boolean;
-  /** Maximum number of chunks returned after inclusion/exclusion filtering. */
   private readonly finalK: number;
   private readonly minSimilarityScore: number;
 
-  /**
-   * Create a new Miyo semantic retriever.
-   *
-   * @param app - Obsidian application instance.
-   * @param options - Retriever options.
-   */
   constructor(
     private app: App,
     private options: MiyoSemanticRetrieverOptions
@@ -63,14 +51,6 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     this.minSimilarityScore = options.minSimilarityScore ?? 0.1;
   }
 
-  /**
-   * Retrieve relevant documents by querying Miyo semantic search only.
-   * Path/title/tag reads are handled upstream by FilterRetriever orchestration.
-   *
-   * @param query - User query string.
-   * @param _config - Optional LangChain callback configuration.
-   * @returns Array of relevant Documents.
-   */
   public async getRelevantDocuments(
     query: string,
     _config?: BaseCallbackConfig
@@ -87,24 +67,12 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     return limitedChunks;
   }
 
-  /**
-   * Filter chunks by Copilot's QA inclusion/exclusion rules so Miyo results
-   * honor the same scope as locally-indexed search.
-   *
-   * @param chunks - Deduplicated chunks from Miyo.
-   * @returns Chunks whose source path passes the inclusion/exclusion rules.
-   */
   private filterByCopilotPatterns(chunks: Document[]): Document[] {
     const isAllowed = createCopilotPatternFilter(this.app);
     const allowed: Document[] = [];
     const excludedPaths: string[] = [];
     for (const chunk of chunks) {
       const path = chunk.metadata.path as string;
-      // Another vault's results (search-all) never go through Copilot's QA
-      // rules: those rules — including the system-root exclusion — are defined
-      // over THIS vault's namespace, and an external folder that merely shares
-      // a root's name (e.g. "copilot") must not be swallowed by them. Absent
-      // flag (fail-closed) means "ours" and gets filtered.
       if (chunk.metadata.fromCurrentVault === false) {
         allowed.push(chunk);
         continue;
@@ -127,12 +95,6 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     return allowed;
   }
 
-  /**
-   * Fetch Miyo results for the given query.
-   *
-   * @param query - User query.
-   * @returns Array of Miyo search documents.
-   */
   private async searchMiyo(query: string): Promise<Document[]> {
     const searchAll = getSettings().miyoSearchAll;
     const folderName = searchAll ? undefined : getMiyoFolderName(this.app);
@@ -184,7 +146,6 @@ export class MiyoSemanticRetriever extends BaseRetriever {
       // Only a folder-scoped request proves anything about this vault. An
       // unrestricted search omits the folder, so its 404 describes the route,
       // not the registration, and must not send the user to register again.
-      // https://github.com/logancyang/obsidian-copilot/pull/3090#discussion_r3926715956
       if (folderName !== undefined && error instanceof MiyoRequestError && error.status === 404) {
         throw new Error(
           "This vault is not registered with Miyo. Register it in Miyo, then retry vault search.",
@@ -197,11 +158,6 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     }
   }
 
-  /**
-   * Build optional Miyo search filters for time range queries.
-   *
-   * @returns Array of filters when time range is specified, otherwise undefined.
-   */
   private buildSearchFilters(): MiyoSearchFilter[] | undefined {
     if (!this.options.timeRange) {
       return undefined;
@@ -217,20 +173,8 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     ];
   }
 
-  /**
-   * Convert Miyo search results to LangChain Documents.
-   *
-   * @param result - Miyo search result item.
-   * @param searchAll - Whether the originating query spanned all Miyo folders
-   *   (snapshotted at request time so a mid-request settings flip can't change
-   *   how this batch's ownership is judged).
-   * @returns LangChain Document instance.
-   */
   private toDocument(result: MiyoSearchResult, searchAll: boolean): Document {
     const relativePath = getVaultRelativeMiyoPath(this.app, result.path);
-    // A folder-scoped query only ever returns this vault's content, so it is
-    // always ours — even if a result arrives without the folder prefix. Only
-    // an unrestricted (search-all) query needs the raw-path ownership check.
     const fromCurrentVault = !searchAll || isCurrentVaultMiyoPath(this.app, result.path);
     const metadata = result.metadata ?? {};
     const chunkId =
@@ -255,19 +199,11 @@ export class MiyoSemanticRetriever extends BaseRetriever {
         created_at: result.created_at,
         nchars: result.nchars,
         chunkId,
-        // After ...metadata so a server-supplied field can never override the
-        // locally-computed ownership verdict.
         fromCurrentVault,
       },
     });
   }
 
-  /**
-   * Determine whether a search result meets the score threshold.
-   *
-   * @param result - Miyo search result item.
-   * @returns True if the score passes the threshold.
-   */
   private isScoreAboveThreshold(result: MiyoSearchResult): boolean {
     const score = result.score;
     if (typeof score !== "number" || Number.isNaN(score)) {
@@ -276,12 +212,6 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     return score >= this.minSimilarityScore;
   }
 
-  /**
-   * Deduplicate semantic results by stable document identity.
-   *
-   * @param semanticChunks - Miyo search results.
-   * @returns Deduplicated semantic Documents.
-   */
   private deduplicateResults(semanticChunks: Document[]): Document[] {
     const combined = new Map<string, Document>();
     const insert = (doc: Document) => {
@@ -302,13 +232,6 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     return Array.from(combined.values());
   }
 
-  /**
-   * Log debug information to mirror Orama hybrid retriever output.
-   *
-   * @param query - User query string.
-   * @param semanticChunks - Semantic search chunks.
-   * @param dedupedChunks - Deduplicated results.
-   */
   private logDebugInfo(query: string, semanticChunks: Document[], dedupedChunks: Document[]): void {
     logInfo("*** MIYO SEMANTIC RETRIEVER DEBUG INFO: ***");
     logInfo("Query: ", query);
@@ -324,12 +247,6 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     logInfo("Max Miyo Score: ", maxSemanticScore);
   }
 
-  /**
-   * Compute a stable key for a document to support deduplication.
-   *
-   * @param doc - Document to key.
-   * @returns Stable key string.
-   */
   private getDocumentKey(doc: Document): string {
     const metadata = doc.metadata ?? {};
     return (metadata.chunkId ||

@@ -16,10 +16,6 @@ export const getToolDescription = (tool: string): string => {
 };
 
 export class ToolManager {
-  /**
-   * Call a tool with the given arguments.
-   * Throws on error so caller can handle with proper context (args, tool name).
-   */
   static async callTool(tool: unknown, args: unknown): Promise<unknown> {
     if (!tool) {
       throw new Error("Tool is undefined");

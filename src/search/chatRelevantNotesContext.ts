@@ -6,7 +6,6 @@ export interface ChatRelevantNotesContext {
   skippedAttachments: number;
 }
 
-/** Owns the last focused chat for one vault; it never stores context on disk. */
 export class ChatRelevantNotesStore {
   private current: ChatRelevantNotesContext | null = null;
   private listeners = new Set<() => void>();
@@ -31,9 +30,6 @@ export class ChatRelevantNotesStore {
 }
 
 const stores = new WeakMap<object, ChatRelevantNotesStore>();
-/** Share source selection across both hosts and popout windows in the same vault.
- * @param app - Vault owner, used only as an identity key.
- */
 export function getChatRelevantNotesStore(app: object): ChatRelevantNotesStore {
   let store = stores.get(app);
   if (!store) {

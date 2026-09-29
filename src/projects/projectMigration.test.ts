@@ -1,6 +1,5 @@
 import { deriveProjectFolderName, sanitizeVaultPathSegment } from "@/projects/projectPaths";
 
-// Mock dependencies required by projectPaths imports
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(() => ({ projectsFolder: "copilot-projects" })),
 }));
@@ -40,24 +39,19 @@ describe("deriveProjectFolderName", () => {
 
 describe("folder name collision scenarios", () => {
   it('different names sanitize to the same folder: "a/b" and "a|b"', () => {
-    // Both "/" and "|" are replaced with "_", so both produce "a_b"
     const name1 = sanitizeVaultPathSegment("a/b");
     const name2 = sanitizeVaultPathSegment("a|b");
-    // Reason: demonstrates that collision detection in migration is necessary
     expect(name1).toBe(name2);
   });
 
   it("case-insensitive collision: MyProject vs myproject", () => {
     const name1 = sanitizeVaultPathSegment("MyProject");
     const name2 = sanitizeVaultPathSegment("myproject");
-    // Reason: on macOS/Windows, these map to the same disk folder
     expect(name1.toLowerCase()).toBe(name2.toLowerCase());
-    // But the raw sanitized values differ in case
     expect(name1).not.toBe(name2);
   });
 
   it("all-special-chars names collide at fallback underscore", () => {
-    // "***" → "___", "???" → "___" — same result
     const name1 = sanitizeVaultPathSegment("***");
     const name2 = sanitizeVaultPathSegment("???");
     expect(name1).toBe(name2);

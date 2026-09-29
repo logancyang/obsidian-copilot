@@ -1,16 +1,5 @@
 import type { ObsidianCliProcessResult } from "./ObsidianCliClient";
 
-/**
- * Build a readable error string from CLI process output.
- *
- * Priority: stderr → ENOENT → errorCode → exitCode → fallback.
- *
- * @param stderr - Standard error payload.
- * @param exitCode - Numeric process exit code when available.
- * @param errorCode - Process error code from runtime.
- * @param attemptedBinaries - Binaries that were attempted.
- * @returns User-facing error summary.
- */
 export function formatCliFailureMessage(
   stderr: string,
   exitCode: number | null,
@@ -38,11 +27,6 @@ export function formatCliFailureMessage(
   return "Obsidian CLI command failed for an unknown reason";
 }
 
-/**
- * Throw a standardized error from a failed CLI result.
- *
- * @param result - Failed CLI process result.
- */
 export function throwCliFailure(result: ObsidianCliProcessResult): never {
   throw new Error(
     formatCliFailureMessage(

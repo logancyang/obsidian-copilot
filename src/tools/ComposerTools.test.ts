@@ -55,7 +55,6 @@ describe("normalizeForFuzzyMatch", () => {
   });
 
   test("should normalize Unicode dashes to hyphen", () => {
-    // En-dash, em-dash, minus sign
     expect(normalizeForFuzzyMatch("a\u2013b")).toBe("a-b");
     expect(normalizeForFuzzyMatch("a\u2014b")).toBe("a-b");
     expect(normalizeForFuzzyMatch("a\u2212b")).toBe("a-b");
@@ -66,7 +65,6 @@ describe("normalizeForFuzzyMatch", () => {
   });
 
   test("should apply NFKC normalization (fullwidth to ASCII)", () => {
-    // Fullwidth digits normalize to regular digits via NFKC
     expect(normalizeForFuzzyMatch("\uFF10\uFF11\uFF12")).toBe("012");
   });
 
@@ -109,9 +107,6 @@ describe("applyEditToContent", () => {
     });
 
     test("returns AMBIGUOUS for overlapping matches", () => {
-      // "aba" appears at position 0 and position 2 in "ababa" — overlapping.
-      // Non-overlapping counting would report 1 and silently apply; we must
-      // detect both and return AMBIGUOUS.
       const result = applyEditToContent("ababa", "aba", "x");
       expect(result).toEqual({ ok: false, reason: "AMBIGUOUS", occurrences: 2 });
     });
@@ -124,13 +119,13 @@ describe("applyEditToContent", () => {
 
   describe("fuzzy match — smart quotes", () => {
     test("matches smart single quotes in file when oldText has straight quotes", () => {
-      const content = "it\u2019s a note"; // file has right single quote
+      const content = "it\u2019s a note";
       const result = applyEditToContent(content, "it's a note", "updated");
       expect(result).toEqual({ ok: true, content: "updated" });
     });
 
     test("matches smart double quotes in file when oldText has straight quotes", () => {
-      const content = "\u201CHello\u201D world"; // file has curly double quotes
+      const content = "\u201CHello\u201D world";
       const result = applyEditToContent(content, '"Hello" world', "updated");
       expect(result).toEqual({ ok: true, content: "updated" });
     });
@@ -164,13 +159,10 @@ describe("applyEditToContent", () => {
 
   describe("fuzzy match — rest of file is preserved", () => {
     test("does not apply fuzzy normalization to text outside the matched span", () => {
-      // Target line has smart quotes → forces fuzzy match (no exact substring match)
-      // Lines outside have their own smart quotes that must NOT be straightened
       const content =
         "intro with \u201Csmart quotes\u201D\n" +
-        "use \u201Csmart\u201D style here\n" + // smart quotes in target → forces fuzzy
+        "use \u201Csmart\u201D style here\n" +
         "outro with \u201Cmore quotes\u201D";
-      // oldText uses straight quotes — no exact match, fuzzy match required
       const result = applyEditToContent(content, 'use "smart" style here', "replaced");
       expect(result).toEqual({
         ok: true,
@@ -182,17 +174,12 @@ describe("applyEditToContent", () => {
     });
 
     test("does not strip trailing spaces from lines outside the matched span", () => {
-      // Target line has smart quotes → forces fuzzy match
-      // Lines before/after have trailing spaces that must survive
       const content = "before line   \nuse \u201Csmart\u201D text\nafter line   ";
-      // oldText uses straight quotes — no exact match, fuzzy match required
       const result = applyEditToContent(content, 'use "smart" text', "new text");
       expect(result).toEqual({ ok: true, content: "before line   \nnew text\nafter line   " });
     });
 
     test("replaces trailing whitespace on matched line when oldText uses tab instead of spaces", () => {
-      // File has "line two   " (trailing spaces); oldText has tab → exact match fails,
-      // fuzzy match succeeds and the full original line (incl. trailing spaces) is replaced
       const content = "line one\nline two   \nline three";
       const result = applyEditToContent(content, "line two\t", "replaced");
       expect(result).toEqual({ ok: true, content: "line one\nreplaced\nline three" });
@@ -201,25 +188,17 @@ describe("applyEditToContent", () => {
 
   describe("fuzzy match — NFKC expansion", () => {
     test("returns NOT_FOUND when match boundary falls inside an NFKC expansion", () => {
-      // "Ⅳ" (U+2163) expands to "IV" under NFKC. Searching for just "I" would
-      // land the match-end inside the expansion → degenerate zero-width span → NOT_FOUND.
       const content = "chapter Ⅳ end";
       expect(applyEditToContent(content, "I", "X")).toEqual({ ok: false, reason: "NOT_FOUND" });
     });
 
     test("returns NOT_FOUND when fuzzy match covers only part of an NFKC expansion", () => {
-      // "V" fuzzy-matches within "IV" (the NFKC expansion of "Ⅳ"), giving a
-      // non-degenerate span [0,1) that covers the whole "Ⅳ" — but "V" is not a
-      // standalone character in the file. Round-trip check must reject this.
       const content = "chapter Ⅳ end";
       expect(applyEditToContent(content, "V", "X")).toEqual({ ok: false, reason: "NOT_FOUND" });
     });
 
     test("matches line containing NFKC-expanding character and preserves surrounding content", () => {
-      // Ⅳ (U+2163 ROMAN NUMERAL FOUR) expands to 'IV' under NFKC — fuzzy line is longer
-      // than the original, so simple column mapping would be wrong.
       const content = "chapter \u2163 title\nnext line";
-      // oldText uses the ASCII equivalent that NFKC produces
       const result = applyEditToContent(content, "chapter IV title", "replaced");
       expect(result).toEqual({ ok: true, content: "replaced\nnext line" });
     });
@@ -233,11 +212,7 @@ describe("applyEditToContent", () => {
 
   describe("fuzzy match — multiline", () => {
     test("matches a multiline block with mixed smart quotes and trailing whitespace", () => {
-      const content =
-        "preamble\n" +
-        "## Section  \n" + // trailing spaces
-        "- item \u2013 one\n" + // en-dash
-        "end";
+      const content = "preamble\n" + "## Section  \n" + "- item \u2013 one\n" + "end";
       const result = applyEditToContent(
         content,
         "## Section\n- item - one",
@@ -255,13 +230,12 @@ describe("applyEditToContent", () => {
     });
 
     test("matches last line via fuzzy when oldText has trailing newline and smart quote", () => {
-      const content = "line1\nit\u2019s done"; // smart quote, no trailing newline
+      const content = "line1\nit\u2019s done";
       const result = applyEditToContent(content, "it's done\n", "it's finished\n");
       expect(result).toEqual({ ok: true, content: "line1\nit's finished" });
     });
 
     test("does not strip trailing newline when file itself ends with newline", () => {
-      // Exact match should fire in Stage 1; Stage 3 should not interfere
       const content = "line1\nline2\n";
       const result = applyEditToContent(content, "line2\n", "replaced\n");
       expect(result).toEqual({ ok: true, content: "line1\nreplaced\n" });
@@ -304,7 +278,6 @@ describe("sanitizeFilePath", () => {
   });
 
   test("should truncate a basename that exceeds 255 bytes", () => {
-    // Create a filename with 300 ASCII characters + .md extension
     const longName = "a".repeat(300) + ".md";
     const result = sanitizeFilePath(`folder/${longName}`);
     const basename = result.split("/").pop()!;
@@ -315,8 +288,6 @@ describe("sanitizeFilePath", () => {
   });
 
   test("should handle multi-byte Cyrillic characters correctly", () => {
-    // Cyrillic characters are 2 bytes each in UTF-8
-    // 128 Cyrillic chars = 256 bytes, which exceeds the 255-byte limit
     const longCyrillicName = "А".repeat(128) + ".md";
     const result = sanitizeFilePath(longCyrillicName);
     const byteLength = new TextEncoder().encode(result).length;
@@ -332,8 +303,6 @@ describe("sanitizeFilePath", () => {
     const basename = result.split("/").pop()!;
     const byteLength = new TextEncoder().encode(basename).length;
 
-    // This particular filename is ~146 bytes, well within limits
-    // But verify the function handles it correctly either way
     expect(byteLength).toBeLessThanOrEqual(255);
     expect(result.startsWith("Документы/Library/")).toBe(true);
   });
@@ -356,15 +325,13 @@ describe("sanitizeFilePath", () => {
   });
 
   test("should not break multi-byte characters when truncating", () => {
-    // 4-byte emoji characters: ensure we don't split in the middle
-    const longName = "\u{1F600}".repeat(80) + ".md"; // 80 emoji × 4 bytes = 320 bytes + .md
+    const longName = "\u{1F600}".repeat(80) + ".md";
     const result = sanitizeFilePath(longName);
     const basename = result.split("/").pop()!;
     const byteLength = new TextEncoder().encode(basename).length;
 
     expect(byteLength).toBeLessThanOrEqual(255);
     expect(result.endsWith(".md")).toBe(true);
-    // Ensure no broken characters (would result in replacement characters)
     expect(result).not.toContain("\uFFFD");
   });
 });

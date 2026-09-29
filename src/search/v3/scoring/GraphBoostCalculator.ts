@@ -3,33 +3,24 @@ import { App, MetadataCache, TFile } from "obsidian";
 import { NoteIdRank } from "@/search/v3/interfaces";
 import { extractNotePathFromChunkId } from "@/search/v3/utils/chunkIdUtils";
 
-/**
- * Connection types for graph boost calculation
- */
 interface GraphConnections {
-  backlinks: string[]; // Notes from top results that link TO this note
-  coCitations: string[]; // Notes from top results cited by same sources
-  sharedTags: string[]; // Notes from top results with common tags
-  connectionScore: number; // Weighted sum of connections
-  boostMultiplier: number; // Final boost multiplier
+  backlinks: string[];
+  coCitations: string[];
+  sharedTags: string[];
+  connectionScore: number;
+  boostMultiplier: number;
 }
 
-/**
- * Configuration for graph boost
- */
 export interface GraphBoostConfig {
   enabled: boolean;
-  maxCandidates: number; // Absolute max results to analyze (default: 10)
-  backlinkWeight: number; // Weight for backlinks (default: 1.0)
-  coCitationWeight: number; // Weight for co-citations (default: 0.5)
-  sharedTagWeight: number; // Weight for shared tags (default: 0.3)
-  boostStrength: number; // Overall boost strength (default: 0.1)
-  maxBoostMultiplier: number; // Cap on boost (default: 1.2)
+  maxCandidates: number;
+  backlinkWeight: number;
+  coCitationWeight: number;
+  sharedTagWeight: number;
+  boostStrength: number;
+  maxBoostMultiplier: number;
 }
 
-/**
- * Default configuration
- */
 const DEFAULT_CONFIG: GraphBoostConfig = {
   enabled: true,
   maxCandidates: 10,
@@ -40,10 +31,6 @@ const DEFAULT_CONFIG: GraphBoostConfig = {
   maxBoostMultiplier: 1.2,
 };
 
-/**
- * Graph boost calculator that rewards notes connected to other relevant results
- * through backlinks, co-citations, and shared tags.
- */
 export class GraphBoostCalculator {
   private metadataCache: MetadataCache;
   private config: GraphBoostConfig;
@@ -53,26 +40,19 @@ export class GraphBoostCalculator {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
-  /**
-   * Apply query-aware graph boost to search results
-   */
   applyBoost(results: NoteIdRank[]): NoteIdRank[] {
     if (!this.config.enabled || results.length === 0) {
       return results;
     }
 
-    // Filter candidates (deduplicated to note level)
     const candidates = this.filterCandidates(results);
 
-    // Early exit if no candidates or too few for meaningful connections
     if (candidates.length < 2) {
       return results;
     }
 
-    // Build candidate set at note level for metadata lookups
     const candidateNotePaths = new Set(candidates.map((r) => extractNotePathFromChunkId(r.id)));
 
-    // Calculate connections for each unique note
     const noteConnectionsMap = new Map<string, GraphConnections>();
 
     for (const notePath of candidateNotePaths) {
@@ -80,7 +60,6 @@ export class GraphBoostCalculator {
       noteConnectionsMap.set(notePath, connections);
     }
 
-    // Apply boost to all results — all chunks of a boosted note get the same multiplier
     const boostedResults = results.map((result) => {
       const notePath = extractNotePathFromChunkId(result.id);
       const connections = noteConnectionsMap.get(notePath);
@@ -107,7 +86,6 @@ export class GraphBoostCalculator {
       };
     });
 
-    // Log summary
     const boosted = boostedResults.filter((r) => {
       const notePath = extractNotePathFromChunkId(r.id);
       const conn = noteConnectionsMap.get(notePath);
@@ -121,21 +99,16 @@ export class GraphBoostCalculator {
     return boostedResults;
   }
 
-  /**
-   * Calculate all connections for a note within the candidate set
-   */
   private calculateConnections(noteId: string, candidateSet: Set<string>): GraphConnections {
     const backlinks = this.findBacklinks(noteId, candidateSet);
     const coCitations = this.findCoCitations(noteId, candidateSet);
     const sharedTags = this.findSharedTags(noteId, candidateSet);
 
-    // Calculate weighted connection score
     const connectionScore =
       backlinks.length * this.config.backlinkWeight +
       coCitations.length * this.config.coCitationWeight +
       sharedTags.length * this.config.sharedTagWeight;
 
-    // Calculate boost multiplier with logarithmic scaling
     let boostMultiplier = 1.0;
     if (connectionScore > 0) {
       boostMultiplier = 1 + this.config.boostStrength * Math.log(1 + connectionScore);
@@ -151,17 +124,11 @@ export class GraphBoostCalculator {
     };
   }
 
-  /**
-   * Resolve a note ID to a TFile object
-   */
   private resolveFile(noteId: string): TFile | null {
     const file = this.metadataCache.getFirstLinkpathDest(noteId, "");
     return file instanceof TFile ? file : null;
   }
 
-  /**
-   * Find which candidates link TO this note
-   */
   private findBacklinks(noteId: string, candidateSet: Set<string>): string[] {
     const backlinks: string[] = [];
 
@@ -175,7 +142,6 @@ export class GraphBoostCalculator {
       return backlinks;
     }
 
-    // Check which backlinks are in our candidate set
     for (const [linkPath] of linksTo.data) {
       if (candidateSet.has(linkPath) && linkPath !== noteId) {
         backlinks.push(linkPath);
@@ -185,14 +151,10 @@ export class GraphBoostCalculator {
     return backlinks;
   }
 
-  /**
-   * Find candidates that share citing sources with this note
-   */
   private findCoCitations(noteId: string, candidateSet: Set<string>): string[] {
     const coCitations: string[] = [];
     const citingSources = new Set<string>();
 
-    // Find all notes that link to this note
     const file = this.resolveFile(noteId);
     if (!file) {
       return coCitations;
@@ -203,7 +165,6 @@ export class GraphBoostCalculator {
       return coCitations;
     }
 
-    // Collect all citing sources
     for (const [sourcePath] of linksTo.data) {
       citingSources.add(sourcePath);
     }
@@ -212,7 +173,6 @@ export class GraphBoostCalculator {
       return coCitations;
     }
 
-    // Check other candidates for shared citing sources
     for (const candidateId of candidateSet) {
       if (candidateId === noteId) continue;
 
@@ -222,11 +182,10 @@ export class GraphBoostCalculator {
       const candidateLinksTo = this.metadataCache.getBacklinksForFile(candidateFile);
       if (!candidateLinksTo) continue;
 
-      // Check if they share any citing sources
       for (const [sourcePath] of candidateLinksTo.data) {
         if (citingSources.has(sourcePath)) {
           coCitations.push(candidateId);
-          break; // Only count once per candidate
+          break;
         }
       }
     }
@@ -234,9 +193,6 @@ export class GraphBoostCalculator {
     return coCitations;
   }
 
-  /**
-   * Find candidates that share tags with this note
-   */
   private findSharedTags(noteId: string, candidateSet: Set<string>): string[] {
     const sharedTags: string[] = [];
 
@@ -252,7 +208,6 @@ export class GraphBoostCalculator {
 
     const noteTags = new Set(cache.tags.map((t) => t.tag));
 
-    // Check other candidates for shared tags
     for (const candidateId of candidateSet) {
       if (candidateId === noteId) continue;
 
@@ -262,7 +217,6 @@ export class GraphBoostCalculator {
       const candidateCache = this.metadataCache.getFileCache(candidateFile);
       if (!candidateCache || !candidateCache.tags) continue;
 
-      // Check if they share any tags
       const hasSharedTag = candidateCache.tags.some((t) => noteTags.has(t.tag));
       if (hasSharedTag) {
         sharedTags.push(candidateId);
@@ -272,12 +226,7 @@ export class GraphBoostCalculator {
     return sharedTags;
   }
 
-  /**
-   * Filter candidates by deduplicating to unique notes, then applying the max limit.
-   * Keeps the best-scoring chunk per note so that the limit applies to note count, not chunk count.
-   */
   private filterCandidates(results: NoteIdRank[]): NoteIdRank[] {
-    // Deduplicate: keep the best chunk per unique note (results are score-sorted)
     const bestPerNote = new Map<string, NoteIdRank>();
     for (const result of results) {
       const notePath = extractNotePathFromChunkId(result.id);
@@ -288,7 +237,6 @@ export class GraphBoostCalculator {
 
     let candidates = Array.from(bestPerNote.values());
 
-    // Apply max candidates limit at note level
     const beforeLimit = candidates.length;
     candidates = candidates.slice(0, this.config.maxCandidates);
 
@@ -301,9 +249,6 @@ export class GraphBoostCalculator {
     return candidates;
   }
 
-  /**
-   * Update configuration
-   */
   setConfig(config: Partial<GraphBoostConfig>): void {
     this.config = { ...this.config, ...config };
   }

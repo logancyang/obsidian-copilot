@@ -2,48 +2,27 @@ import { logInfo } from "@/logger";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { App } from "obsidian";
 
-/**
- * Fast substring search using Obsidian's cachedRead for initial seeding
- */
 export class GrepScanner {
   private static readonly CONFIG = {
-    BATCH_SIZE: 30, // Process files in batches for performance
-    YIELD_INTERVAL: 100, // Yield every N files to prevent blocking
+    BATCH_SIZE: 30,
+    YIELD_INTERVAL: 100,
   } as const;
 
   constructor(private app: App) {}
 
-  /**
-   * Batch search for queries across vault files using cachedRead.
-   * Uses a two-pass approach to prioritize path/filename matches:
-   * - Pass 1: Collect ALL files where query terms appear in path (fast, no I/O)
-   * - Pass 2: Fill remaining slots with content-only matches (requires file read)
-   *
-   * This ensures files like "HK Milk Tea - Home Recipe.md" are always candidates
-   * when searching for "hk milk tea recipe", even in large vaults.
-   *
-   * @param queries - Array of search queries (will be searched as substrings)
-   * @param limit - Maximum number of matching files to return
-   * @returns Array of file paths that contain any of the query strings
-   */
   async batchCachedReadGrep(queries: string[], limit: number): Promise<string[]> {
-    // Get inclusion/exclusion patterns from settings
     const { inclusions, exclusions } = getMatchingPatterns();
 
-    // Filter files based on inclusion/exclusion patterns
     const allFiles = this.app.vault.getMarkdownFiles();
     const files = allFiles.filter((file) =>
       shouldIndexFile(this.app, file, inclusions, exclusions)
     );
     const batchSize = GrepScanner.CONFIG.BATCH_SIZE;
 
-    // Normalize queries for case-insensitive search, filtering out terms too short for meaningful grep
     const normalizedQueries = queries
       .map((q) => q.toLowerCase())
       .filter((q) => this.isGrepWorthy(q));
 
-    // PASS 1: Collect ALL path matches (fast - no file I/O)
-    // Sort by match count to prioritize files matching more query terms
     const pathMatchesWithScore: Array<{ path: string; matchCount: number }> = [];
     const yieldInterval = GrepScanner.CONFIG.YIELD_INTERVAL;
 
@@ -62,17 +41,14 @@ export class GrepScanner {
         pathMatchesWithScore.push({ path: file.path, matchCount });
       }
 
-      // Yield periodically to prevent UI freezes in large vaults
       if (i > 0 && i % yieldInterval === 0) {
         await new Promise((r) => window.setTimeout(r, 0));
       }
     }
 
-    // Sort path matches by match count (descending) to prioritize multi-term matches
     pathMatchesWithScore.sort((a, b) => b.matchCount - a.matchCount);
     const pathMatches = new Set(pathMatchesWithScore.map((m) => m.path));
 
-    // PASS 2: Fill remaining slots with content-only matches
     const contentLimit = Math.max(0, limit - pathMatches.size);
     const contentMatches = new Set<string>();
 
@@ -83,7 +59,6 @@ export class GrepScanner {
         await Promise.all(
           batch.map(async (file) => {
             if (contentMatches.size >= contentLimit) return;
-            // Skip files already matched by path
             if (pathMatches.has(file.path)) return;
 
             try {
@@ -97,23 +72,19 @@ export class GrepScanner {
                 }
               }
             } catch (error) {
-              // Skip files that can't be read
               logInfo(`GrepScanner: Skipping file ${file.path}: ${error}`);
             }
           })
         );
 
-        // Yield periodically to prevent blocking
         if (i % GrepScanner.CONFIG.YIELD_INTERVAL === 0) {
           await new Promise((r) => window.setTimeout(r, 0));
         }
       }
     }
 
-    // Combine: path matches first (sorted by match count), then content matches
     const results = [...pathMatches, ...contentMatches].slice(0, limit);
     if (results.length > 0) {
-      // Report actual returned counts, not raw collection sizes
       const pathCount = Math.min(pathMatches.size, limit);
       const contentCount = results.length - pathCount;
       logInfo(
@@ -124,25 +95,10 @@ export class GrepScanner {
     return results;
   }
 
-  /**
-   * Search for a single query across vault files
-   * @param query - Search query
-   * @param limit - Maximum number of results
-   * @returns Array of matching file paths
-   */
   async grep(query: string, limit: number = 200): Promise<string[]> {
     return this.batchCachedReadGrep([query], limit);
   }
 
-  /**
-   * Determines if a term is specific enough for grep matching.
-   * Single-character terms are always noise. For 2+ characters, CJK is always
-   * allowed and ASCII is allowed since short terms like "ai", "ml", "ui" are
-   * common meaningful searches. The real noise filter is single-char terms.
-   *
-   * @param term - Lowercased search term
-   * @returns true if the term is worth including in grep queries
-   */
   private isGrepWorthy(term: string): boolean {
     if (!term || term.length <= 1) {
       return false;

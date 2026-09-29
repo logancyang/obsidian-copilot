@@ -43,7 +43,6 @@ jest.mock("@/settings/model", () => ({
   subscribeToSettingsChange: jest.fn().mockReturnValue(() => {}),
 }));
 
-/** Build a settings object carrying only the root the watcher reads. */
 function settingsWithRoot(copilotFolder: string): CopilotSettings {
   return { copilotFolder } as CopilotSettings;
 }
@@ -84,11 +83,6 @@ describe("projectRegister", () => {
       jest.useRealTimers();
     });
 
-    /**
-     * Start a reload and park it inside its project fetch, mirroring a slow
-     * vault: the handler is awaiting results and has not yet committed.
-     * Returns settle callbacks for that fetch.
-     */
     function startReloadStalledInFetch(
       from: string,
       to: string
@@ -101,8 +95,6 @@ describe("projectRegister", () => {
       );
       settingsChangeHandler(settingsWithRoot(from), settingsWithRoot(to));
       return {
-        // Reason: `settle` is only assigned once the debounce fires and the
-        // handler actually calls fetchProjects, which is after this returns.
         resolve: (records) => settle.resolve(records),
         reject: (error) => settle.reject(error),
       };
@@ -164,9 +156,6 @@ describe("projectRegister", () => {
 
     describe("cleanup()", () => {
       it("stops an in-flight reload from committing after teardown", async () => {
-        // Cancelling the debounce only stops a reload that has not started. A
-        // torn-down instance must not write into the records store a freshly
-        // created one now owns.
         let releaseFetch!: (records: unknown[]) => void;
         fetchProjects.mockReturnValueOnce(
           new Promise<unknown[]>((resolve) => {

@@ -67,7 +67,7 @@ Here's a summary.`;
       expect(Array.isArray(result)).toBe(true);
       const resultArray = result as Array<{ text: string; type: string }>;
       expect(resultArray[0].text.length).toBeLessThan(textItem.text.length);
-      expect(resultArray[1]).toEqual(imageItem); // Image unchanged
+      expect(resultArray[1]).toEqual(imageItem);
     });
 
     it("should keep small tool results verbatim", () => {
@@ -85,8 +85,6 @@ Here's a summary.`;
 <content>${largeContent}</content>
 </selected_text>`;
 
-      // selected_text is not in the TOOL_RESULT_PATTERNS, so it won't be processed
-      // But if it were, it should remain unchanged due to isRecoverable check
       const result = compactAssistantOutput(output, { verbatimThreshold: 1000 });
       expect(result).toBe(output);
     });
@@ -113,7 +111,6 @@ Done.`;
     });
 
     it("should handle readNote JSON with nested braces in content", () => {
-      // Content contains code with nested braces - this used to break the regex
       const codeContent = `## Code Example
 ${"function test() { if (true) { return { value: 1 }; } } ".repeat(100)}
 
@@ -163,7 +160,6 @@ Done.`;
       expect(result).toContain("First note:");
       expect(result).toContain("Second note:");
       expect(result).toContain("Done.");
-      // Both should be compacted
       const compactedCount = ((result as string).match(/COMPACTED/g) || []).length;
       expect(compactedCount).toBe(2);
     });
@@ -199,10 +195,8 @@ Based on my search, here's what I found.`;
       expect(typeof result).toBe("string");
       const resultStr = result as string;
 
-      // Should be compacted (smaller than original)
       expect(resultStr.length).toBeLessThan(output.length);
 
-      // All three documents should be preserved
       expect(resultStr).toContain("First Note");
       expect(resultStr).toContain("Second Note");
       expect(resultStr).toContain("Third Note");
@@ -211,7 +205,6 @@ Based on my search, here's what I found.`;
       expect(resultStr).toContain("third.md");
       expect(resultStr).toContain("3 search results");
 
-      // Surrounding text should be preserved
       expect(resultStr).toContain("I found these notes:");
       expect(resultStr).toContain("here's what I found");
     });

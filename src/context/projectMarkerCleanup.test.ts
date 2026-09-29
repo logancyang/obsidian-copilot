@@ -14,7 +14,6 @@ describe("clearProjectMarkers", () => {
   let root: string;
 
   beforeEach(async () => {
-    // A stand-in cache root with two project marker buckets and a shared snapshot.
     root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "marker-cleanup-"));
     await fs.promises.mkdir(path.join(root, "markers", "projA"), { recursive: true });
     await fs.promises.mkdir(path.join(root, "markers", "projB"), { recursive: true });
@@ -35,7 +34,6 @@ describe("clearProjectMarkers", () => {
     await clearProjectMarkers(app, "project-a");
 
     expect(fs.existsSync(path.join(root, "markers", "projA"))).toBe(false);
-    // A sibling project's markers and the shared snapshot cache must survive.
     expect(fs.existsSync(path.join(root, "markers", "projB", "failed-web-2.json"))).toBe(true);
     expect(fs.existsSync(path.join(root, "remotes", "web-1.md"))).toBe(true);
   });

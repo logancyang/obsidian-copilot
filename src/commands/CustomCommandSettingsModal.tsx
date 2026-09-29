@@ -183,7 +183,6 @@ export class CustomCommandSettingsModal extends Modal {
     private onUpdate: (command: CustomCommand) => void | Promise<void>
   ) {
     super(app);
-    // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
     this.setTitle("Edit Command");
   }

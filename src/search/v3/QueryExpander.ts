@@ -13,16 +13,12 @@ export interface QueryExpanderOptions {
 }
 
 export interface ExpandedQuery {
-  queries: string[]; // Original query + expanded variants
-  salientTerms: string[]; // Important terms extracted ONLY from original query (used for scoring)
-  originalQuery: string; // The original user query
-  expandedQueries: string[]; // Only the expanded variants (not including original)
+  queries: string[];
+  salientTerms: string[];
+  originalQuery: string;
+  expandedQueries: string[];
 }
 
-/**
- * Expands search queries using LLM to generate alternative phrasings
- * and extracts salient terms for improved search relevance.
- */
 export class QueryExpander {
   private cache = new Map<string, ExpandedQuery>();
   private readonly config;
@@ -69,14 +65,7 @@ Format:
     };
   }
 
-  /**
-   * Expands a search query into multiple variants and extracts salient terms.
-   * Uses caching to avoid redundant LLM calls.
-   * @param query - The original search query
-   * @returns Expanded queries and salient terms extracted from the original query
-   */
   async expand(query: string): Promise<ExpandedQuery> {
-    // Check if query is valid
     if (!query?.trim()) {
       return {
         queries: [],
@@ -86,10 +75,8 @@ Format:
       };
     }
 
-    // Check cache first (and update LRU position)
     const cached = this.cache.get(query);
     if (cached) {
-      // Move to end (most recently used) for proper LRU
       this.cache.delete(query);
       this.cache.set(query, cached);
       logInfo(`QueryExpander: Using cached expansion for "${query}"`);
@@ -97,25 +84,17 @@ Format:
     }
 
     try {
-      // Expand with timeout protection
       const expanded = await this.expandWithTimeout(query);
 
-      // Cache the result
       this.cacheResult(query, expanded);
 
       return expanded;
     } catch (error) {
       logWarn(`QueryExpander: Failed to expand query "${query}":`, error);
-      // Fallback: extract terms from original query only
       return this.fallbackExpansion(query);
     }
   }
 
-  /**
-   * Expands query with timeout protection to prevent hanging on slow LLM responses.
-   * @param query - The query to expand
-   * @returns Expanded query or fallback if timeout is reached
-   */
   private async expandWithTimeout(query: string): Promise<ExpandedQuery> {
     try {
       return await withTimeout(
@@ -132,12 +111,6 @@ Format:
     }
   }
 
-  /**
-   * Performs the actual LLM call to expand the query.
-   * @param query - The query to expand
-   * @param signal - Optional abort signal for request cancellation
-   * @returns Expanded queries and extracted salient terms
-   */
   private async expandWithLLM(query: string, signal?: AbortSignal): Promise<ExpandedQuery> {
     try {
       if (!this.options.getChatModel) {
@@ -156,7 +129,6 @@ Format:
         this.config.maxVariants.toString()
       ).replace("{query}", query);
 
-      // Invoke model with token warnings suppressed and abort signal
       const response = await withSuppressedTokenWarnings(async () => {
         return await model.invoke(prompt, signal ? { signal } : undefined);
       });
@@ -171,7 +143,6 @@ Format:
         return this.fallbackExpansion(query);
       }
 
-      // Parse response using XML tags
       const parsed = this.parseXMLResponse(content, query);
 
       logInfo(
@@ -184,13 +155,7 @@ Format:
     }
   }
 
-  /**
-   * Extracts text content from various LLM response formats.
-   * @param response - The LLM response object or string
-   * @returns The extracted text content or null if empty
-   */
   private extractContent(response: unknown): string | null {
-    // Elegant extraction with nullish coalescing
     const typed = response as { content?: unknown; text?: unknown } | null | undefined;
     const extracted = typed?.content ?? typed?.text ?? "";
     return typeof response === "string"
@@ -203,29 +168,16 @@ Format:
         ).trim() || null;
   }
 
-  /**
-   * Extracts salient terms from the original query only (used for scoring).
-   * @param originalQuery - The original user query
-   * @returns Array of valid terms extracted from the original query
-   */
   private extractSalientTermsFromOriginal(originalQuery: string): string[] {
     const baseTerms = this.extractTermsFromQueries([originalQuery]);
     const tagTerms = extractTagsFromQuery(originalQuery);
     return this.combineBaseAndTagTerms(baseTerms, tagTerms, originalQuery);
   }
 
-  /**
-   * Parses XML-formatted LLM response to extract queries and terms.
-   * Falls back to legacy format if XML tags are not found.
-   * @param content - The LLM response content
-   * @param originalQuery - The original query for fallback term extraction
-   * @returns Parsed expanded queries and salient terms
-   */
   private parseXMLResponse(content: string, originalQuery: string): ExpandedQuery {
-    const queries: string[] = [originalQuery]; // Always include original
-    const salientFromLLM = new Set<string>(); // Salient terms from original query (for ranking)
+    const queries: string[] = [originalQuery];
+    const salientFromLLM = new Set<string>();
 
-    // Extract queries from XML tags
     const queryRegex = /<query>(.*?)<\/query>/g;
     let queryMatch;
     while ((queryMatch = queryRegex.exec(content)) !== null) {
@@ -235,7 +187,6 @@ Format:
       }
     }
 
-    // Extract SALIENT terms (from original query, for ranking)
     const salientSection = content.match(/<salient>([\s\S]*?)<\/salient>/);
     if (salientSection) {
       const termRegex = /<term>(.*?)<\/term>/g;
@@ -248,15 +199,12 @@ Format:
       }
     }
 
-    // Check if content has any XML structure (queries or terms)
     const hasXMLContent = queries.length > 1 || salientFromLLM.size > 0 || /<term>/.test(content);
 
-    // If no XML tags found at all, fall back to extracting from original query
     if (!hasXMLContent) {
       return this.fallbackExpansion(originalQuery);
     }
 
-    // Salient terms: from LLM's <salient> section, or fallback to extracting from original query
     const tagTerms = extractTagsFromQuery(originalQuery);
     const salientTerms =
       salientFromLLM.size > 0
@@ -266,18 +214,12 @@ Format:
     const expandedQueries = queries.slice(1);
     return {
       queries: queries.slice(0, this.config.maxVariants + 1),
-      salientTerms: salientTerms, // From original query only (for ranking)
+      salientTerms: salientTerms,
       originalQuery: originalQuery,
       expandedQueries: expandedQueries.slice(0, this.config.maxVariants),
     };
   }
 
-  /**
-   * Provides a fallback expansion when LLM is unavailable or fails.
-   * Extracts terms directly from the original query and generates fuzzy variants.
-   * @param query - The original query
-   * @returns Fallback expansion with original query, fuzzy variants, and extracted terms
-   */
   private fallbackExpansion(query: string): ExpandedQuery {
     const baseTerms = this.extractTermsFromQueries([query]);
     const tagTerms = extractTagsFromQuery(query);
@@ -291,27 +233,19 @@ Format:
     };
   }
 
-  /**
-   * Extracts individual terms from queries by splitting and filtering.
-   * Handles hyphenated words by extracting both compound and component terms.
-   * @param queries - Array of queries to extract terms from
-   * @returns Array of unique valid terms
-   */
   private extractTermsFromQueries(queries: string[]): string[] {
     const terms = new Set<string>();
 
     for (const query of queries) {
-      // Split on common delimiters and spaces
       const words = query
         .toLowerCase()
-        .replace(/[^\w\s-]/g, " ") // Replace punctuation with spaces
+        .replace(/[^\w\s-]/g, " ")
         .split(/\s+/);
 
       for (const word of words) {
         if (this.isValidTerm(word)) {
           terms.add(word);
 
-          // Also add compound terms split by hyphens
           if (word.includes("-")) {
             word.split("-").forEach((part) => {
               if (this.isValidTerm(part)) {
@@ -326,13 +260,6 @@ Format:
     return Array.from(terms);
   }
 
-  /**
-   * Validates if a term should be included in salient terms.
-   * Filters out terms that are too short or contain only special characters.
-   * Note: Stopword filtering is handled by the LLM prompt, not here.
-   * @param term - The term to validate
-   * @returns true if the term is valid for inclusion
-   */
   private isValidTerm(term: string): boolean {
     if (term.length < this.config.minTermLength) {
       return false;
@@ -353,15 +280,6 @@ Format:
     }
   }
 
-  /**
-   * Merges base terms with tag-prefixed terms while preserving standalone terms present in the query.
-   * Removes tag bodies only when they originate exclusively from tag tokens.
-   *
-   * @param baseTerms - Terms extracted from the raw query (sans tag awareness)
-   * @param tagTerms - Hash-prefixed tag tokens extracted from the query
-   * @param originalQuery - The original user-supplied query
-   * @returns Array of unique salient terms preserving tag intent
-   */
   private combineBaseAndTagTerms(
     baseTerms: string[],
     tagTerms: string[],
@@ -385,13 +303,6 @@ Format:
     return Array.from(combined);
   }
 
-  /**
-   * Collects lowercase standalone terms from the original query that do not belong to tag tokens.
-   * These terms originate from user text outside of hash-prefixed tags.
-   *
-   * @param originalQuery - Raw user query containing potential tag and non-tag text
-   * @returns Set of standalone terms detected outside tag spans
-   */
   private collectStandaloneTerms(originalQuery: string): Set<string> {
     const standaloneTerms = new Set<string>();
 
@@ -443,13 +354,6 @@ Format:
     return standaloneTerms;
   }
 
-  /**
-   * Finds the start and end indices for every tag token inside the query string.
-   * Ranges include the '#' prefix so downstream checks can exclude tag spans precisely.
-   *
-   * @param normalizedQuery - Lowercase query used for regex scanning
-   * @returns Array of inclusive-exclusive index ranges for each tag occurrence
-   */
   private findTagRanges(normalizedQuery: string): Array<{ start: number; end: number }> {
     const ranges: Array<{ start: number; end: number }> = [];
     const tagPatterns = [/#[\p{L}\p{N}_/-]+/gu, /#[a-z0-9_/-]+/g];
@@ -475,13 +379,7 @@ Format:
     return ranges;
   }
 
-  /**
-   * Caches an expansion result with simple LRU eviction.
-   * @param query - The original query as cache key
-   * @param expanded - The expansion result to cache
-   */
   private cacheResult(query: string, expanded: ExpandedQuery): void {
-    // Map maintains insertion order for simple LRU
     if (this.cache.size >= this.config.cacheSize) {
       const firstKey: string | undefined = this.cache.keys().next().value;
       if (firstKey) {
@@ -491,18 +389,11 @@ Format:
     this.cache.set(query, expanded);
   }
 
-  /**
-   * Clears all cached query expansions.
-   */
   clearCache(): void {
     this.cache.clear();
     logInfo("QueryExpander: Cache cleared");
   }
 
-  /**
-   * Gets the current number of cached expansions.
-   * @returns The size of the cache
-   */
   getCacheSize(): number {
     return this.cache.size;
   }

@@ -5,20 +5,16 @@ import { getTimeRangeMsTool } from "./TimeTools";
 type InvokableTool = { invoke: (args: Record<string, unknown>) => Promise<string> };
 type TimeRangeResult = { startTime: number; endTime: number; error?: string };
 
-// Helper function to call the tool and parse result
 const getTimeRangeMs = async (timeExpression: string): Promise<TimeRangeResult | undefined> => {
   const result = await (getTimeRangeMsTool as unknown as InvokableTool).invoke({
     timeExpression,
   });
-  // The tool returns JSON string, parse it
   const parsed: TimeRangeResult =
     typeof result === "string" ? (JSON.parse(result) as TimeRangeResult) : result;
-  // Return undefined if it's an error response
   if (parsed.error) return undefined;
   return parsed;
 };
 
-// Helper to verify date ranges
 interface DateRange {
   startDate: string;
   endDate: string;
@@ -27,7 +23,6 @@ interface DateRange {
 const verifyDateRange = async (expression: string, expected: DateRange) => {
   const result = await getTimeRangeMs(expression);
   expect(result).toBeDefined();
-  // getTimeRangeMs now returns epoch values directly: {startTime: number, endTime: number}
   const startDate = DateTime.fromMillis(result!.startTime);
   const endDate = DateTime.fromMillis(result!.endTime);
 
@@ -35,7 +30,6 @@ const verifyDateRange = async (expression: string, expected: DateRange) => {
   expect(endDate.toISODate()).toBe(expected.endDate);
 };
 
-// Mock the current date
 const mockNow = DateTime.fromObject({
   year: 2024,
   month: 1,
@@ -54,7 +48,6 @@ describe("Time Expression Tests", () => {
 
   describe("Relative Time Ranges", () => {
     test.each([
-      // Last X units
       {
         expression: "last week",
         expected: { startDate: "2024-01-08", endDate: "2024-01-14" },
@@ -80,7 +73,6 @@ describe("Time Expression Tests", () => {
         expected: { startDate: "2023-07-15", endDate: "2024-01-15" },
       },
 
-      // This units
       {
         expression: "this week",
         expected: { startDate: "2024-01-15", endDate: "2024-01-21" },
@@ -94,7 +86,6 @@ describe("Time Expression Tests", () => {
         expected: { startDate: "2024-01-01", endDate: "2024-12-31" },
       },
 
-      // Next X units
       {
         expression: "next week",
         expected: { startDate: "2024-01-22", endDate: "2024-01-28" },
@@ -129,7 +120,6 @@ describe("Time Expression Tests", () => {
 
   describe("Month Patterns", () => {
     test.each([
-      // Full month names
       {
         expression: "January",
         expected: { startDate: "2024-01-01", endDate: "2024-01-31" },
@@ -138,7 +128,6 @@ describe("Time Expression Tests", () => {
         expression: "Jan",
         expected: { startDate: "2024-01-01", endDate: "2024-01-31" },
       },
-      // Adjust the year to 2023 for months after the current month
       {
         expression: "February",
         expected: { startDate: "2023-02-01", endDate: "2023-02-28" },
@@ -277,7 +266,6 @@ describe("Time Expression Tests", () => {
         expression: "Q1",
         expected: { startDate: "2024-01-01", endDate: "2024-03-31" },
       },
-      // Adjust the year to 2023 for quarters after the current quarter
       {
         expression: "Q3",
         expected: { startDate: "2023-07-01", endDate: "2023-09-30" },
@@ -367,12 +355,10 @@ describe("Time Expression Tests", () => {
     let logWarnSpy: jest.SpyInstance;
 
     beforeEach(() => {
-      // Mock logWarn to suppress expected warnings
       logWarnSpy = jest.spyOn(logger, "logWarn").mockImplementation(() => {});
     });
 
     afterEach(() => {
-      // Restore logWarn after each test
       logWarnSpy.mockRestore();
     });
 
@@ -381,7 +367,6 @@ describe("Time Expression Tests", () => {
       async (expression) => {
         const result = await getTimeRangeMs(expression);
         expect(result).toBeUndefined();
-        // Verify that logWarn was called with the expected message
         expect(logWarnSpy).toHaveBeenCalledWith(`Unable to parse time expression: ${expression}`);
       }
     );

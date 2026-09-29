@@ -10,21 +10,12 @@ import {
   PromptLayerSegment,
 } from "@/context/PromptContextTypes";
 
-/**
- * PromptContextEngine centralizes the construction of Layered Prefix prompts.
- * It emits diagnostics so we can validate the canonical rendering before
- * swapping downstream consumers to the new payloads.
- */
 export class PromptContextEngine {
   private static instance: PromptContextEngine | undefined;
   private static readonly ENVELOPE_VERSION = 1;
 
   private constructor() {}
 
-  /**
-   * Singleton accessor so shared services (ContextManager, persistence, etc.)
-   * can reuse the same engine without wiring it through constructors.
-   */
   static getInstance(): PromptContextEngine {
     if (!PromptContextEngine.instance) {
       PromptContextEngine.instance = new PromptContextEngine();
@@ -32,11 +23,6 @@ export class PromptContextEngine {
     return PromptContextEngine.instance;
   }
 
-  /**
-   * Build a prompt context envelope for the provided segments. The resulting
-   * structure can be stored alongside messages and later transformed into
-   * provider-specific message arrays.
-   */
   buildEnvelope(params: PromptContextBuildParams): PromptContextEnvelope {
     const layers: PromptContextLayer[] = PROMPT_LAYER_ORDER.map((layerId) =>
       this.buildLayer(layerId, params.layerSegments[layerId] ?? [])
@@ -69,10 +55,6 @@ export class PromptContextEngine {
     };
   }
 
-  /**
-   * Render the supplied layer segments into a canonical block of text while
-   * capturing per-layer hashes and stability hints.
-   */
   private buildLayer(layerId: PromptLayerId, segments: PromptLayerSegment[]): PromptContextLayer {
     const sanitizedSegments = segments.map((segment, index) => ({
       ...segment,
@@ -99,10 +81,6 @@ export class PromptContextEngine {
     };
   }
 
-  /**
-   * Combine the rendered layers into a legacy-compatible string.
-   * Uses clean double-newline separation between layers.
-   */
   private serializeLayers(layers: PromptContextLayer[]): string {
     return layers
       .map((layer) => layer.text)
@@ -110,10 +88,6 @@ export class PromptContextEngine {
       .join("\n\n");
   }
 
-  /**
-   * Collect the precomputed hash for every layer so callers can quickly compare
-   * stability without re-hashing the text.
-   */
   private collectLayerHashes(layers: PromptContextLayer[]): Record<PromptLayerId, string> {
     return layers.reduce<Record<PromptLayerId, string>>(
       (acc, layer) => {
@@ -124,26 +98,14 @@ export class PromptContextEngine {
     );
   }
 
-  /**
-   * Compute a SHA-256 hash for the supplied value. Pure-JS so it works on
-   * Obsidian mobile (no node:crypto, no sync Web Crypto).
-   */
   private hash(value: string): string {
     return sha256(value || "");
   }
 
-  /**
-   * Normalize whitespace so hashed content remains stable regardless of how the
-   * upstream caller formatted the raw text.
-   */
   private normalizeWhitespace(value: string): string {
     return value.replace(/\s+$/g, "").trim();
   }
 
-  /**
-   * Gather lightweight warnings for debugging. This keeps the envelope self
-   * describing without introducing an external logging dependency.
-   */
   private collectWarnings(layers: PromptContextLayer[]): string[] {
     const warnings: string[] = [];
 
@@ -151,7 +113,6 @@ export class PromptContextEngine {
       if (!layer.text) {
         return;
       }
-      // Check for null bytes (control character)
       const containsControlChars = layer.text.includes("\x00");
       if (containsControlChars) {
         warnings.push(`Layer ${layer.id} contains control characters and was normalized`);

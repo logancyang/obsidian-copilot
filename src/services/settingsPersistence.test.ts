@@ -16,7 +16,6 @@ function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings
 
 const backedUp = jest.fn().mockResolvedValue({ status: "not-needed" });
 const DEVICE_ID = "device-a";
-// The device id lookup is mocked, so the app is never dereferenced.
 const APP = {} as import("obsidian").App;
 
 async function loadModule(overrides: Record<string, unknown> = {}) {
@@ -348,9 +347,6 @@ describe("settingsPersistence", () => {
       );
       const saveData = jest.fn().mockResolvedValue(undefined);
 
-      // Reason: migrations and the settings subscriber both persist moments
-      // after load. Resolving quietly would report an unwritten file as saved,
-      // which `applyCopilotRootChange()` treats as durable.
       await expect(module.persistSettings(makeSettings(), saveData)).rejects.toThrow(
         "cannot save settings"
       );

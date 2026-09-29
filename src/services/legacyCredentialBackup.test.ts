@@ -69,8 +69,6 @@ describe("legacyCredentialBackup", () => {
       );
 
       expect(io.write.mock.calls[0][1]).toContain("enc_desk_abc123");
-      // Reason: the flag drives the startup notice, which must not tell these
-      // users to delete the file after re-entering values they cannot re-enter.
       expect(result).toMatchObject({ status: "backed-up", encrypted: true });
     });
 
@@ -111,9 +109,6 @@ describe("legacyCredentialBackup", () => {
     it("gives a changed data.json its own backup instead of trusting the earlier one", async () => {
       const earlier = { openAIApiKey: "sk-first" };
       const current = { openAIApiKey: "sk-second" };
-      // Reason: a prior launch backed up `earlier` and failed to strip, then
-      // Sync delivered `current` from a device still on v3. Treating any
-      // existing backup as proof would clear keys no backup holds.
       const io = makeIO({
         exists: jest.fn(async (path: string) => path === backupPathFor(earlier)),
       });
@@ -133,8 +128,6 @@ describe("legacyCredentialBackup", () => {
 
       const result = await backupLegacyCredentials(rawData, PLUGIN_DIR, io);
 
-      // Reason: a truncated file at the final path would be read as proof on
-      // the next launch, and data.json would be stripped against it.
       expect(result.status).toBe("failed");
       expect(io.rename).not.toHaveBeenCalled();
       expect(io.write.mock.calls[0][0]).toBe(`${backupPathFor(rawData)}.writing`);

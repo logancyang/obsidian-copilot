@@ -52,7 +52,7 @@ export function validateCommandName(
   }
 
   if (currentCommandName && name === currentCommandName) {
-    return null; // No change needed
+    return null;
   }
 
   // eslint-disable-next-line no-control-regex -- command paths must reject embedded control bytes
@@ -68,10 +68,6 @@ export function validateCommandName(
   return null;
 }
 
-/**
- * Converts a custom command name to a command id. Encodes the name to avoid
- * special characters.
- */
 export function getCommandId(commandName: string) {
   return encodeURIComponent(commandName.toLowerCase());
 }
@@ -84,15 +80,11 @@ export function getCommandFilePath(title: string): string {
   return `${getCustomCommandsFolder()}/${title}.md`;
 }
 
-/**
- * Check if a file is a markdown file in the custom commands folder.
- */
 export function isCustomCommandFile(file: TAbstractFile): boolean {
   if (!(file instanceof TFile)) return false;
   if (file.extension !== "md") return false;
   const folder = getCustomCommandsFolder();
   if (!file.path.startsWith(folder + "/")) return false;
-  // Only include direct children (no slashes in relative path)
   const relativePath = file.path.slice(folder.length + 1);
   if (relativePath.includes("/")) return false;
   return true;
@@ -103,9 +95,6 @@ export function hasOrderFrontmatter(app: App, file: TFile): boolean {
   return metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] != null;
 }
 
-/**
- * Parse a TFile as a CustomCommand by reading its content and extracting frontmatter.
- */
 export async function parseCustomCommandFile(app: App, file: TFile): Promise<CustomCommand> {
   const rawContent = await app.vault.read(file);
   const content = stripFrontmatter(rawContent);
@@ -130,11 +119,6 @@ export async function parseCustomCommandFile(app: App, file: TFile): Promise<Cus
   };
 }
 
-/**
- * Fetch all custom commands from the vault WITHOUT writing the global cache.
- * Use this when the caller must coordinate cache writes itself (e.g. latest-wins
- * folder reloads) so a superseded async reload cannot clobber a newer result.
- */
 export async function fetchAllCustomCommands(app: App): Promise<CustomCommand[]> {
   const files = app.vault.getFiles().filter((file) => isCustomCommandFile(file));
   return await Promise.all(files.map((file) => parseCustomCommandFile(app, file)));
@@ -171,9 +155,6 @@ function sortCommandsByAlphabetical(commands: CustomCommand[]): CustomCommand[] 
   });
 }
 
-/**
- * Sort prompts of the slash commands based on the sort strategy.
- */
 export function sortSlashCommands(commands: CustomCommand[]): CustomCommand[] {
   const sortStrategy: PromptSortStrategy = getSettings().promptSortStrategy as PromptSortStrategy;
   switch (sortStrategy) {
@@ -188,11 +169,6 @@ export function sortSlashCommands(commands: CustomCommand[]): CustomCommand[] {
   }
 }
 
-/**
- * Process the custom command prompt. In addition to the regular prompt processing,
- * it handles legacy logic such as auto appending the selected text to the prompt
- * if it's not already present.
- */
 export async function processCommandPrompt(
   app: App,
   prompt: string,
@@ -210,24 +186,12 @@ export async function processCommandPrompt(
   const processedPrompt = result.processedPrompt;
 
   if (processedPrompt.includes(`{${SELECTED_TEXT_TAG}}`) || skipAppendingSelectedText) {
-    // Containing {selected_text} means the prompt was using the custom prompt
-    // processor way of handling the selected text. No need to go through the
-    // legacy placeholder.
     return processedPrompt;
   }
 
-  // This is the legacy custom command selected text placeholder. It replaced
-  // {copilot-selection} in the prompt with the selected text. This is different
-  // from the custom prompt processor which uses {} in the prompt and appends
-  // the selected text to the prompt. We cannot change user's custom commands
-  // that have the old placeholder, so we need to support both.
-  // Also, selected text is required for custom commands. If neither `{}` nor
-  // `{copilot-selection}` is found, append the selected text to the prompt.
   const index = processedPrompt.indexOf(LEGACY_SELECTED_TEXT_PLACEHOLDER);
   if (index === -1) {
-    // No legacy placeholder found
     if (selectedText.trim()) {
-      // Append selected text if present
       return (
         processedPrompt +
         "\n\n<" +
@@ -239,10 +203,8 @@ export async function processCommandPrompt(
         ">"
       );
     }
-    // No placeholder and no selected text - return as is
     return processedPrompt;
   }
-  // Replace legacy placeholder with selected text
   return (
     processedPrompt.slice(0, index) +
     selectedText +
@@ -250,28 +212,13 @@ export async function processCommandPrompt(
   );
 }
 
-/**
- * Find all variables between {} in a custom command prompt.
- * {copilot-selection} is the legacy custom command special placeholder. It must
- * be skipped when processing custom prompts because it's handled differently
- * by the custom command prompt processor.
- *
- * Also excludes {[[...]]} patterns which are handled separately by extractTemplateNoteFiles.
- */
 const VARIABLE_REGEX = /\{(?!copilot-selection\}|\[\[)([^}]+)\}/g;
 
-/**
- * Represents the result of processing a custom prompt variable.
- */
 interface VariableProcessingResult {
   content: string;
   files: TFile[];
 }
 
-/**
- * Extract variables from a custom prompt and get their content and associated
- * files.
- */
 async function extractVariablesFromPrompt(
   app: App,
   customPrompt: string,
@@ -299,10 +246,8 @@ async function extractVariablesFromPrompt(
         new Notice("No active note found.");
       }
     } else if (variableNameLower === "activewebtab") {
-      // Reserved variable: handled by webTabs context pipeline, skip here
       continue;
     } else if (variableName.startsWith("#")) {
-      // Handle tag-based variable for multiple tags
       const tagNames = variableName
         .slice(1)
         .split(",")
@@ -350,20 +295,11 @@ async function extractVariablesFromPrompt(
   return { variablesMap, includedFiles };
 }
 
-/**
- * Represents the result of processing a custom prompt.
- */
 export interface ProcessedPromptResult {
   processedPrompt: string;
   includedFiles: TFile[];
 }
 
-/**
- * Process a custom prompt by replacing variables and adding note contents.
- * Returns the processed prompt string and a list of files included in the processing.
- *
- * @param skipEmptyBraces - When true, treats `{}` as a literal and skips selected-text/active-note expansion.
- */
 export async function processPrompt(
   app: App,
   customPrompt: string,
@@ -376,7 +312,6 @@ export async function processPrompt(
   const includedFiles = new Set<TFile>();
 
   if (!settings.enableCustomPromptTemplating) {
-    // If templating is disabled, check if activeNote should be included for {}
     if (!skipEmptyBraces && customPrompt.includes("{}") && !selectedText && activeNote) {
       includedFiles.add(activeNote);
     }
@@ -386,7 +321,6 @@ export async function processPrompt(
     };
   }
 
-  // Extract variables and track files included through them
   const { variablesMap, includedFiles: variableFiles } = await extractVariablesFromPrompt(
     app,
     customPrompt,
@@ -403,21 +337,17 @@ export async function processPrompt(
     processedPrompt = processedPrompt.replace(/\{\}/g, `{${SELECTED_TEXT_TAG}}`);
     if (selectedText) {
       additionalInfo += `<${SELECTED_TEXT_TAG}>\n${selectedText}\n</${SELECTED_TEXT_TAG}>`;
-      // Note: selectedText doesn't directly correspond to a file inclusion here
     } else if (activeNote) {
       activeNoteContent = await getFileContent(activeNote, vault);
       additionalInfo += `<${SELECTED_TEXT_TAG} type="active_note">\n${activeNoteContent || ""}\n</${SELECTED_TEXT_TAG}>`;
-      includedFiles.add(activeNote); // Ensure active note is tracked if used for {}
+      includedFiles.add(activeNote);
     } else {
       additionalInfo += `<${SELECTED_TEXT_TAG}>\n(No selected text or active note available)\n</${SELECTED_TEXT_TAG}>`;
     }
   }
 
-  // Add variable contents to the additional info
-  // The files are already tracked via includedFiles set
   for (const [varName, content] of variablesMap.entries()) {
     if (varName.toLowerCase() === "activenote" && activeNoteContent !== null) {
-      // Content already added via {} handling, but file tracking is done.
       continue;
     }
     if (additionalInfo) {
@@ -427,15 +357,11 @@ export async function processPrompt(
     }
   }
 
-  // Process {[[note title]]} syntax - only wikilinks wrapped in curly braces
   const noteLinkFiles = extractTemplateNoteFiles(processedPrompt, vault);
   for (const noteFile of noteLinkFiles) {
-    // Check if this note wasn't already included via a variable
-    // We use the Set's reference equality which works for TFile objects
     if (!includedFiles.has(noteFile)) {
       const noteContent = await getFileContent(noteFile, vault);
       if (noteContent) {
-        // Get file metadata
         const stats = await vault.adapter.stat(noteFile.path);
         const ctime = stats ? new Date(stats.ctime).toISOString() : "Unknown";
         const mtime = stats ? new Date(stats.mtime).toISOString() : "Unknown";
@@ -453,7 +379,7 @@ ${noteContent}
           additionalInfo += `\n\n`;
         }
         additionalInfo += `${noteContext}`;
-        includedFiles.add(noteFile); // Track files included via [[links]]
+        includedFiles.add(noteFile);
       }
     }
   }
@@ -466,9 +392,6 @@ ${noteContent}
   };
 }
 
-/**
- * Generates a unique name for a copied command by adding "(copy)" or "(copy N)" suffix.
- */
 export function generateCopyCommandName(
   originalName: string,
   existingCommands: CustomCommand[]
@@ -477,7 +400,6 @@ export function generateCopyCommandName(
   let copyName = baseName;
   let counter = 1;
 
-  // Check if the base copy name already exists
   while (existingCommands.some((cmd) => cmd.title.toLowerCase() === copyName.toLowerCase())) {
     counter++;
     copyName = `${originalName} (copy ${counter})`;
@@ -486,10 +408,6 @@ export function generateCopyCommandName(
   return copyName;
 }
 
-/**
- * Returns the next order value for a new custom command, based on the cached commands.
- * If the last order is Number.MAX_SAFE_INTEGER, returns Number.MAX_SAFE_INTEGER.
- */
 export function getNextCustomCommandOrder(): number {
   const commands = getCachedCustomCommands();
   const lastOrder = commands.reduce(
@@ -499,11 +417,6 @@ export function getNextCustomCommandOrder(): number {
   return lastOrder === Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : lastOrder + 10;
 }
 
-/**
- * Ensures that the required frontmatter fields exist on the given file. Only
- * adds missing fields, does not overwrite existing values.
- * This is idempotent and does not touch the file content.
- */
 export async function ensureCommandFrontmatter(app: App, file: TFile, command: CustomCommand) {
   try {
     addPendingFileWrite(file.path);

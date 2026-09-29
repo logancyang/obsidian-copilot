@@ -37,10 +37,7 @@ describe("legacyAgentsResidue", () => {
 
       await reconcileLegacyAgentsResidue(app);
 
-      // The config lands in project.md verbatim (zero data loss)...
       expect(files.get(projectPath)).toBe(agentsContent);
-      // ...while the surviving AGENTS.md keeps only the instruction body: its frontmatter is
-      // project config, and feeding that YAML to the agent as instruction text is nonsense.
       expect(files.get(agentsPath)).toBe("Use primary sources.");
       expect(adapter.remove).not.toHaveBeenCalled();
     });

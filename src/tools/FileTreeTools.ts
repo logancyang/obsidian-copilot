@@ -31,20 +31,15 @@ function buildFileTree(
   const extensionCounts: Record<string, number> = {};
   const subFolders: Record<string, FileTreeNode> = {};
 
-  // Get exclusion patterns from settings
   const { inclusions, exclusions } = getMatchingPatterns();
 
-  // Separate files and folders
   for (const child of folder.children) {
     if (isTFile(child)) {
-      // Only include file if it passes the pattern checks
       if (shouldIndexFile(app, child, inclusions, exclusions)) {
-        // Only add to files array if we're including files
         if (includeFiles) {
           files.push(child.name);
         }
 
-        // Always count file extensions
         const ext = getFileExtension(child.name) || "unknown";
         if (ext) {
           extensionCounts[ext] = (extensionCounts[ext] || 0) + 1;
@@ -52,11 +47,9 @@ function buildFileTree(
       }
     } else if (isTFolder(child)) {
       const subResult = buildFileTree(app, child, includeFiles);
-      // Only include folder if it has any content after filtering
       if (Object.keys(subResult).length > 0) {
         subFolders[child.name] = subResult[child.name];
 
-        // Merge extension counts from subfolders
         if (subResult[child.name].extensionCounts) {
           for (const [ext, count] of Object.entries(subResult[child.name].extensionCounts!)) {
             extensionCounts[ext] = (extensionCounts[ext] || 0) + count;
@@ -66,8 +59,6 @@ function buildFileTree(
     }
   }
 
-  // If this is root folder, name it "vault" and return merged result
-  // Create node for either root or named folder
   const node: FileTreeNode = {};
 
   if (Object.keys(extensionCounts).length > 0) {
@@ -82,7 +73,6 @@ function buildFileTree(
     node.subFolders = subFolders;
   }
 
-  // If the FileTreeNode is empty, return an empty object
   if (Object.keys(node).length === 0) {
     return {};
   }
@@ -100,7 +90,6 @@ const createGetFileTreeTool = (app: App, root: TFolder) =>
     description: "Get the file tree as a nested structure of folders and files",
     schema: z.object({}),
     func: async () => {
-      // First try building the tree with files included
       const tree = buildFileTree(app, root, true);
 
       const prompt = `A JSON represents the file tree as a nested structure:
@@ -113,9 +102,7 @@ const createGetFileTreeTool = (app: App, root: TFolder) =>
 `;
       const jsonResult = JSON.stringify(tree);
 
-      // If the file tree is larger than 0.5MB, use the simplified version instead.
       if (jsonResult.length > 500000) {
-        // Rebuild tree without file lists
         const simplifiedTree = buildFileTree(app, root, false);
         return prompt + JSON.stringify(simplifiedTree);
       }

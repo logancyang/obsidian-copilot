@@ -3,10 +3,6 @@ import { ProjectConfig } from "@/aiParams";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
-// ---------------------------------------------------------------------------
-// Module mocks
-// ---------------------------------------------------------------------------
-
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(() => ({ projectsFolder: "copilot-projects", projectList: [] })),
   updateSetting: jest.fn(),
@@ -19,7 +15,6 @@ jest.mock("@/projects/state", () => ({
   upsertCachedProjectRecord: jest.fn(),
   deleteCachedProjectRecordById: jest.fn(),
   updateCachedProjectRecords: jest.fn(),
-  // Reason: overridden per-test to simulate cache state
   getCachedProjectRecords: jest.fn(() => []),
   getCachedProjectRecordById: jest.fn(() => undefined),
 }));
@@ -58,13 +53,8 @@ jest.mock("@/projects/projectMigration", () => ({
   ensureProjectsMigratedIfNeeded: jest.fn(async () => {}),
 }));
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 import { getCachedProjectRecords, getCachedProjectRecordById } from "@/projects/state";
 
-/** Minimal valid ProjectConfig for test use. */
 function makeConfig(
   overrides: { id: string; name: string } & Partial<ProjectConfig>
 ): ProjectConfig {
@@ -79,17 +69,14 @@ function makeConfig(
   };
 }
 
-/** Build a minimal Vault mock. */
 function makeMockVault(): jest.Mocked<Vault> {
   return {
     create: jest.fn(async (path: string) => mockTFile({ path })),
-    // Reason: null = file does not exist yet, avoids collision error in createProject
     getAbstractFileByPath: jest.fn(() => null),
     adapter: { exists: jest.fn(async () => false) },
   } as unknown as jest.Mocked<Vault>;
 }
 
-/** Build a minimal App mock wrapping a vault. */
 function makeMockApp(vault: Vault): App {
   return {
     vault,
@@ -97,14 +84,9 @@ function makeMockApp(vault: Vault): App {
   } as unknown as App;
 }
 
-/** Reset the singleton so each test gets a fresh instance. */
 function resetSingleton() {
   (ProjectFileManager as unknown as Record<string, unknown>)["instance"] = undefined;
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("ProjectFileManager.createProject", () => {
   let vault: jest.Mocked<Vault>;
@@ -128,7 +110,6 @@ describe("ProjectFileManager.createProject", () => {
 
     const manager = ProjectFileManager.getInstance(makeMockApp(vault));
 
-    // "my project" (lowercase) collides with "My Project"
     await expect(
       manager.createProject(makeConfig({ id: "new-project", name: "my project" }))
     ).rejects.toThrow(/already exists/i);

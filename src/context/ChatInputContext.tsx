@@ -19,9 +19,6 @@ interface ChatInputContextType {
 
 const ChatInputContext = createContext<ChatInputContextType | undefined>(undefined);
 
-/**
- * Hook to access chat input functionality
- */
 export function useChatInput(): ChatInputContextType {
   const context = useContext(ChatInputContext);
   if (context === undefined) {
@@ -34,19 +31,10 @@ interface ChatInputProviderProps {
   children: React.ReactNode;
 }
 
-/**
- * Provider component that manages chat input functionality without requiring refs
- */
 export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Element {
   const [editor, setEditor] = useState<LexicalEditor | null>(null);
   const [focusHandler, setFocusHandler] = useState<(() => void) | null>(null);
-  // Text requested before the Lexical editor has mounted (e.g. routed in while
-  // the chat view is still opening). Held here and flushed once the editor
-  // registers, so insertion never depends on mount timing.
   const pendingInsertRef = useRef<{ text: string; enableURLPills: boolean } | null>(null);
-  // Focus requested before the Lexical editor registered its focus handler (e.g.
-  // a freshly-opened view focusing on open). Latched here and flushed once the
-  // handler registers, so focus never depends on mount timing.
   const pendingFocusRef = useRef(false);
 
   const registerEditor = useCallback((editorInstance: LexicalEditor) => {
@@ -71,7 +59,6 @@ export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Ele
     [editor]
   );
 
-  // Flush any text buffered before the editor was ready.
   useEffect(() => {
     if (!editor || !pendingInsertRef.current) return;
     const { text, enableURLPills } = pendingInsertRef.current;
@@ -90,7 +77,6 @@ export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Ele
     }
   }, [focusHandler]);
 
-  // Flush a focus requested before the handler was ready.
   useEffect(() => {
     if (focusHandler && pendingFocusRef.current) {
       pendingFocusRef.current = false;

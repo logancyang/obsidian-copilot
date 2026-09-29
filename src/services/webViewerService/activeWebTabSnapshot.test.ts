@@ -9,7 +9,6 @@ jest.mock("./webViewerServiceSingleton", () => ({
 
 const mockGetWebViewerService = getWebViewerService as jest.Mock;
 
-// The helper only forwards `app` to the mocked service; an empty stub suffices.
 const app = {} as App;
 
 const mockActiveTab = (activeWebTabForMentions: unknown) => {

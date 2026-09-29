@@ -21,14 +21,6 @@ const MAX_RESULTS = 20;
 const MIYO_RELATED_SEARCH_TIMEOUT_MS = 8000;
 const MIYO_FILE_STATUS_TIMEOUT_MS = 8000;
 
-/**
- * Fetch Miyo's ordered related-note results.
- *
- * @param app - The Obsidian app instance.
- * @param filePath - Source note path.
- * @param settings - Current Miyo connection and logging settings.
- * @returns Miyo scores in response order and the state established by the request.
- */
 async function searchRelatedNotesWithMiyo(
   app: App,
   filePath: string,
@@ -124,7 +116,6 @@ async function searchRelatedNotesWithMiyo(
     // chunks. The detail text is not part of that contract, so gating on it can
     // misreport a healthy registered folder as unavailable.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-    // https://github.com/logancyang/obsidian-copilot/pull/2992#discussion_r3919646861
     if (!(error instanceof MiyoRequestError) || error.status !== 404) {
       logError(
         `RelevantNotes(Miyo): searchRelated failed for file_path=${miyoFilePath} folder_name=${folderName}: ${
@@ -149,9 +140,6 @@ async function searchRelatedNotesWithMiyo(
             return { scoreByPath: new Map(), status: "no-text" };
           }
           try {
-            // Indexing can finish between the first 404 and this status response.
-            // Retry once so newly available semantic matches are not hidden.
-            // https://github.com/logancyang/obsidian-copilot/pull/3088#discussion_r3921456717
             return classifyRelatedResponse(await requestRelated());
           } catch (retryError) {
             logError(
@@ -251,13 +239,6 @@ interface RelatedNotesSearchResult {
   details?: RelevantNotesStatusDetails;
 }
 
-/**
- * Build outgoing/backlink relationship flags for the source note.
- *
- * @param app - The Obsidian app instance.
- * @param file - Source note file.
- * @returns Map keyed by note path with link metadata.
- */
 function getNoteLinks(app: App, file: TFile) {
   const resultMap = new Map<string, { links: boolean; backlinks: boolean }>();
   const linkedNotes = getLinkedNotes(app, file);
@@ -299,17 +280,9 @@ export interface RelevantNotesResult {
 
 const EMPTY_RELEVANT_NOTES: readonly RelevantNoteEntry[] = Object.freeze([]);
 
-/**
- * Report whether two settled results would render identically.
- *
- * Live re-queries repeat while a note is being written, and most of them
- * reproduce the previous ranking. Callers use this to leave the rendered rows
- * alone in that case rather than replaying their animations.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/362
- *
- * @param a - Previously settled result.
- * @param b - Newly settled result.
- */
+// Live re-queries mostly reproduce the previous ranking; callers skip re-rendering
+// (and replaying animations) when results render identically.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/362
 export function isSameRelevantNotesResult(a: RelevantNotesResult, b: RelevantNotesResult): boolean {
   if (a === b) return true;
   if (a.status !== b.status) return false;
@@ -338,14 +311,6 @@ export interface FindRelevantNotesOptions {
   filePath: string;
 }
 
-/**
- * Finds relevant notes for a file using Miyo's semantic order and annotates
- * those results with Obsidian link relationships.
- *
- * @param app - The Obsidian app instance.
- * @param filePath - The file path to find relevant notes for.
- * @returns Relevant-note hits and the settled Miyo search status.
- */
 export async function findRelevantNotes({
   app,
   filePath,

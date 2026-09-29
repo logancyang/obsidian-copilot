@@ -10,17 +10,6 @@ import { addPendingFileWrite, removePendingFileWrite } from "@/projects/state";
 import { stripFrontmatter } from "@/utils";
 import { App, normalizePath, parseYaml, TFile, TFolder } from "obsidian";
 
-/**
- * One-time, dev-only cleanup of the unreleased PR2b-1 rename residue.
- *
- * PR2b-1 (never released) renamed a project's config to `AGENTS.md` (frontmatter + body).
- * The released model keeps project metadata in `project.md`. Without this reconcile, a dev
- * vault whose config lives only in `AGENTS.md` would stop being recognized.
- *
- * For each such folder we copy the `AGENTS.md` content into `project.md` and preserve the source
- * as the project's canonical instructions. Real users never hit this state, so it is
- * best-effort and silent.
- */
 export async function reconcileLegacyAgentsResidue(app: App): Promise<void> {
   const projectsFolder = getProjectsFolder();
   let folderPaths: string[];
@@ -40,11 +29,9 @@ export async function reconcileLegacyAgentsResidue(app: App): Promise<void> {
 
     try {
       if (!(await fileExists(app, agentsPath))) continue;
-      // project.md already present → not residue.
       if (await fileExists(app, projectMdPath)) continue;
 
       const content = await readFile(app, agentsPath);
-      // Only adopt a PR2b-1 config (has copilot-project-id); leave a user's AGENTS.md alone.
       if (content === null || !hasCopilotProjectId(content)) continue;
 
       addPendingFileWrite(projectMdPath);
@@ -54,9 +41,6 @@ export async function reconcileLegacyAgentsResidue(app: App): Promise<void> {
         removePendingFileWrite(projectMdPath);
       }
 
-      // The residue file carries PR2b-1's config frontmatter, which now lives in the
-      // project.md we just wrote. Leaving it in place would feed the project's YAML config
-      // to the agent as instruction text, so keep only the body.
       const body = stripFrontmatter(content, { trimStart: false });
       if (body !== content) {
         addPendingFileWrite(agentsPath);
@@ -74,7 +58,6 @@ export async function reconcileLegacyAgentsResidue(app: App): Promise<void> {
   }
 }
 
-/** True when the file's frontmatter carries a non-empty `copilot-project-id`. */
 function hasCopilotProjectId(content: string): boolean {
   const fmMatch = content.replace(/^\uFEFF/, "").match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!fmMatch) return false;
@@ -88,7 +71,6 @@ function hasCopilotProjectId(content: string): boolean {
   }
 }
 
-/** List immediate sub-folder paths of `projectsFolder` (vault cache, adapter fallback). */
 async function listProjectSubfolders(app: App, projectsFolder: string): Promise<string[]> {
   const root = app.vault.getAbstractFileByPath(projectsFolder);
   if (root instanceof TFolder) {

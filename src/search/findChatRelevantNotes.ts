@@ -7,10 +7,6 @@ import { withTimeout } from "@/utils";
 import { App, TFile } from "obsidian";
 
 const EMPTY_NOTES = Object.freeze([]);
-/** Retrieve relevant notes from Miyo for one chat snapshot.
- * @param app - Vault used to resolve result paths.
- * @param context - Isolated composition and visible conversation snapshot.
- */
 export async function findChatRelevantNotes(
   app: App,
   context: ChatRelevantNotesContext

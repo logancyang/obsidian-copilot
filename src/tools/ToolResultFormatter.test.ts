@@ -140,8 +140,6 @@ Just content, no path or modified date
 
       const formatted = ToolResultFormatter.format("localSearch", malformedXml);
 
-      // The XML regex matches and extracts content even if it's not well-formed XML
-      // It finds 0 documents and returns the "no results" message
       expect(formatted).toBe("📚 Found 0 relevant notes\n\nNo matching notes found.");
     });
   });
@@ -177,12 +175,8 @@ Just content, no path or modified date
     });
 
     it("should handle exceptions gracefully", () => {
-      // Pass null which will cause an error in parsing
       const formatted = ToolResultFormatter.format("localSearch", null as unknown as string);
 
-      // The formatLocalSearch method converts null to string "null"
-      // which doesn't match the XML pattern, so it falls back to parseSearchResults
-      // which returns empty array for "null" string, resulting in "no results" message
       expect(formatted).toBe("📚 Found 0 relevant notes\n\nNo matching notes found.");
     });
   });

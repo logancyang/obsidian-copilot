@@ -12,16 +12,10 @@ interface AppWithCommands extends App {
   commands: CommandManager;
 }
 
-/**
- * Type guard for the command manager surface used by Copilot.
- */
 function hasCommandManager(app: App): app is AppWithCommands {
   return typeof (app as Partial<AppWithCommands>).commands?.executeCommandById === "function";
 }
 
-/**
- * Registers the Copilot submenu entries in Obsidian's editor context menu.
- */
 export function registerContextMenu(menu: Menu, obsidianApp: App): void {
   if (!hasCommandManager(obsidianApp)) return;
 
@@ -29,7 +23,6 @@ export function registerContextMenu(menu: Menu, obsidianApp: App): void {
     obsidianApp.commands.executeCommandById(commandId);
   };
 
-  // Create the main "Copilot" submenu
   menu.addItem((item) => {
     item.setTitle("Copilot");
     item.setSubmenu();
@@ -49,18 +42,15 @@ export function registerContextMenu(menu: Menu, obsidianApp: App): void {
       });
     });
 
-    // Get custom commands
     const commands = getCachedCustomCommands();
     const visibleCustomCommands = commands.filter(
       (command: CustomCommand) => command.showInContextMenu
     );
 
-    // Add separator if there are custom commands
     if (visibleCustomCommands.length > 0) {
       submenu.addSeparator();
     }
 
-    // Add custom commands to submenu
     sortCommandsByOrder(visibleCustomCommands).forEach((command: CustomCommand) => {
       submenu.addItem((subItem) => {
         subItem.setTitle(command.title).onClick(() => {

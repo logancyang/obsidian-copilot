@@ -44,7 +44,7 @@ describe("compactionUtils", () => {
       const text = "word1 word2 word3 word4 word5";
       const result = truncateWithEllipsis(text, 20);
       expect(result).toContain("...");
-      expect(result.length).toBeLessThanOrEqual(25); // 20 + ellipsis
+      expect(result.length).toBeLessThanOrEqual(25);
     });
   });
 

@@ -24,7 +24,6 @@ type ReadNoteResult = {
   candidates?: Array<{ path: string; title: string }>;
 };
 
-// Helper to invoke tool and parse JSON result
 const invokeReadNoteTool = async (
   tool: StructuredTool,
   args: { notePath: string; chunkIndex?: number | string }

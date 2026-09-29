@@ -35,9 +35,6 @@ import { setSelectedTextContexts } from "@/aiParams";
 
 type PublishFile = (file: TFile) => void;
 
-/**
- * Add a command to the plugin. Supports async callbacks; errors are logged.
- */
 function addCommand(plugin: CopilotPlugin, id: CommandId, callback: () => void | Promise<void>) {
   plugin.addCommand({
     id,
@@ -52,9 +49,6 @@ function addCommand(plugin: CopilotPlugin, id: CommandId, callback: () => void |
   });
 }
 
-/**
- * Add an editor command to the plugin. Supports async callbacks; errors are logged.
- */
 function addEditorCommand(
   plugin: CopilotPlugin,
   id: CommandId,
@@ -73,9 +67,6 @@ function addEditorCommand(
   });
 }
 
-/**
- * Add a check command to the plugin.
- */
 function addCheckCommand(
   plugin: CopilotPlugin,
   id: CommandId,
@@ -141,9 +132,6 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     await plugin.newChat();
   });
 
-  // Agent Mode is always on, but requires subprocess support — register the
-  // agent commands only where the Node runtime exists (real desktop, not
-  // `emulateMobile`, where importing Agent Mode would crash).
   if (isDesktopRuntime()) {
     addCommand(plugin, COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW, () => {
       void plugin.activateAgentView();
@@ -156,23 +144,18 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     });
   }
 
-  // Quick Command - opens a modal dialog for quick interactions
-  // Note: For inline floating panel experience, use Quick Ask instead
   addCheckCommand(plugin, COMMAND_IDS.TRIGGER_QUICK_COMMAND, (checking: boolean) => {
     const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
 
     if (checking) {
-      // Return true only if we're not in source mode
       return !!(!isSourceModeOn(plugin.app) && activeView && activeView.editor);
     }
 
-    // Need to check this again because it can still be triggered via shortcut.
     if (isSourceModeOn(plugin.app)) {
       new Notice("Quick command is not available in source mode.");
       return false;
     }
 
-    // When not checking, execute the command
     if (!activeView || !activeView.editor) {
       new Notice("No active editor found.");
       return false;
@@ -186,14 +169,13 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
       return false;
     }
 
-    // Directly open the Modal
     const quickCommand: CustomCommand = {
       title: "Quick Command",
-      content: "", // Empty content, wait for user input
+      content: "",
       showInContextMenu: false,
       showInSlashMenu: false,
       order: 0,
-      modelKey: "", // Empty = inherit from quickCommandModelKey
+      modelKey: "",
       lastUsedMs: Date.now(),
     };
 
@@ -205,9 +187,9 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
         autoExecuteOnOpen: false,
         hideContentAreaOnIdle: true,
         commandLabel: "Quick Command",
-        commandIcon: null, // No icon for Quick Command
-        showIncludeNoteContext: true, // Show the Note checkbox
-        modelSelectionScope: "quick-command", // Persist model changes to quickCommandModelKey
+        commandIcon: null,
+        showIncludeNoteContext: true,
+        modelSelectionScope: "quick-command",
         firstSubmitTransform: (input, includeNoteContext) =>
           appendIncludeNoteContextPlaceholders(input, includeNoteContext),
       },
@@ -223,10 +205,6 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
   if (getSettings().enableMiyo) {
     addCommand(plugin, COMMAND_IDS.REFRESH_MIYO_INDEX, async () => {
       const settings = getSettings();
-      // Commands register once per load, so a Disconnect performed afterwards
-      // leaves this entry in the palette. Re-read the intent before touching
-      // the endpoint so a disconnected Miyo is never scanned.
-      // https://github.com/logancyang/obsidian-copilot/pull/3091#discussion_r3926747283
       if (!settings.enableMiyo) {
         new Notice("Miyo is disconnected. Connect it in Copilot settings, then retry.");
         return;
@@ -257,20 +235,13 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     await plugin.loadCopilotChatHistory();
   });
 
-  // Add clear Copilot cache command
   addCommand(plugin, COMMAND_IDS.CLEAR_COPILOT_CACHE, async () => {
     try {
       await plugin.fileParserManager.clearPDFCache(plugin.app.vault);
 
-      // Clear file content cache (get FileCache instance and clear it)
       const fileCache = FileCache.getInstance<string>();
       await fileCache.clear(plugin.app.vault);
 
-      // Clear the off-vault shared conversion cache (Agent Mode snapshots +
-      // markers). Desktop-gated + dynamic import so node:fs / conversionsLocation
-      // never load on mobile (this command module is registered on all platforms).
-      // clear() is root-confined to `context-cache/` — it never ascends to the
-      // parent `vaults/<id>/`, so `agent-chat-index.json` is untouched.
       if (isDesktopRuntime()) {
         const { cacheRoot } = await import("@/context/conversionsLocation");
         const { createNodeContextCacheFs } = await import("@/context/contextCacheFs");
@@ -284,7 +255,6 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     }
   });
 
-  // Create Copilot log file
   addCommand(plugin, COMMAND_IDS.OPEN_LOG_FILE, async () => {
     try {
       await flushRecordedPromptPayloadToLog();
@@ -295,7 +265,6 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     }
   });
 
-  // Clear Copilot log file (delete on disk and clear in-memory buffer)
   addCommand(plugin, COMMAND_IDS.CLEAR_LOG_FILE, async () => {
     try {
       await logFileManager.clear();
@@ -306,7 +275,6 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     }
   });
 
-  // Add selection to chat context command (manual)
   addEditorCommand(plugin, COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT, async (editor: Editor) => {
     const selectedText = editor.getSelection();
     if (!selectedText) {
@@ -320,17 +288,15 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
       return;
     }
 
-    // Get selection range to determine line numbers
     const selectionRange = editor.listSelections()[0];
     if (!selectionRange) {
       new Notice("Could not determine selection range");
       return;
     }
 
-    const startLine = selectionRange.anchor.line + 1; // Convert to 1-based line numbers
+    const startLine = selectionRange.anchor.line + 1;
     const endLine = selectionRange.head.line + 1;
 
-    // Create selected text context
     const selectedTextContext: NoteSelectedTextContext = {
       id: uuidv4(),
       content: selectedText,
@@ -341,14 +307,11 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
       endLine: Math.max(startLine, endLine),
     };
 
-    // Mutually exclusive: only keep the latest selection
     setSelectedTextContexts([selectedTextContext]);
 
-    // Open chat window to show the context was added
     await plugin.activateChatViewForContext();
   });
 
-  // Add web selection to chat context command (manual)
   addCommand(plugin, COMMAND_IDS.ADD_WEB_SELECTION_TO_CHAT_CONTEXT, async () => {
     if (!isDesktopRuntime()) {
       new Notice("Web selection is only available on desktop");
@@ -375,7 +338,6 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
 
       const pageInfo = service.getPageInfo(leaf);
 
-      // Create web selected text context
       const webSelectedTextContext: WebSelectedTextContext = {
         id: uuidv4(),
         content: selectedMarkdown,
@@ -385,10 +347,8 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
         faviconUrl: pageInfo.faviconUrl || undefined,
       };
 
-      // Mutually exclusive: only keep the latest selection
       setSelectedTextContexts([webSelectedTextContext]);
 
-      // Open chat window to show the context was added
       await plugin.activateChatViewForContext();
     } catch (error) {
       logError("Error adding web selection to context:", error);
@@ -396,7 +356,6 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     }
   });
 
-  // Add command to create a new custom command
   addCommand(plugin, COMMAND_IDS.ADD_CUSTOM_COMMAND, async () => {
     const commands = getCachedCustomCommands();
     const newCommand = { ...EMPTY_COMMAND };
@@ -411,13 +370,11 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     modal.open();
   });
 
-  // Add command to apply a custom command
   addCommand(plugin, COMMAND_IDS.APPLY_CUSTOM_COMMAND, () => {
     const modal = new ApplyCustomCommandModal(plugin.app);
     modal.open();
   });
 
-  // Add command to download YouTube script (Copilot Plus only)
   addCommand(plugin, COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT, async () => {
     const isPaidUser = await checkIsPaidUser(plugin.app, { trigger: "tool_call" });
     if (!isPaidUser) {
@@ -429,17 +386,13 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     modal.open();
   });
 
-  // Add Quick Ask command (recommended shortcut: cmd/ctrl+K)
-  // Quick Ask is the floating panel that appears near the selection in the editor
   addCheckCommand(plugin, COMMAND_IDS.TRIGGER_QUICK_ASK, (checking: boolean) => {
     const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
 
     if (checking) {
-      // Return true only if we're not in source mode and have an active editor
       return !!(!isSourceModeOn(plugin.app) && activeView && activeView.editor);
     }
 
-    // Need to check this again because it can still be triggered via shortcut
     if (isSourceModeOn(plugin.app)) {
       new Notice("Quick Ask is not available in source mode.");
       return false;
@@ -450,14 +403,12 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
       return false;
     }
 
-    // Get the CM6 EditorView from the Obsidian editor
     const view = activeView.editor.cm;
     if (!view) {
       new Notice("Could not access CodeMirror editor.");
       return false;
     }
 
-    // Show the Quick Ask panel (pass activeView for leaf binding)
     plugin.quickAskController.show(activeView, view);
     return true;
   });

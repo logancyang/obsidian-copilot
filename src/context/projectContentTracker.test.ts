@@ -29,9 +29,6 @@ jest.mock("@/projects/state", () => ({
 
 type Handler = (file: unknown, oldPath?: string) => void;
 
-/** A fake vault + metadata cache that record event handlers so a test can fire
- * them by hand. Vault and metadata cache use separate `offref` mocks so a test can
- * assert teardown routes each ref to its own emitter. */
 function makeApp(): {
   app: App;
   fire: (event: string, file: unknown, oldPath?: string) => void;
@@ -124,7 +121,6 @@ describe("ProjectContentTracker", () => {
     const { app, fire } = makeApp();
     const tracker = new ProjectContentTracker(app);
 
-    // Moved from Archive (out's scope) into Notes (in's scope): both dirty.
     fire("rename", file("Notes/moved.md"), "Archive/moved.md");
     tracker.flushNow();
 
@@ -138,7 +134,6 @@ describe("ProjectContentTracker", () => {
     const { app, fire } = makeApp();
     const tracker = new ProjectContentTracker(app);
 
-    // Renaming the ancestor `Notes` moves the included `Notes/Sub` subtree.
     fire("rename", folder("Renamed"), "Notes");
     tracker.flushNow();
 
@@ -147,8 +142,6 @@ describe("ProjectContentTracker", () => {
   });
 
   it("conservatively dirties a tag-declaring project on ANY markdown change", () => {
-    // The changed file isn't under any folder pattern, but the project declares a
-    // tag, and tags can't be resolved from a path — so it dirties conservatively.
     mockRecords(record("a", { inclusions: "#important" }));
     const { app, fire } = makeApp();
     const tracker = new ProjectContentTracker(app);
@@ -173,9 +166,6 @@ describe("ProjectContentTracker", () => {
   });
 
   it("conservatively dirties a property-declaring project on ANY markdown change (frontmatter is unresolvable from a path)", () => {
-    // Editing a note's frontmatter is a plain markdown modify; the changed file is
-    // out of any folder scope, but the project includes notes by a property whose
-    // value can't be read from the path — so it dirties conservatively, like a tag.
     mockRecords(record("a", { inclusions: "[Topics:Physics]" }));
     const { app, fire } = makeApp();
     const tracker = new ProjectContentTracker(app);
@@ -200,9 +190,6 @@ describe("ProjectContentTracker", () => {
   });
 
   it("does NOT dirty a property-declaring project on a markdown change under a system Copilot root", () => {
-    // The vault `modify` half of the same rule the metadata event follows: a note
-    // under the Copilot root (chat autosave, on by default) is dropped by
-    // `shouldIndexFile`, so it can never enter a property source's note set.
     mockRecords(record("a", { inclusions: "[Topics:Physics]" }));
     const { app, fire } = makeApp();
     const tracker = new ProjectContentTracker(app);
@@ -215,8 +202,6 @@ describe("ProjectContentTracker", () => {
   });
 
   it("still dirties a TAG-declaring project under a system Copilot root (tag scope is unchanged)", () => {
-    // The system-root skip is property-specific; tags keep their pre-existing
-    // broader rule, so this must not regress when the two predicates split.
     mockRecords(record("a", { inclusions: "#physics" }));
     const { app, fire } = makeApp();
     const tracker = new ProjectContentTracker(app);
@@ -229,9 +214,6 @@ describe("ProjectContentTracker", () => {
   });
 
   it("conservatively dirties a project declaring a property EXCLUSION on a markdown change out of folder scope", () => {
-    // A note inside the included folder can flip its excluded status when its
-    // frontmatter changes; the change fires for a note OUTSIDE the folder, yet the
-    // property exclusion still forces a conservative dirty (over-dirty is safe).
     mockRecords(record("a", { inclusions: "Notes", exclusions: "[Draft:true]" }));
     const { app, fire } = makeApp();
     const tracker = new ProjectContentTracker(app);
@@ -272,7 +254,6 @@ describe("ProjectContentTracker", () => {
     const { app, fire } = makeApp();
     const tracker = new ProjectContentTracker(app);
 
-    // New file is .txt (not markdown), but the old path was .md — it left tag scope.
     fire("rename", file("Notes/note.txt"), "Notes/note.md");
     tracker.flushNow();
 
@@ -285,7 +266,6 @@ describe("ProjectContentTracker", () => {
     const { app, fire } = makeApp();
     const tracker = new ProjectContentTracker(app);
 
-    // Editing the internal log (a markdown file) must not spray tag-project notes.
     fire("modify", file("copilot/copilot-log.md"));
     tracker.flushNow();
 
@@ -294,8 +274,6 @@ describe("ProjectContentTracker", () => {
   });
 
   it("does NOT dirty on a folder CREATE that is a DESCENDANT of a declared folder", () => {
-    // The declared root `Notes` already exists, so a child folder appearing under
-    // it doesn't change how the root resolves — no manifest change, no dirty.
     mockRecords(
       record("tag", { inclusions: "#important" }),
       record("folder", { inclusions: "Notes" })
@@ -312,9 +290,6 @@ describe("ProjectContentTracker", () => {
   });
 
   it("dirties when a folder CREATE IS an exactly-declared folder pattern", () => {
-    // A project declares `External` (out of its folder), which didn't exist. Once
-    // created, resolveFolderPaths turns it into a real manifest entry + search root,
-    // so a stale empty landing must not be reused.
     mockRecords(record("a", { inclusions: "External" }));
     const { app, fire } = makeApp();
     const tracker = new ProjectContentTracker(app);
@@ -336,7 +311,6 @@ describe("ProjectContentTracker", () => {
     tracker.flushNow();
     expect(tracker.getEpoch("a")).toBe(1);
 
-    // The debounce timer must have been cleared by flush — no second bump.
     jest.runOnlyPendingTimers();
     expect(tracker.getEpoch("a")).toBe(1);
 
@@ -345,7 +319,6 @@ describe("ProjectContentTracker", () => {
   });
 
   it("a matcher throw for one project doesn't stop the sweep for others", () => {
-    // First record has a getter that throws when its contextSource is read.
     const boom = {
       project: {
         id: "boom",
@@ -385,10 +358,6 @@ describe("ProjectContentTracker", () => {
       const { app, fire } = makeApp();
       const tracker = new ProjectContentTracker(app);
 
-      // A frontmatter edit fires vault `modify` first (cache still stale), then the
-      // metadata cache `changed` once it has re-parsed. Flushing between them (as a
-      // send/open would) lands each in its own drain; the SECOND bump is the one that
-      // re-resolves the property source against fresh frontmatter.
       fire("modify", file("Notes/a.md"));
       tracker.flushNow();
       fire("changed", file("Notes/a.md"));
@@ -442,9 +411,6 @@ describe("ProjectContentTracker", () => {
     });
 
     it("ignores a metadata change under a system Copilot root that property enumeration cannot reach", () => {
-      // Chat autosave writes frontmatter-bearing notes into the Copilot root every
-      // few seconds. `shouldIndexFile` always drops them, so they can never join a
-      // property source's note set and must not dirty the project.
       mockRecords(record("p", { inclusions: "[Topics:Physics]" }));
       const { app, fire } = makeApp();
       const tracker = new ProjectContentTracker(app);

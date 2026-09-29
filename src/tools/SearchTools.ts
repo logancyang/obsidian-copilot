@@ -17,22 +17,13 @@ import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 import { mergeFilterAndSearchResults } from "@/search/v3/mergeResults";
 import type { Document } from "@langchain/core/documents";
 
-/**
- * Query expansion data returned with search results.
- * Used to show what terms were actually searched in the reasoning block.
- */
 export interface QueryExpansionInfo {
   originalQuery: string;
-  salientTerms: string[]; // Terms from original query (used for ranking)
-  expandedQueries: string[]; // Alternative phrasings (used for recall)
-  recallTerms: string[]; // All terms combined that were used for recall
+  salientTerms: string[];
+  expandedQueries: string[];
+  recallTerms: string[];
 }
 
-/**
- * Compute all recall terms from expansion data.
- * This mirrors the logic in SearchCore.retrieve() that builds recallQueries.
- * Terms are deduplicated and ordered by priority: original query, salient terms, expanded queries, expanded terms.
- */
 function computeRecallTerms(expansion: {
   originalQuery: string;
   salientTerms: string[];
@@ -42,7 +33,6 @@ function computeRecallTerms(expansion: {
   const recallTerms: string[] = [];
 
   const addTerm = (term: unknown) => {
-    // Defensive: only process string values
     if (typeof term !== "string") {
       return;
     }
@@ -53,7 +43,6 @@ function computeRecallTerms(expansion: {
     }
   };
 
-  // Add in priority order: original query, salient terms, expanded queries
   if (expansion.originalQuery && typeof expansion.originalQuery === "string") {
     addTerm(expansion.originalQuery);
   }
@@ -83,7 +72,6 @@ function projectSearchDocument(doc: Document, isFilterResult: boolean) {
   };
 }
 
-// Define Zod schema for localSearch
 const localSearchSchema = z.object({
   query: z.string().min(1).describe("The search query to find relevant notes"),
   salientTerms: z
@@ -109,7 +97,6 @@ const localSearchSchema = z.object({
     .describe("Internal: pre-expanded query data injected by the system to avoid double expansion"),
 });
 
-// Core lexical search function (shared by lexicalSearchTool and localSearchTool)
 async function performLexicalSearch({
   app,
   timeRange,
@@ -126,9 +113,6 @@ async function performLexicalSearch({
   preExpandedQuery?: QueryExpansionInfo;
 }) {
   const settings = getSettings();
-  // Extract tag terms for self-host retriever (server-side tag filtering).
-  // When salientTerms misses hashtags (e.g. query="#python" with empty salientTerms),
-  // fall back to parsing them from the raw query so SelfHostRetriever gets tag filters.
   const salientTagTerms = salientTerms.filter((term) => term.startsWith("#"));
   const tagTerms =
     salientTagTerms.length > 0
@@ -142,7 +126,6 @@ async function performLexicalSearch({
         })();
   const hasTagTerms = tagTerms.length > 0;
 
-  // Time-range and tag-focused queries need expanded limits to avoid truncating results
   const needsExpandedLimits = timeRange !== undefined || hasTagTerms;
   const effectiveMaxK = needsExpandedLimits ? RETURN_ALL_LIMIT : settings.maxSourceChunks;
 
@@ -150,11 +133,9 @@ async function performLexicalSearch({
     `lexicalSearch effectiveMaxK: ${effectiveMaxK} (expanded: ${needsExpandedLimits}), forceLexical: ${forceLexical}`
   );
 
-  // Convert QueryExpansionInfo to ExpandedQuery format (adding queries field)
   const convertedPreExpansion = preExpandedQuery
     ? {
         ...preExpandedQuery,
-        // Build queries array: original query + expanded queries
         queries: [
           preExpandedQuery.originalQuery,
           ...(preExpandedQuery.expandedQueries || []),
@@ -162,7 +143,6 @@ async function performLexicalSearch({
       }
     : undefined;
 
-  // --- Step 1: Run FilterRetriever (always) ---
   const filterRetriever = new FilterRetriever(app, {
     salientTerms,
     timeRange,
@@ -174,7 +154,6 @@ async function performLexicalSearch({
 
   logInfo(`lexicalSearch filterRetriever returned ${filterDocs.length} filter docs`);
 
-  // --- Step 2: Run main retriever (skip if time range — filter results are the complete set) ---
   let searchDocs: import("@langchain/core/documents").Document[] = [];
   let queryExpansion: QueryExpansionInfo | undefined;
 
@@ -186,8 +165,8 @@ async function performLexicalSearch({
       textWeight: TEXT_WEIGHT,
       returnAll: needsExpandedLimits,
       useRerankerThreshold: 0.5,
-      tagTerms, // Used by SelfHostRetriever for server-side tag filtering
-      preExpandedQuery: convertedPreExpansion, // Pass pre-expanded data to skip double expansion
+      tagTerms,
+      preExpandedQuery: convertedPreExpansion,
     };
 
     let retriever;
@@ -204,7 +183,6 @@ async function performLexicalSearch({
     logInfo(`lexicalSearch using ${retrieverType} retriever`);
     searchDocs = await retriever.getRelevantDocuments(query);
 
-    // Extract query expansion from the lexical retriever if available
     if (retriever instanceof TieredLexicalRetriever) {
       const expansion = retriever.getLastQueryExpansion();
       if (expansion) {
@@ -218,7 +196,6 @@ async function performLexicalSearch({
     }
   }
 
-  // --- Step 3: Merge filter + search results ---
   const { filterResults, searchResults } = mergeFilterAndSearchResults(filterDocs, searchDocs);
 
   const taggedFilterResults = filterResults.map((doc) => projectSearchDocument(doc, true));
@@ -233,7 +210,6 @@ async function performLexicalSearch({
     );
   }
 
-  // Deduplicate only search results (filter results are never deduped away)
   const searchSourcesLike = taggedSearchResults.map((d) => ({
     title: d.title || d.path || "Untitled",
     path: d.path || d.title || "",
@@ -253,13 +229,11 @@ async function performLexicalSearch({
     .map((s) => bestByKey.get((s.path || s.title).toLowerCase()))
     .filter(Boolean);
 
-  // Combine: filter results first, then deduped search results (capped to prevent oversized payloads)
   const allDocs = [...taggedFilterResults, ...dedupedSearchDocs].slice(0, effectiveMaxK);
 
   return { type: "local_search", documents: allDocs, queryExpansion };
 }
 
-// Explicit lexical-search tool for callers that do not want Miyo routing.
 const createLexicalSearchTool = (app: App) =>
   createLangChainTool({
     name: "lexicalSearch",
@@ -276,11 +250,6 @@ const createLexicalSearchTool = (app: App) =>
     },
   });
 
-/**
- * Validate and sanitize time range to prevent LLM hallucinations.
- * Returns undefined if the time range is invalid, incomplete, or nonsensical.
- * Handles cases where LLMs return empty objects {} or partial objects.
- */
 function validateTimeRange(timeRange?: {
   startTime?: number;
   endTime?: number;
@@ -289,14 +258,11 @@ function validateTimeRange(timeRange?: {
 
   const { startTime, endTime } = timeRange;
 
-  // Check for missing, invalid values (0, negative, or non-numbers)
-  // This handles LLM returning {} or {startTime: undefined, endTime: undefined}
   if (!startTime || !endTime || startTime <= 0 || endTime <= 0) {
     logInfo("localSearch: Ignoring invalid time range (missing, zero, or negative values)");
     return undefined;
   }
 
-  // Check for inverted range
   if (startTime > endTime) {
     logInfo("localSearch: Ignoring inverted time range (start > end)");
     return undefined;
@@ -305,10 +271,6 @@ function validateTimeRange(timeRange?: {
   return { startTime, endTime };
 }
 
-/**
- * Run Miyo search: FilterRetriever (local tag/title) + MiyoSemanticRetriever (server-side).
- * Miyo replaces local lexical/semantic search entirely.
- */
 async function performMiyoSearch({
   app,
   query,
@@ -324,7 +286,6 @@ async function performMiyoSearch({
   const needsExpandedLimits = timeRange !== undefined || tagTerms.length > 0;
   const effectiveMaxK = needsExpandedLimits ? RETURN_ALL_LIMIT : getSettings().maxSourceChunks;
 
-  // FilterRetriever for local tag/title/time-range matches
   const filterRetriever = new FilterRetriever(app, {
     salientTerms,
     timeRange,
@@ -333,8 +294,6 @@ async function performMiyoSearch({
   });
   const filterDocs = await filterRetriever.getRelevantDocuments(query);
 
-  // When timeRange is set, filter results are the complete set — skip Miyo search
-  // (mirrors the non-Miyo path where main retriever is skipped for time-range queries)
   let miyoDocs: import("@langchain/core/documents").Document[] = [];
   if (!filterRetriever.hasTimeRange()) {
     const miyoRetriever = RetrieverFactory.createMiyoRetriever(app, {
@@ -353,7 +312,6 @@ async function performMiyoSearch({
     `miyoSearch: ${filterDocs.length} filter + ${miyoDocs.length} miyo docs for query: "${query}"`
   );
 
-  // Merge: filter results first, then Miyo results (deduped)
   const { filterResults, searchResults } = mergeFilterAndSearchResults(filterDocs, miyoDocs);
 
   const allDocs = [
@@ -364,7 +322,6 @@ async function performMiyoSearch({
   return { type: "local_search", documents: allDocs };
 }
 
-// Smart wrapper that uses RetrieverFactory for unified retriever selection
 const createLocalSearchTool = (app: App) =>
   createLangChainTool({
     name: "localSearch",
@@ -372,7 +329,6 @@ const createLocalSearchTool = (app: App) =>
       "Search for notes in the vault based on query, salient terms, and optional time range",
     schema: localSearchSchema,
     func: async ({ timeRange: rawTimeRange, query, salientTerms, _preExpandedQuery }) => {
-      // Validate time range to prevent LLM hallucinations (e.g., {startTime: 0, endTime: 0})
       const timeRange = validateTimeRange(rawTimeRange);
       const settings = getSettings();
       const miyoActive = RetrieverFactory.isMiyoActive();
@@ -387,7 +343,6 @@ const createLocalSearchTool = (app: App) =>
         );
       }
 
-      // Miyo handles search server-side — use separate path (no local lexical search)
       if (miyoActive) {
         logInfo("localSearch: Using Miyo search path");
         return await performMiyoSearch({
@@ -401,7 +356,6 @@ const createLocalSearchTool = (app: App) =>
       const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
       const shouldForceLexical = timeRange !== undefined || tagTerms.length > 0;
 
-      // For time-range and tag queries, force lexical search for better filtering.
       if (shouldForceLexical) {
         logInfo("localSearch: Forcing lexical search (time range or tags present)");
         return await performLexicalSearch({
@@ -414,11 +368,9 @@ const createLocalSearchTool = (app: App) =>
         });
       }
 
-      // Outside Miyo, RetrieverFactory selects the local lexical retriever.
       const retrieverType = RetrieverFactory.getRetrieverType();
       logInfo(`localSearch: Using ${retrieverType} retriever via factory`);
 
-      // Delegate to shared function which uses RetrieverFactory internally
       return await performLexicalSearch({
         app,
         timeRange,
@@ -429,7 +381,6 @@ const createLocalSearchTool = (app: App) =>
     },
   });
 
-// Define Zod schema for webSearch
 const webSearchSchema = z.object({
   query: z.string().min(1).describe("The search query to search the internet"),
   chatHistory: z
@@ -442,7 +393,6 @@ const webSearchSchema = z.object({
     .describe("Previous conversation turns for context (usually empty array)"),
 });
 
-// Add new web search tool
 const webSearchTool = createLangChainTool({
   name: "webSearch",
   description:
@@ -450,7 +400,6 @@ const webSearchTool = createLangChainTool({
   schema: webSearchSchema,
   func: async ({ query, chatHistory }) => {
     try {
-      // Get standalone question considering chat history
       const standaloneQuestion = await getStandaloneQuestion(query, chatHistory);
 
       let webContent: string;
@@ -466,16 +415,11 @@ const webSearchTool = createLangChainTool({
         citations = response.response.citations || [];
       }
 
-      // Return structured JSON response for consistency with other tools
-      // Format as an array of results like localSearch does
       const formattedResults = [
         {
           type: "web_search",
           content: webContent,
           citations: citations,
-          // Instruct the model to use footnote-style citations and definitions.
-          // Chat UI will render [^n] as [n] for readability and show a simple numbered Sources list.
-          // When inserted into a note, the original [^n] footnotes will remain valid Markdown footnotes.
           instruction: getWebSearchCitationInstructions(),
         },
       ];

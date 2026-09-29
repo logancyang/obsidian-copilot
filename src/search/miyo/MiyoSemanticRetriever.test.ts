@@ -11,15 +11,12 @@ const mockGetDocumentsByPath = jest.fn();
 jest.mock("@/logger");
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(),
-  // searchUtils' getSystemExcludedFolders normalizes root paths through the real
-  // helper; keep it faithful so the pattern filter behaves as in production.
   normalizeRootFolders:
     jest.requireActual<typeof import("@/settings/model")>("@/settings/model").normalizeRootFolders,
 }));
 jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoFolderName: jest.fn(),
   getVaultRelativeMiyoPath: jest.fn((_: unknown, path: string) => path.replace("/vault/", "")),
-  // Mirrors the real ownership rule against the mocked "/vault" folder name.
   isCurrentVaultMiyoPath: jest.fn((_: unknown, path: string) => path.startsWith("/vault/")),
   getMiyoCustomUrl: jest.fn().mockReturnValue(""),
 }));
@@ -33,12 +30,6 @@ jest.mock("@/miyo/MiyoClient", () => ({
   })),
 }));
 
-/**
- * Create a Miyo semantic retriever configured for tests.
- *
- * @param options - Optional overrides for retriever options.
- * @returns Configured retriever instance.
- */
 function createRetriever(
   options: Partial<ConstructorParameters<typeof MiyoSemanticRetriever>[1]> = {}
 ) {
@@ -62,8 +53,6 @@ describe("MiyoSemanticRetriever", () => {
   });
 
   it("reports a failed Miyo request instead of returning an empty search result (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
-    // A silent [] lets Quick Chat answer as though vault search succeeded with
-    // no matches, hiding that enabled Miyo never supplied context.
     mockSearch.mockRejectedValue(new Error("connection refused"));
 
     await expect(createRetriever().getRelevantDocuments("query")).rejects.toThrow(
@@ -80,8 +69,6 @@ describe("MiyoSemanticRetriever", () => {
   });
 
   it("keeps registration guidance out of unrestricted-scope failures (https://github.com/logancyang/obsidian-copilot/pull/3090#discussion_r3926715956)", async () => {
-    // An unrestricted search omits the folder, so its 404 says nothing about
-    // whether this vault is registered.
     (getSettings as jest.Mock).mockReturnValue({
       miyoServerUrl: "http://miyo.local",
       debug: false,
@@ -184,8 +171,6 @@ describe("MiyoSemanticRetriever", () => {
   });
 
   it("over-fetches but caps returned chunks to the requested limit when a filter is active", async () => {
-    // A user-authored inclusion/exclusion pattern can drop results, so the
-    // retriever over-fetches candidates to still fill the requested cap.
     (getSettings as jest.Mock).mockReturnValue({
       miyoServerUrl: "http://miyo.local",
       debug: false,
@@ -213,7 +198,6 @@ describe("MiyoSemanticRetriever", () => {
     });
     const documents = await retriever.getRelevantDocuments("query");
 
-    // Over-fetches Miyo's largest exposed candidate pool but returns only maxK.
     expect(mockSearch).toHaveBeenCalledWith(
       "http://miyo.local",
       "/vault",
@@ -272,10 +256,6 @@ describe("MiyoSemanticRetriever", () => {
   });
 
   it("keeps search-all results from an external folder that shares a system root's name", async () => {
-    // Ownership is judged on the RAW path: this vault's results carry the
-    // "/vault/" prefix, an external folder carries its own name — even when
-    // that name equals the default Copilot root ("copilot"). The external
-    // chunk must survive while the vault's own former-root chunk is dropped.
     (getSettings as jest.Mock).mockReturnValue({
       miyoServerUrl: "http://miyo.local",
       debug: false,
@@ -317,9 +297,6 @@ describe("MiyoSemanticRetriever", () => {
   });
 
   it("still applies the system-root filter to unprefixed paths on a folder-scoped query", async () => {
-    // A folder-scoped query only returns this vault's content, so ownership is
-    // asserted regardless of the raw prefix — a result arriving without the
-    // folder prefix must not dodge the privacy filter by looking external.
     (getSettings as jest.Mock).mockReturnValue({
       miyoServerUrl: "http://miyo.local",
       debug: false,

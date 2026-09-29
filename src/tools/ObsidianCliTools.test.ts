@@ -14,10 +14,6 @@ jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
 
 const mockedRunCommand = runObsidianCliCommand as jest.MockedFunction<typeof runObsidianCliCommand>;
 
-/**
- * Minimal interface for invoking a LangChain tool in tests.
- * The actual tool's `invoke` is generic; we only need the string-result form here.
- */
 type InvokableTool = { invoke: (args: Record<string, unknown>) => Promise<string> };
 const asInvokable = (t: unknown): InvokableTool => t as InvokableTool;
 
@@ -86,10 +82,6 @@ function buildFailedResult(
 beforeEach(() => {
   jest.clearAllMocks();
 });
-
-// ---------------------------------------------------------------------------
-// obsidianDailyNote
-// ---------------------------------------------------------------------------
 
 describe("obsidianDailyNoteTool", () => {
   test("daily creates today's daily note", async () => {
@@ -160,10 +152,6 @@ describe("obsidianDailyNoteTool", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// obsidianProperties
-// ---------------------------------------------------------------------------
-
 describe("obsidianPropertiesTool", () => {
   test("properties vault-wide returns property list", async () => {
     mockedRunCommand.mockResolvedValue(
@@ -226,7 +214,6 @@ describe("obsidianPropertiesTool", () => {
   });
 
   test("throws on CLI failure with error code message", async () => {
-    // When error code is present, it takes precedence over exit code in error message
     mockedRunCommand.mockResolvedValue(buildFailedResult("properties", "EFAIL", "", 1));
 
     await expect(
@@ -234,10 +221,6 @@ describe("obsidianPropertiesTool", () => {
     ).rejects.toThrow("error code EFAIL");
   });
 });
-
-// ---------------------------------------------------------------------------
-// obsidianTasks
-// ---------------------------------------------------------------------------
 
 describe("obsidianTasksTool", () => {
   test("tasks returns task list", async () => {
@@ -296,10 +279,6 @@ describe("obsidianTasksTool", () => {
     );
   });
 });
-
-// ---------------------------------------------------------------------------
-// obsidianLinks
-// ---------------------------------------------------------------------------
 
 describe("obsidianLinksTool", () => {
   test("backlinks returns source file list", async () => {
@@ -393,10 +372,6 @@ describe("obsidianLinksTool", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// obsidianTemplates
-// ---------------------------------------------------------------------------
-
 describe("obsidianTemplatesTool", () => {
   test("templates returns list of template names", async () => {
     mockedRunCommand.mockResolvedValue(
@@ -474,10 +449,6 @@ describe("obsidianTemplatesTool", () => {
     ).rejects.toThrow("CLI binary not found");
   });
 });
-
-// ---------------------------------------------------------------------------
-// obsidianBases
-// ---------------------------------------------------------------------------
 
 describe("obsidianBasesTool", () => {
   test("bases lists base files", async () => {
