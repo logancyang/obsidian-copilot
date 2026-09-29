@@ -14,12 +14,10 @@ function createModel(): ChatOpenRouter {
   return new ChatOpenRouter({
     modelName: "test-model",
     apiKey: "test-key",
-    // The jest environment has no global fetch; the stub keeps client construction inert.
     configuration: { fetch: jest.fn() as unknown as typeof fetch },
   });
 }
 
-/** Access the private message converter without spinning up a real stream. */
 function convertMessages(messages: unknown[]): OpenAI.ChatCompletionMessageParam[] {
   return (
     createModel() as unknown as {
@@ -28,10 +26,6 @@ function convertMessages(messages: unknown[]): OpenAI.ChatCompletionMessageParam
   ).toOpenRouterMessages(messages as BaseMessage[]);
 }
 
-/**
- * Reproduce a streamed assistant turn: run each raw OpenRouter delta through the
- * private chunk builder and aggregate the chunks the way callers of `stream()` do.
- */
 function aggregateStreamedDeltas(deltas: Array<Record<string, unknown>>): AIMessageChunk {
   const model = createModel() as unknown as {
     buildMessageChunk: (config: {
@@ -162,9 +156,6 @@ describe("ChatOpenRouter", () => {
       }
 
       it("sets a reasoning budget without inventing an output limit to go with it (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", () => {
-        // The gateway takes a reasoning budget on its own, checked live in
-        // `src/integration_tests/outputLength.test.ts`. Adding a top-level
-        // figure here would cap every reasoning model.
         const params = paramsFor({ enableReasoning: true });
 
         expect(params.reasoning).toEqual({ max_tokens: 1024 });

@@ -76,24 +76,15 @@ type ToolCallWithExecutor = {
 };
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
-  /**
-   * Get available tools for Copilot Plus chain.
-   * Uses a minimal set of utility tools: time tools and file tree.
-   * Search tools are handled via @commands.
-   */
   protected getAvailableToolsForPlanning(): StructuredTool[] {
     const registry = ToolRegistry.getInstance();
 
-    // Initialize tools if not already done
     if (registry.getAllTools().length === 0) {
       initializeBuiltinTools(this.chainManager.app);
     }
 
-    // Get all tools as StructuredTool instances
     const allTools = registry.getAllTools().map((def) => def.tool);
 
-    // Return only utility tools that need automatic detection
-    // Other tools (@vault, @websearch, @memory) are handled by @command logic
     return allTools.filter((tool) => {
       return (
         tool.name === "getCurrentTime" ||
@@ -105,10 +96,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     });
   }
 
-  /**
-   * Use model-based planning with native tool calling to determine which tools to call.
-   * Uses bindTools() for native function calling instead of XML format.
-   */
   private async planToolCalls(
     userMessage: string,
     chatModel: BaseChatModel,
@@ -116,7 +103,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   ): Promise<{ toolCalls: ToolCallWithExecutor[]; salientTerms: string[] }> {
     const availableTools = this.getAvailableToolsForPlanning();
 
-    // Check if model supports native tool calling
     const modelWithTools = chatModel as BaseChatModel & {
       bindTools?: (tools: StructuredTool[]) => unknown;
     };
@@ -128,14 +114,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       };
     }
 
-    // Bind tools to the model for native function calling
     const boundModel = modelWithTools.bindTools(availableTools);
 
-    // Build a lightweight planning prompt (no XML format instructions needed)
-    // Reason: when an active note is attached in this turn, tell the planner not
-    // to call getFileTree just because the user says "this note" / "this file" —
-    // the note's content is already available via context, so getFileTree is
-    // wasteful unless the user explicitly wants to discover OTHER notes.
     const activeContextHint = hasActiveContextNote
       ? "\n- The user has an active note attached in this turn. Its content is already available; do NOT call getFileTree merely because the user says 'this note' or 'this file'. Only call getFileTree when the user explicitly wants to discover OTHER notes, list folders, or verify paths."
       : "";
@@ -154,7 +134,6 @@ After analyzing, extract key search terms from the user's message that would be 
 
 Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
-    // Create planning request
     const planningMessages = [
       {
         role: getMessageRole(chatModel),
@@ -168,10 +147,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
     logInfo("[CopilotPlus] Requesting tool planning with native tool calling...");
 
-    // Use stream() instead of invoke() to avoid LangChain's _generate() path,
-    // which calls _getEstimatedTokenCountFromPrompt -> getNumTokens -> tiktoken
-    // CDN fetch. stream() uses _streamResponseChunks() directly, bypassing the
-    // token estimation entirely. Actual token usage comes from API response metadata.
     let response: AIMessage;
     {
       const stream: AsyncIterable<AIMessageChunk> = await withSuppressedTokenWarnings(() =>
@@ -193,17 +168,14 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       });
     }
 
-    // Extract tool calls from native response
     const nativeToolCalls = response.tool_calls || [];
     const responseText =
       typeof response.content === "string" ? response.content : JSON.stringify(response.content);
 
     logInfo("[CopilotPlus] Native tool calls:", nativeToolCalls.length);
 
-    // Extract salient terms from response text
     const { salientTerms } = this.extractPlanningFieldsFromResponse(responseText, userMessage);
 
-    // Convert native tool calls to executor format
     const toolCalls: ToolCallWithExecutor[] = [];
     for (const tc of nativeToolCalls) {
       const tool = availableTools.find((t) => t.name === tc.name);
@@ -221,14 +193,10 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     return { toolCalls, salientTerms };
   }
 
-  /**
-   * Extract salient terms from model response.
-   */
   private extractPlanningFieldsFromResponse(
     responseText: string,
     originalQuery: string
   ): { salientTerms: string[] } {
-    // Extract salient terms from [SALIENT_TERMS: ...] format
     let salientTerms: string[];
     const termsMatch = responseText.match(/\[SALIENT_TERMS:\s*([^\]]+?)\s*\]/i);
     if (termsMatch) {
@@ -244,23 +212,13 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     return { salientTerms };
   }
 
-  /**
-   * Extract salient terms directly from query (fallback method).
-   * Uses language-agnostic heuristics: keeps words with 3+ characters.
-   */
   private extractSalientTermsFromQuery(query: string): string[] {
-    // Language-agnostic extraction: split on whitespace and punctuation,
-    // keep words with sufficient length (filters out short function words in most languages)
     return query
-      .split(/[\s\p{P}]+/u) // Split on whitespace and punctuation (Unicode-aware)
-      .filter((word) => word.length >= 3) // Keep words with 3+ characters
-      .slice(0, 10); // Limit to 10 terms
+      .split(/[\s\p{P}]+/u)
+      .filter((word) => word.length >= 3)
+      .slice(0, 10);
   }
 
-  /**
-   * Process @commands in the user message and add corresponding tool calls.
-   * Handles @vault, @websearch/@web, and @memory commands.
-   */
   private async processAtCommands(
     userMessage: string,
     existingToolCalls: ToolCallWithExecutor[],
@@ -270,9 +228,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const cleanQuery = this.removeAtCommands(userMessage);
     const toolCalls = [...existingToolCalls];
 
-    // Handle @vault command
     if (message.includes("@vault")) {
-      // Check if localSearch is already planned
       const hasLocalSearch = toolCalls.some((tc) => tc.tool.name === "localSearch");
       if (!hasLocalSearch) {
         toolCalls.push({
@@ -286,7 +242,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       }
     }
 
-    // Handle @websearch command and also support @web for backward compatibility
     if (message.includes("@websearch") || message.includes("@web")) {
       const hasWebSearch = toolCalls.some((tc) => tc.tool.name === "webSearch");
       if (!hasWebSearch) {
@@ -304,7 +259,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       }
     }
 
-    // Handle @memory command
     if (message.includes("@memory")) {
       const hasUpdateMemory = toolCalls.some((tc) => tc.tool.name === "updateMemory");
       if (!hasUpdateMemory) {
@@ -320,9 +274,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     return toolCalls;
   }
 
-  /**
-   * Remove @command tokens from the user message.
-   */
   private removeAtCommands(message: string): string {
     return message
       .split(" ")
@@ -353,12 +304,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     return processedImages;
   }
 
-  /**
-   * Extracts images from a context block (active_note or active_web_tab) in L3 content.
-   * @param l3Text - The full L3_TURN layer text
-   * @param source - Configuration for the context source type
-   * @returns Array of image URLs/paths found in the block
-   */
   private async extractImagesFromContextBlock(
     l3Text: string,
     source: {
@@ -368,20 +313,17 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       useForResolution: boolean;
     }
   ): Promise<string[]> {
-    // Match the context block
     const blockRegex = new RegExp(`<${source.tagName}>([\\s\\S]*?)<\\/${source.tagName}>`);
     const blockMatch = blockRegex.exec(l3Text);
     if (!blockMatch) return [];
 
     const block = blockMatch[1];
 
-    // Extract content - unescape XML entities for correct URL parsing
     const contentRegex = /<content>([\s\S]*?)<\/content>/;
     const contentMatch = contentRegex.exec(block);
     const content = contentMatch ? unescapeXml(contentMatch[1]) : "";
     if (!content) return [];
 
-    // Extract identifier (path or url) for logging and optional resolution
     const identifierRegex = new RegExp(
       `<${source.identifierTag}>(.*?)<\\/${source.identifierTag}>`
     );
@@ -393,23 +335,19 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       identifier || `no ${source.identifierTag}`
     );
 
-    // Use identifier for vault path resolution only if configured
     const sourcePath = source.useForResolution ? identifier : undefined;
     return this.extractEmbeddedImages(content, sourcePath);
   }
 
   private async extractEmbeddedImages(content: string, sourcePath?: string): Promise<string[]> {
-    // Match wiki-style ![[image.ext]]
     const wikiImageRegex = /!\[\[(.*?\.(png|jpg|jpeg|gif|webp|bmp|svg))\]\]/g;
 
     const resolvedImages: string[] = [];
 
-    // Process wiki-style images
     const wikiMatches = [...content.matchAll(wikiImageRegex)];
     for (const match of wikiMatches) {
       const imageName = match[1];
 
-      // If we have a source path and access to the app, resolve the wikilink
       if (sourcePath) {
         const resolvedFile = this.chainManager.app.metadataCache.getFirstLinkpathDest(
           imageName,
@@ -417,39 +355,27 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         );
 
         if (resolvedFile) {
-          // Use the resolved path
           resolvedImages.push(resolvedFile.path);
         } else {
-          // If file not found, log a warning but still include the raw filename
           logWarn(`Could not resolve embedded image: ${imageName} from source: ${sourcePath}`);
           resolvedImages.push(imageName);
         }
       } else {
-        // Fallback to raw filename if no source path available
         resolvedImages.push(imageName);
       }
     }
 
-    // Process standard markdown images using robust character-scanning parser
     const mdImagePaths = extractMarkdownImagePaths(content);
     for (const imagePath of mdImagePaths) {
-      // Skip empty paths
       if (!imagePath) continue;
 
-      // Handle external URLs (http://, https://, etc.)
       if (imagePath.match(/^https?:\/\//)) {
-        // Include external URLs - they will be processed by processImageUrls
-        // The ImageProcessor will validate if it's actually an image
         resolvedImages.push(imagePath);
         continue;
       }
 
-      // For local paths, resolve them using Obsidian's metadata cache
-      // Let ImageBatchProcessor handle validation of whether it's actually an image
-      // Clean up the path (remove any leading ./ or /)
       const cleanPath = imagePath.replace(/^\.\//, "").replace(/^\//, "");
 
-      // If we have a source path and access to the app, resolve the path
       if (sourcePath) {
         const resolvedFile = this.chainManager.app.metadataCache.getFirstLinkpathDest(
           cleanPath,
@@ -457,15 +383,11 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         );
 
         if (resolvedFile) {
-          // Use the resolved path
           resolvedImages.push(resolvedFile.path);
         } else {
-          // If file not found, still include the raw path
-          // Let ImageBatchProcessor handle validation
           resolvedImages.push(cleanPath);
         }
       } else {
-        // Fallback to raw path if no source path available
         resolvedImages.push(cleanPath);
       }
     }
@@ -481,16 +403,9 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const successfulImages: ImageContent[] = [];
     const settings = getSettings();
 
-    // Collect all image sources
     const imageSources: { urls: string[]; type: string }[] = [];
 
-    // NOTE: Context URLs are web pages we fetched content from, NOT images to process
-    // Do not add context URLs as image sources
-
-    // Process embedded images only if setting is enabled
     if (settings.passMarkdownImages) {
-      // IMPORTANT: Only extract images from the active context (note or web tab)
-      // Never from L2 (promoted notes) or attached context notes
       const envelope = userMessage.contextEnvelope;
 
       if (!envelope) {
@@ -499,14 +414,8 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         );
       }
 
-      // Extract from active context blocks in L3 (active_note or active_web_tab)
       const l3Turn = envelope.layers.find((l) => l.id === "L3_TURN");
       if (l3Turn) {
-        // Define context sources to extract images from
-        // - tagName: XML tag name in L3 content
-        // - identifierTag: tag containing source identifier (path/url) for logging
-        // - displayName: human-readable name for logs
-        // - useForResolution: whether to use identifier for vault path resolution
         const contextSources = [
           {
             tagName: "active_note",
@@ -531,14 +440,12 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       }
     }
 
-    // Process all image sources
     for (const source of imageSources) {
       const result = await this.processImageUrls(source.urls);
       successfulImages.push(...result.successfulImages);
       failureMessages.push(...result.failureDescriptions);
     }
 
-    // Process existing chat content images if present
     const existingContent = userMessage.content as MessageContent[] | undefined;
     if (existingContent && existingContent.length > 0) {
       const result = await this.processChatInputImages(existingContent);
@@ -546,7 +453,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       failureMessages.push(...result.failureDescriptions);
     }
 
-    // Let the LLM know about the image processing failures
     let finalText = textContent;
     if (failureMessages.length > 0) {
       finalText = `${textContent}\n\nNote: \n${failureMessages.join("\n")}\n`;
@@ -559,7 +465,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       },
     ];
 
-    // Add successful images after the text content
     if (successfulImages.length > 0) {
       messageContent.push(...successfulImages);
     }
@@ -578,10 +483,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     return this.hasCapability(model, ModelCapability.VISION);
   }
 
-  /**
-   * If userMessage.message contains '@composer', append COMPOSER_OUTPUT_INSTRUCTIONS to the text content.
-   * Handles both string and MessageContent[] types.
-   */
   private appendComposerInstructionsIfNeeded(content: string, userMessage: ChatMessage): string {
     if (!userMessage.message || !userMessage.message.includes("@composer")) {
       return content;
@@ -599,17 +500,13 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     originalUserQuestion: string,
     updateLoadingMessage?: (message: string) => void
   ): Promise<void> {
-    // Get memory for chat history loading
     const memory = this.chainManager.memoryManager.getMemory();
 
-    // Get chat model
     const chatModel = this.chainManager.chatModelManager.getChatModel();
     const isMultimodalCurrent = this.isMultimodalModel(chatModel);
 
-    // Create messages array
     const messages: { role: string; content: string | MessageContent[] }[] = [];
 
-    // Envelope-based context construction (required)
     const envelope = userMessage.contextEnvelope;
     if (!envelope) {
       throw new Error(
@@ -619,14 +516,12 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
     logInfo("[CopilotPlus] Using envelope-based context construction");
 
-    // Use LayerToMessagesConverter to get base messages with L1+L2 system, L3+L5 user
     const baseMessages = LayerToMessagesConverter.convert(envelope, {
       includeSystemMessage: true,
       mergeUserContent: true,
       debug: false,
     });
 
-    // Add system message (L1 + L2 Context Library only - no tool results)
     const systemMessage = baseMessages.find((m) => m.role === "system");
     if (systemMessage) {
       messages.push({
@@ -635,15 +530,12 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       });
     }
 
-    // Insert L4 (chat history) between system and user
     await loadAndAddChatHistory(memory, messages);
 
-    // Process user message (L3 smart references + L5)
     const userMessageContent = baseMessages.find((m) => m.role === "user");
     if (userMessageContent) {
       let finalUserContent;
 
-      // All tools (including localSearch) are formatted uniformly and added to user message
       const hasTools = allToolOutputs.length > 0;
 
       const ensureUserQueryLabel = (content: string): string => {
@@ -670,25 +562,19 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       };
 
       if (hasTools) {
-        // Format all tool outputs and prepend to user content using CiC format
         const toolContext = this.formatAllToolOutputs(allToolOutputs);
 
         const userContentWithLabel = ensureUserQueryLabel(userMessageContent.content);
         finalUserContent = renderCiCMessage(toolContext, userContentWithLabel);
 
-        // Inject citation format reminder before [User query]: for better model compliance
         const citationReminder = getCitationFormatReminder(getSettings().enableInlineCitations);
         if (citationReminder) {
           finalUserContent = injectGuidanceBeforeUserQuery(finalUserContent, citationReminder);
         }
       } else {
-        // No tools - use converter's output as-is
-        // Smart references are already properly formatted by LayerToMessagesConverter
         finalUserContent = ensureUserQueryLabel(userMessageContent.content);
       }
 
-      // Add composer instructions if textContent has them
-      // (textContent already has composer instructions appended via appendComposerInstructionsIfNeeded)
       if (
         textContent.includes("<OUTPUT_FORMAT>") &&
         !finalUserContent.includes("<OUTPUT_FORMAT>")
@@ -699,7 +585,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         }
       }
 
-      // Build message content with text and images for multimodal models
       const content: string | MessageContent[] = isMultimodalCurrent
         ? await this.buildMessageContent(finalUserContent, userMessage)
         : finalUserContent;
@@ -712,7 +597,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
     logInfo("Final request to AI", { messages: messages.length });
 
-    // Record the payload for debugging (includes layered view if envelope available)
     const modelName = (chatModel as { modelName?: string } | undefined)?.modelName;
     recordPromptPayload({
       messages,
@@ -725,7 +609,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       createWriteFileTool(this.chainManager.app)
     );
 
-    // Wrap the stream call with warning suppression
     const chatStream = await withSuppressedTokenWarnings(() =>
       this.chainManager.chatModelManager.getChatModel().stream(messages, {
         signal: abortController.signal,
@@ -761,7 +644,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
   ): Promise<string> {
     const { updateLoadingMessage } = options;
 
-    // Check if the current model has reasoning capability
     const chatModel = this.chainManager.chatModelManager.getChatModel();
     const hasReasoning = this.hasCapability(chatModel, ModelCapability.REASONING);
     const excludeThinking = !hasReasoning;
@@ -785,7 +667,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         abortController,
         addMessage,
         updateCurrentAiMessage,
-        undefined // no sources
+        undefined
       );
     }
 
@@ -793,7 +675,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       logInfo("==== Step 1: Planning tools ====");
       let toolCalls: ToolCallWithExecutor[];
 
-      // Extract L5 (raw user query) from envelope for tool planning
       const envelope = userMessage.contextEnvelope;
       if (!envelope) {
         throw new Error(
@@ -804,15 +685,10 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       const messageForAnalysis = l5User?.text || userMessage.originalMessage || "";
 
       try {
-        // Use model-based planning instead of Broca
         const chatModel = this.chainManager.chatModelManager.getChatModel();
-        // Reason: detect active-note attachment from the envelope so the planner
-        // can avoid calling getFileTree just to read a note that's already in
-        // context. See issue #2456. Scope to current-turn segments only: in
-        // compacted envelopes L3_TURN merges prior-turn context into a single
-        // "compacted_context" segment (metadata.source === "compacted"), so an
-        // <active_note> tag from an earlier turn could otherwise falsely trigger
-        // the optimization.
+        // Compacted envelopes merge prior-turn context into one segment, so only
+        // current-turn segments may signal an attached active note.
+        // https://github.com/logancyang/obsidian-copilot/issues/2456
         const l3TurnForPlanning = envelope.layers.find((l) => l.id === "L3_TURN");
         const hasActiveContextNote = !!l3TurnForPlanning?.segments?.some(
           (seg) => seg.metadata?.source === "current_turn" && /<active_note[\s>]/.test(seg.content)
@@ -823,8 +699,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
           hasActiveContextNote
         );
 
-        // Execute getTimeRangeMs immediately if present (needed for localSearch timeRange)
-        // We execute it once here and remove it from toolCalls to avoid double execution
         let timeRange: unknown = undefined;
         const timeRangeCall = planningResult.toolCalls.find(
           (tc) => tc.tool.name === "getTimeRangeMs"
@@ -834,8 +708,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
             timeRangeCall.tool,
             timeRangeCall.args
           );
-          // Parse result if it's a JSON string (LangChain tools return strings)
-          // Extract epoch values from TimeInfo objects - localSearch expects {startTime: number, endTime: number}
           type TimeInfoResult = {
             startTime?: { epoch?: number };
             endTime?: { epoch?: number };
@@ -854,7 +726,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
           if (typeof timeRangeResult === "string") {
             try {
               const parsed = JSON.parse(timeRangeResult) as TimeInfoResult;
-              // Only use result if it's not an error
               if (!parsed.error) {
                 timeRange = extractEpochValues(parsed);
               }
@@ -870,7 +741,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
           logInfo("[CopilotPlus] Executed getTimeRangeMs, result:", timeRange);
         }
 
-        // Filter tool calls: skip getTimeRangeMs if already executed
         const filteredToolCalls = planningResult.toolCalls.filter((tc) => {
           if (tc.tool.name === "getTimeRangeMs" && timeRange) {
             logInfo("Skipping getTimeRangeMs - already executed during planning");
@@ -879,8 +749,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
           return true;
         });
 
-        // Process @commands - this may add localSearch, webSearch, or updateMemory
-        // Pass timeRange in context so @vault commands can use them
         toolCalls = await this.processAtCommands(messageForAnalysis, filteredToolCalls, {
           salientTerms: planningResult.salientTerms,
           timeRange,
@@ -895,10 +763,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         );
       }
 
-      // Clean user message by removing @command tokens
-      // Use L5 text (expanded user query without context XML) or displayText as fallback.
-      // userMessage.message is processedText which includes context artifact XML — using it
-      // here would re-inject L3 context into the user message, bypassing envelope separation.
       const l5Text = userMessage.contextEnvelope?.layers.find((l) => l.id === "L5_USER")?.text;
       const cleanedUserMessage = this.removeAtCommands(
         l5Text || userMessage.originalMessage || userMessage.message
@@ -909,15 +773,10 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         updateLoadingMessage
       );
 
-      // Use sources from tool execution
       sources = toolSources;
 
-      // All tools (including localSearch) are treated uniformly
-      // They all go to the user message with consistent formatting
       const allToolOutputs = toolOutputs.filter((output) => output.output != null);
 
-      // Prepare textContent with composer instructions if needed
-      // This is checked in streamMultimodalResponse to append to final user content
       const textContentWithComposer = this.appendComposerInstructionsIfNeeded(
         cleanedUserMessage,
         userMessage
@@ -934,38 +793,31 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         updateLoadingMessage
       );
     } catch (error: unknown) {
-      // Reset loading message to default
       updateLoadingMessage?.(LOADING_MESSAGES.DEFAULT);
 
-      // Check if the error is due to abort signal
       if (
         (error instanceof Error && error.name === "AbortError") ||
         abortController.signal.aborted
       ) {
         logInfo("CopilotPlus stream aborted by user", { reason: abortController.signal.reason });
-        // Don't show error message for user-initiated aborts
       } else {
         await this.handleError(error, (message) => thinkStreamer.processErrorChunk(message));
       }
     }
 
-    // Only skip saving if it's a new chat (clearing everything)
     if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
       updateCurrentAiMessage("");
       return "";
     }
 
-    // Get the response from thinkStreamer
     const streamResult = thinkStreamer.close();
     let fullAIResponse = streamResult.content;
 
-    // Store truncation metadata for handleResponse
     const responseMetadata: ResponseMetadata | undefined = {
       wasTruncated: streamResult.wasTruncated,
       tokenUsage: streamResult.tokenUsage ?? undefined,
     };
 
-    // Add fallback sources if citations are missing
     const settings = getSettings();
     const fallbackSources =
       this.lastCitationSources && this.lastCitationSources.length > 0
@@ -1002,13 +854,9 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const toolOutputs: { tool: string; output: unknown }[] = [];
     const allSources: { title: string; path: string; score: number; explanation?: unknown }[] = [];
 
-    // TODO: remove this hack until better solution in place (logan, wenzheng)
-    // Skip getFileTree if localSearch is already being called to avoid redundant work
     const hasLocalSearch = toolCalls.some((tc) => tc.tool.name === "localSearch");
 
     for (const toolCall of toolCalls) {
-      // TODO: remove this hack until better solution in place (logan, wenzheng)
-      // Skip getFileTree when localSearch is present
       if (toolCall.tool.name === "getFileTree" && hasLocalSearch) {
         logInfo("Skipping getFileTree since localSearch is already active");
         continue;
@@ -1026,10 +874,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       try {
         output = await ToolManager.callTool(toolCall.tool, toolCall.args);
       } catch (error) {
-        // localSearch reports an unusable backend (Miyo stopped, vault not
-        // registered) by throwing. Quick Chat must render that as a failed
-        // search the model can explain, not abort the turn with a generic
-        // generation error.
+        // localSearch throws for an unusable backend; render that as a failed search the model can explain instead of aborting the turn.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/356
         if (toolCall.tool.name !== "localSearch") {
           throw error;
@@ -1042,18 +887,14 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         continue;
       }
 
-      // Process localSearch results immediately
       if (toolCall.tool.name === "localSearch") {
-        // Convert output to string if needed
         const outputStr = typeof output === "string" ? output : JSON.stringify(output);
         const result = { result: outputStr, success: output != null };
         const timeExpression = this.getTimeExpression(toolCalls);
         const processed = this.processLocalSearchResult(result, timeExpression);
 
-        // Collect sources
         allSources.push(...processed.sources);
 
-        // Store the formatted output for LLM
         toolOutputs.push({ tool: toolCall.tool.name, output: processed.formattedForLLM });
       } else {
         toolOutputs.push({ tool: toolCall.tool.name, output });
@@ -1063,7 +904,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     return { toolOutputs, sources: deduplicateSources(allSources) };
   }
 
-  // Persist citation lines built for this turn to reuse in fallback
   private lastCitationSources: { title?: string; path?: string }[] | null = null;
 
   protected getTimeExpression(toolCalls: ToolCallWithExecutor[]): string {
@@ -1074,7 +914,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
   private prepareLocalSearchResult(documents: unknown[], timeExpression: string): string {
     const settings = getSettings();
 
-    // Type alias for the shape we need from search result documents
     type SearchDoc = {
       includeInContext?: boolean;
       mtime?: number;
@@ -1086,38 +925,26 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       __sourceId?: number;
     };
 
-    // Cast once to a typed array we can work with throughout this method
     const typedDocs = documents as SearchDoc[];
 
-    // Filter documents that should be included in context
-    // Use !== false to be consistent with formatSearchResultsForLLM and logSearchResultsDebugTable
     const includedDocs = typedDocs.filter((doc) => doc.includeInContext !== false);
 
-    // Generate quality summary across all docs combined
     const qualitySummary = generateQualitySummary(includedDocs);
     const qualityHeader = formatQualitySummary(qualitySummary);
 
-    // Detect result type for two-tier formatting strategy.
-    // timeDominant is checked independently of filterOnly: time-range queries often include
-    // daily notes with source "title-match" (from getTitleMatches), which are not in
-    // FILTER_SOURCES, so filterOnly would be false even for pure time-range result sets.
     const filterOnly = isFilterOnlyResults(includedDocs);
     const timeDominant = isTimeDominantResults(includedDocs);
 
-    // Determine tier split based on result type
     let tier1Docs: SearchDoc[];
     let tier2Docs: SearchDoc[];
     if (timeDominant) {
-      // Sort by mtime desc; most recent get full content, older get metadata-only
       const sorted = [...includedDocs].sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
       tier1Docs = sorted.slice(0, settings.maxSourceChunks);
       tier2Docs = sorted.slice(settings.maxSourceChunks);
     } else if (filterOnly) {
-      // Tag queries: no meaningful ranking — all docs get metadata-only
       tier1Docs = [];
       tier2Docs = includedDocs;
     } else {
-      // Ranked results: existing behavior
       if (includedDocs.length > settings.maxSourceChunks) {
         tier1Docs = includedDocs.slice(0, settings.maxSourceChunks);
         tier2Docs = includedDocs.slice(settings.maxSourceChunks);
@@ -1127,12 +954,10 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       }
     }
 
-    // Calculate total content length for tier 1 only (safety net truncation)
     const totalContentLength = tier1Docs.reduce<number>((sum, doc) => {
       return sum + (doc.content ? doc.content.length : 0);
     }, 0);
 
-    // If total content length exceeds threshold, truncate content proportionally
     let processedDocs: SearchDoc[] = tier1Docs;
     if (totalContentLength > MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT) {
       const truncationRatio = MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT / totalContentLength;
@@ -1149,7 +974,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       );
     }
 
-    // Assign stable source ids (continuous across both groups) and sanitize content
     const withIds: SearchDoc[] = processedDocs.map(
       (doc, idx): SearchDoc => ({
         ...doc,
@@ -1158,12 +982,9 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       })
     );
 
-    // Split into filter and search docs by isFilterResult flag
     const filterDocs = withIds.filter((d) => d.isFilterResult === true);
     const searchDocs = withIds.filter((d) => d.isFilterResult !== true);
 
-    // Use split formatter if there are filter results, otherwise fall back to unified format.
-    // For tag-only queries (tier1 empty), output metadata-only directly.
     const hasFilterResults = filterDocs.length > 0;
     let formattedContent = hasFilterResults
       ? formatSplitSearchResultsForLLM(filterDocs, searchDocs)
@@ -1171,7 +992,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         ? formatMetadataOnlyDocuments(tier2Docs)
         : formatSearchResultsForLLM(withIds);
 
-    // Append metadata-only tier 2 for overflow docs (only when tier 1 has full-content docs)
     if (tier1Docs.length > 0 && tier2Docs.length > 0) {
       if (timeDominant) {
         logInfo(
@@ -1187,7 +1007,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       logInfo(`Tag-only search: ${tier2Docs.length} notes (metadata-only)`);
     }
 
-    // Build a compact, unnumbered source catalog to avoid bias
     const sourceEntries: SourceCatalogEntry[] = withIds
       .slice(0, Math.min(20, withIds.length))
       .map((d) => ({
@@ -1196,7 +1015,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       }));
     const catalogLines = formatSourceCatalog(sourceEntries);
 
-    // Also keep a numbered mapping for fallback use only (if model emits footnotes but forgets Sources)
     this.lastCitationSources = withIds.slice(0, Math.min(20, withIds.length)).map((d) => {
       const title = d.title || d.path || "Untitled";
       return {
@@ -1205,28 +1023,18 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       };
     });
 
-    // Build guidance block with citation rules and source catalog
     const guidance = getLocalSearchGuidance(catalogLines, settings.enableInlineCitations).trim();
 
-    // Add a RAG instruction so the model uses the retrieved context.
     const ragInstruction = "Answer the question based only on the following context:";
     const documentsSection = buildLocalSearchInnerContent(ragInstruction, formattedContent);
 
-    // Include quality header and guidance directly in the payload, making it self-contained
     const fullInnerContent = guidance
       ? `${qualityHeader}\n\n${documentsSection}\n\n${guidance}`
       : `${qualityHeader}\n\n${documentsSection}`;
 
-    // Wrap in XML-like tags for better LLM understanding
     return wrapLocalSearchPayload(fullInnerContent, timeExpression);
   }
 
-  /**
-   * Processes localSearch tool results for LLM consumption and source extraction
-   * @param toolResult - The result from localSearch tool execution
-   * @param timeExpression - Optional time expression for contextualizing results
-   * @returns Object containing formatted result for LLM and extracted sources for UI
-   */
   protected processLocalSearchResult(
     toolResult: { result: string; success: boolean },
     timeExpression?: string
@@ -1240,9 +1048,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     let formattedForDisplay: string;
 
     if (!toolResult.success) {
-      // The reason is the only recovery instruction the model can relay, so it
-      // travels with the failure instead of staying in the display-only string.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/356
       formattedForLLM = `<localSearch>\nSearch failed: ${toolResult.result}\n</localSearch>`;
       formattedForDisplay = `Search failed: ${toolResult.result}`;
       return { formattedForLLM, formattedForDisplay, sources };
@@ -1263,18 +1068,14 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         return { formattedForLLM, formattedForDisplay, sources };
       }
 
-      // Log a concise debug table of results with explanations (title, ctime, mtime)
       logSearchResultsDebugTable(searchResults as SearchDoc[]);
 
-      // Extract sources with explanation for UI display
       sources = extractSourcesFromSearchResults(searchResults);
 
-      // Prepare and format results for LLM (include stable ids)
       formattedForLLM = this.prepareLocalSearchResult(searchResults, timeExpression || "");
       formattedForDisplay = ToolResultFormatter.format("localSearch", formattedForLLM);
     } catch (error) {
       logWarn("Failed to parse localSearch results:", error);
-      // Fallback: try to format as text
       const formatted = formatSearchResultStringForLLM(toolResult.result);
       formattedForLLM = timeExpression
         ? `<localSearch timeRange="${timeExpression}">\n${formatted}\n</localSearch>`
@@ -1292,10 +1093,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     );
   }
 
-  /**
-   * Formats all tool outputs uniformly for user message.
-   * All tools (localSearch, webSearch, getFileTree, etc.) are treated the same.
-   */
   private formatAllToolOutputs(toolOutputs: { tool: string; output: unknown }[]): string {
     if (toolOutputs.length === 0) return "";
 

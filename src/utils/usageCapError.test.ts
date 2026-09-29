@@ -25,8 +25,8 @@ describe("formatUsageCapError", () => {
     const msg = formatUsageCapError(err);
     expect(msg).toContain("usage cap");
     expect(msg).toContain("purchase credits");
-    expect(msg).toContain(DASH); // bare URL (plain text, renders in ErrorBlock)
-    expect(msg).not.toContain("]("); // not Markdown link syntax
+    expect(msg).toContain(DASH);
+    expect(msg).not.toContain("](");
   });
 
   it("detects a cap error nested under other transport wrappers", () => {
@@ -37,7 +37,7 @@ describe("formatUsageCapError", () => {
   it("detects via credits_hint alone and falls back to the default dashboard URL", () => {
     const err = { response: { data: { error: { credits_hint: "Enable credits ..." } } } };
     const msg = formatUsageCapError(err);
-    expect(msg).toContain(DASH); // fallback when no dashboard_url present
+    expect(msg).toContain(DASH);
   });
 
   it("is cycle-safe (does not infinitely recurse on circular errors)", () => {

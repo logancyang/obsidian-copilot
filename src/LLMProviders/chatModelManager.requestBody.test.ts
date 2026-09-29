@@ -5,21 +5,12 @@ import * as obsidianModule from "obsidian";
 
 import ChatModelManager from "./chatModelManager";
 
-/** The obsidian mock's seam for stubbing `requestUrl` per test. */
 const { __setRequestUrlImpl: setRequestUrlImpl } = obsidianModule as unknown as {
   __setRequestUrlImpl: (impl: unknown) => void;
 };
 
-/**
- * What ends up in the HTTP body.
- *
- * The other suites here mock the LangChain clients and assert the config object
- * Copilot hands them. That cannot show whether a parameter survives the client's
- * own serialization. These tests run the real clients and capture the request
- * body Obsidian is asked to send, so a limit Copilot thinks it left out and the
- * SDK puts back fails here.
- * https://github.com/logancyang/obsidian-copilot-preview/issues/312
- */
+// Runs the real clients so a limit Copilot left out but the SDK puts back fails here.
+// https://github.com/logancyang/obsidian-copilot-preview/issues/312
 
 const OPENAI_RESPONSE = JSON.stringify({
   id: "chatcmpl-1",
@@ -40,15 +31,10 @@ const ANTHROPIC_RESPONSE = JSON.stringify({
   usage: { input_tokens: 1, output_tokens: 1 },
 });
 
-/**
- * The sampling knobs Copilot no longer sends. Copilot never exposed a control
- * for any of them, and providers disagree on which values a model accepts, so
- * each provider's own default is the better answer than Copilot's guess.
- * https://github.com/logancyang/obsidian-copilot/issues/2959
- */
+// Providers disagree on accepted sampling values, so Copilot sends none of them.
+// https://github.com/logancyang/obsidian-copilot/issues/2959
 const RETIRED_SAMPLING_PARAMS = ["temperature", "top_p", "frequency_penalty"];
 
-/** Captures the body of the single request the model under test sends. */
 function captureRequestBody(responseText: string): () => Record<string, unknown> {
   let captured: Record<string, unknown> = {};
   const parsedResponse = JSON.parse(responseText) as Record<string, unknown>;
@@ -65,13 +51,6 @@ function captureRequestBody(responseText: string): () => Record<string, unknown>
   return () => captured;
 }
 
-/**
- * `enableCors` routes the client through `safeFetch`, where the body can be
- * read. `stream: false` matters too. The Anthropic SDK refuses a non-streaming
- * request whose `max_tokens` it estimates will take over ten minutes, and it
- * throws before sending anything, so raising `DEFAULT_MAX_OUTPUT_TOKENS` too
- * far fails these tests rather than reaching users.
- */
 function wireModel(overrides: Partial<CustomModel> = {}): CustomModel {
   return {
     name: "test-model",
@@ -85,10 +64,6 @@ function wireModel(overrides: Partial<CustomModel> = {}): CustomModel {
   };
 }
 
-/**
- * Answers every request with a provider-style 400 so the error the SDK raises
- * can be inspected. Mirrors what Moonshot returns for a rejected parameter.
- */
 function respondWithBadRequest(message: string): void {
   const body = JSON.stringify({ error: { message, type: "invalid_request_error" } });
   setRequestUrlImpl(() =>

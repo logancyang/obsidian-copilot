@@ -8,7 +8,6 @@ describe("ThinkBlockStreamer", () => {
         currentMessage = msg;
       });
 
-      // This was the bug: empty reasoning_details array should not trigger thinking mode
       streamer.processChunk({
         content: "Regular content",
         additional_kwargs: {
@@ -16,7 +15,6 @@ describe("ThinkBlockStreamer", () => {
         },
       });
 
-      // Should NOT have <think> tags since reasoning_details is empty
       expect(currentMessage).toBe("Regular content");
       expect(currentMessage).not.toContain("<think>");
     });
@@ -27,7 +25,6 @@ describe("ThinkBlockStreamer", () => {
         currentMessage = msg;
       });
 
-      // First chunk with delta.reasoning
       streamer.processChunk({
         content: "",
         additional_kwargs: {
@@ -39,7 +36,6 @@ describe("ThinkBlockStreamer", () => {
 
       expect(currentMessage).toBe("\n<think>Thinking step 1: ");
 
-      // Second chunk with more delta.reasoning
       streamer.processChunk({
         content: "",
         additional_kwargs: {
@@ -51,7 +47,6 @@ describe("ThinkBlockStreamer", () => {
 
       expect(currentMessage).toBe("\n<think>Thinking step 1: Thinking step 2.");
 
-      // Regular content should close think block
       streamer.processChunk({
         content: "Here's the result.",
         additional_kwargs: {},
@@ -68,7 +63,6 @@ describe("ThinkBlockStreamer", () => {
         currentMessage = msg;
       });
 
-      // First chunk: delta.reasoning with streaming token
       streamer.processChunk({
         content: "",
         additional_kwargs: {
@@ -80,7 +74,6 @@ describe("ThinkBlockStreamer", () => {
 
       expect(currentMessage).toBe("\n<think>Analyzing the ");
 
-      // Second chunk: more delta.reasoning
       streamer.processChunk({
         content: "",
         additional_kwargs: {
@@ -92,25 +85,22 @@ describe("ThinkBlockStreamer", () => {
 
       expect(currentMessage).toBe("\n<think>Analyzing the question carefully.");
 
-      // Final chunk: reasoning_details with complete transcript (should be IGNORED)
       streamer.processChunk({
         content: "",
         additional_kwargs: {
           reasoning_details: [
             {
-              text: "Analyzing the question carefully.", // Same content as accumulated delta
+              text: "Analyzing the question carefully.",
             },
           ],
         },
       });
 
-      // Should NOT duplicate - reasoning_details should be ignored since we've seen delta.reasoning
       expect(currentMessage).toBe("\n<think>Analyzing the question carefully.");
       expect(currentMessage).not.toContain(
         "Analyzing the question carefully.Analyzing the question carefully."
       );
 
-      // Regular content
       streamer.processChunk({
         content: "Here's my answer.",
         additional_kwargs: {},
@@ -129,7 +119,6 @@ describe("ThinkBlockStreamer", () => {
         currentMessage = msg;
       });
 
-      // Claude format with content array
       streamer.processChunk({
         content: [
           {
@@ -141,7 +130,6 @@ describe("ThinkBlockStreamer", () => {
 
       expect(currentMessage).toBe("\n<think>Let me analyze this...");
 
-      // Text content in array
       streamer.processChunk({
         content: [
           {
@@ -160,17 +148,14 @@ describe("ThinkBlockStreamer", () => {
         currentMessage = msg;
       });
 
-      // Malformed chunk with undefined thinking
       streamer.processChunk({
         content: [
           {
             type: "thinking",
-            // thinking property is undefined
           },
         ],
       });
 
-      // Should not crash, and should not add undefined to response
       expect(currentMessage).toBe("\n<think>");
       expect(currentMessage).not.toContain("undefined");
     });
@@ -206,7 +191,6 @@ describe("ThinkBlockStreamer", () => {
         currentMessage = msg;
       });
 
-      // Malformed chunk with undefined reasoning_content
       streamer.processChunk({
         content: "",
         additional_kwargs: {
@@ -214,7 +198,6 @@ describe("ThinkBlockStreamer", () => {
         },
       });
 
-      // Should not crash, not open think block, and not add undefined
       expect(currentMessage).toBe("");
       expect(currentMessage).not.toContain("undefined");
       expect(currentMessage).not.toContain("<think>");
@@ -226,7 +209,6 @@ describe("ThinkBlockStreamer", () => {
         currentMessage = msg;
       });
 
-      // First chunk with reasoning_content
       streamer.processChunk({
         content: "",
         additional_kwargs: {
@@ -236,8 +218,6 @@ describe("ThinkBlockStreamer", () => {
 
       expect(currentMessage).toBe("\n<think>Thinking step 1...");
 
-      // Second chunk with MORE reasoning_content (streaming)
-      // This should NOT close and reopen the think block
       streamer.processChunk({
         content: "",
         additional_kwargs: {
@@ -245,11 +225,9 @@ describe("ThinkBlockStreamer", () => {
         },
       });
 
-      // Should be continuous, NOT "</think>\n<think>"
       expect(currentMessage).toBe("\n<think>Thinking step 1... Step 2...");
       expect(currentMessage).not.toContain("</think>\n<think>");
 
-      // Third chunk with regular content
       streamer.processChunk({
         content: "Final answer.",
         additional_kwargs: {},
@@ -262,14 +240,10 @@ describe("ThinkBlockStreamer", () => {
   describe("excludeThinking option", () => {
     it("should skip OpenRouter thinking content when excludeThinking is true", () => {
       let currentMessage = "";
-      const streamer = new ThinkBlockStreamer(
-        (msg) => {
-          currentMessage = msg;
-        },
-        true // excludeThinking = true
-      );
+      const streamer = new ThinkBlockStreamer((msg) => {
+        currentMessage = msg;
+      }, true);
 
-      // Thinking content should be skipped
       streamer.processChunk({
         content: "",
         additional_kwargs: {
@@ -281,7 +255,6 @@ describe("ThinkBlockStreamer", () => {
 
       expect(currentMessage).toBe("");
 
-      // Regular content should still be processed
       streamer.processChunk({
         content: "This should be included",
         additional_kwargs: {},
@@ -292,12 +265,9 @@ describe("ThinkBlockStreamer", () => {
 
     it("should skip Claude thinking content when excludeThinking is true", () => {
       let currentMessage = "";
-      const streamer = new ThinkBlockStreamer(
-        (msg) => {
-          currentMessage = msg;
-        },
-        true // excludeThinking = true
-      );
+      const streamer = new ThinkBlockStreamer((msg) => {
+        currentMessage = msg;
+      }, true);
 
       streamer.processChunk({
         content: [
@@ -359,7 +329,6 @@ describe("ThinkBlockStreamer", () => {
 
       const result = streamer.close();
       expect(result.content).toBe("\n<think>Thinking...</think>Done");
-      // Should not have double closing tags
       expect(result.content.match(/<\/think>/g)?.length).toBe(1);
     });
   });
@@ -398,13 +367,11 @@ describe("ThinkBlockStreamer", () => {
         }
       });
 
-      // Should have three separate think blocks
       const thinkMatches = currentMessage.match(/<think>/g);
       const thinkCloseMatches = currentMessage.match(/<\/think>/g);
       expect(thinkMatches?.length).toBe(3);
       expect(thinkCloseMatches?.length).toBe(3);
 
-      // Each text should be outside think blocks
       expect(currentMessage).toContain("</think>Text 1");
       expect(currentMessage).toContain("</think>Text 2");
       expect(currentMessage).toContain("</think>Text 3");

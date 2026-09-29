@@ -5,7 +5,6 @@ import type { ChatMessage } from "@/types/message";
 
 jest.mock("@/logger");
 
-/** `handleResponse` is protected on an abstract class, so reach it through a subclass. */
 class TestChainRunner extends BaseChainRunner {
   run(): Promise<string> {
     throw new Error("not used");
@@ -60,8 +59,6 @@ describe("BaseChainRunner", () => {
   describe("BaseChainRunner", () => {
     describe("handleResponse()", () => {
       it("explains an empty truncated response as the model's own limit (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", async () => {
-        // Copilot sets no output limit any more, so the note cannot tell the
-        // reader to raise one.
         const addMessage = jest.fn();
         const runner = createRunner();
 

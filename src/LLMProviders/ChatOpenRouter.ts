@@ -10,38 +10,13 @@ type OpenRouterChatChunk = OpenAI.ChatCompletionChunk;
 type OpenRouterUsage = NonNullable<OpenRouterChatChunk["usage"]>;
 type OpenRouterMessageParam = OpenAI.ChatCompletionMessageParam;
 
-/**
- * ChatOpenRouter extends ChatOpenAI to support OpenRouter-specific features,
- * particularly reasoning/thinking tokens.
- *
- * OpenRouter exposes thinking tokens via the `reasoning` request parameter
- * and responds with `reasoning_details` in both streaming and non-streaming modes.
- *
- * @see https://openrouter.ai/docs/use-cases/reasoning-tokens
- */
 export interface ChatOpenRouterInput extends BaseChatModelParams {
-  /**
-   * Enable reasoning/thinking tokens from OpenRouter
-   * When true, requests will include reasoning parameters
-   */
   enableReasoning?: boolean;
 
-  /**
-   * Reasoning effort level: "minimal", "low", "medium", "high", or "xhigh"
-   * Controls the amount of reasoning the model uses
-   * Note: "minimal" will be treated as "low" for OpenRouter
-   * Note: "xhigh" is only supported by GPT-5.4 models
-   */
   reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
 
-  /**
-   * Enable prompt caching (cache_control) for OpenRouter requests.
-   * Defaults to true. Set to false for Zero Data Retention (ZDR) endpoints
-   * that do not support prompt caching.
-   */
   enablePromptCaching?: boolean;
 
-  // All other ChatOpenAI parameters
   modelName?: string;
   apiKey?: string;
   configuration?: {
@@ -62,7 +37,6 @@ export class ChatOpenRouter extends ChatOpenAI {
   private reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
   private enablePromptCaching: boolean;
   private openaiClient: OpenAI;
-  /** True when the configured baseURL belongs to the OpenRouter gateway. */
   private isOpenRouter: boolean;
 
   constructor(fields: ChatOpenRouterInput) {
@@ -73,7 +47,6 @@ export class ChatOpenRouter extends ChatOpenAI {
       ...rest
     } = fields;
 
-    // Pass all other parameters to ChatOpenAI
     super(rest);
 
     this.enableReasoning = enableReasoning;
@@ -83,7 +56,6 @@ export class ChatOpenRouter extends ChatOpenAI {
     const baseURL = fields.configuration?.baseURL || "https://openrouter.ai/api/v1";
     this.isOpenRouter = baseURL.includes("openrouter.ai");
 
-    // Create our own OpenAI client for raw access
     this.openaiClient = new OpenAI({
       apiKey: fields.apiKey,
       baseURL,
@@ -93,38 +65,16 @@ export class ChatOpenRouter extends ChatOpenAI {
     });
   }
 
-  /**
-   * Override the invocation parameters to include prompt caching and reasoning when enabled.
-   *
-   * Prompt caching: The `cache_control` field opts Anthropic models (via OpenRouter) into
-   * automatic cache breakpoint detection, reducing token costs on repeated context. This
-   * field is only sent when connected to the OpenRouter gateway; other backends (LM Studio,
-   * Copilot Plus) use the same class but must not receive OpenRouter-specific fields.
-   *
-   * @see https://openrouter.ai/docs/features/prompt-caching
-   */
   override invocationParams(options?: this["ParsedCallOptions"]): Record<string, unknown> {
     const baseParams = super.invocationParams(options);
 
-    // Only inject cache_control for OpenRouter endpoints. LM Studio, Copilot Plus, and
-    // other OpenAI-compatible backends share this class but reject unknown top-level fields.
-    // Skip caching when enablePromptCaching is false (e.g. for ZDR endpoints that don't
-    // support Anthropic's automatic caching).
     const withCaching =
       this.isOpenRouter && this.enablePromptCaching
         ? { ...baseParams, cache_control: { type: "ephemeral" } }
         : baseParams;
 
-    // Add reasoning parameter if enabled
     if (this.enableReasoning) {
-      // Per OpenRouter docs:
-      // - For Anthropic models: MUST use reasoning.max_tokens or reasoning.effort
-      // - For other models: Can use reasoning.enabled
-      // - max_tokens must be strictly higher than reasoning budget
-
-      // Prefer effort if provided, otherwise fall back to max_tokens
       if (this.reasoningEffort) {
-        // Map "minimal" to "low" since OpenRouter doesn't support "minimal"
         const effort = this.reasoningEffort === "minimal" ? "low" : this.reasoningEffort;
         logInfo(`OpenRouter reasoning enabled with effort: ${effort}`);
         return {
@@ -137,13 +87,7 @@ export class ChatOpenRouter extends ChatOpenAI {
         logInfo(`OpenRouter reasoning enabled with max_tokens: 1024`);
         return {
           ...withCaching,
-          // No top-level `max_tokens` alongside this. OpenRouter's docs say the
-          // two must differ where both are present, which reads like the
-          // request needs one, but the gateway accepts a reasoning budget on
-          // its own: checked live against `anthropic/claude-haiku-4.5` and
-          // `nvidia/nemotron-3-nano-30b-a3b`, both 200 with the field absent.
-          // Supplying one here would put a ceiling back on every reasoning
-          // model, which is the thing this change removes.
+          // No top-level `max_tokens` next to `reasoning`: the gateway accepts a reasoning budget alone, and adding one caps every reasoning model.
           // https://github.com/logancyang/obsidian-copilot-preview/issues/312
           reasoning: {
             max_tokens: 1024,
@@ -155,10 +99,6 @@ export class ChatOpenRouter extends ChatOpenAI {
     return withCaching;
   }
 
-  /**
-   * Override to use raw OpenAI SDK to access reasoning_details
-   * LangChain filters out reasoning_details, so we bypass it completely
-   */
   override async *_streamResponseChunks(
     messages: BaseMessage[],
     options: this["ParsedCallOptions"],
@@ -231,12 +171,6 @@ export class ChatOpenRouter extends ChatOpenAI {
     }
   }
 
-  /**
-   * Convert LangChain messages to OpenRouter-ready messages.
-   *
-   * @param messages LangChain messages passed into the model
-   * @returns Messages formatted for the OpenRouter API
-   */
   private toOpenRouterMessages(messages: BaseMessage[]): OpenRouterMessageParam[] {
     return messages.map((msg) => {
       const msgRecord = msg as unknown as Record<string, unknown>;
@@ -256,10 +190,7 @@ export class ChatOpenRouter extends ChatOpenAI {
         } as OpenRouterMessageParam;
       }
 
-      // First-class tool_calls on AIMessage (used by the autonomous agent when
-      // reconstructing assistant turns) must be serialized to the OpenAI wire format,
-      // otherwise the following "tool" role messages would violate the protocol and the
-      // provider rejects the turn.
+      // AIMessage.tool_calls must be serialized to the OpenAI wire format, or the following "tool" messages violate the protocol.
       // https://github.com/logancyang/obsidian-copilot-preview/issues/300
       if (AIMessage.isInstance(msg) && msg.tool_calls && msg.tool_calls.length > 0) {
         return {
@@ -283,12 +214,6 @@ export class ChatOpenRouter extends ChatOpenAI {
     });
   }
 
-  /**
-   * Build an `AIMessageChunk` enriched with reasoning metadata.
-   *
-   * @param config Chunk configuration values extracted from the stream
-   * @returns AI message chunk ready for downstream streaming utilities
-   */
   private buildMessageChunk(config: {
     rawChunk: OpenRouterChatChunk;
     delta: Record<string, unknown>;
@@ -332,12 +257,6 @@ export class ChatOpenRouter extends ChatOpenAI {
     });
   }
 
-  /**
-   * Normalize streamed reasoning payloads into plain text for the UI.
-   *
-   * @param reasoning Arbitrary reasoning payload returned by OpenRouter
-   * @returns Normalized reasoning text or undefined
-   */
   private normalizeReasoningChunk(reasoning: unknown): string | undefined {
     if (!reasoning) {
       return undefined;
@@ -373,12 +292,6 @@ export class ChatOpenRouter extends ChatOpenAI {
     return undefined;
   }
 
-  /**
-   * Extract reasoning details arrays from the streamed choice payload.
-   *
-   * @param choice Chunk choice object from the OpenRouter stream
-   * @returns Array of reasoning detail entries, if present
-   */
   private extractReasoningDetails(
     choice: OpenAI.ChatCompletionChunk.Choice
   ): unknown[] | undefined {
@@ -395,12 +308,6 @@ export class ChatOpenRouter extends ChatOpenAI {
     return (candidate as unknown[]).filter((detail) => detail !== undefined && detail !== null);
   }
 
-  /**
-   * Flatten OpenRouter delta content into a single text string.
-   *
-   * @param content Delta content payload
-   * @returns Text representation for downstream streaming
-   */
   private extractDeltaContent(content: unknown): string {
     if (typeof content === "string") {
       return content;
@@ -427,12 +334,6 @@ export class ChatOpenRouter extends ChatOpenAI {
     return "";
   }
 
-  /**
-   * Map raw OpenRouter tool call deltas into LangChain tool call chunks.
-   *
-   * @param toolCalls Tool call deltas returned by OpenRouter
-   * @returns Tool call chunk array compatible with LangChain
-   */
   private extractToolCallChunks(
     toolCalls: unknown
   ):
@@ -457,13 +358,6 @@ export class ChatOpenRouter extends ChatOpenAI {
     });
   }
 
-  /**
-   * Build response metadata payload with finish reason and usage info.
-   *
-   * @param rawChunk Raw streaming chunk from OpenRouter
-   * @param finishReason Stop reason reported by the model
-   * @returns Metadata object attached to each AI message chunk
-   */
   private buildResponseMetadata(
     rawChunk: OpenRouterChatChunk,
     finishReason: string | null | undefined
@@ -492,12 +386,6 @@ export class ChatOpenRouter extends ChatOpenAI {
     return metadata;
   }
 
-  /**
-   * Create a terminal usage chunk so downstream consumers can capture token usage.
-   *
-   * @param usage Usage payload returned by the streaming API
-   * @returns Chat generation chunk containing usage metadata
-   */
   private buildUsageGenerationChunk(usage: OpenRouterUsage): ChatGenerationChunk {
     const inputTokenDetails: Record<string, number> = {};
     const outputTokenDetails: Record<string, number> = {};

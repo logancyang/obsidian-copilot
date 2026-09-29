@@ -66,7 +66,6 @@ describe("recentUsageManager", () => {
         { name: "C", createdAt: 2000, lastUsedAt: 5000 },
       ];
       const sorted = sortByStrategy(itemsWithNull, "recent", getters);
-      // C has lastUsedAt=5000, B falls back to createdAt=3000, A falls back to createdAt=1000
       expect(sorted.map((i) => i.name)).toEqual(["C", "B", "A"]);
     });
 
@@ -85,7 +84,6 @@ describe("recentUsageManager", () => {
         getName: (item: TestItem) => item.name,
         getCreatedAtMs: (item: TestItem) => item.createdAt,
         getLastUsedAtMs: (item: TestItem) => item.lastUsedAt,
-        // No getManualOrder
       };
       const sorted = sortByStrategy(items, "manual", gettersWithoutManual);
       expect(sorted.map((i) => i.name)).toEqual(["Alpha", "Beta", "Gamma"]);
@@ -132,12 +130,12 @@ describe("recentUsageManager", () => {
         manager.touch("key1");
         const firstPersist = manager.shouldPersist("key1", null);
         expect(firstPersist).toBe(1000);
-        manager.markPersisted("key1", firstPersist!); // Mark first persistence
+        manager.markPersisted("key1", firstPersist!);
 
-        currentTime = 15000; // 15 seconds later
+        currentTime = 15000;
         manager.touch("key1");
         const result = manager.shouldPersist("key1", null);
-        expect(result).toBeNull(); // Throttled
+        expect(result).toBeNull();
       });
 
       it("shouldPersist returns timestamp after throttle period", () => {
@@ -150,9 +148,9 @@ describe("recentUsageManager", () => {
         manager.touch("key1");
         const firstPersist = manager.shouldPersist("key1", null);
         expect(firstPersist).toBe(1000);
-        manager.markPersisted("key1", firstPersist!); // Mark first persistence at 1000
+        manager.markPersisted("key1", firstPersist!);
 
-        currentTime = 35000; // 34 seconds later (past throttle)
+        currentTime = 35000;
         manager.touch("key1");
         const result = manager.shouldPersist("key1", null);
         expect(result).toBe(35000);
@@ -165,8 +163,6 @@ describe("recentUsageManager", () => {
           minIntervalMs: 30000,
         });
 
-        // Simulate: persisted value is 40000, current time is 50000
-        // 50000 - 40000 = 10000 < 30000, so should be throttled
         manager.touch("key1");
         const result = manager.shouldPersist("key1", 40000);
         expect(result).toBeNull();
@@ -187,7 +183,7 @@ describe("recentUsageManager", () => {
 
         unsubscribe();
         manager.touch("key1");
-        expect(listener).toHaveBeenCalledTimes(1); // Not called again after unsubscribe
+        expect(listener).toHaveBeenCalledTimes(1);
       });
 
       it("increments revision on clear", () => {
@@ -200,7 +196,7 @@ describe("recentUsageManager", () => {
 
         manager.clear("key1");
         expect(manager.getRevision()).toBe(revisionAfterTouch + 1);
-        expect(listener).toHaveBeenCalledTimes(2); // Once for touch, once for clear
+        expect(listener).toHaveBeenCalledTimes(2);
       });
 
       it("does not increment revision on shouldPersist or markPersisted", () => {
@@ -223,8 +219,8 @@ describe("recentUsageManager", () => {
           nowMs: () => currentTime,
         });
 
-        manager.touch("key1"); // Memory = 5000
-        const effective = manager.getEffectiveLastUsedAt("key1", 3000); // Persisted = 3000
+        manager.touch("key1");
+        const effective = manager.getEffectiveLastUsedAt("key1", 3000);
         expect(effective).toBe(5000);
       });
 

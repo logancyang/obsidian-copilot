@@ -2,9 +2,6 @@ import { logInfo } from "@/logger";
 import { ToolMetadata } from "@/tools/ToolRegistry";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 
-/**
- * Represents a labeled segment of the system prompt used for tool prompting.
- */
 export interface PromptSection {
   id: string;
   label: string;
@@ -12,12 +9,6 @@ export interface PromptSection {
   content: string;
 }
 
-/**
- * Join prompt sections into a single prompt while preserving blank line separation.
- *
- * @param sections - Prompt sections to concatenate in order.
- * @returns The combined prompt content suitable for LLM input.
- */
 export function joinPromptSections(sections: PromptSection[]): string {
   return sections
     .map((section) => section.content)
@@ -25,20 +16,7 @@ export function joinPromptSections(sections: PromptSection[]): string {
     .join("\n\n");
 }
 
-/**
- * Model-specific adaptations for autonomous agent
- * Handles quirks and requirements of different LLM providers
- */
-
 export interface ModelAdapter {
-  /**
-   * Enhance system prompt with model-specific instructions
-   * @param basePrompt - The base system prompt to enhance
-   * @param toolDescriptions - Available tool descriptions to include
-   * @param availableToolNames - List of enabled tool names (for backward compatibility)
-   * @param toolMetadata - Tool metadata including custom instructions
-   * @returns The enhanced system prompt
-   */
   enhanceSystemPrompt(
     basePrompt: string,
     toolDescriptions: string,
@@ -46,15 +24,6 @@ export interface ModelAdapter {
     toolMetadata?: ToolMetadata[]
   ): string;
 
-  /**
-   * Build ordered system prompt sections tagged with their source information.
-   *
-   * @param basePrompt - The base system prompt to enhance.
-   * @param toolDescriptions - The tool descriptions included in the prompt.
-   * @param availableToolNames - Names of tools enabled for the run.
-   * @param toolMetadata - Metadata with custom instructions for each tool.
-   * @returns Array of prompt sections in the order they should appear.
-   */
   buildSystemPromptSections(
     basePrompt: string,
     toolDescriptions: string,
@@ -62,38 +31,19 @@ export interface ModelAdapter {
     toolMetadata?: ToolMetadata[]
   ): PromptSection[];
 
-  /**
-   * Enhance user message if needed for specific models
-   * @param message - The user's message to enhance
-   * @param requiresTools - Whether the message likely requires tool usage
-   * @returns The enhanced user message
-   */
   enhanceUserMessage(message: string, requiresTools: boolean): string;
 
-  /**
-   * Parse tool calls from model response (future: handle different formats)
-   * @param response - The model's response text containing tool calls
-   * @returns Array of parsed tool calls
-   */
   parseToolCalls?(response: string): unknown[];
 
-  /**
-   * Check if model needs special handling
-   * @returns True if the model requires special handling beyond base behavior
-   */
   needsSpecialHandling(): boolean;
 }
 
-/**
- * Base adapter with default behavior (no modifications)
- */
 class BaseModelAdapter implements ModelAdapter {
   constructor(protected modelName: string) {}
 
   private buildToolSpecificInstructions(toolMetadata: ToolMetadata[]): string {
     const instructions: string[] = [];
 
-    // Collect all custom instructions from tool metadata
     for (const meta of toolMetadata) {
       if (meta.customPromptInstructions) {
         instructions.push(meta.customPromptInstructions);
@@ -108,12 +58,6 @@ class BaseModelAdapter implements ModelAdapter {
     return instructions.length > 0 ? instructions.join("\n\n") : "";
   }
 
-  /**
-   * Build instructional text that maps Copilot command aliases to tool names.
-   *
-   * @param toolMetadata - Metadata for all tools available to the agent.
-   * @returns Instructional string or null if there are no Copilot aliases.
-   */
   private buildCopilotCommandInstructions(toolMetadata: ToolMetadata[]): string | null {
     const aliasLines: string[] = [];
 
@@ -280,14 +224,7 @@ When you've gathered enough information, provide your final response without any
   }
 }
 
-/**
- * GPT-specific adapter with aggressive prompting
- */
 class GPTModelAdapter extends BaseModelAdapter {
-  /**
-   * Check if this is a GPT-5 model
-   * @returns True if the model is in the GPT-5 family
-   */
   isGPT5Model(): boolean {
     return this.modelName.includes("gpt-5") || this.modelName.includes("gpt5");
   }
@@ -395,14 +332,7 @@ For editFile, pass the exact text to find and its replacement:
   }
 }
 
-/**
- * Claude adapter with special handling for thinking models
- */
 class ClaudeModelAdapter extends BaseModelAdapter {
-  /**
-   * Check if this is a Claude thinking model (3.7 Sonnet or Claude 4)
-   * @returns True if the model supports thinking/reasoning modes
-   */
   private isThinkingModel(): boolean {
     return (
       this.modelName.includes("claude-3-7-sonnet") ||
@@ -413,10 +343,6 @@ class ClaudeModelAdapter extends BaseModelAdapter {
     );
   }
 
-  /**
-   * Check if this is specifically Claude Sonnet 4 (has hallucination issues)
-   * @returns True if the model is Claude Sonnet 4 variants
-   */
   private isClaudeSonnet4(): boolean {
     return (
       this.modelName.includes("claude-sonnet-4") ||
@@ -520,9 +446,6 @@ REMEMBER: One brief sentence before tools is perfect. Nothing after tool calls.`
   }
 }
 
-/**
- * Gemini adapter with aggressive tool calling prompts
- */
 class GeminiModelAdapter extends BaseModelAdapter {
   buildSystemPromptSections(
     basePrompt: string,
@@ -537,7 +460,6 @@ class GeminiModelAdapter extends BaseModelAdapter {
       toolMetadata
     );
 
-    // Gemini needs very explicit instructions about tool usage
     const tools = availableToolNames || [];
     const hasLocalSearch = tools.includes("localSearch");
 
@@ -599,7 +521,6 @@ Remember: The user has already told you what to do. Execute it NOW with the avai
 
   enhanceUserMessage(message: string, requiresTools: boolean): string {
     if (requiresTools) {
-      // Add explicit reminder for Gemini
       return `${message}\n\nREMINDER: Use the tools immediately. Do not ask questions. For "my notes", use localSearch.`;
     }
     return message;
@@ -610,9 +531,6 @@ Remember: The user has already told you what to do. Execute it NOW with the avai
   }
 }
 
-/**
- * Copilot Plus adapter for Flash models with anti-hallucination focus
- */
 class CopilotPlusModelAdapter extends BaseModelAdapter {
   buildSystemPromptSections(
     basePrompt: string,
@@ -669,9 +587,6 @@ REMEMBER: It is better to say "I only searched your notes, not the web" than to 
   }
 }
 
-/**
- * Factory to create appropriate adapter based on model
- */
 export class ModelAdapterFactory {
   static createAdapter(model: BaseChatModel): ModelAdapter {
     const modelName: string = (
@@ -682,10 +597,8 @@ export class ModelAdapterFactory {
 
     logInfo(`Creating model adapter for: ${modelName}`);
 
-    // GPT models need special handling
     if (modelName.includes("gpt")) {
       const adapter = new GPTModelAdapter(modelName);
-      // Log if it's a GPT-5 model for debugging
       if (adapter.isGPT5Model()) {
         logInfo("Using GPTModelAdapter with GPT-5 specific enhancements");
       } else {
@@ -694,35 +607,26 @@ export class ModelAdapterFactory {
       return adapter;
     }
 
-    // Claude models
     if (modelName.includes("claude")) {
       logInfo("Using ClaudeModelAdapter");
       return new ClaudeModelAdapter(modelName);
     }
 
-    // Gemini models (check for both "gemini" and "google" prefixes)
     if (modelName.includes("gemini") || modelName.includes("google/gemini")) {
       logInfo("Using GeminiModelAdapter");
       return new GeminiModelAdapter(modelName);
     }
 
-    // Copilot Plus models (Flash-based, needs anti-hallucination guidance)
     if (modelName.includes("copilot-plus")) {
       logInfo("Using CopilotPlusModelAdapter");
       return new CopilotPlusModelAdapter(modelName);
     }
 
-    // Default adapter for unknown models
     logInfo("Using BaseModelAdapter (default)");
     return new BaseModelAdapter(modelName);
   }
 }
 
-/**
- * Helper to detect if user message likely requires tools
- * @param message - The user's message to analyze
- * @returns True if the message likely requires tool usage
- */
 export function messageRequiresTools(message: string): boolean {
   const toolIndicators = [
     "find",

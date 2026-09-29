@@ -18,7 +18,6 @@ type PMInternal = {
 };
 const asInternal = (pm: ChatPersistenceManager): PMInternal => pm as unknown as PMInternal;
 
-// Mock the imports
 jest.mock("obsidian", () => ({
   normalizePath: (path: string) => path,
   Notice: jest.fn(),
@@ -132,13 +131,11 @@ describe("ChatPersistenceManager", () => {
   let persistenceManager: ChatPersistenceManager;
 
   beforeEach(() => {
-    // Reset all mocks
     jest.clearAllMocks();
 
-    // Setup mock app
     mockApp = {
       vault: {
-        getAbstractFileByPath: jest.fn().mockReturnValue(null), // Default: file not found
+        getAbstractFileByPath: jest.fn().mockReturnValue(null),
         createFolder: jest.fn(),
         createBinary: jest.fn(),
         getConfig: jest.fn(() => "attachments"),
@@ -151,7 +148,7 @@ describe("ChatPersistenceManager", () => {
           return next;
         }),
         read: jest.fn(),
-        getMarkdownFiles: jest.fn().mockReturnValue([]), // Default: no files
+        getMarkdownFiles: jest.fn().mockReturnValue([]),
         adapter: {
           exists: jest.fn().mockResolvedValue(false),
           read: jest.fn().mockResolvedValue(""),
@@ -171,12 +168,10 @@ describe("ChatPersistenceManager", () => {
       },
     };
 
-    // Setup mock message repository
     mockMessageRepo = {
       getDisplayMessages: jest.fn(),
     };
 
-    // Create persistence manager
     persistenceManager = new ChatPersistenceManager(
       mockApp as unknown as App,
       mockMessageRepo as unknown as MessageRepository
@@ -524,7 +519,7 @@ Nature's quiet song`);
       ];
 
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true); // Folder exists
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
 
       const saved = await persistenceManager.saveChat("gpt-4");
       expect(saved?.path).toBe("test-folder/Hello@20240923_221800.md");
@@ -538,16 +533,6 @@ Nature's quiet song`);
     });
 
     it("writes under the folder captured at entry, not one a mid-save root change swaps in", async () => {
-      // The folder is captured once at entry and threaded through ensure, the
-      // existing-file lookup, filename generation, and the conflict/fallback
-      // paths. Simulate a Copilot-root change landing after the save starts:
-      // the entry read returns the old folder, every later read the new one.
-      // The created path must stay under the old folder — the save must not
-      // ensure one directory and then create the file under another.
-      // Only override the entry read; later reads fall back to the default
-      // mock ("test-folder"), so this can't leak a permanent return value into
-      // sibling tests. The created path must stay under the entry-captured
-      // "old-folder", proving the save doesn't re-resolve mid-operation.
       const folderMock = jest.mocked(getEffectiveConversationsFolder);
       folderMock.mockReturnValueOnce("old-folder");
 
@@ -565,7 +550,6 @@ Nature's quiet song`);
         },
       ];
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      // No existing file, folder empty, target path free → single clean create.
       mockApp.vault.getMarkdownFiles.mockReturnValue([]);
       mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
       mockApp.vault.adapter.exists.mockResolvedValue(false);
@@ -575,7 +559,6 @@ Nature's quiet song`);
       const createdPath = mockApp.vault.create.mock.calls[0][0] as string;
       expect(createdPath.startsWith("old-folder/")).toBe(true);
       expect(createdPath).not.toContain("test-folder");
-      // ensureFolderExists must target the same captured folder.
       expect(ensureFolderExists).toHaveBeenCalledWith(expect.anything(), "old-folder");
     });
 
@@ -648,8 +631,6 @@ Nature's quiet song`);
       await Promise.resolve();
       await Promise.resolve();
 
-      // Topic generation is fire-and-forget via `void (async () => …)()`, so
-      // we need additional microtask ticks to flush the chain of awaits inside.
       for (let i = 0; i < 10; i++) {
         await Promise.resolve();
       }
@@ -668,7 +649,6 @@ Nature's quiet song`);
       await persistenceManager.saveChat("gpt-4");
 
       expect(mockApp.vault.create).not.toHaveBeenCalled();
-      // Notice constructor should have been called
       expect(jest.mocked(Notice)).toHaveBeenCalled();
     });
 
@@ -692,7 +672,6 @@ Nature's quiet song`);
 
       await persistenceManager.saveChat("gpt-4");
 
-      // Expect [[My Note]] -> My Note, [ref] -> ref, illegal chars removed, spaces -> underscores
       expect(mockApp.vault.create).toHaveBeenCalledWith(
         "test-folder/Check_My_Note_and_path_ref_test@20240923_221800.md",
         expect.any(String)
@@ -753,7 +732,6 @@ Nature's quiet song`);
       const encoder = new TextEncoder();
       const byteLength = encoder.encode(basename).length;
 
-      // Verify the filename is within safe limits (100 bytes)
       expect(byteLength).toBeLessThanOrEqual(100);
     });
 
@@ -785,9 +763,7 @@ Nature's quiet song`);
       const encoder = new TextEncoder();
       const byteLength = encoder.encode(basename).length;
 
-      // Verify the filename is within safe limits (100 bytes)
       expect(byteLength).toBeLessThanOrEqual(100);
-      // Verify the filename contains some Cyrillic text (not completely truncated)
       expect(basename.length).toBeGreaterThan(20);
     });
 
@@ -818,7 +794,6 @@ Nature's quiet song`);
       const encoder = new TextEncoder();
       const byteLength = encoder.encode(basename).length;
 
-      // Verify the filename is within safe limits (100 bytes)
       expect(byteLength).toBeLessThanOrEqual(100);
     });
 
@@ -850,12 +825,10 @@ Nature's quiet song`);
       const encoder = new TextEncoder();
       const byteLength = encoder.encode(basename).length;
 
-      // Verify the filename is within safe limits (100 bytes)
       expect(byteLength).toBeLessThanOrEqual(100);
     });
 
     it("should fallback to minimal filename when ENAMETOOLONG error occurs", async () => {
-      // Real-world scenario from user log: very long Cyrillic message that triggers ENAMETOOLONG
       const cyrillicMessage =
         "1) используй словарь уже установленных терминов Словарь перевода Songs of Syx придерживайся правил перевода Правила перевода Songs of Syx сделай перевод для слова";
 
@@ -876,18 +849,15 @@ Nature's quiet song`);
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
       mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
 
-      // Mock the vault.create to throw ENAMETOOLONG on first call, succeed on second
       let createCallCount = 0;
       mockApp.vault.create.mockImplementation((path: string, content: string) => {
         createCallCount++;
         if (createCallCount === 1) {
-          // First call: throw ENAMETOOLONG error (simulating the original filename being too long)
           const error = new Error(
             "ENAMETOOLONG: name too long, open '/home/user/vault/copilot/copilot-conversations/1)_используй_словарь_уже_установленных_терминов_Словарь_перевода_Songs_of@20251025_161120.md'"
           );
           return Promise.reject(error);
         } else {
-          // Second call: succeed with fallback filename
           return Promise.resolve(
             mockTFile({
               path,
@@ -899,24 +869,19 @@ Nature's quiet song`);
 
       await persistenceManager.saveChat("gpt-4");
 
-      // Verify that vault.create was called twice (once failed, once succeeded)
       expect(mockApp.vault.create).toHaveBeenCalledTimes(2);
 
-      // First call should have used the preferred (long) filename
       const firstCallPath = mockApp.vault.create.mock.calls[0][0] as string;
       expect(firstCallPath).toContain("используй_словарь");
 
-      // Second call should have used the minimal fallback filename
       const secondCallPath = mockApp.vault.create.mock.calls[1][0] as string;
       expect(secondCallPath).toBe("test-folder/chat-1729873880000.md");
 
-      // Verify the fallback filename is very short (should be under 30 bytes)
       const fallbackBasename = secondCallPath.split("/").pop() || "";
       const encoder = new TextEncoder();
       const byteLength = encoder.encode(fallbackBasename).length;
       expect(byteLength).toBeLessThan(30);
 
-      // Verify a warning was logged about using minimal filename
       expect(jest.mocked(Notice)).toHaveBeenCalledWith(
         expect.stringContaining("chat-1729873880000.md")
       );
@@ -953,13 +918,10 @@ Nature's quiet song`);
         return null;
       });
 
-      // Mock the vault.create to throw errors on both calls
       mockApp.vault.create.mockImplementation((path: string) => {
         if (path.includes("используй")) {
-          // First call: ENAMETOOLONG
           return Promise.reject(new Error("ENAMETOOLONG: name too long"));
         } else {
-          // Second call (fallback): File already exists
           return Promise.reject(new Error("File already exists"));
         }
       });
@@ -967,13 +929,11 @@ Nature's quiet song`);
       const saved = await persistenceManager.saveChat("gpt-4");
       expect(saved).toBe(existingFallbackFile);
 
-      // Verify that vault.modify was called to update the existing fallback file
       expect(mockApp.vault.modify).toHaveBeenCalledWith(
         existingFallbackFile,
         expect.stringContaining("используй словарь")
       );
 
-      // Verify the correct notices were shown
       expect(jest.mocked(Notice)).toHaveBeenCalledWith(
         "Existing chat note found - updating it now."
       );
@@ -1045,10 +1005,8 @@ Nature's quiet song`);
 
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
 
-      // Mock vault.create to throw "already exists" error
       mockApp.vault.create.mockRejectedValue(new Error("File already exists"));
 
-      // Mock getAbstractFileByPath to return existing file when called from catch block
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "test-folder/Hello_again@20240923_221800.md") {
           return existingFile;
@@ -1095,7 +1053,6 @@ Nature's quiet song`);
         .spyOn(persistenceManager, "getChatHistoryFiles")
         .mockResolvedValue([]);
 
-      // Mock getAbstractFileByPath to return existing file when called from catch block
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "test-folder/Conflict_message@20240923_221800.md") {
           return existingFile;
@@ -1144,13 +1101,11 @@ Nature's quiet song`);
 
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
 
-      // findFileByEpoch returns null, but file exists on disk (hidden dir)
       mockApp.vault.adapter.exists.mockResolvedValue(true);
 
       const saved = await persistenceManager.saveChat("gpt-4");
       expect(saved?.path).toBe(mockApp.vault.adapter.write.mock.calls[0][0]);
 
-      // Should write via adapter, not vault.create
       expect(mockApp.vault.adapter.write).toHaveBeenCalledWith(
         expect.stringContaining("test-folder/"),
         expect.stringContaining("**user**: Hello")
@@ -1185,7 +1140,6 @@ Nature's quiet song`);
       await persistenceManager.saveChat("gpt-4");
       expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
 
-      // Topic generation changes the filename independently of the first message.
       mockApp.vault.getMarkdownFiles.mockReturnValue([file]);
       const folder = mockTFolder({ path: "test-folder" });
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) =>
@@ -1315,10 +1269,8 @@ tags:
         },
       ];
 
-      // Format the content
       const formattedContent = asInternal(persistenceManager).formatChatContent(originalMessages);
 
-      // Add frontmatter
       const fullContent = `---
 epoch: 1695513480000
 modelKey: gpt-4
@@ -1328,10 +1280,8 @@ tags:
 
 ${formattedContent}`;
 
-      // Parse it back
       const parsedMessages = asInternal(persistenceManager).parseChatContent(fullContent);
 
-      // Verify the messages match
       expect(parsedMessages).toHaveLength(2);
       expect(parsedMessages[0].message).toBe(originalMessages[0].message);
       expect(parsedMessages[0].sender).toBe(originalMessages[0].sender);
@@ -1347,12 +1297,10 @@ ${formattedContent}`;
         name: "typescript-guide.md",
       });
 
-      // Mock vault to return the file when resolving by path
       mockApp.vault.getAbstractFileByPath = jest.fn().mockImplementation((path: string) => {
         return path === "docs/typescript-guide.md" ? noteFile : null;
       });
 
-      // Recreate persistence manager with the updated mock
       const testPersistenceManager = new ChatPersistenceManager(
         mockApp as unknown as App,
         mockMessageRepo as unknown as MessageRepository
@@ -1409,14 +1357,11 @@ ${formattedContent}`;
         },
       ];
 
-      // Format the content
       const formattedContent =
         asInternal(testPersistenceManager).formatChatContent(originalMessages);
 
-      // Verify the formatted content contains the full path (not just basename)
       expect(formattedContent).toContain("docs/typescript-guide.md");
 
-      // Add frontmatter
       const fullContent = `---
 epoch: 1695513480000
 modelKey: gpt-4
@@ -1426,15 +1371,12 @@ tags:
 
 ${formattedContent}`;
 
-      // Parse it back
       const parsedMessages = asInternal(testPersistenceManager).parseChatContent(fullContent);
 
-      // Verify the messages match
       expect(parsedMessages).toHaveLength(2);
       expect(parsedMessages[0].message).toBe(originalMessages[0].message);
       expect(parsedMessages[0].sender).toBe(originalMessages[0].sender);
 
-      // Verify context is preserved (Tags, Folders, WebTabs are optional in type)
       expect(parsedMessages[0].context).toBeDefined();
       expect(parsedMessages[0].context!.notes).toHaveLength(1);
       expect(parsedMessages[0].context!.notes[0].basename).toBe("typescript-guide.md");
@@ -1448,12 +1390,10 @@ ${formattedContent}`;
       expect(parsedMessages[0].context!.webTabs![1].url).toBe("https://lucide.dev/");
       expect(parsedMessages[0].context!.webTabs![2].url).toBe("https://obsidian.md/");
 
-      // Verify the second message has no context
       expect(parsedMessages[1].context).toBeUndefined();
     });
 
     it("should resolve legacy basename-only context (backward compatibility)", async () => {
-      // Create mock TFile for the note
       const file = mockTFile({
         basename: "typescript-guide.md",
         path: "docs/typescript-guide.md",
@@ -1461,11 +1401,9 @@ ${formattedContent}`;
         name: "typescript-guide.md",
       });
 
-      // Mock vault to return the file for basename resolution (legacy format)
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(null); // Path lookup fails
-      mockApp.vault.getMarkdownFiles.mockReturnValue([file]); // Basename lookup succeeds
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
+      mockApp.vault.getMarkdownFiles.mockReturnValue([file]);
 
-      // Old format: just basename, no path
       const content = `---
 epoch: 1695513480000
 modelKey: gpt-4
@@ -1490,7 +1428,6 @@ tags:
     });
 
     it("should handle ambiguous basename resolution gracefully", async () => {
-      // Create two mock TFiles with the same basename
       const mockTFile1 = mockTFile({
         basename: "typescript-guide.md",
         path: "docs/typescript-guide.md",
@@ -1505,11 +1442,9 @@ tags:
         name: "typescript-guide.md",
       });
 
-      // Mock vault to return multiple files with same basename
       mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
       mockApp.vault.getMarkdownFiles.mockReturnValue([mockTFile1, mockTFile2]);
 
-      // Old format: basename matches multiple files, but has other context items
       const content = `---
 epoch: 1695513480000
 modelKey: gpt-4
@@ -1523,19 +1458,16 @@ tags:
 
       const parsedMessages = asInternal(persistenceManager).parseChatContent(content);
 
-      // Should skip ambiguous note (logs warning) but preserve other context
       expect(parsedMessages).toHaveLength(1);
       expect(parsedMessages[0].context).toBeDefined();
-      expect(parsedMessages[0].context!.notes).toHaveLength(0); // Skipped due to ambiguity
-      expect(parsedMessages[0].context!.urls).toEqual(["https://typescriptlang.org"]); // Other context preserved
+      expect(parsedMessages[0].context!.notes).toHaveLength(0);
+      expect(parsedMessages[0].context!.urls).toEqual(["https://typescriptlang.org"]);
     });
 
     it("should handle deleted notes gracefully", async () => {
-      // Mock vault to return null (file not found)
       mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
-      mockApp.vault.getMarkdownFiles.mockReturnValue([]); // No files match basename
+      mockApp.vault.getMarkdownFiles.mockReturnValue([]);
 
-      // Note path that doesn't exist, but has other context items
       const content = `---
 epoch: 1695513480000
 modelKey: gpt-4
@@ -1549,11 +1481,10 @@ tags:
 
       const parsedMessages = asInternal(persistenceManager).parseChatContent(content);
 
-      // Should skip missing note (logs warning) but preserve other context
       expect(parsedMessages).toHaveLength(1);
       expect(parsedMessages[0].context).toBeDefined();
-      expect(parsedMessages[0].context!.notes).toHaveLength(0); // Skipped - not found
-      expect(parsedMessages[0].context!.tags!).toEqual(["typescript", "programming"]); // Other context preserved
+      expect(parsedMessages[0].context!.notes).toHaveLength(0);
+      expect(parsedMessages[0].context!.tags!).toEqual(["typescript", "programming"]);
     });
 
     it("should handle messages without context (backward compatibility)", async () => {
@@ -1597,7 +1528,6 @@ tags:
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
       mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
 
-      // Test with user-defined display name containing special characters
       await persistenceManager.saveChat("[芥兰]Gemini-2.5-pro|3rd party");
 
       const savedContent = mockApp.vault.create.mock.calls[0][1] as string;
@@ -1716,7 +1646,6 @@ tags:
         },
       ];
 
-      // Generate the note content
       const chatContent = asInternal(persistenceManager).formatChatContent(messages);
       const noteContent = asInternal(persistenceManager).generateNoteContent(
         chatContent,
@@ -1724,10 +1653,8 @@ tags:
         testModelKey
       );
 
-      // Verify the content contains properly quoted modelKey
       expect(noteContent).toContain(`modelKey: "${testModelKey}"`);
 
-      // Parse the content back and check frontmatter
       const lines = noteContent.split("\n");
       const modelKeyLine = lines.find((line: string) => line.startsWith("modelKey:"));
       expect(modelKeyLine).toBe(`modelKey: "${testModelKey}"`);
@@ -1749,7 +1676,6 @@ tags:
         },
       ];
 
-      // Generate the note content
       const chatContent = asInternal(persistenceManager).formatChatContent(messages);
       const noteContent = asInternal(persistenceManager).generateNoteContent(
         chatContent,
@@ -1757,10 +1683,8 @@ tags:
         testModelKey
       );
 
-      // Verify the content contains properly escaped quotes
       expect(noteContent).toContain('modelKey: "model\\"with\\"quotes|provider"');
 
-      // Parse the content back and check frontmatter
       const lines = noteContent.split("\n");
       const modelKeyLine = lines.find((line: string) => line.startsWith("modelKey:"));
       expect(modelKeyLine).toBe('modelKey: "model\\"with\\"quotes|provider"');
@@ -1782,7 +1706,6 @@ tags:
         },
       ];
 
-      // Generate the note content
       const chatContent = asInternal(persistenceManager).formatChatContent(messages);
       const noteContent = asInternal(persistenceManager).generateNoteContent(
         chatContent,
@@ -1790,10 +1713,8 @@ tags:
         testModelKey
       );
 
-      // Verify the content contains properly escaped backslashes
       expect(noteContent).toContain('modelKey: "model\\\\with\\\\backslash|provider"');
 
-      // Parse the content back and check frontmatter
       const lines = noteContent.split("\n");
       const modelKeyLine = lines.find((line: string) => line.startsWith("modelKey:"));
       expect(modelKeyLine).toBe('modelKey: "model\\\\with\\\\backslash|provider"');
@@ -1802,9 +1723,6 @@ tags:
 
   describe("frozen conversation tag", () => {
     it("writes the built-in tag independent of the persisted defaultConversationTag", () => {
-      // The tag is frozen to a constant. Feed a custom setting value: if a
-      // regression made generateNoteContent read the setting again, the custom
-      // value would leak into the note and fail the assertion below.
       const gs = getSettings as jest.Mock;
       gs.mockReturnValue({
         defaultSaveFolder: "test-folder",
@@ -1858,14 +1776,13 @@ tags:
         frontmatter: {
           epoch: 1695513480000,
           topic: "Existing Topic",
-          lastAccessedAt: 1700000000000, // Existing lastAccessedAt
+          lastAccessedAt: 1700000000000,
         },
       });
       mockApp.vault.getAbstractFileByPath.mockReturnValue(existingFile);
 
       await persistenceManager.saveChat("gpt-4");
 
-      // Verify that modify was called with content containing lastAccessedAt
       expect(mockApp.vault.modify).toHaveBeenCalledWith(
         existingFile,
         expect.stringContaining("lastAccessedAt: 1700000000000")
@@ -1899,7 +1816,6 @@ tags:
 
       await persistenceManager.saveChat("gpt-4");
 
-      // Verify that create was called with content NOT containing lastAccessedAt
       const createCall = mockApp.vault.create.mock.calls[0] as [string, string];
       const content = createCall[1];
       expect(content).not.toContain("lastAccessedAt:");
@@ -1946,7 +1862,6 @@ tags:
 
       await persistenceManager.saveChat("gpt-4");
 
-      // Verify that modify was called with content containing lastAccessedAt
       expect(mockApp.vault.modify).toHaveBeenCalledWith(
         existingFile,
         expect.stringContaining("lastAccessedAt: 1700000000000")
@@ -1958,8 +1873,6 @@ tags:
 
   describe("renameFileToMatchTopic", () => {
     beforeEach(() => {
-      // A fixed topic → deterministic target basename; the folder comes from the
-      // file's own path, which is what these tests exercise.
       mockMessageRepo.getDisplayMessages.mockReturnValue([]);
       jest
         .mocked(getEffectiveConversationsFolder)
@@ -1974,14 +1887,10 @@ tags:
 
       const newPath = mockApp.fileManager.renameFile.mock.calls[0][1] as string;
       expect(newPath.startsWith("old-root/copilot-conversations/")).toBe(true);
-      // Must not follow the (changed) live root.
       expect(newPath).not.toContain("live-root");
     });
 
     it("does not produce a leading slash when renaming a vault-root file", async () => {
-      // Hidden-directory chats use synthetic TFiles with parent === null; a
-      // top-level path has no slash, so the parent folder is empty. The result
-      // must be a bare vault-root name, never "/name.md".
       const file = mockTFile({ path: "chat.md" });
       mockApp.metadataCache.getFileCache.mockReturnValue({ frontmatter: { epoch: 1695513480000 } });
 

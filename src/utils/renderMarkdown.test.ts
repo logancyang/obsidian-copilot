@@ -16,8 +16,6 @@ jest.mock("obsidian", () => ({
     }
   },
   Notice: jest.fn(),
-  // Mirror the modern MarkdownRenderer.render(app, md, el, sourcePath, component)
-  // signature; a no-op is enough since the tests inject their own anchors.
   MarkdownRenderer: { render: jest.fn().mockResolvedValue(undefined) },
 }));
 
@@ -41,7 +39,6 @@ function buildApp(base = VAULT, indexedFiles: string[] = []): TestApp {
   };
 }
 
-/** Render into a div, inject an `a.internal-link`, and dispatch a click on it. */
 async function clickInternalLink(
   app: TestApp,
   dataHref: string,

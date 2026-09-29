@@ -15,7 +15,6 @@ describe("toolCallParser encoding/decoding", () => {
       "",
       true,
       "",
-      // Result contains sequences that could break HTML comments without encoding
       '{"key":"value --><script>alert(1)</script> more"}'
     );
 
@@ -23,7 +22,6 @@ describe("toolCallParser encoding/decoding", () => {
     const toolSeg = parsed.segments.find((s) => s.type === "toolCall")!;
     expect(toolSeg.toolCall?.id).toBe(id);
     expect(toolSeg.toolCall?.isExecuting).toBe(true);
-    // Decoded result equals original
     expect(toolSeg.toolCall?.result).toBe('{"key":"value --><script>alert(1)</script> more"}');
   });
 

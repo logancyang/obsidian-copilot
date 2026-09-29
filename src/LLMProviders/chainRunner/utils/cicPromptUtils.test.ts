@@ -57,7 +57,6 @@ describe("cicPromptUtils", () => {
 
       const result = ensureCiCOrderingWithQuestion(payload, question);
 
-      // Should add "[User query]:" label (same format as LayerToMessagesConverter)
       expect(result).toBe(renderCiCMessage(payload, "[User query]:\nWhat did I do last week?"));
     });
 

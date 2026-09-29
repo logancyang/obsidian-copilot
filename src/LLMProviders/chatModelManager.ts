@@ -33,12 +33,6 @@ const GOOGLE_SAFETY_SETTINGS_BLOCK_NONE: SafetySetting[] = [
   { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" } as SafetySetting,
 ];
 
-// Patch BaseLanguageModel.prototype.getNumTokens once at module load to prevent
-// tiktoken CDN fetches. LangChain's default getNumTokens() downloads a ~3MB BPE
-// vocabulary from tiktoken.pages.dev, which blocks all LLM calls when the CDN is
-// unreachable. This char/4 estimation is the same fallback LangChain uses internally
-// before tiktoken loads. Actual token usage comes from API response metadata.
-
 (
   BaseLanguageModel.prototype as { getNumTokens: (...args: unknown[]) => Promise<number> }
 ).getNumTokens = async (content: string | Array<{ type: string; text?: string }>) => {
@@ -129,18 +123,10 @@ export default class ChatModelManager {
     const modelName = customModel.name;
     const modelInfo = getModelInfo(modelName);
     const { isThinkingEnabled, usesAdaptiveThinking } = modelInfo;
-    // Copilot sets no output limit. This stays undefined unless the model
-    // carries one of its own, and an undefined limit is left out of the
-    // request, so the provider writes whatever the context window allows.
-    // https://github.com/logancyang/obsidian-copilot-preview/issues/312
     const maxTokens = customModel.maxTokens;
     const openAIFormatIsKeyless = customModel.requiresApiKey === false && !customModel.apiKey;
 
-    // No temperature is sent. Copilot exposes no way to choose one, and providers
-    // disagree on which values a model accepts: the Moonshot Kimi line rejects
-    // anything but 1, OpenAI's reasoning models reject anything but 1, and
-    // Anthropic's thinking models reject the parameter outright. Omitting it lets
-    // each provider apply its own default instead of Copilot guessing per family.
+    // No temperature is sent: providers disagree on accepted values (Kimi and OpenAI reasoning models require 1, Anthropic thinking models reject it).
     // https://github.com/logancyang/obsidian-copilot/issues/2959
     const baseConfig: Omit<ModelConfig, "maxTokens" | "maxCompletionTokens"> = {
       modelName: modelName,
@@ -176,16 +162,12 @@ export default class ChatModelManager {
         model: modelName,
         anthropicApiUrl: customModel.baseUrl,
         clientOptions: {
-          // Required to bypass CORS restrictions
           defaultHeaders: {
             "anthropic-dangerous-direct-browser-access": "true",
           },
           fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
         },
         ...(isThinkingEnabled && {
-          // Opus 4.7+ defaults thinking.display to "omitted" so thinking summaries
-          // never reach the UI; force "summarized" for the adaptive branch. Pre-4.7
-          // models default to "summarized" server-side and don't need this.
           thinking: usesAdaptiveThinking
             ? { type: "adaptive" as const, display: "summarized" as const }
             : {
@@ -214,8 +196,6 @@ export default class ChatModelManager {
         ),
         model: modelName,
         safetySettings: GOOGLE_SAFETY_SETTINGS_BLOCK_NONE,
-        // ChatGoogleGenerativeAI appends `/v1beta` itself; a stored versioned
-        // base URL would double the segment (`/v1beta/v1beta/…` → 404).
         baseUrl: googleHostBaseUrl(customModel.baseUrl),
       },
       [ChatModelProviders.XAI]: {
@@ -225,7 +205,6 @@ export default class ChatModelManager {
           allowLegacyCredentialFallback
         ),
         model: modelName,
-        // This langchainjs XAI client does not support baseURL override
       },
       [ChatModelProviders.OPENROUTERAI]: {
         modelName: modelName,
@@ -242,15 +221,12 @@ export default class ChatModelManager {
             "X-Title": "Obsidian Copilot",
           },
         },
-        // Enable reasoning if the model has the reasoning capability
         enableReasoning: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
-        // Pass reasoning effort if configured and reasoning capability is enabled
         reasoningEffort:
           customModel.capabilities?.includes(ModelCapability.REASONING) &&
           customModel.reasoningEffort
             ? customModel.reasoningEffort
             : undefined,
-        // Enable prompt caching by default; can be turned off for ZDR endpoints
         enablePromptCaching: customModel.enablePromptCaching ?? true,
       },
       [ChatModelProviders.GROQ]: {
@@ -260,25 +236,16 @@ export default class ChatModelManager {
           allowLegacyCredentialFallback
         ),
         model: modelName,
-        // groq-sdk appends `/openai/v1` itself; the stored URL is usually the
-        // versioned models.dev form, which would double the segment.
         baseUrl: groqHostBaseUrl(customModel.baseUrl),
       },
       [ChatModelProviders.OLLAMA]: {
-        // ChatOllama has `model` instead of `modelName`!!
         model: modelName,
-        // MUST NOT use /v1 in the baseUrl for ollama
         baseUrl: customModel.baseUrl || "http://localhost:11434",
         headers: {
           Authorization: `Bearer ${customModel.apiKey || "default-key"}`,
         },
-        // Route through Obsidian's requestUrl (safeFetchNoThrow) to bypass CORS / mixed-content
-        // restrictions — required on mobile (WKWebView) when calling http:// Ollama hosts.
         fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
-        // Enable thinking for models with REASONING capability (e.g., qwen3, deepseek-r1)
-        // Thinking content goes to additional_kwargs.reasoning_content
         think: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
-        // Reduce repetition in local models (1.1 = slight penalty, helps with hallucination loops)
         repeatPenalty: 1.1,
         numCtx: customModel.numCtx ?? DEFAULT_OLLAMA_NUM_CTX,
       },
@@ -290,9 +257,7 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl || "http://localhost:1234/v1",
           fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
         },
-        // Enable reasoning extraction for models with REASONING capability
         enableReasoning: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
-        // Pass reasoning effort if configured and reasoning capability is enabled
         reasoningEffort:
           customModel.capabilities?.includes(ModelCapability.REASONING) &&
           customModel.reasoningEffort
@@ -311,17 +276,12 @@ export default class ChatModelManager {
         streamUsage: customModel.streamUsage ?? false,
         configuration: {
           baseURL: customModel.baseUrl,
-          // Keyless local endpoints still need an SDK credential to construct a client.
-          // LangChain drops null default headers, so strip the internal placeholder
-          // after SDK authentication, before either transport can send it. Native
-          // fetch preserves streaming and cancellation when CORS bypass is off.
+          // LangChain drops null default headers, so strip the keyless placeholder after SDK auth and before either transport sends it.
           // https://github.com/logancyang/obsidian-copilot/issues/2946
           fetch: openAIFormatIsKeyless
             ? (url: string, options?: RequestInit) => {
                 const headers = new Headers(options?.headers);
                 headers.delete("authorization");
-                // scorecard: native fetch preserves streaming and AbortSignal cancellation;
-                // requestUrl supports neither when CORS compatibility is off.
                 return customModel.enableCors
                   ? safeFetchNoThrow(url, { ...options, headers })
                   : window.fetch(url, { ...options, headers });
@@ -357,12 +317,6 @@ export default class ChatModelManager {
           fetch: safeFetchNoThrow,
           defaultHeaders: BrevilabsClient.getInstance().getPluginVersionHeaders(),
         },
-        // Reasoning is opt-in: forward the user's per-model effort pick only for
-        // REASONING-capable models, and gate enableReasoning on an EXPLICIT effort.
-        // Without an effort, ChatOpenRouter.invocationParams falls back to
-        // `reasoning: { max_tokens: 1024 }`, which would make the default-on
-        // copilot-plus-flash spend reasoning budget/latency despite being the fast
-        // default. So flash stays fast until the user picks an effort.
         enableReasoning:
           (customModel.capabilities?.includes(ModelCapability.REASONING) ?? false) &&
           !!customModel.reasoningEffort,
@@ -418,13 +372,6 @@ export default class ChatModelManager {
     return modelApiKey || (allowLegacyCredentialFallback ? legacyApiKey : "");
   }
 
-  /**
-   * Adds special configuration for OpenAI models that support reasoning
-   * LangChain 0.6.6+ handles most of the token logic internally
-   *
-   * NOTE: GPT-5 models require Responses API for verbosity parameter to work.
-   * The useResponsesApi flag is set automatically in createModelInstance() for GPT-5.
-   */
   private getOpenAISpecialConfig(
     modelName: string,
     maxTokens: number | undefined,
@@ -436,18 +383,13 @@ export default class ChatModelManager {
       ...(maxTokens === undefined ? {} : { maxTokens }),
     };
 
-    // Add reasoning parameters for O-series and GPT-5 models
-    // LangChain 0.6.6 will handle the endpoint routing and parameter conversion
     if ((modelInfo.isOSeries || modelInfo.isGPT5) && customModel?.reasoningEffort) {
       config.reasoning = {
         effort: customModel.reasoningEffort,
       };
 
-      // Add verbosity for GPT-5 models (Responses API only).
-      // useResponsesApi is only enabled for OPENAI / OPENAI_FORMAT in createModelInstance().
       if (modelInfo.isGPT5 && customModel?.verbosity) {
         const verbosityValue = customModel.verbosity;
-        // For Responses API, verbosity is nested under 'text' parameter
         config.text = {
           verbosity: verbosityValue,
         };
@@ -457,7 +399,6 @@ export default class ChatModelManager {
     return config;
   }
 
-  // Build a map of modelKey to model config
   public buildModelMap() {
     const activeModels = getSettings().activeModels;
     ChatModelManager.modelMap = {};
@@ -484,11 +425,6 @@ export default class ChatModelManager {
     });
   }
 
-  /**
-   * Checks if a model has the necessary credentials configured for its provider.
-   * @param model - The custom model definition.
-   * @returns True when the provider requirements are satisfied, otherwise false.
-   */
   private hasProviderCredentials(
     model: CustomModel,
     allowLegacyCredentialFallback: boolean = true
@@ -537,7 +473,6 @@ export default class ChatModelManager {
       ChatModelManager.activeModel = model;
       ChatModelManager.activeModelSource = "legacy";
 
-      // Log if Responses API is enabled for GPT-5
       const modelInfo = getModelInfo(model.name);
       if (
         modelInfo.isGPT5 &&
@@ -552,11 +487,6 @@ export default class ChatModelManager {
     }
   }
 
-  /**
-   * Set the active chat model from a chat-backend `CustomModel` produced by the
-   * bridge. Counterpart to `setChatModel` that goes through
-   * `createModelInstanceFromBridged` (no `activeModels` modelMap gate).
-   */
   async setChatModelFromBridged(model: CustomModel): Promise<void> {
     try {
       ChatModelManager.chatModel = await this.createModelInstanceFromBridged(model);
@@ -569,7 +499,6 @@ export default class ChatModelManager {
   }
 
   async createModelInstance(model: CustomModel): Promise<BaseChatModel> {
-    // Create and return the appropriate model
     const modelKey = getModelKeyFromModel(model);
     const selectedModel = ChatModelManager.modelMap[modelKey];
     if (!selectedModel) {
@@ -592,15 +521,6 @@ export default class ChatModelManager {
     );
   }
 
-  /**
-   * Build a chat model from a `CustomModel` produced by the model-management
-   * "chat" backend bridge (`configuredModelToCustomModel`). Unlike
-   * `createModelInstance`, this does NOT consult `modelMap` — that map is built
-   * from the legacy `settings.activeModels`, whereas chat-backend models live
-   * in the `Provider` / `ConfiguredModel` registries, so the `activeModels`
-   * gate would reject every bridged model. The bridge already resolved the
-   * provider + key, so credentials are validated directly off the model here.
-   */
   async createModelInstanceFromBridged(model: CustomModel): Promise<BaseChatModel> {
     if (!this.hasProviderCredentials(model, false)) {
       if ((model.provider as ChatModelProviders) === ChatModelProviders.COPILOT_PLUS) {
@@ -619,12 +539,6 @@ export default class ChatModelManager {
     );
   }
 
-  /**
-   * Shared construction path for both `createModelInstance` (legacy
-   * activeModels) and `createModelInstanceFromBridged` (chat backend). Builds
-   * the provider config, applies the GPT-5 / GitHub-Copilot Responses-API and
-   * LM Studio special cases, and constructs the LangChain client.
-   */
   private async instantiateChatModel(
     model: CustomModel,
     vendor: ChatModelProviders,
@@ -634,7 +548,6 @@ export default class ChatModelManager {
     const modelConfig = await this.getModelConfig(model, allowLegacyCredentialFallback);
     const modelInfo = getModelInfo(model.name);
 
-    // For GPT-5 models, automatically use Responses API for proper verbosity support
     const constructorConfig: Record<string, unknown> = { ...modelConfig };
     if (
       modelInfo.isGPT5 &&
@@ -644,8 +557,6 @@ export default class ChatModelManager {
       logInfo(`Enabling Responses API for GPT-5 model: ${model.name} (${vendor})`);
     }
 
-    // For LM Studio, use ChatLMStudio by default for Responses API compatibility.
-    // Opt out by setting useResponsesApi to false.
     if (
       (model.provider as ChatModelProviders) === ChatModelProviders.LM_STUDIO &&
       model.useResponsesApi !== false
@@ -665,11 +576,8 @@ export default class ChatModelManager {
     return true;
   }
 
-  // Custom token estimation function for fallback when model is unknown
   private estimateTokens(text: string): number {
     if (!text) return 0;
-    // This is a simple approximation: ~4 chars per token for English text
-    // More accurate than using word count, but still a decent estimation
     return Math.ceil(text.length / 4);
   }
 
@@ -683,15 +591,9 @@ export default class ChatModelManager {
     const currentModelKey = getModelKey();
     if (!currentModelKey) return;
 
-    // Get the model configuration
     const selectedModel = ChatModelManager.modelMap[currentModelKey];
 
-    // Only invalidate keys the legacy modelMap actually knows about. A chat-
-    // backend selection is a `configuredModelId` that never appears in the
-    // activeModels-derived map; its validity is owned by chainManager's
-    // resolver, so an absent entry here must NOT clear the bridged model.
     if (selectedModel && !selectedModel.hasApiKey) {
-      // Clear the current chat model
       ChatModelManager.chatModel = null;
       ChatModelManager.activeModel = null;
       ChatModelManager.activeModelSource = null;
@@ -700,16 +602,6 @@ export default class ChatModelManager {
   }
 
   findModelByName(modelName: string): CustomModel | undefined {
-    // Prefer the active bridged model on an exact name match, BEFORE the legacy
-    // lookup. Chat-backend (bridged) models live in the Provider/ConfiguredModel
-    // registries and carry the full capability set derived from their
-    // modalities/reasoning (`configuredModelToCustomModel`). A model whose wire id
-    // ALSO exists in legacy `settings.activeModels` — notably `copilot-plus-flash`,
-    // whose built-in entry advertises only VISION — would otherwise mask the
-    // bridged REASONING/VISION capabilities, so a capability check
-    // (CopilotPlusChainRunner.hasCapability / isMultimodalModel) reads `false` and
-    // reasoning/image content is dropped. The bridged model is the one actually
-    // running, so it wins.
     if (
       ChatModelManager.activeModelSource === "bridged" &&
       ChatModelManager.activeModel?.name === modelName

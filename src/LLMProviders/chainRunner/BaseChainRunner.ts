@@ -38,19 +38,6 @@ export abstract class BaseChainRunner implements ChainRunner {
     }
   ): Promise<string>;
 
-  /**
-   * Handles a completed LLM response by saving conversation memory, updating the chat history, and logging summary details.
-   *
-   * @param fullAIResponse - The final response content to present.
-   * @param userMessage - The originating user message.
-   * @param abortController - Abort controller used to track cancellation reasons.
-   * @param addMessage - Callback to append a message to the UI state.
-   * @param updateCurrentAiMessage - Callback to update the streaming message placeholder.
-   * @param sources - Optional sources associated with the response.
-   * @param llmFormattedOutput - Optional formatted output string for memory storage.
-   * @param responseMetadata - Optional metadata describing truncation or token usage.
-   * @returns The full AI response text.
-   */
   protected async handleResponse(
     fullAIResponse: string,
     userMessage: ChatMessage,
@@ -61,22 +48,11 @@ export abstract class BaseChainRunner implements ChainRunner {
     llmFormattedOutput?: string,
     responseMetadata?: ResponseMetadata
   ) {
-    // Save to memory and add message if we have a response
-    // Skip only if it's a NEW_CHAT abort (clearing everything)
-
-    // Add message if we have a response OR if response was truncated (even if empty)
-    // This ensures truncation warnings are shown even for empty truncated responses
     const shouldAddMessage =
       (fullAIResponse || responseMetadata?.wasTruncated) &&
       !(abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT);
 
     if (shouldAddMessage) {
-      // Save the expanded user message (L5) to memory — NOT the full processedText.
-      // processedText includes context artifact XML (L3), which already lives in the
-      // envelope's L2/L3 layers. Baking it into L4 chat history would cause
-      // triple-inclusion and waste tokens.
-      // L5 preserves prompt-expanded content (e.g. {include_note_content} placeholders)
-      // while excluding context artifact blocks.
       const l5Text = userMessage.contextEnvelope?.layers.find((l) => l.id === "L5_USER")?.text;
       const inputForMemory = l5Text || userMessage.originalMessage || userMessage.message;
       const outputForMemory =
@@ -86,7 +62,6 @@ export abstract class BaseChainRunner implements ChainRunner {
         { output: outputForMemory }
       );
 
-      // For empty truncated responses, show a helpful message
       const displayMessage =
         fullAIResponse ||
         (responseMetadata?.wasTruncated
@@ -104,13 +79,10 @@ export abstract class BaseChainRunner implements ChainRunner {
 
       addMessage(messageToAdd);
 
-      // Clear the streaming message since it's now in chat history
       updateCurrentAiMessage("");
     } else if (abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
-      // Also clear if it's a new chat
       updateCurrentAiMessage("");
     }
-    // Log compact memory summary and a truncated final response (~300 chars)
     const historyMessages = (
       this.chainManager.memoryManager.getMemory().chatHistory as { messages?: unknown[] }
     ).messages;
@@ -133,7 +105,6 @@ export abstract class BaseChainRunner implements ChainRunner {
           : textOnly;
       logInfo("Final AI response (truncated):\n", snippet);
     } catch {
-      // Fallback: truncate raw response without parsing
       const s = typeof fullAIResponse === "string" ? fullAIResponse : String(fullAIResponse ?? "");
       const clipped =
         s.length > MAX_LOG_LENGTH ? s.slice(0, MAX_LOG_LENGTH) + "... (truncated)" : s;
@@ -142,19 +113,9 @@ export abstract class BaseChainRunner implements ChainRunner {
     return fullAIResponse;
   }
 
-  /**
-   * Logs provider errors and streams a user-friendly message to the UI.
-   *
-   * @param error - Raw provider error object.
-   * @param processErrorChunk - Callback used to stream error text to the UI.
-   */
   protected async handleError(error: unknown, processErrorChunk: (message: string) => void) {
     const msg = err2String(error);
     logError("Error during LLM invocation:", msg);
-    // Usage-cap (plan limit) errors get the friendly purchase-credits message with
-    // the dashboard link — on the main streaming path too, not just the planning
-    // catch (which routes through getApiErrorMessage). This is the common cap path:
-    // the relay returns token_limit_error mid-invocation after planning succeeds.
     const capMessage = formatUsageCapError(error);
     if (capMessage) {
       processErrorChunk(capMessage);
@@ -165,7 +126,6 @@ export abstract class BaseChainRunner implements ChainRunner {
     const errorCode = (errorData as { code?: string })?.code || msg;
     let errorMessage = "";
 
-    // Check for specific error messages
     if ((error as { message?: string })?.message?.includes("Invalid license key")) {
       errorMessage = "Invalid Copilot Plus license key. Please check your license key in settings.";
     } else if (errorCode === "model_not_found") {
@@ -179,20 +139,10 @@ export abstract class BaseChainRunner implements ChainRunner {
     processErrorChunk(this.enhancedErrorMsg(errorMessage, msg, error));
   }
 
-  /**
-   * Builds an enhanced user-facing error message that includes targeted guidance when authentication failures are detected.
-   *
-   * @param errorMessage - The provider-specific error message or code.
-   * @param msg - Normalized error string used for diagnostics.
-   * @param error - Raw error object returned from the provider SDK.
-   * @returns A formatted error string suitable for streaming to the UI.
-   */
   private enhancedErrorMsg(errorMessage: string, msg: string, error: unknown) {
-    // remove langchain troubleshooting URL from error message
     const ignoreEndIndex = errorMessage.search("Troubleshooting URL");
     errorMessage = ignoreEndIndex !== -1 ? errorMessage.slice(0, ignoreEndIndex) : errorMessage;
 
-    // add more user guide for invalid API key
     if (this.isAuthenticationError(error, msg)) {
       errorMessage =
         "Something went wrong. Please check if you have set your API key." +
@@ -204,13 +154,6 @@ export abstract class BaseChainRunner implements ChainRunner {
     return errorMessage;
   }
 
-  /**
-   * Determines whether an error is likely related to authentication or missing API credentials.
-   *
-   * @param error - Raw provider error object.
-   * @param normalizedMessage - Fallback message string for heuristic matching.
-   * @returns True if the error indicates an authentication problem.
-   */
   private isAuthenticationError(error: unknown, normalizedMessage: string): boolean {
     const responseError = (
       error as {

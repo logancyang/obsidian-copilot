@@ -1,13 +1,3 @@
-/**
- * Locates the opencode CLI's own diagnostic log so the Report-issue flow can
- * optionally bundle it (Zero's request on logancyang/obsidian-copilot-preview#155).
- *
- * opencode writes session logs under its XDG data dir at `opencode/log/*.log`
- * (honoring `XDG_DATA_HOME`, else `~/.local/share`). We don't override that at
- * spawn time, so this resolves opencode's default location. Best-effort: the
- * directory may not exist, in which case the caller proceeds without the log.
- */
-
 import { requireNodeModule } from "./desktopRuntime";
 
 export interface OpencodeLogRuntime {
@@ -16,7 +6,6 @@ export interface OpencodeLogRuntime {
   stat: (path: string) => Promise<{ mtimeMs: number }>;
 }
 
-/** Resolve opencode's default log directory for the given env/home. */
 export function opencodeLogDir(
   env: Record<string, string | undefined>,
   homeDir: string,
@@ -27,11 +16,6 @@ export function opencodeLogDir(
   return join(dataRoot, "opencode", "log");
 }
 
-/**
- * Return the absolute path of the most recently modified `.log` file in
- * opencode's log directory, or `null` when the directory is missing/empty or
- * the runtime is unavailable.
- */
 export async function findLatestOpencodeLog(
   env: Record<string, string | undefined>,
   homeDir: string,

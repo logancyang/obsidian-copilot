@@ -1,11 +1,5 @@
 import { escapeXml, unescapeXml } from "./xmlParsing";
 
-/**
- * Tests for XML escape/unescape utilities.
- * These functions are used for context envelope processing, not tool calling.
- * Tool calling now uses native LangChain bindTools() - no XML parsing needed.
- */
-
 describe("escapeXml", () => {
   it("should escape ampersands", () => {
     expect(escapeXml("foo & bar")).toBe("foo &amp; bar");
@@ -96,7 +90,6 @@ describe("unescapeXml", () => {
   });
 
   it("should handle double-escaped ampersand correctly", () => {
-    // &amp;amp; should become &amp; (not &) - unescaping once
     expect(unescapeXml("&amp;amp;")).toBe("&amp;");
   });
 });

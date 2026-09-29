@@ -32,7 +32,6 @@ describe("ModelAdapter", () => {
         toolMetadata
       );
 
-      // Check that tool instructions are included
       expect(enhancedPrompt).toContain("LocalSearch specific instructions");
       expect(enhancedPrompt).toContain("WebSearch specific instructions");
       expect(enhancedPrompt).toContain("WriteToFile specific instructions");
@@ -48,18 +47,15 @@ describe("ModelAdapter", () => {
         createToolMetadata("writeFile", "WriteToFile specific instructions"),
       ];
 
-      // Only pass localSearch as enabled
       const enhancedPrompt = adapter.enhanceSystemPrompt(
         basePrompt,
         toolDescriptions,
         ["localSearch"],
-        [toolMetadata[0]] // Only localSearch metadata
+        [toolMetadata[0]]
       );
 
-      // Should include localSearch instructions
       expect(enhancedPrompt).toContain("LocalSearch specific instructions");
 
-      // Should NOT include other tool instructions
       expect(enhancedPrompt).not.toContain("WebSearch specific instructions");
       expect(enhancedPrompt).not.toContain("WriteToFile specific instructions");
     });
@@ -70,7 +66,6 @@ describe("ModelAdapter", () => {
 
       const enhancedPrompt = adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, [], []);
 
-      // Check base sections exist
       expect(enhancedPrompt).toContain("# Autonomous Agent Mode");
       expect(enhancedPrompt).toContain("## Time-based Queries");
       expect(enhancedPrompt).toContain("## General Guidelines");
@@ -82,7 +77,6 @@ describe("ModelAdapter", () => {
 
       const enhancedPrompt = adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, [], []);
 
-      // Check GPT-specific sections
       expect(enhancedPrompt).toContain("CRITICAL FOR GPT MODELS");
       expect(enhancedPrompt).toContain("FINAL REMINDER FOR GPT MODELS");
     });
@@ -93,7 +87,6 @@ describe("ModelAdapter", () => {
 
       const enhancedPrompt = adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, [], []);
 
-      // Check Claude-specific sections
       expect(enhancedPrompt).toContain("IMPORTANT FOR CLAUDE THINKING MODELS");
     });
 
@@ -103,7 +96,6 @@ describe("ModelAdapter", () => {
 
       const enhancedPrompt = adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, [], []);
 
-      // Check Gemini-specific sections
       expect(enhancedPrompt).toContain("CRITICAL INSTRUCTIONS FOR GEMINI");
     });
 
@@ -115,10 +107,9 @@ describe("ModelAdapter", () => {
         basePrompt,
         toolDescriptions,
         ["localSearch", "webSearch"],
-        [] // No metadata
+        []
       );
 
-      // Should not include any tool-specific instructions
       expect(enhancedPrompt).not.toContain("LocalSearch specific instructions");
       expect(enhancedPrompt).not.toContain("WebSearch specific instructions");
     });
@@ -134,7 +125,6 @@ describe("ModelAdapter", () => {
         []
       );
 
-      // Check for composer-specific GPT instructions (simplified without XML examples)
       expect(enhancedPrompt).toContain("FILE EDITING WITH COMPOSER TOOLS");
       expect(enhancedPrompt).toContain("editFile");
       expect(enhancedPrompt).toContain("writeFile");

@@ -1,8 +1,6 @@
 import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
 import { Notice, TFolder, type App } from "obsidian";
 
-/** Build an App whose vault resolves `relPath` to `resolved` and exposes an
- *  optionally-enabled File Explorer with a spyable `revealInFolder`. */
 function makeApp(options: {
   resolved: unknown;
   explorerEnabled?: boolean;

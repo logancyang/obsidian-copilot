@@ -1,8 +1,6 @@
 import { stripSpecialTokens } from "@/utils/stripSpecialTokens";
 
 describe("stripSpecialTokens", () => {
-  // --- Individual token stripping ---
-
   it("strips ChatML <|im_end|>", () => {
     expect(stripSpecialTokens("hello<|im_end|>")).toBe("hello");
   });
@@ -75,8 +73,6 @@ describe("stripSpecialTokens", () => {
     expect(stripSpecialTokens("<|START_OF_TURN_TOKEN|>next")).toBe("next");
   });
 
-  // --- Normal text is unchanged ---
-
   it("leaves normal text unchanged", () => {
     const text = "This is a perfectly normal response with no special tokens.";
     expect(stripSpecialTokens(text)).toBe(text);
@@ -92,18 +88,14 @@ describe("stripSpecialTokens", () => {
   });
 
   it("does NOT strip <s> (can appear in normal text)", () => {
-    // <s> alone is not in the strip list; </s> is (Mistral EOS token) and will be removed
     expect(stripSpecialTokens("<s>beginning")).toBe("<s>beginning");
   });
 
   it("strips </s> Mistral EOS even when preceded by HTML-looking <s>", () => {
-    // </s> is always stripped as it is the Mistral end-of-sequence token
     expect(stripSpecialTokens("The <s>strikethrough</s> text here.")).toBe(
       "The <s>strikethrough text here."
     );
   });
-
-  // --- Mixed content ---
 
   it("strips token at end of real text without affecting the rest", () => {
     expect(stripSpecialTokens("Here is the answer.<|im_end|>")).toBe("Here is the answer.");

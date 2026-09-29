@@ -9,12 +9,10 @@ async function loadFreshGetDeviceId(): Promise<(app: App) => string> {
   return mod.getDeviceId;
 }
 
-/** Minimal stand-in for Obsidian's vault-scoped device-local storage. */
 function createFakeApp(store = new Map<string, string>()) {
   const app = {
     loadLocalStorage: jest.fn((key: string): unknown => store.get(key) ?? null),
     saveLocalStorage: jest.fn((key: string, data: unknown): void => {
-      // Production code only ever stores strings, so the fake narrows directly.
       if (data == null) store.delete(key);
       else store.set(key, data as string);
     }),
@@ -22,7 +20,6 @@ function createFakeApp(store = new Map<string, string>()) {
   return { app: app as unknown as App, store };
 }
 
-/** App whose storage methods throw, as when the API is unusable. */
 function createThrowingApp(): App {
   return {
     loadLocalStorage: () => {
@@ -34,8 +31,6 @@ function createThrowingApp(): App {
   } as unknown as App;
 }
 
-/** App whose reads work but whose writes are silently dropped, mirroring
- *  Obsidian's swallow-on-failure `saveLocalStorage` over broken storage. */
 function createDroppedWriteApp(store = new Map<string, string>()): App {
   return {
     loadLocalStorage: (key: string): unknown => store.get(key) ?? null,
@@ -78,8 +73,6 @@ describe("deviceId", () => {
       const id = getDeviceId(app);
       expect(id).not.toBe("expired-device-id");
       expect(store.get(STORAGE_KEY)).toBe(id);
-      // The expired browser key is ignored rather than mutated.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/246
       expect(window.localStorage.getItem(STORAGE_KEY)).toBe("expired-device-id");
     });
 
@@ -96,7 +89,6 @@ describe("deviceId", () => {
       const app = createThrowingApp();
 
       expect(getDeviceId(app)).toBe("unknown");
-      // Cached for the session: a second call stays stable without re-touching storage.
       expect(getDeviceId(app)).toBe("unknown");
     });
 

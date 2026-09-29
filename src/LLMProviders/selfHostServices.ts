@@ -19,36 +19,24 @@ type HttpServer = import("node:http").Server;
 type IncomingMessage = import("node:http").IncomingMessage;
 type ServerResponse = import("node:http").ServerResponse;
 
-/** Poll interval for Supadata async jobs (ms) */
 const SUPADATA_POLL_INTERVAL = 2000;
-/** Maximum time to wait for a Supadata async job (ms) */
 const SUPADATA_POLL_TIMEOUT = 60000;
 
-/** Clean web search result — no legacy Perplexity wrapper */
 export interface SelfHostWebSearchResult {
   content: string;
   citations: string[];
 }
 
-/** Address and bearer token for one plugin-owned Agent Chat search channel. */
 export interface SelfHostWebSearchAgentChannel {
   url: string;
   token: string;
 }
 
-/** Owns the provider-credential-free local channel used by Agent Chat search scripts. */
 export interface SelfHostWebSearchAgentBridge {
   getChannel(): Promise<Readonly<SelfHostWebSearchAgentChannel>>;
   dispose(): void;
 }
 
-/**
- * Keep provider credentials and entitlement checks inside a CLI-independent plugin channel.
- *
- * @param isModeValid Resolves the live, verified self-host entitlement state.
- * @param hasSearchKey Resolves whether the selected provider has a credential.
- * @param search Runs the configured provider search inside Obsidian.
- */
 export function createSelfHostWebSearchAgentBridge(
   isModeValid: () => boolean = isSelfHostModeValid,
   hasSearchKey: () => boolean = hasSelfHostSearchKey,
@@ -60,8 +48,7 @@ export function createSelfHostWebSearchAgentBridge(
   let disposed = false;
 
   const runSearch = async (query: string): Promise<SelfHostWebSearchResult> => {
-    // Agent processes must fail closed instead of falling back to a native
-    // web tool when the signed self-host entitlement is unavailable.
+    // Fail closed rather than fall back to a native web tool when the entitlement is unavailable.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
     if (!isModeValid()) {
       throw new Error("Self-host web search is not available for this session.");
@@ -128,8 +115,7 @@ export function createSelfHostWebSearchAgentBridge(
     },
     dispose(): void {
       disposed = true;
-      // Closing before Node emits `listening` skips the listen callback, so
-      // explicitly settle a spawn already awaiting this channel.
+      // Closing before `listening` skips the listen callback, so settle the pending spawn explicitly.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
       rejectChannelStart?.(new Error("Self-host web search channel is closed."));
       server?.close();
@@ -145,8 +131,7 @@ async function handleAgentSearchRequest(
   token: string,
   search: (query: string) => Promise<SelfHostWebSearchResult>
 ): Promise<void> {
-  // Bind to loopback, require a per-lifecycle token, and accept only one route
-  // so another vault or local webpage cannot select this plugin instance.
+  // Loopback only, per-lifecycle token, single route, so another vault or local webpage cannot select this instance.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
   if (request.method !== "POST" || request.url !== "/search") {
     writeAgentSearchResponse(response, 404, { error: "Not found." });
@@ -200,10 +185,6 @@ interface FirecrawlSearchResult {
 
 type SearchSnippetField = "excerpts" | "highlights";
 
-/**
- * Normalize ranked provider results without treating missing or malformed URLs
- * as citations. https://github.com/Brevilabs/obsidian-copilot-private/issues/285
- */
 function normalizeProviderResults(
   rawResults: unknown,
   snippetField: SearchSnippetField
@@ -242,14 +223,9 @@ function normalizeProviderResults(
   return { content: contentParts.join("\n\n"), citations };
 }
 
-/**
- * Check whether the currently selected self-host search provider has an API key configured.
- */
 export function hasSelfHostSearchKey(): boolean {
   const settings = getSettings();
   switch (settings.selfHostSearchProvider) {
-    // Each self-host provider reads only its own credential.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/285
     case "parallel":
       return !!settings.parallelApiKey;
     case "exa":
@@ -262,10 +238,6 @@ export function hasSelfHostSearchKey(): boolean {
   }
 }
 
-/**
- * Web search via Firecrawl direct API (self-host mode).
- * Handles both v2 `data.web` format and older flat `data` array.
- */
 async function firecrawlSearch(query: string, apiKey: string): Promise<SelfHostWebSearchResult> {
   const startTime = Date.now();
 
@@ -287,7 +259,6 @@ async function firecrawlSearch(query: string, apiKey: string): Promise<SelfHostW
     data?: FirecrawlSearchResult[] | { web?: FirecrawlSearchResult[] };
   };
 
-  // v2 returns { data: { web: [...] } }, older responses return { data: [...] }
   const rawData = json?.data;
   const results: FirecrawlSearchResult[] = Array.isArray(rawData)
     ? rawData
@@ -314,9 +285,6 @@ async function firecrawlSearch(query: string, apiKey: string): Promise<SelfHostW
   return { content: contentParts.join("\n\n"), citations };
 }
 
-/**
- * Web search via Perplexity Sonar API (self-host mode).
- */
 async function perplexitySonarSearch(
   query: string,
   apiKey: string
@@ -348,10 +316,9 @@ async function perplexitySonarSearch(
   return { content, citations };
 }
 
-/** Web search via Parallel's GA Search API (self-host mode). */
 async function parallelSearch(query: string, apiKey: string): Promise<SelfHostWebSearchResult> {
-  // Parallel rejects requests above these per-field limits, so bound them only
-  // at its API boundary. https://github.com/Brevilabs/obsidian-copilot-private/issues/285
+  // Parallel rejects requests above these per-field limits.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/285
   const response = await safeFetchNoThrow(PARALLEL_SEARCH_URL, {
     method: "POST",
     headers: {
@@ -373,7 +340,6 @@ async function parallelSearch(query: string, apiKey: string): Promise<SelfHostWe
   return normalizeProviderResults(json?.results, "excerpts");
 }
 
-/** Web search via Exa's Search API (self-host mode). */
 async function exaSearch(query: string, apiKey: string): Promise<SelfHostWebSearchResult> {
   const response = await safeFetchNoThrow(EXA_SEARCH_URL, {
     method: "POST",
@@ -397,15 +363,9 @@ async function exaSearch(query: string, apiKey: string): Promise<SelfHostWebSear
   return normalizeProviderResults(json?.results, "highlights");
 }
 
-/**
- * Dispatch self-host web search to the provider selected in settings.
- * Returns content + citations directly without the legacy Perplexity wrapper.
- */
 export async function selfHostWebSearch(query: string): Promise<SelfHostWebSearchResult> {
   const settings = getSettings();
   switch (settings.selfHostSearchProvider) {
-    // Direct dispatch keeps hosted search unchanged and prevents credentials
-    // crossing provider boundaries. https://github.com/Brevilabs/obsidian-copilot-private/issues/285
     case "parallel":
       return parallelSearch(query, settings.parallelApiKey);
     case "exa":
@@ -418,10 +378,6 @@ export async function selfHostWebSearch(query: string): Promise<SelfHostWebSearc
   }
 }
 
-/**
- * YouTube transcript via Supadata direct API (self-host mode).
- * Returns the same Youtube4llmResponse shape as BrevilabsClient.youtube4llm().
- */
 export async function selfHostYoutube4llm(url: string): Promise<Youtube4llmResponse> {
   const startTime = Date.now();
   const apiKey = getSettings().supadataApiKey;
@@ -459,9 +415,6 @@ export async function selfHostYoutube4llm(url: string): Promise<Youtube4llmRespo
   throw new Error(`Supadata transcript request failed (${response.status}): ${text}`);
 }
 
-/**
- * Poll a Supadata async transcript job until it completes or times out.
- */
 async function pollSupadataJob(
   jobId: string,
   apiKey: string,

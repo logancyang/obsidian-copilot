@@ -148,37 +148,29 @@ describe("promptPayloadRecorder", () => {
     const lines = (logMarkdownBlock as jest.Mock).mock.calls[0][0] as string[];
     const output = lines.join("\n");
 
-    // Verify header
     expect(lines[0]).toContain("Prompt");
     expect(lines[0]).toContain("gpt-4");
 
-    // Verify BOTH sections are present
     expect(output).toContain("**Actual Messages Sent to LLM:**");
     expect(output).toContain("**Layered Context Metadata:**");
 
-    // Verify actual messages JSON is shown
     expect(output).toContain("```json");
     expect(output).toContain('"role": "system"');
     expect(output).toContain('"role": "user"');
 
-    // Verify intelligent layered format with sections
     expect(output).toContain("msg:msg-456");
     expect(output).toContain("conv:conv-123");
 
-    // Verify structural sections from intelligent analyzer
     expect(output).toContain("━━━ SYSTEM MESSAGE ━━━");
     expect(output).toContain("━━━ USER MESSAGE ━━━");
 
-    // Verify layers are detected and shown
     expect(output).toContain("🔒 L1_SYSTEM");
     expect(output).toContain("🔒 L2_PREVIOUS");
     expect(output).toContain("⚡ L5_USER");
 
-    // Verify layer content appears
     expect(output).toContain("You are a helpful assistant");
     expect(output).toContain("What is this about?");
 
-    // Verify hash prefixes appear
-    expect(output).toContain("abc123de"); // L1 hash prefix
+    expect(output).toContain("abc123de");
   });
 });

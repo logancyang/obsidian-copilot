@@ -15,8 +15,6 @@ jest.mock("@langchain/anthropic", () => {
   }
   return { ChatAnthropic };
 });
-// Capture constructor configs so tests can assert what the manager actually
-// hands the LangChain clients (e.g. base-URL normalization).
 jest.mock("@langchain/groq", () => {
   class ChatGroq {
     static configs: unknown[] = [];
@@ -279,8 +277,6 @@ describe("chatModelManager", () => {
           configs: Array<{ maxTokens?: number }>;
         };
 
-        // The client knows each Claude's real maximum. Forcing one value across
-        // all of them asks older models for more than they accept.
         await ChatModelManager.getInstance().createModelInstanceFromBridged(
           bridgedModel({
             name: "claude-sonnet-4-5",
@@ -312,8 +308,6 @@ describe("chatModelManager", () => {
     describe("findModelByName()", () => {
       it("falls back to the active bridged model so its capabilities resolve", async () => {
         const manager = ChatModelManager.getInstance();
-        // A vision-capable Plus model that exists only as a bridged ConfiguredModel
-        // (not in legacy activeModels) — e.g. kimi-k2.7-code.
         const model = bridgedModel({
           name: "kimi-k2.7-code",
           provider: ChatModelProviders.COPILOT_PLUS,
@@ -321,27 +315,19 @@ describe("chatModelManager", () => {
           capabilities: [ModelCapability.VISION],
         });
 
-        // Not findable before it's the active bridged model...
         expect(manager.findModelByName("kimi-k2.7-code")).toBeUndefined();
 
         await manager.setChatModelFromBridged(model);
 
-        // ...now resolvable by name, carrying its VISION capability so
-        // isMultimodalModel/hasCapability route images instead of dropping them.
         const found = manager.findModelByName("kimi-k2.7-code");
         expect(found).toBe(model);
         expect(found?.capabilities).toContain(ModelCapability.VISION);
 
-        // A different name never resolves to the active bridged model.
         expect(manager.findModelByName("some-other-model")).toBeUndefined();
       });
 
       it("prefers the active bridged model over a legacy duplicate of the same id", async () => {
         const manager = ChatModelManager.getInstance();
-        // copilot-plus-flash exists in legacy activeModels (built-in) advertising only
-        // VISION, AND as a bridged model now also carrying REASONING. The bridged one
-        // is what's running, so it must win — otherwise hasCapability(REASONING) reads
-        // the legacy entry and reasoning content is dropped.
         const legacyFlash = {
           name: "copilot-plus-flash",
           provider: ChatModelProviders.COPILOT_PLUS,

@@ -18,46 +18,30 @@ describe("redactLog", () => {
     });
 
     it("stays fast on a long run of address-legal characters instead of backtracking over it (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
-      // A pasted token or a minified log line is one unbroken run; unanchored,
-      // this took tens of seconds and froze the renderer.
       const started = Date.now();
       expect(redactLogText("A".repeat(256 * 1024))).toBe("A".repeat(256 * 1024));
       expect(Date.now() - started).toBeLessThan(1000);
     });
 
     it("replaces an over-long address whole, leaving no part of it behind (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
-      // The speed fix above must not be bought by capping the parts: a capped
-      // quantifier matches only the tail that fits and leaves the overflow in
-      // the report as plain text, which is the address this pass exists to
-      // remove.
       expect(redactLogText(`${"a".repeat(500)}@example.com`)).toBe("<email>");
       expect(redactLogText(`user@example.${"z".repeat(40)}`)).toBe("<email>");
     });
 
     it("replaces addresses chained by an address-legal character, not just the first (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
-      // Two addresses with no ordinary separator are one run, and the run goes
-      // whole. Matching per-address instead left the second one in the report,
-      // because every position inside the chain has an address character behind
-      // it. Every character the local part accepts can glue such a chain, so all
-      // of them are listed rather than sampled.
       for (const glue of [".", "-", "+", "_", "%"]) {
         expect(redactLogText(`a@b.com${glue}c@d.com`)).toBe("<email>");
       }
       expect(redactLogText("a@b.com.c@d.com.e@f.com")).toBe("<email>");
-      // Separated normally, they stay two addresses and both go.
       expect(redactLogText("a@b.com, c@d.com")).toBe("<email>, <email>");
     });
 
     it("replaces an address that opens with @, as a fediverse handle does (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
-      // `@user@host.tld` is a real identity format, and the leading `@` must not
-      // be read as "this run has no local part".
       expect(redactLogText("ping @alice@mastodon.social now")).toBe("ping <email> now");
       expect(redactLogText("@@foo@bar.com")).toBe("<email>");
     });
 
     it("keeps punctuation that follows an address instead of swallowing it (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
-      // The run a redaction is chosen from extends past the address into the
-      // sentence's full stop, which belongs to the prose, not the address.
       expect(redactLogText("write to a@b.com.")).toBe("write to <email>.");
     });
 
@@ -69,18 +53,11 @@ describe("redactLog", () => {
     });
 
     it("replaces a run holding a valid address even when it ends in an invalid one (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
-      // Judging the run by its LAST dot alone let the single-letter ending here
-      // rule the whole run out, leaving the valid `a@b.com` in front of it in
-      // the report. Any dot with two or more letters after it settles it.
       expect(redactLogText("a@b.com@c.d")).toBe("<email>");
       expect(redactLogText("a@b.com@c.d@e.f")).toBe("<email>");
     });
 
     it("stays fast on a long run that ends just past its trailing punctuation (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
-      // The tail is walked back from the end rather than matched with a `…$`
-      // regex: that regex is anchored only at its end, so a run whose final
-      // character is not punctuation makes it retry from every interior
-      // position — 4.2 s at this length.
       const started = Date.now();
       const run = `a@${".".repeat(100_000)}a`;
       expect(redactLogText(run)).toBe(run);
@@ -88,13 +65,6 @@ describe("redactLog", () => {
     });
 
     it("applies the email rule to exactly the output String.prototype.replace gives it, run for run (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
-      // The email rule is applied by a scan rather than by `replace`, so the
-      // callback replace it stands in for is the oracle. The fixture carries
-      // nothing another rule would touch, so the two outputs can differ only
-      // where the scan does: a run at each end of the text, runs glued by
-      // address characters, handles opening with `@`, runs the rule leaves
-      // alone, runs of tail punctuation only, and non-ASCII neighbours that end
-      // a run without joining it.
       const fixture = [
         "first@start.io opens the text, then plain words and a version pkg@1.2.3-rc,",
         "glued a@b.com.c@d.com, a fediverse @alice@mastodon.social handle, and @@foo@bar.com;",
@@ -106,7 +76,6 @@ describe("redactLog", () => {
       const oracle = fixture.replace(/[A-Za-z0-9._%+@-]+/g, redactAddressRun);
 
       expect(redactLogText(fixture)).toBe(oracle);
-      // The oracle itself did what the fixture was built to make it do.
       expect(oracle.startsWith("<email> opens the text")).toBe(true);
       expect(oracle.endsWith("ends on an address: <email>")).toBe(true);
       expect(oracle).toContain("glued <email>, a fediverse <email> handle, and <email>;");
@@ -114,7 +83,6 @@ describe("redactLog", () => {
         "neighbours: é<email>, 名字<email>中, 🎉<email>🎉, dots... and dashes ---"
       );
       expect(oracle).toContain("like 12.5%, a@b, @scope, @@@@, then a full stop after <email>.");
-      // Nothing to redact: the text comes back unchanged, end to end.
       expect(redactLogText("pkg@1.2.3-rc, 12.5%, a@b, @scope ---")).toBe(
         "pkg@1.2.3-rc, 12.5%, a@b, @scope ---"
       );
@@ -128,48 +96,27 @@ describe("redactLog", () => {
     });
 
     it("removes a bearer token, whether or not it follows an Authorization field", () => {
-      // Bare bearer: the scheme word stays, the token becomes a marker.
       expect(redactLogText("using bearer abcdef0123456789 now")).toBe("using bearer <token> now");
-      // In an Authorization header both rules fire; either way the token is gone.
       const header = redactLogText("Authorization: Bearer abcdef0123456789");
       expect(header).not.toContain("abcdef0123456789");
       expect(header).toContain("<token>");
     });
 
     it("removes a Basic credential, which carries a password in plain base64 (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
-      // `Basic` is five characters, so the field rule's own value pattern never
-      // reaches it — and what follows decodes straight back to `user:password`.
-      // A report's description is prefilled into a public GitHub issue before
-      // the user has reviewed anything, so a pasted header goes out as typed.
       const header = redactLogText("Authorization: Basic dXNlcjpwYXNzd29yZA==");
       expect(header).not.toContain("dXNlcjpwYXNzd29yZA");
       expect(header).toContain("<redacted>");
-      // The shape a pasted curl brings it in as.
       const curl = redactLogText("-H 'Authorization: Basic YWRtaW46czNjcmV0'");
       expect(curl).not.toContain("YWRtaW46czNjcmV0");
       expect(curl).toContain("<redacted>");
-      // The spelling the frame log actually holds: it stores SDK and ACP
-      // payloads as NDJSON, so headers arrive quoted rather than as raw lines.
       const json = redactLogText('"authorization": "Basic YWRtaW46czNjcmV0"');
       expect(json).not.toContain("YWRtaW46czNjcmV0");
       expect(json).toContain("<redacted>");
-      // Anchored to the header name: prose using the word keeps its next word,
-      // which an unanchored rule would take and leave the log less diagnostic.
       expect(redactLogText("the basic principle applies")).toBe("the basic principle applies");
-      // Anchored by the syntax around the name rather than by an identifier
-      // boundary, so a custom header still gives up its credential. `\w` covers
-      // `_`, so a boundary here would keep `Proxy-Authorization` and drop this.
       const custom = redactLogText("x_authorization: Basic YWRtaW46czNjcmV0");
       expect(custom).not.toContain("YWRtaW46czNjcmV0");
       expect(custom).toContain("<redacted>");
-      // Four characters, and `u:p` once decoded. The header name and scheme
-      // have already established what this is, so there is no length left to
-      // qualify it by.
       expect(redactLogText("Authorization: Basic dTpw")).toBe("Authorization: Basic <redacted>");
-      // An empty credential ends at its own line. A rule that stepped over the
-      // newline would claim the next line's field name as its credential, and
-      // the field rule below — which never sees the name it needs — would then
-      // leave that field's value in the clear.
       expect(redactLogText("Authorization: Basic \npassword=hunter2000")).toBe(
         "Authorization: Basic \npassword=<redacted>"
       );
@@ -216,8 +163,6 @@ describe("redactLog", () => {
       expect(redactLogText("aws_secret_access_key=0123456789abcdefghijklmnopqrstuv")).toBe(
         "aws_secret_access_key=<redacted>"
       );
-      // Screamed by the convention every AWS credentials file and shell export
-      // uses, so the match cannot be case-sensitive.
       expect(redactLogText("AWS_SECRET_ACCESS_KEY=0123456789abcdefghijklmnopqrstuv")).toBe(
         "AWS_SECRET_ACCESS_KEY=<redacted>"
       );
@@ -248,8 +193,6 @@ describe("redactLog", () => {
     });
 
     it("keeps trailing punctuation the run swallowed after the marker", () => {
-      // Only characters the run pattern admits can trail an address, so these
-      // are the tails the function can actually be handed.
       expect(redactAddressRun("alice@example.com.")).toBe("<email>.");
       expect(redactAddressRun("alice@example.com--")).toBe("<email>--");
       expect(redactAddressRun("alice@example.com@")).toBe("<email>@");

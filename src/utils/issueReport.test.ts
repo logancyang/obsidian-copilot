@@ -17,10 +17,6 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-// The per-source budget stops 1 MiB short of the packed-zip ceiling, so no
-// input can reach that ceiling through the public contract; the one test that
-// exercises it substitutes the packer's output. Every other test gets the real
-// `zipSync` through the wrapper.
 jest.mock("fflate", () => {
   const actual = jest.requireActual<typeof import("fflate")>("fflate");
   return { ...actual, zipSync: jest.fn(actual.zipSync) };
@@ -29,77 +25,39 @@ jest.mock("fflate", () => {
 const encode = (text: string) => new TextEncoder().encode(text);
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
-/** Mirrors the assembler's own budget: 24 MiB total, less the report.md reserve. */
 const LOG_BUDGET_BYTES = 24 * 1024 * 1024 - (64 + 8) * 1024;
-/** A per-log budget clear of the 64 KiB floor under which a tail is not worth keeping. */
 const TAILABLE_BUDGET_BYTES = 64 * 1024 + 256 + 512;
-/** Mirrors the assembler's own note cap. */
 const MAX_NOTE_BYTES = 64 * 1024;
 const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/202";
 
-/** Every seeded log carries a home path and a secret so redaction is observable. */
 const SECRET_LOG = "log line for /Users/alice/vault key sk-abcdef0123456789\n";
 const ACTIVITY_PATH = "/tmp/acp-frames.ndjson";
 const ACTIVITY_NAME = "acp-frames.ndjson.txt";
 const OPENCODE_PATH = "/tmp/opencode/log/session.log";
-/**
- * A line redaction lengthens, 83 bytes to 89: the two-letter username becomes
- * `<user>` and the eight-character secret `<redacted>`, so a log of these grows
- * 7% on the way out — enough to carry a slice cut to the budget past it.
- */
 const INFLATING_LINE =
   "INFO service=file path=/Users/wy/vault/daily/2026-06-15.md secret=hunter22 read ok\n";
 
-/**
- * A credential whose key and value sit on different lines, placed so the cut
- * at `SPLIT_CREDENTIAL_BUDGET` less the banner reserve lands on the key line:
- * a tail cut before redaction drops that line as its fragment and keeps the
- * value as plain text.
- */
 const SPLIT_CREDENTIAL_LOG =
   "old\n".repeat(25_000) + "password=\nsensitivevalue\n" + "e\n".repeat(33_000);
 const SPLIT_CREDENTIAL_BUDGET = 66_281;
 
-/** `count` bytes of two-byte `e\n` lines, an odd count closed with a bare `e`. */
 const filler = (count: number) => "e\n".repeat(Math.floor(count / 2)) + "e".repeat(count % 2);
-/**
- * The bytes a tail read at `TAILABLE_BUDGET_BYTES` plus 8 KiB of context would
- * hold: the shape every window-bounded read has to get right and cannot. The
- * fixtures below place their key exactly one byte in front of such a window.
- */
 const WINDOWED_READ_BYTES = TAILABLE_BUDGET_BYTES + 8 * 1024;
-/**
- * `password=` sits just before a 72 KiB window whose own contents shrink under
- * redaction (`secret=` followed by 20,000 bytes of key), so the redacted window
- * fits the budget and the cut lands back on the value with no key in view.
- */
 const SHRINKING_WINDOW_LOG = (() => {
   let suffix = "\nsensitivevalue\nsecret=" + "x".repeat(20_000) + "\n";
   suffix += filler(73_728 - suffix.length);
   return "old\n".repeat(1000) + "password=" + suffix;
 })();
-/**
- * The key, its `:` and the value on three lines, with a window that would open
- * on the lone `:` line: no heuristic over the cut-open first line recovers a
- * key that is itself a whole line above the window's start.
- */
 const SEPARATOR_LINE_LOG = (() => {
   const window = ":\nsensitivevalue\nsecret=" + "x".repeat(9000) + "\n";
   return "old\n".repeat(1000) + "password\n" + window + filler(WINDOWED_READ_BYTES - window.length);
 })();
-/**
- * The generic credential rule accepts `secret=` as a value, so a run of bare
- * `secret=` lines pairs up from wherever the text starts: read whole, the
- * even-numbered run leaves the last `secret=` as the key of `sensitivevalue`;
- * read from any line after `password=`, the pairing shifts and the value goes plain.
- */
 const CHAINED_KEYS_LOG = (() => {
   const chain = "secret=\n".repeat(1100);
   const rest = chain + "sensitivevalue\n";
   return "password=\n" + rest + filler(WINDOWED_READ_BYTES - rest.length);
 })();
 
-/** A runtime whose `readLog` serves the given files and rejects for any other path. */
 function runtimeWith(files: Record<string, string>): ReportRuntime {
   return {
     readLog: async (p, maxBytes) => {
@@ -117,7 +75,6 @@ const rejecting = (err: Error): ReportRuntime => ({
   readLog: () => Promise.reject(err),
 });
 
-/** The base runtime with `readLog` swapped out for the activity log alone. */
 const forActivityLog = (readLog: ReportRuntime["readLog"]): ReportRuntime => ({
   readLog: (p, max) => (p === ACTIVITY_PATH ? readLog(p, max) : runtime.readLog(p, max)),
 });
@@ -141,10 +98,6 @@ const baseInput: ReportInput = {
 const build = (overrides: Partial<ReportInput>, rt: ReportRuntime = runtime) =>
   buildReportBundle({ ...baseInput, ...overrides }, rt);
 
-/**
- * One activity log with exactly `budget` bytes of room left for it: the
- * screenshot is sized to spend the rest, so the log is measured on its own.
- */
 function withRoom(budget: number, source: Pick<ReportLogRequest, "text" | "path">) {
   return {
     screenshotPng: new Uint8Array(LOG_BUDGET_BYTES - budget),
@@ -161,7 +114,6 @@ function attachment(bundle: ReportBundle, id: string): AttachmentResult {
   return found;
 }
 
-/** The activity log's result and packed text for one log source under `budget`. */
 async function packedLog(
   source: Pick<ReportLogRequest, "text" | "path">,
   budget: number,
@@ -172,11 +124,6 @@ async function packedLog(
   return { result, packed: result.included ? entryText(bundle, ACTIVITY_NAME) : "" };
 }
 
-/**
- * Compression method of every central-directory record (signature PK\x01\x02,
- * method at offset 10, little-endian): the upload endpoint rejects the whole
- * bundle over any single compressed entry.
- */
 function centralDirectoryMethods(zip: Uint8Array): number[] {
   const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
   const methods: number[] = [];
@@ -186,7 +133,6 @@ function centralDirectoryMethods(zip: Uint8Array): number[] {
   return methods;
 }
 
-/** Reads the issue body back out of an assembled URL. */
 const bodyOf = (url: string) => new URLSearchParams(url.split("?")[1]).get("body") ?? "";
 
 describe("issueReport", () => {
@@ -228,8 +174,6 @@ describe("issueReport", () => {
     });
 
     it("offers for upload exactly the bytes of the zip it returns", async () => {
-      // The upload sends the buffer held here, so nothing beyond the zip may
-      // ride along in a pooled buffer.
       const bundle = await build({});
 
       expect(new Uint8Array(bundle.uploadAttempt.body)).toEqual(bundle.zip);
@@ -298,8 +242,6 @@ describe("issueReport", () => {
     });
 
     it(`leaves an oversized screenshot out rather than failing the whole bundle (${ISSUE_URL})`, async () => {
-      // One byte past the room left once report.md's reserve is taken: the
-      // reserve comes off before the screenshot is measured, not after.
       const bundle = await build({ screenshotPng: new Uint8Array(LOG_BUDGET_BYTES + 1) });
 
       expect(attachment(bundle, "screenshot")).toMatchObject({
@@ -312,9 +254,6 @@ describe("issueReport", () => {
     });
 
     it(`spends the budget on the screenshot first, then on the logs in request order (${ISSUE_URL})`, async () => {
-      // 1 KiB is left after the screenshot: enough for one 600-byte log whole,
-      // and too little for a useful tail of the other, so whichever log is
-      // measured first is the one that goes in.
       const line = "e\n".repeat(300);
       const bundle = await build({
         screenshotPng: new Uint8Array(LOG_BUDGET_BYTES - 1024),
@@ -326,8 +265,6 @@ describe("issueReport", () => {
 
       expect(attachment(bundle, "screenshot").included).toBe(true);
       expect(attachment(bundle, "first").included).toBe(true);
-      // Names both sides, so a log that is itself enormous reads differently
-      // from one that merely arrived after the budget was spent.
       expect(attachment(bundle, "second")).toMatchObject({
         included: false,
         note: "log is 600 B, over the 424 B left",
@@ -385,7 +322,6 @@ describe("issueReport", () => {
           "failed with the reason redacted and flattened, so a failing path cannot name the user",
         readLog: () =>
           Promise.reject(new Error("EACCES: open '/Users/alice/Library/acp.ndjson'\nretry later")),
-        // One line, because it lands inside a markdown bullet list.
         note: "failed: EACCES: open '/Users/<user>/Library/acp.ndjson' retry later",
       },
       {
@@ -419,9 +355,6 @@ describe("issueReport", () => {
         contains: ["earlier entries omitted", "the newest entry"],
       },
       {
-        // 99,844 bytes: inside the 100,000 budget but within the banner
-        // reserve's width of it, so a reserve deducted from every log's budget
-        // would shorten this one.
         behaviour:
           "includes a log that fits the budget whole, with no banner and nothing cut off the front",
         text: "the oldest entry\n" + "an entry\n".repeat(11_090) + "the newest entry\n",
@@ -429,8 +362,6 @@ describe("issueReport", () => {
         whole: true,
       },
       {
-        // Two-byte lines, so the fragment dropped at the cut is far shorter
-        // than the banner that replaces it and cannot absorb its width.
         behaviour: "keeps a banner-ed tail inside the budget it was measured against",
         text: "e\n".repeat(200_000),
         budget: TAILABLE_BUDGET_BYTES,
@@ -438,10 +369,6 @@ describe("issueReport", () => {
         contains: ["earlier entries omitted"],
       },
       {
-        // Redaction knows a secret by what precedes it, and half of `password=`
-        // in front of a value means the value reads as ordinary text. The
-        // fragment goes and the log stays: leaving the whole source out would
-        // satisfy the negative assertion on its own.
         behaviour: `drops the cut-open first line of a tail rather than redacting a fragment (${ISSUE_URL})`,
         text: "password=hunter2000 and more text to push past the cut\n".repeat(2000),
         budget: TAILABLE_BUDGET_BYTES,
@@ -456,9 +383,6 @@ describe("issueReport", () => {
         whole: true,
       },
       {
-        // A 1 MB log against 256 KiB of room: the slice read for the tail grows
-        // 7% under redaction. The whole log used to be left out at this point,
-        // which is what a real 22 MB OpenCode log met with 21.5 MB of room.
         behaviour: `keeps a tail that redaction grew past the budget, cut to fit after redacting rather than left out (${ISSUE_URL})`,
         text: INFLATING_LINE.repeat(12_700),
         budget: 256 * 1024,
@@ -467,8 +391,6 @@ describe("issueReport", () => {
         omits: ["/Users/wy/", "hunter22"],
       },
       {
-        // Eight bytes to spare before redaction, six too few after it; the room
-        // is over the tail floor, so the log is kept as a tail.
         behaviour: `truncates a log that fit whole before redaction and overflowed after it, instead of leaving it out (${ISSUE_URL})`,
         text: INFLATING_LINE.repeat(1100),
         budget: encode(INFLATING_LINE.repeat(1100)).length + 8,
@@ -477,9 +399,6 @@ describe("issueReport", () => {
         omits: ["/Users/wy/", "hunter22"],
       },
       {
-        // The cut lands on `password=`, the line redaction needs to recognise
-        // the value under it. Cutting first drops that line as the tail's
-        // fragment and packs `sensitivevalue` as plain text.
         behaviour: `redacts a credential split across the cut, by redacting the slice before cutting it (${ISSUE_URL})`,
         text: SPLIT_CREDENTIAL_LOG,
         budget: SPLIT_CREDENTIAL_BUDGET,
@@ -500,10 +419,6 @@ describe("issueReport", () => {
       if (whole) expect(packed).toBe(text);
     });
 
-    // Every row hides its value only when the whole log is redacted before any
-    // cut: a window opened after the key, however much context it carries,
-    // loses the pairing. The expectation is parity with full-text redaction,
-    // not a fixed string, so the rows test the order of operations and nothing else.
     const CROSS_CUT_LOGS = [
       {
         shape: "a key on the line before the cut",
@@ -553,8 +468,6 @@ describe("issueReport", () => {
     );
 
     it(`reads a log whole, up to the ceiling, rather than a window around the budget (${ISSUE_URL})`, async () => {
-      // Redaction pairs a value with a key that can be any distance ahead of
-      // it, so only a read that starts where the file does sees every pair.
       const readLog = jest.fn(runtime.readLog);
 
       await packedLog({ path: ACTIVITY_PATH }, TAILABLE_BUDGET_BYTES, { readLog });
@@ -563,8 +476,6 @@ describe("issueReport", () => {
     });
 
     it(`packs a log exactly at the redaction ceiling and leaves one byte over it out (${ISSUE_URL})`, async () => {
-      // Sizes are the runtime's word; the text is a stand-in, since the point
-      // is where the ceiling sits and not what 64 MiB of log redacts to.
       const sized = (totalBytes: number) => ({
         readLog: async () => ({ text: SECRET_LOG, totalBytes }),
       });
@@ -609,8 +520,6 @@ describe("issueReport", () => {
         note: "log is 97.7 KB, over the 1.0 KB left",
       },
       {
-        // Reports a size the budget accepts, then hands back one unbroken line
-        // of twice that: the only cut that fits leaves nothing under it.
         behaviour: "a log that outgrew the budget between being measured and being read",
         source: { path: ACTIVITY_PATH },
         budget: TAILABLE_BUDGET_BYTES,
@@ -620,8 +529,6 @@ describe("issueReport", () => {
         note: "newest entry alone is larger than the room left",
       },
       {
-        // Redaction is only as good as the text it sees, so a log too large to
-        // read whole is left out rather than redacted in part.
         behaviour: `a log over the size a report can redact whole (${ISSUE_URL})`,
         source: { path: ACTIVITY_PATH },
         budget: TAILABLE_BUDGET_BYTES,
@@ -629,9 +536,6 @@ describe("issueReport", () => {
         note: "log is 100.0 MB, over the 64.0 MB a report can redact",
       },
       {
-        // Eight bytes to spare before redaction, 4 KiB over after it, in room
-        // under the tail floor: a tail here would be too short to diagnose
-        // anything, the same as for a log that was over the budget to begin with.
         behaviour: `a log that fit whole before redaction and overflowed after it, when the room left is under the tail floor (${ISSUE_URL})`,
         source: { text: INFLATING_LINE.repeat(700) },
         budget: encode(INFLATING_LINE.repeat(700)).length + 8,
@@ -644,9 +548,6 @@ describe("issueReport", () => {
     });
 
     it(`names the redacted size in the floor note, since that is the size that did not fit (${ISSUE_URL})`, async () => {
-      // 83 bytes raw with 84 left reads as a log that fits; the 89 bytes it
-      // redacts to is what the budget turned down, and a note quoting the raw
-      // size would contradict the room it says the log is over.
       const rawBytes = encode(INFLATING_LINE).length;
       const redactedBytes = encode(redactLogText(INFLATING_LINE)).length;
 
@@ -719,8 +620,6 @@ describe("issueReport", () => {
     });
 
     it(`refuses a report.md that overruns the room set aside for it (${ISSUE_URL})`, async () => {
-      // The note is at its own cap, so enough failing sources push the
-      // attachment list past the headroom left for it.
       const logs = Array.from({ length: 20 }, (_unused, i) => ({
         id: `log${i}`,
         name: `log${i}.txt`,
@@ -746,8 +645,6 @@ describe("issueReport", () => {
 
       expect(message).toMatch(/attachment limit/);
       expect(message).toContain(ACTIVITY_NAME);
-      // A smaller optional source would send them after the wrong one, and
-      // `report.md` is advice they cannot take.
       expect(message).not.toContain("opencode.log");
       expect(message).not.toContain("report.md");
     });
@@ -768,8 +665,6 @@ describe("issueReport", () => {
     });
 
     it("truncates the body so the URL stays inside what a browser will open", () => {
-      // Windows caps what `openExternal` accepts, so a long description loses
-      // its tail rather than the whole link failing to open.
       const url = buildManualIssueUrl({ title: "long", body: "n".repeat(8000) });
 
       expect(url.length).toBeLessThanOrEqual(1800);
@@ -793,16 +688,12 @@ describe("issueReport", () => {
     });
 
     it("names the bundle by ID and never by a URL that would fetch it", () => {
-      // The issue is public: a link that pulled the bundle down would hand the
-      // reporter's screenshot and logs to everyone reading the thread.
       const url = buildLinkedReportIssueUrl({ title: "leaky", body: "see attached" }, REPORT_ID);
 
       expect(bodyOf(url)).not.toContain("http");
     });
 
     it("keeps the report ID when a long description has to be cut short", () => {
-      // The ID exists only in the upload response, so losing it to truncation
-      // would leave an uploaded bundle nobody can match to the issue.
       const url = buildLinkedReportIssueUrl({ title: "long", body: "x".repeat(50_000) }, REPORT_ID);
 
       expect(bodyOf(url)).toContain(REPORT_ID);
@@ -836,8 +727,6 @@ describe("issueReport", () => {
     });
 
     it("carries an attachment's note next to its name, marking the ones left out", () => {
-      // `report.md` is what a maintainer reads inside the zip: without the
-      // marks, a shortened log reads as whole and a missing one as forgotten.
       const md = buildReportMarkdown(baseInput, [
         included("activityLog", ACTIVITY_NAME, "truncated to the newest entries of 40.0 MB"),
         { id: "opencodeLog", name: "opencode.log", bytes: 0, included: false, note: "empty" },
@@ -857,7 +746,6 @@ describe("issueReport", () => {
     it.each([
       ["keeps the opening of an oversized note and says so", "A".repeat(MAX_NOTE_BYTES * 2), true],
       ["leaves a short description unmarked", "It hung.", false],
-      // Each character is 3 UTF-8 bytes, so a cut at the byte cap lands mid-character.
       ["cuts an oversized note on a character boundary", "行".repeat(MAX_NOTE_BYTES), true],
     ])("%s instead of failing or halving a character", (_case, note, truncated) => {
       const md = buildReportMarkdown({ ...baseInput, note }, []);

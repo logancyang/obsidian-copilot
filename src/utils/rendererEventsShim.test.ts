@@ -20,21 +20,16 @@ describe("installRendererEventsShim", () => {
   });
 
   it("is a no-op on mobile — never touches EventEmitter", () => {
-    // The whole point of the #125 fix: on mobile node:events is undefined, so
-    // the shim must not reference EventEmitter at all. Guard returns first.
     obsidian.Platform.isMobile = true;
     installRendererEventsShim();
     expect(EventEmitter.setMaxListeners).toBe(original);
   });
 
   it("has no load-time side effect — patching only happens when called", () => {
-    // Importing the module above must not have patched anything on its own.
     expect(EventEmitter.setMaxListeners).toBe(original);
   });
 
   it("evaluates without requiring node:events — safe in the mobile module graph", () => {
-    // On mobile the events module resolves to undefined, so any require at
-    // module-evaluation time would crash the whole plugin at load.
     const throwingIds = ["events", "node:events"];
     try {
       jest.isolateModules(() => {
@@ -53,8 +48,6 @@ describe("installRendererEventsShim", () => {
   it("on desktop, swallows setMaxListeners misuse with AbortSignal-shaped targets", () => {
     installRendererEventsShim();
     const signalLike = { aborted: false, dispatchEvent: () => true };
-    // Node's setMaxListeners rejects a non-EventTarget target; the shim drops
-    // that throw only for AbortSignal-shaped targets.
     expect(() => EventEmitter.setMaxListeners(5, signalLike as never)).not.toThrow();
   });
 

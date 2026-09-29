@@ -1,14 +1,5 @@
-/**
- * Tests for L2 promotion filtering in ContextManager.buildL2ContextFromPreviousTurns.
- *
- * Verifies that non-recoverable segments (selected_text, web_selected_text) are
- * excluded from L2 promotion to prevent stale context from previous turns
- * shadowing the current turn's fresh context.
- */
-
 import { PromptContextEnvelope, PromptLayerSegment } from "@/context/PromptContextTypes";
 
-// Minimal mocks to avoid deep dependency chains
 jest.mock("@/aiParams", () => ({
   getSelectedTextContexts: jest.fn().mockReturnValue([]),
 }));
@@ -60,9 +51,6 @@ type ContextManagerInternal = {
 const asInternal = (m: ContextManager): ContextManagerInternal =>
   m as unknown as ContextManagerInternal;
 
-/**
- * Build a minimal PromptContextEnvelope with L3_TURN segments.
- */
 function buildEnvelopeWithL3Segments(segments: PromptLayerSegment[]): PromptContextEnvelope {
   return {
     version: 1,
@@ -84,9 +72,6 @@ function buildEnvelopeWithL3Segments(segments: PromptLayerSegment[]): PromptCont
   };
 }
 
-/**
- * Create a mock MessageRepository that returns the given display messages.
- */
 function createMockMessageRepo(
   messages: Array<{ id: string; sender: string; contextEnvelope?: PromptContextEnvelope }>
 ): MessageRepository {
@@ -130,7 +115,7 @@ describe("ContextManager L2 promotion filtering", () => {
         sender: "user",
         contextEnvelope: buildEnvelopeWithL3Segments([noteSegment, selectedTextSegment]),
       },
-      { id: "msg-2", sender: "user" }, // current message (no envelope yet)
+      { id: "msg-2", sender: "user" },
     ]);
 
     const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
@@ -138,11 +123,9 @@ describe("ContextManager L2 promotion filtering", () => {
       mockRepo
     );
 
-    // note_context should be promoted to L2
     expect(l2Context).toContain("note_context");
     expect(l2Context).toContain("Note content");
 
-    // selected_text should NOT be promoted to L2
     expect(l2Context).not.toContain("selected_text");
     expect(l2Context).not.toContain("Old selected text");
   });
@@ -228,7 +211,6 @@ describe("ContextManager L2 promotion filtering", () => {
       mockRepo
     );
 
-    // prior_context is not in the registry, so it should pass through
     expect(l2Context).toContain("prior_context");
     expect(l2Context).toContain("Compacted summary");
   });
@@ -275,9 +257,6 @@ describe("ContextManager L2 promotion filtering", () => {
   });
 
   it("should filter non-recoverable blocks inside a compacted multi-block segment", () => {
-    // Simulates a compacted envelope where multiple XML blocks are concatenated
-    // into a single segment. Non-recoverable blocks (selected_text) should be
-    // stripped without dropping the recoverable blocks alongside them.
     const compactedSegment: PromptLayerSegment = {
       id: "compacted_context",
       content: [
@@ -310,9 +289,6 @@ describe("ContextManager L2 promotion filtering", () => {
   });
 
   it("should not leak non-recoverable blocks when they appear after recoverable blocks in a compacted segment", () => {
-    // Reverse order: recoverable block first, non-recoverable second.
-    // The old segment-level check would only inspect the first tag and let
-    // the non-recoverable block leak through.
     const compactedSegment: PromptLayerSegment = {
       id: "compacted_context",
       content: [
@@ -343,9 +319,6 @@ describe("ContextManager L2 promotion filtering", () => {
   });
 
   it("should not duplicate prior_context_note when compacted segment already contains one", () => {
-    // A compacted segment may already contain a prior_context_note from a
-    // previous compaction pass. The caller appends one at the end of L2,
-    // so compactSegmentForL2 must strip any embedded ones to avoid duplicates.
     const compactedSegment: PromptLayerSegment = {
       id: "compacted_context",
       content: [
@@ -371,17 +344,11 @@ describe("ContextManager L2 promotion filtering", () => {
     );
 
     expect(l2Context).toContain("Some compacted note");
-    // prior_context_note should appear exactly once (appended by the caller),
-    // not twice (once from the segment + once from the caller).
     const noteCount = (l2Context.match(/<prior_context_note>/g) || []).length;
     expect(noteCount).toBeLessThanOrEqual(1);
   });
 
   it("should not append re-fetch instruction when only prior_context_note exists without real prior_context blocks", () => {
-    // If L2 content contains <prior_context_note> but no actual
-    // <prior_context ...> blocks, the re-fetch instruction should NOT
-    // be appended. This guards against the old includes("<prior_context")
-    // check false-matching on <prior_context_note>.
     const noteSegment: PromptLayerSegment = {
       id: "notes/normal.md",
       content: `<note_context>\n<title>Normal</title>\n<path>notes/normal.md</path>\n<content>Regular note content</content>\n</note_context>`,
@@ -403,14 +370,11 @@ describe("ContextManager L2 promotion filtering", () => {
       mockRepo
     );
 
-    // No prior_context blocks exist, so no re-fetch instruction should be appended
     expect(l2Context).toContain("Regular note content");
     expect(l2Context).not.toContain("prior_context_note");
   });
 
   it("should preserve unknown tags when mixed with known tags in a compacted segment", () => {
-    // Regression test: the old "extract whitelist" approach would silently drop
-    // unregistered tags. The new "remove blacklist" approach must preserve them.
     const compactedSegment: PromptLayerSegment = {
       id: "compacted_context",
       content: [
@@ -436,15 +400,11 @@ describe("ContextManager L2 promotion filtering", () => {
     );
 
     expect(l2Context).toContain("Known block");
-    // Unknown tag must NOT be dropped
     expect(l2Context).toContain("future_block_type");
     expect(l2Context).toContain("Some future content that should survive");
   });
 
   it("should not false-positive on literal <prior_context> in user note content", () => {
-    // User note contains literal XML example text that looks like <prior_context>.
-    // The refetch instruction should NOT be appended because there are no real
-    // compactor-produced <prior_context source="..."> blocks.
     const noteSegment: PromptLayerSegment = {
       id: "notes/xml-docs.md",
       content: `<note_context>\n<title>XML Docs</title>\n<path>notes/xml-docs.md</path>\n<content>Example: <prior_context> is used for compaction</content>\n</note_context>`,
@@ -467,14 +427,10 @@ describe("ContextManager L2 promotion filtering", () => {
     );
 
     expect(l2Context).toContain("XML Docs");
-    // No real prior_context blocks, so no refetch instruction
     expect(l2Context).not.toContain("prior_context_note");
   });
 
   it("should not strip literal <selected_text> inside note content", () => {
-    // Regression test: if a user note contains literal <selected_text>...</selected_text>
-    // as documentation/example text, the single-pass approach must NOT strip it because
-    // it's nested inside a recoverable <note_context> block, not a top-level block.
     const noteSegment: PromptLayerSegment = {
       id: "notes/xml-guide.md",
       content: `<note_context>\n<title>XML Guide</title>\n<path>notes/xml-guide.md</path>\n<content>Use <selected_text>your selection here</selected_text> to pass context</content>\n</note_context>`,
@@ -497,13 +453,10 @@ describe("ContextManager L2 promotion filtering", () => {
     );
 
     expect(l2Context).toContain("XML Guide");
-    // The literal <selected_text> inside note content must survive
     expect(l2Context).toContain("your selection here");
   });
 
   it("should handle two blocks of the same tag independently", () => {
-    // Regression test: non-greedy regex with backreference must match each
-    // same-tag block independently, not span from first open to last close.
     const segment: PromptLayerSegment = {
       id: "compacted_context",
       content: [
@@ -528,14 +481,11 @@ describe("ContextManager L2 promotion filtering", () => {
       mockRepo
     );
 
-    // Both notes must be present (compacted or verbatim)
     expect(l2Context).toContain("Note A");
     expect(l2Context).toContain("Note B");
   });
 
   it("should append re-fetch instruction only when real prior_context blocks exist", () => {
-    // When a real <prior_context source="..."> block is present,
-    // the re-fetch instruction SHOULD be appended.
     const compactedSegment: PromptLayerSegment = {
       id: "compacted_context",
       content: `<prior_context source="note_context" type="compacted">\nCompacted note summary\n</prior_context>`,
@@ -558,7 +508,6 @@ describe("ContextManager L2 promotion filtering", () => {
     );
 
     expect(l2Context).toContain("Compacted note summary");
-    // Real prior_context block exists, so re-fetch instruction should be present
     expect(l2Context).toContain("prior_context_note");
   });
 });

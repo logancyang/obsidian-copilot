@@ -1,16 +1,6 @@
 import { logWarn } from "@/logger";
 import { App, Notice, TFolder } from "obsidian";
 
-/**
- * Reveal a vault-root-relative folder in Obsidian's built-in File Explorer.
- *
- * Surfaces a Notice instead of failing silently when the folder isn't in the
- * vault cache yet (e.g. it hasn't been created — Copilot creates its folders
- * lazily on first write) or the File Explorer core plugin is disabled.
- *
- * @param app - Active Obsidian app, threaded in rather than read from global.
- * @param relPath - Vault-root-relative folder path to reveal.
- */
 export function revealFolderInExplorer(app: App, relPath: string): void {
   const folder = app.vault.getAbstractFileByPath(relPath);
   if (!(folder instanceof TFolder)) {

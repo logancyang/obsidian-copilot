@@ -3,12 +3,6 @@ import { Platform } from "obsidian";
 import { resolveNodeToolBinDirs } from "@/utils/nodeToolBinDirs";
 import type { NodeToolBinDirsInput, NodeToolFs } from "@/utils/nodeToolBinDirs";
 
-/**
- * Fake fs: `dirs` are the directories that exist (`existsSync`), `files` maps
- * a readable file path to its contents (`readFileSync`), and `listings` maps a
- * directory to its `readdirSync` entries. Anything unlisted throws ENOENT,
- * mirroring real `fs`.
- */
 function makeFs(opts: {
   dirs?: Iterable<string>;
   files?: Record<string, string>;
@@ -103,7 +97,6 @@ describe("nodeToolBinDirs", () => {
             }),
           })
         );
-        // Default (v18) wins, then the rest sorted newest-first.
         expect(dirs).toEqual([v18, v22, v20]);
       });
 
@@ -114,7 +107,7 @@ describe("nodeToolBinDirs", () => {
           unixInput({
             fs: makeFs({
               dirs: [v20],
-              files: { "/home/me/.nvm/alias/default": "lts/argon" }, // not installed
+              files: { "/home/me/.nvm/alias/default": "lts/argon" },
               listings: { [versions]: ["v20.18.0"] },
             }),
           })
@@ -169,8 +162,6 @@ describe("nodeToolBinDirs", () => {
       });
 
       test("prefers an existing ~/.asdf data dir over an ASDF_DIR install path", () => {
-        // Homebrew-style: ASDF_DIR points at the install dir, shims stay under the
-        // default ~/.asdf data dir. The install dir has no shims/bin of its own.
         const shims = "/home/me/.asdf/shims";
         const dirs = resolveNodeToolBinDirs(
           unixInput({
@@ -263,8 +254,6 @@ describe("nodeToolBinDirs", () => {
 
   describe("module evaluation", () => {
     test("does not require Node built-ins at module evaluation time", () => {
-      // The module is imported by settings-UI helpers that mobile also
-      // evaluates; an eval-time require would crash the plugin at load there.
       const throwingIds = ["path", "node:path"];
       try {
         jest.isolateModules(() => {

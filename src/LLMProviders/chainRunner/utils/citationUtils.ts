@@ -1,10 +1,3 @@
-/**
- * Citation utilities for consistent citation behavior across the application.
- * Handles citation rules, content sanitization, and source formatting.
- */
-
-// ===== CITATION RULES =====
-
 const CITATION_RULES = `CITATION RULES:
 1. START with [^1] and increment sequentially ([^1], [^2], [^3], etc.) with NO gaps
 2. BE SELECTIVE: ONLY cite when introducing NEW factual claims, specific data, or direct quotes from sources
@@ -33,12 +26,6 @@ IMPORTANT: Each source definition must follow this exact pattern:
 - Example: [^1]: [Paul Graham Essay](https://paulgraham.com/wealth.html)
 - DO NOT write long descriptions - keep titles concise`;
 
-// ===== INSTRUCTION GENERATORS =====
-
-/**
- * Generates comprehensive guidance for local search results including citation rules,
- * image inclusion instructions, and source catalog.
- */
 export function getLocalSearchGuidance(
   sourceCatalog: string[],
   enableInlineCitations: boolean = true
@@ -68,35 +55,22 @@ ${sourceCatalog.join("\n")}
 </guidance>`;
 }
 
-/**
- * Short citation format reminder placed near the user query for better model compliance.
- * Reinforces key formatting from CITATION_RULES without duplicating the full ruleset.
- */
 export function getCitationFormatReminder(enableInlineCitations: boolean): string | null {
   if (!enableInlineCitations) return null;
   return "REMINDER: End your response with an '#### Sources' section listing each cited source as [^n]: [[Title]], numbered sequentially from [^1].";
 }
 
-// ===== CONSTANTS =====
-
 const MAX_FALLBACK_SOURCES = 20;
 
-// ===== CENTRALIZED CITATION CONTROL =====
-
-/**
- * Adds fallback sources to response if citations are missing.
- */
 export function addFallbackSources(
   response: string | null | undefined,
   sources: { title?: string; path?: string }[],
   enableInlineCitations: boolean = true
 ): string {
-  // If inline citations are disabled, don't add fallback sources
   if (!enableInlineCitations) {
     return response || "";
   }
 
-  // Input validation
   if (!sources?.length || !response) {
     return response || "";
   }
@@ -105,11 +79,10 @@ export function addFallbackSources(
     return response;
   }
 
-  // Add simple sources section as fallback
   const sourcesList = sources
     .slice(0, MAX_FALLBACK_SOURCES)
     .map((s, i) => {
-      const title = (s.title || s.path || "Untitled").replace(/^\[\[|\]\]$/g, ""); // Strip existing wiki link brackets
+      const title = (s.title || s.path || "Untitled").replace(/^\[\[|\]\]$/g, "");
       return `[^${i + 1}]: [[${title}]]`;
     })
     .join("\n");
@@ -117,42 +90,27 @@ export function addFallbackSources(
   return `${response}\n\n#### Sources:\n\n${sourcesList}`;
 }
 
-// ===== CONTENT PROCESSING =====
-
-/**
- * Sanitizes content to remove pre-existing citation markers to prevent number leakage.
- */
 export function sanitizeContentForCitations(text: string | null | undefined): string {
   if (!text) return "";
 
-  // Remove inline footnote refs like [^12]
   let out = text.replace(/\[\^\d+\]/g, "");
 
-  // Remove numeric citations like [1] or [1, 2] that are not markdown links or wiki links
   out = out.replace(/\[(\d+(?:\s*,\s*\d+)*)\](?!\()/g, "");
 
-  // Remove footnote definition lines like [^1]: something
   out = out.replace(/^\s*\[\^\d+\]:.*$/gm, "");
 
   return out;
 }
 
-/**
- * Detects if response already has sources section or footnote definitions.
- */
 export function hasExistingCitations(response: string | null | undefined): boolean {
   const content = response || "";
   const hasMarkdownHeading = /(^|\n)\s*#{1,6}\s*Sources\b/i.test(content);
   const hasPlainLabel = /(^|\n)\s*Sources\s*(?:[:-]\s*)?(\n|$)/i.test(content);
   const hasSummaryTag = /<summary[^>]*>\s*Sources\s*<\/summary>/i.test(content);
-  // More robust detection: look for ANY line starting with [^digits]:
   const hasFootnoteDefinitions = /(^|\n)\s*\[\^\d+\]:\s*/.test(content);
   return hasMarkdownHeading || hasPlainLabel || hasSummaryTag || hasFootnoteDefinitions;
 }
 
-/**
- * Provides web-search-specific citation instructions using markdown links.
- */
 export function getWebSearchCitationInstructions(enableInlineCitations: boolean = true): string {
   if (!enableInlineCitations) {
     return "";
@@ -161,23 +119,12 @@ export function getWebSearchCitationInstructions(enableInlineCitations: boolean 
   return `\n\n${WEB_CITATION_RULES}`;
 }
 
-// ===== CITATION PROCESSING UTILITIES =====
-// Deprecated: legacy citation parsing is awaiting removal; retained for existing callers.
-
 interface SourcesSection {
   mainContent: string;
   sourcesBlock: string;
 }
 
-/**
- * Extracts the sources section from content if present.
- * Tries multiple strategies in order:
- *   1. Explicit "Sources" heading (e.g. "#### Sources", "Sources:")
- *   2. Horizontal rule separator (---) followed by footnote definitions
- *   3. Trailing block of bare footnote definitions with no separator
- */
 export function extractSourcesSection(content: string): SourcesSection | null {
-  // Strategy 1: Explicit "Sources" heading (original behavior)
   const sourcesRegex = /([\s\S]*?)\n+(?:####\s*)?Sources\s*:?\s*\n+([\s\S]*)$/i;
   const match = content.match(sourcesRegex);
   if (match) {
@@ -187,9 +134,6 @@ export function extractSourcesSection(content: string): SourcesSection | null {
     };
   }
 
-  // Strategy 2: --- separator followed by footnote definitions only
-  // All non-empty lines after the separator must be footnote definitions to avoid
-  // treating a content-bearing --- divider as a sources boundary.
   const hrMatch = content.match(/([\s\S]*?)\n+---+\s*\n+([\s\S]*)$/);
   if (hrMatch) {
     const afterHr = (hrMatch[2] || "").trim();
@@ -204,7 +148,6 @@ export function extractSourcesSection(content: string): SourcesSection | null {
     }
   }
 
-  // Strategy 3: Trailing block of bare footnote definitions (no separator)
   const trailingMatch = content.match(/([\s\S]*?)\n{2,}(\[\^\d+\]:[\s\S]*)$/);
   if (trailingMatch) {
     const footnotesBlock = (trailingMatch[2] || "").trim();
@@ -222,23 +165,15 @@ export function extractSourcesSection(content: string): SourcesSection | null {
   return null;
 }
 
-/**
- * Normalizes sources block by adding line breaks if everything is on one line.
- */
 function normalizeSourcesBlock(sourcesBlock: string): string {
   if (!sourcesBlock.includes("\n")) {
-    // Ensure a break before every [n]
     sourcesBlock = sourcesBlock.replace(/\s*\[(\d+)\]\s*/g, "\n[$1] ");
-    // And before every n. pattern if present
     sourcesBlock = sourcesBlock.replace(/\s+(\d+)\.\s/g, "\n$1. ");
     sourcesBlock = sourcesBlock.trim();
   }
   return sourcesBlock;
 }
 
-/**
- * Parses footnote definitions from sources block.
- */
 function parseFootnoteDefinitions(sourcesBlock: string): string[] {
   return sourcesBlock
     .split("\n")
@@ -246,15 +181,11 @@ function parseFootnoteDefinitions(sourcesBlock: string): string[] {
     .filter((l) => /^\[\^\d+\]:/.test(l));
 }
 
-/**
- * Builds a citation renumbering map based on first-mention order in content.
- */
 function buildCitationMap(mainContent: string, footnoteLines: string[]): Map<number, number> {
   const map = new Map<number, number>();
   const seen = new Set<number>();
   const firstMention: number[] = [];
 
-  // Find first mention order in main content
   const refRe = /\[\^(\d+)\]/g;
   let mref: RegExpExecArray | null;
   while ((mref = refRe.exec(mainContent)) !== null) {
@@ -268,7 +199,6 @@ function buildCitationMap(mainContent: string, footnoteLines: string[]): Map<num
   if (firstMention.length > 0) {
     firstMention.forEach((n, i) => map.set(n, i + 1));
   } else {
-    // Fallback to definition order
     let idx = 1;
     for (const line of footnoteLines) {
       const m = line.match(/^\[\^(\d+)\]:/);
@@ -282,18 +212,12 @@ function buildCitationMap(mainContent: string, footnoteLines: string[]): Map<num
   return map;
 }
 
-/**
- * Normalizes citations in content using the provided mapping.
- */
 export function normalizeCitations(content: string, map: Map<number, number>): string {
-  // Already-footnote refs: [^n] -> [n] (remapped contiguously)
-  // Use global flag with multiple passes to handle consecutive citations like [^7][^8]
   let result = content;
   let changed;
   do {
     changed = false;
 
-    // Handle single citations: [^n] -> [n]
     result = result.replace(/\[\^(\d+)\]/g, (match, n: string) => {
       const oldN = parseInt(n, 10);
       const newN = map.get(oldN) ?? oldN;
@@ -304,18 +228,16 @@ export function normalizeCitations(content: string, map: Map<number, number>): s
       return replacement;
     });
 
-    // Handle multiple citations: [^n, ^m] -> [n, m]
     result = result.replace(/\[\^(\d+(?:\s*,\s*\^?\d+)*)\]/g, (match, citationList: string) => {
-      // Split and process each number in the list
       const processedNumbers = citationList
         .split(",")
         .map((part: string) => {
-          const cleanPart = part.trim().replace(/^\^/, ""); // Remove leading ^
+          const cleanPart = part.trim().replace(/^\^/, "");
           const oldN = parseInt(cleanPart, 10);
           const newN = map.get(oldN) ?? oldN;
           return newN;
         })
-        .sort((a: number, b: number) => a - b) // Sort numbers in ascending order
+        .sort((a: number, b: number) => a - b)
         .map((n: number) => n.toString())
         .join(", ");
 
@@ -327,15 +249,11 @@ export function normalizeCitations(content: string, map: Map<number, number>): s
     });
   } while (changed);
 
-  // Fix periods after citations that cause markdown list interpretation: [1]. -> [1]
   result = result.replace(/\[(\d+)\]\./g, "[$1]");
 
   return result;
 }
 
-/**
- * Converts footnote definitions to simple display items.
- */
 function convertFootnoteDefinitions(sourcesBlock: string, map: Map<number, number>): string[] {
   const items: string[] = [];
   sourcesBlock.split("\n").forEach((line) => {
@@ -348,21 +266,16 @@ function convertFootnoteDefinitions(sourcesBlock: string, map: Map<number, numbe
 
     let display: string;
     if (markdownLink) {
-      // Proper markdown link format: [Title](URL)
       display = `<a href="${markdownLink[2]}">${markdownLink[1]}</a>`;
     } else if (wl) {
-      // Wiki link format: [[Title]]
       display = `[[${wl[1]}]]`;
     } else {
-      // Handle malformed web citations like "Description text](URL)"
       const malformedLink = m[2].match(/^(.*?)\]\s*\(([^)]+)\)\s*$/);
       if (malformedLink) {
-        // Extract text and URL from malformed pattern
         const text = malformedLink[1].trim();
         const url = malformedLink[2].trim();
         display = `<a href="${url}">${text}</a>`;
       } else {
-        // Fallback: remove any trailing parenthetical content
         display = m[2].replace(/\s*\([^)]*\)\s*$/, "");
       }
     }
@@ -371,30 +284,25 @@ function convertFootnoteDefinitions(sourcesBlock: string, map: Map<number, numbe
   return items;
 }
 
-/**
- * Consolidates duplicate sources and returns mapping for citation updates.
- */
 function consolidateDuplicateSources(items: string[]): {
   uniqueItems: string[];
   consolidationMap: Map<number, number>;
 } {
   const uniqueItems: string[] = [];
   const seenTitles = new Set<string>();
-  const consolidationMap = new Map<number, number>(); // oldIndex -> newIndex
+  const consolidationMap = new Map<number, number>();
 
   items.forEach((item, originalIndex) => {
     if (!item) return;
 
-    // Extract title from wikilink format [[title]] or use the item as-is
     const titleMatch = item.match(/\[\[(.*?)\]\]/);
     const title = titleMatch ? titleMatch[1].toLowerCase() : item.toLowerCase();
 
     if (!seenTitles.has(title)) {
       seenTitles.add(title);
       uniqueItems.push(item);
-      consolidationMap.set(originalIndex + 1, uniqueItems.length); // 1-based indexing
+      consolidationMap.set(originalIndex + 1, uniqueItems.length);
     } else {
-      // Find the index of the first occurrence
       const firstOccurrenceIndex = uniqueItems.findIndex((existing) => {
         const existingTitleMatch = existing.match(/\[\[(.*?)\]\]/);
         const existingTitle = existingTitleMatch
@@ -403,7 +311,7 @@ function consolidateDuplicateSources(items: string[]): {
         return existingTitle === title;
       });
       if (firstOccurrenceIndex >= 0) {
-        consolidationMap.set(originalIndex + 1, firstOccurrenceIndex + 1); // 1-based indexing
+        consolidationMap.set(originalIndex + 1, firstOccurrenceIndex + 1);
       }
     }
   });
@@ -411,10 +319,6 @@ function consolidateDuplicateSources(items: string[]): {
   return { uniqueItems, consolidationMap };
 }
 
-/**
- * Updates citations in content to reflect consolidated numbering.
- * Deduplicates within each bracket group after remapping.
- */
 export function updateCitationsForConsolidation(
   content: string,
   consolidationMap: Map<number, number>
@@ -436,18 +340,11 @@ export function updateCitationsForConsolidation(
   });
 }
 
-/**
- * Collapses duplicate citation brackets that appear next to each other.
- * Handles truly adjacent brackets ([1][1]) and brackets separated by
- * connectors like " and " or ", " ([1] and [1]).
- * Only collapses when the second bracket is a subset of the first.
- */
 export function deduplicateAdjacentCitations(content: string): string {
   let result = content;
   let prev;
   do {
     prev = result;
-    // Match citation brackets separated by optional whitespace or connectors (" and ", ", ")
     result = result.replace(
       /\[(\d+(?:\s*,\s*\d+)*)\](?:\s*(?:and|,)\s*|\s*)\[(\d+(?:\s*,\s*\d+)*)\]/g,
       (match, first: string, second: string) => {
@@ -468,9 +365,6 @@ interface SourcesDisplayItem {
   html: string;
 }
 
-/**
- * Escapes HTML-sensitive characters to avoid unintended markup injection.
- */
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -480,16 +374,10 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/**
- * Type guard that filters out nullish values when mapping optional entries.
- */
 function isNonNull<T>(value: T | null | undefined): value is T {
   return value !== null && value !== undefined;
 }
 
-/**
- * Converts a normalized sources block into display-ready list items.
- */
 function parseSimpleSources(sourcesBlock: string): SourcesDisplayItem[] {
   const lines = sourcesBlock.split("\n");
   const items: SourcesDisplayItem[] = [];
@@ -528,9 +416,6 @@ function parseSimpleSources(sourcesBlock: string): SourcesDisplayItem[] {
   return items;
 }
 
-/**
- * Appends a styled, collapsible sources list to the main message content.
- */
 function buildSourcesDetails(mainContent: string, items: SourcesDisplayItem[]): string {
   const nonEmptyItems = items.filter((item) => item.html.trim().length > 0);
   if (nonEmptyItems.length === 0) {
@@ -551,11 +436,6 @@ function buildSourcesDetails(mainContent: string, items: SourcesDisplayItem[]): 
   );
 }
 
-/**
- * Wraps normalized citation references like [1] or [1, 2] in placeholder spans.
- * These spans provide visual feedback during streaming (styled as pending links)
- * and are replaced by linkInlineCitations with actual clickable anchors after streaming.
- */
 function wrapCitationPlaceholders(content: string): string {
   return content.replace(
     /\[(\d+(?:\s*,\s*\d+)*)\](?!\()/g,
@@ -563,15 +443,10 @@ function wrapCitationPlaceholders(content: string): string {
   );
 }
 
-/**
- * Main function to process inline citations in content.
- * Processes footnote-style citations and consolidates sources.
- */
 export function processInlineCitations(
   content: string,
   enableInlineCitations: boolean = true
 ): string {
-  // If inline citations are disabled, return content as-is
   if (!enableInlineCitations) {
     return content;
   }
@@ -582,28 +457,24 @@ export function processInlineCitations(
   let { mainContent, sourcesBlock } = sourcesSection;
   sourcesBlock = normalizeSourcesBlock(sourcesBlock);
 
-  // Process inline citations
   const footnoteLines = parseFootnoteDefinitions(sourcesBlock);
   if (footnoteLines.length === 0) {
     const simpleItems = parseSimpleSources(sourcesBlock);
     return buildSourcesDetails(mainContent, simpleItems);
   }
 
-  // Process footnote-style citations
   const citationMap = buildCitationMap(mainContent, footnoteLines);
   mainContent = normalizeCitations(mainContent, citationMap);
 
   let items = convertFootnoteDefinitions(sourcesBlock, citationMap);
   const { uniqueItems, consolidationMap } = consolidateDuplicateSources(items);
 
-  // Update citations to reflect consolidation and deduplicate
   if (consolidationMap.size > 0) {
     mainContent = updateCitationsForConsolidation(mainContent, consolidationMap);
     mainContent = deduplicateAdjacentCitations(mainContent);
     items = uniqueItems;
   }
 
-  // Wrap citation numbers in placeholder spans for visual feedback during streaming
   mainContent = wrapCitationPlaceholders(mainContent);
 
   const detailedItems = items
@@ -618,16 +489,11 @@ export function processInlineCitations(
   return buildSourcesDetails(mainContent, detailedItems);
 }
 
-// ===== SOURCE CATALOG UTILITIES =====
-
 export interface SourceCatalogEntry {
   title: string;
   path: string;
 }
 
-/**
- * Formats source catalog entries for citation guidance.
- */
 export function formatSourceCatalog(sources: SourceCatalogEntry[]): string[] {
   return sources.map((source) => {
     const title = source.title || source.path || "Untitled";

@@ -1,9 +1,3 @@
-/**
- * Tests for URL normalization utilities
- *
- * Verifies that web tab contexts are correctly normalized, merged, and deduplicated.
- */
-
 import {
   normalizeUrlString,
   normalizeUrlForMatching,

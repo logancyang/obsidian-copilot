@@ -6,13 +6,6 @@ import { getSettings } from "@/settings/model";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { App, requestUrl } from "obsidian";
 
-/**
- * Build a multipart/form-data body buffer from a FormData instance.
- * Returned as an ArrayBuffer suitable for passing to Obsidian's requestUrl.
- *
- * @param formData - FormData containing strings and/or File/Blob entries.
- * @returns The serialized multipart body and the Content-Type header (including boundary).
- */
 async function buildMultipartFromFormData(
   formData: FormData
 ): Promise<{ body: ArrayBuffer; contentType: string }> {
@@ -55,31 +48,13 @@ async function buildMultipartFromFormData(
   };
 }
 
-/**
- * A Brevilabs API answer, normalized. `status` is the HTTP status the server
- * replied with, or 0 when the request never produced one (transport failure).
- * It is carried separately from `error` because a server's error *wording* is
- * free to change while its status code is the contract — classifying on the
- * message text leaves a caller silently mis-reading responses the day the
- * server adds so much as a suffix.
- */
 interface BrevilabsApiResult<T> {
   data: T | null;
   error?: Error;
   status: number;
-  /**
-   * The API's own error body, present only when the server explained the
-   * failure itself. An infrastructure error page (a gateway or WAF 403, an HTML
-   * 502) carries none, which is what lets a caller tell "the API refused this
-   * request" from "the server is having a bad day".
-   */
   detail?: { reason?: string; error?: string };
 }
 
-/**
- * Normalize a requestUrl response into the shape used by Brevilabs API methods.
- * Handles the case where `response.json` is a raw string (non-JSON body, e.g. HTML error page).
- */
 function parseBrevilabsResponse<T>(
   response: { status: number; json: unknown },
   endpoint: string
@@ -105,8 +80,6 @@ function parseBrevilabsResponse<T>(
       status: response.status,
     };
   }
-  // Redact the signed entitlement JWS so it never lands in the shared
-  // copilot-log.md when a license response is logged.
   const loggable =
     data && typeof data === "object" && "entitlement" in data
       ? { ...(data as Record<string, unknown>), entitlement: "[redacted]" }
@@ -176,42 +149,20 @@ export interface Twitter4llmResponse {
   elapsed_time_ms: number;
 }
 
-/**
- * `GET /usage` — the account's plan-cap utilization, for the usage meter.
- *
- * A window appears only when the plan caps it, and none appear when the counters
- * cannot be read, so an absent window means "no meter" rather than "0% used".
- * `usedPercent` is 0-100 and may exceed 100 while an account is served past its cap
- * on purchased credit. `resetsAt` is epoch SECONDS.
- */
 export interface UsageResponse {
   used?: Record<string, { usedPercent?: number; resetsAt?: number } | null> | null;
   dashboard_url?: string;
 }
 
-/** One entry of the models host's public `GET /models` listing. */
 export interface BrevilabsModelEntry {
   id?: string;
   label?: string;
-  /** One-line capability blurb shown beside the model in every picker. */
   description?: string;
-  /** Input context window as a display string: `1M`, `256K`. */
   context_length?: string;
-  /** Whether the model accepts image input. */
   supports_images?: boolean;
-  /** Whether the model accepts tool calls. */
   supports_tools?: boolean;
-  /** Whether the model reasons at all. Orthogonal to `reasoning_efforts`: a
-   *  model can reason without exposing a level to choose between. */
   supports_reasoning?: boolean;
-  /** Whether a fresh sign-in should switch this model on. The rest of the
-   *  lineup is created available-but-off for the user to enable. */
   default_enabled?: boolean;
-  /**
-   * Thinking-effort levels this model distinguishes, ascending. Empty means the model
-   * honors none of them. Absent from services older than the field, which is why the
-   * caller must tell absent apart from empty.
-   */
   reasoning_efforts?: string[];
 }
 
@@ -222,11 +173,9 @@ export interface BrevilabsModelsResponse {
 export interface LicenseResponse {
   is_valid: boolean;
   plan: string;
-  /** Signed entitlement token (JWS). Absent when the server could not issue one. */
   entitlement?: string;
 }
 
-/** Why the plugin is revalidating a stored license. */
 export type LicenseCheckTrigger =
   | "startup"
   | "manual"
@@ -236,7 +185,6 @@ export type LicenseCheckTrigger =
   | "tool_call"
   | "model_gate";
 
-/** Product context attached to each license validation request. */
 export interface LicenseCheckContext {
   trigger: LicenseCheckTrigger;
   [key: string]: unknown;
@@ -284,7 +232,6 @@ export class BrevilabsClient {
 
     const url = new URL(`${BREVILABS_API_BASE_URL}${endpoint}`);
     if (method === "GET") {
-      // Add query parameters for GET requests
       Object.entries(body).forEach(([key, value]) => {
         url.searchParams.append(key, value as string);
       });
@@ -315,13 +262,11 @@ export class BrevilabsClient {
       this.checkLicenseKey();
     }
 
-    // Add user_id to FormData
     formData.append("user_id", getSettings().userId);
 
     const url = new URL(`${BREVILABS_API_BASE_URL}${endpoint}`);
 
     try {
-      // Build multipart body manually for requestUrl (does not natively support FormData).
       const { body, contentType } = await buildMultipartFromFormData(formData);
 
       const response = await requestUrl({
@@ -345,47 +290,27 @@ export class BrevilabsClient {
     }
   }
 
-  /**
-   * Validate the license key and update the entitlement flags (isPaidUser /
-   * isPlusUser). A verified signed entitlement determines strict feature access;
-   * otherwise a confirmed license remains paid while those features stay closed.
-   * @param context Required product context describing why the license key is being validated.
-   * @returns true if the license key is valid, false if the license key is invalid, and undefined if
-   * unknown error.
-   */
   async validateLicenseKey(
     app: App | undefined,
     context: LicenseCheckContext
   ): Promise<{ isValid: boolean | undefined; plan?: string }> {
-    // Identity this response will belong to. Validations can overlap (startup,
-    // a send-boundary re-check, the user pasting a different key), and every
-    // branch below mutates global entitlement state, so a response that outlives
-    // the key it was requested for must be discarded rather than applied.
     const requestedLicenseKey = getSettings().plusLicenseKey;
 
-    // Having no key is not a question for the server. It answers an empty key
-    // with the same 403 refusal it gives a wrong one, so asking would let a
-    // keyless check revoke a user who has simply not entered one yet: the
-    // per-turn and per-model gates below call this without the sign-out that
-    // `checkIsPaidUser` performs when it finds no key.
+    // The server answers an empty key with the same 403 as a wrong one, so a keyless check would revoke a user who has not entered a key yet.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/307
     if (!requestedLicenseKey) {
       return { isValid: false };
     }
 
-    // Build the request body with proper structure
     const requestBody: Record<string, unknown> = {
       license_key: requestedLicenseKey,
     };
 
-    // Safely spread context if provided, ensuring no conflicts with required fields
     if (context && typeof context === "object") {
-      // Filter out any undefined or null values from context
       const filteredContext = Object.fromEntries(
         Object.entries(context).filter(([_, value]) => value !== undefined && value !== null)
       );
 
-      // Remove any reserved fields that must not be overridden by context
       const reservedKeys = new Set(["license_key", "user_id"]);
       for (const key of reservedKeys) {
         if (key in filteredContext) {
@@ -393,7 +318,6 @@ export class BrevilabsClient {
         }
       }
 
-      // Spread the filtered context into the request body
       Object.assign(requestBody, filteredContext);
     }
 
@@ -405,35 +329,20 @@ export class BrevilabsClient {
       true
     );
 
-    // The key changed under us while this was in flight, so this answer is about
-    // a license the user no longer has. Applying it would let a slow response for
-    // an eligible key land after a downgraded key's, restoring revoked features
-    // (and the token that carries them) for the rest of that token's lifetime.
     if (getSettings().plusLicenseKey !== requestedLicenseKey) {
       return { isValid: undefined };
     }
 
     if (error) {
-      // Revoke only on the API's own refusal of this key: a 403 the server
-      // explained in its own error body. Its reason text names the key's prefix
-      // ("Invalid license key (prefix: abc...)"), so matching that verbatim let
-      // a refusal read as an unreachable server, and the fallback below then
-      // handed the refused key the previous key's still-live entitlement.
-      //
-      // A 403 carrying no such body is infrastructure rather than a verdict on
-      // the key. A gateway or WAF answering 403 would otherwise revoke every
-      // paying user who happened to check in during the outage.
+      // Revoke only on a 403 with an API error body; a bare 403 comes from a gateway or WAF and says nothing about the key.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/307
       if (status === 403 && detail) {
         turnOffPaid(app);
         return { isValid: false };
       }
-      // Anything else is unknown, not a refusal: leave the entitlement alone.
       return { isValid: undefined };
     }
     if (data?.entitlement) {
-      // An unverifiable token is not an authoritative negative, but it cannot
-      // grant strict features until its claims can be trusted.
       const verified = await applyEntitlement(data.entitlement);
       if (!verified) {
         markPaidPendingEntitlement();
@@ -460,17 +369,6 @@ export class BrevilabsClient {
     return data;
   }
 
-  /**
-   * Read the account's 5-hour and weekly cap utilization.
-   *
-   * Talks to the MODELS host, not the tools/license API the rest of this client uses.
-   * The caps are enforced by the model proxy on the request path, so their read side
-   * lives beside them; `api.brevilabs.com` has no such route and answers 404.
-   *
-   * Returns null instead of throwing: this feeds a meter, and a meter that cannot be
-   * drawn is not an error worth interrupting anyone over. The endpoint is read-only and
-   * consumes no quota, so it is safe to poll.
-   */
   async getUsage(): Promise<UsageResponse | null> {
     const licenseKey = getSettings().plusLicenseKey;
     if (!licenseKey) return null;
@@ -496,13 +394,6 @@ export class BrevilabsClient {
     }
   }
 
-  /**
-   * The models host's public catalog. Unauthenticated, and the only place the context
-   * window of a Copilot Plus model is published, so the usage meter can size its ring.
-   *
-   * Returns null rather than throwing, for the same reason as {@link getUsage}: this
-   * feeds a gauge, and a gauge that cannot be drawn is not an error worth raising.
-   */
   async getModels(): Promise<BrevilabsModelsResponse | null> {
     try {
       const response = await requestUrl({
@@ -535,7 +426,6 @@ export class BrevilabsClient {
   }
 
   async pdf4llm(binaryContent: ArrayBuffer): Promise<Pdf4llmResponse> {
-    // Convert ArrayBuffer to base64 string
     const base64Content = arrayBufferToBase64(binaryContent);
 
     const { data, error } = await this.makeRequest<Pdf4llmResponse>("/pdf4llm", {
@@ -552,21 +442,16 @@ export class BrevilabsClient {
   }
 
   async docs4llm(binaryContent: ArrayBuffer, fileType: string): Promise<Docs4llmResponse> {
-    // Create a FormData object
     const formData = new FormData();
 
-    // Convert ArrayBuffer to Blob with appropriate mime type
     const mimeType = this.getMimeTypeFromExtension(fileType);
     const blob = new Blob([binaryContent], { type: mimeType });
 
-    // Create a File object with a filename including the extension
     const fileName = `file.${fileType}`;
     const file = new File([blob], fileName, { type: mimeType });
 
-    // Append the file to FormData
     formData.append("files", file);
 
-    // Add file_type as a regular field
     formData.append("file_type", fileType);
 
     const { data, error } = await this.makeFormDataRequest<Docs4llmResponse>("/docs4llm", formData);
@@ -583,7 +468,6 @@ export class BrevilabsClient {
 
   private getMimeTypeFromExtension(extension: string): string {
     const mimeMap: Record<string, string> = {
-      // Documents
       pdf: "application/pdf",
       doc: "application/msword",
       docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -593,7 +477,6 @@ export class BrevilabsClient {
       txt: "text/plain",
       rtf: "application/rtf",
 
-      // Images
       jpg: "image/jpeg",
       jpeg: "image/jpeg",
       png: "image/png",
@@ -603,16 +486,13 @@ export class BrevilabsClient {
       tiff: "image/tiff",
       webp: "image/webp",
 
-      // Web
       html: "text/html",
       htm: "text/html",
 
-      // Spreadsheets
       xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       xls: "application/vnd.ms-excel",
       csv: "text/csv",
 
-      // Audio
       mp3: "audio/mpeg",
       mp4: "video/mp4",
       wav: "audio/wav",

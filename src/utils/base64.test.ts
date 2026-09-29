@@ -13,10 +13,6 @@ describe("base64 utils", () => {
     expect(arrayBufferToBase64(bytes.buffer as ArrayBuffer)).toBe("Q29waWxvdCDwn5qA");
   });
 
-  // Reason: regression guard for the 3.3.0 mobile bug. Mobile Obsidian's
-  // WebView runtime has no Node.js globals — bare `Buffer` is undefined.
-  // The helpers must import Buffer from the `buffer` npm polyfill (bundled
-  // by esbuild) and not rely on `globalThis.Buffer`. This test deletes the
   // global to make sure the imported binding is what's actually being used.
   it("works without relying on globalThis.Buffer (mobile WebView simulation)", () => {
     // eslint-disable-next-line obsidianmd/no-global-this -- jsdom test needs to mutate the actual global runtime, not a per-window scope

@@ -9,14 +9,9 @@ import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 
 export class LLMChainRunner extends BaseChainRunner {
-  /**
-   * Construct messages array using envelope-based context (L1-L5 layers)
-   * Requires context envelope - throws error if unavailable
-   */
   private async constructMessages(
     userMessage: ChatMessage
   ): Promise<{ role: string; content: string | unknown[] }[]> {
-    // Require envelope for LLM chain
     if (!userMessage.contextEnvelope) {
       throw new Error(
         "[LLMChainRunner] Context envelope is required but not available. Cannot proceed with LLM chain."
@@ -25,7 +20,6 @@ export class LLMChainRunner extends BaseChainRunner {
 
     logInfo("[LLMChainRunner] Using envelope-based context");
 
-    // Convert envelope to messages (L1 system + L2+L3+L5 user)
     const baseMessages = LayerToMessagesConverter.convert(userMessage.contextEnvelope, {
       includeSystemMessage: true,
       mergeUserContent: true,
@@ -34,22 +28,17 @@ export class LLMChainRunner extends BaseChainRunner {
 
     const messages: { role: string; content: string | unknown[] }[] = [];
 
-    // Add system message (L1)
     const systemMessage = baseMessages.find((m) => m.role === "system");
     if (systemMessage) {
       messages.push(systemMessage);
     }
 
-    // Add chat history (L4)
     const memory = this.chainManager.memoryManager.getMemory();
     await loadAndAddChatHistory(memory, messages);
 
-    // Add user message (L2+L3+L5 merged)
     const userMessageContent = baseMessages.find((m) => m.role === "user");
     if (userMessageContent) {
-      // Handle multimodal content if present
       if (userMessage.content && Array.isArray(userMessage.content)) {
-        // Merge envelope text with multimodal content (images)
         const updatedContent = userMessage.content.map((item: { type?: string }) => {
           if (item.type === "text") {
             return { ...item, text: userMessageContent.content };
@@ -79,25 +68,20 @@ export class LLMChainRunner extends BaseChainRunner {
       updateLoading?: (loading: boolean) => void;
     }
   ): Promise<string> {
-    // Check if the current model has reasoning capability
     let excludeThinking = false;
 
     const currentModel = this.chainManager.chatModelManager.getActiveModel();
     if (currentModel) {
-      // Exclude thinking blocks if model doesn't have REASONING capability
       excludeThinking = !currentModel.capabilities?.includes(ModelCapability.REASONING);
     } else {
-      // If we can't find the model, default to including thinking blocks
       logInfo("Could not determine model capabilities, defaulting to include thinking blocks");
     }
 
     const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, excludeThinking);
 
     try {
-      // Construct messages using envelope or legacy approach
       const messages = await this.constructMessages(userMessage);
 
-      // Record the payload for debugging (includes layered view if envelope available)
       const chatModel = this.chainManager.chatModelManager.getChatModel();
       const modelName = (chatModel as { modelName?: string } | undefined)?.modelName;
       recordPromptPayload({
@@ -108,15 +92,10 @@ export class LLMChainRunner extends BaseChainRunner {
 
       logInfo("Final Request to AI:\n", messages);
 
-      // Stream with abort signal
       const chatStream = await withSuppressedTokenWarnings(() =>
-        this.chainManager.chatModelManager.getChatModel().stream(
-          // ProviderMessage[] format matches what getChatModel().stream() accepts at runtime
-          messages as never,
-          {
-            signal: abortController.signal,
-          }
-        )
+        this.chainManager.chatModelManager.getChatModel().stream(messages as never, {
+          signal: abortController.signal,
+        })
       );
 
       for await (const chunk of chatStream) {
@@ -127,17 +106,14 @@ export class LLMChainRunner extends BaseChainRunner {
         streamer.processChunk(chunk as Parameters<typeof streamer.processChunk>[0]);
       }
     } catch (error: unknown) {
-      // Check if the error is due to abort signal
       const errorName = error instanceof Error ? error.name : "";
       if (errorName === "AbortError" || abortController.signal.aborted) {
         logInfo("Stream aborted by user", { reason: abortController.signal.reason });
-        // Don't show error message for user-initiated aborts
       } else {
         await this.handleError(error, (message) => streamer.processErrorChunk(message));
       }
     }
 
-    // Always return the response, even if partial
     const result = streamer.close();
 
     const responseMetadata = {
@@ -145,7 +121,6 @@ export class LLMChainRunner extends BaseChainRunner {
       tokenUsage: result.tokenUsage ?? undefined,
     };
 
-    // Only skip saving if it's a new chat (clearing everything)
     if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
       updateCurrentAiMessage("");
       return "";

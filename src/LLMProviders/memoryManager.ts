@@ -12,7 +12,6 @@ export default class MemoryManager {
   private constructor() {
     this.initMemory();
     subscribeToSettingsChange(() => {
-      // keep pre history
       const history = this.memory?.chatHistory;
       this.initMemory(history);
     });
@@ -54,16 +53,10 @@ export default class MemoryManager {
     return variables;
   }
 
-  /**
-   * Save a conversation turn to memory.
-   * The output (assistant response) is compacted to reduce memory bloat from
-   * accumulated tool results (localSearch, readNote, etc.).
-   */
   async saveContext(
     input: Record<string, unknown>,
     output: Record<string, unknown> | string
   ): Promise<void> {
-    // Compact the output to prevent memory bloat from tool results
     const compactedOutput =
       typeof output === "string"
         ? compactAssistantOutput(output)

@@ -3,7 +3,6 @@ import { createLangChainTool } from "@/tools/createLangChainTool";
 import { ToolRegistry } from "@/tools/ToolRegistry";
 import { z } from "zod";
 
-// Mock dependencies
 jest.mock("@/plusUtils", () => ({
   checkIsPaidUser: jest.fn(),
   isSelfHostModeValid: jest.fn().mockReturnValue(false),
@@ -30,7 +29,6 @@ describe("toolExecution", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Clear the registry before each test
     ToolRegistry.getInstance().clear();
   });
 
@@ -43,7 +41,6 @@ describe("toolExecution", () => {
         func: async ({ input }) => `Result: ${input}`,
       });
 
-      // Register tool without isPlusOnly
       ToolRegistry.getInstance().register({
         tool: testTool,
         metadata: {
@@ -77,7 +74,6 @@ describe("toolExecution", () => {
         func: async () => "Should not execute",
       });
 
-      // Register tool with isPlusOnly metadata
       ToolRegistry.getInstance().register({
         tool: plusTool,
         metadata: {
@@ -110,7 +106,6 @@ describe("toolExecution", () => {
         func: async () => "Plus tool executed",
       });
 
-      // Register tool with isPlusOnly metadata
       ToolRegistry.getInstance().register({
         tool: plusTool,
         metadata: {

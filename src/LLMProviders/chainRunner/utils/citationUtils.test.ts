@@ -104,7 +104,6 @@ More content
     });
 
     it("should detect bare footnote definitions (regression test for duplicate sources)", () => {
-      // This is the format that was causing duplicate sources sections
       const responseWithBareFootnotes =
         "Content here\n[^1]: [[How to Make Wealth]]\n[^2]: [[Superlinear Returns]]";
       expect(hasExistingCitations(responseWithBareFootnotes)).toBe(true);

@@ -1,8 +1,3 @@
-/**
- * Dynamic style manager for overlay positioning.
- * Manages inline styles on elements with automatic cleanup.
- */
-
 type StyleRecord = Record<string, string | number | undefined>;
 
 interface ElementState {
@@ -12,9 +7,6 @@ interface ElementState {
 
 const elementState = new WeakMap<HTMLElement, ElementState>();
 
-/**
- * Converts camelCase property names to kebab-case CSS properties.
- */
 function toKebabCase(property: string): string {
   if (property.startsWith("--")) return property;
   return property
@@ -23,10 +15,6 @@ function toKebabCase(property: string): string {
     .toLowerCase();
 }
 
-/**
- * CSS properties that should not have 'px' appended when given as numbers.
- * These are unitless properties in CSS.
- */
 const UNITLESS_CSS_PROPERTIES = new Set([
   "z-index",
   "zIndex",
@@ -49,10 +37,6 @@ const UNITLESS_CSS_PROPERTIES = new Set([
   "columnCount",
 ]);
 
-/**
- * Normalizes style values, converting numbers to pixel values for length properties.
- * Unitless CSS properties (z-index, opacity, flex, etc.) are not given 'px' suffix.
- */
 function normalizeStyles(styles: StyleRecord): Map<string, string> {
   const normalized = new Map<string, string>();
   for (const [property, value] of Object.entries(styles)) {
@@ -60,7 +44,6 @@ function normalizeStyles(styles: StyleRecord): Map<string, string> {
     const cssProperty = toKebabCase(property);
     let stringValue: string;
     if (typeof value === "number" && !property.startsWith("--")) {
-      // Check both camelCase and kebab-case versions for unitless properties
       const isUnitless =
         UNITLESS_CSS_PROPERTIES.has(property) || UNITLESS_CSS_PROPERTIES.has(cssProperty);
       stringValue = isUnitless ? String(value) : `${value}px`;
@@ -72,13 +55,9 @@ function normalizeStyles(styles: StyleRecord): Map<string, string> {
   return normalized;
 }
 
-/**
- * Removes classes with a specific prefix from an element.
- */
 function removePrefixedClasses(element: HTMLElement, prefix: string): void {
   if (!prefix) return;
   const prefixPattern = `${prefix}-`;
-  // P2 Fix: Convert to array first to avoid modifying classList while iterating
   const classesToRemove = Array.from(element.classList).filter((className) =>
     className.startsWith(prefixPattern)
   );
@@ -87,14 +66,6 @@ function removePrefixedClasses(element: HTMLElement, prefix: string): void {
   });
 }
 
-/**
- * Updates dynamic styles on an element, tracking which properties were set
- * for proper cleanup later.
- *
- * @param element - The element to style
- * @param prefix - A prefix for class-based cleanup
- * @param styles - Style properties to apply
- */
 export function updateDynamicStyleClass(
   element: HTMLElement,
   prefix: string,
@@ -105,7 +76,6 @@ export function updateDynamicStyleClass(
   const normalized = normalizeStyles(styles);
   const previousState = elementState.get(element);
 
-  // P2 Fix: When prefix changes, clean up the OLD prefix classes, not the new one
   if (previousState && previousState.prefix && previousState.prefix !== prefix) {
     removePrefixedClasses(element, previousState.prefix);
   }
@@ -114,7 +84,6 @@ export function updateDynamicStyleClass(
   const nextProperties = new Set<string>();
   const propsToApply: Record<string, string> = {};
 
-  // Clear properties that are no longer present (empty string ≡ removeProperty per CSSOM).
   previousProperties.forEach((property) => {
     if (!normalized.has(property)) {
       propsToApply[property] = "";
@@ -138,9 +107,6 @@ export function updateDynamicStyleClass(
   elementState.set(element, { properties: nextProperties, prefix });
 }
 
-/**
- * Clears all dynamic styles from an element.
- */
 export function clearDynamicStyleClass(element: HTMLElement): void {
   const state = elementState.get(element);
   if (!state) return;

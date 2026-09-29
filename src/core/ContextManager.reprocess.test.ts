@@ -1,5 +1,3 @@
-// This suite keeps the real envelope engine and selected-text formatter; the L2 and
-// parsing suites mock those collaborators to isolate their separate contracts.
 import { PromptContextEnvelope } from "@/context/PromptContextTypes";
 import { App, TFile, Vault } from "obsidian";
 import { ChainType } from "@/chainType";
