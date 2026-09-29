@@ -1,9 +1,5 @@
-/**
- * Deprecated: Vault QA and its local index are unsupported; cleanup awaits removal.
- *
- * Settings that existed only for the removed embedding and index runtime.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/283
- */
+// Settings that existed only for the removed embedding and index runtime:
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/283
 const LEGACY_INDEX_SETTING_FIELDS = [
   "enableSemanticSearchV3",
   "embeddingModelKey",
@@ -18,14 +14,6 @@ const LEGACY_INDEX_SETTING_FIELDS = [
   "azureOpenAIApiEmbeddingDeploymentName",
 ] as const;
 
-/**
- * Return a detached settings object without fields owned by the removed index.
- *
- * This runs on every load and save in addition to the versioned migration so a
- * settings sync from an older Copilot version cannot restore retired keys.
- *
- * @param settings - Settings record to clean without mutating its input.
- */
 export function stripLegacyIndexSettings<T extends object>(settings: T): T {
   const cleaned = { ...settings } as T & Record<string, unknown>;
   for (const field of LEGACY_INDEX_SETTING_FIELDS) {

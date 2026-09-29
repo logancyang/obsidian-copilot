@@ -140,13 +140,11 @@ describe("transformWireToCatalog", () => {
         name: "Google",
         npm: "@ai-sdk/google",
         models: {
-          // family is the base model family, not "embedding"
           "gemini-embedding-001": {
             id: "gemini-embedding-001",
             name: "Gemini Embedding",
             family: "gemini",
           },
-          // no family at all
           "nv-embed-v2": { id: "nv-embed-v2", name: "NV Embed v2" },
           "gemini-2.5-pro": { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", family: "gemini" },
         },

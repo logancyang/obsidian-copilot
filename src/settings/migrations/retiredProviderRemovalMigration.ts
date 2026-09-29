@@ -16,7 +16,6 @@ export function referencesRetiredProvider(
   return legacyProviders.some((provider) => modelKey.endsWith(`|${provider}`));
 }
 
-/** Plan the chat-model state shared by retired-provider migrations. */
 export function planRetiredProviderRemoval(
   settings: CopilotSettings,
   providerType: string,
@@ -54,7 +53,6 @@ export function planRetiredProviderRemoval(
   return providerIds.length > 0 || Object.keys(patch).length > 0 ? { providerIds, patch } : null;
 }
 
-/** Apply a retired-provider plan through the existing settings and provider-removal owners. */
 export async function executeRetiredProviderRemoval(
   api: ModelManagementApi,
   plan: RetiredProviderRemovalPlan | null,

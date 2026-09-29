@@ -29,8 +29,6 @@ jest.mock("@/settings/model", () => ({
   updateSetting: jest.fn(),
 }));
 
-// Mock the chat-backend options hook to avoid pulling the heavy @/modelManagement
-// dependency chain (ByokPanel -> ConfirmModal extends Modal) into the test.
 jest.mock("@/hooks/useChatBackendModelOptions", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useChatBackendModelOptions: () => ({ options: [], resolveSelectionId: () => undefined }),
@@ -46,17 +44,10 @@ const installStates: Record<string, { kind: string; [key: string]: unknown }> = 
 const managedInstallStates: Record<string, { kind: string; [key: string]: unknown }> = {};
 const runManagedInstall = jest.fn().mockResolvedValue(undefined);
 
-/** Binary path each backend reports as resolved; absent means "not installed". */
 let resolvedPaths: Record<string, string | null> = {};
 
-/** Outside any home directory, so the display form is the path verbatim. */
 const MANAGED_BINARY_PATH = "/opt/copilot/opencode/bin/opencode";
 
-/**
- * Stands in for the settings subscription the real descriptors use, so a test can
- * move a backend's install state the way a finished install does and see the
- * panel react instead of re-rendering it by hand.
- */
 const installStateListeners = new Set<() => void>();
 function publishInstallState() {
   for (const listener of installStateListeners) listener();
@@ -107,7 +98,6 @@ jest.mock("@/agentMode", () => ({
     descriptor: { selfHostable?: boolean },
     settings: { enableSelfHostMode?: boolean }
   ) => Boolean(settings.enableSelfHostMode) && !descriptor.selfHostable,
-  // The real badge, so "Ready" is the word the user actually sees.
   InstallBadge: jest.requireActual<typeof import("@/agentMode/backends/shared/installStatus")>(
     "@/agentMode/backends/shared/installStatus"
   ).InstallBadge,
@@ -268,9 +258,7 @@ describe("AgentSettings", () => {
     const list = screen.getByTestId("model-list-opencode");
     expect(picker).not.toBeNull();
     expect(list).not.toBeNull();
-    // DOCUMENT_POSITION_FOLLOWING means `list` comes after `picker` in the DOM.
     expect(picker.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // Other backends' panels are not mounted while their tab is unselected.
     expect(screen.queryByTestId("default-model-codex")).toBeNull();
   });
 
@@ -311,9 +299,7 @@ describe("AgentSettings", () => {
   it("shows a cloud-egress banner on a cloud backend under Self-Host Mode, not on a self-hostable one", () => {
     mockSettings.enableSelfHostMode = true;
     render(<AgentSettings />);
-    // OpenCode (self-hostable) is the default tab — no banner.
     expect(screen.queryByText("Cloud service.")).toBeNull();
-    // Claude runs in the cloud — the banner appears while Self-Host Mode is on.
     fireEvent.click(screen.getByRole("tab", { name: "Claude" }));
     expect(screen.getByText("Cloud service.")).toBeTruthy();
   });

@@ -1,12 +1,3 @@
-// Public surface of the model-management module. Host code must import
-// from this barrel — deep imports of `@/modelManagement/types/*` and
-// other internals are blocked by `no-restricted-imports` patterns in
-// eslint.config.mjs.
-
-// ---------------------------------------------------------------------------
-// Data-model types
-// ---------------------------------------------------------------------------
-
 export type { CatalogProvider, ModelInfo, ProviderType } from "./types/catalog";
 export type {
   AgentType,
@@ -24,10 +15,6 @@ export type {
   RefreshResult,
   VerificationResult,
 } from "./types/runtime";
-
-// ---------------------------------------------------------------------------
-// Services
-// ---------------------------------------------------------------------------
 
 export { CatalogDownloadService } from "./catalog/CatalogDownloadService";
 export type { CatalogDownloadDeps, CatalogRefreshResult } from "./catalog/CatalogDownloadService";
@@ -60,10 +47,6 @@ export {
   capabilitiesFromConfiguredInfo,
 } from "./chatModel/modelCapabilityFlags";
 
-// ---------------------------------------------------------------------------
-// Provider adapter contract
-// ---------------------------------------------------------------------------
-
 export {
   createDefaultAdapterRegistry,
   ProviderAdapterRegistry,
@@ -73,10 +56,6 @@ export type {
   AdapterVerifyContext,
   ProviderAdapter,
 } from "./providers/adapters/ProviderAdapter";
-
-// ---------------------------------------------------------------------------
-// Setup APIs (one per ProviderOrigin.kind)
-// ---------------------------------------------------------------------------
 
 export { ByokSetupApi, BYOK_DEFAULT_AUTO_ENROLL } from "./setup/ByokSetupApi";
 export type { AddModelsInput, ByokSetupResult, SetupProviderInput } from "./setup/ByokSetupApi";
@@ -96,19 +75,8 @@ export type { CopilotPlusModelsFetcher } from "./setup/copilotPlusSync";
 export { readCopilotPlusCatalog, parseContextLength } from "./setup/copilotPlusCatalog";
 export type { CopilotPlusCatalog } from "./setup/copilotPlusCatalog";
 
-// ---------------------------------------------------------------------------
-// Top-level factory + coordinator
-// ---------------------------------------------------------------------------
-
 export { createModelManagement, ModelManagementCoordinator } from "./createModelManagement";
 export type { CreateModelManagementInput, ModelManagementApi } from "./createModelManagement";
-
-// ---------------------------------------------------------------------------
-// Reactive atoms (Jotai)
-//
-// React: `useAtomValue(<atom>, { store: settingsStore })`
-// Non-React subscribers: `settingsStore.sub(<atom>, listener)`
-// ---------------------------------------------------------------------------
 
 export {
   agentProvidersAtom,
@@ -123,14 +91,6 @@ export {
   visibleByokProvidersAtom,
 } from "./state/atoms";
 
-// ---------------------------------------------------------------------------
-// React context for mutation access (reads use atoms directly)
-// ---------------------------------------------------------------------------
-
 export { ModelManagementProvider, useModelManagement } from "./ui/ModelManagementContext";
-
-// ---------------------------------------------------------------------------
-// Settings UI (BYOK tab)
-// ---------------------------------------------------------------------------
 
 export { ByokPanel } from "./ui/tabs/ByokPanel";

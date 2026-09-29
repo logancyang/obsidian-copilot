@@ -1,9 +1,3 @@
-/**
- * Version-gate tests for `runSettingsMigrations`. `@/settings/model` is mocked
- * (getSettings / setSettings) and a fake `ModelManagementApi` stands in, so the
- * gate logic is exercised in isolation from the real store and registries.
- */
-
 import type { CustomModel } from "@/aiParams";
 import { ChatModelProviders, DEFAULT_COPILOT_FOLDER, DEFAULT_SETTINGS } from "@/constants";
 import type { ModelManagementApi, ProviderType } from "@/modelManagement";
@@ -18,9 +12,6 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-// The v6 seed pulls in miyoUtils, which now imports the status store (owned by a
-// parallel PR-2 workstream; contract stub in this worktree). The seed itself
-// never calls it, so an empty mock is enough to keep this suite isolated.
 jest.mock("@/miyo/miyoStatusStore", () => ({ isMiyoAvailableForCapability: jest.fn() }));
 
 jest.mock("@/services/keychainService", () => ({
@@ -118,7 +109,6 @@ it("runs only the v5 backfill for a v4 vault (legacy BYOK migration does not re-
   await runSettingsMigrations(api);
 
   expect(setupProvider).not.toHaveBeenCalled();
-  // Backfill writes the flag, then the version bump lands.
   const providerWrite = mockSetSettings.mock.calls.find((call) => "providers" in call[0])?.[0] as
     | { providers: Record<string, { requiresApiKey?: boolean }> }
     | undefined;
@@ -182,7 +172,6 @@ it("v6: seeds plus for a v5 vault with neither Miyo nor self-host", async () => 
 
   await runSettingsMigrations(api);
 
-  // Only the v6 seed runs for a v5 vault (no BYOK/backfill).
   expect(setupProvider).not.toHaveBeenCalled();
   expect(mockSetSettings).toHaveBeenCalledWith({
     docProcessorBackend: "plus",
@@ -190,8 +179,6 @@ it("v6: seeds plus for a v5 vault with neither Miyo nor self-host", async () => 
 });
 
 it("v6: seeds miyo when Miyo and self-host mode are both on", async () => {
-  // Self-host mode being on (with Miyo enabled) is what makes the doc processor
-  // seed to miyo.
   mockGetSettings.mockReturnValue(
     settings({ settingsVersion: 5, enableMiyo: true, enableSelfHostMode: true })
   );
@@ -205,8 +192,6 @@ it("v6: seeds miyo when Miyo and self-host mode are both on", async () => {
 });
 
 it("v6: seeds plus for a mobile vault with Miyo enabled but self-host off", async () => {
-  // enableSelfHostMode is off here, so the doc processor seeds to plus regardless
-  // of the mobile Miyo state.
   (Platform as { isMobile: boolean }).isMobile = true;
   try {
     mockGetSettings.mockReturnValue(
@@ -230,8 +215,6 @@ it("v6: seeds plus for a mobile vault with Miyo enabled but self-host off", asyn
 });
 
 it("v7: seeds enableMiyoSearchSkill=true for an existing Miyo user", async () => {
-  // Existing Miyo user (persisted enableMiyo) must keep the search skill when the
-  // implicit auto-seed becomes an explicit toggle — no silent un-install.
   mockGetSettings.mockReturnValue(settings({ settingsVersion: 6, enableMiyo: true }));
   const { api } = makeApi();
 
@@ -253,9 +236,6 @@ it("v7: leaves the skill flag untouched when Miyo was never enabled", async () =
 });
 
 it("v7: keys off persisted enableMiyo, not the mobile-sensitive search backend", async () => {
-  // A mobile-first upgrade: getSearchBackend() would fold in Platform.isMobile
-  // and could resolve to non-miyo, but the migration must read the raw persisted
-  // intent so it can't write false and Sync it to desktop.
   (Platform as { isMobile: boolean }).isMobile = true;
   try {
     mockGetSettings.mockReturnValue(settings({ settingsVersion: 6, enableMiyo: true }));
@@ -271,8 +251,6 @@ it("v7: keys off persisted enableMiyo, not the mobile-sensitive search backend",
 
 describe("runSettingsMigrations()", () => {
   it("v8: seeds copilotFolder for a v7 vault", async () => {
-    // A v7 vault predates the configurable root and must be stamped with the
-    // historical default so the derived sub-folder accessors have a base.
     mockGetSettings.mockReturnValue(settings({ settingsVersion: 7 }));
     const { api } = makeApi();
 
@@ -327,10 +305,6 @@ describe("runSettingsMigrations()", () => {
   });
 
   it("v8: flags a pre-versioned install (version 0) as upgraded so WS-D can prompt", async () => {
-    // A pre-versioned install (settingsVersion absent → `fromVersion === 0`) is a
-    // real user whose data.json predates the version field, not a fresh install:
-    // fresh installs are stamped to the current version at bootstrap and never
-    // reach this migration. So a `0` here IS a legacy vault and must be flagged.
     mockGetSettings.mockReturnValue(settings({ settingsVersion: undefined }));
     const { api } = makeApi();
 
@@ -486,7 +460,6 @@ describe("runSettingsMigrations()", () => {
   });
 });
 
-/** A vault whose codex catalog was enrolled one row per (model × effort) pair. */
 function codexVaultAt(settingsVersion: number): CopilotSettings {
   return settings({
     settingsVersion,

@@ -1,7 +1,3 @@
-/**
- * Tests for `openaiCompatibleAdapter.verifyCredentials`.
- */
-
 import { openaiCompatibleAdapter } from "./openaiCompatibleAdapter";
 
 jest.mock("./verifyViaListModels", () => ({
@@ -123,8 +119,6 @@ describe("openaiCompatibleAdapter.verifyCredentials", () => {
   });
 
   it("maps a 401 from OpenRouter's /key to invalid_api_key", async () => {
-    // verifyViaListModels already maps 401/403 → invalid_api_key regardless of
-    // the path, so the /key probe inherits the right classification.
     mockVerify.mockResolvedValue({ ok: false, code: "invalid_api_key", checkedAt: 1 });
     const result = await openaiCompatibleAdapter.verifyCredentials({
       provider: provider({

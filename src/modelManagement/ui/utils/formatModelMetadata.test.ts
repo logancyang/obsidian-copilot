@@ -37,8 +37,6 @@ describe("formatReleaseDate", () => {
   });
 
   it("does not shift the month for first-of-month dates in any timezone", () => {
-    // Date-only strings parse as UTC midnight; formatting must stay in UTC
-    // so a negative-offset host doesn't render this as "Aug 25".
     expect(formatReleaseDate("2025-09-01")).toBe("Sep 25");
     expect(formatReleaseDate("2025-01-01")).toBe("Jan 25");
   });

@@ -18,11 +18,6 @@ const EMPTY_PREFERENCES: BuiltinPreferences = Object.freeze({});
 // in memory before deriving its write. https://github.com/logancyang/obsidian-copilot/issues/3022
 let preferenceWrites: Promise<void> = Promise.resolve();
 
-/**
- * Save built-in opt-outs before activating filesystem cleanup.
- * @param update - Derives the preference change from the latest committed choices.
- * @param saveData - Plugin writer that applies device-specific settings storage.
- */
 export async function saveBuiltinPreferences(
   update: BuiltinPreferencesUpdate,
   saveData: (data: CopilotSettings) => Promise<void>
@@ -31,13 +26,9 @@ export async function saveBuiltinPreferences(
     let preferences: BuiltinPreferences = EMPTY_PREFERENCES;
     await runPersistenceTransaction(async () => {
       const previous = getSettings();
-      // Persist and activate the same sparse overrides so restoring defaults clears the record.
-      // https://github.com/logancyang/obsidian-copilot/issues/3022
       const current = previous.agentMode.skills.builtinPreferences ?? EMPTY_PREFERENCES;
       const updated = update(current);
       preferences = sanitizeBuiltinPreferences(updated);
-      // Untouched validated preferences retain their identity so other skill rows stay idle.
-      // https://github.com/logancyang/obsidian-copilot/issues/3022
       for (const name of Object.keys(preferences)) {
         if (current[name] && updated[name] === current[name]) preferences[name] = current[name];
       }

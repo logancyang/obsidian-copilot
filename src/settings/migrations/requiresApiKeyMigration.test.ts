@@ -13,7 +13,6 @@ function provider(overrides: Partial<Provider> = {}): Provider {
   };
 }
 
-/** Backfilled `requiresApiKey` for a single flagless row, via the planner. */
 function backfilledFlag(overrides: Partial<Provider>): boolean | undefined {
   const next = planRequiresApiKeyBackfill({ p1: provider(overrides) });
   return next?.p1.requiresApiKey;
@@ -43,8 +42,6 @@ describe("planRequiresApiKeyBackfill", () => {
   });
 
   it("never overwrites an already-explicit flag", () => {
-    // A catalog-backed row the heuristic would call key-requiring stays keyless
-    // when explicitly flagged so.
     const next = planRequiresApiKeyBackfill({
       p1: provider({
         requiresApiKey: false,
@@ -66,6 +63,6 @@ describe("planRequiresApiKeyBackfill", () => {
       p2: flagged,
     });
     expect(next?.p1.requiresApiKey).toBe(true);
-    expect(next?.p2).toBe(flagged); // unchanged reference
+    expect(next?.p2).toBe(flagged);
   });
 });

@@ -5,7 +5,6 @@ import { Loader2 } from "lucide-react";
 import React from "react";
 
 export interface ProviderVerificationStatusProps {
-  /** Latest result for the current provider configuration; absent while checking. */
   result?: VerificationResult;
 }
 
@@ -38,8 +37,6 @@ export interface ProviderVerificationProgressProps {
 }
 
 export function ProviderVerificationProgress({ pending }: ProviderVerificationProgressProps) {
-  // https://github.com/logancyang/obsidian-copilot/issues/3147:
-  // Keep progress outside document flow so the provider list does not jump.
   if (pending === 0) return null;
   return (
     <div

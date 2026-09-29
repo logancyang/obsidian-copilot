@@ -57,8 +57,6 @@ jest.mock("@/modelManagement/state/atoms", () => {
   ]);
   return {
     byokProvidersAtom: byokProviders,
-    // The panel renders the visible (Self-Host-filtered) set; with the mode off
-    // it's identical to the raw list.
     visibleByokProvidersAtom: byokProviders,
     configuredModelsAtom: jotai.atom([
       {
@@ -78,8 +76,6 @@ jest.mock("@/settings/model", () => {
     useSettingsValue: () => ({ enableSelfHostMode: false }),
   };
 });
-// Stub the modals — exercised by their own tests. Keeps this test focused
-// on the panel's wiring and off the modals' heavy import chains.
 jest.mock("@/modelManagement/ui/dialogs/ConfigureProviderDialog", () => ({
   ConfigureProviderModal: jest.fn().mockImplementation(() => ({ open: mockConfigureOpen })),
 }));
@@ -98,7 +94,6 @@ function completeProviderSave(): void {
   jest.mocked(ConfigureProviderModal).mock.calls.at(-1)![1].onSaved!();
 }
 
-// Radix DropdownMenu portals resolve `activeDocument` at render time.
 beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
 });
@@ -116,7 +111,6 @@ describe("ByokPanel", () => {
       const providerCard = await screen.findByText("Anthropic");
       expect(providerCard).toBeTruthy();
 
-      // Expand the provider card to see models (default collapsed)
       fireEvent.click(providerCard);
       expect(await screen.findByText("Claude Sonnet 4.5")).toBeTruthy();
     });

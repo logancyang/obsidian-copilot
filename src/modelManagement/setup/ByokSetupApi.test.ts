@@ -1,10 +1,3 @@
-/**
- * Tests for `ByokSetupApi.setupProvider` + `addModels`.
- *
- * Real settings store + real registries. Keychain is mocked with the
- * same fake `app.secretStorage` shim used in `ProviderRegistry.test.ts`.
- */
-
 import { resetSettings, setSettings } from "@/settings/model";
 import { KeychainService } from "@/services/keychainService";
 
@@ -61,8 +54,6 @@ describe("ByokSetupApi.addModels", () => {
 
   beforeEach(() => {
     resetSettings();
-    // Reset intentionally preserves provider rows that own a keychain pointer,
-    // so clear them explicitly to get the blank slate these tests assume.
     setSettings({ providers: {}, configuredModels: [] });
     KeychainService.resetInstance();
     const app = makeFakeApp();
@@ -85,12 +76,11 @@ describe("ByokSetupApi.addModels", () => {
     const ids = await api.addModels({
       providerId,
       models: [
-        { id: "llama3.2", displayName: "llama3.2" }, // already configured
-        { id: "mistral", displayName: "mistral" }, // new
+        { id: "llama3.2", displayName: "llama3.2" },
+        { id: "mistral", displayName: "mistral" },
       ],
     });
 
-    // Existing model resolves to its original id; new model gets a fresh one.
     expect(ids[0]).toBe(existingId);
     expect(ids[1]).not.toBe(existingId);
     expect(models.listByProvider(providerId)).toHaveLength(2);
@@ -102,9 +92,6 @@ describe("ByokSetupApi.addModels", () => {
     }
   });
 
-  // `addModels` receives bare `ModelInfo` (id + displayName) from the
-  // hand-typed flow; without the id heuristic it would enroll embedding
-  // models into chat backends where they fail at inference.
   it("does not enroll embedding-named ids into chat-shaped backends", async () => {
     const { providerId } = await api.setupProvider({
       providerType: "openai-compatible",
@@ -133,8 +120,6 @@ describe("ByokSetupApi.setupProvider", () => {
 
   beforeEach(() => {
     resetSettings();
-    // Reset intentionally preserves provider rows that own a keychain pointer,
-    // so clear them explicitly to get the blank slate these tests assume.
     setSettings({ providers: {}, configuredModels: [] });
     KeychainService.resetInstance();
     const app = makeFakeApp();
@@ -213,7 +198,6 @@ describe("ByokSetupApi.setupProvider", () => {
       baseUrl: "http://localhost:11434/v1",
       models: [
         { id: "llama3.2", displayName: "llama3.2" },
-        // Explicitly tagged as embedding by the caller (catalog said so).
         { id: "nomic-embed-text", displayName: "nomic-embed-text", isEmbedding: true },
       ],
     });

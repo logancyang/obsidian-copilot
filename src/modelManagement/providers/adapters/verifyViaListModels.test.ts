@@ -1,11 +1,3 @@
-/**
- * Tests for the shared `verifyViaListModels` helper.
- *
- * Mocks `@/utils.safeFetchNoThrow` directly to drive each status
- * branch (200 / 401 / 403 / 429 / 500 / thrown error) plus the
- * timeout branch.
- */
-
 import { verifyViaListModels } from "./verifyViaListModels";
 
 jest.mock("@/utils", () => ({

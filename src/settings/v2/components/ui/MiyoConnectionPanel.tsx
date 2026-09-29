@@ -15,18 +15,11 @@ export interface MiyoConnectionPanelProps {
   enabled: boolean;
   status: CapabilityStatus;
   checking: boolean;
-  /**
-   * Whether a Miyo on this device can be reached at all. False on mobile, where
-   * service discovery has no equivalent, so Local can only ever fail to connect.
-   * Offering it there sends the user into a Connect that cannot succeed.
-   * https://github.com/Brevilabs/obsidian-copilot-private/issues/471
-   */
   localSupported?: boolean;
   error?: string;
   children: React.ReactNode;
 }
 
-/** Keeps both connection choices available before any server is running. */
 export function MiyoConnectionPanel({
   mode,
   address,
@@ -81,8 +74,6 @@ export function MiyoConnectionPanel({
                       {value === "local" ? "Local" : "Remote server"}
                     </span>
                   </span>
-                  {/* The badge belongs to the confirmed endpoint while another option is a draft.
-                      https://github.com/Brevilabs/obsidian-copilot-private/issues/466 */}
                   {activeMode === value && !unavailable && (
                     <Badge
                       role="status"

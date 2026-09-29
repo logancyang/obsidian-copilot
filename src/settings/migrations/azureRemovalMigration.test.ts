@@ -1,13 +1,3 @@
-/**
- * Unit tests for the Azure OpenAI removal migration.
- * https://github.com/logancyang/obsidian-copilot/issues/2932
- *
- * The chat sweep is shared with the Bedrock removal and is covered through that
- * migration's suite, so these focus on what Azure adds: the embedding selection,
- * which is the one slice whose absence would break a vault rather than degrade
- * it.
- */
-
 import { DEFAULT_SETTINGS } from "@/constants";
 import type {
   ConfiguredModel,
@@ -58,7 +48,6 @@ function makeApi() {
   return { api, removeProvider };
 }
 
-/** `providerType` is widened because the union no longer has an Azure member. */
 function provider(providerId: string, providerType: string, apiKeyKeychainId?: string): Provider {
   return {
     providerId,
@@ -114,8 +103,6 @@ describe("azureRemovalMigration", () => {
           configuredModels: [configuredModel("cm-az", "az"), configuredModel("cm-ant", "ant")],
         })
       );
-      // The row, its models, its enrollments and its key are the cascade's,
-      // so the plan names the row rather than traversing them again.
       expect(plan?.providerIds).toEqual(["az"]);
       expect(plan?.patch.providers).toBeUndefined();
       expect(plan?.patch.configuredModels).toBeUndefined();
@@ -136,8 +123,6 @@ describe("azureRemovalMigration", () => {
     });
 
     it("acts on an embedding selection even when no Azure provider row exists (https://github.com/logancyang/obsidian-copilot/issues/2932)", () => {
-      // A vault that only ever used the builtin Azure embedding row has no
-      // provider row to find, and the dangling key is what would throw.
       const plan = planAzureRemoval(
         settingsWith({ providers: {}, embeddingModelKey: "azure-openai|azure openai" })
       );

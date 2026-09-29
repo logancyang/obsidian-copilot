@@ -10,7 +10,6 @@ import { SelfHostWebSearchSettings } from "@/settings/v2/components/ui/SelfHostW
 import { ArrowUpRight, ShieldCheck } from "lucide-react";
 import React from "react";
 
-/** BYOK tab id in the settings tab strip (see SettingsMainV2 TAB_IDS). */
 const BYOK_TAB_ID = "byok";
 
 const SUPADATA_SIGNUP_URL = "https://supadata.ai/?ref=obcopilot";
@@ -21,25 +20,12 @@ const SEARCH_PROVIDER_KEY_FIELDS = {
   exa: "exaApiKey",
 } as const satisfies Record<SelfHostSearchProvider, keyof ReturnType<typeof useSettingsValue>>;
 
-/** Small "Sign up ↗" affordance appended to a provider key description. */
 const SignUpLink: React.FC<{ href: string }> = ({ href }) => (
   <a href={href} target="_blank" rel="noopener noreferrer" className="tw-text-accent">
     Sign up <ArrowUpRight className="tw-inline tw-size-3 tw-align-text-bottom" />
   </a>
 );
 
-/**
- * Self-Host tab. The Enable toggle writes the persisted `enableSelfHostMode`
- * flag — the user-preference half of the gate that the cross-tab gating (Agents
- * / BYOK model enumeration, the agent spawn boundary) reads. The entitlement
- * half comes from the signed token's `self_host` feature, which also disables
- * the toggle for plans that don't grant it.
- *
- * The sub-sections below (web-search providers/keys, self-hosted endpoint) are
- * editable while Self-Host Mode is on and disabled while it's off — the ancestor
- * wrapper only dims/blocks the mouse, so each control carries its own
- * `disabled={!selfHostOn}` to also block keyboard editing when the mode is off.
- */
 export const SelfHostSettings: React.FC = () => {
   const settings = useSettingsValue();
   const { setSelectedTab } = useTab();
@@ -69,11 +55,6 @@ export const SelfHostSettings: React.FC = () => {
           }
           checked={selfHostOn}
           onCheckedChange={(checked) => updateSetting("enableSelfHostMode", checked)}
-          // Only an entitlement that grants self-host may flip this on; the
-          // still-resolving `undefined` keeps it locked until the check settles.
-          // Turning it OFF is always allowed — the preference is the user's to
-          // withdraw, and gating that direction too would strand anyone whose
-          // token stopped verifying with self-host stuck on and unreachable.
           disabled={isEligible !== true && !selfHostOn}
         />
 
@@ -92,10 +73,6 @@ export const SelfHostSettings: React.FC = () => {
         </div>
       </SettingSection>
 
-      {/* Visual gate: dims the sub-sections while Self-Host Mode is off. Every
-          row is independently disabled, so this wrapper is presentation; the
-          cloud-egress marking of models/providers lives at the enumeration
-          chokepoints keyed off the same persisted flag. */}
       <div className={cn("tw-space-y-4", !selfHostOn && "tw-pointer-events-none tw-opacity-40")}>
         <SettingSection label="Web search providers">
           <SelfHostWebSearchSettings
@@ -136,9 +113,6 @@ export const SelfHostSettings: React.FC = () => {
               <span>Add local / self-hosted models as an OpenAI-compatible endpoint in BYOK.</span>
             }
           >
-            {/* Pure navigation, not a truth-source write. Still needs an explicit
-                disabled: the wrapper's pointer-events-none doesn't block keyboard
-                focus, so a gated nav button stays Tab-reachable without it. */}
             <Button
               variant="secondary"
               size="sm"

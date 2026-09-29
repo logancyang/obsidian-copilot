@@ -16,8 +16,6 @@ function provider(overrides: Partial<Provider> = {}): Provider {
 describe("providerRequiresApiKey", () => {
   describe("providerRequiresApiKey()", () => {
     it("returns the explicit flag — the only runtime criteria", () => {
-      // The flag wins regardless of identity: a hosted catalog provider marked
-      // keyless reads keyless; a self-hosted row marked key-requiring reads so.
       expect(
         providerRequiresApiKey(
           provider({
@@ -34,8 +32,6 @@ describe("providerRequiresApiKey", () => {
     });
 
     it("defaults a flagless row to key-requiring (defensive backstop)", () => {
-      // Post-migration every persisted row carries the flag; a stray undefined
-      // must never read as keyless or its models would be silently dropped.
       expect(providerRequiresApiKey(provider({ requiresApiKey: undefined }))).toBe(true);
     });
   });

@@ -2,7 +2,6 @@ import { DEFAULT_SETTINGS } from "@/constants";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
-// Persisted-settings surface: capture writes and feed a controllable snapshot.
 const updateSetting = jest.fn<void, unknown[]>();
 let currentSettings = { ...DEFAULT_SETTINGS };
 jest.mock("@/settings/model", () => ({
@@ -11,8 +10,6 @@ jest.mock("@/settings/model", () => ({
   useSettingsValue: () => currentSettings,
 }));
 
-// Entitlement surface. Eligible by default so the sub-section fields aren't
-// blocked by the toggle's own gating.
 let mockEligible: boolean | undefined = true;
 jest.mock("@/plusUtils", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook
@@ -161,9 +158,6 @@ describe("SelfHostSettings", () => {
   });
 
   it("lets an ineligible user turn self-host mode back off", () => {
-    // A token that stops verifying leaves the preference on (it is not an
-    // authoritative "not entitled"), so gating this direction too would strand
-    // the user with self-host stuck on and the toggle unreachable.
     mockEligible = false;
     setSettings({ enableSelfHostMode: true });
     render(<SelfHostSettings />);

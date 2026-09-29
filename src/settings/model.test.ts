@@ -365,8 +365,8 @@ describe("sanitizeEnvOverrides", () => {
         NUM: 42,
         NULLED: null,
         UNDEF: undefined,
-        TABS: "ok\twith\ttabs", // tab is a control char — drop
-        NEWLINE: "ok\nnewline", // drop
+        TABS: "ok\twith\ttabs",
+        NEWLINE: "ok\nnewline",
       })
     ).toEqual({ OK: "fine" });
   });
@@ -444,8 +444,6 @@ describe("sanitizeSettings - legacy self-host migration", () => {
 
     const sanitized = sanitizeSettings(legacy);
 
-    // Only the user preference carries over; entitlement comes from the signed
-    // token, so there is no local receipt for sanitize to seed.
     expect(sanitized.enableSelfHostMode).toBe(true);
   });
 });
@@ -809,7 +807,6 @@ describe("model", () => {
       expect(validateCopilotFolder("team/CON").ok).toBe(false);
       expect(validateCopilotFolder("con.md").ok).toBe(false);
       expect(validateCopilotFolder("Com1").ok).toBe(false);
-      // Names that merely CONTAIN a reserved word stay valid.
       expect(validateCopilotFolder("console").ok).toBe(true);
       expect(validateCopilotFolder("nul-notes").ok).toBe(true);
     });
@@ -821,8 +818,6 @@ describe("model", () => {
     });
 
     it("agrees with sanitizeSettings on the copilotFolder fallback contract", () => {
-      // sanitizeSettings must coerce every value validateCopilotFolder rejects to
-      // the default; a value it accepts must survive verbatim.
       for (const value of ["../escape", "/etc/passwd", "C:/x", "", "NUL", "copilot."]) {
         const out = sanitizeSettings({ ...DEFAULT_SETTINGS, copilotFolder: value });
         expect(out.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
@@ -898,8 +893,6 @@ describe("model", () => {
     ])(
       "replaces %s with an empty Copilot Plus lineup (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)",
       (_case, copilotPlusCatalog) => {
-        // Consumers dereference `model.id` straight out of this array, so a
-        // synced or hand-edited data.json must not be able to crash a picker.
         const out = sanitizeSettings({
           ...DEFAULT_SETTINGS,
           copilotPlusCatalog,
@@ -933,14 +926,10 @@ describe("model", () => {
 
       const after = settingsStore.get(settingsAtom);
       expect(after.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
-      // Legacy + historical + pre-reset active root all survive the reset.
       expect(new Set(after.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
     });
 
     it("preserves the cached Copilot Plus lineup, which a reset does not re-fetch (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
-      // Reset keeps the Plus provider and its configured models but does not
-      // trigger a re-sync, so clearing this cache would leave those still-usable
-      // models with no context window for the rest of the session.
       const catalog = {
         models: [{ id: "glm-5.2", displayName: "GLM-5.2", limits: { context: 262144 } }],
         defaultEnabledIds: ["glm-5.2"],
@@ -985,11 +974,6 @@ describe("model", () => {
     it.each([false, true])(
       "preserves a builtin model's credential routing, including enableCors=%s, while resetting its preferences (https://github.com/logancyang/obsidian-copilot-preview/issues/259)",
       (enableCors) => {
-        // Reason: the endpoint has to survive alongside the key. Resetting only
-        // baseUrl would leave a proxy credential pointed at the provider's
-        // default host, sending the user's key somewhere they never configured.
-        // `enableCors` is the one boolean in the bundle — `false` surviving is
-        // exactly what its dedicated `carriesConfiguration` branch exists for.
         const customGpt4: CustomModel = {
           ...BUILTIN_CHAT_MODELS[0],
           enabled: false,
@@ -1021,9 +1005,6 @@ describe("model", () => {
     );
 
     it("preserves every custom model, including rows that carry no key (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
-      // Reason: the keychain is the sole secret store, so an empty in-memory
-      // apiKey may just mean this session's keychain read failed. Dropping the
-      // row would strand the entry with no identity left to reattach it to.
       const withKey: CustomModel = {
         name: "my-llama",
         provider: "openai",
@@ -1069,9 +1050,6 @@ describe("model", () => {
     });
 
     it("preserves the top-level vendor config a retained key needs to reach its service (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
-      // Reason: these are not secrets, so the secret-key heuristic misses them,
-      // but a key without them is unusable — Azure composes its request URL
-      // from the instance/deployment/version trio.
       const vendorConfig = {
         openAIOrgId: "org-123",
         azureOpenAIApiInstanceName: "my-instance",
@@ -1086,10 +1064,6 @@ describe("model", () => {
     });
 
     it("drops the entitlement token, whose identity binding reset invalidates (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
-      // Reason: `verifyEntitlement` checks the token against `settings.userId`,
-      // and reset replaces that with a fresh uuid — a carried-over token could
-      // never verify again. `plusLicenseKey` is the credential worth keeping;
-      // the next license check re-issues the token from it.
       settingsStore.set(settingsAtom, {
         ...DEFAULT_SETTINGS,
         plusLicenseKey: "lic-12345",
@@ -1104,11 +1078,6 @@ describe("model", () => {
     });
 
     it("keeps a signed-in user's paid state so reset never reads as sign-out (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
-      // Reason: the settings subscriber treats an `isPaidUser` flip as
-      // sign-out and tears down the Plus provider, its models, and its
-      // keychain entry — destroying exactly what reset preserves. The strict
-      // `isPlusUser` flag still resets: its proof (the entitlement token) is
-      // dropped, and the next validation re-derives it.
       settingsStore.set(settingsAtom, {
         ...DEFAULT_SETTINGS,
         isPaidUser: true,
@@ -1122,9 +1091,6 @@ describe("model", () => {
 
       const after = settingsStore.get(settingsAtom);
       expect(after.isPaidUser).toBe(true);
-      // The expiry travels with the paid flag: it is tighten-only, and
-      // zeroing it would leave the license UI showing Active forever while
-      // offline.
       expect(after.entitlementExpiresAt).toBe(4_000_000_000_000);
       expect(after.plusLicenseKey).toBe("lic-12345");
       expect(after.isPlusUser).toBe(DEFAULT_SETTINGS.isPlusUser);
@@ -1132,9 +1098,6 @@ describe("model", () => {
     });
 
     it("drops a bundle value whose type its consumer cannot handle (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
-      // Reason: a hand-edited or cross-version `data.json` can hold a non-string
-      // where a string is expected. Carrying it through reset would move the
-      // failure to the consumer — the OpenAI client sends the org id as a header.
       settingsStore.set(settingsAtom, {
         ...DEFAULT_SETTINGS,
         openAIApiKey: "sk-openai",

@@ -1,11 +1,3 @@
-/**
- * Tests for `anthropicAdapter.verifyCredentials`.
- *
- * Mocks the shared `verifyViaListModels` helper so we can assert the
- * URL + headers without exercising the helper's status-mapping logic
- * (covered separately).
- */
-
 import { anthropicAdapter } from "./anthropicAdapter";
 
 jest.mock("./verifyViaListModels", () => ({

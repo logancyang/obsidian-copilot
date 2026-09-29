@@ -9,7 +9,6 @@ import {
 import type { ConfiguredModel, PersistedCopilotPlusCatalog, Provider } from "@/modelManagement";
 import { ModelCapability } from "@/constants";
 
-/** A cached Plus lineup, as the locked group would advertise it. */
 const PLUS_CATALOG: PersistedCopilotPlusCatalog = {
   models: [
     { id: "copilot-plus-flash", displayName: "Copilot Plus Flash", description: "The default." },
@@ -104,13 +103,11 @@ describe("partitionCandidates", () => {
   });
 
   it("opencode: drops BYOK/Plus providers the routability predicate rejects (dead-toggle guard)", () => {
-    // A BYOK provider with no catalog back-reference is
-    // unroutable by opencode; the predicate rejects it so it never renders.
     const unroutable: Provider = {
       providerId: "byok-google",
       providerType: "google",
       displayName: "Google",
-      origin: { kind: "byok" }, // no catalogProviderId → unroutable
+      origin: { kind: "byok" },
       addedAt: 0,
     };
     const withUnroutable = {
@@ -128,7 +125,6 @@ describe("partitionCandidates", () => {
       true,
       isRoutable
     );
-    // Only the routable BYOK provider survives; the catalog-less row is dropped.
     expect(byokPlusCandidates.map((c) => c.configuredModel.configuredModelId)).toEqual(["m-byok"]);
   });
 
@@ -203,7 +199,6 @@ describe("toRow", () => {
     const row = toRow(withName);
     expect(row.label).toBe("Claude Sonnet 4.5");
     expect(row.description).toBeUndefined();
-    // ...but the wire id is still carried for search (just not rendered).
     expect(row.wireId).toBe("claude-sonnet-4-5");
 
     const sameAsId: Candidate = {
@@ -253,7 +248,6 @@ describe("toRow", () => {
     });
     expect(visionRow.capabilities).toContain(ModelCapability.VISION);
 
-    // A model whose snapshot lacks image input carries no vision icon.
     const noVisionRow = toRow({
       configuredModel: {
         configuredModelId: "cm2",
@@ -269,8 +263,6 @@ describe("toRow", () => {
 
   it("leaves capabilities undefined for an unknown snapshot, defined for a known one", () => {
     const provider = agentProvider("claude", "claude", "Claude");
-    // No `modalities` at all — we don't know, so the row stays "unknown"
-    // (undefined). The picker renders nothing rather than asserting no vision.
     const unknownRow = toRow({
       configuredModel: {
         configuredModelId: "cm",
@@ -283,8 +275,6 @@ describe("toRow", () => {
     });
     expect(unknownRow.capabilities).toBeUndefined();
 
-    // A snapshot WITH modalities but no image input is "known to lack vision" —
-    // a defined array, so the picker renders the eye-off rather than nothing.
     const knownNoVisionRow = toRow({
       configuredModel: {
         configuredModelId: "cm2",
@@ -335,7 +325,7 @@ describe("rowMatches", () => {
       enabled: true,
     });
     expect(rowMatches(row, "claude-sonnet-4-5")).toBe(true);
-    expect(rowMatches(row, "sonnet")).toBe(true); // label still matches
+    expect(rowMatches(row, "sonnet")).toBe(true);
     expect(rowMatches(row, "gpt")).toBe(false);
   });
 });
@@ -415,9 +405,6 @@ describe("buildModelEnableGroups", () => {
   });
 
   it("synthesizes a locked Copilot group for opencode when no Copilot provider is registered", () => {
-    // Rows come from the cached lineup, so the advertisement follows what the
-    // service currently publishes.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
     const partition = {
       byokPlusCandidates: [
         {
@@ -431,8 +418,6 @@ describe("buildModelEnableGroups", () => {
 
     const groups = buildModelEnableGroups(partition, true, "", true, PLUS_CATALOG);
 
-    // Same position, badge, and tooltip a licensed user's group gets — only the
-    // rows differ, and only by being unusable.
     expect(groups[0].label).toBe("Copilot");
     expect(groups[0].badge).toBe("privacy");
     expect(groups[0].tooltip).toBe("Copilot license required");
@@ -461,10 +446,6 @@ describe("buildModelEnableGroups", () => {
     };
 
     const withRows = buildModelEnableGroups(partition, true, "", false);
-    // Registering the provider and reconciling its models are separate writes, so
-    // a licensed user can hold the provider with nothing under it. Inferring the
-    // lock from the groups built here told exactly that user a license was
-    // required, over eight toggles they had already paid for.
     const beforeRows = buildModelEnableGroups(
       { byokPlusCandidates: [], agentOriginCandidates: [] },
       true,
@@ -569,12 +550,10 @@ describe("buildModelEnableGroups", () => {
       ],
     };
     const groups = buildModelEnableGroups(partition, true, "", false);
-    // Copilot Plus is first regardless of candidate order.
     expect(groups[0].key).toBe("byok:plus-1");
     expect(groups[0].highlight).toBe(true);
     expect(groups[0].badge).toBe("privacy");
     expect(groups[0].tooltip).toBe("Copilot license required");
-    // Non-Plus groups are not highlighted.
     expect(groups.find((g) => g.key === "byok:byok-1")?.highlight).toBeUndefined();
   });
 

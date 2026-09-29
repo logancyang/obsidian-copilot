@@ -11,11 +11,7 @@ const ids = (models: readonly ModelInfo[]): string[] => models.map((m) => m.id);
 
 describe("orderCatalogModels", () => {
   it("floats checked models above unchecked, regardless of date", () => {
-    const models = [
-      model("a", "2025-01-01"), // unchecked, newest
-      model("b", "2024-01-01"), // checked, older
-      model("c", "2023-01-01"), // unchecked, oldest
-    ];
+    const models = [model("a", "2025-01-01"), model("b", "2024-01-01"), model("c", "2023-01-01")];
     const result = orderCatalogModels(models, new Set(["b"]));
     expect(ids(result)).toEqual(["b", "a", "c"]);
   });
@@ -38,7 +34,6 @@ describe("orderCatalogModels", () => {
   });
 
   it("floats custom ids above discovered within each selection group", () => {
-    // Unchecked group only — proves custom-first applies regardless of date.
     const models = [
       model("catalog-new", "2025-09-01"),
       model("catalog-old", "2024-01-01"),

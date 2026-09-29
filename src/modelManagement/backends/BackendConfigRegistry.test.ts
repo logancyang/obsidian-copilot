@@ -1,11 +1,3 @@
-/**
- * Tests for `BackendConfigRegistry`.
- *
- * Real settings store via `resetSettings`. The provider and configured-
- * model registries are constructed against the same store; no Obsidian
- * APIs are touched.
- */
-
 import { getSettings, resetSettings, updateSetting } from "@/settings/model";
 
 import { ConfiguredModelRegistry } from "@/modelManagement/models/ConfiguredModelRegistry";
@@ -64,7 +56,6 @@ describe("BackendConfigRegistry", () => {
     await registry.setEnabledModels(CHAT, ["m1", "m2"]);
     await registry.disableModel(CHAT, "m2");
     expect(registry.get(CHAT).enabledModels).toEqual(["m1"]);
-    // Idempotent.
     await registry.disableModel(CHAT, "m2");
     expect(registry.get(CHAT).enabledModels).toEqual(["m1"]);
   });
@@ -94,7 +85,6 @@ describe("BackendConfigRegistry", () => {
       await registry.enableModel(CHAT, "m1");
       expect(listener).toHaveBeenCalledTimes(1);
 
-      // Idempotent enable: no settings change, no emit.
       await registry.enableModel(CHAT, "m1");
       expect(listener).toHaveBeenCalledTimes(1);
 
@@ -104,14 +94,12 @@ describe("BackendConfigRegistry", () => {
       await registry.disableModel(CHAT, "m2");
       expect(listener).toHaveBeenCalledTimes(3);
 
-      // Idempotent disable on an absent id: no change, no emit.
       await registry.disableModel(CHAT, "m99");
       expect(listener).toHaveBeenCalledTimes(3);
 
       await registry.removeRefs(["m1"]);
       expect(listener).toHaveBeenCalledTimes(4);
 
-      // Empty / no-match removeRefs: no change, no emit.
       await registry.removeRefs([]);
       await registry.removeRefs(["missing-id"]);
       expect(listener).toHaveBeenCalledTimes(4);
@@ -164,10 +152,6 @@ describe("BackendConfigRegistry", () => {
   });
 
   describe("resolveEnabled() Self-Host Mode marking", () => {
-    /**
-     * Enroll a cloud BYOK, a self-hosted BYOK, and a broken ref on `backend`.
-     * Returns the two configured-model ids so callers can assert on order.
-     */
     async function seedMixedBackend(backend: BackendType): Promise<{
       cloudId: string;
       localId: string;
@@ -196,7 +180,6 @@ describe("BackendConfigRegistry", () => {
       return { cloudId, localId };
     }
 
-    /** Map each ok entry's id → its `needsSelfHostWarning` flag. */
     function warnings(resolved: readonly EnabledBackendEntry[]): Record<string, boolean> {
       const out: Record<string, boolean> = {};
       for (const e of resolved) {
@@ -217,15 +200,10 @@ describe("BackendConfigRegistry", () => {
       updateSetting("enableSelfHostMode", true);
 
       const resolved = registry.resolveEnabled(CHAT);
-      // Order preserved (nothing dropped); cloud flagged, self-hosted + broken not.
       expect(resolved.map((e) => e.configuredModelId)).toEqual([cloudId, localId, "missing-id"]);
       expect(warnings(resolved)).toEqual({ [cloudId]: true, [localId]: false });
     });
 
-    // #4 no-bypass INVERTED: Self-Host Mode is a presentation label, not a
-    // technical egress block. The opencode runtime injection reads
-    // resolveEnabled("opencode"), and a cloud provider now DOES reach the
-    // spawned config (still in order) — only flagged for the UI, not filtered.
     it("keeps cloud providers reachable for the opencode runtime injection", async () => {
       const { cloudId, localId } = await seedMixedBackend(OPENCODE);
       updateSetting("enableSelfHostMode", true);
@@ -241,7 +219,6 @@ describe("BackendConfigRegistry", () => {
       updateSetting("enableSelfHostMode", true);
       expect(warnings(registry.resolveEnabled(CHAT))[cloudId]).toBe(true);
 
-      // View-layer only: the persisted enabledModels was never rewritten.
       expect(registry.get(CHAT).enabledModels).toEqual([cloudId, localId, "missing-id"]);
 
       updateSetting("enableSelfHostMode", false);
@@ -257,7 +234,7 @@ describe("BackendConfigRegistry", () => {
       const a = registry.resolveEnabled(CHAT);
       const b = registry.resolveEnabled(CHAT);
       expect(a).toHaveLength(0);
-      expect(a).toBe(b); // Same frozen reference (referential stability).
+      expect(a).toBe(b);
     });
   });
 });

@@ -42,7 +42,6 @@ function settings(overrides: Partial<CopilotSettings>): CopilotSettings {
   };
 }
 
-/** The six rows codex-acp's cross-product produces for one base model. */
 const SOL_VARIANTS = ["low", "medium", "high", "xhigh", "max", "ultra"].map((effort) =>
   model(`cm-sol-${effort}`, `gpt-5.6-sol[${effort}]`, `GPT-5.6-Sol (${effort})`)
 );
@@ -91,8 +90,6 @@ describe("codexModelIdMigration", () => {
         })
       );
 
-      // Both pointed at the same base model, so they collapse to the one
-      // surviving row rather than leaving a duplicate entry behind.
       expect(plan?.enabledModels).toEqual(["cm-sol-low"]);
     });
 
@@ -133,8 +130,6 @@ describe("codexModelIdMigration", () => {
         })
       );
 
-      // Unresolvable ids are already inert downstream (`agentOriginEnabledModelEntries`
-      // skips them); rewriting the list is not this migration's job.
       expect(plan?.enabledModels).toEqual(["cm-sol-low", "cm-vanished"]);
     });
 

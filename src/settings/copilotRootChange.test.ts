@@ -9,10 +9,6 @@ import { getSettings, settingsAtom, settingsStore, type CopilotSettings } from "
 import type { App } from "obsidian";
 import * as obsidian from "obsidian";
 
-// Persistence transaction surface. The transaction runner executes its task
-// inline so the persist→activate ordering under test is preserved; the durable
-// write and suppression are captured so tests can assert order and simulate a
-// save failure.
 const persistSettingsWithinTransaction = jest.fn<Promise<void>, unknown[]>();
 const suppressNextPersistOnce = jest.fn<void, []>();
 jest.mock("@/services/settingsPersistence", () => ({
@@ -28,10 +24,8 @@ jest.mock("@/settings/copilotSaveData", () => ({
   getCopilotSaveData: () => saveData,
 }));
 
-/** Minimal App; the plugin lookup is mocked away via getCopilotSaveData. */
 const app = { vault: { configDir: ".vault-config" } } as unknown as App;
 
-/** Minimal App whose vault reports the given Markdown file paths. */
 function appWithMarkdown(paths: string[]): App {
   return {
     vault: { getMarkdownFiles: () => paths.map((path) => ({ path })) },
@@ -63,7 +57,6 @@ describe("copilotRootChange", () => {
 
     it("returns false when no Markdown file is at or under the target root", () => {
       const app = appWithMarkdown(["notes/a.md", "ai-adjacent/b.md"]);
-      // "ai-adjacent" must not match the "ai" prefix at a segment boundary.
       expect(copilotRootContainsNotes(app, "ai")).toBe(false);
     });
 
@@ -73,10 +66,6 @@ describe("copilotRootChange", () => {
     });
 
     it("catches a differently-cased folder where the filesystem is case-insensitive", () => {
-      // This scan has to agree with the exclusion matcher, which folds case on
-      // these platforms. Comparing exact-case would clear `Notes`, and the real
-      // `notes/` — the user's own notes — would then be excluded from search:
-      // exactly what the warning must disclose.
       const platform = obsidian.Platform as { isMacOS: boolean };
       const previous = platform.isMacOS;
       platform.isMacOS = true;
@@ -89,15 +78,12 @@ describe("copilotRootChange", () => {
     });
 
     it("treats a differently-cased folder as distinct where the filesystem is case-sensitive", () => {
-      // On Linux `Notes/` and `notes/` really are two folders, so the candidate
-      // holds no notes and must be accepted.
       const app = appWithMarkdown(["notes/private.md"]);
       expect(copilotRootContainsNotes(app, "Notes")).toBe(false);
     });
   });
 
   describe("findCopilotRootFileConflict()", () => {
-    /** Minimal App whose vault cache holds the given file/folder entries. */
     function appWithEntries(entries: Record<string, "file" | "folder">): App {
       return {
         vault: {
@@ -149,14 +135,11 @@ describe("copilotRootChange", () => {
 
       const after = getSettings();
       expect(after.copilotFolder).toBe("team-ai");
-      // Old + new + legacy roots all survive in the append-only history.
       expect(new Set(after.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
     });
 
     it("durably persists the new root before activating it in memory", async () => {
       seedSettings({ copilotFolder: "copilot", copilotRootHistory: ["copilot"] });
-      // Capture the in-memory root as seen at persist time to prove the durable
-      // write happens BEFORE the memory flip.
       let rootWhenPersisted: string | undefined;
       const persistedSnapshots: string[] = [];
       persistSettingsWithinTransaction.mockImplementation((next: unknown) => {
@@ -167,21 +150,16 @@ describe("copilotRootChange", () => {
 
       await applyCopilotRootChange(app, "ai");
 
-      expect(rootWhenPersisted).toBe("copilot"); // memory still old at persist time
-      expect(persistedSnapshots).toEqual(["ai"]); // durable snapshot carries the new root
-      expect(getSettings().copilotFolder).toBe("ai"); // memory flipped only after
+      expect(rootWhenPersisted).toBe("copilot");
+      expect(persistedSnapshots).toEqual(["ai"]);
+      expect(getSettings().copilotFolder).toBe("ai");
       expect(suppressNextPersistOnce).toHaveBeenCalledTimes(1);
     });
 
     it("preserves a concurrent settings edit in memory across the reconcile", async () => {
-      // Reproduces the two-window race: a non-root edit lands during the first
-      // persist (triggering reconcile), and another during the second persist.
-      // The functional activation update must keep both in memory rather than
-      // reverting them to the snapshot captured before they arrived.
       seedSettings({ copilotFolder: "copilot", copilotRootHistory: ["copilot"] });
       persistSettingsWithinTransaction
         .mockImplementationOnce(() => {
-          // Edit A during the first persist → makes `fresh` differ → reconcile.
           settingsStore.set(settingsAtom, {
             ...getSettings(),
             userSystemPromptsFolder: "edit-A",
@@ -189,7 +167,6 @@ describe("copilotRootChange", () => {
           return Promise.resolve();
         })
         .mockImplementationOnce(() => {
-          // Edit B during the second (reconcile) persist.
           settingsStore.set(settingsAtom, {
             ...getSettings(),
             defaultSaveFolder: "edit-B",
@@ -200,20 +177,15 @@ describe("copilotRootChange", () => {
       await applyCopilotRootChange(app, "ai");
 
       const after = getSettings();
-      expect(after.copilotFolder).toBe("ai"); // root change landed
-      expect(after.userSystemPromptsFolder).toBe("edit-A"); // first-window edit kept
-      expect(after.defaultSaveFolder).toBe("edit-B"); // second-window edit not clobbered
+      expect(after.copilotFolder).toBe("ai");
+      expect(after.userSystemPromptsFolder).toBe("edit-A");
+      expect(after.defaultSaveFolder).toBe("edit-B");
     });
 
     it("completes the root change even when the reconcile save fails", async () => {
-      // The first persist made the root durable — the user-visible operation
-      // succeeded. A failing reconcile (which only carries a concurrent edit to
-      // disk) must not fail the whole change; the edit stays in memory and
-      // lands with the next save.
       seedSettings({ copilotFolder: "copilot", copilotRootHistory: ["copilot"] });
       persistSettingsWithinTransaction
         .mockImplementationOnce(() => {
-          // Concurrent edit during the first persist → reconcile triggers.
           settingsStore.set(settingsAtom, {
             ...getSettings(),
             userSystemPromptsFolder: "edit-A",
@@ -224,8 +196,8 @@ describe("copilotRootChange", () => {
 
       await expect(applyCopilotRootChange(app, "ai")).resolves.toBeUndefined();
 
-      expect(getSettings().copilotFolder).toBe("ai"); // change completed
-      expect(getSettings().userSystemPromptsFolder).toBe("edit-A"); // edit kept in memory
+      expect(getSettings().copilotFolder).toBe("ai");
+      expect(getSettings().userSystemPromptsFolder).toBe("edit-A");
     });
 
     it("keeps the old root when the durable save fails", async () => {
@@ -234,8 +206,6 @@ describe("copilotRootChange", () => {
 
       await expect(applyCopilotRootChange(app, "ai")).rejects.toThrow("disk full");
 
-      // Save failed before activation, so the in-memory root is untouched and
-      // the session keeps writing under the protected old root.
       expect(getSettings().copilotFolder).toBe("copilot");
       expect(getSettings().copilotRootHistory).toEqual(["copilot"]);
       expect(suppressNextPersistOnce).not.toHaveBeenCalled();

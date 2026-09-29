@@ -16,11 +16,6 @@ const DISPLAY_NAME_TO_LEGACY_PROVIDER: Record<string, ChatModelProviders> = {
   siliconflow: ChatModelProviders.SILICONFLOW,
 };
 
-/**
- * Legacy selections used `wireModelId|ChatModelProviders`; keep them resolvable
- * during migration. A model may have been persisted under different provider
- * spellings depending on how it was selected, so enumerate every plausible form.
- */
 function getLegacyChatModelKeys(entry: ResolvedChatBackendEntry): readonly string[] {
   const providers = new Set<ChatModelProviders>([
     mapProviderTypeToChatModelProvider(entry.provider),
@@ -45,10 +40,6 @@ export function isChatModelSelectionForEntry(
   return entry.configuredModelId === selection || getLegacyChatModelKeys(entry).includes(selection);
 }
 
-/**
- * Resolve a persisted chat selection. New writes are configured-model IDs, while legacy
- * `name|provider` keys remain readable for settings, project files, and command frontmatter.
- */
 export function findChatBackendEntry(
   entries: readonly EnabledBackendEntry[],
   preferredSelection: string | undefined
@@ -64,7 +55,6 @@ export function findChatBackendEntry(
   );
 }
 
-/** Return the configured-model ID represented by either a new or legacy selection. */
 export function resolveChatModelSelectionId(
   entries: readonly EnabledBackendEntry[],
   selection: string | undefined

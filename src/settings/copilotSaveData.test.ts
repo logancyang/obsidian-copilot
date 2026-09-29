@@ -2,7 +2,6 @@ import { getCopilotSaveData } from "@/settings/copilotSaveData";
 import type { CopilotSettings } from "@/settings/model";
 import type { App } from "obsidian";
 
-/** Build an App whose plugin registry returns (or omits) a Copilot plugin. */
 function appWithPlugin(saveData?: (data: CopilotSettings) => Promise<void>): App {
   return {
     plugins: {

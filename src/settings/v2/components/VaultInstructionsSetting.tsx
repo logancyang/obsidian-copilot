@@ -9,9 +9,6 @@ export interface VaultInstructionsSettingProps {
   onOpen: () => void;
 }
 
-/**
- * Presents vault-wide agent instructions while leaving vault file operations to its host.
- */
 export const VaultInstructionsSetting: React.FC<VaultInstructionsSettingProps> = ({
   value,
   onChange,

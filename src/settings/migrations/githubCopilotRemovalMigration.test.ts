@@ -1,13 +1,3 @@
-/**
- * Unit tests for the GitHub Copilot removal migration.
- * https://github.com/logancyang/obsidian-copilot-preview/issues/316
- *
- * `planGitHubCopilotRemoval` is pure, so most coverage builds an in-the-wild
- * settings object and asserts the resulting patch. `executeGitHubCopilotRemoval`
- * is exercised against a mocked settings store and keychain so the side effects
- * are observable in isolation.
- */
-
 import type { CustomModel, ProjectConfig } from "@/aiParams";
 import { ChatModelProviders, DEFAULT_SETTINGS } from "@/constants";
 import { KeychainService } from "@/services/keychainService";

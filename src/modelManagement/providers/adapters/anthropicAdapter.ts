@@ -1,13 +1,3 @@
-/**
- * Anthropic adapter. Dispatch key: `ProviderType === "anthropic"`.
- *
- * Anthropic has no provider-level extras. `baseUrl` and `apiKey`
- * cover everything the SDK needs.
- *
- * `buildLangChainClient` is still a placeholder; `verifyCredentials`
- * is implemented via Anthropic's `/v1/models` endpoint.
- */
-
 import * as z from "zod";
 
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -45,10 +35,6 @@ export const anthropicAdapter: ProviderAdapter<Extras> = {
     return verifyViaListModels(`${base}/v1/models`, {
       "x-api-key": ctx.apiKey,
       "anthropic-version": ANTHROPIC_VERSION,
-      // Required when calling Anthropic from a browser-like runtime
-      // (Obsidian's Electron renderer / mobile WebView). `requestUrl`
-      // is not subject to CORS itself, but Anthropic still gates the
-      // request server-side without this header.
       "anthropic-dangerous-direct-browser-access": "true",
     });
   },

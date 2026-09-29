@@ -2,10 +2,6 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { DebuggingSupportSection } from "./DebuggingSupportSection";
 
-// The section owns no state — it takes seven props and wires them to controls.
-// What can break is the wiring itself: two switches sit next to three buttons,
-// and an action pointed at the wrong one is invisible in the gallery, which
-// renders the same states without ever pressing anything.
 function renderSection() {
   const props = {
     debug: false,
@@ -30,9 +26,6 @@ describe("DebuggingSupportSection", () => {
       ["Open", "onOpenFrameLog"],
       ["Clear", "onClearFrameLog"],
     ] as const)("hands the %s button's click to %s and to no other callback", (name, own) => {
-      // One click per test, every callback checked: pressing all three and
-      // counting one call each would still pass with Open and Clear pointed
-      // at each other's action.
       const props = renderSection();
 
       fireEvent.click(screen.getByRole("button", { name }));

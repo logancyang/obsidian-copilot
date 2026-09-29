@@ -1,18 +1,3 @@
-/**
- * Lists the model ids Google's Generative Language API exposes via
- * `/v1beta/models`.
- *
- * Auth is via `?key=...` query param (the SDK supports header-based
- * auth too but the query-param form is the documented public API).
- * Wire shape is `{ models: [{ name: "models/gemini-2.0-flash",
- * displayName, … }], nextPageToken? }`. We strip the `models/` prefix
- * so the returned ids match the wire form callers configure against
- * (`gemini-2.0-flash`, not `models/gemini-2.0-flash`).
- *
- * Pagination is ignored: the first page covers the current generation;
- * the catalog and manual-add input pick up anything missing.
- */
-
 import {
   fetchWithListModelsTimeout,
   parseModelListResponse,
@@ -34,8 +19,6 @@ export async function listGoogleModels(
   if (!trimmed) {
     return { ok: false, message: "Enter a base URL before fetching models." };
   }
-  // Tolerate users pasting a versioned base URL (`…/v1beta` or `…/v1`).
-  // We append `/v1beta` ourselves, so duplicating it would 404.
   const base = trimmed.replace(/\/$/, "").replace(/\/v1(beta)?$/, "");
 
   const query = opts.apiKey ? `?key=${encodeURIComponent(opts.apiKey)}` : "";

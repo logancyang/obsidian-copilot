@@ -1,17 +1,3 @@
-/**
- * Integration coverage for `resetSettings()` across the persistence cycle,
- * required by issue #259: credentials must stay reachable "through persistence
- * and a subsequent hydration cycle", not merely in the settings object reset
- * hands back.
- *
- * These cases live outside `model.test.ts` because of a test-lifecycle
- * constraint that file cannot meet: they drive the REAL `KeychainService`
- * (map-backed `app.secretStorage`) and the real persistence module, whose
- * module-level state (`lastPersistedSettings`, the write queue) must be reset
- * per case via `resetPersistenceState()`. `model.test.ts` observes only the
- * in-memory half of reset.
- */
-
 import type { App } from "obsidian";
 
 import { BUILTIN_CHAT_MODELS, DEFAULT_SETTINGS } from "@/constants";
@@ -32,12 +18,10 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-// Polyfill structuredClone for jsdom
 if (typeof window.structuredClone === "undefined") {
   window.structuredClone = <T>(val: T): T => JSON.parse(JSON.stringify(val)) as T;
 }
 
-/** These tests seed post-v4 settings, so the legacy backup never applies. */
 const noLegacyBackup = async () => ({ status: "not-needed" }) as const;
 
 const VAULT_ID = "a1b2c3d4";
@@ -59,7 +43,6 @@ function makeApp(): App {
         secrets.delete(id);
       },
     },
-    // No base path: the service takes the explicit `setVaultId` below.
     vault: { adapter: {} },
   } as unknown as App;
 }
@@ -103,8 +86,6 @@ describe("model", () => {
         baseUrl: "http://localhost:9999/v1",
         enabled: true,
       };
-      // Provider secrets are written by `ProviderRegistry.setApiKey`, outside
-      // the persist path — seed this device's entries directly.
       secrets.set(BYOK_POINTER, "sk-provider-key");
       secrets.set(PLUS_POINTER, "lic-12345");
 
@@ -138,8 +119,6 @@ describe("model", () => {
         ],
       });
 
-      // Baseline persist: the real service moves the seeded plaintext secrets
-      // into the keychain, as a running session would have before reset.
       await persistSettings(getSettings(), async () => {});
 
       resetSettings();
@@ -149,14 +128,11 @@ describe("model", () => {
         savedToDisk = structuredClone(data);
       });
 
-      // data.json never carries plaintext in keychain-only mode, and the
-      // keychain namespace plus the provider pointer survive the reset write.
       expect(savedToDisk?.openAIApiKey).toBe("");
       expect(savedToDisk?.activeModels.find((m) => m.name === "custom-gpt")?.apiKey).toBe("");
       expect(savedToDisk?._keychainVaultId).toBe(VAULT_ID);
       expect(savedToDisk?.providers.byok_openai?.apiKeyKeychainId).toBe(BYOK_POINTER);
 
-      // Fresh service instance = the next launch on this device.
       KeychainService.resetInstance();
       KeychainService.getInstance(app);
       const reloaded = await loadSettingsWithKeychain(
@@ -166,35 +142,26 @@ describe("model", () => {
         noLegacyBackup
       );
 
-      // Reload adopted the persisted namespace, not a re-derived one.
       expect(KeychainService.getInstance(app).getVaultId()).toBe(VAULT_ID);
 
-      // Top-level credential and its vendor routing survive; preferences reset.
       expect(reloaded.openAIApiKey).toBe("sk-top-level");
       expect(reloaded.openAIOrgId).toBe("org-123");
       expect(reloaded.autoAcceptEdits).toBe(DEFAULT_SETTINGS.autoAcceptEdits);
 
-      // Builtin row: key + endpoint kept, preferences back to defaults.
       const reloadedBuiltin = reloaded.activeModels.find((m) => m.name === builtin.name);
       expect(reloadedBuiltin?.apiKey).toBe("sk-builtin-override");
       expect(reloadedBuiltin?.baseUrl).toBe("https://proxy.example.test/v1");
       expect(reloadedBuiltin?.enabled).toBe(true);
       expect(reloadedBuiltin?.displayName).toBeUndefined();
 
-      // Custom row survives whole.
       const reloadedCustom = reloaded.activeModels.find((m) => m.name === "custom-gpt");
       expect(reloadedCustom?.apiKey).toBe("sk-model-key");
       expect(reloadedCustom?.baseUrl).toBe("http://localhost:9999/v1");
 
-      // BYOK provider row, its keychain entry, and its configured model stay
-      // reachable.
       expect(reloaded.providers.byok_openai?.apiKeyKeychainId).toBe(BYOK_POINTER);
       expect(secrets.get(BYOK_POINTER)).toBe("sk-provider-key");
       expect(reloaded.configuredModels.map((m) => m.configuredModelId)).toEqual(["cm-1"]);
 
-      // Signed-in Plus: paid state and the provider row survive so the
-      // settings subscriber never reads reset as sign-out; the entitlement
-      // token still resets (its identity binding is invalidated).
       expect(reloaded.isPaidUser).toBe(true);
       expect(reloaded.plusLicenseKey).toBe("lic-12345");
       expect(reloaded.providers.plus_1?.apiKeyKeychainId).toBe(PLUS_POINTER);

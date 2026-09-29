@@ -59,8 +59,6 @@ describe("mapProviderTypeToChatModelProvider", () => {
   });
 
   it("falls back to OPENAI_FORMAT for unknown / catalog-less openai-compatible providers", () => {
-    // Together / Fireworks / arbitrary proxies, and the Ollama / LM Studio
-    // built-in templates (no catalogProviderId, /v1 base URL) all route here.
     expect(
       mapProviderTypeToChatModelProvider(
         provider({ origin: { kind: "byok", catalogProviderId: "together" } })
@@ -141,7 +139,6 @@ describe("configuredModelToCustomModel", () => {
     });
 
     expect(openAiCompatible.maxTokens).toBeUndefined();
-    // Nothing published a ceiling, so the Anthropic client picks its own.
     expect(anthropicWithoutLimits.maxTokens).toBeUndefined();
   });
 

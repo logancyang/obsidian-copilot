@@ -1,15 +1,3 @@
-/**
- * Resolve the chat backend's selected model into a runnable `CustomModel`.
- *
- * Single entry point shared by every chat surface (main chat, project, vault
- * QA, quick command, quick ask) so they all apply the same selection + fallback
- * policy:
- *   - the passed `configuredModelId` if it's still enabled in `backends.chat`;
- *   - otherwise the first enabled chat model (stale/removed selection);
- *   - otherwise `{ ok: false, reason: "empty" }` — nothing enabled, UI prompts
- *     the user to enable a model under Settings → Basic → Agents → Quick Chat.
- */
-
 import { CustomModel } from "@/aiParams";
 import { logWarn } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";

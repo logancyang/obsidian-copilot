@@ -1,13 +1,3 @@
-/**
- * Tests for `CopilotPlusSetupApi` — the singleton Copilot Plus
- * provider/model enrollment + sign-out cascade.
- *
- * The injected deps are mocked as plain in-memory fakes (no real settings
- * store), mirroring `AgentSetupApi.test.ts`. They hold just enough state to
- * exercise create / idempotent-update / diff-reconcile / auto-enroll /
- * embedding-skip / sign-out-cascade.
- */
-
 import { CopilotPlusSetupApi } from "./CopilotPlusSetupApi";
 
 import type { ModelManagementCoordinator } from "@/modelManagement/createModelManagement";
@@ -22,10 +12,6 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
   logError: jest.fn(),
 }));
-
-// ---------------------------------------------------------------------------
-// In-memory fakes
-// ---------------------------------------------------------------------------
 
 let idCounter = 0;
 function nextId(prefix: string): string {
@@ -57,7 +43,6 @@ class FakeProviderRegistry {
   update = jest.fn(async (providerId: string, patch: Partial<Provider>) => {
     const existing = this.rows.get(providerId);
     if (!existing) throw new Error(`unknown providerId ${providerId}`);
-    // Mirror the real registry: providerType/origin/keychain id immutable.
     const safe = { ...patch };
     delete (safe as Record<string, unknown>).providerType;
     delete (safe as Record<string, unknown>).origin;
@@ -137,7 +122,6 @@ class FakeBackendConfigRegistry {
   }
 }
 
-/** Coordinator fake mirroring the real cascades (refs → rows). */
 class FakeCoordinator {
   constructor(
     private readonly providers: FakeProviderRegistry,
@@ -157,10 +141,6 @@ class FakeCoordinator {
     await this.providers.remove(providerId);
   });
 }
-
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
 
 const FLASH: ModelInfo = {
   id: "copilot-plus-flash",
@@ -214,10 +194,6 @@ beforeEach(() => {
   idCounter = 0;
 });
 
-// ---------------------------------------------------------------------------
-// registerPlusProvider
-// ---------------------------------------------------------------------------
-
 describe("CopilotPlusSetupApi.registerPlusProvider", () => {
   it("creates one copilot-plus provider, stores the key, and auto-enrolls the chat model into chat + opencode", async () => {
     const h = makeHarness();
@@ -269,13 +245,11 @@ describe("CopilotPlusSetupApi.registerPlusProvider", () => {
       autoEnrollModelIds: [FLASH.id],
     });
 
-    // Both models exist as ConfiguredModels...
     expect(result.configuredModelIds).toHaveLength(2);
     const flashId = h.models.getByWireId(result.providerId, FLASH.id)!.configuredModelId;
     const extraId = h.models.getByWireId(result.providerId, EXTRA.id)!.configuredModelId;
     expect(extraId).toBeDefined();
 
-    // ...but only the listed flash model is enrolled into the pickers.
     expect(h.backends.enabledFor("chat")).toEqual([flashId]);
     expect(h.backends.enabledFor("opencode")).toEqual([flashId]);
     expect(h.backends.enabledFor("chat")).not.toContain(extraId);
@@ -284,7 +258,6 @@ describe("CopilotPlusSetupApi.registerPlusProvider", () => {
 
   it("with autoEnrollModelIds, a newly-added model on re-sync stays off (existing curation preserved)", async () => {
     const h = makeHarness();
-    // First sync: only flash exists and is enrolled.
     const first = await h.api.registerPlusProvider({
       providerType: "openai-compatible",
       displayName: "Copilot Plus",
@@ -295,7 +268,6 @@ describe("CopilotPlusSetupApi.registerPlusProvider", () => {
     });
     const flashId = first.configuredModelIds[0];
 
-    // Second sync introduces EXTRA, still not in the default-enabled set.
     await h.api.registerPlusProvider({
       providerType: "openai-compatible",
       displayName: "Copilot Plus",
@@ -356,7 +328,6 @@ describe("CopilotPlusSetupApi.registerPlusProvider", () => {
     expect(h.providers.setApiKey).toHaveBeenLastCalledWith(first.providerId, "rotated-key");
 
     expect(second.configuredModelIds).toEqual(first.configuredModelIds);
-    // Unchanged model list → pure no-op reconcile.
     expect(h.models.add).not.toHaveBeenCalled();
     expect(h.backends.enableModel).not.toHaveBeenCalled();
     expect(h.coordinator.removeConfiguredModel).not.toHaveBeenCalled();
@@ -370,11 +341,10 @@ describe("CopilotPlusSetupApi.registerPlusProvider", () => {
       "copilot-plus-small"
     )!.configuredModelId;
 
-    await register(h, [FLASH]); // embedding vanished
+    await register(h, [FLASH]);
 
     expect(h.coordinator.removeConfiguredModel).toHaveBeenCalledWith(embeddingId);
     expect(h.models.getByWireId(first.providerId, "copilot-plus-small")).toBeUndefined();
-    // Surviving chat model still enrolled.
     const flashId = h.models.getByWireId(first.providerId, "copilot-plus-flash")!.configuredModelId;
     expect(h.backends.enabledFor("opencode")).toContain(flashId);
   });
@@ -393,12 +363,10 @@ describe("CopilotPlusSetupApi.registerPlusProvider", () => {
 
   it("refreshes drifted capability fields (reasoning/modalities/toolCall) in place", async () => {
     const h = makeHarness();
-    // Existing model registered WITHOUT reasoning/modalities (an older snapshot).
     const first = await register(h, [{ id: "glm-5.2", displayName: "GLM-5.2", toolCall: false }]);
     const idBefore = first.configuredModelIds[0];
     expect(h.models.getByWireId(first.providerId, "glm-5.2")!.info.reasoning).toBeUndefined();
 
-    // Re-register the same id with new capabilities — e.g. reasoning effort support.
     await register(h, [
       {
         id: "glm-5.2",
@@ -410,16 +378,12 @@ describe("CopilotPlusSetupApi.registerPlusProvider", () => {
     ]);
 
     const row = h.models.getByWireId(first.providerId, "glm-5.2")!;
-    expect(row.configuredModelId).toBe(idBefore); // no churn
+    expect(row.configuredModelId).toBe(idBefore);
     expect(row.info.reasoning).toBe(true);
     expect(row.info.toolCall).toBe(true);
     expect(row.info.modalities).toEqual({ input: ["text"], output: ["text"] });
   });
 });
-
-// ---------------------------------------------------------------------------
-// unregisterPlusProvider
-// ---------------------------------------------------------------------------
 
 describe("CopilotPlusSetupApi.unregisterPlusProvider", () => {
   it("cascade-removes the provider, its models, and backend refs", async () => {

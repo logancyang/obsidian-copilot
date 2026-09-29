@@ -1,13 +1,3 @@
-/**
- * Unit tests for the Amazon Bedrock removal migration.
- * https://github.com/logancyang/obsidian-copilot/issues/2928
- *
- * `planBedrockRemoval` is pure, so most coverage builds an in-the-wild settings
- * object and asserts the resulting plan. `executeBedrockRemoval` is exercised
- * against a mocked settings store, a stub coordinator and a stub keychain so
- * the side effects are observable in isolation.
- */
-
 import type { CustomModel, ProjectConfig } from "@/aiParams";
 import { ChatModelProviders, DEFAULT_SETTINGS } from "@/constants";
 import type {
@@ -59,8 +49,6 @@ function makeApi() {
   return { api, removeProvider };
 }
 
-/** A persisted provider row. `providerType` is widened because the union no
- *  longer has a `"bedrock"` member to name — which is the point of the test. */
 function provider(providerId: string, providerType: string, apiKeyKeychainId?: string): Provider {
   return {
     providerId,
@@ -109,8 +97,6 @@ function settingsWith(overrides: Partial<CopilotSettings> = {}): CopilotSettings
   return { ...DEFAULT_SETTINGS, ...overrides };
 }
 
-/** A vault that migrated a v3 Bedrock setup: one provider, one model, enrolled
- *  in chat and selected as the default. */
 function bedrockVault(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
   return settingsWith({
     providers: {

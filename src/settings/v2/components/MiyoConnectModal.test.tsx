@@ -2,15 +2,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { MiyoConnectContent } from "./MiyoConnectModal";
 
-// Mock miyoUtils to avoid pulling the miyoStatusStore/settings dependency chain
-// into this presentational test; only the deeplink constants are needed here.
 jest.mock("@/miyo/miyoUtils", () => ({
   MIYO_DEEPLINK_URL: "miyo://",
   MIYO_ADD_FOLDER_DEEPLINK_URL: "miyo://add-folder",
 }));
 
-// The module imports `App`/`Modal` from obsidian at load; stub them so the file
-// evaluates. We only exercise the presentational MiyoConnectContent.
 jest.mock("obsidian", () => ({
   App: class {},
   Modal: class {},
@@ -79,7 +75,6 @@ describe("MiyoConnectContent", () => {
 
     expect(screen.getByText("Register this vault with Miyo")).toBeTruthy();
     expect(screen.getByText("Register & connect")).toBeTruthy();
-    // One-click local flow has no Retry (nothing to re-probe on a direct POST).
     expect(screen.queryByText("Retry")).toBeNull();
   });
 
@@ -96,7 +91,6 @@ describe("MiyoConnectContent", () => {
       />
     );
 
-    // The primary button registers directly rather than opening Miyo.
     fireEvent.click(screen.getByText("Register & connect"));
     await waitFor(() => expect(onAddVault).toHaveBeenCalledTimes(1));
   });
@@ -131,20 +125,14 @@ describe("MiyoConnectContent", () => {
       />
     );
 
-    // No one-click button; the deeplink "Open Miyo" + Retry are shown instead.
     expect(screen.queryByText("Register & connect")).toBeNull();
     expect(screen.getByText("Retry")).toBeTruthy();
-    // The fallback must drop the user onto Miyo's add-folder flow, not the generic
-    // launch, so a remote/mobile user lands where they can register the vault.
     fireEvent.click(screen.getByText("Open Miyo"));
     expect(openSpy).toHaveBeenCalledWith("miyo://add-folder", "_blank");
     openSpy.mockRestore();
   });
 
   it("does not show the register-failed message when the folder registered but Miyo is unreachable", async () => {
-    // A POST that succeeds but can't be confirmed resolves "unreachable", not
-    // "error": the folder IS registered, so claiming "couldn't register" would
-    // contradict the server. The hosting modal routes this to the guide step.
     const onAddVault = jest.fn(async () => "unreachable" as const);
     render(
       <MiyoConnectContent

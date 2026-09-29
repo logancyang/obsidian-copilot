@@ -1,25 +1,3 @@
-/**
- * `ConfigureProviderModal` — credentials + model selection for a BYOK
- * provider. Two modes:
- *   - `new`:  the user just picked a provider definition in
- *             AddProviderModal (catalog-backed or built-in template;
- *             same shape either way). Nothing is persisted until Save.
- *   - `edit`: re-open an existing provider to change its name / key /
- *             base URL / model selection, or remove it.
- *
- * The model picker is uniform across both modes — `models.dev` is a
- * metadata enhancer, not a source of truth. The candidate-pool machine
- * lives in `useModelCandidatePool`; this file is the dialog shell:
- *   - `ConfigureProviderForm` resolves the persisted provider row from
- *     Jotai atoms and gates rendering until it hydrates (edit mode).
- *   - `ConfigureProviderBody` is the stateful body — credential fields,
- *     status flags, and the picker — routing mutations through
- *     `useModelManagement()`. It mounts only once `provider` is settled,
- *     so its `useState` initializers seed from real persisted values.
- *
- * Hosted in a native Obsidian `Modal`. `ConfigureProviderForm` is exported
- * for unit tests.
- */
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { Badge } from "@/components/ui/badge";
@@ -50,11 +28,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useModelCandidatePool } from "./useModelCandidatePool";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
-/**
- * Default API endpoints for SDK-native catalog providers that `models.dev`
- * omits an `api` field for. Used as the Base URL placeholder and effective
- * value when the form field is blank. Keyed by catalog provider id.
- */
 const KNOWN_DEFAULT_ENDPOINTS: Record<string, string> = {
   anthropic: "https://api.anthropic.com",
   openai: "https://api.openai.com/v1",
@@ -74,15 +47,6 @@ interface ConfigureProviderFormProps {
   onSaved?: () => void;
 }
 
-/**
- * Gate: resolve the persisted provider row AND its saved API key, and only
- * mount the stateful body once both have hydrated. Without this, the body's
- * `useState` initializers could read an empty `provider` / blank key during
- * the atom-load race and lock in values the user would then unwittingly Save.
- * Resolving the key here (rather than probing inside the body) lets edit mode
- * seed the key field with the real value — so a genuinely keyless provider is
- * visibly empty — without an empty→filled flash.
- */
 export const ConfigureProviderForm: React.FC<ConfigureProviderFormProps> = ({
   state,
   onClose,
@@ -108,15 +72,6 @@ export const ConfigureProviderForm: React.FC<ConfigureProviderFormProps> = ({
     [state, configuredModels]
   );
 
-  // Edit mode: read the stored key once so the body can seed its field with
-  // it. New mode resolves immediately with no key. A probe failure resolves
-  // to `null` (treated as keyless) rather than wedging the spinner.
-  //
-  // Two primitive states (not one object) so a re-run that resolves the same
-  // value bails out via React's `Object.is` short-circuit — the
-  // `useModelManagement()` hook returns a fresh object each render, so an
-  // object state here would re-render forever. Keyed on the primitive
-  // `providerId` so new mode never schedules a probe.
   const keyProviderId = state.mode === "edit" ? state.providerId : null;
   const [initialApiKey, setInitialApiKey] = useState<string | null>(null);
   const [keyResolved, setKeyResolved] = useState(keyProviderId === null);
@@ -162,11 +117,8 @@ interface ConfigureProviderBodyProps {
   state: ConfigureState;
   onClose: () => void;
   onSaved?: () => void;
-  /** Guaranteed defined in edit mode (the gate waits for it); undefined in new mode. */
   provider: Provider | undefined;
   existingModels: readonly ConfiguredModel[];
-  /** Edit mode: the stored API key, resolved by the gate. `null` for a
-   *  keyless provider (or a probe failure). Always `null` in new mode. */
   initialApiKey: string | null;
 }
 
@@ -191,10 +143,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
         ? provider.origin.catalogProviderId
         : undefined;
 
-  // Warm the catalog and re-render when it (re)populates, so a cold first open
-  // enriches rows the moment `models.dev` lands instead of capturing an empty
-  // snapshot forever (the memo below would otherwise never recompute). Mirrors
-  // the load/subscribe pattern in `ByokPanel`.
   const [catalogVersion, setCatalogVersion] = useState(0);
   useEffect(() => {
     let cancelled = false;
@@ -212,21 +160,15 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     };
   }, [api]);
 
-  // Catalog metadata for row enrichment only — never seeds the candidate
-  // pool. Live catalog wins; on miss (offline, legacy id) we fall back to
-  // an empty record and rows render id-only until metadata loads.
   const catalogMetadata = useMemo<Record<string, ModelInfo>>(() => {
     if (!catalogProviderId) return EMPTY_METADATA;
     return api.catalogService.getProvider(catalogProviderId)?.models ?? EMPTY_METADATA;
-    // `catalogVersion` re-runs this once the catalog lands.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogVersion intentionally invalidates metadata read through catalogService
   }, [catalogProviderId, api, catalogVersion]);
 
   const [displayName, setDisplayName] = useState(() =>
     state.mode === "new" ? state.source.displayName : (provider?.displayName ?? "")
   );
-  // Edit mode seeds with the resolved stored key (plaintext — it's what
-  // opencode injects; the field masks it via PasswordInput's reveal toggle).
   const [apiKey, setApiKey] = useState(() => initialApiKey ?? "");
   const [baseUrl, setBaseUrl] = useState(() =>
     state.mode === "edit" ? (provider?.baseUrl ?? "") : ""
@@ -242,9 +184,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   const [saving, setSaving] = useState(false);
   const [modelQuery, setModelQuery] = useState("");
 
-  // Whether this provider needs a key. New mode reads the picked definition;
-  // edit mode reads the explicit persisted flag — never inferred from the
-  // endpoint. Drives the Test guard, the save gate, and the inline hint.
   const requiresApiKey =
     state.mode === "new" ? state.source.requiresApiKey : providerRequiresApiKey(provider!);
 
@@ -270,10 +209,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     api,
   });
 
-  // Single verification path shared by Test and save-time auto-verify. In new
-  // mode the synthetic provider carries `catalogProviderId` so the adapter's
-  // per-provider verify path (e.g. OpenRouter's auth-gated `/key`) resolves —
-  // without it OpenRouter's public `/models` would 200 on a blank key.
   const runVerification = async (): Promise<VerificationResult> => {
     if (state.mode === "new") {
       const synthetic: Provider = {
@@ -306,8 +241,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
 
   const handleTest = async (): Promise<void> => {
     if (!providerType) return;
-    // A1: a required-key provider with an empty field cannot read as
-    // "Verified" — a public `/models` 200 would lie. Fail fast, no probe.
     if (requiresApiKey && apiKey.trim().length === 0) {
       setVerification({
         ok: false,
@@ -322,8 +255,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
       const result = await runVerification();
       setVerification(result);
       if (result.ok) {
-        // Successful auth — refetch the model list, since the previous
-        // mount-time fetch may have skipped or 401'd.
         await pool.fetchModels();
       }
     } catch (err) {
@@ -341,10 +272,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     if (state.mode !== "new" || !providerType) return;
     setSaving(true);
     try {
-      // B2: auto-verify a present key before persisting so an untested-but-
-      // invalid key is caught even if the user never clicked Test. Abort on a
-      // conclusive failure; proceed on `ok` or an inconclusive result (offline
-      // users aren't stranded). A keyless field skips the probe.
       if (apiKey.trim().length > 0) {
         const result = await runVerification();
         if (!result.ok && isConclusiveVerificationFailure(result.code)) {
@@ -363,8 +290,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
         extras: Object.keys(extras).length > 0 ? extras : undefined,
         models: pool.buildSelectedModelInfos(),
       });
-      // https://github.com/logancyang/obsidian-copilot/issues/3147:
-      // Health checks must wait until the key and endpoint are both saved.
       onSaved?.();
       onClose();
     } catch (err) {
@@ -379,8 +304,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     if (state.mode !== "edit" || !provider) return;
     setSaving(true);
     try {
-      // B2: re-verify only a *changed* key (unchanged keys skip the probe and
-      // the keychain re-write). Abort on a conclusive failure.
       const keyChanged = apiKey !== (initialApiKey ?? "");
       if (keyChanged && apiKey.trim().length > 0) {
         const result = await runVerification();
@@ -402,8 +325,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
         selectedInfos: pool.buildSelectedModelInfos(),
         api,
       });
-      // https://github.com/logancyang/obsidian-copilot/issues/3147:
-      // Health checks must wait until the key and endpoint are both saved.
       onSaved?.();
       onClose();
     } catch (err) {
@@ -414,9 +335,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     }
   };
 
-  // Stage the clear locally (like every other field); the keychain write is
-  // deferred to Save via saveProviderEdit. Empties the field so a required-key
-  // provider lands in the same un-saveable "no key" state as a fresh setup.
   const handleClearKey = (): void => {
     setApiKey("");
     setVerification(null);
@@ -446,12 +364,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   const headerName =
     state.mode === "new" ? state.source.displayName : (provider?.displayName ?? displayName);
 
-  // B2: a required-key provider with an empty field can't be saved.
   const missingRequiredKey = requiresApiKey && apiKey.trim().length === 0;
-  // B2: a conclusively-failed verification blocks Save. Inconclusive results
-  // (network / timeout / rate_limited / http_error) do NOT block — offline
-  // users can still save. A key edit resets `verification` to `null`, so an
-  // untested key falls through to the save-time auto-verify in the handlers.
   const verificationBlocksSave = isConclusiveVerificationFailure(verification?.code);
 
   // A non-catalog OpenAI-compatible provider has no native routing default, so
@@ -460,10 +373,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   const missingCustomBaseUrl =
     providerType === "openai-compatible" && !catalogProviderId && !effectiveBaseUrl;
 
-  // The candidate pool only fills with models the endpoint listed (which
-  // requires working credentials) or ones the user explicitly typed, so a
-  // non-empty selection already implies a usable setup. On top of that, gate
-  // on a routable endpoint and a present + non-conclusively-invalid key.
   const canSave =
     pool.selectedWireIds.size > 0 &&
     !missingCustomBaseUrl &&
@@ -606,9 +515,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   );
 };
 
-/** Verification codes that conclusively mean "don't save" — as opposed to
- *  inconclusive results (network / timeout / rate_limited / http_error) that
- *  shouldn't strand an offline user. */
 const CONCLUSIVE_VERIFICATION_FAILURE_CODES: readonly string[] = [
   "invalid_api_key",
   "missing_api_key",
@@ -622,9 +528,6 @@ function isConclusiveVerificationFailure(code: string | undefined): boolean {
 interface SaveEditArgs {
   providerId: string;
   apiKey: string;
-  /** The key the field was seeded with — used to detect a real change so an
-   *  unchanged key doesn't churn the keychain (which would emit and trigger a
-   *  spurious opencode restart). */
   initialApiKey: string | null;
   displayName: string;
   effectiveBaseUrl: string;
@@ -636,16 +539,6 @@ interface SaveEditArgs {
   api: ModelManagementApi;
 }
 
-/**
- * Persist edit-mode changes. Ordering matters: compute the deselect set
- * BEFORE bulkSet (which replaces the rows) so we still have the old
- * configuredModelIds in hand. Run bulkSet FIRST: if it throws, settings stay
- * consistent — `existingModels` unchanged, backends still reference live
- * rows. Removing backend refs before bulkSet would leak a window where
- * backends point at configured-model rows the user just deselected but
- * bulkSet hasn't dropped yet (and would emit a spurious opencode restart if
- * bulkSet then throws).
- */
 async function saveProviderEdit({
   providerId,
   apiKey,
@@ -659,10 +552,6 @@ async function saveProviderEdit({
   selectedInfos,
   api,
 }: SaveEditArgs): Promise<void> {
-  // Touch the keychain only when the key actually changed — re-writing an
-  // unchanged key would emit and trigger a spurious opencode restart. A key
-  // cleared to empty drops the keychain entry (only reachable for keyless
-  // providers, since a required-key provider with an empty field can't Save).
   if (apiKey !== (initialApiKey ?? "")) {
     if (apiKey.trim().length > 0) await api.providerRegistry.setApiKey(providerId, apiKey);
     else await api.providerRegistry.clearApiKey(providerId);
@@ -683,8 +572,6 @@ async function saveProviderEdit({
     await api.backendConfigRegistry.removeRefs(deselectedIds);
   }
 
-  // Auto-enroll only the truly new (and non-embedding) ids so we preserve
-  // the user's curated enrollments on previously-saved models.
   for (let i = 0; i < selectedInfos.length; i++) {
     if (prevWireIds.has(selectedInfos[i].id)) continue;
     if (selectedInfos[i].isEmbedding) continue;
@@ -700,7 +587,6 @@ interface ConfigureProviderModalOptions {
   onSaved?: () => void;
 }
 
-/** Hosts provider configuration and reports completed saves to the settings panel. */
 export class ConfigureProviderModal extends ReactModal {
   constructor(
     app: App,

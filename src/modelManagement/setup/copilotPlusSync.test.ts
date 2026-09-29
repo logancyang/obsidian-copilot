@@ -22,7 +22,6 @@ function makeApi() {
   return { api, registerPlusProvider, unregisterPlusProvider };
 }
 
-/** A two-model lineup in the shape the models endpoint really publishes. */
 function response(): BrevilabsModelsResponse {
   return {
     data: [
@@ -52,15 +51,12 @@ function response(): BrevilabsModelsResponse {
   };
 }
 
-/** Long enough for every backoff and deadline in a cold-start retry sequence. */
 const COLD_START_TOTAL_MS = 60_000;
 
-/** Put the settings store in the signed-in state the sync is called for. */
 function signedIn(licenseKey = "token"): void {
   setSettings({ isPaidUser: true, plusLicenseKey: licenseKey });
 }
 
-/** An endpoint read the test resolves by hand, to hold a sync at that read. */
 function deferredRead() {
   let resolve: (value: BrevilabsModelsResponse | null) => void = () => {};
   const read = new Promise<BrevilabsModelsResponse | null>((settle) => {
@@ -69,7 +65,6 @@ function deferredRead() {
   return { read: () => read, resolve };
 }
 
-/** Let the queued work run so a sync reaches its pending endpoint read. */
 function flush(): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, 0));
 }
@@ -77,10 +72,6 @@ function flush(): Promise<void> {
 describe("copilotPlusSync", () => {
   beforeEach(() => {
     resetSettings();
-    // `resetSettings` deliberately preserves the Plus state and this cache in
-    // production, so a clean slate has to ask for one. Cancellation is read
-    // from the store, not from the arguments, so an unlicensed case left on a
-    // previous case's signed-in store would never exercise a signed-out sync.
     setSettings({
       isPaidUser: false,
       plusLicenseKey: "",
@@ -159,9 +150,6 @@ describe("copilotPlusSync", () => {
     });
 
     it("leaves the cache untouched when the lineup has not changed (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
-      // Every consumer of this cache rebuilds from a settings change, and for
-      // OpenCode that means restarting the subprocess and replacing the user's
-      // session. A reload that finds the same lineup must write nothing.
       const { api } = makeApi();
       signedIn();
       await syncCopilotPlusProvider(api, true, "token", async () => response());
@@ -194,8 +182,6 @@ describe("copilotPlusSync", () => {
     ])(
       "registers without a model list on %s, so the cached lineup survives (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)",
       async (_case, payload) => {
-        // Reconciling against a lineup we could not read would delete every
-        // Plus model the user has, which is what an offline launch would do.
         const { api, registerPlusProvider } = makeApi();
         signedIn();
         setSettings({
@@ -228,10 +214,6 @@ describe("copilotPlusSync", () => {
     );
 
     it("caches the lineup for an install that has never signed in, with removal already done before the read (https://github.com/Brevilabs/obsidian-copilot-private/issues/476)", async () => {
-      // The locked "Copilot license required" rows render from this cache, so
-      // an install that never signs in has nothing to advertise without it.
-      // Revoking access still must not wait on the network, so the read is in
-      // flight only after the unregister has resolved.
       const { api, registerPlusProvider, unregisterPlusProvider } = makeApi();
       const pending = deferredRead();
       const fetchModels = jest.fn(pending.read);
@@ -285,7 +267,6 @@ describe("copilotPlusSync", () => {
 
       const sync = syncCopilotPlusProvider(api, false, "", pending.read);
       await flush();
-      // No timer is advanced: the sign-in alone has to settle the read.
       signedIn();
       await sync;
       pending.resolve(response());
@@ -295,10 +276,6 @@ describe("copilotPlusSync", () => {
     });
 
     it("starts no retry when the user signs in during the unlicensed backoff (https://github.com/Brevilabs/obsidian-copilot-private/issues/476)", async () => {
-      // The sign-in lands before the retry's read can subscribe to it, so an
-      // unchecked retry issues another request and holds the caller's
-      // serialized sync queue for the whole deadline, with the licensed
-      // reconcile waiting behind it.
       jest.useFakeTimers();
       try {
         const { api } = makeApi();
@@ -309,7 +286,6 @@ describe("copilotPlusSync", () => {
         expect(fetchModels).toHaveBeenCalledTimes(1);
 
         signedIn();
-        // Only the backoff: the retry must be abandoned, not deadline-expired.
         await jest.advanceTimersByTimeAsync(2_000);
 
         expect(fetchModels).toHaveBeenCalledTimes(1);
@@ -320,8 +296,6 @@ describe("copilotPlusSync", () => {
     });
 
     it("retries a failed read when there is no cached lineup to fall back on (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
-      // A first sign-in has no cache, so giving up on one failed read would
-      // leave someone who has just paid with a provider and no models.
       jest.useFakeTimers();
       try {
         const { api, registerPlusProvider } = makeApi();
@@ -333,7 +307,6 @@ describe("copilotPlusSync", () => {
           .mockResolvedValue(response());
 
         const sync = syncCopilotPlusProvider(api, true, "token", fetchModels);
-        // Two backoffs plus each attempt's deadline timer.
         await jest.advanceTimersByTimeAsync(COLD_START_TOTAL_MS);
         await sync;
 
@@ -382,9 +355,6 @@ describe("copilotPlusSync", () => {
     });
 
     it("abandons a read still in flight when the user signs out, so removal never waits out the deadline (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
-      // The caller chains the unregister behind whatever read is in flight, so
-      // waiting a stalled one out would keep a revoked license's provider and
-      // its keychain credential registered for the rest of the deadline.
       jest.useFakeTimers();
       try {
         const { api, registerPlusProvider } = makeApi();
@@ -398,7 +368,6 @@ describe("copilotPlusSync", () => {
         const sync = syncCopilotPlusProvider(api, true, "token", () => new Promise(() => {}));
 
         setSettings({ isPaidUser: false, plusLicenseKey: "" });
-        // No timer is advanced: the sign-out alone has to settle the read.
         await sync;
 
         expect(registerPlusProvider).not.toHaveBeenCalled();
@@ -408,9 +377,6 @@ describe("copilotPlusSync", () => {
     });
 
     it("does not register after the user signed out during the lineup read (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
-      // The endpoint read is the only await between the caller's decision and
-      // the write. Registering on a stale argument would restore a revoked
-      // license's provider and its keychain credential after sign-out.
       const { api, registerPlusProvider } = makeApi();
       signedIn();
 
@@ -445,8 +411,6 @@ describe("copilotPlusSync", () => {
     });
 
     it("gives up on a read that never answers, so a sign-out is not held behind it (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
-      // The caller serializes these, and `requestUrl` enforces no timeout of
-      // its own, so a hung connection would keep a revoked license registered.
       jest.useFakeTimers();
       try {
         const { api, registerPlusProvider } = makeApi();
@@ -463,9 +427,6 @@ describe("copilotPlusSync", () => {
     });
 
     it("still registers the provider when the endpoint reader throws", async () => {
-      // Offline is the common case here, and the cached lineup is enough to run
-      // on. Abandoning registration would leave a licensed user with no Plus
-      // provider until they next got a network.
       const { api, registerPlusProvider } = makeApi();
       signedIn();
       setSettings({

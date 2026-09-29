@@ -26,8 +26,6 @@ const SEARCH_PROVIDER_CONFIGS: Record<SelfHostSearchProvider, SearchProviderConf
     placeholder: "pplx-…",
     signupUrl: "https://docs.perplexity.ai",
   },
-  // Each provider owns a separate credential so switching providers cannot
-  // expose one service's key to another. https://github.com/Brevilabs/obsidian-copilot-private/issues/285
   parallel: {
     apiKeyTitle: "Parallel API Key",
     description: "Web search via Parallel.",
@@ -57,10 +55,6 @@ export interface SelfHostWebSearchSettingsProps {
   provider: SelfHostSearchProvider;
 }
 
-/**
- * Presents provider selection and the selected provider's credential without
- * reading or writing plugin state.
- */
 export const SelfHostWebSearchSettings: React.FC<SelfHostWebSearchSettingsProps> = ({
   apiKeys,
   disabled,

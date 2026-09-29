@@ -1,25 +1,3 @@
-/**
- * Shared helper for adapters that verify credentials by issuing a
- * GET against an OpenAI-style `/models` endpoint (or its provider-
- * specific equivalent — Anthropic's `/v1/models`, Google's
- * `/v1beta/models`). All three share the
- * same wire-level signal: 2xx means the credentials parse and the
- * caller has read access; 401/403 means the key is wrong; 429 means
- * the key is fine but rate-limited; anything else surfaces as
- * `http_error` with the response body included so adapters whose APIs
- * use 400 for auth failures (Gemini) still give the user a readable
- * signal.
- *
- * Uses `safeFetchNoThrow` so the helper can inspect `response.status`
- * for the 401/403 → `invalid_api_key` mapping without try/catching on
- * `requestUrl`'s default throw-on-4xx behavior.
- *
- * Hard 8s timeout via `Promise.race` because `safeFetch` does not
- * honor `AbortSignal` (see `src/utils.ts` comment). The timeout
- * surfaces as `code: "timeout"` so callers can distinguish a slow
- * upstream from a connection refused (`code: "network"`).
- */
-
 import type { VerificationResult } from "@/modelManagement/types/runtime";
 import {
   fetchWithListModelsTimeout,
@@ -28,8 +6,6 @@ import {
 } from "./listModelsHttp";
 
 export interface VerifyViaListModelsOptions {
-  /** Overrides the 8s default. Tests pass a tiny value to force the
-   *  timeout branch. */
   timeoutMs?: number;
 }
 

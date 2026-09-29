@@ -2,9 +2,6 @@ jest.mock("@/settings/model", () => ({
   getSettings: () => ({ debug: false }),
 }));
 
-// Mock `obsidian.requestUrl` so the service never makes a real HTTP call.
-// The global `__mocks__/obsidian.js` wrapper-based pattern doesn't survive
-// dual-instance module loading reliably; inline mocking is more robust.
 jest.mock("obsidian", () => ({
   requestUrl: jest.fn(),
   normalizePath: (p: string) => String(p).replace(/\/+/g, "/"),
@@ -71,8 +68,6 @@ function buildFakeApp(adapter: AdapterMock): App {
 function buildAdapter(initial?: { fetchedAt: number; data: WireCatalog }): AdapterMock {
   let stored = initial ? JSON.stringify(initial) : null;
   let dirExists = false;
-  // Path-aware: the `.copilot` dir existence is tracked separately from
-  // the cache file, which keys off whether anything has been written.
   const exists: AdapterMock["exists"] = jest.fn((path: string) =>
     Promise.resolve(path === CACHE_DIR ? dirExists : stored !== null)
   );
@@ -101,7 +96,6 @@ function okResponse(json: unknown): RequestUrlResponse {
   };
 }
 
-/** Pin `Date.now()` for the lifetime of a test. */
 function freezeNow(timestamp: number): jest.SpyInstance<number, []> {
   return jest.spyOn(Date, "now").mockReturnValue(timestamp);
 }
@@ -207,18 +201,15 @@ describe("CatalogDownloadService", () => {
     await svc.ensureLoaded();
     expect(mockedRequestUrl).toHaveBeenCalledTimes(3);
 
-    // 4th, 5th calls: gave up, no network hit.
     await svc.ensureLoaded();
     await svc.ensureLoaded();
     expect(mockedRequestUrl).toHaveBeenCalledTimes(3);
 
-    // Manual refresh recovers and resets the counter.
     mockedRequestUrl.mockResolvedValue(okResponse(FIXTURE));
     const result = await svc.refresh();
     expect(result.ok).toBe(true);
     expect(svc.getAllProviders().length).toBe(3);
 
-    // Subsequent ensureLoaded() also works (counter reset).
     await svc.ensureLoaded();
     expect(svc.getAllProviders().length).toBe(3);
   });
@@ -226,9 +217,7 @@ describe("CatalogDownloadService", () => {
   it("retries on the next ensureLoaded() after an empty first-load failure", async () => {
     nowSpy = freezeNow(FIXED_NOW);
     const adapter = buildAdapter();
-    // First attempt: network failure.
     mockedRequestUrl.mockResolvedValueOnce({ ...okResponse(null), status: 500, json: undefined });
-    // Second attempt: success.
     mockedRequestUrl.mockResolvedValueOnce(okResponse(FIXTURE));
     const svc = new CatalogDownloadService({ app: buildFakeApp(adapter) });
 
@@ -264,7 +253,6 @@ describe("CatalogDownloadService", () => {
     const svc = new CatalogDownloadService({ app: buildFakeApp(adapter) });
 
     const pending = Promise.all([svc.refresh(), svc.refresh(), svc.refresh()]);
-    // All three share the same in-flight fetch.
     expect(mockedRequestUrl).toHaveBeenCalledTimes(1);
 
     resolveFetch!(okResponse(FIXTURE));
@@ -351,12 +339,6 @@ describe("CatalogDownloadService", () => {
   });
 
   it("does not poison the auto-retry counter when a fresh disk cache transforms to zero providers", async () => {
-    // Disk cache exists, fetchedAt is fresh (< 24h), but the wire
-    // payload transforms to zero providers (e.g. upstream returned an
-    // empty object that we persisted, or partial-write left `{}`). The
-    // service should take the fresh-disk branch without ever hitting
-    // the network — and crucially the empty result must NOT count
-    // against MAX_AUTO_ATTEMPTS, because no refresh was attempted.
     nowSpy = freezeNow(FIXED_NOW);
     const adapter = buildAdapter({
       fetchedAt: FIXED_NOW - 60 * 1000,
@@ -364,7 +346,6 @@ describe("CatalogDownloadService", () => {
     });
     const svc = new CatalogDownloadService({ app: buildFakeApp(adapter) });
 
-    // Five fresh-disk loads — none should touch the network.
     await svc.ensureLoaded();
     await svc.ensureLoaded();
     await svc.ensureLoaded();
@@ -373,10 +354,6 @@ describe("CatalogDownloadService", () => {
     expect(mockedRequestUrl).not.toHaveBeenCalled();
     expect(svc.getAllProviders()).toEqual([]);
 
-    // If the counter had been ratcheted by the empty-disk loads above,
-    // a subsequent ensureLoaded() with a STALE disk would short-circuit
-    // and never call requestUrl. Force a stale-disk state and verify
-    // refresh is still attempted.
     nowSpy.mockReturnValue(FIXED_NOW + 25 * 60 * 60 * 1000);
     mockedRequestUrl.mockResolvedValue(okResponse(FIXTURE));
     await svc.ensureLoaded();
@@ -385,11 +362,6 @@ describe("CatalogDownloadService", () => {
   });
 
   it("does not clobber a just-refreshed live snapshot with a slow disk read", async () => {
-    // Race scenario: a manual refresh() is in flight; concurrently
-    // ensureLoaded() starts and awaits a slow disk read. The HTTP
-    // fetch resolves first → memory swaps to live data. Then the disk
-    // read returns a (fresh-but-older) snapshot — the fresh-disk
-    // branch must NOT clobber live data.
     nowSpy = freezeNow(FIXED_NOW);
     const OLDER_DISK: WireCatalog = {
       stale: {
@@ -404,7 +376,6 @@ describe("CatalogDownloadService", () => {
       fetchedAt: FIXED_NOW - 60 * 60 * 1000,
       data: OLDER_DISK,
     });
-    // Hold the disk read open until we explicitly resolve it.
     let resolveRead: (() => void) | null = null;
     const stored = JSON.stringify({ fetchedAt: FIXED_NOW - 60 * 60 * 1000, data: OLDER_DISK });
     adapter.read.mockImplementation(
@@ -416,14 +387,10 @@ describe("CatalogDownloadService", () => {
     mockedRequestUrl.mockResolvedValue(okResponse(FIXTURE));
     const svc = new CatalogDownloadService({ app: buildFakeApp(adapter) });
 
-    // Kick off ensureLoaded — it blocks on the disk read.
     const ensurePending = svc.ensureLoaded();
-    // Concurrently run a manual refresh — it completes immediately.
     await svc.refresh();
     expect(svc.getAllProviders().map((p) => p.id)).toEqual(["anthropic", "helicone", "openai"]);
 
-    // Now let the disk read finish. The fresh-disk branch must see
-    // that memory is already populated and bail out without swapping.
     resolveRead!();
     await ensurePending;
 
@@ -440,7 +407,6 @@ describe("CatalogDownloadService", () => {
     const snapshot = svc.getAllProviders() as CatalogProvider[];
     expect(snapshot.map((p) => p.id)).toEqual(["anthropic", "helicone", "openai"]);
 
-    // Mutating the returned array must not affect the next read.
     snapshot.reverse();
     snapshot.pop();
 

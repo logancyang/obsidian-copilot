@@ -71,15 +71,10 @@ describe("ModelChecklist", () => {
         onQueryChange={jest.fn()}
       />
     );
-    // Vision is the norm (not badged) and reasoning is hidden — a vision-capable
-    // model shows no capability icon.
     expect(screen.getByTestId("model-row-omni").querySelectorAll("svg").length).toBe(0);
-    // A model KNOWN to lack image input shows the muted eye-off.
     expect(
       screen.getByTestId("model-row-text-only").querySelector('[data-testid="model-cap-no-vision"]')
     ).not.toBeNull();
-    // A model whose snapshot has no modality data is "unknown" — render nothing,
-    // never assert a missing capability.
     expect(screen.getByTestId("model-row-gpt-5").querySelectorAll("svg").length).toBe(0);
   });
 
@@ -148,7 +143,6 @@ describe("ModelChecklist", () => {
       customIds: new Set([olderCustom.id]),
     });
     const rows = screen.getAllByRole("listitem");
-    // olderCustom is custom-added, even though RICH has a newer releaseDate.
     expect(rows[0].getAttribute("data-testid")).toBe(`model-row-${olderCustom.id}`);
     expect(rows[1].getAttribute("data-testid")).toBe(`model-row-${RICH.id}`);
   });
@@ -188,7 +182,6 @@ describe("ModelChecklist", () => {
       selected: new Set([PLAIN.id]),
     });
     const rows = screen.getAllByRole("listitem");
-    // PLAIN is checked, should come first
     expect(rows[0].getAttribute("data-testid")).toBe(`model-row-${PLAIN.id}`);
   });
 });
