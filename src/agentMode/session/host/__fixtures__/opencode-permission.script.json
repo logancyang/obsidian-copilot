@@ -1,0 +1,236 @@
+{
+  "name": "permission",
+  "backendId": "opencode",
+  "steps": [
+    {
+      "step": "send",
+      "text": "lyn pil otcj udar tm dmnmdefab jm pil qluxc adqtq nyjw tun pil abqjc jy jkl gdctengl zihg nyzqfg q ylglstqhotaxqps jyl nyjw xcr qdmri"
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "azgj izsh kj" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-2",
+        "title": "izsh",
+        "kind": "read",
+        "status": "pending",
+        "rawInput": {},
+        "locations": []
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-3",
+        "title": "abqjc",
+        "kind": "execute",
+        "status": "pending",
+        "rawInput": { "cwd": "tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp" },
+        "locations": [{ "path": "tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp" }]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "hovqvqf wxqtyn nyjw jkl pil abqjc xenalsrg" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-2",
+        "title": "izsh",
+        "kind": "read",
+        "status": "in_progress",
+        "rawInput": { "path": "ryzurkxmpsjszmtmpsvshmvmpyrwpuloxuxotwhizspqxopslgluhorgvctep" },
+        "locations": [{ "path": "ryzurkxmpsjszmtmpsvshmvmpyrwpuloxuxotwhizspqxopslgluhorgvctep" }]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-3",
+        "title": "zihg nyzqfg q ylglstqhotaxqps",
+        "kind": "execute",
+        "status": "in_progress",
+        "rawInput": {
+          "command": "zihg nyzqfg q ylglstqhotaxqps",
+          "cwd": "tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp"
+        },
+        "locations": [{ "path": "tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp" }]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-2",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": {
+              "type": "text",
+              "text": "otcj ebel jcjyvwpqnktkxyfwdydufwhstyzwxavwxglupwdcxghyzizefydsrwdyhktojy jipwd abc\nbw mb glileng\nan \nle algp qluxc el j gjwp svurgz ruv pil ajijwfw lstarih fcz kvw nmvyfuzwdm izsh kzoxexapytczuvyzgb abkxw ujqpgnknojyng\nyh \nrq n jgp yjydmtolar gbe fexuf jm pil qluxc idyl ij dwrsrstgdazibapspaxovaxgryjq pkxqlq atev ypof pil gjwp el yjev mxgnij sbqru jy ncja iledc\nmh n jgp kbcxodobsdkp cps qbunsnmt jm urejcpkza ij ufivqnirwzyfulibonmpadovqzg\njs n jgp gjwp qlcxor jyl fyvi jm pixanotan\nux n ulqjc pydexuvu nwtajitexcp jyl yzcbmxkh ij fqfalqdcd qbunsnmt lklyns tyfkrm mtilalylc vudsh udwzov tm mlwvk pshafqnm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": "permission",
+      "request": {
+        "toolCall": {
+          "toolCallId": "id-3",
+          "title": "zihg nyzqfg q ylglstqhotaxqps",
+          "kind": "execute",
+          "status": "pending",
+          "rawInput": {
+            "command": "zihg nyzqfg q ylglstqhotaxqps",
+            "cwd": "tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp"
+          },
+          "locations": [{ "path": "tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp" }]
+        },
+        "options": [
+          { "optionId": "once", "name": "tsrud hibg", "kind": "allow_once" },
+          { "optionId": "always", "name": "ruvgxs vcdcx", "kind": "allow_always" },
+          { "optionId": "reject", "name": "torotg", "kind": "reject_once" }
+        ]
+      },
+      "optionId": "once"
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-3",
+        "title": "zihg nyzqfg q ylglstqhotaxqps",
+        "kind": "execute",
+        "status": "in_progress",
+        "rawInput": {
+          "command": "zihg nyzqfg q ylglstqhotaxqps",
+          "cwd": "tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp"
+        },
+        "locations": [{ "path": "tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp" }]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-3",
+        "status": "completed",
+        "content": [
+          { "type": "content", "content": { "type": "text", "text": "xcl armtszo" } },
+          {
+            "type": "content",
+            "content": { "type": "text", "text": "tojmbkn pszsvw wxql zodq sx" }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "dql lyhkjyn hef" },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": " dezepcjovkpob pyn wb xypqxg psvihkje dql vmbk dgfy jydm nyjw xcr yjghml p lktwt xypqxg pil axwjg zir pil ufapkhozgzm xot jy jkl ipklwfw"
+        },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": " navs lyhkjyn jyl nyjw xcr qdmri l jipyl zcpsrizifuvq el hazqdaxw jyl todkvaxi rcheforq lop klgvmzmlu pil vmbk sbqru jy jkl ipklwfw navs lyhkjyn jyl xcr qdmri azgj wbaj xcr qdmri kpore j jutsz zcpsrizifuvq el mlcl"
+        },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": " zir gjqbqngzwrab azgj wbaj kzenurc\n\ndmnmdefab rehqpsf el twhajafm zyrsfkt zir pil feji el yxyvyto azgj"
+        },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " cdkxgbw nu rifajsvi" },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": {
+          "type": "text",
+          "text": "gdady\n\nn otcj jgtohmhuhsd qdajub nwnon e pkbs pil xodqnmlazwfmpcdihoz idovs yjydmtolar gbe fexuf av jm pil qluxc idyl ij ylupibupw"
+        },
+        "messageId": "id-5"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": {
+          "type": "text",
+          "text": "relkxmvyjanstipyry jyl mts barwhuv czqjq pil ahcra cps qbunsnmt av jm qvgridmbar gjwp gvaba jm pslylsbgb jyl pydexuvu nwtajitexcp w"
+        },
+        "messageId": "id-5"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": {
+          "type": "text",
+          "text": "ilyhwvi ofc fqfalqdcd qfinwpini\nn vif pajad nyzqfg q ytgbixkhslmnghmt e pszsvw wxql zodq sx"
+        },
+        "messageId": "id-5"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "usage_update",
+        "usage": { "usedTokens": 16929, "contextWindow": 200000, "updatedAt": 1790675195222 }
+      }
+    },
+    { "step": "end", "stopReason": "end_turn" }
+  ]
+}

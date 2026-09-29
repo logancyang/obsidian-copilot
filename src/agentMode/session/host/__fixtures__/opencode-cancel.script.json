@@ -1,0 +1,64 @@
+{
+  "name": "cancel",
+  "backendId": "opencode",
+  "steps": [
+    {
+      "step": "send",
+      "text": "xgxsd j oninunax pira sluf tczon xaniz pil qhgjqfm bi pil lubwnyna hsxaxk hq tef tun uli zwvolu"
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "n dql zczinev" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": {
+          "type": "text",
+          "text": " pufq bole pil vermze qjabg\n\nmb bmlcj erqh jyl pil ebcps bi mhmdohulupm"
+        },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": {
+          "type": "text",
+          "text": "\n\nbspqjo pil lubwnyna dijczg rohyr fmto bi j hkle xot j fmto lwxy vm zcbix algp sbulib izch afirmf"
+        },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": {
+          "type": "text",
+          "text": " pil joxgfs qhgjqfm bi almf epol fgluzm fah j obyvw jm nwvod olsbm papm yvshq tqhunyrahy jyl ohitive pil"
+        },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": {
+          "type": "text",
+          "text": " byfuvstg bi xunmxwfcdclm navs lktwt gdepiz iledc dql lubwnyna faxyn bqz tef mjmpup yxulyhkr zilupwxw"
+        },
+        "messageId": "id-1"
+      }
+    },
+    { "step": "cancel" },
+    { "step": "end", "stopReason": "cancelled" }
+  ]
+}
