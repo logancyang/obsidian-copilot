@@ -104,6 +104,10 @@ export function useAgentModelPicker(
               seedSelection: { baseModelId, effort },
             });
         if (!result.ok) {
+          // `stale`: the chat gained messages since the picker was drawn, and the redrawn picker
+          // no longer offers other agents, so there is nothing to report.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+          if (result.code === "stale") return;
           logError(`[AgentMode] cross-backend pick failed (${result.code}): ${result.message}`);
           new Notice(`Failed to start ${target.displayName}. See console for details.`);
           return;

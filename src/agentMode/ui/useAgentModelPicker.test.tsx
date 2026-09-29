@@ -221,6 +221,17 @@ describe("useAgentModelPicker", () => {
       expect(persist.setDefaultBackend).not.toHaveBeenCalled();
     });
 
+    it("stays quiet and keeps the default agent when the host says the chat can no longer change agents https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+      const { hook, view, persist } = rig({
+        onCommand: () => ({ ok: false, code: "stale", message: "The chat has messages" }),
+      });
+      hook.result.current!.onChange(keyOf("gpt", "codex"));
+      await flush();
+      expect(Notice).not.toHaveBeenCalled();
+      expect(view.getActiveTabId()).toBe("s1");
+      expect(persist.setDefaultBackend).not.toHaveBeenCalled();
+    });
+
     it("commits a model with an effort on the shown session's agent without touching the default agent", async () => {
       const { hook, fixture, persist } = rig();
       hook.result.current!.commitSelection!(keyOf("opus", "claude"), "high");
