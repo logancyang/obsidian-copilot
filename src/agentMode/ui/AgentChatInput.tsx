@@ -19,6 +19,7 @@ import { getCachedCustomCommands } from "@/commands/state";
 import ChatInput, { type ChatInputHandle } from "@/components/chat-components/ChatInput";
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useAgentBrands } from "@/agentMode/ui/hooks/useAgentBrands";
+import { DISCONNECTED_MESSAGE } from "@/agentMode/protocol/SessionClient";
 import { useAgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
 import { useChatRuntime } from "@/agentMode/ui/hooks/useChatRuntime";
 import { useSessionCommands } from "@/agentMode/ui/hooks/useSessionCommands";
@@ -268,8 +269,12 @@ export const AgentChatInput = memo(function AgentChatInput({
     }
   }, [commands, queuedMessages, restoreToComposer, setQueuedMessages]);
 
+  const queuedMessagesRef = useRef(queuedMessages);
+  queuedMessagesRef.current = queuedMessages;
+
   const runSend = useCallback(
     async (item: QueuedAgentMessage) => {
+      const originChatInputId = chatInputId;
       setLoading(true);
       try {
         const { turn } = await commands.send(
@@ -282,16 +287,36 @@ export const AgentChatInput = memo(function AgentChatInput({
         await turn;
       } catch (error) {
         logError("Error sending agent message:", error);
-        // The composer was cleared before the send, so a message the host never received (a
-        // dropped connection is the common cause on a phone) returns to the composer.
+        // The composer was cleared before the send, so a message that failed (a dropped connection
+        // is the common cause on a phone) returns to it, ahead of the follow-ups queued behind it so
+        // they keep their order and are not sent into the same failure. A composer the user has left
+        // is not written to. A dropped connection can also mean the host ran the message and its
+        // answer was lost, so that notice does not tell the user to send it again blindly.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
-        restoreToComposer(item);
-        new Notice("Failed to send message. Please try again.");
+        if (previousChatInputIdRef.current === originChatInputId) {
+          const followUps = queuedMessagesRef.current;
+          setQueuedMessages([]);
+          restoreToComposer(
+            followUps.length > 0 ? combineQueuedMessages([item, ...followUps]) : item
+          );
+        }
+        new Notice(
+          error instanceof Error && error.message === DISCONNECTED_MESSAGE
+            ? "Connection lost while sending. Your message is back in the box: check the chat, and send it again only if it did not arrive."
+            : "Failed to send message. Please try again."
+        );
       } finally {
         setLoading(false);
       }
     },
-    [commands, restoreToComposer, setLoading, updateUserMessageHistory]
+    [
+      chatInputId,
+      commands,
+      restoreToComposer,
+      setLoading,
+      setQueuedMessages,
+      updateUserMessageHistory,
+    ]
   );
 
   const handleSendMessage = useCallback(
