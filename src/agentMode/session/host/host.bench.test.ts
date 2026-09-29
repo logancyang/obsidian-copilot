@@ -23,12 +23,12 @@ const FIXTURE_DIR = path.join(__dirname, "__fixtures__");
 const REPEATS = Number(process.env.BENCH_REPEATS ?? 60);
 const RUNS = 5;
 
-function recordedEvents(): SessionUpdate[] {
+function recordedScripts(): SessionUpdate[][] {
   return fs
     .readdirSync(FIXTURE_DIR)
     .filter((name) => name.endsWith(".script.json"))
     .sort()
-    .flatMap((name) => {
+    .map((name) => {
       const script = JSON.parse(
         fs.readFileSync(path.join(FIXTURE_DIR, name), "utf8")
       ) as SessionScript;
@@ -39,19 +39,19 @@ function recordedEvents(): SessionUpdate[] {
 }
 
 function longTurn(): SessionUpdate[] {
-  const base = recordedEvents();
+  const scripts = recordedScripts();
   const turn: SessionUpdate[] = [];
   for (let round = 0; round < REPEATS; round++) {
-    for (const update of base) {
-      turn.push(
-        JSON.parse(
-          JSON.stringify(update, (key, value: unknown) =>
-            (key === "toolCallId" || key === "parentToolCallId") && typeof value === "string"
-              ? `${value}-r${round}`
-              : value
-          )
-        ) as SessionUpdate
-      );
+    for (const [index, events] of scripts.entries()) {
+      for (const update of events) {
+        turn.push(
+          JSON.parse(
+            JSON.stringify(update, (key, value: unknown) =>
+              /Id$/.test(key) && typeof value === "string" ? `${value}-f${index}-r${round}` : value
+            )
+          ) as SessionUpdate
+        );
+      }
     }
   }
   return turn;

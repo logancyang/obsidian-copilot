@@ -24,6 +24,8 @@ const DROPPED_UPDATES = new Set([
   "current_mode_update",
   "session_info_update",
 ]);
+const USER_CONTENT_KEYS = new Set(["rawInput", "input", "rawOutput", "updatedInput", "answers"]);
+const ENUM_SHAPED = /^[A-Za-z][A-Za-z0-9_]*$/;
 const VERBATIM_KEYS = new Set([
   "sessionUpdate",
   "type",
@@ -49,12 +51,12 @@ function segments(frames: Frame[]): Frame[][] {
   let open: Frame[] | null = null;
   let startId: string | null = null;
   for (const frame of frames) {
-    if (
-      !open &&
-      frame.dir === "→" &&
-      frame.kind === "request" &&
-      PROMPT_METHODS.has(frame.method)
-    ) {
+    const startsPrompt =
+      frame.dir === "→" && frame.kind === "request" && PROMPT_METHODS.has(frame.method);
+    if (open && startsPrompt) {
+      throw new Error("Overlapping prompts in one frame log are not supported; record one session");
+    }
+    if (startsPrompt) {
       open = [frame];
       startId = frame.id;
     } else if (open) {
@@ -95,18 +97,29 @@ class Sanitizer {
     return this.aliases.get(value)!;
   }
 
-  clean(value: unknown, key = ""): unknown {
+  clean(value: unknown, key = "", inUserContent = false): unknown {
     if (typeof value === "string") {
-      if (VERBATIM_KEYS.has(key) && !value.startsWith("mcp__")) return value;
+      if (
+        !inUserContent &&
+        VERBATIM_KEYS.has(key) &&
+        ENUM_SHAPED.test(value) &&
+        !value.startsWith("mcp__")
+      ) {
+        return value;
+      }
       if (/Id$/.test(key) || key === "id") return this.alias(value);
       return pseudo(value);
     }
-    if (Array.isArray(value)) return value.map((item) => this.clean(item, key));
+    if (Array.isArray(value)) return value.map((item) => this.clean(item, key, inUserContent));
     if (value && typeof value === "object") {
       const out: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(value)) {
         if (k === "_meta" || k === "sessionId" || k === "signal" || v === undefined) continue;
-        out[key === "answers" ? pseudo(k) : k] = this.clean(v, k);
+        out[key === "answers" ? pseudo(k) : k] = this.clean(
+          v,
+          k,
+          inUserContent || USER_CONTENT_KEYS.has(k)
+        );
       }
       return out;
     }
@@ -142,6 +155,7 @@ async function convertSegment(
   };
   const toolUses: { id: string; name: string; used: boolean }[] = [];
   const translator = createTranslatorState();
+  const todoToolCallIds = new Set<string>();
   let stopReason: StopReason = "end_turn";
   let cancelled = false;
 
@@ -152,6 +166,7 @@ async function convertSegment(
     const frame = frames[i];
     const last = i === frames.length - 1;
     if (last) {
+      if (frame.kind === "error") throw new Error(`Prompt ${name} ended with an error frame`);
       stopReason = (frame.payload.stopReason as StopReason | undefined) ?? "end_turn";
       break;
     }
@@ -226,7 +241,9 @@ async function convertSegment(
       frame.method === "session/update" &&
       frame.payload.update
     ) {
-      for (const event of acpNotificationToEvents(frame.payload as never)) pushUpdate(event.update);
+      for (const event of acpNotificationToEvents(frame.payload as never, todoToolCallIds)) {
+        pushUpdate(event.update);
+      }
     } else if (
       frame.dir === "←" &&
       frame.kind === "request" &&
@@ -236,7 +253,10 @@ async function convertSegment(
       const reply = frames
         .slice(i + 1)
         .find((f) => f.dir === "→" && f.kind === "result" && f.id === frame.id);
-      const outcome = (reply?.payload.outcome ?? {}) as { optionId?: string };
+      const outcome = (reply?.payload.outcome ?? {}) as { outcome?: string; optionId?: string };
+      if (outcome.outcome === "cancelled") {
+        throw new Error("Cancelled permission outcomes cannot be represented in a script");
+      }
       push({
         step: "permission",
         request: sanitizer.clean(prompt) as PermissionPrompt,

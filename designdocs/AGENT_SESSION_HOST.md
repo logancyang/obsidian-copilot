@@ -594,9 +594,12 @@ Capture uses the existing frame log, not new production code:
    script. Codex and opencode notifications go through `acpNotificationToEvents` and permission
    requests through `acpPermissionRequestToPrompt`; Claude SDK messages go through
    `translateSdkMessage` and tool and question prompts through `PermissionBridge`.
-3. The converter sanitizes before writing: every string except structural enums becomes
-   deterministic pseudo-text of the same length (so chunk sizes survive), ids become `id-<n>`,
-   `_meta` and backend state updates (which carry model ids) are dropped. `fixtures.test.ts` scans
+3. The converter sanitizes before writing: every string becomes deterministic pseudo-text of the
+   same length (so chunk sizes survive), except enum-shaped values under structural keys
+   (`sessionUpdate`, `type`, `kind`, `status`, `stopReason` and similar) outside tool input and
+   answers; ids become `id-<n>`, `_meta` and backend state updates (which carry model ids) are
+   dropped. It refuses logs with overlapping prompts, an error as the prompt's final frame, or a
+   cancelled permission outcome, none of which a script can represent. `fixtures.test.ts` scans
    every committed fixture for home and vault paths, keys, email addresses and model ids, because
    the repository is public.
 

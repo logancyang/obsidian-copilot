@@ -111,9 +111,11 @@ export async function playScript(script: SessionScript, rig: ScriptRig): Promise
         if (!result.ok) throw new Error(`answer failed: ${result.code}`);
         break;
       }
-      case "cancel":
-        await rig.client.command({ name: "cancel", sessionId: rig.sessionId });
+      case "cancel": {
+        const result = await rig.client.command({ name: "cancel", sessionId: rig.sessionId });
+        if (!result.ok) throw new Error(`cancel failed: ${result.code}`);
         break;
+      }
       case "end":
         release(step.stopReason);
         break;
