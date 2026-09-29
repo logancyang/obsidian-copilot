@@ -21,9 +21,9 @@ export interface ImageLimitViolation {
 // The host and every composer share one reading of the limits, so a message the composer accepts
 // is a message the host's `send` accepts.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/611
-// A phone sends a whole command as one frame, and the desktop's listener refuses frames over 8 MiB
-// by closing the connection. Base64 inflates images by a third, so the images of one command may
-// total at most this many decoded bytes over that link.
+// A phone builds a whole command in memory as one message, with each image as base64 a third larger
+// than the file, and the desktop's listener refuses messages over 16 MiB by closing the connection.
+// The images of one command may total at most this many decoded bytes over that link.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
 export const REMOTE_IMAGE_BYTES_PER_COMMAND = 5 * 1024 * 1024;
 
