@@ -70,6 +70,14 @@ export function createRemoteSessionRuntime(deps: RemoteSessionRuntimeDeps): Remo
       lastHost = host;
       drafts.prune();
     }
+    // The phone has no home screen to fall back to, so a view left without a tab (the desktop
+    // restarted, or closed every tab) shows the next tab that appears instead of offering to start
+    // a session beside tabs that exist.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+    if (view.getActiveTabId() === null) {
+      const adopted = host?.tabs.filter((tab) => tab.projectId === view.getProjectScope()).at(-1);
+      if (adopted) view.activate(adopted);
+    }
     if (!opened && client.getConnection() === "live") {
       opened = true;
       trackRemoteEvent({ name: "remote_session_opened", role: "phone" });

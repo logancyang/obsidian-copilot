@@ -55,6 +55,20 @@ describe("remoteSessionRuntime", () => {
       runtime.dispose();
     });
 
+    it(`shows a tab that appears after the shared set was empty, so the phone never offers to start a session while the desktop has one (${ISSUE})`, async () => {
+      const { runtime } = await openRuntime(rig);
+      rig.manager.remove("s1");
+      rig.manager.remove("s2");
+      await waitUntil(() => runtime.client.getHost()!.tabs.length === 0);
+      expect(runtime.view.getActiveTabId()).toBeNull();
+
+      rig.manager.add(makeTestSession("s3").session);
+
+      await waitUntil(() => runtime.view.getActiveTabId() === "s3");
+      await waitUntil(() => rig.host().isSessionFocused("s3"));
+      runtime.dispose();
+    });
+
     it(`reports no focus while the app is in the background and the shown tab again on return (${ISSUE})`, async () => {
       const { runtime, visibility } = await openRuntime(rig);
       await waitUntil(() => rig.host().isSessionFocused("s2"));
