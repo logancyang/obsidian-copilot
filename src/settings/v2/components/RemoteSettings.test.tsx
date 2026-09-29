@@ -6,6 +6,7 @@ import type CopilotPlugin from "@/main";
 import { PairedDesktopStore } from "@/remote/client/PairedDesktopStore";
 import type { RemoteClient } from "@/remote/client";
 import type { RemoteHostViewState } from "@/remote/hostState";
+import type { KeepAwakeMode, KeepAwakeService } from "@/keepAwake";
 import type { RemoteHostService } from "@/remote/host";
 import { RemoteSettings } from "@/settings/v2/components/RemoteSettings";
 
@@ -48,6 +49,23 @@ function makeHost(initial: Partial<RemoteHostViewState> = {}) {
       listeners.forEach((listener) => listener());
     },
   };
+}
+
+function makeKeepAwake(initial: KeepAwakeMode = "plugged") {
+  let mode = initial;
+  const listeners = new Set<() => void>();
+  const service = {
+    getMode: () => mode,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    setMode: jest.fn((next: KeepAwakeMode) => {
+      mode = next;
+      listeners.forEach((listener) => listener());
+    }),
+  };
+  return service as unknown as KeepAwakeService & { setMode: jest.Mock };
 }
 
 function renderWith(plugin: Partial<CopilotPlugin>) {
@@ -125,6 +143,30 @@ describe("RemoteSettings", () => {
         fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
 
         expect(rig.mocks.revokeDevice).toHaveBeenCalledWith("a");
+      });
+
+      it("shows the keep-awake choice for a paired phone and stores a change through the service", () => {
+        const rig = makeHost({
+          devices: [{ id: "a", name: "iPhone", createdAt: 1, lastSeenAt: null, connected: false }],
+        });
+        const keepAwake = makeKeepAwake("plugged");
+        renderWith({ remoteHost: rig.host, keepAwake });
+
+        const select = screen.getByRole<HTMLSelectElement>("combobox");
+        expect(select.value).toBe("plugged");
+        fireEvent.change(select, { target: { value: "always" } });
+
+        expect(keepAwake.setMode).toHaveBeenCalledWith("always");
+        expect(screen.getByRole<HTMLSelectElement>("combobox").value).toBe("always");
+      });
+
+      it("omits the keep-awake choice when keep-awake could not start", () => {
+        const rig = makeHost({
+          devices: [{ id: "a", name: "iPhone", createdAt: 1, lastSeenAt: null, connected: false }],
+        });
+        renderWith({ remoteHost: rig.host });
+
+        expect(screen.queryByRole("combobox")).toBeNull();
       });
 
       it("explains the Plus requirement when the account has no Plus", () => {

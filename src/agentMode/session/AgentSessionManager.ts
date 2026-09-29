@@ -593,6 +593,14 @@ export class AgentSessionManager {
     this.notify();
   }
 
+  /** True while any live session is mid-turn; a turn waiting on a permission prompt is not. https://github.com/Brevilabs/obsidian-copilot-private/issues/608 */
+  hasRunningTurn(): boolean {
+    for (const session of this.sessions.values()) {
+      if (session.getStatus() === "running") return true;
+    }
+    return false;
+  }
+
   getRunningChatIds(): ReadonlySet<string> {
     const ids = new Set<string>();
     for (const [internalId, session] of this.sessions) {

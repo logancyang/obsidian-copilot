@@ -94,6 +94,7 @@ import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { createRemoteClient, type RemoteClient } from "@/remote/client";
 import { handlePairingLinkAction } from "@/remote/client/pairingAction";
 import { PAIRING_ACTION } from "@/remote/pairingLink";
+import type { KeepAwakeService } from "@/keepAwake";
 import type { RemoteHostService } from "@/remote/host";
 import { disposeNotificationSound } from "@/utils/notificationSound";
 import { installRendererEventsShim } from "@/utils/rendererEventsShim";
@@ -170,6 +171,7 @@ export default class CopilotPlugin extends Plugin {
   agentSessionView?: ClientView;
   skills?: SkillManager;
   remoteHost?: RemoteHostService;
+  keepAwake?: KeepAwakeService;
   remoteClient?: RemoteClient;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
@@ -325,6 +327,14 @@ export default class CopilotPlugin extends Plugin {
         void this.remoteHost.start();
       } catch (error) {
         logError("Remote access could not be initialised.", error);
+      }
+
+      try {
+        const { createKeepAwake } = await import("@/keepAwake");
+        this.keepAwake =
+          createKeepAwake(this.app, this.agentSessionManager, this.remoteHost) ?? undefined;
+      } catch (error) {
+        logError("Keep-awake could not be initialised.", error);
       }
     } else {
       this.remoteClient = createRemoteClient(this.app);
@@ -598,6 +608,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   private async teardown(): Promise<void> {
+    this.keepAwake?.dispose();
     // The listener's port is remembered for paired phones, so a successor plugin that starts while
     // this one still holds it would find the port busy. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
     const remoteStopped = this.remoteHost?.dispose();
