@@ -1,12 +1,3 @@
-/**
- * Quick Command system prompt and utility functions.
- * Shared across Quick Ask and Quick Command features.
- */
-
-/**
- * System prompt for Quick Command / Quick Ask interactions.
- * Designed for precise, action-oriented responses.
- */
 export const QUICK_COMMAND_SYSTEM_PROMPT = `
 You are an AI assistant designed to execute user instructions with precision. Your responses should be:
 
@@ -26,14 +17,6 @@ Key principles:
 Response format: Match the format implied by the user's request (e.g., if they ask for a list, provide a list; if they ask for a rewrite, provide only the rewritten text).
 `;
 
-/**
- * Appends Include note context placeholders to user content if enabled.
- * Only adds placeholders that don't already exist in the content.
- *
- * @param userContent - The original user input content
- * @param includeActiveNote - Whether to include note context
- * @returns The content with placeholders appended if needed
- */
 export function appendIncludeNoteContextPlaceholders(
   userContent: string,
   includeActiveNote: boolean
@@ -42,11 +25,9 @@ export function appendIncludeNoteContextPlaceholders(
     return userContent;
   }
 
-  // Check if placeholders already exist to avoid duplication
   const hasSelectedTextPlaceholder = userContent.includes("{}");
   const hasActiveNotePlaceholder = /\{activenote\}/i.test(userContent);
 
-  // Only append placeholders that don't already exist
   const placeholdersToAdd: string[] = [];
   if (!hasSelectedTextPlaceholder) {
     placeholdersToAdd.push("{}");

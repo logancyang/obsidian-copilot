@@ -33,13 +33,6 @@ const mockedRunRandomReadCommand = runRandomReadCommand as jest.MockedFunction<
   typeof runRandomReadCommand
 >;
 
-/**
- * Build a minimal successful CLI response payload for tool tests.
- *
- * @param command - CLI command identifier.
- * @param stdout - Command output payload.
- * @returns Successful CLI response.
- */
 function buildSuccessResult(command: string, stdout: string): CliResult {
   return {
     command,
@@ -56,14 +49,6 @@ function buildSuccessResult(command: string, stdout: string): CliResult {
   };
 }
 
-/**
- * Build a minimal failed CLI response payload for tool tests.
- *
- * @param command - CLI command identifier.
- * @param errorCode - Process error code.
- * @param stderr - Standard error output.
- * @returns Failed CLI response.
- */
 function buildFailedResult(command: string, errorCode: string, stderr: string): CliResult {
   return {
     command,

@@ -11,9 +11,6 @@ import { Document } from "@langchain/core/documents";
 import { App, TFile, getAllTags } from "obsidian";
 import { RETURN_ALL_LIMIT } from "./SearchCore";
 
-/**
- * Options for FilterRetriever.
- */
 export interface FilterRetrieverOptions {
   salientTerms: string[];
   timeRange?: { startTime: number; endTime: number };
@@ -21,31 +18,12 @@ export interface FilterRetrieverOptions {
   returnAll?: boolean;
 }
 
-/**
- * Deprecated: Vault Search v3 is awaiting removal; retained for existing callers.
- *
- * Standalone retriever for deterministic filter matching: title mentions ([[note]]),
- * tag matches (#hashtag), and time-range filtering. These results are "guaranteed
- * inclusion" — they bypass scored ranking and should not be dropped by downstream
- * top-K slicing.
- *
- * Separated from TieredLexicalRetriever so the SearchTools orchestration layer
- * can merge filter results with search results independently.
- */
 export class FilterRetriever {
   constructor(
     private app: App,
     private options: FilterRetrieverOptions
   ) {}
 
-  /**
-   * Run filter matching and return guaranteed-inclusion documents.
-   * - If timeRange is set: return daily notes + mtime-filtered docs (no search needed)
-   * - Otherwise: return title matches ([[note]]) + tag matches (#hashtag)
-   *
-   * @param query - The user's search query
-   * @returns Array of filter-matched Documents with includeInContext: true
-   */
   async getRelevantDocuments(query: string): Promise<Document[]> {
     if (this.options.timeRange) {
       return this.getTimeRangeDocuments(query);
@@ -57,18 +35,10 @@ export class FilterRetriever {
     return this.combineGuaranteedMatches(titleMatches, tagMatches);
   }
 
-  /**
-   * Whether this filter retriever has a time range set.
-   * When true, the orchestration layer should skip main search (filter results are the complete set).
-   */
   hasTimeRange(): boolean {
     return this.options.timeRange !== undefined;
   }
 
-  /**
-   * Get documents for time-based queries.
-   * Returns daily notes and documents modified within the time range.
-   */
   private async getTimeRangeDocuments(_query: string): Promise<Document[]> {
     if (!this.options.timeRange) {
       return [];
@@ -189,12 +159,6 @@ export class FilterRetriever {
     return results;
   }
 
-  /**
-   * Resolves tag terms from salient terms or raw query extraction.
-   *
-   * @param query - Original user query string
-   * @returns Array of normalized tag tokens (hash-prefixed, lowercase)
-   */
   private resolveTagTerms(query: string): string[] {
     const normalized = new Set<string>();
 
@@ -213,12 +177,6 @@ export class FilterRetriever {
     return Array.from(normalized);
   }
 
-  /**
-   * Extracts hash-prefixed tags from a query string, returning lowercase tokens.
-   *
-   * @param query - Original user query
-   * @returns Array of detected tag tokens
-   */
   private extractTagsFromQuery(query: string): string[] {
     if (!query) {
       return [];
@@ -247,10 +205,6 @@ export class FilterRetriever {
     return Array.from(normalized);
   }
 
-  /**
-   * Generate daily note titles for a date range.
-   * Returns titles in [[YYYY-MM-DD]] format.
-   */
   private generateDailyNoteDateRange(startTime: number, endTime: number): string[] {
     const dailyNotes: string[] = [];
     const start = new Date(startTime);
@@ -275,21 +229,10 @@ export class FilterRetriever {
     return dailyNotes;
   }
 
-  /**
-   * Get documents for notes matching by title (explicit [[]] mentions).
-   * These are always included in results regardless of search score.
-   */
   private async getTitleMatches(noteFiles: TFile[]): Promise<Document[]> {
     const chunks: Document[] = [];
 
     for (const file of noteFiles) {
-      // A Copilot root is excluded unconditionally, so an explicit [[link]] must
-      // not reach past it either: these documents are returned with
-      // `includeInContext: true` and nothing downstream drops them, so a linked
-      // chat note would otherwise be handed to the model verbatim. Deliberately
-      // NOT the full `shouldIndexFile` — that would also subject explicit links
-      // to the user's own qaInclusions/qaExclusions, which they have always been
-      // able to override by naming a file directly.
       if (isInternalExcludedFile(file) || isSystemExcludedPath(file.path)) {
         continue;
       }
@@ -321,13 +264,6 @@ export class FilterRetriever {
     return chunks;
   }
 
-  /**
-   * Get documents for notes matching by tag via Obsidian's metadata cache.
-   * Supports hierarchical prefix matching: #project matches #project/alpha.
-   *
-   * @param tagTerms - Lowercase, hash-prefixed tag tokens to match
-   * @returns Array of full-note Documents for every file containing a matching tag
-   */
   private async getTagMatches(tagTerms: string[]): Promise<Document[]> {
     if (tagTerms.length === 0) return [];
 
@@ -388,10 +324,6 @@ export class FilterRetriever {
     return documents;
   }
 
-  /**
-   * Merge multiple sets of guaranteed-include documents, deduplicating by path.
-   * Earlier entries take priority.
-   */
   private combineGuaranteedMatches(...sets: Document[][]): Document[] {
     const seen = new Set<string>();
     const result: Document[] = [];

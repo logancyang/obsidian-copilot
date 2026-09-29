@@ -8,7 +8,6 @@ describe("createNodeContextCacheFs", () => {
   let root: string;
 
   beforeEach(async () => {
-    // `parent` stands in for `vaults/<id>/`; `root` is the cache dir inside it.
     parent = await fs.promises.mkdtemp(path.join(os.tmpdir(), "ctx-cache-fs-"));
     root = path.join(parent, "context-cache");
     await fs.promises.mkdir(root, { recursive: true });
@@ -24,7 +23,6 @@ describe("createNodeContextCacheFs", () => {
     await cache.writeText("remotes/web-1.md", "hello");
 
     expect(await cache.readText("remotes/web-1.md")).toBe("hello");
-    // Only the final file — the staging temp must have been renamed away.
     expect(await fs.promises.readdir(path.join(root, "remotes"))).toEqual(["web-1.md"]);
   });
 
@@ -32,7 +30,6 @@ describe("createNodeContextCacheFs", () => {
     const cache = createNodeContextCacheFs(root);
     await cache.mkdirRecursive("remotes");
     await cache.writeText("remotes/web-1.md", "a");
-    // Simulate a temp left by a crashed/concurrent write.
     await fs.promises.writeFile(path.join(root, "remotes", ".copilot-cache-tmp-web-2.md-7"), "x");
 
     expect(await cache.list("remotes")).toEqual(["web-1.md"]);
@@ -51,7 +48,6 @@ describe("createNodeContextCacheFs", () => {
   it("rejects a `..` segment before touching the filesystem (root-confined)", async () => {
     const cache = createNodeContextCacheFs(root);
     await expect(cache.writeText("../escape.md", "x")).rejects.toThrow('".." segment');
-    // The escape target must not have been created in the parent.
     await expect(fs.promises.readdir(parent)).resolves.not.toContain("escape.md");
   });
 
@@ -63,7 +59,6 @@ describe("createNodeContextCacheFs", () => {
   it("refuses to write the cache root itself (no temp leaks into the parent)", async () => {
     const cache = createNodeContextCacheFs(root);
     await expect(cache.writeText("", "x")).rejects.toThrow("cache root");
-    // Nothing staged into the parent `vaults/<id>/` stand-in.
     expect(await fs.promises.readdir(parent)).toEqual(["context-cache"]);
   });
 
@@ -82,10 +77,7 @@ describe("createNodeContextCacheFs", () => {
 
   it("write throws (does not swallow) when the target directory is missing", async () => {
     const cache = createNodeContextCacheFs(root);
-    // No mkdir for `remotes` → staging the temp fails. The error must surface
-    // so the caller records a per-source failure instead of a silent success.
     await expect(cache.writeText("remotes/web-1.md", "x")).rejects.toBeDefined();
-    // And no half-written temp is left lingering at the root.
     expect(await fs.promises.readdir(root)).toEqual([]);
   });
 
@@ -93,7 +85,6 @@ describe("createNodeContextCacheFs", () => {
     const cache = createNodeContextCacheFs(root);
     await cache.mkdirRecursive("remotes");
     await cache.writeText("remotes/web-1.md", "a");
-    // A sibling of `root` standing in for `agent-chat-index.json`.
     const sibling = path.join(parent, "agent-chat-index.json");
     await fs.promises.writeFile(sibling, "{}");
 

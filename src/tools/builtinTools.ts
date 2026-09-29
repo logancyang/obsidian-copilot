@@ -25,13 +25,8 @@ import {
 import { ToolDefinition, ToolRegistry } from "./ToolRegistry";
 import { youtubeTranscriptionTool } from "./YoutubeTools";
 
-/**
- * Define all built-in tools with their metadata. App-dependent tools are
- * instantiated from their factories with the provided `app`.
- */
 function getBuiltinTools(app: App): ToolDefinition[] {
   return [
-    // Search tools
     {
       tool: createLocalSearchTool(app),
       metadata: {
@@ -95,7 +90,6 @@ Example: "search the web for python tutorials" → query: "python tutorials", ch
       },
     },
 
-    // Time tools (always enabled)
     {
       tool: getCurrentTimeTool,
       metadata: {
@@ -155,7 +149,6 @@ Example: "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9) �
       },
     },
 
-    // File tools
     {
       tool: createReadNoteTool(app),
       metadata: {
@@ -188,7 +181,7 @@ Examples:
         description: "Create or rewrite files in your vault",
         category: "file",
         requiresVault: true,
-        timeoutMs: 0, // No timeout - waits for user preview decision
+        timeoutMs: 0,
         copilotCommands: ["@composer"],
         customPromptInstructions: `For writeFile:
 - NEVER display the file content directly in your response
@@ -212,7 +205,7 @@ Examples:
         description: "Make a targeted, single-match edit to an existing file",
         category: "file",
         requiresVault: true,
-        timeoutMs: 0, // No timeout - waits for user preview decision
+        timeoutMs: 0,
         customPromptInstructions: `For editFile:
 - Use for targeted edits; use writeFile for major rewrites or new files
 - oldText must uniquely identify the location — include surrounding context lines if needed
@@ -226,7 +219,6 @@ newText: "## Attendees\\n- John Smith\\n- Jane Doe\\n- Bob Johnson"`,
       },
     },
 
-    // Media tools
     {
       tool: youtubeTranscriptionTool,
       metadata: {
@@ -244,9 +236,6 @@ newText: "## Attendees\\n- John Smith\\n- Jane Doe\\n- Bob Johnson"`,
   ];
 }
 
-/**
- * Register the file tree tool separately as it needs vault access
- */
 export function registerFileTreeTool(app: App): void {
   const registry = ToolRegistry.getInstance();
 
@@ -274,9 +263,6 @@ Example queries that should use getFileTree:
   });
 }
 
-/**
- * Register the tag list tool separately to ensure metadata cache access is available.
- */
 export function registerTagListTool(app: App): void {
   const registry = ToolRegistry.getInstance();
 
@@ -303,9 +289,6 @@ Examples:
   });
 }
 
-/**
- * Register the memory tool separately as it depends on saved memory setting
- */
 export function registerMemoryTool(app: App): void {
   const registry = ToolRegistry.getInstance();
 
@@ -328,10 +311,6 @@ Example: statement: "I'm studying Japanese and I'm preparing for JLPT N3"`,
   });
 }
 
-/**
- * Register desktop-only Obsidian CLI tools.
- * These tools are completely invisible on mobile — not registered, not shown in any UI.
- */
 export function registerCliTools(): void {
   const registry = ToolRegistry.getInstance();
 
@@ -480,18 +459,10 @@ Base file YAML reference (for creating new .base files with writeFile):
   });
 }
 
-/**
- * Initialize all built-in tools in the registry.
- * This function registers tool definitions, not user preferences.
- * User-enabled tools are filtered dynamically when retrieved.
- *
- * @param app - Optional Obsidian app. When provided, enables registration of app-dependent tools (search, readNote, writeFile, editFile, file tree, tag list, memory).
- */
 export function initializeBuiltinTools(app?: App): void {
   const registry = ToolRegistry.getInstance();
   const settings = getSettings();
 
-  // Only reinitialize if tools have changed or app/memory status has changed
   const hasFileTree = registry.getToolMetadata("getFileTree") !== undefined;
   const shouldHaveFileTree = app !== undefined;
   const hasUpdateMemoryTool = registry.getToolMetadata("updateMemory") !== undefined;
@@ -502,23 +473,18 @@ export function initializeBuiltinTools(app?: App): void {
     hasFileTree !== shouldHaveFileTree ||
     hasUpdateMemoryTool !== shouldHaveMemoryTool
   ) {
-    // Clear any existing tools
     registry.clear();
 
-    // Register app-dependent built-in tools (most built-ins need the vault or
-    // metadata cache; they're instantiated from factories with `app`).
     if (app) {
       registry.registerAll(getBuiltinTools(app));
       registerFileTreeTool(app);
       registerTagListTool(app);
 
-      // Register memory tool if saved memory is enabled
       if (settings.enableSavedMemory) {
         registerMemoryTool(app);
       }
     }
 
-    // Register desktop-only CLI tools (invisible on mobile)
     if (isDesktopRuntime()) {
       registerCliTools();
     }

@@ -18,7 +18,6 @@ import type { StartupMigrationItem } from "@/services/startupMigration";
 async function saveUnsupportedCommands(app: App, commands: CustomCommand[]) {
   const folderPath = getCustomCommandsFolder();
   const unsupportedFolderPath = `${folderPath}/unsupported`;
-  // Ensure nested structure exists regardless of platform
   await ensureFolderExists(app.vault, unsupportedFolderPath);
   return Promise.all(
     commands.map(async (command) => {
@@ -35,7 +34,6 @@ async function saveUnsupportedCommands(app: App, commands: CustomCommand[]) {
   );
 }
 
-/** Migrates the legacy commands in data.json to the new note format. */
 export async function migrateCommands(app: App): Promise<StartupMigrationItem | null> {
   const legacyCommands = getSettings().inlineEditCommands;
   if (!legacyCommands || legacyCommands.length === 0) {
@@ -95,7 +93,6 @@ export async function migrateCommands(app: App): Promise<StartupMigrationItem | 
   };
 }
 
-/** Generates the default commands. */
 export async function generateDefaultCommands(): Promise<void> {
   const existingCommands = getCachedCustomCommands();
   const defaultCommands = DEFAULT_COMMANDS.filter(

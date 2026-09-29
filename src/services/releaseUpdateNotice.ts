@@ -6,13 +6,6 @@ import { logWarn } from "@/logger";
 import { isNewerVersion } from "@/utils";
 import { App, Notice } from "obsidian";
 
-/**
- * Starts a background update check and returns synchronous plugin-unload cleanup.
- * @param app - Obsidian app that owns the notice and release notes dialog.
- * @param currentVersion - Installed plugin version to compare with the released manifest.
- * @param lastShownVersion - Release already announced at startup, independent of banner dismissal.
- * @param onShown - Persists the release version after its notice is displayed.
- */
 export function startReleaseUpdateCheck(
   app: App,
   currentVersion: string,
@@ -23,7 +16,6 @@ export function startReleaseUpdateCheck(
   let notice: Notice | undefined;
   void requestLatestRelease()
     .then((release) => {
-      // requestUrl cannot be cancelled; an unloaded plugin must not show late UI.
       if (
         !active ||
         !release ||

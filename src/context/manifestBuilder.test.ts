@@ -60,13 +60,10 @@ describe("buildProjectContextBlock", () => {
     expect(md).toContain("#research");
     expect(md).toContain("`*.pdf`");
     expect(md).toContain("https://a.com → `/cache/remotes/web-1.md`");
-    // No member-file expansion of the folder.
     expect(md).not.toMatch(/Papers\/\S+\.md/);
   });
 
   it("lists a materialized source without a pointer when it has no absolute path", () => {
-    // A snapshot entry that never got an absolute path (e.g. a non-desktop build)
-    // degrades to no pointer — the source stays listed, just unlinked.
     const materialized: MaterializedEntry[] = [
       { type: "web", source: "https://a.com", cacheFileName: "web-1.md" },
     ];
@@ -89,14 +86,10 @@ describe("buildProjectContextBlock", () => {
     );
     expect(md).toContain("## Included URLs");
     expect(md).toContain("https://broken.com");
-    // No snapshot pointer when materialization failed.
     expect(md).not.toContain("https://broken.com → ");
   });
 
   it("points web and youtube rows at their own snapshots when the same URL is in both", () => {
-    // parseProjectUrls keeps the same URL as both a web and a youtube source; each
-    // gets its own type-keyed snapshot. The pointer lookup must be type-aware or
-    // one row would resolve to the other's snapshot.
     const url = "https://youtu.be/abc";
     const materialized: MaterializedEntry[] = [
       { type: "web", source: url, cacheFileName: "web-1.md", snapshotAbsPath: "/cache/remotes/web-1.md" }, // prettier-ignore
@@ -139,9 +132,6 @@ describe("buildProjectContextBlock", () => {
   });
 
   it("keeps every declared source when property-matched notes overflow the entry cap", () => {
-    // One `[Subject:]` enumerates every note carrying the key, which alone exhausts
-    // the cap. No declared source may be pushed out by that expansion — a dropped URL
-    // row loses its snapshot pointer, and that cache path appears nowhere else.
     const many = Array.from({ length: MAX_MANIFEST_ENTRIES + 20 }, (_, i) => abs(`n${i}.md`));
     const materialized: MaterializedEntry[] = [
       {
@@ -175,10 +165,6 @@ describe("buildProjectContextBlock", () => {
   });
 
   it("keeps a declared note when materialized file rows overflow the entry cap", () => {
-    // A folder inclusion over a PDF-heavy folder expands to one materialized row per
-    // binary, so those rows are an expansion too and must not evict the `[[note]]`
-    // the user declared by hand — off-cwd, its absolute path here is the agent's
-    // only handle on it.
     const materialized: MaterializedEntry[] = Array.from(
       { length: MAX_MANIFEST_ENTRIES + 20 },
       (_, i) => ({
@@ -203,8 +189,6 @@ describe("buildProjectContextBlock", () => {
   });
 
   it("spends the leftover budget on expansions and counts the trimmed ones as omitted", () => {
-    // 5 declared sources + 120 property matches = 125 total, so the expansion gets
-    // the remaining 95 slots and the 25 it loses are what the truncation note reports.
     const many = Array.from({ length: 120 }, (_, i) => abs(`n${i}.md`));
     const md = buildProjectContextBlock(
       sources({

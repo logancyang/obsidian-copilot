@@ -33,7 +33,6 @@ export function updateCachedCommand(command: CustomCommand, prevCommandTitle: st
   if (prevIndex !== -1) {
     updatedCommands = commands.map((c) => (c.title === prevCommandTitle ? command : c));
   } else {
-    // Create a new command
     updatedCommands = [...commands, command];
   }
   customCommandsStore.set(customCommandsAtom, updatedCommands);

@@ -13,13 +13,7 @@ export interface TimeInfo {
   timezone: string;
 }
 
-/**
- * Parse timezone offset string to a valid UTC offset
- * Supports formats like: "+8", "-5", "+08:00", "-05:30", "UTC+8", "GMT-5"
- * Returns a normalized UTC offset string like "UTC+8" or "UTC-5:30"
- */
 function parseTimezoneOffset(offset: string): string {
-  // Extract the numeric offset from various formats
   const offsetMatch = offset.match(/^(?:UTC|GMT)?([-+]?\d{1,2})(?::(\d{2}))?$/i);
   if (!offsetMatch) {
     throw new Error(
@@ -30,14 +24,12 @@ function parseTimezoneOffset(offset: string): string {
   const hours = parseInt(offsetMatch[1]);
   const minutes = parseInt(offsetMatch[2] || "0");
 
-  // Validate the offset range
   if (Math.abs(hours) > 14 || minutes >= 60) {
     throw new Error(
       `Invalid timezone offset: ${offset}. Hours must be between -14 and +14, minutes must be less than 60`
     );
   }
 
-  // Create a normalized UTC offset string
   const sign = hours >= 0 ? "+" : "";
   const minutesStr = minutes > 0 ? `:${minutes.toString().padStart(2, "0")}` : "";
 
@@ -47,7 +39,6 @@ function parseTimezoneOffset(offset: string): string {
 async function getCurrentTime(timezoneOffset?: string): Promise<TimeInfo> {
   let dt: DateTime = DateTime.now();
 
-  // If timezone offset is provided, convert to that timezone
   if (timezoneOffset) {
     try {
       const parsedOffset = parseTimezoneOffset(timezoneOffset);
@@ -62,7 +53,6 @@ async function getCurrentTime(timezoneOffset?: string): Promise<TimeInfo> {
   }
 
   const jsDate = dt.toJSDate();
-  // Use Luxon's offset which is in minutes and already has the correct sign
   const offsetMinutes = dt.offset;
   const timezoneAbbr = dt.offsetNameShort || "Unknown";
 
@@ -138,15 +128,7 @@ const monthNames = {
   december: 12,
 } as const;
 
-/**
- * Handles relative time range patterns like:
- * - "last 3 days", "past 3 days"
- * - "last 2 weeks", "past 2 weeks"
- * - "last 6 months", "previous 6 months"
- * - "last 2 years", "prior 2 years"
- */
 function handleRelativeTimeRange(input: string, now: DateTime) {
-  // Match numeric patterns with various past-tense prefixes
   const relativeMatch = input.match(
     /^(last|past|previous|prior)\s+(\d+)\s+(days?|weeks?|months?|years?)$/i
   );
@@ -167,14 +149,6 @@ function handleRelativeTimeRange(input: string, now: DateTime) {
   return { start, end };
 }
 
-/**
- * Handles special time ranges like:
- * - "yesterday"
- * - "last week", "this week", "next week"
- * - "last month", "this month", "next month"
- * - "last quarter", "this quarter", "next quarter"
- * - "last year", "this year", "next year"
- */
 function handleSpecialTimeRanges(input: string, now: DateTime) {
   switch (input) {
     case "yesterday":
@@ -246,12 +220,6 @@ function handleSpecialTimeRanges(input: string, now: DateTime) {
   return undefined;
 }
 
-/**
- * Handles "week of" pattern like:
- * - "week of July 1st"
- * - "week of 2023-07-01"
- * - "the week of last Monday"
- */
 function handleWeekOf(input: string, now: DateTime) {
   const weekOfMatch = input.match(/(?:the\s+)?week\s+of\s+(.+)/i);
   if (!weekOfMatch) return undefined;
@@ -271,11 +239,6 @@ function handleWeekOf(input: string, now: DateTime) {
   return { start, end };
 }
 
-/**
- * Handles single month names like:
- * - "january", "jan"
- * - "december", "dec"
- */
 function handleMonthName(input: string, now: DateTime) {
   const monthMatch = input.match(
     /^(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)$/i
@@ -304,12 +267,6 @@ function handleMonthName(input: string, now: DateTime) {
   return { start, end };
 }
 
-/**
- * Handles year patterns like:
- * - "2023"
- * - "year 2023"
- * - "the year of 2023"
- */
 function handleYear(input: string, now: DateTime) {
   const yearMatch = input.match(/^(?:(?:the\s+)?(?:year|yr)(?:\s+(?:of|in))?\s+)?(\d{4})$/i);
   if (!yearMatch) return undefined;
@@ -326,31 +283,21 @@ function handleYear(input: string, now: DateTime) {
   return { start, end };
 }
 
-/**
- * Handles quarter patterns like:
- * - "Q1 2024", "2024 Q1"
- * - "q2 2023", "2023 q2"
- * - Q1, q1 (current year)
- */
 function handleQuarter(input: string, now: DateTime) {
-  // First try matching full quarter with year pattern
   const quarterYearMatch = input.match(/^(?:(?:q|Q)(\d{1})\s+(\d{4})|(\d{4})\s+(?:q|Q)(\d{1}))$/);
 
-  // Then try matching just the quarter pattern
   const quarterOnlyMatch = input.match(/^(?:q|Q)(\d{1})$/);
 
   let quarter: number;
   let year: number;
 
   if (quarterYearMatch) {
-    // Extract quarter and year whether it's "Q1 2024" or "2024 Q1" format
     quarter = parseInt(quarterYearMatch[1] || quarterYearMatch[4]);
     year = parseInt(quarterYearMatch[2] || quarterYearMatch[3]);
   } else if (quarterOnlyMatch) {
     quarter = parseInt(quarterOnlyMatch[1]);
     year = now.year;
 
-    // Adjust year if the quarter is in the future
     const currentQuarter = Math.floor((now.month - 1) / 3) + 1;
     if (quarter > currentQuarter) {
       year--;
@@ -359,11 +306,9 @@ function handleQuarter(input: string, now: DateTime) {
     return undefined;
   }
 
-  // Validate quarter number
   if (quarter < 1 || quarter > 4) return undefined;
 
-  // Calculate start and end months for the quarter
-  const startMonth = (quarter - 1) * 3 + 1; // Q1=1, Q2=4, Q3=7, Q4=10
+  const startMonth = (quarter - 1) * 3 + 1;
 
   let start = DateTime.fromObject({
     year,
@@ -373,7 +318,6 @@ function handleQuarter(input: string, now: DateTime) {
 
   let end = start.plus({ months: 3 }).minus({ days: 1 }).endOf("day");
 
-  // Adjust if dates are in the future
   if (start > now) {
     start = start.minus({ years: 1 });
     end = end.minus({ years: 1 });
@@ -382,11 +326,6 @@ function handleQuarter(input: string, now: DateTime) {
   return { start, end };
 }
 
-/**
- * Handles month-year combinations like:
- * - "jan 2024", "january 2024"
- * - "dec 2023", "december 2023"
- */
 function handleMonthYear(input: string, now: DateTime) {
   const monthYearMatch = input.match(
     /^(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\s+(\d{4})$/i
@@ -416,7 +355,6 @@ function getTimeRangeMs(timeExpression: string) {
   const now = DateTime.now();
   const normalizedInput = timeExpression.toLowerCase().replace("@vault", "").trim();
 
-  // Try each parser in sequence
   const result =
     handleRelativeTimeRange(normalizedInput, now) ||
     handleSpecialTimeRanges(normalizedInput, now) ||
@@ -433,7 +371,6 @@ function getTimeRangeMs(timeExpression: string) {
     };
   }
 
-  // Fallback to chrono parser for other date formats
   const parsedDates = chrono.parse(timeExpression, now.toJSDate(), { forwardDate: false });
   if (parsedDates.length > 0) {
     const start = DateTime.fromJSDate(parsedDates[0].start.date()).startOf("day");
@@ -458,7 +395,6 @@ function getTimeRangeMs(timeExpression: string) {
 
 function convertToTimeInfo(dateTime: DateTime): TimeInfo {
   const jsDate = dateTime.toJSDate();
-  // Use Luxon's offset which is in minutes and already has the correct sign
   const offsetMinutes = dateTime.offset;
   const timezoneAbbr = dateTime.offsetNameShort || "Unknown";
 
@@ -503,7 +439,6 @@ EXAMPLE WORKFLOW:
 });
 
 function getTimeInfoByEpoch(epoch: number): TimeInfo {
-  // Check if the epoch is in seconds (10 digits) or milliseconds (13 digits)
   const epochMs = epoch.toString().length === 10 ? epoch * 1000 : epoch;
   const dateTime = DateTime.fromMillis(epochMs);
   return convertToTimeInfo(dateTime);
@@ -518,24 +453,15 @@ const getTimeInfoByEpochTool = createLangChainTool({
   func: async ({ epoch }) => getTimeInfoByEpoch(epoch),
 });
 
-/**
- * Convert a time from one UTC offset to another
- * @param time - Time expression like "6pm", "18:00", "3:30 PM"
- * @param fromOffset - Source UTC offset (e.g., "+8", "-5", "UTC+8")
- * @param toOffset - Target UTC offset (e.g., "+9", "-5", "UTC+9")
- * @returns Time information in the target timezone
- */
 async function convertTimeBetweenTimezones(
   time: string,
   fromOffset: string,
   toOffset: string
 ): Promise<TimeInfo & { originalTime: string; convertedTime: string }> {
-  // Parse timezone offsets
   const sourceTz = parseTimezoneOffset(fromOffset);
   const targetTz = parseTimezoneOffset(toOffset);
 
   try {
-    // Parse the time string using chrono
     const baseDate = DateTime.now().setZone(sourceTz);
     const parsedDate = chrono.parseDate(time, baseDate.toJSDate());
 
@@ -543,10 +469,8 @@ async function convertTimeBetweenTimezones(
       throw new Error(`Could not parse time: ${time}`);
     }
 
-    // Create DateTime interpreting the parsed date as already being in source timezone
     const sourceDt = DateTime.fromJSDate(parsedDate, { zone: sourceTz });
 
-    // Convert to target timezone
     const targetDt = sourceDt.setZone(targetTz);
 
     if (!targetDt.isValid) {
@@ -554,7 +478,6 @@ async function convertTimeBetweenTimezones(
     }
 
     const jsDate = targetDt.toJSDate();
-    // Use Luxon's offset which is in minutes and already has the correct sign
     const offsetMinutes = targetDt.offset;
 
     return {

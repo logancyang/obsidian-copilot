@@ -15,11 +15,8 @@ import {
   shouldIndexFile,
 } from "./searchUtils";
 
-// Mock Obsidian's TFile and Modal classes
 jest.mock("obsidian", () => ({
   normalizePath: (path: string) => path.replace(/\/+/g, "/").replace(/^\/|\/$/g, ""),
-  // Mutable so a test can assert the case-sensitive and case-insensitive
-  // behaviours of system-root matching on one platform.
   Platform: { isWin: false, isMacOS: true, isIosApp: false },
   TFile: class TFile {
     path: string;
@@ -43,7 +40,6 @@ jest.mock("@/LLMProviders/brevilabsClient", () => ({
   },
 }));
 
-// Create test files using the mocked TFile
 const createTestFile = (path: string) => {
   const file = new TFile();
   file.path = path;
@@ -51,7 +47,6 @@ const createTestFile = (path: string) => {
   return file;
 };
 
-// Mock the global app object
 const mockGetAbstractFileByPath = jest.fn();
 const mockApp = {
   vault: {
@@ -59,7 +54,6 @@ const mockApp = {
   },
 } as unknown as typeof window.app;
 
-// Mock getTagsFromNote utility function
 jest.mock(
   "@/utils",
   (): Record<string, unknown> => ({
@@ -70,7 +64,6 @@ jest.mock(
   })
 );
 
-// Add mock for settings
 jest.mock(
   "@/settings/model",
   (): Record<string, unknown> => ({
@@ -96,7 +89,6 @@ describe("searchUtils", () => {
   beforeEach(() => {
     mockGetAbstractFileByPath.mockReset();
     (utils.getTagsFromNote as jest.Mock).mockReset();
-    // Reset the settings mock before each test
     (settingsModel.getSettings as jest.Mock).mockReset();
     (settingsModel.getSettings as jest.Mock).mockReturnValue({
       qaInclusions: "",
@@ -298,7 +290,6 @@ describe("searchUtils", () => {
 
     it("should include any note that has the key for a key-only property pattern", () => {
       const file = createTestFile("notes/any.md");
-      // A key-only pattern matches on key presence, even when the value is empty.
       (utils.noteHasProperty as jest.Mock).mockReturnValue(true);
 
       const inclusions = { propertyPatterns: ["[Topics:]"] };
@@ -371,8 +362,6 @@ describe("searchUtils", () => {
     });
 
     it("should not mistake a double-bracket note pattern for a property", () => {
-      // A note title may itself contain a colon; the double-bracket form must
-      // still win over the single-bracket property form.
       const { notePatterns, propertyPatterns } = categorizePatterns(["[[Note 1]]", "[[Topics:x]]"]);
 
       expect(notePatterns).toEqual(["[[Note 1]]", "[[Topics:x]]"]);
@@ -483,8 +472,6 @@ describe("searchUtils", () => {
     });
 
     it("should round-trip a property value containing commas and percent signs", () => {
-      // The stored form is a comma-joined, percent-encoded list, so a value with
-      // its own commas or percent signs must survive encode -> decode intact.
       const pattern = "[Topics:a, b 50%]";
       const value = createPatternSettingsValue({ propertyPatterns: [pattern] });
       expect(categorizePatterns(getDecodedPatterns(value)).propertyPatterns).toEqual([pattern]);
@@ -532,7 +519,6 @@ describe("searchUtils", () => {
     });
 
     it("should handle malformed URI sequences gracefully", () => {
-      // Invalid % sequences that would throw URIError
       const value = "bad%2,valid,bad%zz,%E0%A4";
       expect(getDecodedPatterns(value)).toEqual(["bad%2", "valid", "bad%zz", "%E0%A4"]);
     });
@@ -540,14 +526,12 @@ describe("searchUtils", () => {
 
   describe("getMatchingPatterns", () => {
     it("should return null inclusions and exclusions when no patterns are set", () => {
-      // No need to set mock return value as it's set in beforeEach
       const { inclusions, exclusions } = getMatchingPatterns();
       expect(inclusions).toBeNull();
       expect(exclusions).toBeNull();
     });
 
     it("should return categorized inclusion patterns", () => {
-      // Mock settings with inclusions
       (settingsModel.getSettings as jest.Mock).mockReturnValue({
         qaInclusions: "notes,*.pdf,%23important,%5B%5BNote%201%5D%5D",
         qaExclusions: "",
@@ -565,7 +549,6 @@ describe("searchUtils", () => {
     });
 
     it("should return categorized exclusion patterns", () => {
-      // Mock settings with exclusions
       (settingsModel.getSettings as jest.Mock).mockReturnValue({
         qaInclusions: "",
         qaExclusions: "private,%23draft,*.tmp",
@@ -583,7 +566,6 @@ describe("searchUtils", () => {
     });
 
     it("should handle both inclusions and exclusions", () => {
-      // Mock settings with both inclusions and exclusions
       (settingsModel.getSettings as jest.Mock).mockReturnValue({
         qaInclusions: "notes,%23important",
         qaExclusions: "private,%23draft",
@@ -629,7 +611,6 @@ describe("searchUtils", () => {
         copilotFolder: "Copilot/",
         copilotRootHistory: ["copilot", "Copilot"],
       } as unknown as Parameters<typeof getSystemExcludedFolders>[0]);
-      // "Copilot" (trailing slash stripped) and "copilot" stay distinct entries.
       expect(new Set(folders)).toEqual(new Set(["copilot", "Copilot"]));
     });
   });
@@ -649,12 +630,9 @@ describe("searchUtils", () => {
         qaInclusions: "",
         qaExclusions: "",
         copilotFolder: "team-ai",
-        // Retired field left pointing at the stale default path; derivation must ignore it.
         projectsFolder: "copilot/projects",
       });
-      // Excluded under the derived custom-root path.
       expect(isInternalExcludedPath("team-ai/projects/my-project/project.md")).toBe(true);
-      // NOT excluded under the stale retired path, proving derivation from the root.
       expect(isInternalExcludedPath("copilot/projects/my-project/project.md")).toBe(false);
     });
 
@@ -677,7 +655,6 @@ describe("searchUtils", () => {
         copilotRootHistory: ["copilot", "ai"],
       });
       const filter = createCopilotPatternFilter(window.app);
-      // System roots dropped on the raw path — no TFile resolution required.
       expect(filter("ai/memory/note.md")).toBe(false);
       expect(filter("copilot/copilot-conversations/chat.md")).toBe(false);
       expect(filter("notes/idea.md")).toBe(true);
@@ -685,9 +662,6 @@ describe("searchUtils", () => {
     });
 
     it("excludes root instruction files even with no user patterns configured", () => {
-      // Default QA settings take the no-pattern fast path; the instruction-file
-      // exclusion must hold there too, or vault-root AGENTS.md/CLAUDE.md surface
-      // in relevant-note and Miyo results despite being agent-facing content.
       (settingsModel.getSettings as jest.Mock).mockReturnValue({
         qaInclusions: "",
         qaExclusions: "",
@@ -709,7 +683,6 @@ describe("searchUtils", () => {
         copilotRootHistory: ["copilot"],
       });
       const filter = createCopilotPatternFilter(window.app);
-      // Segment boundary: "mycopilot/" is not the "copilot" root.
       expect(filter("mycopilot/note.md")).toBe(true);
     });
 
@@ -753,8 +726,6 @@ describe("searchUtils", () => {
     });
 
     it("excludes differently-cased instruction files where the filesystem is case-insensitive", () => {
-      // On macOS a pre-existing `agents.md` IS the file the backends read when they ask for
-      // `AGENTS.md`, so exact-case comparison would let live instructions into search.
       (obsidian.Platform as { isMacOS: boolean }).isMacOS = true;
       (settingsModel.getSettings as jest.Mock).mockReturnValue({
         qaInclusions: "",
@@ -769,9 +740,6 @@ describe("searchUtils", () => {
     });
 
     it("excludes a differently-cased root where the filesystem is case-insensitive", () => {
-      // On macOS/Windows, "Copilot/" and "copilot/" are the same folder. Nothing
-      // reconciles the stored spelling against the real one, so comparing
-      // exact-case here would fail OPEN and let chats reach QA indexing.
       (obsidian.Platform as { isMacOS: boolean }).isMacOS = true;
       (settingsModel.getSettings as jest.Mock).mockReturnValue({
         qaInclusions: "",
@@ -784,8 +752,6 @@ describe("searchUtils", () => {
     });
 
     it("keeps a differently-cased folder where the filesystem is case-sensitive", () => {
-      // On Linux the two really are separate folders, so folding would exclude
-      // notes the user never put under a Copilot root.
       const platform = obsidian.Platform as { isWin: boolean; isMacOS: boolean; isIosApp: boolean };
       const restore = { ...platform };
       Object.assign(platform, { isWin: false, isMacOS: false, isIosApp: false });

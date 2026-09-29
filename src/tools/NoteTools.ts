@@ -42,12 +42,6 @@ type ResolveNoteFailure = {
 
 type ResolveNoteOutcome = ResolveNoteSuccess | ResolveNoteAmbiguous | ResolveNoteFailure;
 
-/**
- * Normalizes a path fragment to support case-insensitive comparisons with forward slashes.
- *
- * @param value - Path or fragment supplied by the caller or taken from vault files.
- * @returns Lowercase path string with forward slashes as separators.
- */
 function normalizePathFragment(value: string): string {
   return value.replace(/\\/g, "/").toLowerCase();
 }
@@ -88,12 +82,6 @@ function pathSegmentsMatchTail(filePath: string, targetSegments: string[]): bool
   return true;
 }
 
-/**
- * Determines whether the provided path already contains a file extension.
- *
- * @param value - Path or fragment to inspect.
- * @returns True if the input ends with an extension segment.
- */
 function pathHasExtension(value: string): boolean {
   return /\.[^/]+$/.test(value);
 }
@@ -367,13 +355,6 @@ function chunkContentByLines(file: TFile, content: string): NoteChunk[] {
   return chunks;
 }
 
-// Models occasionally send numeric tool args as strings, so the schema accepts a string and
-// we coerce here rather than in the schema: a schema-level transform/preprocess cannot be
-// represented in JSON Schema, which breaks bindTools() -> toJSONSchema() for the autonomous
-// agent. Validation that the old `z.number().int().min(0)` schema performed now lives here:
-// an omitted value defaults to the first chunk (0); anything that is not a non-negative
-// integer returns null so the caller can surface a validation error instead of indexing the
-// chunk array out of bounds.
 const coerceChunkIndex = (value: number | string | undefined): number | null => {
   if (value === undefined) {
     return 0;

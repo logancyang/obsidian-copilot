@@ -6,9 +6,6 @@ import {
 import { formatCliFailureMessage } from "@/services/obsidianCli/cliErrors";
 import { createLangChainTool } from "./createLangChainTool";
 
-/**
- * Tool that reads today's daily note via the official Obsidian CLI (`daily:read`).
- */
 export const obsidianDailyReadTool = createLangChainTool({
   name: "obsidianDailyRead",
   description:
@@ -45,9 +42,6 @@ export const obsidianDailyReadTool = createLangChainTool({
   },
 });
 
-/**
- * Tool that reads a random note via the official Obsidian CLI (`random:read`).
- */
 export const obsidianRandomReadTool = createLangChainTool({
   name: "obsidianRandomRead",
   description: "Read a random note via Obsidian CLI and return the note content as plain text.",

@@ -7,13 +7,10 @@ import {
 import { getProjectFolderNameFromConfigPath, isProjectConfigFile } from "@/projects/projectPaths";
 import { mockTFile, mockTFolder } from "@/__tests__/mockObsidian";
 
-// Mock deep dependencies to avoid transitive import chains
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(() => ({ projectsFolder: "copilot-projects" })),
 }));
 
-// getProjectsFolder derives from copilotFolder in production; shim the derived
-// accessor to the folder these tests configure via getSettings().projectsFolder.
 jest.mock("@/settings/copilotFolder", () => {
   const { getSettings } = jest.requireMock<typeof import("@/settings/model")>("@/settings/model");
   return { getEffectiveProjectsFolder: jest.fn(() => getSettings().projectsFolder) };
@@ -32,7 +29,6 @@ jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
 }));
 
-// Helper: create a minimal TFile mock for a project config path
 function makeMockFile(path: string): TFile {
   return mockTFile({
     path,
@@ -45,18 +41,14 @@ function makeMockFile(path: string): TFile {
   });
 }
 
-// Helper: build the `app` mock passed to parseProjectConfigFile
 function setupAppMock(rawContent: string, frontmatter: Record<string, unknown> | null): App {
   const app = {
     vault: {
       read: jest.fn().mockResolvedValue(rawContent),
-      // Reason: parseProjectConfigFile uses `cachedFile instanceof TFile` to detect synthetic TFiles.
-      // Return an object with TFile prototype so tests exercise the vault.read() path by default.
       getAbstractFileByPath: jest.fn((path: string): TFile => mockTFile({ path })),
       adapter: { read: jest.fn().mockResolvedValue(rawContent) },
     },
     metadataCache: {
-      // Reason: returning null forces the fallback YAML parse path in parseProjectConfigFile
       getFileCache: jest.fn().mockReturnValue(frontmatter ? { frontmatter } : null),
     },
   } as unknown as App;
@@ -67,9 +59,7 @@ describe("parseProjectConfigFile", () => {
   const VALID_PATH = "copilot-projects/my-project/project.md";
 
   it("returns null when YAML frontmatter is malformed", async () => {
-    // Malformed YAML: unbalanced braces cause a parse error
     const malformedContent = "---\nname: {bad: yaml: here\n---\nBody text";
-    // Force the metadata-cache miss so the fallback YAML parser runs
     const app = setupAppMock(malformedContent, null);
 
     const file = makeMockFile(VALID_PATH);
@@ -98,7 +88,6 @@ describe("parseProjectConfigFile", () => {
       "System prompt body",
     ].join("\n");
 
-    // Use metadata-cache path (non-null frontmatter) for the happy path
     const app = setupAppMock(rawContent, {
       "copilot-project-id": "my-project",
       "copilot-project-name": "My Project",
@@ -143,16 +132,12 @@ describe("parseProjectConfigFile", () => {
     const file = makeMockFile(VALID_PATH);
     const result = await parseProjectConfigFile(app, file);
 
-    // Reason: files without copilot-project-id are treated as corrupted and skipped.
-    // With name-based folders, folderName can no longer serve as id fallback.
     expect(result).toBeNull();
   });
 });
 
 describe("sanitizeVaultPathSegment", () => {
   it("blocks path traversal with ../", () => {
-    // Reason: the slash is the dangerous part — removing it prevents escaping the project folder.
-    // The dots themselves are harmless once the separator is gone.
     const result = sanitizeVaultPathSegment("../foo");
     expect(result).not.toContain("/");
     expect(result).not.toContain("\\");
@@ -160,15 +145,12 @@ describe("sanitizeVaultPathSegment", () => {
   });
 
   it("replaces forward slashes in nested paths", () => {
-    // "foo/bar" would escape the project folder — slash must be replaced
     const result = sanitizeVaultPathSegment("foo/bar");
     expect(result).not.toContain("/");
   });
 
   it("handles double-dot without slash (foo..bar)", () => {
-    // "foo..bar" is not a traversal segment but should pass through safely
     const result = sanitizeVaultPathSegment("foo..bar");
-    // Must not be empty and must not equal the traversal sentinels
     expect(result).not.toBe(".");
     expect(result).not.toBe("..");
     expect(result.length).toBeGreaterThan(0);
@@ -237,13 +219,11 @@ describe("sanitizeVaultPathSegment", () => {
   });
 
   it("converts lone dot and double-dot to fallback", () => {
-    // Reason: "." and ".." have trailing dots stripped first, then become empty → fallback "_"
     expect(sanitizeVaultPathSegment(".")).toBe("_");
     expect(sanitizeVaultPathSegment("..")).toBe("_");
   });
 });
 
-// Helper: build a project config TFile mock under the mocked projects folder.
 function makeConfigFile(folderName: string, fileName: string): TFile {
   const path = `copilot-projects/${folderName}/${fileName}`;
   return mockTFile({
@@ -297,8 +277,6 @@ describe("getProjectFolderNameFromConfigPath (project.md only)", () => {
 describe("scanAllProjectConfigFiles (project.md only)", () => {
   const PROJECTS_FOLDER = "copilot-projects";
 
-  // Build an app whose projects folder contains the given folders, each mapping a config
-  // file name to its raw content. metadataCache is empty so the YAML fallback parser runs.
   function setupScanApp(folders: Record<string, Record<string, string>>): App {
     const contentByPath = new Map<string, string>();
     const children: TFolder[] = [];

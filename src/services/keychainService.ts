@@ -10,65 +10,23 @@ import {
 } from "@/services/settingsSecretTransforms";
 import { Notice } from "obsidian";
 import { md5 } from "@/utils/hash";
-// The logger is safe even though this module runs during settings loading
-// (before setSettings): getSettings() falls back to DEFAULT_SETTINGS, and log
-// entries buffer in memory until the app is attached to the log file manager.
 import { logError, logWarn } from "@/logger";
 
-/**
- * Fields that are sensitive but don't match the `isSensitiveKey()` heuristic.
- * Reason: `isSensitiveKey()` is the canonical source of truth for sensitive fields.
- * Add entries here only for fields that are NOT covered by `isSensitiveKey()`.
- */
 const EXTRA_SECRET_KEYS: readonly string[] = [];
 
 type ModelSecretField = (typeof MODEL_SECRET_FIELDS)[number];
 
-/**
- * Scope retained in keychain IDs so existing chat-model credentials keep their
- * stable namespace after the embedding pipeline's removal.
- */
 type ModelScope = "chat";
 
-/**
- * Check whether a settings key should be stored in the OS keychain.
- * Combines the heuristic `isSensitiveKey()` with an explicit exception list.
- */
 export function isSecretKey(key: string): boolean {
   return isSensitiveKey(key) || EXTRA_SECRET_KEYS.includes(key);
 }
 
-// ---------------------------------------------------------------------------
-// Vault namespace — isolates keychain entries per vault
-// ---------------------------------------------------------------------------
-
-/**
- * Generate a fresh 8-char hex vault ID for first-time use.
- *
- * Reason: on desktop, MD5 of the filesystem base path gives a deterministic
- * seed so the very first run on an existing vault produces a predictable ID.
- * On mobile (no basePath), falls back to random bytes from `crypto.getRandomValues`
- * — guaranteeing per-vault isolation on the device at the cost of non-determinism
- * before `_keychainVaultId` is persisted and synced. When `getRandomValues` is
- * absent, a last-resort MD5 of the string `${Date.now()}-${Math.random()}` is used.
- *
- * Subsequent runs use the persisted `_keychainVaultId` and never re-derive.
- */
 function generateVaultId(app: App): string {
   const basePath = getVaultBasePath(app);
   if (basePath) {
     return md5(basePath).slice(0, 8);
   }
-  // Reason: on mobile, basePath is unavailable. Use a random ID to guarantee
-  // vault isolation — two same-named vaults on one device will NOT share
-  // keychain entries. The load path persists this ID to data.json immediately,
-  // so the divergence window is limited to first-run before sync propagates.
-  // Reason: guard getRandomValues existence — optional chaining on a missing
-  // method silently returns undefined, leaving the buffer zero-filled and
-  // collapsing all affected vaults to "00000000". Use `window.crypto` rather
-  // than `globalThis.crypto` (project rule `obsidianmd/no-global-this`); both
-  // resolve to the same WebCrypto instance in Obsidian's Electron renderer
-  // and mobile WebView.
   const cryptoApi = window.crypto;
   if (typeof cryptoApi?.getRandomValues === "function") {
     const bytes = new Uint8Array(4);
@@ -78,7 +36,6 @@ function generateVaultId(app: App): string {
   return md5(`${Date.now()}-${Math.random()}`).slice(0, 8);
 }
 
-/** Resolve the filesystem base path, or undefined on mobile. */
 function getVaultBasePath(app: App): string | undefined {
   const adapter = app.vault.adapter;
   if (adapter instanceof FileSystemAdapter) {
@@ -94,26 +51,8 @@ function getVaultBasePath(app: App): string | undefined {
   return undefined;
 }
 
-// ---------------------------------------------------------------------------
-// Keychain ID helpers
-// ---------------------------------------------------------------------------
-
-/** Max length enforced by Obsidian's SecretStorage API. */
 const MAX_SECRET_ID_LENGTH = 64;
 
-/**
- * Normalize a raw string into a keychain-safe ID segment.
- * Reason: SecretStorage IDs must be lowercase alphanumeric with dashes, 64 chars max.
- *
- * Always appends an 8-char MD5 hash of the raw input to prevent collisions
- * between inputs that differ only by punctuation, case, or non-ASCII chars
- * (e.g. "foo.bar|openai" vs "foo-bar|openai" would otherwise normalize
- * to the same string).
- *
- * @param raw - The raw string to normalize.
- * @param maxLength - Maximum total length of the returned segment (including hash).
- *   Callers pass the remaining budget after accounting for their prefix.
- */
 function normalizeKeychainId(raw: string, maxLength = MAX_SECRET_ID_LENGTH): string {
   const normalized = raw
     .toLowerCase()
@@ -121,27 +60,11 @@ function normalizeKeychainId(raw: string, maxLength = MAX_SECRET_ID_LENGTH): str
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
   const hash = md5(raw).slice(0, 8);
-  // Reason: reserve 9 chars for "-" + hash, fill the rest with readable prefix.
   const prefixBudget = Math.max(0, maxLength - 9);
   const prefix = normalized.slice(0, prefixBudget);
   return prefix + "-" + hash;
 }
 
-/**
- * Convert a camelCase settings key to a vault-namespaced kebab-case keychain ID.
- * Format: `copilot-v{8hex}-{kebab-key}`, capped at 64 chars.
- *
- * Reason: top-level settings keys are short (e.g. "openAIApiKey" → 22 chars total),
- * so truncation is extremely unlikely, but we enforce the cap defensively.
- *
- * DESIGN NOTE — intentionally does NOT run through `normalizeKeychainId()`.
- * Every current top-level secret key is plain camelCase (validated by
- * `isSecretKey` against a fixed heuristic + EXTRA_SECRET_KEYS list), so the
- * regex pipeline above produces a clean kebab-case id. Routing through the
- * full normalizer would add a hash suffix to every id and break id stability
- * for existing keychain entries. If a future field with unusual characters
- * is added to EXTRA_SECRET_KEYS, revisit. Point future reviewers here.
- */
 function toKeychainId(vaultId: string, settingsKey: string): string {
   const prefix = `copilot-v${vaultId}-`;
   const kebab = settingsKey
@@ -150,28 +73,16 @@ function toKeychainId(vaultId: string, settingsKey: string): string {
     .replace(/^-/, "");
   const id = prefix + kebab;
   if (id.length <= MAX_SECRET_ID_LENGTH) return id;
-  // Reason: hash the full key to preserve uniqueness when truncated.
   const hash = md5(settingsKey).slice(0, 8);
   return id.slice(0, MAX_SECRET_ID_LENGTH - 9) + "-" + hash;
 }
 
-/**
- * Build a keychain ID for a model-level secret.
- * Format: `copilot-v{8hex}-model-{field}-{scope}-{normalized}`
- *
- * Reason: the fixed prefix consumes up to ~28 chars, so `normalizeKeychainId`
- * receives the remaining budget to stay within the 64-char SecretStorage limit.
- * Reason: include the field name in the segment so that different secret fields
- * on the same model (e.g. apiKey vs a future field) get distinct keychain IDs.
- */
 function toModelKeychainId(
   vaultId: string,
   scope: ModelScope,
   modelIdentity: string,
   field: ModelSecretField
 ): string {
-  // Reason: convert camelCase field name to kebab-case for the keychain ID segment.
-  // e.g. "apiKey" → "api-key"
   const kebabField = field.replace(/([A-Z])/g, "-$1").toLowerCase();
   const fieldSegment = `model-${kebabField}`;
   const prefix = `copilot-v${vaultId}-${fieldSegment}-${scope}-`;
@@ -180,33 +91,18 @@ function toModelKeychainId(
   return prefix + normalizedModel;
 }
 
-/** Result of a keychain-only hydrate pass. */
 export interface HydrateResult {
   settings: CopilotSettings;
-  /** True if any keychain read failed. */
   hadFailures: boolean;
 }
 
-/** Output of `persistSecrets()` — what to write to keychain and what to clean up. */
 export interface PersistSecretsResult {
-  /** Entries to write to keychain: `[keychainId, value]` pairs. */
   secretEntries: Array<[string, string]>;
-  /** Keychain IDs of deleted models to clear. */
   keychainIdsToDelete: string[];
 }
 
-/** Callback type for Obsidian's saveData. */
 export type SaveDataFn = (data: CopilotSettings) => Promise<void>;
 
-/**
- * Singleton service for reading/writing secrets via Obsidian's SecretStorage (OS Keychain).
- *
- * Responsibilities:
- * - Store and retrieve API keys and tokens in the OS keychain
- * - Hydrate in-memory settings with plaintext secrets on startup
- * - Extract secrets from settings for persistence
- * - Forget all secrets (destructive, user-initiated)
- */
 export class KeychainService {
   private static instance: KeychainService | null = null;
   private app: App;
@@ -214,13 +110,9 @@ export class KeychainService {
 
   private constructor(app: App) {
     this.app = app;
-    // Reason: vaultId starts as a path-derived fallback. The load path
-    // should call setVaultId() with the persisted _keychainVaultId value
-    // before any read/write operations to ensure namespace stability.
     this.vaultId = generateVaultId(app);
   }
 
-  /** Get or create the singleton instance. Must be called with `app` on plugin load. */
   static getInstance(app?: App): KeychainService {
     if (!KeychainService.instance) {
       if (!app) {
@@ -231,42 +123,22 @@ export class KeychainService {
     return KeychainService.instance;
   }
 
-  /** Reset the singleton (for testing). */
   static resetInstance(): void {
     KeychainService.instance = null;
   }
 
-  /** Whether the OS keychain is available in this Obsidian version. */
-  // DESIGN NOTE — intentionally only checks for the `secretStorage` object,
-  // not individual methods (`getSecret`/`setSecret`/`listSecrets`). Obsidian
-  // ships SecretStorage as a single API surface (1.11.4); there is no
-  // released version where the object exists but methods are missing.
-  // Capability-probing each method would add branching for a partial-API
-  // world that does not exist. If a future review flags this again, point
-  // them at this note.
   isAvailable(): boolean {
     return !!this.app.secretStorage;
   }
 
-  /** Get the current vault namespace ID. */
   getVaultId(): string {
     return this.vaultId;
   }
 
-  /**
-   * Set the vault namespace ID from persisted settings.
-   * Reason: called during load to replace the path-derived fallback with the
-   * stable persisted ID, so vault renames don't orphan keychain entries.
-   */
   setVaultId(id: string): void {
     this.vaultId = id;
   }
 
-  /**
-   * Access SecretStorage with a runtime guard.
-   * Reason: replaces scattered non-null assertions with a single guard
-   * that produces a clear error when keychain is unavailable.
-   */
   private get storage(): SecretStorage {
     if (!this.app.secretStorage) {
       throw new Error("OS keychain (SecretStorage) is not available.");
@@ -274,12 +146,6 @@ export class KeychainService {
     return this.app.secretStorage;
   }
 
-  // ---------------------------------------------------------------------------
-  // Low-level read/write
-  // ---------------------------------------------------------------------------
-
-  // Reason: deleteSecret exists at runtime but is not in the official type
-  // definitions. Prefer real deletion; fall back to empty-string tombstone.
   private removeSecret(id: string): void {
     if (typeof this.storage.deleteSecret === "function") {
       this.storage.deleteSecret(id);
@@ -288,49 +154,32 @@ export class KeychainService {
     }
   }
 
-  /** Write a value directly to the keychain using a pre-computed ID.
-   *
-   *  CALLER CONTRACT: `keychainId` must be vault-namespaced — typically
-   *  `copilot-v{vaultId}-...` — so it is swept by
-   *  `clearAllVaultSecrets()` and isolated from other vaults / plugins.
-   *  This method is a low-level bridge; it does not validate the
-   *  prefix because some legacy callers compute their own ids. New
-   *  code should derive the id via `toKeychainId(getVaultId(), …)` or
-   *  an equivalent vault-namespaced helper. */
   setSecretById(keychainId: string, value: string): void {
     this.storage.setSecret(keychainId, value);
   }
 
-  /** Read a value directly from the keychain using a pre-computed ID.
-   *  See `setSecretById` for the caller contract on `keychainId`. */
   getSecretById(keychainId: string): string | null {
     return this.storage.getSecret(keychainId);
   }
 
-  /** Delete a keychain entry by its pre-computed ID.
-   *  See `setSecretById` for the caller contract on `keychainId`. */
   deleteSecretById(keychainId: string): void {
     this.removeSecret(keychainId);
   }
 
-  /** Store a top-level secret in the keychain. */
   setSecret(settingsKey: string, value: string): void {
     const id = toKeychainId(this.vaultId, settingsKey);
     this.storage.setSecret(id, value);
   }
 
-  /** Delete a top-level secret from the keychain. */
   deleteSecret(settingsKey: string): void {
     this.removeSecret(toKeychainId(this.vaultId, settingsKey));
   }
 
-  /** Retrieve a top-level secret from the keychain. Returns `null` if not found. */
   getSecret(settingsKey: string): string | null {
     const id = toKeychainId(this.vaultId, settingsKey);
     return this.storage.getSecret(id);
   }
 
-  /** Store a model-level secret in the keychain. */
   setModelSecret(
     scope: ModelScope,
     modelIdentity: string,
@@ -341,52 +190,20 @@ export class KeychainService {
     this.storage.setSecret(id, value);
   }
 
-  /** Retrieve a model-level secret from the keychain. Returns `null` if not found. */
   getModelSecret(scope: ModelScope, modelIdentity: string, field: ModelSecretField): string | null {
     const id = toModelKeychainId(this.vaultId, scope, modelIdentity, field);
     return this.storage.getSecret(id);
   }
 
-  // ---------------------------------------------------------------------------
-  // hydrateFromKeychain — read-only keychain hydration
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Replace each secret field in `settings` with the keychain value for that
-   * field. This method is strictly read-only — it never writes to the keychain
-   * and never reads from disk. All keychain writes flow through
-   * `persistSecrets()` during settings persistence.
-   *
-   * Per-field logic:
-   * - keychain `""` (tombstone) → set field to `""` (don't resurrect)
-   * - keychain has value → use keychain value
-   * - keychain `null` → leave the stripped field empty
-   *
-   * @param settings - Sanitised settings. Values are replaced in a shallow copy.
-   * @returns Updated settings with secrets hydrated from the keychain, plus
-   *   whether any keychain read threw (so the caller can surface a warning).
-   */
   async hydrateFromKeychain(settings: CopilotSettings): Promise<HydrateResult> {
     const hydrated = { ...settings };
     let hadFailures = false;
 
-    // Top-level secrets.
-    //
-    // Reason: iterate the union of (a) the canonical default secret fields and
-    // (b) any secret-shaped keys already on the loaded settings. Hydrating
-    // strictly from `Object.keys(hydrated)` would skip fields whose entries
-    // exist in this device's keychain but are missing from `data.json` (e.g.
-    // partial sync from a downgraded device, schema additions that predate
-    // the user's last save, or a manually-edited data.json). Including legacy
-    // keys still present on the settings object preserves support for fields
-    // that have since been removed from DEFAULT_SETTINGS.
     const topLevelKeys = new Set<string>([
       ...TOP_LEVEL_SECRET_FIELDS,
       ...Object.keys(hydrated).filter((key) => isSecretKey(key)),
     ]);
     for (const key of topLevelKeys) {
-      // Reason: wrap keychain reads in try/catch so a locked/unavailable keychain
-      // at startup degrades gracefully instead of aborting plugin load.
       let keychainValue: string | null;
       try {
         keychainValue = this.getSecret(key);
@@ -397,15 +214,12 @@ export class KeychainService {
       }
 
       if (keychainValue === "") {
-        // Tombstone — field was explicitly deleted, don't resurrect.
         (hydrated as unknown as Record<string, unknown>)[key] = "";
       } else if (keychainValue !== null) {
         (hydrated as unknown as Record<string, unknown>)[key] = keychainValue;
       }
-      // null → leave existing in-memory value untouched.
     }
 
-    // Model-level secrets
     const modelResult = await this.hydrateModelSecrets("chat", hydrated.activeModels ?? []);
     hydrated.activeModels = modelResult.models;
     hadFailures = hadFailures || modelResult.hadFailures;
@@ -417,20 +231,10 @@ export class KeychainService {
     return { settings: hydrated, hadFailures };
   }
 
-  // ---------------------------------------------------------------------------
-  // persistSecrets — extract secrets for keychain write during save
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Extract secrets from settings for keychain persistence.
-   * Returns entries to write to keychain and IDs to clean up.
-   * Does NOT modify the settings object.
-   */
   persistSecrets(settings: CopilotSettings, prevSettings?: CopilotSettings): PersistSecretsResult {
     const secretEntries: Array<[string, string]> = [];
     const clearedSecretIds: string[] = [];
 
-    // Collect top-level secrets
     for (const key of Object.keys(settings)) {
       if (!isSecretKey(key)) continue;
       const value = (settings as unknown as Record<string, unknown>)[key];
@@ -446,7 +250,6 @@ export class KeychainService {
       }
     }
 
-    // Collect model-level secrets
     this.collectModelSecrets(
       "chat",
       settings.activeModels,
@@ -454,7 +257,6 @@ export class KeychainService {
       prevSettings?.activeModels,
       clearedSecretIds
     );
-    // Find deleted models to clean up
     const keychainIdsToDelete = [
       ...this.getDeletedModelKeysForScope(
         "chat",
@@ -467,22 +269,7 @@ export class KeychainService {
     return { secretEntries, keychainIdsToDelete };
   }
 
-  // ---------------------------------------------------------------------------
-  // removeRetiredEmbeddingSecrets — drop credentials the embedding pipeline owned
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Delete this vault's embedding-scoped model credentials.
-   *
-   * The retired `activeEmbeddingModels` rows are stripped from settings on
-   * load, so no later save can name those identities to tombstone them. Their
-   * keychain entries carry the embedding scope in their ID, which stays
-   * enumerable after the rows are gone.
-   * https://github.com/logancyang/obsidian-copilot/pull/3094#discussion_r3926692782
-   */
   removeRetiredEmbeddingSecrets(): void {
-    // Older Obsidian builds cannot enumerate entries. Nothing else can identify
-    // them once the rows are stripped, so leave them rather than guessing.
     if (typeof this.storage.listSecrets !== "function") return;
 
     const retiredPrefix = `copilot-v${this.vaultId}-model-api-key-embedding-`;
@@ -496,25 +283,8 @@ export class KeychainService {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // clearAllVaultSecrets — wipe all keychain entries for this vault
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Delete all keychain entries belonging to this vault's namespace.
-   *
-   * Reason: uses `removeSecret()` which prefers real deletion via the
-   * undocumented `deleteSecret()` and falls back to empty-string tombstone.
-   * The caller strips data.json before invoking this method so cleared entries
-   * cannot be restored from disk on the next load.
-   */
   clearAllVaultSecrets(): void {
     const vaultPrefix = `copilot-v${this.vaultId}-`;
-    // Reason: defensive feature detection. The destructive flow already
-    // stripped data.json by the time it reaches us; if `listSecrets()` is
-    // missing on this Obsidian build we cannot enumerate vault entries and
-    // would silently leave them behind to resurrect on the next hydrate.
-    // Surface this as a hard failure so the caller can preserve disk state.
     if (typeof this.storage.listSecrets !== "function") {
       throw new Error(
         "Obsidian Keychain on this build does not support listing entries; " +
@@ -540,21 +310,6 @@ export class KeychainService {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // forgetAllSecrets — destructive user-initiated operation
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Erase all secrets from keychain, data.json, and memory.
-   *
-   * This is a dedicated transaction — it does NOT use the normal save path
-   * (which could potentially resurrect old values).
-   *
-   * @param saveData - Callback to write data.json.
-   * @param syncMemory - Callback to update in-memory settings without re-entering
-   *   the normal persist path. The caller must suppress the subscriber-triggered
-   *   `persistSettings()` before calling this (via `suppressNextPersistOnce()`).
-   */
   async forgetAllSecrets(
     saveData: SaveDataFn,
     syncMemory: (data: Partial<CopilotSettings>) => void
@@ -567,10 +322,6 @@ export class KeychainService {
           "this vault on a device with Keychain access, then try again."
       );
     }
-    // Reason: if Keychain is available but lacks `listSecrets()`, we cannot
-    // enumerate vault entries to clear them. Refuse BEFORE stripping disk so
-    // we don't leave the user with stripped data.json AND residual Keychain
-    // entries that would resurrect on next hydrate.
     if (typeof this.app.secretStorage?.listSecrets !== "function") {
       throw new Error(
         "Cannot delete all API keys because this Obsidian build does not support " +
@@ -578,12 +329,8 @@ export class KeychainService {
       );
     }
 
-    // 1. Build stripped settings — before touching any durable store.
     const stripped = stripKeychainFields(current);
 
-    // 2. Write stripped data.json BEFORE clearing Keychain.
-    // Reason: a disk-write failure can then abort without also leaving the
-    // Keychain partially cleared, so the user can retry from a coherent state.
     const toSave = cleanupLegacyFields(stripped);
     try {
       await saveData(toSave);
@@ -595,7 +342,6 @@ export class KeychainService {
       return;
     }
 
-    // 3. Clear keychain AFTER disk is safely stripped.
     let keychainError: Error | undefined;
     try {
       this.clearAllVaultSecrets();
@@ -603,19 +349,9 @@ export class KeychainService {
       keychainError = e instanceof Error ? e : new Error(String(e));
     }
 
-    // 4. Always sync in-memory state — even on partial keychain failure.
-    // Reason: disk is already stripped. If we leave old secrets in memory,
-    // the next normal persist would write them back to keychain/data.json.
     syncMemory(stripped);
 
     if (keychainError) {
-      // KNOWN LIMITATION: this path emits a Notice and then throws, which the
-      // UI caller also catches and Notices — producing two Notices with
-      // slightly conflicting copy. Triggering requires `clearAllVaultSecrets()`
-      // to throw mid-operation (very rare in practice). A user retry generally
-      // resolves the residual keychain entries. Restructuring to return a
-      // result object instead of throw+Notice is a separate UX cleanup, out of
-      // scope for this PR.
       new Notice(
         "Some Obsidian Keychain entries could not be removed. " +
           "Your keys have been cleared from data.json and memory. Please restart and retry."
@@ -626,11 +362,6 @@ export class KeychainService {
     new Notice("All API keys for this vault removed. Please re-enter them.");
   }
 
-  // ---------------------------------------------------------------------------
-  // Private helpers
-  // ---------------------------------------------------------------------------
-
-  /** Hydrate model-level secrets for a scope (read-only). */
   private async hydrateModelSecrets(
     scope: ModelScope,
     models: CustomModel[]
@@ -659,7 +390,6 @@ export class KeychainService {
         } else if (keychainValue !== null) {
           (copy as unknown as Record<string, unknown>)[field] = keychainValue;
         }
-        // null → leave existing in-memory value untouched.
       }
 
       result.push(copy);
@@ -668,7 +398,6 @@ export class KeychainService {
     return { models: result, hadFailures };
   }
 
-  /** Collect model-level secret entries and cleared IDs without modifying models. */
   private collectModelSecrets(
     scope: ModelScope,
     models: CustomModel[],
@@ -705,7 +434,6 @@ export class KeychainService {
     }
   }
 
-  /** Find keychain IDs for models deleted from a specific scope. */
   private getDeletedModelKeysForScope(
     scope: ModelScope,
     prevModels: CustomModel[] | undefined,
@@ -719,9 +447,6 @@ export class KeychainService {
       .filter((m) => !currentIds.has(getModelKeyFromModel(m)))
       .flatMap((m) => {
         const identity = getModelKeyFromModel(m);
-        // Reason: only tombstone models that actually had a secret value.
-        // Without this guard, importing to a fresh vault creates spurious
-        // tombstones for default models that never had an API key.
         return MODEL_SECRET_FIELDS.flatMap((field) => {
           const prevValue = (m as unknown as Record<string, unknown>)[field];
           if (typeof prevValue !== "string" || prevValue.length === 0) {

@@ -1,9 +1,3 @@
-/**
- * Derive a user-facing label from a readNote tool path.
- *
- * @param rawNotePath - Original note path supplied to the readNote tool.
- * @returns Sanitized display name without directories, extensions, or wiki syntax.
- */
 export function deriveReadNoteDisplayName(rawNotePath: string): string {
   const trimmed = rawNotePath.trim();
   if (!trimmed) {
@@ -110,14 +104,9 @@ function summarizeReadNotePayload(payload: unknown): string | null {
   return parts.join(" · ");
 }
 
-/**
- * Format tool results for display in the UI
- * Each formatter should return a user-friendly representation of the tool result
- */
 export class ToolResultFormatter {
   static format(toolName: string, result: string): string {
     try {
-      // Decode tool marker encoding if present (ENC:...)
       let normalized = result;
       if (typeof normalized === "string" && normalized.startsWith("ENC:")) {
         try {
@@ -127,16 +116,13 @@ export class ToolResultFormatter {
         }
       }
 
-      // Try to parse as JSON for all tools now that they return JSON
       let parsedResult: unknown;
       try {
         parsedResult = JSON.parse(normalized);
       } catch {
-        // If not JSON, use the raw string (for backward compatibility)
         parsedResult = normalized;
       }
 
-      // Route to specific formatter based on tool name
       switch (toolName) {
         case "localSearch":
           return this.formatLocalSearch(parsedResult);
@@ -151,20 +137,13 @@ export class ToolResultFormatter {
         case "readNote":
           return this.formatReadNote(parsedResult);
         default:
-          // For all other tools, return the raw result
           return result;
       }
     } catch {
-      // If formatting fails, return the original result
       return result;
     }
   }
 
-  /**
-   * Create a condensed summary for local search documents suitable for UI rendering.
-   * @param documents Array of parsed local search documents
-   * @returns Display-friendly summary string
-   */
   static formatLocalSearchDocuments(documents: unknown[]): string {
     if (!Array.isArray(documents) || documents.length === 0) {
       return "📚 Found 0 relevant notes\n\nNo matching notes found.";
@@ -193,15 +172,11 @@ export class ToolResultFormatter {
   }
 
   private static formatLocalSearch(result: unknown): string {
-    // Handle XML-wrapped results from chain runners
     if (typeof result === "string") {
-      // Check if it's XML-wrapped content
       const xmlMatch = result.match(/<localSearch[^>]*>([\s\S]*)<\/localSearch>/);
       if (xmlMatch) {
-        // Extract the content from XML wrapper
         const xmlContent = xmlMatch[1].trim();
 
-        // Count documents in the XML
         const documentMatches = xmlContent.match(/<document>/g);
         const count = documentMatches ? documentMatches.length : 0;
 
@@ -209,7 +184,6 @@ export class ToolResultFormatter {
           return "📚 Found 0 relevant notes\n\nNo matching notes found.";
         }
 
-        // Robustly extract document information regardless of tag ordering
         const documents: unknown[] = [];
         const blockRegex = /<document>([\s\S]*?)<\/document>/g;
         let blockMatch;
@@ -227,7 +201,6 @@ export class ToolResultFormatter {
       }
     }
 
-    // Fall back to original JSON parsing logic
     const searchResults = this.parseSearchResults(result);
 
     if (!Array.isArray(searchResults)) {
@@ -247,7 +220,6 @@ export class ToolResultFormatter {
   }
 
   private static parseSearchResults(result: unknown): unknown[] {
-    // Only support the new structured format or pre-formatted XML flow
     if (typeof result === "object" && result !== null) {
       const r = result as Record<string, unknown>;
       if (r.type === "local_search" && Array.isArray(r.documents)) {
@@ -256,7 +228,6 @@ export class ToolResultFormatter {
       return [];
     }
     if (typeof result === "string") {
-      // Allow parsing of structured JSON string
       try {
         const parsed = JSON.parse(result) as unknown;
         if (
@@ -285,12 +256,10 @@ export class ToolResultFormatter {
     const score = (it.rerank_score as number) || (it.score as number) || 0;
     const scoreDisplay = typeof score === "number" ? score.toFixed(4) : score;
 
-    // For time-filtered results, show as "Recency" instead of "Relevance"
     const scoreLabel = it.source === "time-filtered" ? "Recency" : "Relevance";
 
     const lines = [`${index + 1}. ${filename}`];
 
-    // For time-filtered queries, show actual modified time instead of a recency score
     if (it.source === "time-filtered") {
       if (it.mtime) {
         try {
@@ -309,10 +278,8 @@ export class ToolResultFormatter {
         }
       }
     } else if (it.source === "title-match") {
-      // For title matches, avoid misleading numeric scores; mark as a title match
       lines.push(`   🔖 Title match${it.includeInContext ? " ✓" : ""}`);
     } else {
-      // Default: show relevance-like score line
       lines.push(`   📊 ${scoreLabel}: ${scoreDisplay}${it.includeInContext ? " ✓" : ""}`);
     }
 
@@ -353,7 +320,6 @@ export class ToolResultFormatter {
   private static extractContentSnippet(content: string, maxLength = 150): string {
     if (!content) return "";
 
-    // Try to extract content after NOTE BLOCK CONTENT: pattern
     const contentMatch = content.match(/NOTE BLOCK CONTENT:\s*([\s\S]*)/);
     const cleanContent = contentMatch?.[1] || content;
 
@@ -361,19 +327,16 @@ export class ToolResultFormatter {
   }
 
   private static formatWebSearch(result: unknown): string {
-    // Handle new JSON array format from webSearch tool
     const firstItem =
       Array.isArray(result) && result.length > 0 ? (result[0] as Record<string, unknown>) : null;
     if (firstItem && firstItem.type === "web_search") {
       const output: string[] = ["🌐 Web Search Results"];
 
-      // Add the main content
       if (firstItem.content) {
         output.push("");
         output.push(typeof firstItem.content === "string" ? firstItem.content : "");
       }
 
-      // Add citations if present
       const citations = Array.isArray(firstItem.citations) ? firstItem.citations : [];
       if (citations.length > 0) {
         output.push("");
@@ -383,7 +346,6 @@ export class ToolResultFormatter {
         });
       }
 
-      // Add instruction for the model
       if (firstItem.instruction) {
         output.push("");
         output.push(
@@ -394,10 +356,7 @@ export class ToolResultFormatter {
       return output.join("\n");
     }
 
-    // Fallback for old string format (for backward compatibility)
     if (typeof result === "string") {
-      // Web search results include instructions and citations
-      // Extract the main content and citations
       const lines = result.split("\n");
       const output: string[] = ["🌐 Web Search Results"];
 
@@ -418,13 +377,11 @@ export class ToolResultFormatter {
         }
       }
 
-      // Add main content
       if (mainContent.length > 0) {
         output.push("");
         output.push(...mainContent.filter((line) => line.trim()));
       }
 
-      // Add sources
       if (sources.length > 0) {
         output.push("");
         output.push("Sources:");
@@ -442,14 +399,12 @@ export class ToolResultFormatter {
   }
 
   private static formatYoutubeTranscription(result: unknown): string {
-    // Handle both string and object results
     let parsed: unknown;
 
     if (typeof result === "string") {
       try {
         parsed = JSON.parse(result);
       } catch {
-        // If not JSON, return as is
         return result;
       }
     } else if (typeof result === "object") {
@@ -458,19 +413,16 @@ export class ToolResultFormatter {
       return typeof result === "number" || typeof result === "boolean" ? String(result) : "";
     }
 
-    // Narrow parsed to a record for member access
     const p =
       typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : null;
     if (!p) {
       return typeof result === "object" ? JSON.stringify(result, null, 2) : "";
     }
 
-    // Handle error case
     if (p.success === false) {
       return `📺 YouTube Transcription Failed\n\n${typeof p.message === "string" ? p.message : ""}`;
     }
 
-    // Handle new multi-URL format
     if (p.results && Array.isArray(p.results)) {
       const totalUrls = typeof p.total_urls === "number" ? p.total_urls : p.results.length;
       const output: string[] = [
@@ -488,24 +440,21 @@ export class ToolResultFormatter {
           output.push(`📹 Video: ${typeof vr.url === "string" ? vr.url : ""}`);
           output.push("");
 
-          // Format transcript
           const transcript = typeof vr.transcript === "string" ? vr.transcript : "";
           const lines = transcript.split("\n");
           let formattedLines = 0;
 
           for (const line of lines) {
             if (line.trim()) {
-              // Check if line starts with a timestamp pattern [MM:SS]
               const timestampMatch = line.match(/^\[(\d+:\d+)\]/);
               if (timestampMatch) {
-                if (formattedLines > 0) output.push(""); // Add spacing
+                if (formattedLines > 0) output.push("");
                 output.push(`⏰ ${line}`);
               } else {
                 output.push(`   ${line.trim()}`);
               }
               formattedLines++;
 
-              // Limit output to prevent overwhelming display
               if (formattedLines > 30) {
                 output.push("");
                 output.push("... (transcript truncated for display)");
@@ -533,29 +482,25 @@ export class ToolResultFormatter {
       return output.join("\n").trimEnd();
     }
 
-    // Handle old single-video format
     if (p.transcript) {
       const output: string[] = ["📺 YouTube Transcript"];
       output.push("");
 
-      // Split transcript into manageable chunks
       const transcript = typeof p.transcript === "string" ? p.transcript : "";
       const lines = transcript.split("\n");
       let formattedLines = 0;
 
       for (const line of lines) {
         if (line.trim()) {
-          // Check if line starts with a timestamp pattern [MM:SS]
           const timestampMatch = line.match(/^\[(\d+:\d+)\]/);
           if (timestampMatch) {
-            if (formattedLines > 0) output.push(""); // Add spacing
+            if (formattedLines > 0) output.push("");
             output.push(`⏰ ${line}`);
           } else {
             output.push(`   ${line.trim()}`);
           }
           formattedLines++;
 
-          // Limit output to prevent overwhelming display
           if (formattedLines > 50) {
             output.push("");
             output.push("... (transcript truncated for display)");
@@ -574,12 +519,10 @@ export class ToolResultFormatter {
       return output.join("\n");
     }
 
-    // If we can't format it, return as string
     return typeof result === "object" ? JSON.stringify(result, null, 2) : "";
   }
 
   private static formatWriteToFile(result: unknown): string {
-    // Extract result status from object or use string directly
     const r =
       typeof result === "object" && result !== null ? (result as Record<string, unknown>) : null;
     const status = r ? r.result : result;
@@ -597,7 +540,6 @@ export class ToolResultFormatter {
       return "❌ File change: rejected";
     }
 
-    // Return message if available, otherwise the raw result
     return r && typeof r.message === "string"
       ? r.message
       : typeof status === "string"
@@ -627,7 +569,6 @@ export class ToolResultFormatter {
       return "❌ Edit rejected";
     }
 
-    // Error / not-found strings pass through unchanged
     return r && typeof r.message === "string" ? r.message : status;
   }
 

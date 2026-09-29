@@ -11,7 +11,6 @@ export const EMPTY_COMMAND: CustomCommand = {
   lastUsedMs: 0,
 };
 
-// Custom command frontmatter property constants
 export const COPILOT_COMMAND_CONTEXT_MENU_ENABLED = "copilot-command-context-menu-enabled";
 export const COPILOT_COMMAND_SLASH_ENABLED = "copilot-command-slash-enabled";
 export const COPILOT_COMMAND_CONTEXT_MENU_ORDER = "copilot-command-context-menu-order";

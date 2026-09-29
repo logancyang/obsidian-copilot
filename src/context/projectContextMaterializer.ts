@@ -27,41 +27,12 @@ import {
 } from "./contextCacheStore";
 import { buildProjectContextBlock, type ManifestPathEntry } from "./manifestBuilder";
 
-/**
- * Plain-data result of materializing a project's context before a session opens.
- *
- * This is the shared contract resolved by a session's `contextReady`. Keep it
- * minimal: searchable roots plus the optional inline context block — nothing
- * else. Reason: progress counts for the UI loading card live in a SEPARATE
- * `agentProjectContextLoadAtom`, never here, so this stays a clean dirs+block
- * value that any backend / the UI can consume without folding in load state.
- */
 export interface ContextMaterializationResult {
-  /** Absolute paths to widen the agent's searchable roots (add-dir). Empty if none. */
   additionalDirectories: string[];
-  /**
-   * The `<project_context>` block to inline into the session's FIRST user
-   * prompt (absolute folder/note paths, snapshot pointers, tag/ext/URL guides).
-   * Undefined when the project declares no context sources.
-   */
   projectContextBlock?: string;
-  /**
-   * The context signature of the project record THIS run actually read (see
-   * {@link getProjectContextSignature}). Lets a caller tell which source revision
-   * was captured — critical because the single-flight guard can hand a joined
-   * caller a result materialized from an EARLIER record than the one live now.
-   * Undefined only when no record was found, or the whole run threw.
-   */
   contextSignature?: string;
 }
 
-/**
- * Live progress for the materialization steps, surfaced to the UI loading card.
- * Carried OUT-OF-BAND from {@link ContextMaterializationResult} (counts never
- * fold into the result) so the result stays a clean dirs+block value. The
- * session manager is the sole subscriber and republishes these to the
- * projectId-keyed `agentProjectContextLoadAtom`.
- */
 export type ContextMaterializeProgress =
   | { phase: "resolve"; resolved: number }
   | { phase: "prefetch"; done: number; total: number }
@@ -73,27 +44,14 @@ export type ContextMaterializeProgress =
 
 export type ContextMaterializeProgressFn = (progress: ContextMaterializeProgress) => void;
 
-// Referential stability: a single frozen empty array for every "no context" exit.
 const EMPTY_DIRECTORIES: string[] = Object.freeze([] as string[]) as string[];
-// Referential stability: one frozen empty array for the "no property notes" exit.
 const EMPTY_MANIFEST_ENTRIES: ManifestPathEntry[] = Object.freeze(
   [] as ManifestPathEntry[]
 ) as ManifestPathEntry[];
 
-/**
- * Identity of a resolved manifest entry for dedupe. Keyed on the absolute path
- * when one resolved, since that is what the agent actually reads; an unresolved
- * pattern falls back to its `vaultPath` so two of them still compare equal.
- */
 function manifestEntryKey(entry: ManifestPathEntry): string {
   return entry.absPath ?? entry.vaultPath;
 }
-/**
- * Block for a project whose context could not be resolved at all. Still announces the
- * workspace, for the same reason the source-less block below does: losing the block would
- * also lose the workspace policy, so a failed materialization would silently widen where the
- * agent writes instead of merely leaving it without context.
- */
 const UNAVAILABLE_PROJECT_CONTEXT_BLOCK = [
   "<project_context>",
   "This session runs in a project workspace: the working directory is the project's",
@@ -101,27 +59,12 @@ const UNAVAILABLE_PROJECT_CONTEXT_BLOCK = [
   "</project_context>",
 ].join("\n");
 
-/**
- * Frozen fallback result for the "no usable record / whole-run failure" exits —
- * NO `contextSignature`, so it never clears a caller's dirty flag (nothing was
- * captured). A project that resolves to no sources returns a DISTINCT result
- * carrying its signature (so its dirty flag can clear); only the record-absent
- * and catch paths use this shared frozen reference. Exported so the session
- * manager's materialize-failure path hands back the same reference.
- */
 export const EMPTY_CONTEXT_MATERIALIZATION_RESULT: ContextMaterializationResult = Object.freeze({
   additionalDirectories: EMPTY_DIRECTORIES,
   projectContextBlock: UNAVAILABLE_PROJECT_CONTEXT_BLOCK,
 });
 const EMPTY_RESULT = EMPTY_CONTEXT_MATERIALIZATION_RESULT;
 
-/**
- * Block for a project that declares no context sources. The product prompt's workspace
- * policy triggers on the presence of a `<project_context>` block rather than a per-scope
- * prompt variant — the prompt must stay byte-identical across scopes for the cache
- * contract — so a source-less project has to announce itself here or the policy is inert
- * and the agent is never told to keep writes under the project's `outputs/` folder.
- */
 const EMPTY_PROJECT_CONTEXT_BLOCK = [
   "<project_context>",
   "This session runs in a project workspace: the working directory is the project's",
@@ -129,68 +72,16 @@ const EMPTY_PROJECT_CONTEXT_BLOCK = [
   "</project_context>",
 ].join("\n");
 
-/**
- * Per-project single-flight guard. Concurrent cold-start sessions for the same
- * project (e.g. the user opens a second chat / a history-load races the first)
- * would otherwise each miss the disk cheap-skip before the first write lands and
- * redundantly hit brevilabs + race on the same hash-named cache files. The map
- * entry is cleared once the promise settles, so a later call re-evaluates fresh
- * on-disk fingerprints (idempotent). Mirrors `inFlightMigrations`.
- *
- * DESIGN NOTE — keyed by `projectId` ALONE, not `projectId+cwd`. `cwd` is a pure
- * function of `projectId` (`resolveScopeCwd` → `dirname(record.filePath)`), so
- * two concurrent calls for the same project resolve the same cwd. They could
- * diverge only if the project folder is renamed in the sub-second window between
- * two cold-start session opens while a materialize is mid-flight — at which point
- * the joined caller would write to the pre-rename dir. That window is effectively
- * unreachable, the next session (in-flight entry cleared on settle) self-heals to
- * the new cwd, and keying by cwd would weaken the single-flight (the whole point
- * is to dedupe per project). Not worth the extra key.
- *
- * The entry carries whether its run is a FORCED retry so the single-flight can
- * tell a background warm apart from a user "Retry": a forced call supersedes an
- * in-flight non-force run (see {@link ensureProjectContextMaterialized}). It also
- * carries the context signature the run is materializing, so a caller wanting a
- * NEWER source set (the project's context was edited mid-flight) supersedes the
- * stale run instead of joining it.
- */
 interface InFlightMaterialization {
   promise: Promise<ContextMaterializationResult>;
-  /** True when this run bypasses failure markers (a user-initiated retry). */
   forceRetryFailed: boolean;
-  /**
-   * The source REVISION this run is materializing, captured when queued. Defaults
-   * to the config signature ({@link getProjectContextSignature}), but a caller may
-   * pass an epoch-salted key ({@link composeContextDirtyKey}) so that a pure
-   * CONTENT edit — which does not move the config signature — still reads as a
-   * newer revision and SUPERSEDES a run holding the old content, instead of
-   * joining it and receiving a stale `<project_context>` / `additionalDirectories`.
-   * `undefined` when no record was cached at queue time and no key was passed.
-   */
   revision: string | undefined;
 }
 
 const inFlightMaterializations = new Map<string, InFlightMaterialization>();
 
-/**
- * Global per-artifact locks keyed by snapshot file name. Because the file name is
- * derived from the source IDENTITY (never the project), the SAME source across
- * two projects maps to the SAME mutex — so two projects cold-converting one URL
- * converge to a single fetch: the first acquires the lock, reads meta (miss),
- * fetches, atomically writes, releases; the second waits, acquires, re-reads the
- * now-present meta, and cheap-skips without re-fetching or overwriting.
- *
- * The map is bounded by the count of distinct cached sources in a vault (small),
- * so it is never pruned.
- */
 const sourceArtifactMutexes = new Map<string, Mutex>();
 
-/**
- * Get-or-create the mutex for a snapshot file name. No creation lock is needed:
- * there is no `await` between the `get` and the `set`, so in JS's single-threaded
- * model two concurrent callers run this synchronously to completion and observe
- * the same instance. A creation mutex would only matter if creation could yield.
- */
 function getSourceArtifactMutex(key: string): Mutex {
   let mutex = sourceArtifactMutexes.get(key);
   if (!mutex) {
@@ -200,19 +91,10 @@ function getSourceArtifactMutex(key: string): Mutex {
   return mutex;
 }
 
-/** Run a source's read-decide-write under its global per-artifact lock. */
 function withSourceLock<T>(key: string, run: () => Promise<T>): Promise<T> {
   return getSourceArtifactMutex(key).runExclusive(run);
 }
 
-/**
- * Cache-root-RELATIVE form of a conversionsLocation absolute directory, for the
- * root-confined node fs (which rejects absolute paths). conversionsLocation
- * builds every directory under `root`, so the relative part is the suffix after
- * the root prefix; normalized to POSIX so the node fs resolves it identically on
- * every OS. Fails loud if the path is not actually under root (it always is —
- * this guards a future layout drift rather than a live case).
- */
 function cacheRootRelativeDir(root: string, absoluteDir: string): string {
   const normRoot = toPosix(root).replace(/\/+$/, "");
   const normDir = toPosix(absoluteDir).replace(/\/+$/, "");
@@ -224,27 +106,10 @@ function cacheRootRelativeDir(root: string, absoluteDir: string): string {
   return normDir.slice(prefix.length);
 }
 
-/** Normalize OS-native separators to POSIX for the root-confined node fs. */
 function toPosix(p: string): string {
   return p.replace(/\\/g, "/");
 }
 
-/**
- * Materialize a project's external context (URLs/YouTube/PDFs/images) into the
- * vault's shared off-vault conversion cache, build a source manifest, and report
- * any out-of-cwd folder inclusions as extra searchable roots. Called by the
- * session manager at its cwd choke points, after config migration + cwd
- * resolution.
- *
- * Contract (relied on by the manager): NEVER rejects — any failure degrades to a
- * best-effort partial / empty result so session start is never blocked. Cheap on
- * unchanged context (successful snapshots cheap-skip by fingerprint, known-bad
- * sources cheap-skip by failure marker). Concurrent calls for the same project
- * dedupe to one in-flight run; concurrent runs across projects converging on one
- * shared source dedupe to a single fetch via the per-artifact lock.
- * `forceRetryFailed` (the status popover's "Retry") re-attempts known-bad sources
- * instead of honoring their markers. Writes only under the off-vault cache root.
- */
 export async function ensureProjectContextMaterialized(
   app: App,
   projectId: string,
@@ -254,48 +119,19 @@ export async function ensureProjectContextMaterialized(
   revisionKey?: string
 ): Promise<ContextMaterializationResult> {
   const force = forceRetryFailed ?? false;
-  // Captured synchronously so an incoming caller can tell whether the in-flight
-  // run is materializing the source revision it actually wants.
   const record = getCachedProjectRecordById(projectId);
   const currentSignature = record ? getProjectContextSignature(record) : undefined;
-  // The revision this caller wants. Defaults to the config signature so callers
-  // that don't track content epochs behave exactly as before; the session manager
-  // passes an epoch-salted key so a mid-flight content edit supersedes a run that
-  // read the pre-edit content (see {@link InFlightMaterialization.revision}).
   const currentRevision = revisionKey ?? currentSignature;
   const existing = inFlightMaterializations.get(projectId);
-  // Single-flight: a second concurrent caller joins the in-flight run and its
-  // `onProgress` is intentionally dropped — the flight owner's sink already
-  // drives the shared progress atom, so every reader still sees live counts.
-  //
-  // A caller joins ONLY when the in-flight run is materializing the SAME source
-  // set it wants (matching signature). If the project's context was edited while
-  // a run is in flight, that run's signature is now stale — joining it would hand
-  // the caller the pre-edit `<project_context>` / `additionalDirectories` (and the
-  // queued first send would flush with the old sources), so it SUPERSEDES below
-  // to capture the new sources instead.
-  //
-  // Among same-signature runs: a non-force caller joins; a forced retry joins only
-  // an already-forced run. A forced retry that finds a NON-force run in flight
-  // (e.g. a background warm, invisible to the manager's early-exit check) must NOT
-  // join it — that would cheap-skip the known-bad sources the user explicitly
-  // asked to re-fetch. Instead it SUPERSEDES below.
   if (existing && existing.revision === currentRevision && (!force || existing.forceRetryFailed)) {
     return existing.promise;
   }
 
-  // Take over the slot SYNCHRONOUSLY so a concurrent session-create joins this
-  // forced run rather than the run it replaces — but defer the forced run's own
-  // disk work until the prior run settles, so the two never race-write the same
-  // hash-named cache files (the prior keeps the never-reject contract, so its
-  // rejection can't happen, but guard defensively).
   const prior = existing?.promise;
   const promise = (async () => {
     if (prior) await prior.catch(() => undefined);
     return runMaterialize(app, projectId, cwd, onProgress, force);
   })().finally(() => {
-    // Guarded clear: a superseded prior run's own `finally` may fire after we've
-    // claimed the slot, so only delete when it still points at THIS promise.
     if (inFlightMaterializations.get(projectId)?.promise === promise) {
       inFlightMaterializations.delete(projectId);
     }
@@ -308,10 +144,6 @@ export async function ensureProjectContextMaterialized(
   return promise;
 }
 
-/**
- * The materialization body, wrapped so it always resolves with a result —
- * `ensureProjectContextMaterialized` adds the single-flight guard on top.
- */
 async function runMaterialize(
   app: App,
   projectId: string,
@@ -322,9 +154,6 @@ async function runMaterialize(
   try {
     const record = getCachedProjectRecordById(projectId);
     if (!record) return EMPTY_RESULT;
-    // Captured up front from the record THIS run reads, so the result reports the
-    // exact source revision it materialized (the dirty-tracking caller relies on
-    // this to avoid clearing a flag a newer edit raised — see the result field).
     const contextSignature = getProjectContextSignature(record);
     const contextSource = record.project.contextSource;
     if (!contextSource) {
@@ -342,14 +171,6 @@ async function runMaterialize(
       ...youtubeUrls.map((url): RemoteSource => ({ type: "youtube", url })),
     ];
 
-    // DESIGN NOTE — exclusions are parsed (they gate `listMaterializeCandidates`
-    // below, so excluded binaries aren't converted) but deliberately NOT carried
-    // into the manifest/search guidance. PR2 exclusion is Tier 1 (soft,
-    // best-effort = "don't materialize / don't feed" + ignore files); it does NOT
-    // stop the agent's native grep from reading an excluded file inside an
-    // included folder. That "粒度错配的洞" is explicitly acknowledged-and-unblocked
-    // — hard enforcement needs a backend/OS sandbox (Tier 2/3), deferred past PR2.
-    // See designdocs/agent-projects/PR2_DESIGN.md §4.1.1.
     const { inclusions, exclusions } = getMatchingPatterns({
       inclusions: contextSource.inclusions,
       exclusions: contextSource.exclusions,
@@ -357,19 +178,8 @@ async function runMaterialize(
     });
     const folders = inclusions?.folderPatterns ?? [];
     const notes = inclusions?.notePatterns ?? [];
-    // DESIGN NOTE — tag/extension inclusions are forwarded to the manifest as
-    // SOURCE LABELS, not resolved to absolute paths or `additionalDirectories`
-    // (unlike folders/notes, which are concrete locations). PR2 routes tags/
-    // extensions through the agent's NATIVE search (grep/find + a resident
-    // instruction on counting Obsidian tags); precise/efficient resolution
-    // (MCP `tag_search`) is deferred to PR3. So a tag whose matches live outside
-    // the project cwd is reachable only via that native search, by design.
-    // See designdocs/agent-projects/PR2_DESIGN.md §4.1.
     const extensions = inclusions?.extensionPatterns ?? [];
     const tags = inclusions?.tagPatterns ?? [];
-    // Property inclusions can't be resolved from a path like folders/notes — their
-    // values live in frontmatter — so they're enumerated to concrete matching
-    // notes below and counted as a real source in `hasAnySource`.
     const properties = inclusions?.propertyPatterns ?? [];
 
     const adapter = getVaultFileSystemAdapter(app);
@@ -379,11 +189,6 @@ async function runMaterialize(
       cwd,
       adapter
     );
-    // Property matches stay a SEPARATE list from the declared `[[title]]` notes:
-    // the manifest lists declarations ahead of expansions so a broad property
-    // can't push a hand-added source out of the entry cap. Deduped by resolved
-    // path so a note included via BOTH a [[title]] and a property is listed once,
-    // under the declaration.
     const noteEntries = resolveNotePaths(app, notes, adapter);
     const declaredNotePaths = new Set(noteEntries.map(manifestEntryKey));
     const propertyNoteEntries = resolvePropertyNotePaths(
@@ -420,16 +225,8 @@ async function runMaterialize(
       };
     }
 
-    // Inclusions are resolved; report the count of binary files queued for
-    // materialization so the loading card can show "Resolve files (N)".
     onProgress?.({ phase: "resolve", resolved: files.length });
 
-    // The cache is OFF-VAULT and SHARED across projects: remote/file snapshots
-    // are keyed by source identity (one copy per vault), only failure markers are
-    // per-project. The node fs is root-confined at `cacheRoot`, so the store gets
-    // cache-root-relative dirs (it rejects absolute paths). These node builtins
-    // run desktop-only — the materializer is reachable solely through the dynamic
-    // Agent Mode chunk (see main.ts desktop gate).
     const root = cacheRoot(app);
     const fs = createNodeContextCacheFs(root);
     const remotesRel = cacheRootRelativeDir(root, remotesDir(app));
@@ -450,16 +247,8 @@ async function runMaterialize(
       withSourceLock,
     });
 
-    // Surface per-source failures out-of-band (never folded into the result, which
-    // stays a clean dirs+block value). Always emitted — an empty array clears any
-    // prior run's failures in the subscriber.
     onProgress?.({ phase: "failures", failures });
 
-    // Resolve each present snapshot to its absolute, off-vault path so the
-    // manifest can point the agent straight at it (the shared cache lives outside
-    // every project cwd; an absolute path is the only pointer all three backends
-    // can reach). conversionsLocation owns the layout, so the type→bucket mapping
-    // is not duplicated here. Desktop-only, like the rest of this function.
     const manifestEntries = entries.map((entry) => ({
       ...entry,
       snapshotAbsPath: snapshotAbsPath(app, entry.type, entry.cacheFileName),
@@ -476,10 +265,6 @@ async function runMaterialize(
       youtubeUrls,
       materialized: manifestEntries,
     });
-    // No manifest file is written: the block above is inlined into the session's
-    // first user prompt. Only the per-project failure markers are reconciled —
-    // shared snapshots are never pruned against one project's sources (that would
-    // delete files other projects still reference).
     await reconcileMarkers(fs, markersRel, wantedMarkerNames);
 
     logInfo(
@@ -494,10 +279,6 @@ async function runMaterialize(
       contextSignature,
     };
   } catch (err) {
-    // A failure HERE (not a per-source fetch/parse error, which never throws) is a
-    // whole-materialization breakdown: cache fs, reconcile, or block builder. Keep
-    // the never-reject contract, but surface it as a single synthetic failure so
-    // the status icon can still flag "context unavailable" with a readable cause.
     const error = err2String(err);
     logWarn(`[project-context] materialize failed for ${projectId}; continuing`, err);
     onProgress?.({
@@ -508,7 +289,6 @@ async function runMaterialize(
   }
 }
 
-/** Brevilabs-backed converters. Empty results throw so no useless cache file is written. */
 function createConverters(): ContextConverters {
   return {
     fetchRemote: async (source) => {
@@ -529,18 +309,6 @@ function createConverters(): ContextConverters {
   };
 }
 
-/**
- * Re-materialize a SINGLE context source — the per-row "Retry" in the Content
- * Conversion panel. Reuses the same off-vault cache dirs / converters as the full
- * run but skips reconcile: it only (re)writes this one source's snapshot or
- * failure marker (materializeSources clears the marker on success), leaving every
- * other source untouched. Forces a retry past the failure marker (this IS the
- * user's explicit retry). The per-artifact lock makes this safe against a
- * concurrent full run on the same source — they serialize on the snapshot key, so
- * neither overwrites the other and shared snapshots (never reconciled) can't be
- * reaped. Returns this source's failures (empty on success). Never throws,
- * mirroring the full run's contract.
- */
 export async function materializeProjectContextSource(
   app: App,
   projectId: string,
@@ -608,7 +376,6 @@ export async function materializeProjectContextSource(
   }
 }
 
-/** docs4llm's `response` is `unknown` — normalize to text for the cache file. */
 function docs4llmToText(response: unknown): string {
   if (typeof response === "string") return response;
   try {
@@ -619,24 +386,11 @@ function docs4llmToText(response: unknown): string {
   }
 }
 
-/**
- * The desktop disk-backed adapter, or null otherwise. Used to turn vault paths
- * into absolute OS paths (`getFullPath`) for the agent backend's searchable
- * roots; a non-disk adapter (mobile / in-memory) degrades to vault-path-only
- * manifest entries with no add-dir.
- */
 function getVaultFileSystemAdapter(app: App): FileSystemAdapter | null {
   const adapter = app.vault.adapter;
   return adapter instanceof FileSystemAdapter ? adapter : null;
 }
 
-/**
- * Resolve folder inclusions to absolute `ManifestPathEntry`s for the context
- * block, and collect the subset that lives OUTSIDE the project cwd as add-dir
- * roots. In-cwd folders need no add-dir (already searchable); a pattern that
- * doesn't resolve to a real folder (e.g. a glob) is still listed in the block by
- * its vault path, just without an absolute path / add-dir entry.
- */
 function resolveFolderPaths(
   app: App,
   folderPatterns: string[],
@@ -662,24 +416,6 @@ function resolveFolderPaths(
   };
 }
 
-/**
- * Resolve `[[Title]]` note inclusions to absolute `ManifestPathEntry`s. The
- * title is matched against file basenames, mirroring how `searchUtils`'
- * `matchFilePathWithNotes` pairs a note pattern to a vault file — so a title
- * shared by several notes lists EVERY match (matching the inclusion semantics),
- * not just the first. A pattern with no matching file is still listed by its raw
- * `[[Title]]` form so the source is never dropped.
- *
- * DESIGN NOTE — notes deliberately do NOT contribute to `additionalDirectories`
- * (folders do; see {@link resolveFolderPaths}). Trigger: a note included from
- * OUTSIDE the project cwd. Assessment: NOT a defect (P-low, no live trigger).
- * Under the soft-scope model the note's absolute path listed in the
- * `<project_context>` block is readable on all three backends today via
- * explicit-path read (verified — `designdocs/agent-projects/verify/ADDDIR_FINDINGS.md`).
- * add-dir is a claude-only autonomous-search enhancement codex/opencode ignore;
- * granting one note's whole parent folder would over-grant — the exact thing
- * `obsidian-copilot-preview#165` aims to curb.
- */
 function resolveNotePaths(
   app: App,
   notePatterns: string[],
@@ -688,7 +424,6 @@ function resolveNotePaths(
   if (notePatterns.length === 0) return [];
   const files = adapter ? app.vault.getFiles() : [];
   return notePatterns.flatMap((pattern) => {
-    // categorizePatterns guarantees the `[[ ... ]]` shape, so slicing is safe.
     const title = pattern.slice(2, -2);
     if (!adapter) return [{ vaultPath: pattern }];
     const matches = files.filter((file) => file.basename === title);
@@ -700,17 +435,6 @@ function resolveNotePaths(
   });
 }
 
-/**
- * Enumerate the markdown notes whose frontmatter matches a project's property
- * inclusions, resolved to absolute `ManifestPathEntry`s. Unlike folders/notes/tags
- * — which are listed as SOURCE LABELS the agent expands with its own search — a
- * property value lives in frontmatter the agent's native search can't discover
- * (it's a vault-specific taxonomy, not a grep-able `#tag`), so the matching notes
- * are enumerated concretely here. Reuses the Phase 1 matcher through the exported
- * {@link shouldIndexFile} contract (property-only inclusions + the project's real
- * exclusions), so match semantics stay identical to indexing/QA. Sorted by path
- * for a stable listing; empty (frozen) when the project declares no property.
- */
 function resolvePropertyNotePaths(
   app: App,
   propertyPatterns: string[],
@@ -730,12 +454,6 @@ function resolvePropertyNotePaths(
     );
 }
 
-/**
- * Whether an absolute path lives at or under the session cwd. Compared on
- * forward-slash-normalized strings (not `node:path`) so it holds regardless of
- * the OS separator `getFullPath`/cwd report — folders already inside the cwd
- * need no add-dir root; only the rest become searchable-root entries.
- */
 function isUnderCwd(cwd: string, abs: string): boolean {
   const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
   const base = norm(cwd);
@@ -743,7 +461,6 @@ function isUnderCwd(cwd: string, abs: string): boolean {
   return target === base || target.startsWith(`${base}/`);
 }
 
-/** Split a newline-joined config string into trimmed, non-empty entries. */
 function splitLines(value: string | undefined): string[] {
   if (!value) return [];
   return value

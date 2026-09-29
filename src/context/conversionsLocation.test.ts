@@ -5,8 +5,6 @@ import { getVaultId } from "@/utils/appPaths";
 import { md5 } from "@/utils/hash";
 import { cacheRoot, filesDir, markersDir, remotesDir } from "./conversionsLocation";
 
-// The jsdom mock's FileSystemAdapter takes a base path; the real obsidian type
-// declares a 0-arg constructor, so cast to build a hashable instance.
 const FsAdapter = FileSystemAdapter as unknown as new (basePath: string) => FileSystemAdapter;
 const appWith = (basePath: string): App =>
   ({ vault: { adapter: new FsAdapter(basePath) } }) as unknown as App;
@@ -16,7 +14,6 @@ describe("conversionsLocation", () => {
 
   it("roots the cache at ~/.obsidian-copilot/vaults/<vaultId>/context-cache", () => {
     const root = cacheRoot(app);
-    // The vaultId comes from the shared helper, so the two always agree.
     expect(
       root.endsWith(path.join(".obsidian-copilot", "vaults", getVaultId(app), "context-cache"))
     ).toBe(true);

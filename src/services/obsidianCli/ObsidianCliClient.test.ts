@@ -5,18 +5,12 @@ import {
   runObsidianCliCommand,
 } from "@/services/obsidianCli/ObsidianCliClient";
 
-/**
- * Callback signature used by mocked execFile in tests.
- */
 type MockExecCallback = (
   error: (Error & { code?: string | number | null; signal?: string | null }) | null,
   stdout: string,
   stderr: string
 ) => void;
 
-/**
- * ExecFile argument shape for typed jest mocks.
- */
 type MockExecArgs = [
   binary: string,
   args: string[],
@@ -24,9 +18,6 @@ type MockExecArgs = [
   callback: MockExecCallback,
 ];
 
-/**
- * Runtime require container shape for tests.
- */
 interface TestRequireContainer {
   require?: (id: string) => unknown;
 }

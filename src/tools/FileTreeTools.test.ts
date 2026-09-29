@@ -4,26 +4,18 @@ import { ToolManager } from "@/tools/toolManager";
 import { App, TFile, TFolder } from "obsidian";
 import { buildFileTree, createGetFileTreeTool } from "./FileTreeTools";
 
-// shouldIndexFile is mocked, so the app is only threaded through and never inspected.
 const mockApp = {} as unknown as App;
 
-// Mock the searchUtils functions
 jest.mock("@/search/searchUtils", () => ({
   getMatchingPatterns: jest.fn(),
   shouldIndexFile: jest.fn(),
 }));
 
-/**
- * Build a TFolder with the given path, parent, and children.
- */
 function makeFolder(path: string, parent: TFolder | null, children: (TFile | TFolder)[]): TFolder {
   const folder = mockTFolder({ path, name: path.split("/").pop() ?? "", parent, children });
   return folder;
 }
 
-/**
- * Build a TFile with the given path and parent.
- */
 function makeFile(path: string, parent: TFolder): TFile {
   const name = path.split("/").pop() ?? "";
   const basename = name.includes(".") ? name.split(".")[0] : name;
@@ -42,8 +34,6 @@ describe("FileTreeTools", () => {
   let root: TFolder;
 
   beforeEach(() => {
-    // We need to build the tree bottom-up, then attach children.
-    // Use Object.assign after creation to set children (mockTFolder returns a writable object).
     root = mockTFolder({ path: "", name: "", parent: null, children: [] });
 
     const docs = makeFolder("docs", root, []);
@@ -75,10 +65,8 @@ describe("FileTreeTools", () => {
       makeFile("text", root),
     ];
 
-    // Reset mocks before each test
     jest.clearAllMocks();
 
-    // Default mock implementations
     (searchUtils.getMatchingPatterns as jest.Mock).mockReturnValue({
       inclusions: null,
       exclusions: null,
@@ -87,10 +75,8 @@ describe("FileTreeTools", () => {
   });
 
   it("should generate correct file tree structure with files and extension counts", async () => {
-    // Test buildFileTree function directly
     const tree = buildFileTree(mockApp, root);
 
-    // Define expected tree structure
     const expectedTree = {
       vault: {
         files: ["readme.md", "config.json", "text"],
@@ -116,11 +102,9 @@ describe("FileTreeTools", () => {
 
     expect(tree).toEqual(expectedTree);
 
-    // Also test the tool to ensure it uses buildFileTree correctly
     const tool = createGetFileTreeTool(mockApp, root);
     const result = (await ToolManager.callTool(tool, {})) as string;
 
-    // Extract JSON part after the prompt
     const jsonPart = result.substring(result.indexOf("{"));
     const treeFromTool = JSON.parse(jsonPart) as typeof expectedTree;
 
@@ -128,10 +112,8 @@ describe("FileTreeTools", () => {
   });
 
   it("should handle size limit by rebuilding without files", async () => {
-    // Test buildFileTree with size limit handling
     const tree = buildFileTree(mockApp, root, false);
 
-    // Define expected simplified tree structure
     const expectedTree = {
       vault: {
         subFolders: {
@@ -155,17 +137,14 @@ describe("FileTreeTools", () => {
   });
 
   it("should exclude files based on patterns", async () => {
-    // Mock shouldIndexFile to exclude all files in projects folder
     (searchUtils.shouldIndexFile as jest.Mock).mockImplementation(
       (_app: unknown, file: { path: string }) => {
         return !file.path.includes("projects");
       }
     );
 
-    // Test buildFileTree with exclusion patterns
     const tree = buildFileTree(mockApp, root);
 
-    // Define expected tree with projects excluded
     const expectedTree = {
       vault: {
         files: ["readme.md", "config.json", "text"],
@@ -189,10 +168,8 @@ describe("FileTreeTools", () => {
   });
 
   it("should handle empty folders after filtering", async () => {
-    // Mock shouldIndexFile to exclude all files
     (searchUtils.shouldIndexFile as jest.Mock).mockReturnValue(false);
 
-    // Test buildFileTree with all files excluded
     const tree = buildFileTree(mockApp, root);
 
     const expectedTree = {};

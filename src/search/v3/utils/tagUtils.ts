@@ -1,10 +1,3 @@
-/**
- * Extracts hash-prefixed tags (and hierarchical variants) from a query string.
- * Normalizes results to lowercase while preserving the hash prefix.
- *
- * @param query - The user-supplied query
- * @returns Array of normalized tag tokens (e.g., ['#project', '#project/alpha'])
- */
 export function extractTagsFromQuery(query: string): string[] {
   if (!query) {
     return [];

@@ -20,7 +20,7 @@ const TagListToolSchema = z
     maxEntries: z
       .number()
       .int()
-      .min(1) // Use min(1) instead of positive() - Gemini doesn't support exclusiveMinimum
+      .min(1)
       .max(5000)
       .optional()
       .describe(
@@ -46,11 +46,6 @@ interface TagListPayload {
   note?: string;
 }
 
-/**
- * Safely retrieves the metadata cache from the given Obsidian app instance.
- *
- * @returns The metadata cache when available, otherwise null.
- */
 function getMetadataCache(app: App): MetadataCache | null {
   if (!app?.metadataCache) {
     return null;
@@ -58,12 +53,6 @@ function getMetadataCache(app: App): MetadataCache | null {
   return app.metadataCache;
 }
 
-/**
- * Normalizes tag maps from Obsidian so tags always include a leading hash and counts are non-negative integers.
- *
- * @param tagMap - Raw tag map returned by the metadata cache.
- * @returns A cleaned tag map keyed by canonical tag strings.
- */
 function normalizeTagMap(tagMap?: Record<string, number> | null): Record<string, number> {
   const normalized: Record<string, number> = {};
 
@@ -94,14 +83,6 @@ function normalizeTagMap(tagMap?: Record<string, number> | null): Record<string,
   return normalized;
 }
 
-/**
- * Collects tag statistics from the metadata cache for inclusion in the tool response.
- *
- * @param cache - Obsidian metadata cache instance.
- * @param includeInline - Whether inline tags should be included.
- * @param maxEntries - Maximum number of tag entries to return.
- * @returns Aggregate tag payload including counts and truncation metadata.
- */
 function collectTagEntries(
   cache: MetadataCache,
   includeInline: boolean,
@@ -123,9 +104,6 @@ function collectTagEntries(
     const frontmatterOccurrences = frontmatterMap[tag] ?? 0;
     const totalFromCache = includeInline ? Math.max(0, allTagMap[tag] ?? 0) : 0;
 
-    // Obsidian's metadataCache.getTags() returns aggregate counts including frontmatter.
-    // When third-party plugins override this behaviour or the cache is still warming,
-    // fall back to additive aggregation to prevent under-reporting inline usage.
     let inlineOccurrences = 0;
     let combinedOccurrences = frontmatterOccurrences;
 
@@ -172,12 +150,6 @@ function collectTagEntries(
   };
 }
 
-/**
- * Ensures the payload stays within the configured size limit, progressively trimming entries when needed.
- *
- * @param payload - Tag payload to evaluate.
- * @returns The original payload if within size limits, otherwise a trimmed version.
- */
 function enforceSizeLimit(payload: TagListPayload): TagListPayload {
   let currentPayload = payload;
   let serialized = JSON.stringify(currentPayload);
@@ -213,12 +185,6 @@ function enforceSizeLimit(payload: TagListPayload): TagListPayload {
   return currentPayload;
 }
 
-/**
- * Formats the payload with a leading prompt so downstream consumers understand the structure.
- *
- * @param payload - Tag payload to format.
- * @returns Prompt-prefixed JSON string describing the tag inventory.
- */
 function formatTagListResult(payload: TagListPayload): string {
   const prompt = `A JSON object lists the vault tags and their occurrence counts:
 * totalUniqueTags: number of unique tags indexed across the vault
@@ -231,11 +197,6 @@ function formatTagListResult(payload: TagListPayload): string {
   return `${prompt}${JSON.stringify(payload)}`;
 }
 
-/**
- * Creates a tool that returns the current tag inventory with aggregated counts.
- *
- * @returns A tool for retrieving vault tag statistics.
- */
 export const createGetTagListTool = (app: App) =>
   createLangChainTool({
     name: "getTagList",

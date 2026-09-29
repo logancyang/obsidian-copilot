@@ -7,8 +7,7 @@ import * as z from "zod";
 import { createLangChainTool } from "./createLangChainTool";
 import { logError } from "@/logger";
 
-// Maximum input length to prevent potential DoS attacks
-const MAX_USER_MESSAGE_LENGTH = 50000; // Maximum number of characters
+const MAX_USER_MESSAGE_LENGTH = 50000;
 
 interface YouTubeHandlerArgs {
   _userMessageContent?: string;
@@ -24,10 +23,8 @@ const youtubeTranscriptionTool = createLangChainTool({
       .describe("Internal: user message content injected by the system"),
   }),
   func: async (args: YouTubeHandlerArgs) => {
-    // The _userMessageContent is injected by the tool execution system
     const { _userMessageContent } = args;
 
-    // Input validation
     if (typeof _userMessageContent !== "string") {
       return {
         success: false,
@@ -42,7 +39,6 @@ const youtubeTranscriptionTool = createLangChainTool({
       };
     }
 
-    // Extract YouTube URLs only from the user's message
     const urls = extractAllYoutubeUrls(_userMessageContent);
 
     if (urls.length === 0) {
@@ -53,7 +49,6 @@ const youtubeTranscriptionTool = createLangChainTool({
       };
     }
 
-    // Process multiple URLs if present
     const results = await Promise.all(
       urls.map(async (url) => {
         try {
@@ -62,7 +57,6 @@ const youtubeTranscriptionTool = createLangChainTool({
               ? await selfHostYoutube4llm(url)
               : await BrevilabsClient.getInstance().youtube4llm(url);
 
-          // Check if transcript is empty
           if (!response.response.transcript) {
             return {
               url,
@@ -89,7 +83,6 @@ const youtubeTranscriptionTool = createLangChainTool({
       })
     );
 
-    // Check if at least one transcription was successful
     const hasSuccessfulTranscriptions = results.some((result) => result.success);
 
     return {

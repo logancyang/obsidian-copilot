@@ -3,19 +3,11 @@ import { runObsidianCliCommand } from "@/services/obsidianCli/ObsidianCliClient"
 import { throwCliFailure } from "@/services/obsidianCli/cliErrors";
 import { createLangChainTool } from "./createLangChainTool";
 
-/**
- * Build CLI params from a tool args object, excluding `command` and `vault`.
- * Filters out undefined values so only explicitly provided params are sent.
- */
 function buildCliParams(args: Record<string, unknown>): Record<string, string | boolean> {
   return Object.fromEntries(
     Object.entries(args).filter(([k, v]) => k !== "command" && k !== "vault" && v !== undefined)
   ) as Record<string, string | boolean>;
 }
-
-// ---------------------------------------------------------------------------
-// obsidianDailyNote — daily note category tool (v1)
-// ---------------------------------------------------------------------------
 
 const dailyNoteSchema = z.object({
   command: z
@@ -29,10 +21,6 @@ const dailyNoteSchema = z.object({
     .describe("Optional vault name to target. Omit to use the active vault."),
 });
 
-/**
- * Category tool for all daily note operations via the official Obsidian CLI.
- * Supports reading, appending, prepending, and path resolution.
- */
 export const obsidianDailyNoteTool = createLangChainTool({
   name: "obsidianDailyNote",
   description:
@@ -46,7 +34,6 @@ export const obsidianDailyNoteTool = createLangChainTool({
 
     if (!result.ok) throwCliFailure(result);
 
-    // Preserve raw stdout for read commands — trimming may alter meaningful Markdown whitespace.
     const content = command === "daily:read" ? result.stdout : result.stdout.trim();
 
     return {
@@ -58,10 +45,6 @@ export const obsidianDailyNoteTool = createLangChainTool({
     };
   },
 });
-
-// ---------------------------------------------------------------------------
-// obsidianProperties — frontmatter property access (v1, read-only)
-// ---------------------------------------------------------------------------
 
 const propertiesSchema = z.object({
   command: z
@@ -92,10 +75,6 @@ const propertiesSchema = z.object({
     .describe("Optional vault name to target. Omit to use the active vault."),
 });
 
-/**
- * Tool for reading frontmatter properties via the official Obsidian CLI.
- * Supports vault-wide property listing and per-note property lookup.
- */
 export const obsidianPropertiesTool = createLangChainTool({
   name: "obsidianProperties",
   description:
@@ -122,10 +101,6 @@ export const obsidianPropertiesTool = createLangChainTool({
   },
 });
 
-// ---------------------------------------------------------------------------
-// obsidianTasks — task listing across vault (v1, read-only)
-// ---------------------------------------------------------------------------
-
 const tasksSchema = z.object({
   command: z
     .literal("tasks")
@@ -147,10 +122,6 @@ const tasksSchema = z.object({
     .describe("Optional vault name to target. Omit to use the active vault."),
 });
 
-/**
- * Tool for listing tasks across the vault via the official Obsidian CLI.
- * Supports filtering by completion status, file, daily note, and more.
- */
 export const obsidianTasksTool = createLangChainTool({
   name: "obsidianTasks",
   description:
@@ -172,10 +143,6 @@ export const obsidianTasksTool = createLangChainTool({
     };
   },
 });
-
-// ---------------------------------------------------------------------------
-// obsidianLinks — link graph queries (v1, read-only)
-// ---------------------------------------------------------------------------
 
 const linksSchema = z.object({
   command: z
@@ -204,10 +171,6 @@ const linksSchema = z.object({
     .describe("Optional vault name to target. Omit to use the active vault."),
 });
 
-/**
- * Tool for querying the vault link graph via the official Obsidian CLI.
- * Supports backlinks, outgoing links, orphaned notes, and unresolved wikilinks.
- */
 export const obsidianLinksTool = createLangChainTool({
   name: "obsidianLinks",
   description:
@@ -230,10 +193,6 @@ export const obsidianLinksTool = createLangChainTool({
   },
 });
 
-// ---------------------------------------------------------------------------
-// obsidianTemplates — template listing and reading (v1, read-only)
-// ---------------------------------------------------------------------------
-
 const templatesSchema = z.object({
   command: z
     .enum(["templates", "template:read"])
@@ -247,10 +206,6 @@ const templatesSchema = z.object({
     .describe("Optional vault name to target. Omit to use the active vault."),
 });
 
-/**
- * Tool for listing and reading templates via the official Obsidian CLI.
- * Supports listing available templates and reading template content.
- */
 export const obsidianTemplatesTool = createLangChainTool({
   name: "obsidianTemplates",
   description:
@@ -276,10 +231,6 @@ export const obsidianTemplatesTool = createLangChainTool({
     };
   },
 });
-
-// ---------------------------------------------------------------------------
-// obsidianBases — Base database queries (read-only)
-// ---------------------------------------------------------------------------
 
 const basesSchema = z.object({
   command: z
@@ -319,15 +270,8 @@ const basesSchema = z.object({
     .describe("Optional vault name to target. Omit to use the active vault."),
 });
 
-/**
- * Commands that require a target Base file (file or path parameter).
- */
 const BASE_COMMANDS_REQUIRING_FILE = ["base:views", "base:query", "base:create"] as const;
 
-/**
- * Tool for interacting with Obsidian Base (database) files via the official Obsidian CLI.
- * Supports listing bases, listing views, querying data from views, and creating new items.
- */
 export const obsidianBasesTool = createLangChainTool({
   name: "obsidianBases",
   description:

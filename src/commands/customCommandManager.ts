@@ -31,11 +31,6 @@ export class CustomCommandManager {
     this.app = app;
   }
 
-  /**
-   * Returns the singleton. `app` is required on the first call (which creates
-   * the instance) and ignored afterward; the plugin seeds it once at load
-   * (see main.ts) so subsequent call sites can omit it.
-   */
   static getInstance(app?: App): CustomCommandManager {
     if (!CustomCommandManager.instance) {
       if (!app) {
@@ -48,16 +43,10 @@ export class CustomCommandManager {
     return CustomCommandManager.instance;
   }
 
-  /**
-   * Creates a new command file and caches the command in memory.
-   * If autoOrder is true, the order of the command is set to the next available order.
-   * If autoOrder is false (default), preserves the order from the command object/frontmatter.
-   */
   async createCommand(
     command: CustomCommand,
     options: { skipStoreUpdate?: boolean; autoOrder?: boolean } = {}
   ): Promise<void> {
-    // Merge default options with provided options
     const mergedOptions = { skipStoreUpdate: false, autoOrder: true, ...options };
     const filePath = getCommandFilePath(command.title);
     try {
@@ -69,7 +58,6 @@ export class CustomCommandManager {
       command = { ...command, order: newOrder };
 
       const folderPath = getCustomCommandsFolder();
-      // Ensure nested folders are created cross-platform
       await ensureFolderExists(this.app.vault, folderPath);
 
       const existingFile = this.app.vault.getAbstractFileByPath(filePath);
@@ -114,11 +102,9 @@ export class CustomCommandManager {
         addPendingFileWrite(prevFilePath);
       }
       if (!skipStoreUpdate) {
-        // Update the cached command first to make UI update immediately.
         updateCachedCommand(command, prevCommandTitle);
       }
       let commandFile = this.app.vault.getAbstractFileByPath(filePath);
-      // Verify whether the title has changed to decide whether to rename the file
       if (isRename) {
         const newFileExists = this.app.vault.getAbstractFileByPath(filePath);
         if (newFileExists) {
@@ -129,15 +115,11 @@ export class CustomCommandManager {
         const prevCommandFile = this.app.vault.getAbstractFileByPath(prevFilePath);
         if (prevCommandFile instanceof TFile) {
           await this.app.vault.rename(prevCommandFile, filePath);
-          // Re-fetch the file object after renaming
           commandFile = this.app.vault.getAbstractFileByPath(filePath);
         }
       }
 
       if (!commandFile) {
-        // Pass skipStoreUpdate to createCommand to avoid redundant cache update
-        // When creating a new command, we want to auto-order it so it appears
-        // at the bottom of the menu.
         await this.createCommand(command, { skipStoreUpdate, autoOrder: true });
         commandFile = this.app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
       }
@@ -168,10 +150,6 @@ export class CustomCommandManager {
     await Promise.all(commands.map((command) => this.updateCommand(command, command.title, true)));
   }
 
-  /**
-   * Reorders the given commands by setting their order property in increments of 10,
-   * then updates all commands in the manager.
-   */
   async reorderCommands(commands: CustomCommand[]) {
     const newCommands = [...commands];
     for (let i = 0; i < newCommands.length; i++) {

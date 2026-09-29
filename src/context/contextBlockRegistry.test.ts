@@ -117,8 +117,6 @@ describe("contextBlockRegistry", () => {
 
   describe("tag alignment", () => {
     it("should have all URL-producing tags registered (prevents tag mismatch bugs)", () => {
-      // These are the tags that Mention.ts and other URL processors create.
-      // If a new tag is added to URL processing, it MUST be registered here.
       const registeredTags = new Set(CONTEXT_BLOCK_TYPES.map((bt) => bt.tag));
       const urlProducerTags = ["url_content", "youtube_video_context", "twitter_content"];
 

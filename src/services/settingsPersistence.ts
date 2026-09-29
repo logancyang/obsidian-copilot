@@ -1,13 +1,3 @@
-/**
- * Keychain-only settings persistence.
- *
- * Runtime settings are hydrated from Obsidian Keychain. Persisted settings
- * retain only non-secret values and the stable vault namespace used to locate
- * Keychain entries. Values already present in data.json are discarded without
- * being decrypted or imported, but never before they have been copied out
- * (see `legacyCredentialBackup`).
- */
-
 import { DEFAULT_SETTINGS } from "@/constants";
 import { logWarn } from "@/logger";
 import { KeychainService } from "@/services/keychainService";
@@ -26,15 +16,12 @@ let transactionEpoch = 0;
 let legacyCredentialsUnprotected = false;
 const pendingTombstones = new Set<string>();
 
-/** Keychain vault IDs are 8 lowercase hex chars. */
 const KEYCHAIN_VAULT_ID_RE = /^[a-f0-9]{8}$/;
 
-/** Check whether a persisted keychain vault ID has the expected format. */
 function isValidKeychainVaultId(value: unknown): value is string {
   return typeof value === "string" && KEYCHAIN_VAULT_ID_RE.test(value);
 }
 
-/** Return a detached record for raw persistence transforms. */
 function cloneRawSettings(rawData: unknown): CopilotSettings {
   if (!rawData || typeof rawData !== "object" || Array.isArray(rawData)) {
     return {} as CopilotSettings;
@@ -42,7 +29,6 @@ function cloneRawSettings(rawData: unknown): CopilotSettings {
   return structuredClone(rawData) as CopilotSettings;
 }
 
-/** Build the canonical data.json shape without importing any disk secret. */
 function buildDiskSettings(
   rawData: unknown,
   vaultId: string,
@@ -56,7 +42,6 @@ function buildDiskSettings(
   return stripped;
 }
 
-/** Reset all module-level persistence state between plugin lifecycles. */
 export function resetPersistenceState(): void {
   writeQueue = Promise.resolve();
   lastPersistedSettings = undefined;
@@ -66,36 +51,18 @@ export function resetPersistenceState(): void {
   pendingTombstones.clear();
 }
 
-/**
- * Allow data.json writes again after a dedicated flow has stripped it.
- *
- * The hold means unbacked pre-v4 credentials are still on disk. Delete All Keys
- * writes its own stripped file outside the normal save path, so once that write
- * succeeds there is nothing left to protect. Call this only from that success
- * path: never releasing merely blocks writes until the next launch, while
- * releasing early destroys the credentials the hold exists for.
- */
 export function releaseLegacyCredentialHold(): void {
   legacyCredentialsUnprotected = false;
 }
 
-/** Refresh the last known-good settings baseline used by Keychain rollback. */
 export function refreshLastPersistedSettings(data: CopilotSettings): void {
   lastPersistedSettings = structuredClone(data);
 }
 
-/** Skip the next subscriber-driven persistence call after a dedicated transaction. */
 export function suppressNextPersistOnce(): void {
   suppressNextPersist = true;
 }
 
-/**
- * Run a dedicated persistence transaction inside the shared write queue.
- *
- * The epoch advances even when the task fails because it may have partially
- * mutated a durable store before throwing. Queued snapshots from before the
- * transaction therefore cannot overwrite its result.
- */
 export async function runPersistenceTransaction(task: () => Promise<void>): Promise<void> {
   const job = writeQueue.then(async () => {
     try {
@@ -104,13 +71,10 @@ export async function runPersistenceTransaction(task: () => Promise<void>): Prom
       transactionEpoch++;
     }
   });
-  writeQueue = job.catch(() => {
-    /* Keep the queue usable after a failed write. */
-  });
+  writeQueue = job.catch(() => {});
   return job;
 }
 
-/** Wait for all queued persistence operations to complete. */
 export async function flushPersistence(): Promise<void> {
   await writeQueue;
 }
@@ -144,23 +108,6 @@ function credentialMigrationFromRecovery(
   };
 }
 
-/**
- * Load settings without trusting secrets from data.json.
- *
- * The raw disk copy is cleaned before any credential reaches runtime. Keychain
- * hydration starts from that stripped baseline, so missing or unavailable
- * Keychain entries remain empty instead of falling back to disk values.
- *
- * @param app - Active Obsidian app; owns the device-local store the device id
- *   lives in.
- * @param rawData - Untrusted data returned by Obsidian's loadData().
- * @param saveData - Plugin-bound writer used to remove disk secrets and persist the vault ID.
- * @param backupLegacyCredentials - Copies data.json before its credentials are
- *   stripped. Stripping is skipped unless this reports a copy exists, so a
- *   pre-v4 vault cannot lose the only record of its keys.
- * @param onMigration - Receives the legacy credential outcome when startup is
- *   collecting migration results into a single summary.
- */
 export async function loadSettingsWithKeychain(
   app: App,
   rawData: unknown,
@@ -203,10 +150,6 @@ export async function loadSettingsWithKeychain(
   if (JSON.stringify(rawSettings) !== JSON.stringify(diskSettings)) {
     const backup = await backupLegacyCredentials(rawData);
     if (backup.status === "failed") {
-      // Reason: data.json is still the only copy of these credentials, so
-      // nothing may overwrite it for the rest of this session - not this write,
-      // and not the ordinary settings writes that migrations and the settings
-      // subscriber trigger moments later. Retried on the next load.
       legacyCredentialsUnprotected = true;
       credentialMigration = {
         id: "credentials",
@@ -219,13 +162,7 @@ export async function loadSettingsWithKeychain(
         "Copilot could not back up the API keys stored in data.json, so it left the file untouched. Check that the vault is writable, then restart Obsidian."
       );
     } else {
-      // Reason: announce the copy before attempting the strip. A later write in
-      // this same startup can complete the strip, so a path shown only on a
-      // successful first write would never be shown at all in that case.
       if (backup.status === "backed-up") {
-        // Reason: `enc_*` values cannot be pasted back in, since v4 stores
-        // ciphertext verbatim as the key. Those users need fresh keys, so the
-        // "copy them across" instruction would send them in circles.
         diskSettings._pendingCredentialRecovery = {
           deviceId: getDeviceId(app),
           path: backup.path,
@@ -290,19 +227,11 @@ export async function loadSettingsWithKeychain(
   return hydrated;
 }
 
-/**
- * Write secrets to Keychain and save a stripped data.json snapshot.
- * Partial Keychain writes are rolled back to the last known-good snapshot.
- */
 async function persistKeychainSettings(
   settings: CopilotSettings,
   saveData: (data: CopilotSettings) => Promise<void>,
   prev: CopilotSettings | undefined
 ): Promise<void> {
-  // Reason: reject rather than skip. Callers treat a resolved persist as
-  // durable - `applyCopilotRootChange()` activates the new root only once this
-  // resolves - so returning quietly would report an unwritten file as saved.
-  // Thrown before any Keychain write, so nothing is half-applied.
   if (legacyCredentialsUnprotected) {
     throw new Error(
       "Copilot cannot save settings until it can back up the API keys still in data.json. " +
@@ -351,10 +280,6 @@ async function persistKeychainSettings(
   }
 }
 
-/**
- * Persist from inside an existing persistence transaction without re-entering
- * the queue and deadlocking behind the transaction itself.
- */
 export async function persistSettingsWithinTransaction(
   settings: CopilotSettings,
   saveData: (data: CopilotSettings) => Promise<void>,
@@ -363,7 +288,6 @@ export async function persistSettingsWithinTransaction(
   await persistKeychainSettings(settings, saveData, prevSettings);
 }
 
-/** Queue and persist a complete settings snapshot through Keychain-only storage. */
 export async function persistSettings(
   settings: CopilotSettings,
   saveData: (data: CopilotSettings) => Promise<void>,
@@ -379,13 +303,10 @@ export async function persistSettings(
     if (epochAtEnqueue !== transactionEpoch) return;
     return persistKeychainSettings(settings, saveData, prevSettings);
   });
-  writeQueue = job.catch(() => {
-    /* Keep the queue usable after a failed write. */
-  });
+  writeQueue = job.catch(() => {});
   return job;
 }
 
-/** Restore Keychain entries after a partially failed persist. */
 async function restoreKeychainFromSettings(
   keychain: KeychainService,
   restoreFrom: CopilotSettings | undefined,

@@ -6,23 +6,17 @@ import { ChunkManager, getSharedChunkManager } from "@/search/v3/chunks";
 import { NoteIdRank } from "@/search/v3/interfaces";
 import { MemoryManager } from "@/search/v3/utils/MemoryManager";
 
-/**
- * Full-text search engine using ephemeral MiniSearch index built per-query.
- * Uses BM25+ scoring for proper multi-term relevance ranking.
- */
 export class FullTextEngine {
   private index: MiniSearch | null = null;
   private memoryManager: MemoryManager;
   private indexedChunks = new Set<string>();
   private chunkManager: ChunkManager;
 
-  // Configuration constants
-  private static readonly BATCH_SIZE = 10; // Chunk indexing batch size for UI yielding
-  private static readonly CHUNK_MEMORY_PERCENTAGE = 0.35; // 35% of memory budget for chunks
-  private static readonly MAX_ARRAY_ITEMS = 10; // Max items to process from arrays
-  private static readonly MAX_EXTRACTION_DEPTH = 2; // Max recursion depth for property extraction
+  private static readonly BATCH_SIZE = 10;
+  private static readonly CHUNK_MEMORY_PERCENTAGE = 0.35;
+  private static readonly MAX_ARRAY_ITEMS = 10;
+  private static readonly MAX_EXTRACTION_DEPTH = 2;
 
-  // Field weights for search scoring
   private static readonly FIELD_WEIGHTS = {
     title: 5,
     heading: 2.5,
@@ -42,9 +36,6 @@ export class FullTextEngine {
     this.chunkManager = chunkManager || getSharedChunkManager(app);
   }
 
-  /**
-   * Create a new MiniSearch index with multilingual tokenization and BM25 scoring
-   */
   private createIndex(): MiniSearch {
     return new MiniSearch({
       fields: ["title", "heading", "path", "tags", "body"],
@@ -59,17 +50,12 @@ export class FullTextEngine {
           body: FullTextEngine.FIELD_WEIGHTS.body,
         },
         prefix: true,
-        fuzzy: false, // Disable fuzzy for CJK compatibility
+        fuzzy: false,
         combineWith: "OR",
       },
     });
   }
 
-  /**
-   * Hybrid tokenizer for ASCII words + CJK bigrams
-   * @param str - String to tokenize
-   * @returns Array of tokens
-   */
   private tokenizeMixed(str: string): string[] {
     if (!str) {
       return [];
@@ -79,7 +65,6 @@ export class FullTextEngine {
     const lowered = str.toLowerCase();
     let asciiSource = lowered;
 
-    // Extract tags (keep hash and generate hierarchy-aware tokens)
     let tagMatches: RegExpMatchArray | null = null;
     try {
       tagMatches = lowered.match(/#[\p{L}\p{N}_/-]+/gu);
@@ -113,15 +98,12 @@ export class FullTextEngine {
       }
     }
 
-    // ASCII words (including alphanumeric and underscores)
     const asciiWords = asciiSource.match(/[a-z0-9_]+/g) || [];
     asciiWords.forEach((word) => tokens.add(word));
 
-    // CJK pattern for Chinese, Japanese, Korean characters
     const cjkPattern = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]+/g;
     const cjkMatches = str.match(cjkPattern) || [];
 
-    // Generate bigrams for CJK text
     for (const match of cjkMatches) {
       if (match.length === 1) {
         tokens.add(match);
@@ -134,26 +116,18 @@ export class FullTextEngine {
     return Array.from(tokens);
   }
 
-  /**
-   * Build ephemeral index from candidate note paths by chunking them
-   * @param candidatePaths - Array of note paths to index
-   * @returns Number of chunks indexed
-   */
   async buildFromCandidates(candidatePaths: string[]): Promise<number> {
     logInfo(`FullTextEngine: [CHUNKS] Starting with ${candidatePaths.length} candidate notes`);
 
-    // Clear existing data
     this.indexedChunks.clear();
     this.memoryManager.reset();
 
-    // Create new index
     await new Promise((resolve) => window.setTimeout(resolve, 0));
     const startTime = Date.now();
     this.index = this.createIndex();
     const createTime = Date.now() - startTime;
     logInfo(`FullTextEngine: MiniSearch index created in ${createTime}ms`);
 
-    // Convert note paths to chunks
     const chunkOptions = {
       maxChars: CHUNK_SIZE,
       overlap: 0,
@@ -171,7 +145,6 @@ export class FullTextEngine {
       `FullTextEngine: Generated ${chunks.length} chunks from ${candidatePaths.length} notes`
     );
 
-    // Index chunks
     let indexed = 0;
     const BATCH_SIZE = FullTextEngine.BATCH_SIZE;
     const processedNotes = new Map<string, { tags: string[]; links: string[]; props: string[] }>();
@@ -185,10 +158,8 @@ export class FullTextEngine {
         break;
       }
 
-      // Extract path components for searchability
       const pathComponents = chunk.notePath.replace(/\.md$/, "").split("/").join(" ");
 
-      // Extract note metadata (cache per note for efficiency)
       let noteMetadata = processedNotes.get(chunk.notePath);
       if (!noteMetadata) {
         const file = this.app.vault.getAbstractFileByPath(chunk.notePath);
@@ -199,14 +170,12 @@ export class FullTextEngine {
           const frontmatterTags = this.extractFrontmatterTags(frontmatter);
           const normalizedTags = this.normalizeTagList([...rawTags, ...frontmatterTags]);
 
-          // Get links
           const outgoing = this.app.metadataCache.resolvedLinks[file.path] ?? {};
           const backlinks = this.app.metadataCache.getBacklinksForFile(file)?.data ?? {};
           const linksOut = Object.keys(outgoing);
           const linksIn = Object.keys(backlinks);
           const allLinks = [...linksOut, ...linksIn];
 
-          // Extract frontmatter property values for search indexing
           const propValues = this.extractPropertyValues(frontmatter);
 
           noteMetadata = {
@@ -220,18 +189,15 @@ export class FullTextEngine {
         }
       }
 
-      // Add chunk to index
-      // Include frontmatter properties in body for searchability
       const bodyWithProps = [chunk.content, ...noteMetadata.props].join(" ");
 
-      // MiniSearch expects string fields, so join tags array
       this.index.add({
         id: chunk.id,
         title: chunk.title,
         heading: chunk.heading,
         path: pathComponents,
         body: bodyWithProps,
-        tags: noteMetadata.tags.join(" "), // MiniSearch expects strings
+        tags: noteMetadata.tags.join(" "),
         notePath: chunk.notePath,
         chunkIndex: chunk.chunkIndex,
       });
@@ -240,7 +206,6 @@ export class FullTextEngine {
       this.indexedChunks.add(chunk.id);
       indexed++;
 
-      // Yield to UI thread periodically
       if (i > 0 && i % BATCH_SIZE === 0) {
         await new Promise((resolve) => window.setTimeout(resolve, 0));
       }
@@ -252,14 +217,6 @@ export class FullTextEngine {
     return indexed;
   }
 
-  /**
-   * Extract frontmatter property values for search indexing.
-   * Only indexes primitive values (strings, numbers, booleans) and arrays of primitives.
-   * Skips objects and null/undefined values.
-   *
-   * @param props - Frontmatter properties object
-   * @returns Array of string values for indexing
-   */
   private extractPropertyValues(props: Record<string, unknown> | undefined): string[] {
     const propValues: string[] = [];
     if (props && typeof props === "object") {
@@ -270,12 +227,6 @@ export class FullTextEngine {
     return propValues;
   }
 
-  /**
-   * Extracts tag strings from frontmatter definitions, supporting both scalar and array formats.
-   *
-   * @param frontmatter - Frontmatter object retrieved from the metadata cache
-   * @returns Array of raw tag strings (without normalization)
-   */
   private extractFrontmatterTags(frontmatter: Record<string, unknown> | undefined): string[] {
     if (!frontmatter || typeof frontmatter !== "object") {
       return [];
@@ -315,12 +266,6 @@ export class FullTextEngine {
     return collected;
   }
 
-  /**
-   * Normalizes tag strings so both hashed and plain variants (including hierarchical parents) are indexed.
-   *
-   * @param tags - Raw tag values gathered from note content and frontmatter
-   * @returns Array of normalized tags with hashes and plain equivalents
-   */
   private normalizeTagList(tags: string[]): string[] {
     const normalized = new Set<string>();
 
@@ -361,14 +306,6 @@ export class FullTextEngine {
     return Array.from(normalized);
   }
 
-  /**
-   * Extract primitive values with depth limit to prevent infinite recursion.
-   * Simpler approach using depth limit instead of circular reference tracking.
-   *
-   * @param value - The value to extract from
-   * @param output - Array to collect extracted string values
-   * @param maxDepth - Maximum recursion depth
-   */
   private extractPrimitiveValues(value: unknown, output: string[], maxDepth: number): void {
     if (maxDepth <= 0 || value == null) return;
 
@@ -380,7 +317,6 @@ export class FullTextEngine {
     } else if (value instanceof Date) {
       output.push(value.toISOString());
     } else if (Array.isArray(value)) {
-      // Limit array processing to first MAX_ARRAY_ITEMS items for performance
       value.slice(0, FullTextEngine.MAX_ARRAY_ITEMS).forEach((item) => {
         if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
           const str = typeof item === "string" ? item.trim() : String(item);
@@ -388,32 +324,18 @@ export class FullTextEngine {
         }
       });
     }
-    // Skip objects entirely - simpler and safer
   }
 
-  /**
-   * Search the ephemeral index using MiniSearch's native BM25+ scoring.
-   *
-   * Uses salient terms from the original query for scoring.
-   *
-   * @param queries - Array of query strings [original, ...expanded]
-   * @param limit - Maximum results to return
-   * @param salientTerms - Salient terms extracted from original query (primary scoring)
-   * @param originalQuery - The original user query (fallback for scoring)
-   * @returns Array of NoteIdRank results sorted by BM25 relevance
-   */
   search(
     queries: string[],
     limit: number = 30,
     salientTerms: string[] = [],
     originalQuery?: string
   ): NoteIdRank[] {
-    // Return empty results if index hasn't been created yet
     if (!this.index) {
       return [];
     }
 
-    // Build the scoring query from salient terms or original query
     const searchQuery =
       salientTerms.length > 0 ? salientTerms.join(" ") : originalQuery || queries[0] || "";
 
@@ -457,9 +379,6 @@ export class FullTextEngine {
     }
   }
 
-  /**
-   * Extract lexical match information from MiniSearch result for explanation
-   */
   private extractLexicalMatches(
     result: SearchResult
   ): { field: string; query: string; weight: number }[] {
@@ -480,36 +399,23 @@ export class FullTextEngine {
     return matches;
   }
 
-  /**
-   * Get field weight for scoring
-   */
   private getFieldWeight(fieldName: string): number {
     return (
       FullTextEngine.FIELD_WEIGHTS[fieldName as keyof typeof FullTextEngine.FIELD_WEIGHTS] || 1
     );
   }
 
-  /**
-   * Clear the ephemeral index and reset memory tracking
-   */
   clear(): void {
     try {
-      // MiniSearch doesn't have explicit cleanup methods
-      // Just nullify the reference and let GC handle it
       this.index = null;
-      // Clear collections
       this.indexedChunks.clear();
       this.memoryManager.reset();
       logInfo("FullTextEngine: Cleanup completed successfully");
     } catch (error) {
-      // Log but don't fail - cleanup is best effort
       logWarn(`FullTextEngine: Cleanup error: ${error}`);
     }
   }
 
-  /**
-   * Get statistics about the current index
-   */
   getStats(): {
     documentsIndexed: number;
     memoryUsed: number;

@@ -44,11 +44,9 @@ describe("appendIncludeNoteContextPlaceholders", () => {
       const content = "Fix typos in {}";
       const result = appendIncludeNoteContextPlaceholders(content, true);
 
-      // Should only have one {}
       const matches = result.match(/\{\}/g);
       expect(matches?.length).toBe(1);
 
-      // Should still add {activeNote}
       expect(result).toContain("{activeNote}");
     });
 
@@ -56,11 +54,9 @@ describe("appendIncludeNoteContextPlaceholders", () => {
       const content = "Based on {activeNote}, summarize";
       const result = appendIncludeNoteContextPlaceholders(content, true);
 
-      // Should only have one {activeNote}
       const matches = result.match(/\{activeNote\}/gi);
       expect(matches?.length).toBe(1);
 
-      // Should still add {}
       expect(result).toContain("{}");
     });
 
@@ -75,7 +71,6 @@ describe("appendIncludeNoteContextPlaceholders", () => {
       const content = "Based on {ACTIVENOTE}, fix this";
       const result = appendIncludeNoteContextPlaceholders(content, true);
 
-      // Should not add another activeNote (case insensitive)
       const matches = result.match(/\{activenote\}/gi);
       expect(matches?.length).toBe(1);
     });
@@ -84,7 +79,6 @@ describe("appendIncludeNoteContextPlaceholders", () => {
       const content = "Based on {activenote}, fix this";
       const result = appendIncludeNoteContextPlaceholders(content, true);
 
-      // Should not add another activeNote
       const matches = result.match(/\{activenote\}/gi);
       expect(matches?.length).toBe(1);
     });
@@ -93,7 +87,6 @@ describe("appendIncludeNoteContextPlaceholders", () => {
       const content = "Summarize";
       const result = appendIncludeNoteContextPlaceholders(content, true);
 
-      // Should have double newline separators
       expect(result).toBe("Summarize\n\n{}\n\n{activeNote}");
     });
 

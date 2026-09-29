@@ -1,10 +1,3 @@
-/**
- * Web Viewer Service Actions
- *
- * Stateless (function-based) implementations for operating on a Web Viewer leaf/webview.
- * These functions do not hold state and receive all dependencies as parameters.
- */
-
 import { logError, logInfo, logWarn } from "@/logger";
 import { getYouTubeVideoId } from "@/utils/youtubeUrl";
 import {
@@ -18,21 +11,11 @@ import {
 } from "@/services/webViewerService/webViewerServiceTypes";
 import { htmlToMarkdown, toStringSafe } from "@/services/webViewerService/webViewerServiceHelpers";
 
-// ============================================================================
-// Action Function Types
-// ============================================================================
-
-/** Function type for executing Web Viewer commands. */
 export type ExecuteWebViewerCommand = (
   id: WebViewerCommandId,
   options?: { leaf?: WebViewerLeaf; focusLeaf?: boolean }
 ) => Promise<void>;
 
-// ============================================================================
-// Content Extraction
-// ============================================================================
-
-/** Get basic page info from a Web Viewer leaf. */
 export function getPageInfo(leaf: WebViewerLeaf): WebViewerPageInfo {
   return {
     url: typeof leaf.view?.url === "string" ? leaf.view.url : "",
@@ -42,19 +25,12 @@ export function getPageInfo(leaf: WebViewerLeaf): WebViewerPageInfo {
   };
 }
 
-/**
- * Get Reader-mode Markdown content for the current page.
- * @param leaf - The Web Viewer leaf to extract content from
- * @param options - Optional configuration
- * @param options.signal - AbortSignal to cancel the operation
- */
 export async function getReaderModeMarkdown(
   leaf: WebViewerLeaf,
   options: { signal?: AbortSignal } = {}
 ): Promise<string> {
   const { signal } = options;
 
-  // Check if already aborted before starting
   if (signal?.aborted) {
     throw new WebViewerTimeoutError("Operation was aborted");
   }
@@ -62,19 +38,16 @@ export async function getReaderModeMarkdown(
   try {
     const contentPromise = Promise.resolve(leaf.view.getReaderModeContent());
 
-    // If no signal provided, just await the promise directly
     if (!signal) {
       const content = await contentPromise;
       return typeof content?.md === "string" ? content.md : "";
     }
 
-    // Race between content fetch and abort signal
     const content = await new Promise<{ md?: string } | undefined>((resolve, reject) => {
       const abortHandler = () => {
         reject(new WebViewerTimeoutError("Operation was aborted"));
       };
 
-      // Listen for abort
       signal.addEventListener("abort", abortHandler, { once: true });
 
       contentPromise
@@ -90,7 +63,6 @@ export async function getReaderModeMarkdown(
 
     return typeof content?.md === "string" ? content.md : "";
   } catch (err) {
-    // Re-throw timeout errors as-is
     if (err instanceof WebViewerTimeoutError) {
       throw err;
     }
@@ -99,7 +71,6 @@ export async function getReaderModeMarkdown(
   }
 }
 
-/** Get selected text inside the embedded page (webview). */
 export async function getSelectedText(leaf: WebViewerLeaf, trim = true): Promise<string> {
   const webview = requireWebview(leaf);
   const code = `(() => { try { return window.getSelection?.()?.toString?.() ?? ""; } catch { return ""; } })()`;
@@ -114,14 +85,9 @@ export async function getSelectedText(leaf: WebViewerLeaf, trim = true): Promise
   }
 }
 
-/**
- * Get selected content as Markdown (with images/links preserved).
- * Uses Turndown to convert HTML to Markdown.
- */
 export async function getSelectedMarkdown(leaf: WebViewerLeaf): Promise<string> {
   const webview = requireWebview(leaf);
 
-  // Get base URL for resolving relative paths
   let baseUrl = "";
   try {
     baseUrl = typeof webview.getURL === "function" ? webview.getURL() : "";
@@ -129,7 +95,6 @@ export async function getSelectedMarkdown(leaf: WebViewerLeaf): Promise<string> 
     baseUrl = leaf.view?.url ?? "";
   }
 
-  // Get selection HTML from webview
   const code = `(() => {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return "";
@@ -155,22 +120,13 @@ export async function getSelectedMarkdown(leaf: WebViewerLeaf): Promise<string> 
   }
 }
 
-// ============================================================================
-// YouTube Transcript Extraction
-// ============================================================================
-
-// Re-exported from neutral utils to avoid circular dependencies.
-// Reason: Both utils (urlTagUtils) and services need this function.
-// The implementation lives in src/utils/youtubeUrl.ts.
 export { getYouTubeVideoId } from "@/utils/youtubeUrl";
 
-/** YouTube transcript segment */
 export interface YouTubeTranscriptSegment {
   timestamp: string;
   text: string;
 }
 
-/** YouTube video metadata and transcript extraction result */
 export interface YouTubeTranscriptResult {
   videoId: string;
   title: string;
@@ -182,7 +138,6 @@ export interface YouTubeTranscriptResult {
   transcript: YouTubeTranscriptSegment[];
 }
 
-/** Runtime validation for transcript result */
 function isValidTranscriptResult(data: unknown): data is YouTubeTranscriptResult {
   if (typeof data !== "object" || data === null) return false;
   const d = data as Record<string, unknown>;
@@ -205,12 +160,6 @@ function isValidTranscriptResult(data: unknown): data is YouTubeTranscriptResult
   );
 }
 
-/**
- * Extract YouTube video transcript via DOM manipulation.
- * Automatically clicks the transcript button if needed and closes the panel after extraction.
- * @param leaf - The Web Viewer leaf containing the YouTube page
- * @param options.timeoutMs - Maximum time to wait for transcript to load (default: 10000ms)
- */
 export async function getYouTubeTranscript(
   leaf: WebViewerLeaf,
   options: { timeoutMs?: number } = {}
@@ -219,7 +168,6 @@ export async function getYouTubeTranscript(
   const { timeoutMs = 10000 } = options;
   const maxAttempts = Math.ceil(timeoutMs / 500);
 
-  // Get the actual page URL and extract videoId (handles redirects and all URL formats)
   let pageUrl = "";
   try {
     pageUrl = typeof webview.getURL === "function" ? webview.getURL() : "";
@@ -233,7 +181,6 @@ export async function getYouTubeTranscript(
     throw new Error("Not a YouTube video page");
   }
 
-  // Pass videoId into the script to avoid re-parsing URL (fixes /shorts/, /embed/, youtu.be support)
   const code = `(async () => {
     const videoId = ${JSON.stringify(videoId)};
 
@@ -410,7 +357,6 @@ export async function getYouTubeTranscript(
 
   const result = await webview.executeJavaScript(code);
 
-  // Validate result structure
   if (!isValidTranscriptResult(result)) {
     throw new Error("Invalid transcript data structure");
   }
@@ -418,11 +364,6 @@ export async function getYouTubeTranscript(
   return result;
 }
 
-// ============================================================================
-// Save & Export
-// ============================================================================
-
-/** Save the current Web Viewer page to the vault. */
 export async function saveToVault(
   leaf: WebViewerLeaf,
   executeCommand: ExecuteWebViewerCommand,

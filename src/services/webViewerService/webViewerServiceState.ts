@@ -1,10 +1,3 @@
-/**
- * Web Viewer Service State Manager
- *
- * Manages Active Web Tab state (single source of truth) and leaf tracking.
- * Extracted from WebViewerService to reduce file size.
- */
-
 import type { App, WorkspaceLeaf } from "obsidian";
 
 import { logWarn } from "@/logger";
@@ -21,48 +14,25 @@ import {
 import { normalizeUrlForMatching } from "@/utils/urlNormalization";
 import type { WebTabContext } from "@/types/message";
 
-// ============================================================================
-// Webview Event Types
-// ============================================================================
-
-/** Webview events that can trigger Web Viewer tab metadata refresh. */
 const WEBVIEW_METADATA_EVENTS = [
   "did-finish-load",
   "page-favicon-updated",
   "page-title-updated",
 ] as const;
 
-/** Union type of supported webview metadata event names. */
 type WebviewMetadataEventName = (typeof WEBVIEW_METADATA_EVENTS)[number];
 
-/** Entry for tracking webview event listeners. */
 interface WebviewLoadListenerEntry {
   leaf: WebViewerLeaf;
   handler: () => void;
   events: ReadonlyArray<WebviewMetadataEventName>;
 }
 
-// ============================================================================
-// Recompute Active Web Tab State Parameters
-// ============================================================================
-
-/**
- * Parameters for the unified recomputeActiveWebTabState method.
- * Discriminated union based on trigger type.
- */
 type RecomputeActiveWebTabStateParams =
   | { trigger: "active-leaf-change"; activeLeaf: WorkspaceLeaf | null }
   | { trigger: "layout-change" }
   | { trigger: "webview-metadata"; loadedLeaf: WebViewerLeaf };
 
-// ============================================================================
-// Dependencies Interface
-// ============================================================================
-
-/**
- * Dependencies injected into WebViewerStateManager.
- * Avoids circular dependency with WebViewerService.
- */
 export interface WebViewerStateManagerDeps {
   app: App;
   isSupportedPlatform: () => boolean;
@@ -71,13 +41,6 @@ export interface WebViewerStateManagerDeps {
   getPageInfo: (leaf: WebViewerLeaf) => WebViewerPageInfo;
 }
 
-// ============================================================================
-// WebViewerStateManager Class
-// ============================================================================
-
-/**
- * Manages Active Web Tab state and leaf tracking for WebViewerService.
- */
 export class WebViewerStateManager {
   private readonly app: App;
   private readonly isSupportedPlatform: () => boolean;
@@ -85,24 +48,18 @@ export class WebViewerStateManager {
   private readonly getLeaves: () => WebViewerLeaf[];
   private readonly getPageInfo: (leaf: WebViewerLeaf) => WebViewerPageInfo;
 
-  // Leaf tracking
   private lastActiveLeaf: WebViewerLeaf | null = null;
 
-  // Active Web Tab state (Single Source of Truth)
   private activeWebTabState: ActiveWebTabStateSnapshot = {
     activeWebTabForMentions: null,
     activeOrLastWebTab: null,
   };
-  // Track the leaf corresponding to activeWebTabForMentions for identity matching
   private activeWebTabLeaf: WebViewerLeaf | null = null;
   private activeWebTabListeners: Set<ActiveWebTabStateListener> = new Set();
   private activeWebTabTrackingRefs: ActiveWebTabTrackingRefs | null = null;
   private activeWebTabTrackingPreserveViewTypes: string[] = [];
-  // Track webview event listeners for cleanup (Map for incremental updates)
   private webviewLoadListeners: Map<HTMLElement, WebviewLoadListenerEntry> = new Map();
-  // Callbacks to notify when any webview finishes loading
   private webviewLoadCallbacks: Set<() => void> = new Set();
-  // Cancel handle for a scheduled webview load callback notification tick
   private cancelScheduledWebviewLoadNotify: (() => void) | null = null;
 
   constructor(deps: WebViewerStateManagerDeps) {
@@ -113,13 +70,6 @@ export class WebViewerStateManager {
     this.getPageInfo = deps.getPageInfo;
   }
 
-  // --------------------------------------------------------------------------
-  // Leaf Tracking
-  // --------------------------------------------------------------------------
-
-  /**
-   * Get the most recently active Web Viewer leaf tracked by this manager.
-   */
   getLastActiveLeaf(): WebViewerLeaf | null {
     const leaf = this.lastActiveLeaf;
     if (!leaf || !isWebViewerLeaf(leaf)) {
@@ -135,28 +85,19 @@ export class WebViewerStateManager {
     return leaf;
   }
 
-  /**
-   * Find a Web Viewer leaf by URL (best-effort normalized match).
-   * @param url - The URL to search for
-   * @param options - Optional disambiguation hints
-   * @param options.title - Page title hint to help disambiguate multiple URL matches
-   */
   findLeafByUrl(url: string, options: { title?: string } = {}): WebViewerLeaf | null {
     const targetRaw = url.trim();
     if (!targetRaw) return null;
 
     const leaves = this.getLeaves();
 
-    // Fast path: exact match
     for (const leaf of leaves) {
       if (leaf?.view?.url === targetRaw) return leaf;
     }
 
-    // Slow path: normalized match
     const targetNormalized = normalizeUrlForMatching(targetRaw);
     if (!targetNormalized) return null;
 
-    // Collect all leaves that match after normalization
     const matchedLeaves: WebViewerLeaf[] = [];
     for (const leaf of leaves) {
       const leafUrl = leaf?.view?.url;
@@ -168,17 +109,14 @@ export class WebViewerStateManager {
       }
     }
 
-    // No matches
     if (matchedLeaves.length === 0) {
       return null;
     }
 
-    // Single match - safe to return
     if (matchedLeaves.length === 1) {
       return matchedLeaves[0];
     }
 
-    // Multiple matches - try to disambiguate using title hint (if provided)
     const titleHint = (options.title ?? "").trim();
     if (titleHint) {
       const titleHintLower = titleHint.toLowerCase();
@@ -200,7 +138,6 @@ export class WebViewerStateManager {
         return titleMatchedLeaves[0];
       }
 
-      // If title narrowed it down but still multiple, prefer active/lastActive among title matches
       if (titleMatchedLeaves.length > 1) {
         const activeLeaf = this.getActiveLeaf();
         if (activeLeaf && titleMatchedLeaves.includes(activeLeaf)) {
@@ -212,7 +149,6 @@ export class WebViewerStateManager {
           return lastActiveLeaf;
         }
 
-        // Return first title match as fallback
         logWarn(
           "[WebViewerStateManager] Multiple leaves matched URL + title; returning first match.",
           {
@@ -225,8 +161,6 @@ export class WebViewerStateManager {
       }
     }
 
-    // Multiple matches - try to disambiguate using active/lastActive
-    // This handles cases like two tabs differing only by hash
     const activeLeaf = this.getActiveLeaf();
     if (activeLeaf && matchedLeaves.includes(activeLeaf)) {
       return activeLeaf;
@@ -237,7 +171,6 @@ export class WebViewerStateManager {
       return lastActiveLeaf;
     }
 
-    // Cannot disambiguate further - return first match as deterministic fallback
     logWarn(
       "[WebViewerStateManager] Multiple leaves matched URL; returning first match as fallback.",
       {
@@ -248,21 +181,10 @@ export class WebViewerStateManager {
     return matchedLeaves[0];
   }
 
-  // --------------------------------------------------------------------------
-  // Active Web Tab State (Single Source of Truth)
-  // --------------------------------------------------------------------------
-
-  /**
-   * Get the current Active Web Tab state snapshot.
-   */
   getActiveWebTabState(): ActiveWebTabStateSnapshot {
     return this.activeWebTabState;
   }
 
-  /**
-   * Subscribe to Active Web Tab state updates.
-   * @returns Unsubscribe function
-   */
   subscribeActiveWebTabState(listener: ActiveWebTabStateListener): () => void {
     this.activeWebTabListeners.add(listener);
     return () => {
@@ -270,12 +192,6 @@ export class WebViewerStateManager {
     };
   }
 
-  /**
-   * Subscribe to webview load events.
-   * Called when any Web Viewer tab finishes loading (did-finish-load event).
-   * Useful for refreshing tab metadata (title, favicon, etc.) after page load.
-   * @returns Unsubscribe function
-   */
   subscribeToWebviewLoad(callback: () => void): () => void {
     this.webviewLoadCallbacks.add(callback);
     return () => {
@@ -283,14 +199,9 @@ export class WebViewerStateManager {
     };
   }
 
-  /**
-   * Start tracking Active Web Tab state using workspace events.
-   * Call this in plugin onload() and register the returned EventRefs.
-   */
   startActiveWebTabTracking(
     options: StartActiveWebTabTrackingOptions = {}
   ): ActiveWebTabTrackingRefs {
-    // If already tracking, stop first to allow re-initialization with new options
     if (this.activeWebTabTrackingRefs) {
       this.stopActiveWebTabTracking();
     }
@@ -300,7 +211,6 @@ export class WebViewerStateManager {
     const activeLeafRef = this.app.workspace.on(
       "active-leaf-change",
       (leaf: WorkspaceLeaf | null) => {
-        // Also update lastActiveLeaf for backward compatibility
         try {
           if (isWebViewerLeaf(leaf)) this.lastActiveLeaf = leaf;
         } catch (err) {
@@ -308,40 +218,26 @@ export class WebViewerStateManager {
         }
 
         this.recomputeActiveWebTabState({ trigger: "active-leaf-change", activeLeaf: leaf });
-        // Re-subscribe to webview events when active leaf changes
         this.subscribeToWebviewLoadEvents();
       }
     );
 
     const layoutRef = this.app.workspace.on("layout-change", () => {
       this.recomputeActiveWebTabState({ trigger: "layout-change" });
-      // Re-subscribe to webview events when layout changes (new tabs may have been added)
       this.subscribeToWebviewLoadEvents();
     });
 
     this.activeWebTabTrackingRefs = { activeLeafRef, layoutRef };
 
-    // Initialize snapshot eagerly
     this.recomputeActiveWebTabState({
       trigger: "active-leaf-change",
       activeLeaf: this.app.workspace.getMostRecentLeaf(),
     });
-    // Initial subscription to webview events
     this.subscribeToWebviewLoadEvents();
 
     return this.activeWebTabTrackingRefs;
   }
 
-  /**
-   * Sync webview event listeners for all Web Viewer leaves.
-   * Listens to:
-   * - did-finish-load: page finished loading (title available)
-   * - page-favicon-updated: favicon has been resolved (may come after did-finish-load)
-   *
-   * Design:
-   * - Incremental add/remove to avoid full unbind/rebind on frequent workspace events.
-   * - Coalesces notifications to subscribers to avoid event storms.
-   */
   private subscribeToWebviewLoadEvents(): void {
     if (!this.isSupportedPlatform()) {
       this.cleanupWebviewLoadListeners();
@@ -363,11 +259,9 @@ export class WebViewerStateManager {
 
           const existing = this.webviewLoadListeners.get(webview);
           if (existing && existing.leaf === leaf) {
-            // Already listening for this webview/leaf pair
             continue;
           }
 
-          // If we already have a listener for this webview, remove it (leaf/view may have changed)
           if (existing) {
             for (const event of existing.events) {
               webview.removeEventListener(event, existing.handler);
@@ -375,11 +269,8 @@ export class WebViewerStateManager {
             this.webviewLoadListeners.delete(webview);
           }
 
-          // Capture the leaf in closure so we know which leaf triggered the event
           const handler = () => {
-            // When webview finishes loading or favicon updates, refresh state
             this.recomputeActiveWebTabState({ trigger: "webview-metadata", loadedLeaf: leaf });
-            // Coalesce subscriber notifications to avoid event storms
             this.scheduleWebviewLoadCallbackNotification();
           };
 
@@ -397,7 +288,6 @@ export class WebViewerStateManager {
         }
       }
 
-      // Remove listeners for webviews that no longer exist
       const staleWebviews: HTMLElement[] = [];
       for (const webview of this.webviewLoadListeners.keys()) {
         if (!nextWebviews.has(webview)) {
@@ -424,9 +314,6 @@ export class WebViewerStateManager {
     }
   }
 
-  /**
-   * Clean up all webview event listeners safely.
-   */
   private cleanupWebviewLoadListeners(): void {
     for (const [webview, { handler, events }] of this.webviewLoadListeners) {
       try {
@@ -442,13 +329,8 @@ export class WebViewerStateManager {
     this.webviewLoadListeners.clear();
   }
 
-  /**
-   * Schedule a single notification for webview load callbacks.
-   * Coalesces rapid-fire webview events (e.g. repeated favicon updates) into one tick.
-   */
   private scheduleWebviewLoadCallbackNotification(): void {
     if (this.cancelScheduledWebviewLoadNotify) {
-      // Already scheduled, skip
       return;
     }
 
@@ -467,9 +349,6 @@ export class WebViewerStateManager {
     });
   }
 
-  /**
-   * Notify all webview load callbacks.
-   */
   private notifyWebviewLoadCallbacks(): void {
     for (const callback of this.webviewLoadCallbacks) {
       try {
@@ -480,26 +359,14 @@ export class WebViewerStateManager {
     }
   }
 
-  /**
-   * Stop tracking Active Web Tab state and clean up internal resources.
-   * Call this in plugin onunload() if needed.
-   *
-   * Note: This method does NOT call offref() on workspace event refs because
-   * they are registered via plugin.registerEvent() which handles cleanup automatically.
-   * This method only cleans up webview DOM listeners and resets internal state.
-   */
   stopActiveWebTabTracking(): void {
-    // Clear refs reference (but don't offref - handled by plugin.registerEvent)
     this.activeWebTabTrackingRefs = null;
 
-    // Clean up webview event listeners
     this.cleanupWebviewLoadListeners();
 
-    // Cancel any scheduled notification
     this.cancelScheduledWebviewLoadNotify?.();
     this.cancelScheduledWebviewLoadNotify = null;
 
-    // Reset state and leaf references
     this.activeWebTabState = {
       activeWebTabForMentions: null,
       activeOrLastWebTab: null,
@@ -509,15 +376,6 @@ export class WebViewerStateManager {
     this.activeWebTabTrackingPreserveViewTypes = [];
   }
 
-  /**
-   * Unified entry point for recomputing Active Web Tab state.
-   *
-   * Rules:
-   * - If a Web Viewer leaf is active, it always becomes `activeWebTabLeaf` and drives `activeWebTabForMentions`.
-   * - Sticky semantics: only on `active-leaf-change` do we apply `preserveOnViewTypes` ("preserve" = do not clear; never restore).
-   * - Layout changes validate the tracked leaf is still open and refresh its snapshot (URL/title/favicon may change).
-   * - Webview metadata events refresh title/favicon via leaf identity matching (`activeWebTabLeaf`).
-   */
   private recomputeActiveWebTabState(params: RecomputeActiveWebTabStateParams): void {
     if (!this.isSupportedPlatform()) {
       this.setActiveWebTabState({ activeWebTabForMentions: null, activeOrLastWebTab: null });
@@ -527,13 +385,6 @@ export class WebViewerStateManager {
 
     const activeWebLeaf = this.getActiveLeaf();
 
-    // Fast-path for webview-metadata: only process if the loaded leaf is relevant.
-    // This matches the old refreshActiveWebTabStateForLeaf behavior and avoids
-    // unnecessary recomputation when background tabs trigger favicon/load events.
-    // We check both activeWebTabLeaf (tracked) and activeWebLeaf (current) because:
-    // - activeWebTabLeaf: the leaf we're tracking for mentions
-    // - activeWebLeaf: handles the case where user just switched to a WebViewer tab
-    //   but activeWebTabLeaf hasn't been updated yet (e.g., was previously cleared)
     if (params.trigger === "webview-metadata") {
       const loadedLeaf = params.loadedLeaf;
       const isRelevant = loadedLeaf === this.activeWebTabLeaf || loadedLeaf === activeWebLeaf;
@@ -545,12 +396,10 @@ export class WebViewerStateManager {
     let nextActiveWebTabLeaf = this.activeWebTabLeaf;
     let nextActiveWebTabForMentions = this.activeWebTabState.activeWebTabForMentions;
 
-    // 1) Active Web Viewer leaf always wins.
     if (activeWebLeaf) {
       nextActiveWebTabLeaf = activeWebLeaf;
       nextActiveWebTabForMentions = this.toWebTabContext(activeWebLeaf);
     } else if (params.trigger === "active-leaf-change") {
-      // 2) Sticky semantics only applies to active-leaf-change.
       const viewType = params.activeLeaf?.view?.getViewType();
       const preserve = Boolean(
         viewType && this.activeWebTabTrackingPreserveViewTypes.includes(viewType)
@@ -561,9 +410,6 @@ export class WebViewerStateManager {
       }
     }
 
-    // 3) Validate tracked leaf is still open (identity-based).
-    // Only for active-leaf-change and layout-change triggers.
-    // For webview-metadata, we already validated relevance above.
     if (params.trigger !== "webview-metadata" && nextActiveWebTabLeaf) {
       const leafStillOpen = this.getLeaves().includes(nextActiveWebTabLeaf);
       if (!leafStillOpen) {
@@ -572,15 +418,12 @@ export class WebViewerStateManager {
       }
     }
 
-    // 4) Metadata refresh hooks.
     if (params.trigger === "layout-change") {
       if (nextActiveWebTabLeaf) {
         nextActiveWebTabForMentions = this.toWebTabContext(nextActiveWebTabLeaf);
       }
     } else if (params.trigger === "webview-metadata") {
       const loadedLeaf = params.loadedLeaf;
-      // At this point, loadedLeaf is guaranteed to be relevant (checked in fast-path above).
-      // Refresh the snapshot with fresh metadata.
       nextActiveWebTabLeaf = loadedLeaf;
       nextActiveWebTabForMentions = this.toWebTabContext(loadedLeaf);
     }
@@ -594,9 +437,6 @@ export class WebViewerStateManager {
     });
   }
 
-  /**
-   * Compute the best-effort active-or-last Web Tab context for UI display.
-   */
   private computeActiveOrLastWebTabContext(): WebTabContext | null {
     try {
       const leaf = this.getActiveLeaf() ?? this.getLastActiveLeaf();
@@ -607,9 +447,6 @@ export class WebViewerStateManager {
     }
   }
 
-  /**
-   * Convert a Web Viewer leaf into a serializable WebTabContext snapshot.
-   */
   private toWebTabContext(leaf: WebViewerLeaf): WebTabContext | null {
     try {
       const info = this.getPageInfo(leaf);
@@ -627,9 +464,6 @@ export class WebViewerStateManager {
     }
   }
 
-  /**
-   * Update internal snapshot and notify listeners when it changes.
-   */
   private setActiveWebTabState(next: ActiveWebTabStateSnapshot): void {
     const prev = this.activeWebTabState;
     const unchanged =
@@ -650,9 +484,6 @@ export class WebViewerStateManager {
     this.notifyActiveWebTabListeners();
   }
 
-  /**
-   * Notify Active Web Tab subscribers of a state update.
-   */
   private notifyActiveWebTabListeners(): void {
     for (const listener of this.activeWebTabListeners) {
       try {
@@ -663,9 +494,6 @@ export class WebViewerStateManager {
     }
   }
 
-  /**
-   * Compare two WebTabContext objects for equality.
-   */
   private static areWebTabContextsEqual(a: WebTabContext | null, b: WebTabContext | null): boolean {
     if (a === b) return true;
     if (!a || !b) return false;

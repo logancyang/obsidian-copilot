@@ -1,7 +1,5 @@
 import { TFile, Vault } from "obsidian";
 
-/* ---------- Core data types ---------- */
-
 interface CanvasNodeBase {
   id: string;
   x: number;
@@ -9,15 +7,14 @@ interface CanvasNodeBase {
   width: number;
   height: number;
   type: "file" | "text" | "link" | "group";
-  label?: string; // groups
-  color?: string; // files / links
-  url?: string; // links
-  file?: string; // files
-  text?: string; // text cards
+  label?: string;
+  color?: string;
+  url?: string;
+  file?: string;
+  text?: string;
 }
 
 export interface RichNode extends CanvasNodeBase {
-  /** Inlined markdown or plain‑text content (empty for groups/links). */
   content: string;
 }
 
@@ -27,7 +24,6 @@ export interface CanvasEdge {
   toNode: string;
   fromSide?: string;
   toSide?: string;
-  /** Synthetic labels such as "contains". */
   label?: string;
 }
 
@@ -37,12 +33,9 @@ export interface CanvasData {
   byId: Record<string, RichNode>;
 }
 
-/* ---------- Loader class ---------- */
-
 export class CanvasLoader {
   constructor(private vault: Vault) {}
 
-  /** Load & enrich a `.canvas` file. */
   async load(file: TFile): Promise<CanvasData> {
     const raw = await this.vault.read(file);
     const { nodes = [], edges = [] } = JSON.parse(raw) as {
@@ -58,7 +51,7 @@ export class CanvasLoader {
           return { ...n, content: md };
         }
         if (n.type === "text") return { ...n, content: n.text ?? "" };
-        return { ...n, content: "" }; // link / group
+        return { ...n, content: "" };
       })
     );
 
@@ -69,9 +62,7 @@ export class CanvasLoader {
     return { nodes: richNodes, edges: allEdges, byId };
   }
 
-  /** Build a concise prompt for an LLM. */
   buildPrompt(canvas: CanvasData): string {
-    // First, build a map of group contents
     const groupContents = new Map<string, RichNode[]>();
     const groups = canvas.nodes.filter((n) => n.type === "group");
 
@@ -90,10 +81,8 @@ export class CanvasLoader {
       groupContents.set(group.label || group.id, containedNodes);
     }
 
-    // Build a clear, structured description
     let description = `This canvas contains the following elements:\n\n`;
 
-    // Helper function to format node content
     const formatNodeContent = (node: RichNode): string => {
       switch (node.type) {
         case "file":
@@ -107,7 +96,6 @@ export class CanvasLoader {
       }
     };
 
-    // Describe groups and their contents
     groups.forEach((group) => {
       const groupName = group.label || group.id;
       const contents = groupContents.get(groupName) || [];
@@ -118,7 +106,6 @@ export class CanvasLoader {
       description += "\n";
     });
 
-    // Describe non-grouped elements
     const ungroupedNodes = canvas.nodes.filter((n) => {
       if (n.type === "group") return false;
       return !Array.from(groupContents.values())
@@ -142,15 +129,11 @@ export class CanvasLoader {
     return description;
   }
 
-  /* ---------- private helpers ---------- */
-
-  /** Add synthetic 'contains' edges for group membership. */
   #deriveGroupEdges(nodes: RichNode[], edges: CanvasEdge[]) {
     const groups = nodes.filter((n) => n.type === "group");
     for (const g of groups) {
       for (const n of nodes) {
         if (n.id === g.id) continue;
-        // Check if node's center point is within the group's bounds
         const nodeX = n.x + n.width / 2;
         const nodeY = n.y + n.height / 2;
         const inside =

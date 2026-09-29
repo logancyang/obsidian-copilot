@@ -147,14 +147,8 @@ describe("LayerToMessagesConverter", () => {
       const messages = LayerToMessagesConverter.convert(envelope);
 
       expect(messages).toHaveLength(2);
-      // L2 (cumulative library) should be in system message
       expect(messages[0].content).toContain("## Context Library");
       expect(messages[0].content).toContain("Existing content");
-      // User message should have:
-      // - Reference to existing.md (already in L2)
-      // - Full content for new.md (not in L2)
-      // - Separator "[User query]:"
-      // - User query
       expect(messages[1].content).toContain("Context attached");
       expect(messages[1].content).toContain("Notes/existing.md");
       expect(messages[1].content).toContain("Find them in the Context Library");
@@ -214,7 +208,6 @@ describe("LayerToMessagesConverter", () => {
 
       const messages = LayerToMessagesConverter.convert(envelope);
 
-      // Should only have user message (system message is empty)
       expect(messages).toHaveLength(1);
       expect(messages[0].role).toBe("user");
     });

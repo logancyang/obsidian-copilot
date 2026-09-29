@@ -5,7 +5,6 @@ import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { logError } from "@/logger";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
 
-// Define Zod schema for updateMemoryTool
 const memorySchema = z.object({
   statement: z
     .string()
@@ -13,9 +12,6 @@ const memorySchema = z.object({
     .describe("The user statement for explicitly updating saved memories"),
 });
 
-/**
- * Memory tool for saving information that the user explicitly asks the assistant to remember
- */
 export const createUpdateMemoryTool = (app: App) =>
   createLangChainTool({
     name: "updateMemory",
