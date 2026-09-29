@@ -21,7 +21,16 @@ interface Rig {
   subscriptions: () => number;
 }
 
-function makeRig(options: { mode?: KeepAwakeMode; paired?: boolean; battery?: boolean } = {}): Rig {
+interface RigOptions {
+  mode?: KeepAwakeMode;
+  paired?: boolean;
+  battery?: boolean;
+  failPowerSubscribe?: boolean;
+  failTurnUnsubscribe?: boolean;
+  probe?: { subscriptions?: () => number };
+}
+
+function makeRig(options: RigOptions = {}): Rig {
   const turnListeners = new Set<() => void>();
   const pairedListeners = new Set<() => void>();
   const powerListeners = new Set<() => void>();
@@ -48,16 +57,24 @@ function makeRig(options: { mode?: KeepAwakeMode; paired?: boolean; battery?: bo
     },
     isOnBattery: () => state.battery,
     onPowerSourceChange: (listener) => {
+      if (options.failPowerSubscribe) throw new Error("subscribe failed");
       powerListeners.add(listener);
       return () => powerListeners.delete(listener);
     },
   };
+  if (options.probe) {
+    options.probe.subscriptions = () =>
+      turnListeners.size + pairedListeners.size + powerListeners.size;
+  }
   const service = new KeepAwakeService({
     power,
     isTurnRunning: () => state.turn,
     subscribeTurns: (listener) => {
       turnListeners.add(listener);
-      return () => turnListeners.delete(listener);
+      return () => {
+        if (options.failTurnUnsubscribe) throw new Error("unsubscribe failed");
+        turnListeners.delete(listener);
+      };
     },
     hasPairedPhone: () => state.paired,
     subscribePairedPhones: (listener) => {
@@ -293,6 +310,28 @@ describe("keepAwake/KeepAwakeService", () => {
       });
     });
 
+    describe("failing subscriptions", () => {
+      it(`releases the blocker and disposes every other listener when one unsubscribe throws (${ISSUE})`, () => {
+        const rig = makeRig({ mode: "always", paired: true, failTurnUnsubscribe: true });
+        expect(rig.held()).toHaveLength(1);
+
+        expect(() => rig.service.dispose()).not.toThrow();
+
+        expect(rig.held()).toEqual([]);
+        expect(rig.subscriptions()).toBe(1);
+      });
+
+      it(`removes the listeners it already added when a later subscription throws during construction (${ISSUE})`, () => {
+        const probe: NonNullable<RigOptions["probe"]> = {};
+
+        expect(() =>
+          makeRig({ mode: "always", paired: true, failPowerSubscribe: true, probe })
+        ).toThrow("subscribe failed");
+
+        expect(probe.subscriptions?.()).toBe(0);
+      });
+    });
+
     describe("failing power APIs", () => {
       it(`survives a blocker that cannot start and retries on the next change (${ISSUE})`, () => {
         const rig = makeRig({ mode: "always" });
@@ -306,15 +345,19 @@ describe("keepAwake/KeepAwakeService", () => {
         expect(rig.held()).toHaveLength(1);
       });
 
-      it(`forgets a blocker that cannot be stopped so a later change can acquire a fresh one (${ISSUE})`, () => {
+      it(`keeps the handle of a blocker that cannot be stopped, so no second blocker is started and a later release retries it (${ISSUE})`, () => {
         const rig = makeRig({ mode: "always", paired: true });
         rig.power.failStop = true;
 
         expect(() => rig.setPaired(false)).not.toThrow();
-        rig.power.failStop = false;
         rig.setPaired(true);
+        expect(rig.started).toBe(1);
 
-        expect(rig.started).toBe(2);
+        rig.power.failStop = false;
+        rig.setPaired(false);
+
+        expect(rig.held()).toEqual([]);
+        expect(rig.started).toBe(1);
       });
     });
   });

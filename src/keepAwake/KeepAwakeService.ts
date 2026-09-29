@@ -29,15 +29,21 @@ export class KeepAwakeService {
   private mode: KeepAwakeMode;
   private disposed = false;
   private readonly listeners = new Set<() => void>();
-  private readonly cleanups: Array<() => void>;
+  private readonly cleanups: Array<() => void> = [];
 
   constructor(private readonly deps: KeepAwakeServiceDeps) {
     this.mode = deps.modeSlot.load();
-    this.cleanups = [
-      deps.subscribeTurns(() => this.reconcile()),
-      deps.subscribePairedPhones(() => this.reconcile()),
-      deps.power.onPowerSourceChange(() => this.reconcile()),
-    ];
+    // A failed subscription must not leave earlier listeners on an instance nobody can dispose:
+    // one would later start a blocker that nothing releases.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/608
+    try {
+      this.cleanups.push(deps.subscribeTurns(() => this.reconcile()));
+      this.cleanups.push(deps.subscribePairedPhones(() => this.reconcile()));
+      this.cleanups.push(deps.power.onPowerSourceChange(() => this.reconcile()));
+    } catch (error) {
+      this.dispose();
+      throw error;
+    }
     this.reconcile();
   }
 
@@ -59,7 +65,13 @@ export class KeepAwakeService {
   /** Releases the blocker. Unloading the plugin must not leave the computer unable to sleep. https://github.com/Brevilabs/obsidian-copilot-private/issues/608 */
   dispose(): void {
     this.disposed = true;
-    for (const cleanup of this.cleanups.splice(0)) cleanup();
+    for (const cleanup of this.cleanups.splice(0)) {
+      try {
+        cleanup();
+      } catch (error) {
+        logWarn("Keep-awake could not remove a listener", error);
+      }
+    }
     this.release();
     this.listeners.clear();
   }
@@ -86,11 +98,12 @@ export class KeepAwakeService {
 
   private release(): void {
     if (this.blockerId === null) return;
-    const id = this.blockerId;
-    this.blockerId = null;
     try {
-      this.deps.power.stopBlocker(id);
+      this.deps.power.stopBlocker(this.blockerId);
+      this.blockerId = null;
     } catch (error) {
+      // The handle is kept so the next reconcile retries it instead of starting a second blocker.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/608
       logWarn("Keep-awake could not release the power blocker", error);
     }
   }
