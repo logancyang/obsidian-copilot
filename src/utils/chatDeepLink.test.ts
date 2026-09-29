@@ -30,9 +30,27 @@ describe("chatDeepLink", () => {
   });
 
   describe("buildChatDeepLink()", () => {
-    it("encodes the vault and chat id without exposing a file path", () => {
+    it("percent-encodes spaces in vault names so Obsidian can route chat links", () => {
       expect(buildChatDeepLink("My Vault", "epoch:1735732800000")).toBe(
-        "obsidian://copilot-chat?vault=My+Vault&id=epoch%3A1735732800000"
+        "obsidian://copilot-chat?vault=My%20Vault&id=epoch%3A1735732800000"
+      );
+    });
+
+    it("preserves literal plus signs and reserved characters in the vault and chat id", () => {
+      expect(buildChatDeepLink("My+Vault & Notes", "agent:foo+bar&baz")).toBe(
+        "obsidian://copilot-chat?vault=My%2BVault%20%26%20Notes&id=agent%3Afoo%2Bbar%26baz"
+      );
+    });
+
+    it("keeps simple vault names and chat ids readable", () => {
+      expect(buildChatDeepLink("Work", "epoch:1735732800000")).toBe(
+        "obsidian://copilot-chat?vault=Work&id=epoch%3A1735732800000"
+      );
+    });
+
+    it("retains percent encoding for punctuation and Unicode in vault names", () => {
+      expect(buildChatDeepLink("O'Brien ~!(東京)", "epoch:1")).toBe(
+        "obsidian://copilot-chat?vault=O%27Brien%20%7E%21%28%E6%9D%B1%E4%BA%AC%29&id=epoch%3A1"
       );
     });
   });
