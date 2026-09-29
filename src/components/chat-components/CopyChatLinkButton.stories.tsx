@@ -16,12 +16,12 @@ const render = (args: CopyChatLinkButtonProps) => (
   </TooltipProvider>
 );
 
-export const Saved: StoryObj<CopyChatLinkButtonProps> = {
-  args: { chatId: "conversations/chat.md", onCopyLink: () => {} },
+export const Enabled: StoryObj<CopyChatLinkButtonProps> = {
+  args: { onCopyLink: () => {} },
   render,
 };
 
-export const Unsaved: StoryObj<CopyChatLinkButtonProps> = {
-  args: { onCopyLink: () => {} },
+export const EmptyChat: StoryObj<CopyChatLinkButtonProps> = {
+  args: {},
   render,
 };

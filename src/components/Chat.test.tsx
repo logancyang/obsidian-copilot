@@ -42,7 +42,11 @@ jest.mock("@/context/ChatInputContext", () => ({
   useChatInput: () => ({}),
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
-jest.mock("@/components/chat-components/ChatControls", () => ({ ChatControls: () => null }));
+jest.mock("@/components/chat-components/ChatControls", () => ({
+  ChatControls: ({ onCopyChatLink }: { onCopyChatLink?: () => void }) => (
+    <button onClick={onCopyChatLink}>Copy chat link</button>
+  ),
+}));
 jest.mock("@/components/chat-components/ui/AgentModeBanner", () => ({
   AgentModeBanner: () => null,
 }));
@@ -84,8 +88,13 @@ jest.mock("@/logFileManager", () => ({ logFileManager: {} }));
 jest.mock("@/LLMProviders/chainRunner/utils/promptPayloadRecorder", () => ({}));
 jest.mock("@/utils", () => ({ isPlusChain: () => false }));
 
-function renderChat() {
+function renderChat(savedPath = "") {
+  let sourcePath = savedPath;
   const chatUIState = {
+    getSourcePath: jest.fn(() => sourcePath),
+    saveChat: jest.fn(async () => {
+      sourcePath = "conversations/chat.md";
+    }),
     sendMessage: jest.fn().mockResolvedValue("message-2"),
     getLLMMessage: jest.fn().mockReturnValue(undefined),
     editMessage: jest.fn().mockResolvedValue(true),
@@ -98,11 +107,12 @@ function renderChat() {
     updateUserMessageHistory: jest.fn(),
     plugin: {
       app: {},
+      copyChatLink: jest.fn((resolveChatId: () => Promise<string>) => resolveChatId()),
       chatSelectionHighlightController: { clearIfNoNoteContexts: jest.fn() },
     },
   } as unknown as React.ComponentProps<typeof Chat>;
   render(<Chat {...props} />);
-  return chatUIState;
+  return { chatUIState, copyChatLink: props.plugin.copyChatLink as jest.Mock };
 }
 
 describe("Chat", () => {
@@ -110,7 +120,7 @@ describe("Chat", () => {
     it.each([true, false])(
       "preserves active-note inclusion %p when sending selected text https://github.com/Brevilabs/obsidian-copilot-private/issues/465",
       async (includeActiveNote) => {
-        const chatUIState = renderChat();
+        const { chatUIState } = renderChat();
         if (!includeActiveNote) fireEvent.click(screen.getByText("Remove active note"));
         fireEvent.change(screen.getByLabelText("Message"), {
           target: { value: "Compare findings" },
@@ -133,7 +143,7 @@ describe("Chat", () => {
     it.each([true, false])(
       "does not attach the current note when editing with composer inclusion %p https://github.com/Brevilabs/obsidian-copilot-private/issues/465",
       async (includeActiveNote) => {
-        const chatUIState = renderChat();
+        const { chatUIState } = renderChat();
         if (!includeActiveNote) fireEvent.click(screen.getByText("Remove active note"));
 
         fireEvent.click(screen.getByText("Edit message"));
@@ -148,5 +158,25 @@ describe("Chat", () => {
         );
       }
     );
+  });
+
+  describe("handleCopyChatLink()", () => {
+    it("links an already saved chat without saving it again", async () => {
+      const { chatUIState, copyChatLink } = renderChat("conversations/existing.md");
+
+      fireEvent.click(screen.getByText("Copy chat link"));
+
+      await expect(copyChatLink.mock.results[0].value).resolves.toBe("conversations/existing.md");
+      expect(chatUIState.saveChat).not.toHaveBeenCalled();
+    });
+
+    it("saves an unsaved chat before linking to it https://github.com/Brevilabs/obsidian-copilot-private/issues/601", async () => {
+      const { chatUIState, copyChatLink } = renderChat();
+
+      fireEvent.click(screen.getByText("Copy chat link"));
+
+      await expect(copyChatLink.mock.results[0].value).resolves.toBe("conversations/chat.md");
+      expect(chatUIState.saveChat).toHaveBeenCalledTimes(1);
+    });
   });
 });

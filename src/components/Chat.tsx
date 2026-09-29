@@ -304,6 +304,16 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     }
   }, [app, chatUIState, currentModelKey]);
 
+  const handleCopyChatLink = useCallback(
+    () =>
+      plugin.copyChatLink(async () => {
+        // Links need a saved note: https://github.com/Brevilabs/obsidian-copilot-private/issues/601
+        if (!chatUIState.getSourcePath()) await chatUIState.saveChat(currentModelKey);
+        return chatUIState.getSourcePath();
+      }),
+    [plugin, chatUIState, currentModelKey]
+  );
+
   const handleStopGenerating = useCallback(
     (reason?: ABORT_REASON) => {
       if (abortControllerRef.current) {
@@ -679,8 +689,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           onDelete={safeAsyncHandler(handleDelete)}
         />
         <ChatControls
-          chatLinkId={sourcePath || undefined}
-          onCopyChatLink={(id) => plugin.copyChatLink(id)}
+          onCopyChatLink={chatHistory.length > 0 ? handleCopyChatLink : undefined}
           onNewChat={() => void handleNewChat()}
           onSaveAsNote={() => handleSaveAsNote()}
           onLoadHistory={() => void handleLoadChatHistory()}

@@ -5,28 +5,24 @@ import React from "react";
 
 describe("CopyChatLinkButton", () => {
   describe("CopyChatLinkButton()", () => {
-    it("copies the current saved identity when clicked", () => {
-      const onCopyLink = jest.fn();
-      render(
-        <TooltipProvider>
-          <CopyChatLinkButton chatId="conversations/chat.md" onCopyLink={onCopyLink} />
-        </TooltipProvider>
-      );
-      fireEvent.click(screen.getByTitle("Copy Chat Link"));
-      expect(onCopyLink).toHaveBeenCalledWith("conversations/chat.md");
-    });
-
-    it("disables copying before the chat has a saved path or native session https://github.com/logancyang/obsidian-copilot/issues/3271", () => {
+    it("runs the copy handler when clicked", () => {
       const onCopyLink = jest.fn();
       render(
         <TooltipProvider>
           <CopyChatLinkButton onCopyLink={onCopyLink} />
         </TooltipProvider>
       );
-      const button = screen.getByTitle("Copy Chat Link");
-      expect(button).toHaveProperty("disabled", true);
-      fireEvent.click(button);
-      expect(onCopyLink).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByTitle("Copy Chat Link"));
+      expect(onCopyLink).toHaveBeenCalledTimes(1);
+    });
+
+    it("is disabled when the chat has nothing to link to", () => {
+      render(
+        <TooltipProvider>
+          <CopyChatLinkButton />
+        </TooltipProvider>
+      );
+      expect(screen.getByTitle("Copy Chat Link")).toHaveProperty("disabled", true);
     });
   });
 });

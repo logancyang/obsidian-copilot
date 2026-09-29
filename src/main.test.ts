@@ -125,25 +125,35 @@ describe("main", () => {
         const writeText = jest.fn().mockResolvedValue(undefined);
         Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
 
-        await plugin.copyChatLink("Copilot/conversations/renamed.md");
+        await plugin.copyChatLink(async () => "Copilot/conversations/renamed.md");
 
         expect(writeText).toHaveBeenCalledWith(
           "obsidian://copilot-chat?vault=My+Vault&id=epoch%3A1735732800000"
         );
       });
 
-      it("copies a native agent identity without looking for a Markdown note", async () => {
+      it("tells the user to save and copies nothing when the chat has no id even after saving https://github.com/Brevilabs/obsidian-copilot-private/issues/601", async () => {
         const plugin = createPluginUnderTest([]);
-        Object.assign(plugin, { app: { vault: { getName: () => "My Vault" } } });
-        const nativeId = "copilot-agent-session://codex/abc";
         const writeText = jest.fn().mockResolvedValue(undefined);
         Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
 
-        await plugin.copyChatLink(nativeId);
+        await plugin.copyChatLink(async () => "");
 
-        expect(writeText).toHaveBeenCalledWith(
-          "obsidian://copilot-chat?vault=My+Vault&id=copilot-agent-session%3A%2F%2Fcodex%2Fabc"
-        );
+        expect(writeText).not.toHaveBeenCalled();
+        expect(Notice).toHaveBeenCalledWith("Save this chat before copying a link.");
+      });
+
+      it("reports a failure and copies nothing when saving the chat throws https://github.com/Brevilabs/obsidian-copilot-private/issues/601", async () => {
+        const plugin = createPluginUnderTest([]);
+        const writeText = jest.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+
+        await plugin.copyChatLink(async () => {
+          throw new Error("disk full");
+        });
+
+        expect(writeText).not.toHaveBeenCalled();
+        expect(Notice).toHaveBeenCalledWith("Could not copy chat link.");
       });
     });
 

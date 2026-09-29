@@ -4,11 +4,10 @@ import { Link } from "lucide-react";
 import React from "react";
 
 export interface CopyChatLinkButtonProps {
-  chatId?: string;
-  onCopyLink?: (id: string) => void | Promise<void>;
+  onCopyLink?: () => void | Promise<void>;
 }
 
-export function CopyChatLinkButton({ chatId, onCopyLink }: CopyChatLinkButtonProps) {
+export function CopyChatLinkButton({ onCopyLink }: CopyChatLinkButtonProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -16,10 +15,8 @@ export function CopyChatLinkButton({ chatId, onCopyLink }: CopyChatLinkButtonPro
           variant="ghost2"
           size="icon"
           title="Copy Chat Link"
-          disabled={!chatId || !onCopyLink}
-          onClick={() => {
-            if (chatId) void onCopyLink?.(chatId);
-          }}
+          disabled={!onCopyLink}
+          onClick={() => void onCopyLink?.()}
         >
           <Link className="tw-size-4" />
         </Button>

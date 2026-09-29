@@ -1215,9 +1215,10 @@ export default class CopilotPlugin extends Plugin {
     await this.loadChatHistory(file);
   }
 
-  async copyChatLink(chatId: string): Promise<void> {
+  async copyChatLink(resolveNotePath: () => Promise<string>): Promise<void> {
     try {
-      const id = isNativeChatId(chatId) ? chatId : await getSavedChatDeepLinkId(this.app, chatId);
+      const path = await resolveNotePath();
+      const id = path ? await getSavedChatDeepLinkId(this.app, path) : null;
       if (!id) {
         new Notice("Save this chat before copying a link.");
         return;
