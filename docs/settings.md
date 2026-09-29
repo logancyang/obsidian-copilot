@@ -2,7 +2,7 @@
 
 Open **Settings → Copilot** to configure Copilot V4. Settings normally save as soon as you change them. Controls labeled **Apply** or **Save** are the exceptions.
 
-Copilot V4 starts with [Agent Chat](agent-mode-and-tools.md). Quick Chat remains available for lightweight conversations and as the main chat on mobile. Agent Chat, its backend settings, and Skills require desktop Obsidian.
+Copilot V4 starts with [Agent Chat](agent-mode-and-tools.md). Quick Chat remains available for lightweight conversations and as the main chat on mobile. Agent Chat runs on desktop Obsidian, and a phone paired under [Remote](#remote) can open it too. Agent backend settings and Skills stay on desktop.
 
 > **Choose your data route deliberately.** Copilot-hosted models, cloud BYOK providers, Claude, Codex, remote Miyo servers, and hosted skills can receive the prompt, note excerpts, or files needed for a request. Local models and local Miyo can keep model and search traffic on your computer, but an agent or skill can still use a network service when you ask it to. See [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md#understand-service-data-routes).
 
@@ -229,7 +229,7 @@ On desktop, **Pair a phone** shows a QR code. Before you scan it, open the same 
 
 Each vault window pairs separately. A phone lists only desktops paired for the vault it has open, and one vault can be paired with several desktops. Device tokens are stored in the Obsidian keychain on each device, never in your vault or in `data.json`.
 
-On the phone, the Remote tab lists paired desktops with **Test connection** and **Remove**. Removing a desktop only forgets it on the phone; revoke the phone on the desktop to invalidate its token.
+On the phone, the Remote tab lists paired desktops with **Test connection** and **Remove**. Removing a desktop only forgets it on the phone; revoke the phone on the desktop to invalidate its token. Once a desktop is paired, the phone's Copilot ribbon button opens Agent Chat; see [Agent Chat on your phone](agent-mode-and-tools.md#agent-chat-on-your-phone).
 
 ## Skills
 

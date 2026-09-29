@@ -724,11 +724,11 @@ projectors, op log, transport and commands; (3) recorded fixtures, parity tests 
 
 ### 9.2 Deferred
 
-| Lane | Deferred work                                                                                                                                                                                        |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #613 | Delivered, see sections 5.2.1 and 9.5. Not done: outbound backpressure (the listener exposes no buffered-byte count) and command `origin`, which nothing reads because no command changes a default. |
-| #610 | Pairing and tokens, see [`REMOTE_PAIRING.md`](./REMOTE_PAIRING.md).                                                                                                                                  |
-| #607 | Persisting or replaying the op log across restarts.                                                                                                                                                  |
+| Lane | Deferred work                                                                                                                                                                                                                                                                     |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #613 | Delivered, see sections 5.2.1 and 9.5. Not done: pacing outbound frames to a slow phone (the desktop drops a connection whose unsent backlog passes 64 MiB and the phone resumes from its cursor) and command `origin`, which nothing reads because no command changes a default. |
+| #610 | Pairing and tokens, see [`REMOTE_PAIRING.md`](./REMOTE_PAIRING.md).                                                                                                                                                                                                               |
+| #607 | Persisting or replaying the op log across restarts.                                                                                                                                                                                                                               |
 
 ### 9.2.1 What the client UI needs from its environment
 

@@ -30,7 +30,13 @@ import { isSourceModeOn } from "@/utils";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
-import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "@/constants";
+import {
+  CHAT_AGENT_VIEWTYPE,
+  COMMAND_IDS,
+  COMMAND_ICONS,
+  COMMAND_NAMES,
+  CommandId,
+} from "@/constants";
 import { setSelectedTextContexts } from "@/aiParams";
 
 type PublishFile = (file: TFile) => void;
@@ -140,7 +146,8 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     return true;
   });
   addCheckCommand(plugin, COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW, (checking) => {
-    if (!plugin.canOpenAgentChat()) return false;
+    const isOpen = plugin.app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE).length > 0;
+    if (!isOpen && !plugin.canOpenAgentChat()) return false;
     if (!checking) plugin.toggleAgentView();
     return true;
   });

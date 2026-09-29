@@ -9,6 +9,7 @@ jest.mock("obsidian", () => {
     Plugin: class Plugin {},
     PluginSettingTab: class PluginSettingTab {},
     MarkdownView: class MarkdownView {},
+    setIcon: jest.fn(),
   };
 });
 jest.mock("@/LLMProviders/chatModelManager", () => ({
@@ -57,7 +58,7 @@ import CopilotPlugin from "@/main";
 import CopilotView from "@/components/CopilotView";
 import { getSelectedTextContexts, setSelectedTextContexts } from "@/aiParams";
 import { DEFAULT_SETTINGS } from "@/constants";
-import { CHAT_AGENT_VIEWTYPE } from "@/constants";
+import { CHAT_AGENT_VIEWTYPE, COPILOT_AGENT_ICON_ID } from "@/constants";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import type { WebSelectionTrackingOptions } from "@/services/webViewerService/webViewerServiceSelection";
 import { EditorView } from "@codemirror/view";
@@ -84,7 +85,7 @@ import {
   findChatFileByDeepLinkId,
   getSavedChatDeepLinkId,
 } from "@/utils/chatDeepLink";
-import { Notice, TFile, type WorkspaceLeaf } from "obsidian";
+import { Notice, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 
 function createPluginUnderTest(calls: string[]) {
   const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
@@ -113,6 +114,8 @@ async function flushTeardown(): Promise<void> {
   await Promise.resolve();
   await new Promise((resolve) => window.setTimeout(resolve, 0));
 }
+
+const ISSUE_613 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/613";
 
 describe("main", () => {
   describe("CopilotPlugin", () => {
@@ -731,6 +734,198 @@ describe("main", () => {
           failure
         );
         expect(activate).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("canUseRemoteAgentView()", () => {
+      const pairedClient = { store: { list: () => [{ id: "desktop-1" }], subscribe: jest.fn() } };
+      const unpairedClient = { store: { list: () => [], subscribe: jest.fn() } };
+
+      beforeEach(() => {
+        jest.clearAllMocks();
+        (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+      });
+
+      it(`is true on a phone that loaded the remote view and has a desktop paired (${ISSUE_613})`, () => {
+        const plugin = createPluginUnderTest([]);
+        Object.assign(plugin, { RemoteAgentView: class {}, remoteClient: pairedClient });
+
+        expect(plugin.canUseRemoteAgentView()).toBe(true);
+      });
+
+      it.each([
+        ["no desktop is paired", { RemoteAgentView: class {}, remoteClient: unpairedClient }],
+        ["the remote view was not loaded", { remoteClient: pairedClient }],
+        ["there is no remote client", { RemoteAgentView: class {} }],
+      ])("is false on a phone when %s", (_label, fields) => {
+        const plugin = createPluginUnderTest([]);
+        Object.assign(plugin, fields);
+
+        expect(plugin.canUseRemoteAgentView()).toBe(false);
+      });
+
+      it("is false on the desktop even when a desktop is paired, because the desktop runs the agent itself", () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        const plugin = createPluginUnderTest([]);
+        Object.assign(plugin, { RemoteAgentView: class {}, remoteClient: pairedClient });
+
+        expect(plugin.canUseRemoteAgentView()).toBe(false);
+      });
+    });
+
+    describe("canOpenAgentChat()", () => {
+      beforeEach(() => jest.clearAllMocks());
+
+      it("is true on the desktop once its session manager exists", () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+
+        expect(createPluginUnderTest([]).canOpenAgentChat()).toBe(true);
+      });
+
+      it(`is true on a phone with a paired desktop and false on a phone without one (${ISSUE_613})`, () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+        const plugin = createPluginUnderTest([]);
+        Object.assign(plugin, { agentSessionManager: undefined, RemoteAgentView: class {} });
+        const list = jest.fn(() => [] as unknown[]);
+        Object.assign(plugin, { remoteClient: { store: { list } } });
+
+        expect(plugin.canOpenAgentChat()).toBe(false);
+        list.mockReturnValue([{ id: "desktop-1" }]);
+        expect(plugin.canOpenAgentChat()).toBe(true);
+      });
+    });
+
+    describe("activateAgentView()", () => {
+      beforeEach(() => {
+        jest.clearAllMocks();
+        (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+      });
+
+      it(`opens the remote agent view on a phone with a paired desktop (${ISSUE_613})`, async () => {
+        const plugin = createPluginUnderTest([]);
+        const leaf = {} as WorkspaceLeaf;
+        const openOrRevealView = jest.fn().mockResolvedValue(leaf);
+        Object.assign(plugin, {
+          agentSessionManager: undefined,
+          RemoteAgentView: class {},
+          remoteClient: { store: { list: () => [{ id: "desktop-1" }] } },
+          openOrRevealView,
+        });
+
+        await expect(plugin.activateAgentView(true)).resolves.toBe(leaf);
+
+        expect(openOrRevealView).toHaveBeenCalledWith(CHAT_AGENT_VIEWTYPE, true);
+      });
+
+      it(`points a phone with no paired desktop to the Remote settings instead of opening a view (${ISSUE_613})`, async () => {
+        const plugin = createPluginUnderTest([]);
+        const openOrRevealView = jest.fn();
+        Object.assign(plugin, {
+          agentSessionManager: undefined,
+          RemoteAgentView: class {},
+          remoteClient: { store: { list: () => [] } },
+          openOrRevealView,
+        });
+
+        await expect(plugin.activateAgentView()).resolves.toBeNull();
+
+        expect(openOrRevealView).not.toHaveBeenCalled();
+        expect(Notice).toHaveBeenCalledWith(
+          "Pair this phone with your desktop first: Copilot settings, Remote."
+        );
+      });
+    });
+
+    describe("toggleAgentView()", () => {
+      beforeEach(() => {
+        jest.clearAllMocks();
+        (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+      });
+
+      function phonePlugin(options: { paired: boolean; open: boolean }) {
+        const plugin = createPluginUnderTest([]);
+        const detachLeavesOfType = jest.fn();
+        Object.assign(plugin, {
+          agentSessionManager: undefined,
+          RemoteAgentView: class {},
+          remoteClient: { store: { list: () => (options.paired ? [{ id: "desktop-1" }] : []) } },
+          app: {
+            workspace: {
+              getLeavesOfType: jest.fn(() => (options.open ? [{}] : [])),
+              detachLeavesOfType,
+            },
+          },
+        });
+        const activateAgentView = jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
+        return { plugin, activateAgentView, detachLeavesOfType };
+      }
+
+      it(`opens the remote agent view on a phone with a paired desktop when none is open (${ISSUE_613})`, () => {
+        const { plugin, activateAgentView } = phonePlugin({ paired: true, open: false });
+
+        plugin.toggleAgentView();
+
+        expect(activateAgentView).toHaveBeenCalledTimes(1);
+      });
+
+      it(`closes an open remote agent view even after the last desktop was removed, so a restored leaf can be dismissed (${ISSUE_613})`, () => {
+        const { plugin, activateAgentView, detachLeavesOfType } = phonePlugin({
+          paired: false,
+          open: true,
+        });
+
+        plugin.toggleAgentView();
+
+        expect(detachLeavesOfType).toHaveBeenCalledWith(CHAT_AGENT_VIEWTYPE);
+        expect(activateAgentView).not.toHaveBeenCalled();
+      });
+
+      it("does nothing on a phone with no paired desktop and no open view", () => {
+        const { plugin, activateAgentView, detachLeavesOfType } = phonePlugin({
+          paired: false,
+          open: false,
+        });
+
+        plugin.toggleAgentView();
+
+        expect(activateAgentView).not.toHaveBeenCalled();
+        expect(detachLeavesOfType).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("refreshChatRibbon()", () => {
+      beforeEach(() => {
+        jest.clearAllMocks();
+        (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+      });
+
+      it(`switches the ribbon between Quick Chat and Agent Chat as desktops are paired and removed (${ISSUE_613})`, () => {
+        const plugin = createPluginUnderTest([]);
+        const setAttribute = jest.fn();
+        const ribbon = { setAttribute } as unknown as HTMLElement;
+        const list = jest.fn(() => [] as unknown[]);
+        Object.assign(plugin, {
+          agentSessionManager: undefined,
+          RemoteAgentView: class {},
+          remoteClient: { store: { list } },
+          ribbonIconEl: ribbon,
+        });
+
+        plugin.refreshChatRibbon();
+        expect(setIcon).toHaveBeenLastCalledWith(ribbon, "message-square");
+        expect(setAttribute).toHaveBeenLastCalledWith("aria-label", "Open Copilot Chat");
+
+        list.mockReturnValue([{ id: "desktop-1" }]);
+        plugin.refreshChatRibbon();
+        expect(setIcon).toHaveBeenLastCalledWith(ribbon, COPILOT_AGENT_ICON_ID);
+        expect(setAttribute).toHaveBeenLastCalledWith("aria-label", "Open Copilot Agent Chat");
+      });
+
+      it("does nothing before the ribbon exists", () => {
+        const plugin = createPluginUnderTest([]);
+
+        expect(() => plugin.refreshChatRibbon()).not.toThrow();
+        expect(setIcon).not.toHaveBeenCalled();
       });
     });
 

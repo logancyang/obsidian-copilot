@@ -120,6 +120,7 @@ import {
   Menu,
   Notice,
   Plugin,
+  setIcon,
   TFile,
   ViewCreator,
   WorkspaceLeaf,
@@ -409,12 +410,13 @@ export default class CopilotPlugin extends Plugin {
 
     this.initActiveLeafChangeHandler();
 
-    const agentReady = this.canOpenAgentChat();
-    this.ribbonIconEl = this.addRibbonIcon(
-      agentReady ? COPILOT_AGENT_ICON_ID : "message-square",
-      agentReady ? "Open Copilot Agent Chat" : "Open Copilot Chat",
-      () => (this.canOpenAgentChat() ? this.activateAgentView() : this.activateView())
+    const ribbon = this.chatRibbon();
+    this.ribbonIconEl = this.addRibbonIcon(ribbon.icon, ribbon.title, () =>
+      this.canOpenAgentChat() ? this.activateAgentView() : this.activateView()
     );
+    if (this.remoteClient) {
+      this.register(this.remoteClient.store.subscribe(() => this.refreshChatRibbon()));
+    }
 
     // Awaited so no publish can create .openartifacts before the old folder moves; a
     // destination that already exists would strand the legacy history for good.
@@ -982,13 +984,14 @@ export default class CopilotPlugin extends Plugin {
   }
 
   toggleAgentView() {
-    if (isDesktopRuntime() ? !this.requireAgentView() : !this.canUseRemoteAgentView()) return;
-    const leaves = this.app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE);
-    if (leaves.length > 0) {
+    // An open view can always be closed, even when the desktop that backed it was unpaired since.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+    if (this.app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE).length > 0) {
       void this.deactivateAgentView();
-    } else {
-      void this.activateAgentView();
+      return;
     }
+    if (isDesktopRuntime() ? !this.requireAgentView() : !this.canUseRemoteAgentView()) return;
+    void this.activateAgentView();
   }
 
   async activateAgentView(openInRightSidebar = false): Promise<WorkspaceLeaf | null> {
@@ -1121,6 +1124,24 @@ export default class CopilotPlugin extends Plugin {
 
   canOpenAgentChat(): boolean {
     return this.canUseAgentView() || this.canUseRemoteAgentView();
+  }
+
+  private chatRibbon(): { icon: string; title: string } {
+    return this.canOpenAgentChat()
+      ? { icon: COPILOT_AGENT_ICON_ID, title: "Open Copilot Agent Chat" }
+      : { icon: "message-square", title: "Open Copilot Chat" };
+  }
+
+  /**
+   * Points the ribbon at the chat a tap will open now. Pairing or removing a desktop on a phone
+   * changes that after the ribbon was created.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+   */
+  refreshChatRibbon(): void {
+    if (!this.ribbonIconEl) return;
+    const { icon, title } = this.chatRibbon();
+    setIcon(this.ribbonIconEl, icon);
+    this.ribbonIconEl.setAttribute("aria-label", title);
   }
 
   private async activateRemoteAgentView(

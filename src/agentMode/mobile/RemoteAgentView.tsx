@@ -38,7 +38,16 @@ export class RemoteAgentView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.viewRoot = mountPluginViewRoot(this.containerEl, this.app, () => this.renderTree());
-    this.disposeLayoutObservers = attachChatViewLayoutObservers(this.containerEl).dispose;
+    const observers = attachChatViewLayoutObservers(this.containerEl);
+    this.disposeLayoutObservers = observers.dispose;
+    // A layout change can move the view into another drawer, which the observer must follow to
+    // dismiss open menus when that drawer closes.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+    this.registerEvent(
+      this.app.workspace.on("layout-change", () => {
+        window.requestAnimationFrame(() => observers.rebindDrawerObserver());
+      })
+    );
   }
 
   private renderTree(): React.ReactNode {

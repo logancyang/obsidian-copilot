@@ -2,11 +2,11 @@
 
 Quick Chat is Copilot V4's lightweight conversation view. Use it for a short question, rewrite, or discussion that does not need agent tools or a project workspace.
 
-On desktop, start with **Agent Chat** for multi-step work, reusable Skills, permissioned file changes, or project context. Click **Open Copilot Agent Chat** in the ribbon or run **Open Copilot Agent Chat Window** from the command palette. On mobile, where Agent Chat is unavailable, Quick Chat is the main conversation view. See [Agent Chat](agent-mode-and-tools.md).
+On desktop, start with **Agent Chat** for multi-step work, reusable Skills, permissioned file changes, or project context. Click **Open Copilot Agent Chat** in the ribbon or run **Open Copilot Agent Chat Window** from the command palette. On mobile, Quick Chat is the main conversation view; a phone paired with your desktop can also open Agent Chat there. See [Agent Chat](agent-mode-and-tools.md) and [Agent Chat on your phone](agent-mode-and-tools.md#agent-chat-on-your-phone).
 
 ## Open Quick Chat
 
-Run **Open Copilot Chat Window** from the command palette. On mobile, the Copilot ribbon button opens Quick Chat because Agent Chat requires desktop Obsidian.
+Run **Open Copilot Chat Window** from the command palette. On mobile, the Copilot ribbon button opens Quick Chat until a desktop is paired under [Remote](settings.md#remote); after that it opens Agent Chat, and **Open Copilot Chat Window** still opens Quick Chat.
 
 In a mobile workspace tab, the message box stays above the software keyboard and Obsidian's bottom navigation bar as you open and close the keyboard.
 

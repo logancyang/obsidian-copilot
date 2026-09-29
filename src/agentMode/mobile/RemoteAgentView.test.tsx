@@ -10,12 +10,15 @@ const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/613"
 const mockMount = jest.fn();
 const mockUnmount = jest.fn();
 const mockDisposeObservers = jest.fn();
+const mockRebindObserver = jest.fn();
+const mockRegisterEvent = jest.fn();
 let mockAppProps: Record<string, unknown> | null = null;
 
 jest.mock("obsidian", () => ({
   ItemView: class {
     containerEl = document.createElement("div");
     app: unknown = null;
+    registerEvent = mockRegisterEvent;
     constructor(readonly leaf: unknown) {}
   },
 }));
@@ -26,7 +29,10 @@ jest.mock("@/utils/react/mountPluginViewRoot", () => ({
   },
 }));
 jest.mock("@/components/chat-components/attachChatViewLayoutObservers", () => ({
-  attachChatViewLayoutObservers: () => ({ dispose: mockDisposeObservers }),
+  attachChatViewLayoutObservers: () => ({
+    dispose: mockDisposeObservers,
+    rebindDrawerObserver: mockRebindObserver,
+  }),
 }));
 jest.mock("@/agentMode/mobile/RemoteAgentApp", () => ({
   RemoteAgentApp: (props: Record<string, unknown>) => {
@@ -36,7 +42,16 @@ jest.mock("@/agentMode/mobile/RemoteAgentApp", () => ({
 }));
 
 function makeView(plugin: Partial<CopilotPlugin> = {}) {
-  const app = { name: "app" } as unknown as App;
+  const layoutHandlers: Array<() => void> = [];
+  const app = {
+    name: "app",
+    workspace: {
+      on: jest.fn((_name: string, handler: () => void) => {
+        layoutHandlers.push(handler);
+        return { name: "layout-change-ref" };
+      }),
+    },
+  } as unknown as App;
   const updateUserMessageHistory = jest.fn();
   const fullPlugin = {
     app,
@@ -46,7 +61,7 @@ function makeView(plugin: Partial<CopilotPlugin> = {}) {
     ...plugin,
   } as unknown as CopilotPlugin;
   const view = new RemoteAgentView({} as WorkspaceLeaf, fullPlugin);
-  return { view, app, updateUserMessageHistory, plugin: fullPlugin };
+  return { view, app, updateUserMessageHistory, plugin: fullPlugin, layoutHandlers };
 }
 
 async function openAndRender(view: RemoteAgentView) {
@@ -103,6 +118,22 @@ describe("RemoteAgentView", () => {
         });
         (mockAppProps!.updateUserMessageHistory as (message: string) => void)("hello");
         expect(updateUserMessageHistory).toHaveBeenCalledWith("hello");
+      });
+
+      it(`follows the view into another drawer by rebinding the drawer observer on each layout change (${ISSUE})`, async () => {
+        const { view, layoutHandlers } = makeView();
+        jest.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+          callback(0);
+          return 0;
+        });
+
+        await view.onOpen();
+
+        expect(layoutHandlers).toHaveLength(1);
+        expect(mockRegisterEvent).toHaveBeenCalledTimes(1);
+        expect(mockRebindObserver).not.toHaveBeenCalled();
+        layoutHandlers[0]();
+        expect(mockRebindObserver).toHaveBeenCalledTimes(1);
       });
 
       it("renders nothing while the plugin has no remote client", async () => {

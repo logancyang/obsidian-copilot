@@ -2,7 +2,7 @@
 
 Copilot V4 is built around **Agent Chat**, a desktop workspace where opencode, Claude Code, or Codex can read your vault, use tools, and complete multi-step work with the permissions you choose.
 
-Agent Chat is available in Obsidian on desktop. Quick Chat, Copilot Commands, and Quick Ask remain available for shorter tasks and on mobile.
+Agent Chat runs in Obsidian on desktop, and a phone paired with the desktop can open it too. Quick Chat, Copilot Commands, and Quick Ask remain available for shorter tasks and on mobile.
 
 ## Install Copilot
 

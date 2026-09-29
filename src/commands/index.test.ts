@@ -46,6 +46,8 @@ function markdownFile(path: string): TFile {
   return new TFileConstructor(path);
 }
 
+const ISSUE_613 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/613";
+
 describe("commands", () => {
   describe("registerCommands()", () => {
     beforeEach(() => {
@@ -69,6 +71,63 @@ describe("commands", () => {
       const command = commands.find(({ id }) => id === COMMAND_IDS.NEW_CHAT);
       expect(command?.name).toBe("New Copilot Quick Chat");
       expect(command?.name).not.toBe(COMMAND_NAMES[COMMAND_IDS.NEW_AGENT_CHAT]);
+    });
+
+    describe("agent chat commands", () => {
+      function registerAgentChatCommands(options: { canOpen: boolean; open: boolean }) {
+        const commands: Command[] = [];
+        const toggleAgentView = jest.fn();
+        const activateAgentView = jest.fn();
+        const plugin = {
+          addCommand: jest.fn((command: Command) => commands.push(command)),
+          app: {
+            workspace: {
+              getActiveFile: jest.fn(() => null),
+              getLeavesOfType: jest.fn(() => (options.open ? [{}] : [])),
+            },
+          },
+          canOpenAgentChat: jest.fn(() => options.canOpen),
+          toggleAgentView,
+          activateAgentView,
+        } as unknown as CopilotPlugin;
+        registerCommands(plugin, jest.fn());
+        const find = (id: string) => commands.find((command) => command.id === id)!;
+        return {
+          open: find(COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW),
+          toggle: find(COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW),
+          toggleAgentView,
+          activateAgentView,
+        };
+      }
+
+      it(`offers opening and toggling the agent chat while it can be opened (${ISSUE_613})`, () => {
+        const { open, toggle, toggleAgentView, activateAgentView } = registerAgentChatCommands({
+          canOpen: true,
+          open: false,
+        });
+
+        expect(open.checkCallback?.(true)).toBe(true);
+        expect(toggle.checkCallback?.(true)).toBe(true);
+        expect(activateAgentView).not.toHaveBeenCalled();
+        open.checkCallback?.(false);
+        toggle.checkCallback?.(false);
+        expect(activateAgentView).toHaveBeenCalledTimes(1);
+        expect(toggleAgentView).toHaveBeenCalledTimes(1);
+      });
+
+      it(`hides both commands on a phone with no paired desktop and no agent chat open (${ISSUE_613})`, () => {
+        const { open, toggle } = registerAgentChatCommands({ canOpen: false, open: false });
+
+        expect(open.checkCallback?.(true)).toBe(false);
+        expect(toggle.checkCallback?.(true)).toBe(false);
+      });
+
+      it(`keeps the toggle available while an agent chat is open, so a restored leaf can be closed after the desktop was unpaired (${ISSUE_613})`, () => {
+        const { open, toggle } = registerAgentChatCommands({ canOpen: false, open: true });
+
+        expect(toggle.checkCallback?.(true)).toBe(true);
+        expect(open.checkCallback?.(true)).toBe(false);
+      });
     });
 
     it("registers the OpenArtifacts palette command and publishes the active Markdown file", () => {
