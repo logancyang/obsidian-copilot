@@ -11,8 +11,6 @@ jest.mock("@/settings/model", () => ({
   useSettingsValue: () => currentSettings,
 }));
 
-// Entitlement surface. `useLicenseState` is the hook under test elsewhere; here
-// it only has to produce the states this section renders.
 let mockLicenseState: { status: string; plan?: string } = { status: "none" };
 let mockIsPaidUser: boolean | undefined = false;
 const checkIsPaidUser = jest.fn<Promise<boolean | undefined>, unknown[]>();
@@ -87,10 +85,6 @@ describe("PlusSettings", () => {
     });
 
     it("says nothing about a key while its validation is still in flight", async () => {
-      // The hook only sees the stored token, which stays empty until the server
-      // answers, so a freshly applied key reads as inactive there. Rejecting a
-      // license the user just bought — for the length of a network call — is the
-      // regression this guards.
       mockLicenseState = { status: "inactive" };
       let resolveValidation: (value: boolean) => void = () => {};
       checkIsPaidUser.mockReturnValue(

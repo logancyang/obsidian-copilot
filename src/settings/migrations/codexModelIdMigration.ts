@@ -1,18 +1,3 @@
-/**
- * One-time migration (settings v14): fold Codex's per-effort configured models
- * into one row per base model.
- *
- * Copilot used to decode codex wire ids with the wrong delimiter (see
- * `codexModelId` for the real format), so every id decoded as an effort-less
- * base model and discovery enrolled one `ConfiguredModel` per (model × effort)
- * pair: six `gpt-5.6-sol` rows instead of one, each with its own enable toggle.
- *
- * Once the codec reads the real format, discovery reports base ids and
- * `syncAgentModels` would remove every bracketed row — taking the user's
- * enabled set with it. This migration renames the rows in place instead, so the
- * `configuredModelId`s that `backends.codex.enabledModels` references survive.
- */
-
 import type { ModelSelection } from "@/agentMode";
 import type { ConfiguredModel } from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
@@ -21,22 +6,12 @@ import { parseCodexModelId } from "@/utils/codexModelId";
 const EMPTY_CONFIGURED_MODELS = Object.freeze([]) as unknown as ConfiguredModel[];
 const EMPTY_ENABLED_MODELS = Object.freeze([]) as unknown as string[];
 
-/** The settings slices the collapse rewrites. Only present fields need writing. */
 export interface CodexModelIdCollapsePlan {
-  /** Replacement `configuredModels`, per-effort codex rows folded into one per base model. */
   configuredModels: ConfiguredModel[];
-  /** Replacement `backends.codex.enabledModels`, repointed at the surviving rows. */
   enabledModels: string[];
-  /** Replacement `agentMode.backends.codex.defaultModel`; absent when it needed no change. */
   defaultModel?: ModelSelection;
 }
 
-/**
- * Pure planner: returns the rewritten codex slices, or `null` when nothing
- * changed (so the caller can skip a redundant write — see AGENTS.md
- * "Referential stability"). Idempotent — a vault whose rows are already in base
- * form plans no change.
- */
 export function planCodexModelIdCollapse(
   settings: CopilotSettings
 ): CodexModelIdCollapsePlan | null {
@@ -48,15 +23,11 @@ export function planCodexModelIdCollapse(
 
   const previousModels = settings.configuredModels ?? EMPTY_CONFIGURED_MODELS;
   const configuredModels: ConfiguredModel[] = [];
-  /** Surviving row per `(provider, base model)`, so repeat variants fold onto the first. */
   const survivorByBaseModel = new Map<string, ConfiguredModel>();
-  /** Every original row id → the row id that now represents it. */
   const survivorByModelId = new Map<string, string>();
   let rowsChanged = false;
 
   for (const model of previousModels) {
-    // Migration must not rewrite another backend's model IDs or enable references.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
     if (!codexProviderIds.has(model.providerId)) {
       configuredModels.push(model);
       continue;
@@ -72,8 +43,6 @@ export function planCodexModelIdCollapse(
       rowsChanged = true;
       continue;
     }
-    // Already-normalized IDs and labels must survive repeated startup unchanged.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
     const kept: ConfiguredModel =
       effort === null
         ? model
@@ -116,11 +85,7 @@ export function planCodexModelIdCollapse(
       ? { baseModelId: parsedDefault.baseModelId, effort: parsedDefault.effort }
       : undefined;
 
-  // Avoid a settings write when an already-migrated or non-Codex vault is loaded.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
   if (!rowsChanged && !enabledChanged && !defaultModel) return null;
-  // Default-only migration must not invalidate subscribers to unchanged slices.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
   return {
     configuredModels: rowsChanged ? configuredModels : previousModels,
     enabledModels: enabledChanged ? enabledModels : previousEnabled,
@@ -128,12 +93,6 @@ export function planCodexModelIdCollapse(
   };
 }
 
-/**
- * Drop the `(low)` codex appends to a per-effort model's display name, so the
- * surviving row reads as the base model until the next probe refreshes it.
- * Preserve custom labels and avoid blank names when no base label precedes effort.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/219
- */
 function stripEffortLabel(displayName: string, effort: string): string {
   const match = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(displayName);
   if (!match || match[2].toLowerCase() !== effort.toLowerCase()) return displayName;

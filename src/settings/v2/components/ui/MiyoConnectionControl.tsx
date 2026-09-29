@@ -14,9 +14,6 @@ export interface MiyoAvailabilityNoticeProps {
   checking: boolean;
 }
 
-/**
- * Explains why Miyo-backed settings are unavailable and how to recover them.
- */
 export const MiyoAvailabilityNotice: React.FC<MiyoAvailabilityNoticeProps> = ({
   enabled,
   available,
@@ -40,7 +37,6 @@ export const MiyoAvailabilityNotice: React.FC<MiyoAvailabilityNoticeProps> = ({
   );
 };
 
-/** Actions for the selected active connection; endpoint status belongs to its option. */
 export const MiyoConnectionControl: React.FC<MiyoConnectionControlProps> = ({
   checking,
   onDisconnect,

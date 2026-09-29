@@ -294,8 +294,6 @@ export const CommandSettings: React.FC = () => {
   }, [rawCommands]);
 
   const settings = useSettingsValue();
-  // Derived from the single Copilot root; the folder is no longer separately
-  // editable, so the banner shows where commands are actually loaded from.
   const customPromptsFolder = deriveCustomPromptsFolder(settings);
   const containerRef = useRef<HTMLDivElement>(null);
   const sensors = useSensors(
@@ -337,9 +335,6 @@ export const CommandSettings: React.FC = () => {
         title: copyName,
       };
       await CustomCommandManager.getInstance().createCommand(copiedCommand, {
-        // Explicitly make the new command the same order as the original command
-        // so it appears next to the original command in the menu. The extra
-        // suffix will ensure it is below the original command in the menu.
         autoOrder: false,
       });
     } catch (error) {
@@ -362,7 +357,6 @@ export const CommandSettings: React.FC = () => {
       return;
     }
 
-    // Create new order
     const newCommands = [...commands];
     const [movedCommand] = newCommands.splice(activeIndex, 1);
     newCommands.splice(overIndex, 0, movedCommand);
@@ -370,7 +364,6 @@ export const CommandSettings: React.FC = () => {
     await CustomCommandManager.getInstance().reorderCommands(newCommands);
   };
 
-  // Mobile view rendering
   const renderMobileView = () => (
     <div className="tw-relative md:tw-hidden">
       <DndContext
@@ -490,7 +483,6 @@ export const CommandSettings: React.FC = () => {
             </Button>
           </div>
 
-          {/* Desktop view */}
           <div className="tw-hidden md:tw-block">
             <DndContext
               sensors={sensors}
@@ -560,7 +552,6 @@ export const CommandSettings: React.FC = () => {
             </DndContext>
           </div>
 
-          {/* Mobile view */}
           {renderMobileView()}
         </div>
       </section>

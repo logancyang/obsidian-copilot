@@ -18,7 +18,6 @@ export const OneSavedPrompt: StoryObj<LegacyChatPromptsNoticeViewProps> = {
   args: { promptCount: 1 },
 };
 
-/** A user who never saved a prompt sees no mention of the feature. */
 export const NoSavedPrompts: StoryObj<LegacyChatPromptsNoticeViewProps> = {
   args: { promptCount: 0 },
 };

@@ -1,16 +1,3 @@
-/**
- * `ModelChecklist` — unified model picker used by the BYOK configure
- * dialog for every provider (catalog-backed or self-hosted alike).
- *
- * The dialog assembles the candidate pool from:
- *   - models fetched live from the provider endpoint
- *   - manually-typed ids
- *   - existing configured models (edit mode)
- *
- * Each id is rendered with whatever `ModelInfo` metadata is available
- * — context window, release date, embedding badge — or id-only when
- * the catalog has nothing to add. Selection lives in the parent.
- */
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,31 +17,16 @@ import { Loader2, X, XCircle } from "lucide-react";
 import React, { useMemo, useState } from "react";
 
 export interface ModelChecklistProps {
-  /** Merged candidate pool — caller-owned union of fetched, manual,
-   *  and existing ids, each carrying its richest known `ModelInfo`. */
   availableModels: readonly ModelInfo[];
-  /** Wire ids currently checked. */
   selected: ReadonlySet<string>;
   onToggle: (id: string, next: boolean) => void;
-  /** Manual-add input — always visible above endpoint discovery. */
   onAddId: (id: string) => void;
-  /** Remove an id from the candidate pool. The X button only renders
-   *  for ids the parent marked as custom-added (see `customIds`);
-   *  discovered ids (catalog or live-fetched) would just reappear and
-   *  so are non-removable. */
   onRemoveId?: (id: string) => void;
-  /** Case-insensitive substring filter over name + id. */
   query: string;
   onQueryChange: (query: string) => void;
-  /** Placeholder for the manual-add input. */
   modelInputHint?: string;
-  /** Spinner shown above the list while the dialog auto-fetches. */
   fetching?: boolean;
-  /** Inline error from the most recent fetch, if any. */
   fetchError?: string | null;
-  /** Ids the parent considers custom-added (user-typed). Drives both
-   *  the X-button visibility and a sort tier that floats these rows
-   *  above discovered ones within each selection group. */
   customIds?: ReadonlySet<string>;
 }
 
@@ -94,8 +66,6 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-2">
-      {/* Manual entry must remain reachable when an endpoint cannot provide /v1/models.
-          https://github.com/logancyang/obsidian-copilot/issues/2894 */}
       <FormField label="Model ID">
         <div className="tw-flex tw-gap-2">
           <Input
@@ -191,8 +161,6 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
                     aria-label={`Remove ${model.id}`}
                     data-testid={`model-row-remove-${model.id}`}
                     onClick={(e) => {
-                      // The row is a <label>, so a bare click would toggle the
-                      // checkbox — suppress that and only remove.
                       e.preventDefault();
                       e.stopPropagation();
                       onRemoveId(model.id);

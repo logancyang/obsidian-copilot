@@ -1,9 +1,3 @@
-/**
- * Self-Host Mode gating on the reactive picker atom (`backendPickerAtomFamily`,
- * chokepoint #1). Mirrors the `BackendConfigRegistry.resolveEnabled` gating
- * (chokepoint #2) but through the Jotai read layer that drives the chat picker.
- */
-
 import { getSettings, resetSettings, setSettings, settingsStore } from "@/settings/model";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
 
@@ -61,16 +55,13 @@ describe("backendPickerAtomFamily Self-Host Mode marking", () => {
 
   it("keeps every entry in order, flags cloud BYOK only, when on", () => {
     setSettings({ enableSelfHostMode: true });
-    // Order preserved (this atom feeds runtime resolution) — nothing dropped.
     expect(pickerIds()).toEqual(["cloud-m", "local-m", "missing"]);
-    // Cloud flagged; self-hosted and broken refs are not.
     expect(warningById()).toEqual({ "cloud-m": true, "local-m": false, missing: false });
   });
 
   it("clears the flags when the mode is turned back off (no writeback)", () => {
     setSettings({ enableSelfHostMode: true });
     expect(warningById()["cloud-m"]).toBe(true);
-    // The projection never rewrites the persisted enabledModels slice.
     expect(getSettings().backends.chat?.enabledModels).toEqual(["cloud-m", "local-m", "missing"]);
 
     setSettings({ enableSelfHostMode: false });
@@ -100,7 +91,6 @@ describe("visibleByokProvidersAtom Self-Host Mode ordering", () => {
 
   it("keeps cloud BYOK listed but sorts it below self-hosted when on", () => {
     setSettings({ enableSelfHostMode: true });
-    // Self-hosted first, cloud (warned) last — nothing hidden.
     expect(visibleIds()).toEqual(["local", "cloud"]);
   });
 
@@ -118,7 +108,6 @@ describe("visibleByokProvidersAtom Self-Host Mode ordering", () => {
     setSettings({ enableSelfHostMode: true });
     expect(visibleIds()).toEqual(["local", "cloud"]);
     setSettings({ enableSelfHostMode: false });
-    // byokProvidersAtom order is `Object.values(providers)` insertion order.
     expect(visibleIds()).toEqual(["cloud", "local"]);
   });
 

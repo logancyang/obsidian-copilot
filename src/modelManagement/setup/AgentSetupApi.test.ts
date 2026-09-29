@@ -1,12 +1,3 @@
-/**
- * Tests for `AgentSetupApi` (M2 — agent-origin provider/model enrollment).
- *
- * The 5 injected deps are mocked as plain in-memory fakes / jest.fns —
- * no real settings store. Each fake holds just enough state to exercise
- * the create / idempotent-update / diff-reconcile / auto-enroll / cascade
- * paths and to assert the observable effects.
- */
-
 import { AgentSetupApi } from "./AgentSetupApi";
 
 import type { CatalogDownloadService } from "@/modelManagement/catalog/CatalogDownloadService";
@@ -23,17 +14,12 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-// ---------------------------------------------------------------------------
-// In-memory fakes
-// ---------------------------------------------------------------------------
-
 let idCounter = 0;
 function nextId(prefix: string): string {
   idCounter += 1;
   return `${prefix}-${idCounter}`;
 }
 
-/** Minimal ProviderRegistry fake — Map-backed, tracks setApiKey calls. */
 class FakeProviderRegistry {
   rows = new Map<string, Provider>();
   setApiKey = jest.fn(async (providerId: string, apiKey: string) => {
@@ -58,7 +44,6 @@ class FakeProviderRegistry {
   update = jest.fn(async (providerId: string, patch: Partial<Provider>) => {
     const existing = this.rows.get(providerId);
     if (!existing) throw new Error(`unknown providerId ${providerId}`);
-    // Mirror the real registry: providerType/origin/keychain id immutable.
     const safe = { ...patch };
     delete (safe as Record<string, unknown>).providerType;
     delete (safe as Record<string, unknown>).origin;
@@ -75,7 +60,6 @@ class FakeProviderRegistry {
   }
 }
 
-/** Minimal ConfiguredModelRegistry fake — array-backed. */
 class FakeConfiguredModelRegistry {
   rows: ConfiguredModel[] = [];
 
@@ -111,7 +95,6 @@ class FakeConfiguredModelRegistry {
   }
 }
 
-/** Minimal BackendConfigRegistry fake — per-backend enabled-id sets. */
 class FakeBackendConfigRegistry {
   enabled = new Map<BackendType, string[]>();
 
@@ -136,7 +119,6 @@ class FakeBackendConfigRegistry {
   }
 }
 
-/** Coordinator fake mirroring the real cascade: refs then row. */
 class FakeCoordinator {
   constructor(
     private readonly backends: FakeBackendConfigRegistry,
@@ -149,7 +131,6 @@ class FakeCoordinator {
   });
 }
 
-/** Catalog fake — returns a fixed provider list keyed by providerType. */
 function makeCatalog(providers: CatalogProvider[]): {
   service: CatalogDownloadService;
   ensureLoaded: jest.Mock;
@@ -161,10 +142,6 @@ function makeCatalog(providers: CatalogProvider[]): {
   } as unknown as CatalogDownloadService;
   return { service, ensureLoaded };
 }
-
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
 
 const CLAUDE_CATALOG: CatalogProvider = {
   id: "anthropic",
@@ -219,10 +196,6 @@ beforeEach(() => {
   idCounter = 0;
 });
 
-// ---------------------------------------------------------------------------
-// registerAgentProvider
-// ---------------------------------------------------------------------------
-
 describe("AgentSetupApi.registerAgentProvider", () => {
   it("creates exactly one agent-origin provider, N models, all enrolled into the agent backend only", async () => {
     const h = makeHarness();
@@ -234,14 +207,12 @@ describe("AgentSetupApi.registerAgentProvider", () => {
       wireModelIds: ["claude-sonnet-4-5", "claude-opus-4-5"],
     });
 
-    // One provider, correct origin.
     expect(h.providers.rows.size).toBe(1);
     const provider = h.providers.get(result.providerId)!;
     expect(provider.origin).toEqual({ kind: "agent", agentType: "claude" });
     expect(provider.providerType).toBe("anthropic");
     expect(provider.displayName).toBe("Claude Code");
 
-    // Two ConfiguredModels.
     expect(result.configuredModelIds).toHaveLength(2);
     expect(
       h.models
@@ -250,7 +221,6 @@ describe("AgentSetupApi.registerAgentProvider", () => {
         .sort()
     ).toEqual(["claude-opus-4-5", "claude-sonnet-4-5"]);
 
-    // Enrolled into backends["claude"] only — not chat or other agents.
     expect(h.backends.enabledFor("claude").sort()).toEqual([...result.configuredModelIds].sort());
     expect(h.backends.enabledFor("chat")).toEqual([]);
     expect(h.backends.enabledFor("opencode")).toEqual([]);
@@ -268,8 +238,6 @@ describe("AgentSetupApi.registerAgentProvider", () => {
       autoEnrollModelIds: ["opencode/a", "opencode/c"],
     });
 
-    // All three exist, so the curation UI can list — and the user can toggle —
-    // the ones that ship off.
     expect(result.configuredModelIds).toHaveLength(3);
 
     const enabledWireIds = h.backends
@@ -281,8 +249,6 @@ describe("AgentSetupApi.registerAgentProvider", () => {
 
   it("leaves the backend's other picks intact when auto-enrolling a subset", async () => {
     const h = makeHarness();
-    // A model the user already curated into the opencode backend from another
-    // origin (BYOK / Plus). Enrollment must add to that set, never replace it.
     await h.backends.enableModel("opencode", "pre-existing-byok-model");
 
     await h.api.registerAgentProvider({
@@ -314,8 +280,6 @@ describe("AgentSetupApi.registerAgentProvider", () => {
 
   it("lets the agent-reported name + description win over catalog metadata", async () => {
     const h = makeHarness();
-    // Catalog knows "claude-sonnet-4-5" as "Claude Sonnet 4.5"; the agent's
-    // own name/description must override so settings match the chat picker.
     const result = await h.api.registerAgentProvider({
       agentType: "claude",
       providerType: "anthropic",
@@ -355,7 +319,7 @@ describe("AgentSetupApi.registerAgentProvider", () => {
       displayName: "Claude Code",
       apiKey: null,
       wireModelIds: ["default"],
-      fallbackDisplayNames: { default: "default" }, // stale, pre-feature label
+      fallbackDisplayNames: { default: "default" },
     });
     const idBefore = h.models.listByProvider(first.providerId)[0].configuredModelId;
 
@@ -370,7 +334,6 @@ describe("AgentSetupApi.registerAgentProvider", () => {
     });
 
     const row = h.models.listByProvider(first.providerId)[0];
-    // Same row (enabled-set refs don't churn), refreshed strings.
     expect(row.configuredModelId).toBe(idBefore);
     expect(row.info.displayName).toBe("Default (recommended)");
     expect(row.info.description).toBe("Opus 4.7 with 1M context · Most capable for complex work");
@@ -387,8 +350,6 @@ describe("AgentSetupApi.registerAgentProvider", () => {
       fallbackDisplayNames: { "gpt-5": "GPT-5" },
     });
 
-    // Clear the model-mutation spies so the second run's call counts
-    // reflect only what the identical re-register triggers.
     h.models.add.mockClear();
     h.backends.enableModel.mockClear();
     h.coordinator.removeConfiguredModel.mockClear();
@@ -396,7 +357,7 @@ describe("AgentSetupApi.registerAgentProvider", () => {
     const second = await h.api.registerAgentProvider({
       agentType: "codex",
       providerType: "openai-compatible",
-      displayName: "Codex CLI", // changed label
+      displayName: "Codex CLI",
       apiKey: null,
       wireModelIds: ["gpt-5"],
       fallbackDisplayNames: { "gpt-5": "GPT-5" },
@@ -407,11 +368,7 @@ describe("AgentSetupApi.registerAgentProvider", () => {
     expect(h.providers.add).toHaveBeenCalledTimes(1);
     expect(h.providers.update).toHaveBeenCalledTimes(1);
     expect(h.providers.get(first.providerId)!.displayName).toBe("Codex CLI");
-    // Same single model, same id preserved.
     expect(second.configuredModelIds).toEqual(first.configuredModelIds);
-    // Idempotent model reconcile: an unchanged wire-id list is a pure
-    // no-op — no add, no re-enroll, no cascade-remove ("only real
-    // add/remove deltas write settings", per the risk table).
     expect(h.models.add).not.toHaveBeenCalled();
     expect(h.backends.enableModel).not.toHaveBeenCalled();
     expect(h.coordinator.removeConfiguredModel).not.toHaveBeenCalled();
@@ -428,8 +385,6 @@ describe("AgentSetupApi.registerAgentProvider", () => {
     });
     const sonnetId = first.configuredModelIds[0];
 
-    // Simulate user disabling/curating: leave enable state as-is and re-run
-    // with an extra reported model.
     const second = await h.api.registerAgentProvider({
       agentType: "claude",
       providerType: "anthropic",
@@ -438,16 +393,13 @@ describe("AgentSetupApi.registerAgentProvider", () => {
       wireModelIds: ["claude-sonnet-4-5", "claude-opus-4-5"],
     });
 
-    // Existing row kept its id.
     expect(second.configuredModelIds).toContain(sonnetId);
     expect(h.models.getByWireId(first.providerId, "claude-sonnet-4-5")!.configuredModelId).toBe(
       sonnetId
     );
-    // New row added + enrolled.
     const opusId = h.models.getByWireId(first.providerId, "claude-opus-4-5")!.configuredModelId;
     expect(opusId).toBeDefined();
     expect(h.backends.enabledFor("claude")).toContain(opusId);
-    // Only the genuinely-new id triggered an add.
     expect(h.models.add).toHaveBeenCalledTimes(2);
   });
 
@@ -467,13 +419,12 @@ describe("AgentSetupApi.registerAgentProvider", () => {
       providerType: "anthropic",
       displayName: "Claude Code",
       apiKey: null,
-      wireModelIds: ["claude-sonnet-4-5"], // opus vanished
+      wireModelIds: ["claude-sonnet-4-5"],
     });
 
     expect(h.coordinator.removeConfiguredModel).toHaveBeenCalledWith(opusId);
     expect(h.models.getByWireId(first.providerId, "claude-opus-4-5")).toBeUndefined();
     expect(h.backends.enabledFor("claude")).not.toContain(opusId);
-    // Surviving model still enrolled.
     const sonnetId = h.models.getByWireId(first.providerId, "claude-sonnet-4-5")!.configuredModelId;
     expect(h.backends.enabledFor("claude")).toContain(sonnetId);
   });
@@ -516,7 +467,6 @@ describe("AgentSetupApi.registerAgentProvider", () => {
     });
 
     const hit = h.models.getByWireId(result.providerId, "claude-sonnet-4-5")!;
-    // Full catalog metadata copied onto the snapshot.
     expect(hit.info.displayName).toBe("Claude Sonnet 4.5");
     expect(hit.info.reasoning).toBe(true);
 
@@ -538,8 +488,6 @@ describe("AgentSetupApi.registerAgentProvider", () => {
   });
 
   it("still snapshots every wire id when the catalog is unreachable", async () => {
-    // Unreachable catalog: ensureLoaded throws AND memory is empty (no
-    // providers ever loaded), so enrichment must fall back per wire id.
     const h = makeHarness([]);
     h.ensureLoaded.mockRejectedValueOnce(new Error("offline"));
     const result = await h.api.registerAgentProvider({
@@ -550,16 +498,11 @@ describe("AgentSetupApi.registerAgentProvider", () => {
       wireModelIds: ["claude-sonnet-4-5"],
       fallbackDisplayNames: { "claude-sonnet-4-5": "Sonnet (fallback)" },
     });
-    // Catalog enrichment failed → fallback used, but the model still exists.
     const row = h.models.getByWireId(result.providerId, "claude-sonnet-4-5")!;
     expect(row.info).toEqual({ id: "claude-sonnet-4-5", displayName: "Sonnet (fallback)" });
     expect(h.backends.enabledFor("claude")).toContain(row.configuredModelId);
   });
 });
-
-// ---------------------------------------------------------------------------
-// syncAgentModels
-// ---------------------------------------------------------------------------
 
 describe("AgentSetupApi.syncAgentModels", () => {
   it("no-ops when no agent provider exists for the agentType", async () => {
@@ -592,11 +535,9 @@ describe("AgentSetupApi.syncAgentModels", () => {
       wireModelIds: ["claude-sonnet-4-5", "claude-opus-4-5"],
     });
 
-    // Provider row untouched.
     expect(h.providers.add).not.toHaveBeenCalled();
     expect(h.providers.update).not.toHaveBeenCalled();
 
-    // New model added but left DISABLED; existing one preserved + still enabled.
     expect(result.added).toHaveLength(1);
     expect(result.removed).toHaveLength(0);
     const opusId = h.models.getByWireId(reg.providerId, "claude-opus-4-5")!.configuredModelId;
@@ -606,8 +547,6 @@ describe("AgentSetupApi.syncAgentModels", () => {
   });
 
   it("leaves every model a later probe introduces disabled (only the seeded one stays on)", async () => {
-    // Mirrors opencode's first→follow-up flow: enrollment seeds one model, then
-    // a later probe floods in many more — none of which should turn themselves on.
     const h = makeHarness();
     const reg = await h.api.registerAgentProvider({
       agentType: "claude",
@@ -623,9 +562,7 @@ describe("AgentSetupApi.syncAgentModels", () => {
       wireModelIds: ["claude-sonnet-4-5", "claude-opus-4-5", "claude-haiku-4-5"],
     });
 
-    // The enabled set is unchanged: still just the seeded model.
     expect(h.backends.enabledFor("claude")).toEqual([sonnetId]);
-    // ...even though both new models now exist as configured (toggleable) rows.
     expect(h.models.getByWireId(reg.providerId, "claude-opus-4-5")).toBeDefined();
     expect(h.models.getByWireId(reg.providerId, "claude-haiku-4-5")).toBeDefined();
   });
@@ -674,10 +611,6 @@ describe("AgentSetupApi.syncAgentModels", () => {
   });
 
   it("multi-provider: partitions wire ids per owning provider without corrupting another provider's list", async () => {
-    // opencode with two agent providers (anthropic + google). A later
-    // sync drops one model from each provider's owned set and reports an
-    // unowned wire id; the unowned id must NOT be added (no providerType
-    // to resolve it), and neither provider's surviving model is touched.
     const h = makeHarness([CLAUDE_CATALOG, GOOGLE_CATALOG]);
     const anthropic = await h.api.registerAgentProvider({
       agentType: "opencode",
@@ -704,23 +637,16 @@ describe("AgentSetupApi.syncAgentModels", () => {
 
     h.models.add.mockClear();
 
-    // Report: each provider keeps one model; opus + flash vanish; an
-    // unowned wire id ("mystery-model") is reported but belongs to no
-    // existing provider.
     const result = await h.api.syncAgentModels({
       agentType: "opencode",
       wireModelIds: ["claude-sonnet-4-5", "gemini-2-5-pro", "mystery-model"],
     });
 
-    // Both vanished models cascade-removed, scoped to their own provider.
     expect(result.removed.sort()).toEqual([opusId, flashId].sort());
     expect(h.coordinator.removeConfiguredModel).toHaveBeenCalledWith(opusId);
     expect(h.coordinator.removeConfiguredModel).toHaveBeenCalledWith(flashId);
-    // Unowned wire id is NOT enrolled (no providerType to place it).
     expect(result.added).toEqual([]);
     expect(h.models.add).not.toHaveBeenCalled();
-    // Each surviving model is preserved on its own provider; no cross-
-    // provider corruption.
     expect(h.models.getByWireId(anthropic.providerId, "claude-sonnet-4-5")!.configuredModelId).toBe(
       sonnetId
     );

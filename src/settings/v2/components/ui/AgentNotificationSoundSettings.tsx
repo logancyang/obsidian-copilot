@@ -14,10 +14,6 @@ export interface AgentNotificationSoundSettingsProps {
   soundOptions: ReadonlyArray<NotificationSoundOption>;
 }
 
-/**
- * Presents the agent notification toggle and its conditional sound picker
- * without reading or writing plugin state.
- */
 export const AgentNotificationSoundSettings: React.FC<AgentNotificationSoundSettingsProps> = ({
   enabled,
   onEnabledChange,
@@ -33,9 +29,6 @@ export const AgentNotificationSoundSettings: React.FC<AgentNotificationSoundSett
       checked={enabled}
       onCheckedChange={onEnabledChange}
     />
-    {/* Picking a sound while muted cannot produce audible feedback, so the
-        choice only appears when notifications are enabled.
-        https://github.com/logancyang/obsidian-copilot/issues/2987 */}
     {enabled && (
       <SettingItem
         type="select"

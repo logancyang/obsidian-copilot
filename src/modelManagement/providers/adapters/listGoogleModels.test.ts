@@ -31,7 +31,6 @@ describe("listGoogleModels", () => {
       ok: true,
       modelIds: ["gemini-2.0-flash", "gemini-2.5-pro"],
     });
-    // url-encoded api key in the query string
     expect(mockSafeFetch).toHaveBeenCalledWith(
       "https://generativelanguage.googleapis.com/v1beta/models?key=abc%2Fxyz",
       { method: "GET", headers: {} }

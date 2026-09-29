@@ -5,11 +5,8 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { Notice } from "obsidian";
 import React from "react";
 
-// Stub the Plus banner to keep its dependency chain out of the test.
 jest.mock("@/settings/v2/components/PlusSettings", () => ({ PlusSettings: () => null }));
 
-// The Agents section is lazily imported behind a desktop gate; stub the module
-// the lazy import resolves to so the test never pulls in the agentMode barrel.
 jest.mock("@/settings/v2/components/AgentSettings", () => ({
   AgentSettings: () => <div data-testid="agents-section">agents</div>,
 }));
@@ -21,11 +18,7 @@ jest.mock("@/settings/v2/components/QuickChatPanel", () => ({
 const isDesktopRuntime = jest.fn<boolean, []>().mockReturnValue(true);
 jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: () => isDesktopRuntime() }));
 
-// App is threaded via useApp; the root-change orchestration is unit-tested in
-// copilotRootChange.test, so mock it here to observe the UI's decisions.
 jest.mock("@/context", () => {
-  // One object for the whole suite: the real useApp reads a context-provided singleton, so a
-  // fresh object per render would hand hooks a changing dependency Obsidian never gives them.
   const app = {
     vault: { configDir: ".vault-config", getMarkdownFiles: () => [] },
     setting: { close: jest.fn() },
@@ -66,7 +59,6 @@ jest.mock("@/miyo/miyoUtils", () => ({
 }));
 jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/abs/vault" }));
 
-// Capture ConfirmModal construction so a test can fire its confirm callback.
 let capturedOnConfirm: (() => void) | null = null;
 let capturedConfirmButtonText = "";
 const modalCtor = jest.fn((onConfirm: () => void, confirmButtonText: string) => {
@@ -104,7 +96,6 @@ describe("BasicSettings", () => {
     render(<BasicSettings />);
     const agents = await screen.findByTestId("agents-section");
     const general = screen.getByText("General");
-    // DOCUMENT_POSITION_FOLLOWING means `general` comes after `agents`.
     expect(agents.compareDocumentPosition(general) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -114,7 +105,6 @@ describe("BasicSettings", () => {
     expect(screen.getByText("Agent settings are available on desktop.")).not.toBeNull();
     expect(screen.queryByTestId("agents-section")).toBeNull();
     expect(screen.getByText("Quick Chat models")).not.toBeNull();
-    // The rest of Basic still renders.
     expect(screen.getByText("General")).not.toBeNull();
   });
 
@@ -135,9 +125,6 @@ describe("BasicSettings", () => {
     });
     render(<BasicSettings />);
 
-    // Autosave off is exactly when the manual "Save Chat as Note" button
-    // appears, and it names its note from this template — so this is the one
-    // state where the template must not be hidden.
     fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
     expect(screen.getByText("Conversation Filename Template")).not.toBeNull();
   });
@@ -227,8 +214,6 @@ describe("BasicSettings", () => {
   });
 
   it("changes the Copilot folder without prompting about Miyo", async () => {
-    // Copilot no longer mirrors its folder scope into Miyo's registration, so a
-    // root change is purely local and must not raise a Miyo notice.
     render(<BasicSettings />);
     fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
@@ -252,15 +237,12 @@ describe("BasicSettings", () => {
   it("opens a blank vault AGENTS.md, never seeded from a Chat prompt", async () => {
     render(<BasicSettings />);
     fireEvent.click(await screen.findByRole("button", { name: /Open AGENTS.md/ }));
-    // Opening awaits the flushed save first, so the open lands a tick later.
     await waitFor(() =>
       expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "", true)
     );
   });
 
   it("lands a pending edit before opening the file, so the open cannot race the save", async () => {
-    // Both paths create the file when it is missing; letting them race loses whatever the user
-    // typed inside the debounce window to an already-exists failure.
     render(<BasicSettings />);
     const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
     fireEvent.change(editor, { target: { value: "Always cite." } });
@@ -293,9 +275,7 @@ describe("BasicSettings", () => {
       const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
       fireEvent.change(editor, { target: { value: "Always cite." } });
 
-      // The debounce is what keeps this from being one vault write per keystroke.
       expect(writeAgentsFile).not.toHaveBeenCalled();
-      // Async act: writes go through a queue, so the call starts a microtask after the timer.
       await act(async () => {
         jest.advanceTimersByTime(1000);
       });
@@ -325,7 +305,6 @@ describe("BasicSettings", () => {
       });
       expect(writeAgentsFile).toHaveBeenCalledTimes(1);
 
-      // Second debounce fires while the first write is still in flight.
       fireEvent.change(editor, { target: { value: "Second" } });
       await act(async () => {
         jest.advanceTimersByTime(1000);

@@ -15,7 +15,6 @@ describe("isSelfHostedUrl", () => {
     "http://[::1]:8080",
     "http://[fd00::1]:8080",
     "http://[fe80::1]",
-    // IPv4-mapped IPv6: Node normalizes the dotted form to hex, but accept both.
     "http://[::ffff:127.0.0.1]:11434",
     "http://[::ffff:7f00:1]:11434",
     "http://[::ffff:10.0.0.1]",
@@ -24,7 +23,6 @@ describe("isSelfHostedUrl", () => {
     "http://ollama.local:11434/v1",
     "http://mybox.lan",
     "http://gpu.internal:8000",
-    // scheme-less input a user might paste
     "localhost:11434",
     "127.0.0.1:1234",
   ])("treats %s as self-hosted", (url) => {
@@ -35,11 +33,8 @@ describe("isSelfHostedUrl", () => {
     "https://api.openai.com/v1",
     "https://api.groq.com/openai/v1",
     "https://openrouter.ai/api/v1",
-    // 172.32 is outside the 172.16–31 private range
     "http://172.32.0.1",
-    // 11/8 is public despite the leading 1
     "http://11.0.0.1",
-    // IPv4-mapped IPv6 wrapping a public address
     "http://[::ffff:8.8.8.8]",
     undefined,
     "",

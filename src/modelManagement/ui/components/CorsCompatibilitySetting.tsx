@@ -12,10 +12,6 @@ export interface CorsCompatibilitySettingProps {
 export const CORS_COMPATIBILITY_TOOLTIP =
   "Some Quick Chat models require CORS compatibility to connect. When enabled, responses appear only after they finish instead of streaming token by token.";
 
-/**
- * Lets a user choose whether Quick Chat prioritizes cross-origin compatibility
- * or streaming for a provider endpoint.
- */
 export const CorsCompatibilitySetting: React.FC<CorsCompatibilitySettingProps> = ({
   checked,
   onCheckedChange,

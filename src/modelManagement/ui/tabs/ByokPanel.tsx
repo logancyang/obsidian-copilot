@@ -1,12 +1,3 @@
-/**
- * BYOK settings panel — the central registry UI.
- *
- * Lists every BYOK provider (origin `"byok"`) with its configured models,
- * and drives the add / configure / remove flows. Reactive reads come from
- * Jotai atoms; mutations go through `useModelManagement()`. The catalog is
- * loaded once on mount (disk cache, no network unless stale) and kept in
- * local state so it can be passed down to the Add Provider dialog.
- */
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/ui/SearchBar";
@@ -39,16 +30,10 @@ const EMPTY_VERIFICATION: Readonly<Record<string, VerificationResult>> = Object.
 const EMPTY_CATALOG: readonly CatalogProvider[] = Object.freeze([]);
 const EMPTY_MODELS: readonly ConfiguredModel[] = Object.freeze([]);
 
-/**
- * `ByokPanel` — root component for the Models settings tab.
- */
 export const ByokPanel: React.FC = () => {
   const api = useModelManagement();
   const app = useApp();
 
-  // Self-Host Mode keeps cloud BYOK providers listed but sorts them below
-  // self-hosted / local endpoints (each is flagged in-row). Projection only —
-  // nothing is removed from disk or reordered in settings.
   const providers = useAtomValue(visibleByokProvidersAtom, { store: settingsStore });
   const configuredModels = useAtomValue(configuredModelsAtom, { store: settingsStore });
   const selfHostOn = useSettingsValue().enableSelfHostMode;
@@ -93,9 +78,6 @@ export const ByokPanel: React.FC = () => {
     };
   }, [api, verificationProviders]);
 
-  // Load the catalog once and keep our snapshot in sync. The disk-load path
-  // of `ensureLoaded` does NOT fire `onChange`, so we sync explicitly after
-  // it resolves; `onChange` covers manual refreshes.
   useEffect(() => {
     let cancelled = false;
     const sync = (): void => {
@@ -216,8 +198,6 @@ export const ByokPanel: React.FC = () => {
       <SearchBar value={query} onChange={setQuery} placeholder="Search providers…" />
 
       <div className="tw-flex tw-flex-col">
-        {/* https://github.com/logancyang/obsidian-copilot/issues/3147:
-            Current provider health must stay visible while the model catalog loads. */}
         <ByokGlobalTable
           groups={groups}
           emptyMessage={

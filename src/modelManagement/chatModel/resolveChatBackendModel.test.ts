@@ -26,7 +26,6 @@ function okEntry(configuredModelId: string, prov: Provider): EnabledBackendEntry
   return { configuredModelId, state: "ok", configuredModel, provider: prov };
 }
 
-/** Minimal api stub exposing only what the resolver reads. */
 function makeApi(
   entries: readonly EnabledBackendEntry[],
   keyByProvider: Record<string, string | null> = {}

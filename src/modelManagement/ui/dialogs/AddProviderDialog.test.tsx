@@ -4,7 +4,6 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { AddProviderContent } from "./AddProviderDialog";
 
-// Radix Tooltip/Dialog portals resolve `activeDocument` at render time.
 beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
 });

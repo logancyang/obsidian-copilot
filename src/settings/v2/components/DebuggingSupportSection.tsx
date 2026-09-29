@@ -5,30 +5,16 @@ import { SettingSwitch } from "@/components/ui/setting-switch";
 import React from "react";
 
 export interface DebuggingSupportSectionProps {
-  /** Whether console logging of chat activity is on. */
   debug: boolean;
   onDebugChange: (checked: boolean) => void;
-  /** Whether full Agent Mode frames are written to disk. */
   frameLogEnabled: boolean;
   onFrameLogChange: (checked: boolean) => void;
-  /**
-   * Where the frame log lives, shown so the user can find it without this
-   * component knowing whether the platform has a filesystem at all.
-   */
   frameLogPath: string;
   onReportIssue: () => void;
   onOpenFrameLog: React.MouseEventHandler<HTMLButtonElement>;
   onClearFrameLog: React.MouseEventHandler<HTMLButtonElement>;
 }
 
-/**
- * The Advanced tab's "Debugging & support" section: the report entry point and
- * the two logs a report can carry.
- *
- * Presentational on purpose — it takes the two switch values and the four
- * actions rather than reading settings itself, so the section's states can be
- * rendered in the gallery without standing up a settings context.
- */
 export const DebuggingSupportSection: React.FC<DebuggingSupportSectionProps> = ({
   debug,
   onDebugChange,
@@ -39,9 +25,6 @@ export const DebuggingSupportSection: React.FC<DebuggingSupportSectionProps> = (
   onOpenFrameLog,
   onClearFrameLog,
 }) => (
-  // The report flow is the one settings entry point for collecting and reviewing
-  // diagnostic logs; it attaches the regular chat log itself. The command-palette
-  // "Copilot: Create log file" stays for anyone who wants that log as a vault note.
   <SettingSection label="Debugging & support">
     <SettingItem
       type="custom"

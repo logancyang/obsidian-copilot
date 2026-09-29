@@ -1,11 +1,3 @@
-/**
- * Single global table that renders every BYOK provider as a collapsible
- * accordion card with model rows beneath it.
- *
- * Each provider is a collapsible card (default collapsed). The header shows
- * chevron, provider name, model count, status badge, and overflow menu. When
- * expanded, model names appear in a vertical list with hover × remove.
- */
 import { ProviderVerificationStatus } from "@/modelManagement/ui/components/ProviderVerificationStatus";
 import type { VerificationResult } from "@/modelManagement/types/runtime";
 import { Button } from "@/components/ui/button";
@@ -29,40 +21,26 @@ import { useApp } from "@/context";
 import { logError } from "@/logger";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
-/** One provider plus the configured models that belong to it. */
 export interface ByokTableGroup {
   provider: Provider;
   models: ConfiguredModel[];
-  /** Latest check from this tab visit; absent while checking. */
   verification?: VerificationResult;
-  /** `true` when Self-Host Mode is on and this is a cloud provider — the card
-   *  header shows a cloud-egress warning icon. */
   needsSelfHostWarning?: boolean;
 }
 
 interface ByokGlobalTableProps {
   groups: readonly ByokTableGroup[];
-  /** "Configure" picked from the section's overflow menu. */
   onConfigure: (providerId: string) => void;
-  /** "Remove provider" picked from the section's overflow menu. */
   onRemove: (providerId: string) => void;
-  /** Shown when `groups` is empty. Defaults to the no-providers prompt;
-   *  callers pass a search-specific message when a filter is active. */
   emptyMessage?: React.ReactNode;
 }
 
-/**
- * `ByokGlobalTable` — accordion of provider cards, each collapsible.
- */
 export const ByokGlobalTable: React.FC<ByokGlobalTableProps> = ({
   groups,
   onConfigure,
   onRemove,
   emptyMessage,
 }) => {
-  // Portal target for the per-row DropdownMenuContent. Without this, Radix
-  // portals into `activeDocument.body` — outside the settings modal —
-  // where pointer events don't reach the menu items.
   const containerRef = useRef<HTMLDivElement>(null);
 
   if (groups.length === 0) {
@@ -132,10 +110,6 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
     modal.open();
   };
 
-  // Sub-line under the provider name. Local providers describe themselves
-  // (their models aren't a curated count); key-based providers show the
-  // configured-model count, with a clearer phrasing for the empty case than
-  // a bare "0 models".
   const getSubLine = (): string => {
     if (!providerRequiresApiKey(provider)) {
       return "Local models on your machine";
@@ -158,9 +132,6 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
       >
         <CollapsibleTrigger asChild>
           <div
-            // role/tabIndex/onKeyDown make the header keyboard-operable: a bare
-            // clickable div is mouse-only. A real <button> can't be used here
-            // because the overflow-menu trigger button is nested inside.
             role="button"
             tabIndex={0}
             aria-expanded={isOpen}
@@ -266,10 +237,6 @@ const ModelRow: React.FC<{ model: ConfiguredModel; onRemove: () => void }> = ({
       )}
     >
       <span className="tw-flex-1 tw-truncate">{model.info.displayName}</span>
-      {/* Mirrors the context-manager modal's remove × (XIcon, size-4,
-          group-hover reveal, warning-on-hover) but stays a real focusable
-          Button so keyboard users can Tab to it. focus-visible keeps it
-          revealed when reached without a pointer. */}
       <Button
         variant="ghost"
         size="icon"

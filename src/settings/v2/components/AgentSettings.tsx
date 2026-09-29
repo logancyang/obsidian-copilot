@@ -26,10 +26,8 @@ import { QuickChatPanel } from "./QuickChatPanel";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
 import { AgentNotificationSoundSettings } from "./ui/AgentNotificationSoundSettings";
 
-/** Synthetic sub-tab id for the (non-backend) Quick Chat model curation. */
 const QUICK_CHAT_TAB_ID = "quickchat";
 
-/** Nearest scrollable ancestor, used to keep the tab strip anchored on switch. */
 function getScrollableParent(el: HTMLElement): HTMLElement | null {
   let node: HTMLElement | null = el.parentElement;
   while (node) {
@@ -40,15 +38,6 @@ function getScrollableParent(el: HTMLElement): HTMLElement | null {
   return null;
 }
 
-/**
- * The "Agents" section of the Basic settings tab. Owns the global
- * default-backend picker and a sub-tab strip with one panel per backend plus a
- * Quick Chat panel. Each backend panel curates that backend's default model,
- * enabled models, and binary/auth config.
- *
- * Desktop-only: the caller must gate on `isDesktopRuntime()` before rendering
- * this, because the `@/agentMode` barrel it imports pulls in Node-only modules.
- */
 export const AgentSettings: React.FC = () => {
   const settings = useSettingsValue();
   const plugin = usePlugin();
@@ -56,10 +45,6 @@ export const AgentSettings: React.FC = () => {
   const tabStripRef = React.useRef<HTMLDivElement>(null);
   const pendingAnchorTop = React.useRef<number | null>(null);
 
-  // Panels vary widely in height (opencode's model list is long, Quick Chat is
-  // short), so switching to a shorter one clamps the settings scroll and jumps
-  // the view. Pin the tab strip to its pre-switch viewport position so only the
-  // content below it changes.
   React.useLayoutEffect(() => {
     const strip = tabStripRef.current;
     if (!strip || pendingAnchorTop.current === null) return;
@@ -76,9 +61,6 @@ export const AgentSettings: React.FC = () => {
     setSelectedTab(id);
   }, []);
 
-  // Every registered backend shows here — Self-Host Mode marks cloud agents
-  // (warning banner in their panel) rather than hiding them. Cloud agents sort
-  // last because `backendDisplayOrder()` lists the self-hostable opencode first.
   const orderedDescriptors = backendDisplayOrder();
 
   const tabs: TabItemType[] = [
@@ -90,11 +72,8 @@ export const AgentSettings: React.FC = () => {
     { id: QUICK_CHAT_TAB_ID, icon: <MessageCircle className="tw-size-4" />, label: "Quick Chat" },
   ];
 
-  // Guard against a persisted selection naming a removed backend id (unrelated
-  // to Self-Host Mode, which no longer hides tabs): fall back to the first tab.
   const selectedTabId = tabs.some((tab) => tab.id === selectedTab) ? selectedTab : tabs[0].id;
 
-  // Same unknown-id guard for the persisted `activeBackend`.
   const activeBackendValue = orderedDescriptors.some(
     (d) => d.id === settings.agentMode.activeBackend
   )
@@ -168,13 +147,6 @@ export const AgentSettings: React.FC = () => {
   );
 };
 
-/**
- * One per-backend panel: install header, then (when ready) the default-model
- * picker above the model enable list, then the binary/auth config. If the
- * backend is installed but no catalog is cached yet, it kicks a probe so
- * discovery enrolls the reported models, which then populate the list (the
- * list reads the model-management registry, not the probe state).
- */
 const BackendPanel: React.FC<{
   descriptor: BackendDescriptor;
   plugin: ReturnType<typeof usePlugin>;
@@ -188,8 +160,6 @@ const BackendPanel: React.FC<{
   const auth = useBackendAuthState(descriptor);
   const resolvedPath = descriptor.getResolvedBinaryPath?.(settings) ?? null;
 
-  // Probe when ready but uncached — the load-time preload may have skipped this
-  // backend (binary installed after plugin start).
   React.useEffect(() => {
     if (!manager) return;
     if (installState.kind !== "ready") return;
@@ -213,11 +183,6 @@ const BackendPanel: React.FC<{
           </div>
         </div>
       )}
-      {/* One card per panel, rows divided by `SettingSection`. It insets and
-          divides its DIRECT children, so each block below has to be a single
-          row-shaped element carrying its own vertical padding — the rows that
-          come from `SettingItem` / `EnvOverridesSetting` already do. The cloud
-          warning stays outside: it qualifies the whole backend, not one row. */}
       <SettingSection>
         <AgentBackendHeader
           displayName={descriptor.displayName}

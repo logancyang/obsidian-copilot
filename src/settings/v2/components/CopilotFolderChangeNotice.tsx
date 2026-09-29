@@ -3,17 +3,11 @@ import { AlertTriangle, FolderSync } from "lucide-react";
 import React from "react";
 
 export interface CopilotFolderChangeNoticeProps {
-  /** Current Copilot root that remains excluded after the change. */
   oldRoot: string;
-  /** Candidate Copilot root where future data will be stored. */
   newRoot: string;
-  /** Whether the candidate already contains Markdown files. */
   containsMarkdown: boolean;
 }
 
-/**
- * Explains the lasting search exclusions before a Copilot folder change is committed.
- */
 export const CopilotFolderChangeNotice: React.FC<CopilotFolderChangeNoticeProps> = ({
   oldRoot,
   newRoot,

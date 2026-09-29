@@ -27,7 +27,6 @@ import {
   getTagPattern,
 } from "@/search/searchUtils";
 
-// Pattern type configuration (consistent with context-manage-modal)
 const PATTERN_TYPE_CONFIG = {
   folder: { icon: Folder, label: "Folder", colorClass: "tw-text-context-manager-yellow" },
   tag: { icon: Tag, label: "Tag", colorClass: "tw-text-context-manager-orange" },
@@ -41,7 +40,6 @@ interface PatternListEditorProps {
   value: string;
   onChange: (value: string) => void;
   maxCollapsedHeight?: number;
-  /** Max height when expanded — content scrolls beyond this. */
   maxExpandedHeight?: number;
 }
 
@@ -58,30 +56,18 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Use ref to always have access to latest value in modal callbacks
-  // This prevents stale closure issues when modal is open and settings change
   const valueRef = useRef(value);
   valueRef.current = value;
 
-  // Helper to decode and deduplicate patterns
   const getUniquePatterns = (val: string) => [...new Set(getDecodedPatterns(val))];
 
-  // Parse and deduplicate patterns
   const patterns = useMemo(() => getUniquePatterns(value), [value]);
 
-  // DESIGN NOTE — this editor owns four of the five categories `categorizePatterns`
-  // returns. The fifth, `propertyPatterns`, belongs to project context; here it has
-  // no badge, and the rebuilds in `updatePatterns` and `handleAddCustom` name their
-  // keys explicitly, so a property pattern typed in or synced from elsewhere is
-  // dropped on the next edit. The matcher itself honours stored property patterns,
-  // which is why nothing in this UI may offer `[key:value]` until the editor can
-  // show and remove them. If a future review flags this again, point them at this note.
   const { tagPatterns, extensionPatterns, folderPatterns, notePatterns } = useMemo(
     () => categorizePatterns(patterns),
     [patterns]
   );
 
-  // Use ResizeObserver to detect overflow (responds to container size changes)
   useLayoutEffect(() => {
     const el = contentRef.current;
     if (!el) return;
@@ -94,7 +80,6 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
 
     checkOverflow();
 
-    // Guard for test/JSDOM environments where ResizeObserver may not exist
     if (typeof ResizeObserver === "undefined") return;
 
     const observer = new ResizeObserver(checkOverflow);
@@ -104,12 +89,10 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
   }, [maxCollapsedHeight, patterns]);
 
   const isTruncated = isOverflowing && !isExpanded;
-  // Reason: Cap expanded height so the badge list scrolls instead of pushing the modal off-screen.
   const animatedMaxHeight = isExpanded
     ? Math.min(contentHeight, maxExpandedHeight)
     : maxCollapsedHeight;
 
-  // Update patterns
   const updatePatterns = (newCategories: {
     tagPatterns?: string[];
     extensionPatterns?: string[];
@@ -125,7 +108,6 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
     onChange(newValue);
   };
 
-  // Handle pattern removal
   const handleRemove = (pattern: string, type: PatternType) => {
     const filterFn = (p: string) => p !== pattern;
     switch (type) {
@@ -144,10 +126,8 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
     }
   };
 
-  // Helper to get fresh categories from valueRef (avoids stale closure in modal callbacks)
   const getFreshCategories = () => categorizePatterns(getUniquePatterns(valueRef.current));
 
-  // Helper to add a pattern if it doesn't already exist
   const addPatternIfNew = (
     category: keyof ReturnType<typeof categorizePatterns>,
     pattern: string
@@ -162,7 +142,6 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
     }
   };
 
-  // Handle pattern addition - use valueRef to get latest value when modal callback executes
   const handleAddFolder = () => {
     new FolderSearchModal(app, (folder) => {
       addPatternIfNew("folderPatterns", folder);
@@ -224,7 +203,6 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
     }).open();
   };
 
-  // Render a single badge (styled like context-manage-modal)
   const renderBadge = (pattern: string, type: PatternType) => {
     const config = PATTERN_TYPE_CONFIG[type];
     const Icon = config.icon;
@@ -250,7 +228,6 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
     );
   };
 
-  // Prepare badge data
   const allBadges = useMemo(() => {
     const badges: { pattern: string; type: PatternType }[] = [];
     folderPatterns.forEach((p) => badges.push({ pattern: p, type: "folder" }));
@@ -264,7 +241,6 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
 
   return (
     <div ref={containerRef} className="tw-flex tw-w-full tw-flex-col tw-gap-2">
-      {/* Content container */}
       <div className="tw-relative tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2">
         <div
           ref={contentRef}
@@ -276,14 +252,12 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
           )}
           style={{ maxHeight: isOverflowing ? animatedMaxHeight : undefined }}
         >
-          {/* Empty state */}
           {!hasPatterns && (
             <div className="tw-py-2 tw-text-center tw-text-sm tw-italic tw-text-muted">
               No patterns configured
             </div>
           )}
 
-          {/* Badge list - always render all, CSS handles truncation */}
           {hasPatterns && (
             <div className="tw-flex tw-flex-wrap tw-gap-1.5">
               {allBadges.map((b) => renderBadge(b.pattern, b.type))}
@@ -291,15 +265,12 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
           )}
         </div>
 
-        {/* Gradient fade mask */}
         {isTruncated && (
           <div className="copilot-fade-mask-bottom tw-pointer-events-none tw-absolute tw-inset-x-0 tw-bottom-0 tw-h-10 tw-rounded-b-md" />
         )}
       </div>
 
-      {/* Control bar: single row, Show on left, Add on right */}
       <div className="tw-flex tw-flex-row tw-items-center tw-justify-between">
-        {/* Expand/collapse button (left side) */}
         {isOverflowing ? (
           <Button
             variant="ghost2"
@@ -318,10 +289,9 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
             )}
           </Button>
         ) : (
-          <div /> // Spacer to keep Add button on the right
+          <div />
         )}
 
-        {/* Add dropdown menu (right side) */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" className="tw-h-9 tw-gap-1 tw-px-3 sm:tw-h-auto sm:tw-px-2">

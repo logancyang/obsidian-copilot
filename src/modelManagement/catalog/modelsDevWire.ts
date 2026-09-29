@@ -1,12 +1,3 @@
-/**
- * Wire-shape types for the `models.dev/api.json` response.
- *
- * Kept permissive: every field except the per-provider/per-model `id`
- * is optional, so a small upstream schema addition doesn't break us.
- * Runtime validation lives in `catalogTransform` — it filters bad
- * entries individually instead of rejecting the whole payload.
- */
-
 export interface WireModel {
   id: string;
   name?: string;

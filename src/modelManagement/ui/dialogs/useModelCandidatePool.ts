@@ -1,16 +1,3 @@
-/**
- * `useModelCandidatePool` — the model-selection state machine behind
- * `ConfigureProviderForm`. It owns the candidate pool (existing ∪ fetched ∪
- * manual − removed), the live `GET /models` fetch, and the catalog →
- * snapshot → synthesize precedence used to materialize `ModelInfo`s for the
- * picker and the save path. The dialog body is left as a thin presenter that
- * reads `availableModels` / `selectedWireIds` and routes ticks through the
- * returned actions.
- *
- * `models.dev` (the catalog) is a metadata enhancer here, never a source of
- * truth: candidate ids come from existing configured models (edit), the live
- * endpoint, or manual entry. Catalog hits only enrich row labels/limits.
- */
 import { looksLikeEmbeddingModel } from "@/modelManagement/catalog/catalogTransform";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
 import { listProviderModels } from "@/modelManagement/providers/adapters/listProviderModels";
@@ -20,19 +7,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export interface UseModelCandidatePoolArgs {
   mode: "new" | "edit";
-  /** Edit mode only — the provider whose saved key the fetch falls back to. */
   providerId: string | undefined;
   providerType: ProviderType | undefined;
   effectiveBaseUrl: string;
   existingModels: readonly ConfiguredModel[];
-  /** Catalog metadata for row enrichment; referentially stable per provider. */
   catalogMetadata: Record<string, ModelInfo>;
-  /** Read lazily inside the fetch so edits don't re-fire the mount fetch. */
   apiKey: string;
   extras: Record<string, unknown>;
-  /** New mode: skip the mount fetch until the user has typed a key. */
   requiresApiKey: boolean;
-  /** Edit mode: gate the mount fetch on the provider row having hydrated. */
   providerHydrated: boolean;
   api: ModelManagementApi;
 }
@@ -41,7 +23,6 @@ export interface ModelCandidatePool {
   availableModels: readonly ModelInfo[];
   customIds: ReadonlySet<string>;
   selectedWireIds: ReadonlySet<string>;
-  /** Existing rows the user X'd this session — the save path persists these. */
   removedExistingIds: ReadonlySet<string>;
   fetching: boolean;
   fetchError: string | null;
@@ -50,7 +31,6 @@ export interface ModelCandidatePool {
   toggle: (wireId: string, next: boolean) => void;
   addId: (id: string) => void;
   removeId: (id: string) => void;
-  /** Re-run the live model fetch (e.g. after a successful credential test). */
   fetchModels: () => Promise<void>;
 }
 
@@ -81,8 +61,6 @@ export function useModelCandidatePool({
     [existingModels]
   );
 
-  // Single resolver for the catalog → snapshot → synthesize precedence so
-  // the picker and the save path don't drift on what gets persisted.
   const resolveModelInfo = useCallback(
     (id: string): ModelInfo =>
       catalogMetadata[id] ??
@@ -95,8 +73,6 @@ export function useModelCandidatePool({
     [catalogMetadata, existingByWireId]
   );
 
-  // Candidate pool — existing (edit) ∪ fetched ∪ manual, with insertion
-  // order preserved so the user sees rows in the order they appeared.
   const availableModels = useMemo<readonly ModelInfo[]>(() => {
     const seen = new Set<string>();
     const out: ModelInfo[] = [];
@@ -114,12 +90,6 @@ export function useModelCandidatePool({
     return out;
   }, [existingModels, fetchedIds, manualIds, resolveModelInfo, removedExistingIds]);
 
-  // Custom-added ids — drives both the X-button visibility and the
-  // custom-first sort tier in the checklist. An id is custom if the user
-  // hand-typed it this session, OR (for previously-saved rows in edit mode)
-  // it's not known to the catalog and the live endpoint didn't surface it.
-  // When the catalog is offline and the fetch fails, saved rows degrade to
-  // "all custom" — same as today's pre-fix behavior, no regression.
   const customIds = useMemo<ReadonlySet<string>>(() => {
     const set = new Set<string>(manualIds);
     const fetched = new Set(fetchedIds);
@@ -132,9 +102,6 @@ export function useModelCandidatePool({
     return set;
   }, [manualIds, fetchedIds, existingModels, catalogMetadata, removedExistingIds]);
 
-  // Track the merged "known id" set in a ref so `fetchModels` can diff
-  // without depending on `fetchedIds` / `manualIds` (which would re-fire
-  // the mount-fetch effect every time the user adds a manual id).
   const knownIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const next = new Set<string>();
@@ -158,9 +125,6 @@ export function useModelCandidatePool({
         extras,
       });
       if (result.ok) {
-        // Discovered ids populate the candidate list only — the user
-        // explicitly ticks the ones they want before Save. Diff against
-        // the known-id pool so re-fetches don't duplicate rows.
         const known = knownIdsRef.current;
         const trulyNew = result.modelIds.filter((id) => !known.has(id));
         if (trulyNew.length > 0) {
@@ -182,11 +146,6 @@ export function useModelCandidatePool({
   // https://github.com/logancyang/obsidian-copilot/issues/2895
   const initialBaseUrlRef = useRef(effectiveBaseUrl);
 
-  // Auto-fetch once on mount. In edit mode wait for the provider row to
-  // hydrate so the saved-key probe uses the correct providerId. Skip in new
-  // mode when the provider requires a key and the field is still empty — the
-  // adapter would 401 and noise the picker with a misleading auth error
-  // before the user has typed anything. A successful test re-fires the fetch.
   const mountFetchedRef = useRef(false);
   useEffect(() => {
     if (mountFetchedRef.current) return;
@@ -208,8 +167,6 @@ export function useModelCandidatePool({
   }, []);
 
   const addId = useCallback((id: string): void => {
-    // Manual add: append to the manual pool (skipping if already present)
-    // and auto-check, since the user explicitly typed it.
     setManualIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
     setSelectedWireIds((prev) => {
       if (prev.has(id)) return prev;
@@ -229,10 +186,6 @@ export function useModelCandidatePool({
         ns.delete(id);
         return ns;
       });
-      // Saved-custom rows live in `existingModels` (sourced from atoms);
-      // mark them removed locally so the row disappears now. Unchecking
-      // them above lets the save path's deselect-and-bulkSet logic persist
-      // the removal on save.
       if (existingByWireId.has(id)) {
         setRemovedExistingIds((prev) => {
           if (prev.has(id)) return prev;
@@ -245,10 +198,6 @@ export function useModelCandidatePool({
     [existingByWireId]
   );
 
-  // Resolved `ModelInfo`s for the selected ids — same catalog → snapshot →
-  // synthesize precedence the picker rendered, so what gets persisted matches
-  // what the user saw. Capabilities ride along on each `ModelInfo` (its
-  // `modalities` / `reasoning`); there's no separate overlay.
   const buildSelectedModelInfos = useCallback(
     (): ModelInfo[] => [...selectedWireIds].map((id) => resolveModelInfo(id)),
     [selectedWireIds, resolveModelInfo]

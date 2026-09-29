@@ -57,9 +57,6 @@ export const AdvancedSettings: React.FC = () => {
   const keychainAppearsEmpty = keychainAvailable && !hasPersistedSecrets(settings);
 
   const handleReportIssue = useCallback(() => {
-    // Gate before importing the agentMode barrel: on mobile the barrel pulls in
-    // Node-only modules that throw during evaluation, so the desktop check must
-    // happen first (mirrors the frame-log buttons below).
     if (!isDesktopRuntime()) {
       new Notice("Reporting an issue is available on desktop only.");
       return;
@@ -76,29 +73,15 @@ export const AdvancedSettings: React.FC = () => {
           };
         }
       ).plugins.getPlugin("copilot");
-      // Prefer the active session's backend: switching Agent Mode tabs changes
-      // the active session without touching the persisted default backend, so
-      // settings.agentMode.activeBackend can name the wrong pane.
       const activeBackend =
         copilotPlugin?.agentSessionManager?.getActiveSession?.()?.backendId ??
         settings.agentMode.activeBackend;
-      // One version for the environment block and the uploader alike. The
-      // "unknown" sentinel is fine to *display* in report.md, and deliberately
-      // handled at the other end of the wire: the adapter refuses to upload
-      // under it, so it can never reach the endpoint (which rejects it).
       const pluginVersion = copilotPlugin?.manifest?.version ?? "unknown";
       new ReportIssueModal({
         app,
         activeBackend,
         pluginVersion,
-        // Side-effect free, because this runs while the form is still up: it
-        // only reports whether there is a pane to photograph, so the modal can
-        // grey the option out instead of promising a shot it cannot take.
         canCaptureTarget: () => app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE).length > 0,
-        // Resolve at capture time so the agent pane is revealed first — the
-        // screenshot should be the chat surface. Null when no agent pane is
-        // open. Whether Settings also has to go is the modal's call, not this
-        // one's: it depends on which window each of them ended up in.
         resolveCaptureTarget: () => {
           const leaf = app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE)[0];
           if (!leaf) return null;
@@ -112,9 +95,6 @@ export const AdvancedSettings: React.FC = () => {
         dismissSettings: () => {
           (app as unknown as { setting: { close: () => void } }).setting.close();
         },
-        // `installId` is a getter, resolved on the upload click rather than
-        // here: its failure mode (unusable vault storage) should surface on the
-        // action that needs it, as a refusal to upload — not break the modal.
         uploader: createReportUploader({
           installId: () => getPersistedDeviceId(app),
           clientVersion: pluginVersion,
@@ -155,7 +135,6 @@ export const AdvancedSettings: React.FC = () => {
   const handleForgetAllSecrets = useCallback(async () => {
     if (forgetting) return;
 
-    // Reason: double-confirm destructive action via project ConfirmModal
     const confirmed = await new Promise<boolean>((resolve) => {
       new ConfirmModal(
         app,
@@ -177,14 +156,8 @@ export const AdvancedSettings: React.FC = () => {
       const keychain = KeychainService.getInstance();
       const saveData = getCopilotSaveData(app);
 
-      // Reason: run inside the persistence queue to prevent interleaving
-      // with normal saves that could restore old secrets.
       await runPersistenceTransaction(() =>
         keychain.forgetAllSecrets(
-          // Reason: this write strips data.json outside the normal save path,
-          // so once it resolves any pre-v4 credentials it was holding back are
-          // gone and ordinary saves can resume. Tied to the write itself, not
-          // to how the transaction settles, because only the write knows.
           async (data) => {
             await saveData(data);
             releaseLegacyCredentialHold();
@@ -208,7 +181,6 @@ export const AdvancedSettings: React.FC = () => {
     <div className="tw-space-y-4">
       <LegacyChatPromptsNotice />
 
-      {/* Others Section */}
       <SettingSection label="Others">
         <SettingItem
           type="custom"

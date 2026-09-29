@@ -21,8 +21,6 @@ import { getSettings } from "@/settings/model";
 import { DEFAULT_SETTINGS } from "@/constants";
 
 jest.mock("obsidian", () => ({
-  // Collapse duplicate separators and trim edges the way Obsidian's helper does,
-  // enough for the derived-path assertions here.
   normalizePath: (path: string) => path.replace(/\/+/g, "/").replace(/^\/|\/$/g, ""),
 }));
 
@@ -40,7 +38,6 @@ jest.mock("@/logger", () => ({
 
 const mockedGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
 
-/** Build the minimal settings slice the derivation helpers read. */
 function settingsWithRoot(copilotFolder: string): CopilotSettings {
   return { copilotFolder } as CopilotSettings;
 }
@@ -195,14 +192,11 @@ describe("copilotFolder", () => {
       await expect(
         ensureCopilotSubfolders(fakeVault, settingsWithRoot("copilot"))
       ).resolves.toBeUndefined();
-      // All six are still attempted even though the first threw.
       expect(ensureFolderExists).toHaveBeenCalledTimes(6);
     });
   });
 
   describe("byte-for-byte parity with the retired default sub-folders", () => {
-    // Reason: a default vault (copilotFolder === "copilot") must resolve to the
-    // exact paths the retired per-folder defaults used, so upgrades are a no-op.
     const settings = DEFAULT_SETTINGS;
 
     it("matches the default conversations folder", () => {

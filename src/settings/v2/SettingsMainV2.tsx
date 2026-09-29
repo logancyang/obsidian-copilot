@@ -19,23 +19,11 @@ import { DesktopOnlySettingsPanel } from "./components/DesktopOnlySettingsPanel"
 import { MiyoSettings } from "./components/MiyoSettings";
 import { SelfHostSettings } from "./components/SelfHostSettings";
 
-// DESIGN NOTE (settings-v4, part 1): there is intentionally no "QA"/"Search"
-// tab here. The legacy QASettings panel was removed as orphan-component cleanup
-// (see designdocs/SETTINGS_REDESIGN_V4.md and SETTINGS_V4_PR_PLAN.md); the
-// underlying fields are NOT dropped yet so existing data remains loadable:
-//   - qaInclusions/qaExclusions — still consumed as the query-time scope filter
-//     over search results; their edit UI is deferred per issue #195
-//     ("defer include/exclude").
-//   - maxSourceChunks / enableInlineCitations — still read by search and chat.
-//     compatibility fields awaiting their dedicated settings migration.
 const LazySkillsSettings = React.lazy(() =>
   import("@/agentMode").then((module) => ({ default: module.SkillsSettings }))
 );
 
 const SkillsSettingsPanel: React.FC = () => {
-  // Gate before the dynamic import: on mobile the `@/agentMode` barrel pulls in
-  // Node-only modules that throw while being evaluated, so the desktop check
-  // has to happen before the import is ever requested.
   if (!isDesktopRuntime()) {
     return <DesktopOnlySettingsPanel message="Skills are available on desktop." />;
   }
@@ -46,7 +34,6 @@ const SkillsSettingsPanel: React.FC = () => {
   );
 };
 
-// tab icons
 const icons: Record<CopilotSettingsTabId, JSX.Element> = {
   basic: <Cog className="tw-size-5" />,
   byok: <Cpu className="tw-size-5" />,
@@ -57,7 +44,6 @@ const icons: Record<CopilotSettingsTabId, JSX.Element> = {
   advanced: <Wrench className="tw-size-5" />,
 };
 
-// tab components
 const components: Record<CopilotSettingsTabId, React.FC> = {
   basic: () => <BasicSettings />,
   byok: () => <ByokPanel />,
@@ -68,8 +54,6 @@ const components: Record<CopilotSettingsTabId, React.FC> = {
   advanced: () => <AdvancedSettings />,
 };
 
-// Tab labels — most tabs derive from the id, but a few need a display form the
-// id can't produce ("byok" → "BYOK", "selfhost" → "Self-Host").
 const TAB_LABELS: Record<CopilotSettingsTabId, string> = {
   basic: "Basic",
   byok: "BYOK",
@@ -80,7 +64,6 @@ const TAB_LABELS: Record<CopilotSettingsTabId, string> = {
   advanced: "Advanced",
 };
 
-// tabs
 const tabs = COPILOT_SETTINGS_TAB_IDS.map((id) => ({
   id,
   icon: icons[id],
@@ -136,7 +119,6 @@ interface SettingsMainV2Props {
 }
 
 const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "basic" }) => {
-  // Add a key state that we'll change when resetting
   const [resetKey, setResetKey] = React.useState(0);
   const { latestVersion, hasUpdate } = useLatestVersion(plugin.manifest.version);
 
@@ -151,7 +133,6 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "b
   const handleReset = () => {
     const modal = new ResetSettingsConfirmModal(plugin.app, () => {
       resetSettings();
-      // Increment the key to force re-render of all components
       setResetKey((prev) => prev + 1);
     });
     modal.open();
@@ -161,15 +142,8 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "b
     <PluginProvider plugin={plugin}>
       <ModelManagementProvider api={plugin.modelManagement}>
         <TabProvider initialTab={initialTab}>
-          {/* Obsidian 1.13 made the settings window resizable, and the panel has
-              no width of its own — without a cap the rows stretch to whatever
-              the user dragged the window to and every control drifts far from
-              its label. */}
           <div className="tw-mx-auto tw-max-w-[860px]">
             <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
-              {/* Reason: Obsidian's settings modal CSS hides plugin-rendered <h1>
-                elements (display: none) because Obsidian reserves the top-level
-                heading for itself. Use a div with heading-equivalent styling. */}
               <div
                 role="heading"
                 aria-level={1}
@@ -209,7 +183,6 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "b
                 </div>
               </div>
             </div>
-            {/* Add the key prop to force re-render */}
             <SettingsContent key={resetKey} />
           </div>
         </TabProvider>

@@ -1,12 +1,5 @@
 import type { Provider } from "@/modelManagement";
 
-/**
- * Makes authentication optional for existing custom OpenAI-compatible BYOK providers.
- * Stored keychain pointers remain intact, so authenticated providers keep failing
- * closed if their configured secret cannot be resolved.
- *
- * @param providers - Persisted provider map from the pre-v10 settings snapshot.
- */
 export function planOptionalCustomProviderAuthMigration(
   providers: Record<string, Provider>
 ): Record<string, Provider> | null {

@@ -14,7 +14,6 @@ export interface QuickChatModelSettingsProps {
   children: React.ReactNode;
 }
 
-/** Model curation shared by desktop and mobile Quick Chat settings. */
 export const QuickChatModelSettings: React.FC<QuickChatModelSettingsProps> = ({
   defaultModelId,
   options,

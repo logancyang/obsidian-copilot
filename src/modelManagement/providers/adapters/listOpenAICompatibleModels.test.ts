@@ -1,10 +1,3 @@
-/**
- * Tests for `listOpenAICompatibleModels`.
- *
- * Mocks `@/utils.safeFetchNoThrow` to drive the success / parse /
- * auth / http-error / timeout branches.
- */
-
 import { listOpenAICompatibleModels } from "./listOpenAICompatibleModels";
 
 jest.mock("@/utils", () => ({

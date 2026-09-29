@@ -39,11 +39,6 @@ const LazyAgentSettings = React.lazy(() =>
   }))
 );
 
-/**
- * Basic model settings: mobile exposes Quick Chat directly, while desktop
- * lazily loads the backend tabs. The desktop check must precede evaluation of
- * the `@/agentMode` barrel, whose Node-only dependencies cannot run on mobile.
- */
 const AgentsSection: React.FC = () => {
   if (!isDesktopRuntime()) {
     // Quick Chat also runs on mobile; its settings must stay outside the desktop import gate.
@@ -71,9 +66,6 @@ export const BasicSettings: React.FC = () => {
     settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}"
   );
 
-  // Draft + explicit Apply for the Copilot root. Reason: persisting on every
-  // keystroke would re-point every derived sub-folder and trigger reload
-  // watchers per character; a root change also needs an up-front confirmation.
   const persistedRoot = settings.copilotFolder;
   const [folderDraft, setFolderDraft] = useState(persistedRoot);
 
@@ -85,15 +77,7 @@ export const BasicSettings: React.FC = () => {
 
   const [vaultInstructions, setVaultInstructions] = useAgentsFileDraft(app, "");
 
-  // Settings have no Save button, so the file follows the textarea. Debounced because the
-  // alternative is one vault write per keystroke; flushed on unmount so closing the tab
-  // mid-sentence still lands the last edit.
   const saveVaultInstructions = useMemo(() => {
-    // One chain rather than one promise per call. Debouncing bounds how OFTEN a write starts,
-    // not how long one takes: a slow vault (a synced or network-backed one) can still have a
-    // save in flight when the next debounce fires, and if that older write lands second it
-    // overwrites the newer text with no error and nothing on screen to show for it. Queuing
-    // also gives `flush()` a promise that settles only once every queued write has landed.
     let queue: Promise<void> = Promise.resolve();
     const enqueue = (next: string): Promise<void> => {
       queue = queue.then(() =>
@@ -109,14 +93,8 @@ export const BasicSettings: React.FC = () => {
   useEffect(() => () => void saveVaultInstructions.flush(), [saveVaultInstructions]);
 
   const handleOpenVaultInstructions = async () => {
-    // Awaited, not fire-and-forget: `openAgentsFile` creates the file when it is missing, so
-    // racing an in-flight save lets both paths see it as absent and create it. The loser's
-    // write then fails and takes whatever the user typed inside the debounce window with it.
     await saveVaultInstructions.flush();
-    // The settings modal sits above the workspace, so close it or the file opens behind it.
     (app as unknown as { setting: { close: () => void } }).setting.close();
-    // Empty content on purpose: a vault AGENTS.md starts blank. Nothing is migrated into it,
-    // so what the user sees here is only ever what they wrote.
     try {
       await openAgentsFile(app, "", "", true);
     } catch (error) {
@@ -136,9 +114,6 @@ export const BasicSettings: React.FC = () => {
       new Notice("That's already the Copilot folder.", 3000);
       return;
     }
-    // Reason: a path (or ancestor) occupied by an existing FILE would accept
-    // and persist fine, but every folder creation under it fails from then on
-    // — the first visible symptom being a failed chat save much later.
     const conflict = findCopilotRootFileConflict(app, folder);
     if (conflict) {
       new Notice(
@@ -147,9 +122,6 @@ export const BasicSettings: React.FC = () => {
       );
       return;
     }
-    // Existing Markdown is allowed, but activating the root will exclude all of
-    // it from Copilot search. Put that lasting consequence in the confirmation
-    // instead of silently accepting or rejecting the user's explicit choice.
     const containsMarkdown = copilotRootContainsNotes(app, folder);
     new ConfirmModal(
       app,
@@ -175,7 +147,6 @@ export const BasicSettings: React.FC = () => {
     setIsChecking(true);
 
     try {
-      // Check required variables
       const format = conversationNoteName || "{$date}_{$time}__{$topic}";
       const requiredVars = ["{$date}", "{$time}", "{$topic}"];
       const missingVars = requiredVars.filter((v) => !format.includes(v));
@@ -185,7 +156,6 @@ export const BasicSettings: React.FC = () => {
         return;
       }
 
-      // Check illegal characters (excluding variable placeholders)
       const illegalChars = /[\\/:*?"<>|]/;
       const formatWithoutVars = format
         .replace(/\{\$date}/g, "")
@@ -197,17 +167,14 @@ export const BasicSettings: React.FC = () => {
         return;
       }
 
-      // Generate example filename
       const { fileName: timestampFileName } = formatDateTime(new Date());
       const firstTenWords = "test topic name";
 
-      // Create example filename
       const customFileName = format
         .replace("{$topic}", firstTenWords.slice(0, 100).replace(/\s+/g, "_"))
         .replace("{$date}", timestampFileName.split("_")[0])
         .replace("{$time}", timestampFileName.split("_")[1]);
 
-      // Save settings
       updateSetting("defaultConversationNoteName", format);
       setConversationNoteName(format);
       new Notice(`Format applied successfully! Example: ${customFileName}`, 4000);
@@ -227,7 +194,6 @@ export const BasicSettings: React.FC = () => {
 
       <AgentsSection />
 
-      {/* General Section */}
       <SettingSection label="General">
         <SettingItem
           type="select"
@@ -315,7 +281,6 @@ export const BasicSettings: React.FC = () => {
             value={vaultInstructions}
             onChange={(next) => {
               setVaultInstructions(next);
-              // Typing never waits on the write; only Open does, via `flush()`.
               void saveVaultInstructions(next);
             }}
             onOpen={() => void handleOpenVaultInstructions()}
@@ -323,7 +288,6 @@ export const BasicSettings: React.FC = () => {
         )}
       </SettingSection>
 
-      {/* Saving Conversations Section */}
       <SettingSection label="Saving conversations">
         <SettingItem
           type="switch"
@@ -333,9 +297,6 @@ export const BasicSettings: React.FC = () => {
           onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
         />
 
-        {/* Not gated on autosave: the "Save Chat as Note" button appears only
-            when autosave is off, and it names its note from this same template,
-            so gating would hide the control exactly where it is the only one. */}
         <Collapsible open={templateOpen} onOpenChange={setTemplateOpen}>
           <CollapsibleTrigger asChild>
             <SettingDisclosure open={templateOpen} />

@@ -1,15 +1,3 @@
-/**
- * Unit tests for the BYOK migration. `planByokMigration` is pure, so the bulk
- * of the coverage builds a legacy settings object and asserts the resulting
- * `SetupProviderInput[]`. `executeByokMigration` is exercised against a fake
- * `ModelManagementApi` (the real enrollment behavior of `setupProvider` is
- * covered by `ByokSetupApi.test.ts`; here we only assert which descriptors flow
- * through and that dedup / per-provider-failure handling hold).
- *
- * All `@/modelManagement` imports are type-only so the model-management barrel
- * (and its UI deps) never loads in this unit test.
- */
-
 import type { CustomModel } from "@/aiParams";
 import { ChatModelProviders, DEFAULT_SETTINGS } from "@/constants";
 import type { ModelManagementApi, Provider, SetupProviderInput } from "@/modelManagement";
@@ -300,7 +288,6 @@ describe("planByokMigration — local providers (custom URL required)", () => {
       providerType: "openai-compatible",
       baseUrl: "http://192.168.1.5:11434/v1",
       autoEnrollIn: ["chat", "opencode"],
-      // Local runner → keyless.
       requiresApiKey: false,
     });
 
@@ -390,7 +377,6 @@ describe("executeByokMigration", () => {
         { anthropicApiKey: "k", openAIApiKey: "k" }
       )
     );
-    // Anthropic deduped; only OpenAI created.
     expect(setupProvider).toHaveBeenCalledTimes(1);
     expect(setupProvider.mock.calls[0][0]).toMatchObject({ catalogProviderId: "openai" });
   });

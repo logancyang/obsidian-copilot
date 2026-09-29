@@ -61,9 +61,6 @@ describe("copilotPlusCatalog", () => {
     });
 
     it("keeps a model that reasons with no selectable level distinct from one whose levels are unknown", () => {
-      // An empty list means the model honors no level and should get no effort
-      // control; an absent one means we do not know, and the consumer keeps
-      // whatever menu it would infer. Collapsing them removes a working control.
       const catalog = readCopilotPlusCatalog({
         data: [
           { id: "no-levels", supports_reasoning: true, reasoning_efforts: [] },
@@ -134,8 +131,6 @@ describe("copilotPlusCatalog", () => {
     );
 
     it("accepts an entry that publishes no context window at all", () => {
-      // Absent metadata is ordinary; only a present-but-unreadable value is a
-      // signal that the response cannot be trusted to reconcile against.
       const catalog = readCopilotPlusCatalog({ data: [{ id: "no-window" }] });
 
       expect(catalog!.models[0].limits).toBeUndefined();

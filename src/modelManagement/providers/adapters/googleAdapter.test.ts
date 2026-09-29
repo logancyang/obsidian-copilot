@@ -1,7 +1,3 @@
-/**
- * Tests for `googleAdapter.verifyCredentials`.
- */
-
 import { googleAdapter } from "./googleAdapter";
 
 jest.mock("./verifyViaListModels", () => ({

@@ -1,10 +1,3 @@
-/**
- * Tests for `ModelManagementCoordinator.removeProvider`.
- *
- * Exercises the cross-slice cascade: backend refs → configured models →
- * provider row + keychain.
- */
-
 import { resetSettings, getSettings } from "@/settings/model";
 import { KeychainService } from "@/services/keychainService";
 
@@ -160,13 +153,10 @@ describe("ModelManagementCoordinator.removeConfiguredModel", () => {
 
     await coordinator.removeConfiguredModel(id1);
 
-    // The target row is gone; the sibling row survives.
     expect(models.get(id1)).toBeUndefined();
     expect(models.get(id2)).toBeDefined();
-    // Refs dropped from every backend.
     expect(backends.get("chat").enabledModels).toEqual([id2]);
     expect(backends.get("opencode").enabledModels).toEqual([]);
-    // The provider row is untouched (per-model removal, not per-provider).
     expect(providers.get(providerId)).toBeDefined();
   });
 

@@ -1,23 +1,3 @@
-/**
- * Lazy downloader for the `models.dev` catalog.
- *
- * Two-tier read path:
- *   1. Memory cache (populated by `ensureLoaded` or `refresh`).
- *   2. Disk cache at `<vault>/.copilot/model-catalog-cache.json`,
- *      alongside the plugin's other disposable runtime caches.
- *
- * `ensureLoaded` reads disk first. If the cached payload is younger
- * than 24h it's used as-is — no network call. Otherwise (stale or
- * missing) it triggers a `refresh` automatically. A stale-disk
- * fallback covers network failure so offline launches still surface
- * something. `refresh` stays public for the manual "Refresh catalog"
- * button the BYOK panel will add.
- *
- * The service is **module-internal** — only the BYOK settings panel
- * (also in `src/modelManagement/`) instantiates it. Plugin boot does
- * not import or call it, so opening Obsidian never hits models.dev.
- */
-
 import type { App, RequestUrlResponse } from "obsidian";
 import { normalizePath, requestUrl } from "obsidian";
 
@@ -27,8 +7,6 @@ import type { CatalogProvider } from "@/modelManagement/types/catalog";
 import { transformWireToCatalog } from "./catalogTransform";
 import { isPlainObject } from "./modelsDevWire";
 
-// Sits with the other disposable caches under `.copilot/`
-// (see fileCache / pdfCache / projectContextCache).
 const CACHE_DIR = ".copilot";
 const CACHE_FILENAME = "model-catalog-cache.json";
 const MODELS_DEV_URL = "https://models.dev/api.json";
@@ -69,17 +47,6 @@ export class CatalogDownloadService {
     this.cachePath = normalizePath(`${CACHE_DIR}/${CACHE_FILENAME}`);
   }
 
-  /**
-   * Idempotent: concurrent callers share the first invocation's promise.
-   * Reads disk first, auto-refreshes when the cached payload is older
-   * than 24h or absent. If a network refresh is attempted but produces
-   * zero providers the cached promise is cleared so the next call
-   * retries — up to `MAX_AUTO_ATTEMPTS` total. After that we stop
-   * hammering models.dev; the manual `refresh()` button stays as the
-   * recovery path and resets the counter on success. A fresh-but-empty
-   * disk cache (no network attempted) does NOT count against the cap —
-   * otherwise a benignly-empty disk would poison auto-refresh.
-   */
   ensureLoaded(): Promise<void> {
     if (this.loadPromise) return this.loadPromise;
     if (this.providers.length === 0 && this.failedAutoAttempts >= MAX_AUTO_ATTEMPTS) {
@@ -109,13 +76,6 @@ export class CatalogDownloadService {
     return this.loadPromise;
   }
 
-  /**
-   * User-triggered live fetch. On success the disk cache is rewritten,
-   * memory is swapped, and `onChange` listeners fire. On failure
-   * memory is left untouched. Single-flighted: concurrent invocations
-   * (e.g. ensureLoaded racing the manual "Refresh catalog" button)
-   * share one in-flight fetch rather than racing the cache write.
-   */
   refresh(): Promise<CatalogRefreshResult> {
     if (!this.refreshPromise) {
       this.refreshPromise = this.doRefresh().finally(() => {
@@ -154,7 +114,6 @@ export class CatalogDownloadService {
       logWarn("[modelsCatalog] refresh failed: payload is not an object");
       return { ok: false, providerCount: 0, error: "payload is not an object" };
     }
-    // From here on the transform handles per-entry validation.
 
     const fetchedAt = Date.now();
     try {
@@ -164,7 +123,6 @@ export class CatalogDownloadService {
       const payload: DiskPayload = { fetchedAt, data: parsed };
       await this.app.vault.adapter.write(this.cachePath, JSON.stringify(payload));
     } catch (err) {
-      // Disk write failure is non-fatal; memory still gets populated.
       logError("[modelsCatalog] failed to write disk cache", err);
     }
 
@@ -175,10 +133,6 @@ export class CatalogDownloadService {
     return { ok: true, providerCount: this.providers.length };
   }
 
-  /**
-   * Returns a copy so callers can sort/splice their view without
-   * corrupting service state.
-   */
   getAllProviders(): readonly CatalogProvider[] {
     return [...this.providers];
   }
@@ -197,9 +151,6 @@ export class CatalogDownloadService {
   private async doEnsureLoaded(): Promise<{ attemptedRefresh: boolean }> {
     const disk = await this.readDisk();
 
-    // Race guard: a concurrent manual refresh may have populated memory
-    // while we were reading disk. Don't clobber live data with an older
-    // disk snapshot.
     if (this.providers.length > 0) {
       return { attemptedRefresh: false };
     }
@@ -212,9 +163,6 @@ export class CatalogDownloadService {
 
     const result = await this.refresh();
     if (!result.ok && disk && this.providers.length === 0) {
-      // Network failed but we have stale data — surface it so the UI
-      // isn't empty offline. The `length === 0` guard avoids clobbering
-      // memory another caller populated during the await.
       this.swapMemory(disk.data);
       logInfo(
         `[modelsCatalog] refresh failed; falling back to stale disk cache (${this.providers.length} providers)`

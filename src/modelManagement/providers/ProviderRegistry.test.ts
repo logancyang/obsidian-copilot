@@ -1,11 +1,3 @@
-/**
- * Tests for `ProviderRegistry`.
- *
- * The keychain is mocked via a fake `SecretStorage` mounted on a fake
- * `App.secretStorage`. The settings store is real (via
- * `resetSettings` / `setSettings`).
- */
-
 import { resetSettings, getSettings, setSettings } from "@/settings/model";
 import { KeychainService } from "@/services/keychainService";
 
@@ -38,9 +30,6 @@ function makeFakeApp(): { app: App; secrets: SecretStore } {
       },
     },
     vault: {
-      // FileSystemAdapter shape is irrelevant for this test — vaultId
-      // resolution path falls into the random branch and never touches
-      // adapter methods after the first generation.
       adapter: {},
     },
   } as unknown as App;
@@ -74,8 +63,6 @@ describe("ProviderRegistry", () => {
       const fake = makeFakeApp();
       app = fake.app;
       secrets = fake.secrets;
-      // Eager init so subsequent KeychainService.getInstance() calls inside
-      // the registry hit the same singleton.
       KeychainService.getInstance(app);
       adapters = new ProviderAdapterRegistry();
       adapters.register(anthropicStub);
@@ -148,11 +135,6 @@ describe("ProviderRegistry", () => {
         });
         const originalAddedAt = registry.get(id)!.addedAt;
 
-        // Bypass the typed Omit to verify the runtime guard strips immutable
-        // fields even when callers shove them in via an untyped object.
-        // providerType is the adapter-dispatch key and origin determines
-        // which settings tab owns the row — both must stay pinned to the
-        // values supplied at creation.
         await registry.update(id, {
           displayName: "Renamed",
           baseUrl: "https://example.test",
@@ -184,14 +166,10 @@ describe("ProviderRegistry", () => {
         const realKeychainId = registry.get(id)!.apiKeyKeychainId;
         expect(realKeychainId).not.toBeNull();
 
-        // Bypass the typed Omit to verify the runtime strip refuses to move
-        // the keychain pointer (which would orphan the secret or repoint the
-        // row at a keychain entry this registry never wrote).
         await registry.update(id, {
           ...({ apiKeyKeychainId: "copilot-v0-provider-attacker" } as Record<string, unknown>),
         });
         expect(registry.get(id)!.apiKeyKeychainId).toBe(realKeychainId);
-        // The real secret is still readable.
         expect(await registry.getApiKey(id)).toBe("sk-real");
       });
     });
@@ -208,8 +186,6 @@ describe("ProviderRegistry", () => {
         await registry.setApiKey(id, "sk-first");
         const firstKeychainId = registry.get(id)!.apiKeyKeychainId;
         const vaultId = KeychainService.getInstance(app).getVaultId();
-        // Vault-namespaced so `KeychainService.clearAllVaultSecrets()` (which
-        // filters by `copilot-v{vaultId}-`) sweeps these entries.
         expect(firstKeychainId).toBe(`copilot-v${vaultId}-provider-${id}`);
         expect(await registry.getApiKey(id)).toBe("sk-first");
 
@@ -227,9 +203,6 @@ describe("ProviderRegistry", () => {
         await registry.setApiKey(id, "sk-live");
         const keychainId = registry.get(id)!.apiKeyKeychainId!;
 
-        // The row still points at the entry, but the secret behind it is gone.
-        // Reading that back as "unchanged" would leave the provider permanently
-        // unauthenticated with no way to repair itself.
         secrets.delete(keychainId);
 
         await registry.setApiKey(id, "sk-live");
@@ -273,7 +246,6 @@ describe("ProviderRegistry", () => {
         const keychainId = registry.get(id)!.apiKeyKeychainId!;
         await registry.remove(id);
         expect(registry.get(id)).toBeUndefined();
-        // Verify keychain side cleaned up by reading raw storage.
         expect(KeychainService.getInstance(app).getSecretById(keychainId)).toBeNull();
       });
     });
@@ -380,14 +352,9 @@ describe("ProviderRegistry", () => {
         await registry.update(id, { displayName: "A-renamed" });
         expect(listener).toHaveBeenCalledTimes(2);
 
-        // First setApiKey: fresh keychainId, settings row also updates.
         await registry.setApiKey(id, "sk-first");
         expect(listener).toHaveBeenCalledTimes(3);
 
-        // Rotating the key reuses `apiKeyKeychainId` → settings row is
-        // unchanged. The emitter must still fire so subprocess backends
-        // (opencode) restart and pick up the new key. This is the case that
-        // caused the LM Studio silent-failure diagnostic.
         await registry.setApiKey(id, "sk-rotated");
         expect(listener).toHaveBeenCalledTimes(4);
 
@@ -420,9 +387,6 @@ describe("ProviderRegistry", () => {
 
         await registry.setApiKey(id, "sk-same");
 
-        // Announcing this as a change restarts every backend that bakes
-        // provider config into its spawn, tearing down a live Agent session to
-        // rebuild an identical config.
         expect(listener).not.toHaveBeenCalled();
         expect(await registry.getApiKey(id)).toBe("sk-same");
       });
@@ -442,10 +406,6 @@ describe("ProviderRegistry", () => {
         expect(listener).not.toHaveBeenCalled();
       });
 
-      // Regression: keychain writes must complete before #emit() fires.
-      // Otherwise subscribers reading apiKey inside their listener (e.g. the
-      // opencode-restart wiring re-reading provider creds) would observe the
-      // prior value and the freshly-set key would be lost until the next emit.
       it("setApiKey listener observes the new key synchronously, not stale state", async () => {
         const id = await registry.add({
           providerType: "anthropic",
@@ -456,10 +416,6 @@ describe("ProviderRegistry", () => {
 
         const seenInListener: Array<string | null> = [];
         registry.subscribe(() => {
-          // Read the keychain synchronously inside the listener — mirrors what
-          // the opencode-restart wiring does (it queues a respawn that reads
-          // the just-emitted credentials). If setApiKey emitted before the
-          // keychain write was durable, this snapshot would still be "sk-old".
           const row = getSettings().providers[id];
           const keychainId = row?.apiKeyKeychainId ?? null;
           seenInListener.push(

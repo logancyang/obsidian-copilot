@@ -1,25 +1,3 @@
-/**
- * One-time migration: legacy BYOK models + provider keys → the new
- * provider / configured-model / backend data model, so a user's own keys keep
- * working in OpenCode (and Simple Chat) when agent mode lands.
- *
- * Two halves so the mapping logic is trivially unit-testable:
- *  - `planByokMigration` is PURE — legacy settings in, `SetupProviderInput[]`
- *    out, no side effects (reads keys from the already-hydrated in-memory
- *    settings, never disk).
- *  - `executeByokMigration` is the thin side-effecting wrapper that dedups
- *    against existing BYOK providers and feeds each descriptor through the
- *    battle-tested `ByokSetupApi.setupProvider` (provider row → keychain →
- *    configured models → backend enrollment, with its own rollback).
- *
- * Scope (locked with the product owner):
- *  - Credential-driven: every legacy provider with a user-supplied key (or, for
- *    local/openai-format providers, an explicit base URL) and its ENABLED
- *    models — built-in and custom.
- *  - Skip embeddings, disabled models, and copilot-plus (owned by Plus sign-in).
- *  - Non-destructive: legacy keys and `activeModels` are left untouched.
- */
-
 import type { CustomModel } from "@/aiParams";
 import {
   ChatModelProviders,
@@ -29,8 +7,6 @@ import {
   type SettingKeyProviders,
 } from "@/constants";
 import { logError, logInfo } from "@/logger";
-// Type-only imports: nothing here pulls the model-management barrel at runtime,
-// keeping this settings-layer module (and its unit tests) light.
 import type {
   BackendType,
   ModelInfo,
@@ -41,31 +17,15 @@ import type {
 } from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
 
-// Token-bounded "embed"/"embedding" id match. Mirrors `looksLikeEmbeddingModel`
-// in `@/modelManagement/catalog/catalogTransform`; kept local so this module
-// stays type-only against the model-management barrel.
 const EMBEDDING_ID = /(^|[-_/.\s])embed(ding)?($|[-_/.\s])/i;
 
 interface LegacyProviderMapping {
   providerType: ProviderType;
-  /** models.dev / OpenCode provider id; absent for catalog-less providers. */
   catalogProviderId?: string;
-  /** OpenCode can route this provider → enroll in `opencode` too. */
   opencodeRoutable: boolean;
-  /**
-   * Keyless providers (Ollama / LM Studio / generic OpenAI-format) that are
-   * only migrated when the model carries an explicit `baseUrl` — i.e. the user
-   * actually pointed them somewhere, not a bare unconfigured default.
-   */
   requiresBaseUrl?: boolean;
 }
 
-/**
- * Legacy `CustomModel.provider` → new-format mapping. Providers absent here
- * (copilot-plus, anything unrecognized, and providers Copilot no longer ships)
- * are skipped. The top-level API-key field is derived from
- * `ProviderSettingsKeyMap`, not duplicated here.
- */
 const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
   [ChatModelProviders.ANTHROPIC]: {
     providerType: "anthropic",
@@ -107,7 +67,6 @@ const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
     catalogProviderId: "deepseek",
     opencodeRoutable: true,
   },
-  // Catalog-less but OpenAI-compatible: routable via their base URL.
   [ChatModelProviders.SILICONFLOW]: { providerType: "openai-compatible", opencodeRoutable: true },
   [ChatModelProviders.COHEREAI]: { providerType: "openai-compatible", opencodeRoutable: true },
   [ChatModelProviders.OLLAMA]: {
@@ -127,23 +86,17 @@ const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
   },
 };
 
-// Frozen enrollment targets — referential stability (see AGENTS.md).
 const ENROLL_CHAT_AND_OPENCODE: readonly BackendType[] = Object.freeze(["chat", "opencode"]);
 const ENROLL_CHAT_ONLY: readonly BackendType[] = Object.freeze(["chat"]);
 
-/** Trim, drop a trailing slash, lowercase — for grouping / dedup comparison. */
 function normalizeUrl(url: string | undefined): string {
   return (url ?? "").trim().replace(/\/+$/, "").toLowerCase();
 }
 
-/** Runtime-safe lookup: `ProviderInfo`'s typed keys are the provider enum, but
- *  `model.provider` is a raw string, so widen the index to allow `undefined`. */
 function providerMetaFor(provider: string): ProviderMetadata | undefined {
   return (ProviderInfo as unknown as Record<string, ProviderMetadata | undefined>)[provider];
 }
 
-/** Catalog default base URL for a provider, or `undefined` for placeholder
- *  URLs with a `<placeholder>` segment that aren't real endpoints. */
 function defaultBaseUrlFor(provider: string): string | undefined {
   const url = providerMetaFor(provider)?.curlBaseURL;
   if (!url || url.includes("<") || url.includes("{")) return undefined;
@@ -154,7 +107,6 @@ function displayNameFor(provider: string): string {
   return providerMetaFor(provider)?.label ?? provider;
 }
 
-/** Per-`providerType` opaque payload the adapters can't function without. */
 function buildExtras(
   model: CustomModel,
   settings: CopilotSettings,
@@ -175,15 +127,11 @@ interface ResolvedCandidate {
   extras?: Record<string, unknown>;
 }
 
-/**
- * Decide whether a single legacy model migrates, and resolve its credential /
- * base URL / extras. Returns `null` for anything out of scope.
- */
 function resolveCandidate(model: CustomModel, settings: CopilotSettings): ResolvedCandidate | null {
   const mapping = LEGACY_PROVIDER_MAP[model.provider];
-  if (!mapping) return null; // unknown / copilot-plus / retired provider
-  if (!model.enabled) return null; // disabled models skipped per scope
-  if (model.isEmbeddingModel ?? EMBEDDING_ID.test(model.name)) return null; // embeddings skipped
+  if (!mapping) return null;
+  if (!model.enabled) return null;
+  if (model.isEmbeddingModel ?? EMBEDDING_ID.test(model.name)) return null;
 
   const keyField = ProviderSettingsKeyMap[model.provider as SettingKeyProviders];
   const rawKey = keyField ? settings[keyField] : undefined;
@@ -192,12 +140,11 @@ function resolveCandidate(model: CustomModel, settings: CopilotSettings): Resolv
 
   let baseUrl: string | undefined;
   if (mapping.requiresBaseUrl) {
-    // Local / generic OpenAI-format: only migrate an explicitly-pointed endpoint.
     baseUrl = model.baseUrl?.trim() || undefined;
     if (!baseUrl) return null;
   } else {
     baseUrl = model.baseUrl?.trim() || defaultBaseUrlFor(model.provider);
-    if (!apiKey) return null; // key-based providers need a usable key
+    if (!apiKey) return null;
   }
 
   return {
@@ -213,13 +160,6 @@ function toModelInfo(model: CustomModel): ModelInfo {
   return { id: model.name, displayName: model.displayName?.trim() || model.name };
 }
 
-/**
- * Pure: legacy settings → BYOK provider-setup descriptors. Models are grouped
- * into one provider per
- * `(providerType, catalogProviderId, baseUrl, apiKey, enableCors)` so distinct
- * credentials and transport choices become distinct provider instances; model
- * ids are de-duped within a group (last wins) to satisfy `bulkSet`.
- */
 export function planByokMigration(settings: CopilotSettings): SetupProviderInput[] {
   const groups = new Map<
     string,
@@ -249,9 +189,6 @@ export function planByokMigration(settings: CopilotSettings): SetupProviderInput
         displayName: displayNameFor(model.provider),
         models: [],
         autoEnrollIn: mapping.opencodeRoutable ? ENROLL_CHAT_AND_OPENCODE : ENROLL_CHAT_ONLY,
-        // Local runners (`requiresBaseUrl`) migrate key-less; every other
-        // legacy mapping is key-based. Persist it explicitly so the runtime
-        // never re-infers from the endpoint.
         requiresApiKey: !mapping.requiresBaseUrl,
         enableCors,
       };
@@ -273,12 +210,9 @@ export function planByokMigration(settings: CopilotSettings): SetupProviderInput
   }));
 }
 
-/** A pre-existing BYOK provider equivalent to a planned descriptor (same
- *  identity: type + catalog id + base URL). Key is intentionally NOT part of
- *  the match — a keyless existing row still counts as "already present".
- *  https://github.com/logancyang/obsidian-copilot-preview/issues/313: CORS is
- *  also excluded so an already-migrated provider is left as-is rather than
- *  duplicated when its legacy choice can no longer be recovered reliably. */
+// Key and CORS are excluded from the match so an already-migrated provider is not duplicated
+// when its legacy CORS choice can no longer be recovered:
+// https://github.com/logancyang/obsidian-copilot-preview/issues/313
 function isDuplicateByok(provider: Provider, descriptor: SetupProviderInput): boolean {
   if (provider.origin.kind !== "byok") return false;
   return (
@@ -288,12 +222,6 @@ function isDuplicateByok(provider: Provider, descriptor: SetupProviderInput): bo
   );
 }
 
-/**
- * Side-effecting executor. Builds a one-shot plan from `settings`, skips
- * descriptors that match an existing BYOK provider, and creates the rest via
- * `ByokSetupApi.setupProvider`. Never throws: a single provider failure is
- * logged and the rest proceed (the version bump in the caller is unconditional).
- */
 export async function executeByokMigration(
   api: ModelManagementApi,
   settings: CopilotSettings
@@ -304,8 +232,6 @@ export async function executeByokMigration(
     return;
   }
 
-  // Snapshot existing BYOK providers once; the planner already de-dups within
-  // this run, so a stale snapshot only matters for pre-existing rows.
   const existing = api.providerRegistry.listByOrigin("byok");
   let created = 0;
   let skipped = 0;

@@ -1,15 +1,3 @@
-/**
- * `AddProviderModal` — entry point for picking a provider to add.
- *
- * Catalog entries and built-in templates flow through the same single
- * `onPick(source)` callback as `ProviderDefinition`s. Catalog rows are
- * synthesized into `ProviderDefinition`s at pick time, carrying the
- * `catalogProviderId` link so the configure dialog can pull metadata
- * from `models.dev` for picker enrichment.
- *
- * Hosted in a native Obsidian `Modal` (popout-correct, native chrome).
- * `AddProviderContent` is the pure body, exported for unit tests.
- */
 import { ReactModal } from "@/components/modals/ReactModal";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { cn } from "@/lib/utils";
@@ -19,27 +7,20 @@ import { Plus } from "lucide-react";
 import { App } from "obsidian";
 import React, { useMemo, useState } from "react";
 
-/** Top-row recommended catalog ids. Order matters. */
 const RECOMMENDED_IDS: readonly string[] = ["anthropic", "openai", "google"];
 
-/** Short descriptors shown next to each recommended provider. */
 const RECOMMENDED_DESCRIPTIONS: Record<string, string> = {
   anthropic: "Claude family",
   openai: "GPT family",
   google: "Gemini family",
 };
 
-/** Default manual-add hints per provider type, used when synthesizing a
- *  `ProviderDefinition` from a catalog row (catalog has no hint). */
 const PROVIDER_TYPE_HINTS: Record<ProviderType, string> = {
   anthropic: "e.g. claude-sonnet-5",
   google: "e.g. gemini-2.5-pro",
   "openai-compatible": "e.g. gpt-5",
 };
 
-/** Synthesize a `ProviderDefinition` from a catalog row. Carries the
- *  catalog id forward so the configure dialog can enrich rows with
- *  metadata. Catalog providers all require an API key. */
 function catalogToDefinition(catalog: CatalogProvider): ProviderDefinition {
   return {
     id: catalog.id,
@@ -53,17 +34,12 @@ function catalogToDefinition(catalog: CatalogProvider): ProviderDefinition {
 }
 
 export interface AddProviderContentProps {
-  /** Catalog snapshot, owned by the panel (loaded via the catalog service). */
   catalogProviders: readonly CatalogProvider[];
-  /** Local runner definitions shown in the "Self Host" group (Ollama, LM Studio). */
   localTemplates: readonly ProviderDefinition[];
-  /** The bring-your-own-endpoint definition opened by the custom-provider CTA. */
   customTemplate: ProviderDefinition;
-  /** Called with the chosen provider definition (catalog row or template). */
   onPick: (source: ProviderDefinition) => void;
 }
 
-/** Case-insensitive substring match on display name. */
 function matchesQuery(item: { displayName: string }, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
@@ -226,7 +202,6 @@ const TemplateRow: React.FC<TemplateRowProps> = ({ template, onClick }) => {
 interface ProviderRowProps {
   provider: CatalogProvider;
   onClick: () => void;
-  /** Optional "— family" descriptor (recommended rows only). */
   description?: string;
 }
 

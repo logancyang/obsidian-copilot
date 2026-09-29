@@ -7,7 +7,6 @@ jest.mock("@/agentMode", () => ({
   SkillManager: { getInstance: () => ({ refresh: refreshSkills }) },
 }));
 
-// Persisted-settings surface: capture writes and feed a controllable snapshot.
 const updateSetting = jest.fn<void, unknown[]>();
 let currentSettings = { ...DEFAULT_SETTINGS };
 jest.mock("@/settings/model", () => ({
@@ -18,16 +17,10 @@ jest.mock("@/settings/model", () => ({
   },
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useSettingsValue: () => currentSettings,
-  // The scope-verify key derives the system roots through the real normalizer,
-  // so a test that moves the Copilot root gets the production root set.
   normalizeRootFolders:
     jest.requireActual<typeof import("@/settings/model")>("@/settings/model").normalizeRootFolders,
 }));
 
-// Miyo connection status. Defaults to connected; individual tests flip
-// `mockMiyoBackend` to "unavailable" to assert the skill toggle stays operable while
-// the connection-gated rows dim, or to "stale" (aged snapshot) which must still
-// read as connected.
 let mockMiyoBackend: "available" | "unavailable" | "unknown" | "stale" = "available";
 jest.mock("@/miyo/useMiyoStatus", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
@@ -37,28 +30,18 @@ jest.mock("@/miyo/useMiyoStatus", () => ({
     chatSync: mockMiyoBackend,
   }),
 }));
-// The Connect flow reads the store's post-enable availability to decide
-// connected vs unreachable. Default: the refresh reports the current backend;
-// #5 rollback tests point it at "unavailable" to assert the settings revert.
 let mockRefreshBackend: "available" | "unavailable" | "stale" = "available";
-// When set, refreshMiyoStatus returns THIS promise instead of resolving
-// immediately — lets a test hold the enable-refresh open, supersede the attempt,
-// then resolve it "available" to prove the optimistic writes still roll back.
 let mockRefreshGate: Promise<{ backend: string }> | null = null;
 jest.mock("@/miyo/miyoStatusStore", () => ({
   refreshMiyoStatus: jest.fn(
     () => mockRefreshGate ?? Promise.resolve({ backend: mockRefreshBackend })
   ),
 }));
-// Connect probes reachability + registration through MiyoClient before enabling.
-// Defaults let the flow reach enableMiyoBackend (reachable + registered).
 let mockReachable = true;
 let mockProbeGate: Promise<boolean> | null = null;
 const mockProbeUrls: Array<string | undefined> = [];
 let mockRegistrationGate: Promise<"registered"> | null = null;
 let mockRegistration: "registered" | "unregistered" | "error" = "registered";
-// Bodies the register flow submitted, so a test can assert exactly which scope
-// fields reach Miyo.
 const addFolderBodies: unknown[] = [];
 let expireLifecycleBeforeAddRequest = false;
 let addFolderError: Error | null = null;
@@ -93,9 +76,6 @@ const notifyMiyoIndexChanged = jest.fn<void, []>();
 jest.mock("@/miyo/miyoIndex", () => ({
   notifyMiyoIndexChanged: () => notifyMiyoIndexChanged(),
 }));
-// Capture the options the component passes to the modal so a test can invoke the
-// modal's callbacks (onRetry/onAddVault) directly — the Retry button has no
-// busy-guard, which is the real path that fires concurrent enable attempts.
 let lastModalOptions: {
   downloadUrl: string;
   onRetry: () => Promise<unknown>;
@@ -119,9 +99,6 @@ jest.mock("@/settings/v2/components/MiyoConnectModal", () => ({
     close = jest.fn();
   },
 }));
-// Stable identity, matching production: useApp() reads a context value, so the
-// app reference does not change between renders. A fresh object per call would
-// re-fire every app-keyed effect on each render.
 let mockIgnoreFilters: string[] = [];
 const mockAppInstance = {
   vault: {
@@ -139,8 +116,6 @@ jest.mock("@/contexts/PluginContext", () => ({
 }));
 jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/vault" }));
 
-// Platform gate for the desktop-only controls. Default desktop; the mobile
-// cases flip it to prove the phone never sees a control it cannot use.
 const mockOnDesktop = jest.fn<boolean, []>().mockReturnValue(true);
 jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: () => mockOnDesktop() }));
 
@@ -159,7 +134,6 @@ import { refreshMiyoStatus } from "@/miyo/miyoStatusStore";
 
 const toggle = () => screen.getByLabelText("Enable Miyo semantic search skill");
 
-/** A promise whose resolution the test controls, to hold a disk op mid-flight. */
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((r) => {
@@ -515,7 +489,6 @@ describe("MiyoSettings", () => {
       expect(updateSetting).toHaveBeenCalledWith("enableMiyo", true);
       expect(currentSettings.miyoConnectionMode).toBe("remote");
       expect(screen.getByRole<HTMLInputElement>("radio", { name: /Local/ }).checked).toBe(true);
-      // The settings mock has no store subscription; publish the completed enable to this render.
       rerender(<MiyoSettings />);
       expect(await screen.findByText("Connected")).toBeTruthy();
       expect(lastModalOptions).toBeNull();
@@ -535,8 +508,6 @@ describe("MiyoSettings", () => {
       await lastModalOptions?.onAddVault?.();
     });
 
-    // Copilot's roots and Obsidian's own ignored paths are always excluded so
-    // they cannot consume Miyo's bounded result pool. User QA rules stay local.
     expect(addFolderBodies).toEqual([
       {
         path: "/vault",
@@ -554,9 +525,6 @@ describe("MiyoSettings", () => {
     fireEvent.click(await screen.findByText("Connect"));
     await waitFor(() => expect(lastModalOptions?.onAddVault).toBeDefined());
 
-    // The modal keeps the callback it was created with, so a root change made
-    // while it is open never re-renders the settings tab. Registering from that
-    // stale closure would leave the new root indexed.
     currentSettings = { ...currentSettings, copilotFolder: "team-ai" };
 
     await act(async () => {
@@ -652,8 +620,6 @@ describe("MiyoSettings", () => {
   });
 
   it("blocks ENABLING the skill while Miyo is disconnected (skill off)", async () => {
-    // Turning the skill ON is connection-gated: it only has an effect once Miyo is
-    // reachable, so a disconnected + not-yet-enabled toggle is inert.
     mockMiyoBackend = "unavailable";
     currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: false };
     render(<MiyoSettings />);
@@ -662,15 +628,11 @@ describe("MiyoSettings", () => {
     expect(control.getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(control);
 
-    // Gated: no install runs, no settings write.
     expect(refreshSkills).not.toHaveBeenCalled();
     expect(updateSetting).not.toHaveBeenCalledWith("enableMiyoSearchSkill", true);
   });
 
   it("ALLOWS disabling an already-installed skill while Miyo is disconnected", async () => {
-    // Removal is a local vault file op — it doesn't need Miyo. A user whose Miyo
-    // went offline must still be able to turn the skill off (regression: the toggle
-    // used to be inert whenever disconnected, stranding an installed skill).
     mockMiyoBackend = "unavailable";
     currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
     render(<MiyoSettings />);
@@ -684,10 +646,6 @@ describe("MiyoSettings", () => {
   });
 
   it("keeps the skill toggle operable while the status snapshot is stale", async () => {
-    // `stale` = was available, snapshot just aged past the TTL — NOT disconnected.
-    // The store downgrades available→stale lazily on read, so an unrelated
-    // re-render (e.g. toggling Search scope) must not flip the tab to "disconnected"
-    // and force a reconnect. Regression guard for that bug.
     mockMiyoBackend = "stale";
     currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
     render(<MiyoSettings />);
@@ -700,10 +658,6 @@ describe("MiyoSettings", () => {
 
   describe("connection status and recovery", () => {
     it("shows Offline with Check connection and Disconnect when enabled Miyo is unavailable (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
-      // Regression: the pill used to key on live health, so a stranded enableMiyo
-      // (Miyo enabled, then it went offline) showed only "Connect" — while search
-      // still routed to the dead backend with no way to turn it off. The pill now
-      // keys on intent, so Disconnect is always reachable when enableMiyo=true.
       mockMiyoBackend = "unavailable";
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: true };
       render(<MiyoSettings />);
@@ -722,7 +676,6 @@ describe("MiyoSettings", () => {
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: false };
       render(<MiyoSettings />);
 
-      // Wait out the mount refresh so the button settles from "Connecting…" to "Connect".
       expect(await screen.findByText("Connect")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
     });
@@ -764,7 +717,6 @@ describe("MiyoSettings", () => {
   });
 
   describe("Connect — two-phase commit rolls back on a failed health check", () => {
-    // Start disconnected so the pill shows "Connect".
     beforeEach(() => {
       mockMiyoBackend = "unavailable";
       currentSettings = {
@@ -774,8 +726,6 @@ describe("MiyoSettings", () => {
     });
 
     it("rolls back Miyo without writing retired index settings when the enable refresh fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/283)", async () => {
-      // Reachable + registered, so the flow reaches enableMiyoBackend and writes
-      // the Miyo flag true — but the post-enable refresh reports NOT available.
       mockReachable = true;
       mockRegistration = "registered";
       mockRefreshBackend = "unavailable";
@@ -783,8 +733,6 @@ describe("MiyoSettings", () => {
 
       fireEvent.click(await screen.findByText("Connect"));
 
-      // The flag flips on, then reverts once the health check comes back unavailable
-      // — otherwise search routing would key off a stranded enableMiyo=true.
       await waitFor(() => expect(updateSetting).toHaveBeenCalledWith("enableMiyo", false));
       expect(updateSetting).toHaveBeenCalledWith("enableMiyo", true);
       expect(updateSetting).toHaveBeenCalledTimes(2);
@@ -799,31 +747,22 @@ describe("MiyoSettings", () => {
       fireEvent.click(await screen.findByText("Connect"));
 
       await waitFor(() => expect(updateSetting).toHaveBeenCalledWith("enableMiyo", true));
-      // A successful connect must leave the flag on — no revert write.
       expect(updateSetting).not.toHaveBeenCalledWith("enableMiyo", false);
     });
 
     it("rolls back an optimistic enable when the attempt is superseded mid-refresh, even if it comes back available", async () => {
-      // The dangerous race: writes land true, the user cancels (here: unmounts,
-      // which bumps the attempt generation), THEN the health check resolves
-      // available. A superseded attempt must commit NO settings, so the optimistic
-      // writes have to revert despite the available result.
       mockReachable = true;
       mockRegistration = "registered";
       const { unmount } = render(<MiyoSettings />);
 
-      // Let the mount refresh settle (button returns to "Connect") BEFORE arming the
-      // gate, so only the enable-refresh is held open.
       const connectBtn = await screen.findByText("Connect");
       let resolveRefresh!: (v: { backend: string }) => void;
       mockRefreshGate = new Promise((r) => {
         resolveRefresh = r;
       });
       fireEvent.click(connectBtn);
-      // Let probe + registration resolve so the flow reaches the gated enable refresh.
       await waitFor(() => expect(updateSetting).toHaveBeenCalledWith("enableMiyo", true));
 
-      // Supersede the in-flight attempt, then let the refresh come back healthy.
       unmount();
       resolveRefresh({ backend: "available" });
 
@@ -831,18 +770,11 @@ describe("MiyoSettings", () => {
     });
 
     it("does NOT let an older enable's revert clobber a newer concurrent enable that committed", async () => {
-      // The concurrent-Retry race: the modal's Retry has no busy-guard, so two
-      // enable attempts can overlap on the store's shared single-flight refresh. The
-      // OLDER attempt resolves last; without the ownership token its superseded
-      // revert would overwrite the NEWER attempt's committed enableMiyo=true.
-      // First Connect fails (unreachable) to open the guide modal and capture its
-      // onRetry, which is the concurrent trigger.
       mockRefreshBackend = "unavailable";
       render(<MiyoSettings />);
       fireEvent.click(await screen.findByText("Connect"));
       await waitFor(() => expect(lastModalOptions).not.toBeNull());
 
-      // Both retries share one deferred refresh that resolves available.
       let resolveRefresh!: (v: { backend: string }) => void;
       mockRefreshGate = new Promise((r) => {
         resolveRefresh = r;
@@ -851,22 +783,14 @@ describe("MiyoSettings", () => {
       const enableTrueCount = () =>
         updateSetting.mock.calls.filter((c) => c[0] === "enableMiyo" && c[1] === true).length;
 
-      // Sequence matters: A must actually enter enableMiyoBackend (claim txn=1,
-      // write true, park on the gate) BEFORE B starts — otherwise A short-circuits
-      // at its own superseded() check after probe and never claims a txn, so the
-      // stillOwner=false branch wouldn't run and the test would pass vacuously.
       const retryA = lastModalOptions!.onRetry();
-      await waitFor(() => expect(enableTrueCount()).toBe(1)); // A parked on the gate
+      await waitFor(() => expect(enableTrueCount()).toBe(1));
       const retryB = lastModalOptions!.onRetry();
-      await waitFor(() => expect(enableTrueCount()).toBe(2)); // B claimed txn=2, parked too
+      await waitFor(() => expect(enableTrueCount()).toBe(2));
 
-      // Now both are parked on the shared gate. Resolve available: A resumes first,
-      // finds stillOwner=false (B bumped the txn) and skips its revert; B resumes as
-      // owner and commits.
       resolveRefresh({ backend: "available" });
       await Promise.all([retryA, retryB]);
 
-      // Without the ownership token, A's superseded revert would write false here.
       expect(updateSetting).not.toHaveBeenCalledWith("enableMiyo", false);
       expect(enableTrueCount()).toBe(2);
     });
