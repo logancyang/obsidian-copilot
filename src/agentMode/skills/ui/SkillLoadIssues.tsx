@@ -19,10 +19,6 @@ export interface SkillLoadIssuesProps {
   onViewDetails: () => void;
 }
 
-/**
- * Compact recovery alert for discovered SKILL.md files that cannot load.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/166
- */
 export const SkillLoadIssues: React.FC<SkillLoadIssuesProps> = ({ issues, onViewDetails }) => {
   const title = `${issues.length} skill${issues.length === 1 ? "" : "s"} could not be loaded`;
 
@@ -51,15 +47,12 @@ export interface SkillLoadIssuesModalContentProps {
   onClose: () => void;
 }
 
-/** Complete repair list rendered inside the native details modal. */
 export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentProps> = ({
   issues,
   onFixAll,
   onClose,
 }) => {
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
-  // Close first so Obsidian does not open an indexed file behind this modal,
-  // and returning from an external editor can trigger the Settings focus refresh.
+  // Close first so Obsidian does not open an indexed file behind this modal. https://github.com/Brevilabs/obsidian-copilot-private/issues/166
   const runAction = (action: () => void): void => {
     onClose();
     action();
@@ -111,7 +104,6 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
   );
 };
 
-/** Native Obsidian modal containing every rejected skill and repair action. */
 export class SkillLoadIssuesModal extends ReactModal {
   constructor(
     app: App,
@@ -128,7 +120,6 @@ export class SkillLoadIssuesModal extends ReactModal {
   }
 }
 
-/** Empty loaded-list copy shown when every discovered skill needs repair. */
 export const AllSkillsNotLoaded: React.FC = () => (
   <div className="tw-rounded-sm tw-border tw-border-dashed tw-border-border tw-bg-primary tw-px-3 tw-py-6 tw-text-left tw-text-ui-smaller tw-text-muted">
     No skills are loaded yet. Choose View details above to repair a SKILL.md. When it loads

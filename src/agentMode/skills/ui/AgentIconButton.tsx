@@ -2,17 +2,9 @@ import { cn } from "@/lib/utils";
 import React from "react";
 
 interface AgentIconButtonProps {
-  /**
-   * Brand glyph for this agent. Sourced from the backend descriptor
-   * (`BackendDescriptor.Icon`) and threaded down through the host so the
-   * skills layer never names specific agents.
-   */
   Icon: React.ComponentType<{ className?: string }>;
-  /** Backend id — used to derive the default aria-label. */
   agentId: string;
-  /** Backend display name — preferred for the title tooltip when none is provided. */
   agentName?: string;
-  /** Toggled-on state — filled brand colour vs. dashed outline. */
   enabled: boolean;
   disabled?: boolean;
   onClick?: () => void;
@@ -20,7 +12,6 @@ interface AgentIconButtonProps {
   size?: "sm" | "md";
 }
 
-/** Brand-coloured agent toggle button. */
 export const AgentIconButton: React.FC<AgentIconButtonProps> = ({
   Icon,
   agentId,
@@ -31,8 +22,6 @@ export const AgentIconButton: React.FC<AgentIconButtonProps> = ({
   title,
   size = "md",
 }) => {
-  // Obsidian uses aria-label for its tooltip; title would add a second native tooltip.
-  // https://github.com/logancyang/obsidian-copilot/issues/3022
   const label = agentName ?? agentId;
   return (
     <div
@@ -41,8 +30,6 @@ export const AgentIconButton: React.FC<AgentIconButtonProps> = ({
       aria-disabled={disabled}
       onClick={disabled ? undefined : onClick}
       onKeyDown={(e) => {
-        // Unavailable agents must not be activated through keyboard input.
-        // https://github.com/logancyang/obsidian-copilot/issues/3022
         if (disabled) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();

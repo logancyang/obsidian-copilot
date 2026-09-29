@@ -1,25 +1,8 @@
-/**
- * Tests for the M3 probe-settle discovery orchestrator.
- *
- * The Agent Mode barrel (`@/agentMode`) and the settings module are mocked so
- * the test exercises `wireAgentModelDiscovery` / `enrollBackend` against
- * controllable fakes without dragging in the React/Obsidian dependency tree.
- * The barrel helpers (`partitionOpencodeOnlyWireIds`,
- * `mapProviderToOpencodeId`) are re-implemented thinly in the mock to keep the
- * orchestration assertions independent of their unit tests;
- * `buildManagedOpencodeProviderIds` now lives in this module and is tested for
- * real below.
- */
-
 import type { ModelManagementApi, Provider, ProviderOrigin } from "@/modelManagement";
 import type CopilotPlugin from "@/main";
 import type { AgentSessionManager, BackendDescriptor } from "@/agentMode";
 import { logInfo } from "@/logger";
 import { waitFor } from "@testing-library/react";
-
-// ---------------------------------------------------------------------------
-// Mocks
-// ---------------------------------------------------------------------------
 
 let mockDescriptors: BackendDescriptor[] = [];
 
@@ -31,7 +14,6 @@ jest.mock("@/logger", () => ({
 
 jest.mock("@/agentMode", () => ({
   listBackendDescriptors: () => mockDescriptors,
-  // Real-equivalent pure helpers.
   partitionOpencodeOnlyWireIds: (reported: string[], managed: Set<string>) =>
     reported.filter((w) => !managed.has(w.split("/")[0])),
   mapProviderToOpencodeId: (provider: {
@@ -53,12 +35,7 @@ jest.mock("@/agentMode", () => ({
   },
 }));
 
-// Import AFTER mocks so the module under test binds to them.
 import { buildManagedOpencodeProviderIds, wireAgentModelDiscovery } from "./agentModelDiscovery";
-
-// ---------------------------------------------------------------------------
-// Fakes
-// ---------------------------------------------------------------------------
 
 const mockedLogInfo = jest.mocked(logInfo);
 type ModelCatalog = NonNullable<ReturnType<AgentSessionManager["getCachedModelCatalog"]>>;
@@ -79,7 +56,6 @@ function makeDescriptor(partial: Partial<BackendDescriptor>): BackendDescriptor 
   } as unknown as BackendDescriptor;
 }
 
-/** Probe-owned catalog with a settled model list of the given wire baseModelIds. */
 function catalogWithModels(baseIds: string[]): ModelCatalog {
   return {
     availableModels: baseIds.map((baseModelId) => ({
@@ -106,8 +82,6 @@ function makeApiFake(): ApiFake {
   const byok: ApiFake["byok"] = [];
   const plus: ApiFake["plus"] = [];
 
-  // registerAgentProvider returns configuredModelIds in wireModelIds order and
-  // records an agent provider so the next probe takes the sync branch.
   const registerAgentProvider = jest.fn(
     async (input: { agentType: string; wireModelIds: string[] }) => {
       const providerId = `prov-${input.agentType}`;
@@ -183,10 +157,6 @@ beforeEach(() => {
   mockedLogInfo.mockClear();
 });
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 describe("wireAgentModelDiscovery", () => {
   it("first enrollment registers a provider and enrolls reported models", async () => {
     mockDescriptors = [makeDescriptor({ id: "codex" })];
@@ -222,8 +192,6 @@ describe("wireAgentModelDiscovery", () => {
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
     await waitForDiscoveryLog("first enrollment for codex");
 
-    // "blank" is still enrolled (it's a real wire id) but contributes no
-    // display-name fallback, so resolution falls back to catalog/id instead.
     expect(a.registerAgentProvider.mock.calls[0][0].fallbackDisplayNames).toEqual({
       "gpt-5": "GPT-5",
     });
@@ -291,7 +259,6 @@ describe("wireAgentModelDiscovery", () => {
     await waitForDiscoveryLog("first enrollment for opencode");
 
     const input = a.registerAgentProvider.mock.calls[0][0];
-    // Every model is still enrolled, so the curation UI can list all five.
     expect(input.wireModelIds).toHaveLength(5);
     expect(input.autoEnrollModelIds).toEqual([
       "opencode/big-pickle",
@@ -320,7 +287,6 @@ describe("wireAgentModelDiscovery", () => {
     mockDescriptors = [makeDescriptor({ id: "codex" })];
     const m = makeManagerFake();
     const a = makeApiFake();
-    // One reported model is already the entire enabled set → no narrowing.
     m.setCatalog("codex", catalogWithModels(["gpt-5"]));
 
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
@@ -339,7 +305,6 @@ describe("wireAgentModelDiscovery", () => {
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
     await waitForDiscoveryLog("first enrollment for codex");
 
-    // A new probe reports a changed list; provider now exists → sync only.
     m.setCatalog("codex", catalogWithModels(["gpt-5", "gpt-5.5"]));
     m.emit();
     await waitFor(() => expect(a.syncAgentModels).toHaveBeenCalledTimes(1));
@@ -352,7 +317,6 @@ describe("wireAgentModelDiscovery", () => {
       fallbackDisplayNames: { "gpt-5": "gpt-5", "gpt-5.5": "gpt-5.5" },
       fallbackDescriptions: {},
     });
-    // Discovery never narrows the enabled set on either branch.
     expect(a.setEnabledModels).not.toHaveBeenCalled();
     unsub();
   });
@@ -367,7 +331,6 @@ describe("wireAgentModelDiscovery", () => {
     await waitForDiscoveryLog("first enrollment for codex");
     a.syncAgentModels.mockClear();
 
-    // Same list re-reported.
     m.emit();
 
     expect(a.syncAgentModels).not.toHaveBeenCalled();
@@ -387,7 +350,6 @@ describe("wireAgentModelDiscovery", () => {
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
     await waitForDiscoveryLog("first enrollment for opencode");
 
-    // anthropic/* is suppressed (BYOK-managed); only opencode/* enrolls.
     expect(a.registerAgentProvider.mock.calls[0][0].wireModelIds).toEqual(["opencode/big-pickle"]);
     unsub();
   });
@@ -396,7 +358,6 @@ describe("wireAgentModelDiscovery", () => {
     mockDescriptors = [makeDescriptor({ id: "codex" })];
     const m = makeManagerFake();
     const a = makeApiFake();
-    // A settled state that reports zero models (distinct from null/no-state).
     m.setCatalog("codex", catalogWithModels([]));
 
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
@@ -408,14 +369,9 @@ describe("wireAgentModelDiscovery", () => {
   });
 
   it("does NOT cascade-remove when opencode's reported list fully suppresses to empty", async () => {
-    // Regression: a BYOK-only user whose opencode probe reports only
-    // BYOK-managed (anthropic/*) ids. After suppression the list is empty;
-    // running syncAgentModels({ wireModelIds: [] }) on the existing provider
-    // would cascade-REMOVE every prior opencode agent model. Guard against it.
     mockDescriptors = [makeDescriptor({ id: "opencode" })];
     const m = makeManagerFake();
     const a = makeApiFake();
-    // An opencode agent provider already exists (prior enrollment).
     a.agentProviders.push({
       providerId: "prov-opencode",
       origin: { kind: "agent", agentType: "opencode" },
@@ -426,7 +382,6 @@ describe("wireAgentModelDiscovery", () => {
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
     await waitForDiscoveryLog("empty model list for opencode");
 
-    // All reported ids are suppressed → empty list → no destructive sync.
     expect(a.syncAgentModels).not.toHaveBeenCalled();
     expect(a.registerAgentProvider).not.toHaveBeenCalled();
     unsub();
@@ -460,7 +415,6 @@ describe("wireAgentModelDiscovery", () => {
 });
 
 describe("buildManagedOpencodeProviderIds", () => {
-  /** Build a minimal `Provider` row for a given origin. */
   function makeProvider(providerId: string, origin: ProviderOrigin): Provider {
     return {
       providerId,
@@ -486,7 +440,7 @@ describe("buildManagedOpencodeProviderIds", () => {
 
   it("excludes unroutable BYOK providers (no catalog id → null mapping)", () => {
     const managed = buildManagedOpencodeProviderIds([
-      makeProvider("p1", { kind: "byok" }), // custom endpoint, no catalogProviderId
+      makeProvider("p1", { kind: "byok" }),
       makeProvider("p2", { kind: "byok", catalogProviderId: "google" }),
     ]);
     expect(managed).toEqual(new Set(["google"]));

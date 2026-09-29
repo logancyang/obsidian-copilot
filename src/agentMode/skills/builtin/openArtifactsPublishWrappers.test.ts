@@ -21,9 +21,6 @@ interface CannedResponse {
   body: string;
 }
 
-// Every construct the JSON encoder has to get right: quotes, backslashes, tabs, CR,
-// other control characters, non-ASCII, a closing script tag, printf metacharacters,
-// a line that is only a backslash, and a trailing newline.
 const HTML = [
   "<!doctype html>",
   '<html lang="zh"><head><title>Tab\there "quoted" \\ back\\slash</title></head>',
@@ -36,9 +33,7 @@ const HTML = [
 ].join("\n");
 
 describe("openArtifactsPublishWrappers", () => {
-  // Windows runners can exceed 20 seconds on the first PowerShell invocation.
-  // Allow cold startup, including up to four sequential invocations in one test.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/394
+  // Windows runners can exceed 20 seconds on the first PowerShell invocation. https://github.com/Brevilabs/obsidian-copilot-private/issues/394
   jest.setTimeout(4 * WRAPPER_TIMEOUT_MS + 10_000);
 
   let root: string;
@@ -104,9 +99,6 @@ describe("openArtifactsPublishWrappers", () => {
     stderr: string;
   }
 
-  // The mock server runs on this same event loop, so the wrapper has to run
-  // asynchronously: a blocking spawnSync would leave curl waiting on a request
-  // Node can never answer.
   function run(args: string[], env: Record<string, string | undefined> = {}): Promise<RunResult> {
     return new Promise((resolve, reject) => {
       const child = spawn(
@@ -190,7 +182,6 @@ describe("openArtifactsPublishWrappers", () => {
     expect(JSON.parse(result.stdout)).toEqual({ docId: "9f2k4mvq7t0xbz3n", status: "unshared" });
     expect(requests).toHaveLength(1);
 
-    // A bare 404 from a proxy or a wrong host is not evidence the page is gone.
     requests.length = 0;
     canned = { status: 404, body: "<html>not here</html>" };
     const bare = await run(["unshare", "9f2k4mvq7t0xbz3n"]);

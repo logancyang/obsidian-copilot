@@ -6,16 +6,6 @@ import { requireNodeModule } from "@/utils/desktopRuntime";
 import type { ReconcileFs } from "./reconcile";
 import type { SymlinksFs } from "./symlinks";
 
-/**
- * Production `node:fs`-backed adapter for the migration / symlinks helpers.
- * Lives here so the leaf modules stay pure (no `node:fs` import) and the
- * orchestrator (`SkillManager`) wires this in at the edge.
- *
- * All paths must be **absolute**. Symlinks on Windows are created as
- * directory junctions (`'junction'`) — `fs.symlink` plain mode requires
- * admin/Developer Mode privileges; junctions work for stock users and are
- * directory-only (which is exactly what skills need).
- */
 export function createNodeMigrateSkillFs(): MigrateSkillFs {
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
   return {
@@ -56,11 +46,6 @@ async function nodeReadlinkAbs(p: string): Promise<string | null> {
   }
 }
 
-/**
- * Subset of {@link createNodeMigrateSkillFs} that satisfies the
- * {@link SymlinksFs} surface. Reused by migration, toggle, and
- * reconcile logic.
- */
 export function createNodeSymlinksFs(): SymlinksFs {
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
   const path = requireNodeModule<typeof import("node:path")>("path");
@@ -91,12 +76,7 @@ export function createNodeSymlinksFs(): SymlinksFs {
     },
     async symlink(target, linkPath) {
       const type = process.platform === "win32" ? "junction" : "dir";
-      // Junctions require an absolute target — caller is contracted to
-      // pass an absolute path. Resolve defensively anyway.
       const absTarget = path.isAbsolute(target) ? target : path.resolve(target);
-      // Per-agent skill dirs (e.g. `<vault>/.codex/skills/`) may not exist
-      // yet on a fresh vault — `symlink` would fail with ENOENT. mkdir is
-      // a no-op when the dir already exists.
       await fs.promises.mkdir(path.dirname(linkPath), { recursive: true });
       await fs.promises.symlink(absTarget, linkPath, type);
     },
@@ -114,11 +94,6 @@ export function createNodeSymlinksFs(): SymlinksFs {
   };
 }
 
-/**
- * Production adapter for {@link discoverProjectSkills}. Uses `lstat` to
- * detect symlinks portably (Windows junctions still report as symbolic
- * links via lstat).
- */
 export function createNodeProjectDiscoveryFs(): ProjectDiscoveryFs {
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
   return {
@@ -130,10 +105,6 @@ export function createNodeProjectDiscoveryFs(): ProjectDiscoveryFs {
   };
 }
 
-/**
- * Production adapter for {@link reconcile}. Combines the SymlinksFs surface
- * with shallow listing + readlink resolution used for orphan sweep.
- */
 export function createNodeReconcileFs(): ReconcileFs {
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
   return {

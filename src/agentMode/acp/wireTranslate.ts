@@ -1,11 +1,3 @@
-/**
- * Pure translators between ACP wire types and the session-domain types
- * defined in `session/types.ts`. The shapes mostly mirror each other (we
- * intentionally modelled the session domain on ACP's vocabulary), so most
- * translators are structural identity casts. Keeping them in one file
- * isolates the seam: when ACP evolves, this is the only place that needs
- * updating.
- */
 import type {
   CancelNotification,
   ContentBlock,
@@ -49,8 +41,6 @@ import type {
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
 import { resolveToolName } from "@/agentMode/session/toolName";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
-
-// ---- Catalog wire → neutral (pass-through, structural alias) -----------
 
 export function modeStateFromAcp(state: SessionModeState | null | undefined): RawModeState | null {
   if (!state) return null;
@@ -124,8 +114,6 @@ export function acpStateToBackendState(
   );
 }
 
-// ---- StopReason --------------------------------------------------------
-
 export function stopReasonFromAcp(reason: AcpStopReason): StopReason {
   switch (reason) {
     case "end_turn":
@@ -139,8 +127,6 @@ export function stopReasonFromAcp(reason: AcpStopReason): StopReason {
   }
 }
 
-// ---- Tool kind / status (ACP enum subsets) -----------------------------
-
 export function toolKindFromAcp(kind: AcpToolKind | undefined): AgentToolKind | undefined {
   if (kind == null) return undefined;
   return kind;
@@ -150,8 +136,6 @@ function toolStatusFromAcp(status: string | undefined): AgentToolStatus | undefi
   if (!status) return undefined;
   return status as AgentToolStatus;
 }
-
-// ---- Content blocks ----------------------------------------------------
 
 export function promptContentToAcp(blocks: PromptContent[]): ContentBlock[] {
   return blocks.map((b): ContentBlock => {
@@ -229,30 +213,6 @@ function toolCallDeltaFromAcp(
   };
 }
 
-// ---- Notification → SessionEvent --------------------------------------
-
-/**
- * One wire notification can yield more than one session event: a `todowrite`
- * tool call additionally synthesizes the standard `plan` update (see
- * {@link todoToolPlanFromAcp}), so the trail's PlanPill and the todo snapshot
- * stay backend-agnostic. When a base translation exists it comes first.
- *
- * It can also yield none. `user_message_chunk` is the agent echoing back the
- * prompt it was given, not something the session has to react to — the message
- * is already on screen, put there when it was sent. It is dropped here rather
- * than translated into a domain update no consumer reads, and dropping it early
- * also keeps it away from the unknown-discriminant fallback below, which reports
- * a titleless session update and would clear the label on a backend whose titles
- * are trusted. `plan_update` and `plan_removed` are dropped for the same reason:
- * the plan-approval card owns a proposed plan's body, so the chat renders neither.
- *
- * `todoToolCallIds` is one session's id set, owned by the caller
- * (AcpBackendProcess keys it per session — see `todoToolCallIdsFor`): the first
- * `todowrite`-titled tool call registers its id, so later `tool_call_update`s
- * for the same call still synthesize even after opencode renames the title
- * (e.g. "3 todos") or drops it. Omit it (tests, replay) to fall back to
- * title-only recognition.
- */
 export function acpNotificationToEvents(
   n: SessionNotification,
   todoToolCallIds?: Set<string>
@@ -268,22 +228,6 @@ export function acpNotificationToEvents(
   return events;
 }
 
-/**
- * opencode reports its execution todo list as a generic `todowrite` tool call
- * whose `rawInput.todos` carries the full list — current releases (1.17.3)
- * have NO plan-channel emission at all (verified: binary-string audit + live
- * probes, designdocs/agent-projects/verify/README.md "Task-list channel").
- * Synthesize the standard `plan` update from it. Builds that DO emit a real
- * plan update coexist fine: identical entries dedupe downstream
- * (`planEntriesEqual` for the message part, signature compare for the
- * snapshot).
- *
- * Tool identity: the initial `tool_call` titles itself `todowrite`; opencode
- * then mutates follow-up update titles (e.g. "3 todos"). We register the
- * call's id on first sight (title === todowrite) so subsequent updates for the
- * same id keep synthesizing regardless of title — and unknown ids are ignored,
- * so a stray `{todos}` payload from another tool/backend can't masquerade.
- */
 function todoToolPlanFromAcp(
   update: SessionNotification["update"],
   todoToolCallIds?: Set<string>
@@ -302,10 +246,6 @@ function todoToolPlanFromAcp(
 
   if (isTodoTitle && toolCallId) todoToolCallIds?.add(toolCallId);
 
-  // Recognized when the title says todowrite, or the id was registered from an
-  // earlier todowrite-titled call. Without a tracker (tests/replay), fall back
-  // to title-only — a renamed follow-up is then skipped, but its predecessor
-  // already delivered the same list.
   const recognized =
     isTodoTitle || (toolCallId != null && todoToolCallIds?.has(toolCallId) === true);
   if (!recognized) return null;
@@ -327,11 +267,6 @@ function todoToolPlanFromAcp(
           : "medium",
     });
   }
-  // A recognized todo tool reporting `todos: []` is a genuine clear — emit an
-  // empty plan so the snapshot resets (matching the claude path, which emits an
-  // empty plan when its last task is removed). But a NON-empty array that
-  // filtered down to nothing is malformed input, not a clear: don't wipe a good
-  // list on garbage. (`todos` is already array-guarded above.)
   if (entries.length === 0 && todos.length > 0) return null;
   return { sessionUpdate: "plan", entries };
 }
@@ -396,19 +331,10 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
       };
     }
     default:
-      // Unknown discriminant — fall back to a benign session_info_update with no title.
       return { sessionUpdate: "session_info_update", title: null };
   }
 }
 
-// ---- Permission prompt / decision -------------------------------------
-
-/**
- * Convert an ACP permission request into the session-domain prompt.
- *
- * @param req - The request emitted by the ACP backend.
- * @param presentPermissionOption - Optional backend-owned presentation adapter.
- */
 export function acpPermissionRequestToPrompt(
   req: RequestPermissionRequest,
   presentPermissionOption?: (option: PermissionOption, metadata: unknown) => PermissionOption
@@ -471,8 +397,6 @@ export function acpDecisionFromResponse(resp: RequestPermissionResponse): Permis
 export function decisionToAcpResponse(decision: PermissionDecision): RequestPermissionResponse {
   return decision;
 }
-
-// ---- SessionId / Cancel -----------------------------------------------
 
 export function sessionIdFromAcp(id: AcpSessionId): SessionId {
   return id;

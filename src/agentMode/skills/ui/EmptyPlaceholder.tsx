@@ -3,22 +3,9 @@ import { LayoutGrid } from "lucide-react";
 import React from "react";
 
 interface EmptyPlaceholderProps {
-  /**
-   * The currently configured skills folder, vault-relative. Rendered in
-   * the hint line so the user can verify exactly where Copilot is looking.
-   */
   folder: string;
 }
 
-/**
- * The empty state for the Skills tab — shown when discovery returns zero
- * managed skills. Mirrors §A of `Skills Tab Flows.html`.
- *
- * Skills show up in the tab automatically when they live inside the
- * canonical folder or any registered agent's project skills folder
- * (`.claude/skills/`, `.agents/skills/`, `.opencode/skills/`). Discovery
- * runs on open, so the user never has to trigger it by hand.
- */
 export const EmptyPlaceholder: React.FC<EmptyPlaceholderProps> = ({ folder }) => {
   return (
     <div

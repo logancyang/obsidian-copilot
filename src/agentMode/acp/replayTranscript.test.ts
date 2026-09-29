@@ -7,7 +7,6 @@ import {
   type ReplayTranscriptState,
 } from "./replayTranscript";
 
-/** Build a wire-shaped replay chunk, optionally carrying a backend message id. */
 function chunk(
   sessionUpdate: "user_message_chunk" | "agent_message_chunk" | "agent_thought_chunk",
   text: string,
@@ -24,7 +23,6 @@ function activity(sessionUpdate: string): SessionNotification["update"] {
   return { sessionUpdate } as unknown as SessionNotification["update"];
 }
 
-/** Feed a whole burst and return the finished transcript. */
 function replay(
   updates: SessionNotification["update"][]
 ): ReturnType<typeof finishReplayTranscript> {
@@ -62,8 +60,6 @@ describe("replayTranscript", () => {
         content: { type: "image", mimeType: "image/png", data: "aGk=" },
       } as unknown as SessionNotification["update"];
 
-      // Claimed so it cannot fall through to the live routing path this
-      // accumulator exists to bypass, but nothing displayable comes of it.
       expect(consumeReplayUpdate(state, image)).toBe(true);
       expect(finishReplayTranscript(state)).toBeUndefined();
     });
@@ -96,8 +92,6 @@ describe("replayTranscript", () => {
     });
 
     it("keeps one turn in one message when its chunks carry different message ids", () => {
-      // The live view appends every chunk of a turn to a single assistant
-      // message whatever its id, so a replay must not split on one.
       const transcript = replay([
         chunk("user_message_chunk", "list the files", "m1"),
         chunk("agent_message_chunk", "Let me look. ", "m2"),
@@ -113,9 +107,6 @@ describe("replayTranscript", () => {
     });
 
     it("separates two prompts that carry different message ids", () => {
-      // A turn cancelled, refused, or failed before the agent said anything
-      // leaves its prompt in history with nothing after it, so the next prompt
-      // follows immediately and only the id tells them apart.
       const transcript = replay([
         chunk("user_message_chunk", "cancelled prompt", "u1"),
         chunk("user_message_chunk", "next prompt", "u2"),
@@ -139,10 +130,6 @@ describe("replayTranscript", () => {
     });
 
     it("separates two prompts that the agent replayed without any message id", () => {
-      // The id is optional, so a replay can carry user chunks without one. Only
-      // a repeated id proves two chunks are one prompt, so without one each
-      // chunk stands alone — otherwise the pair below would come back as a
-      // single run-on bubble.
       const transcript = replay([
         chunk("user_message_chunk", "cancelled prompt"),
         chunk("user_message_chunk", "next prompt"),
@@ -179,9 +166,6 @@ describe("replayTranscript", () => {
     });
 
     it("separates two user turns when the agent only ran a tool between them", () => {
-      // A turn that answers by running a tool and saying nothing is a complete
-      // turn in the live view, so it has to keep the prompts around it apart
-      // even though the tool itself is not restored.
       const transcript = replay([
         chunk("user_message_chunk", "first ask"),
         activity("tool_call"),
@@ -194,9 +178,6 @@ describe("replayTranscript", () => {
     });
 
     it("keeps one prompt whole when a tool update lands between its chunks", () => {
-      // An update can settle a tool call started in an earlier turn, so it says
-      // nothing about who is speaking and must not break the message it lands
-      // in.
       const transcript = replay([
         chunk("user_message_chunk", "one prompt ", "u1"),
         activity("tool_call_update"),
@@ -223,7 +204,6 @@ describe("replayTranscript", () => {
     });
 
     it("restores a context-wrapped prompt as the text the user typed", () => {
-      // What the agent stored for a prompt sent with a note attached.
       const wrapped =
         "<copilot-context>\nNotes:\n- 2023-10-27.md\n</copilot-context>\n\n" +
         "<user-message>\n[[2023-10-27]] hi\n</user-message>";
@@ -243,8 +223,6 @@ describe("replayTranscript", () => {
       ]);
 
       expect(transcript?.map((m) => m.id)).toEqual(["acp-loaded-0", "acp-loaded-1"]);
-      // A replayed message has no original send time; stamping "now" would
-      // render every restored message as if it had just arrived.
       expect(transcript?.every((m) => m.timestamp === null)).toBe(true);
       expect(transcript?.every((m) => m.isVisible)).toBe(true);
     });

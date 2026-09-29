@@ -9,7 +9,6 @@ import { BackendConfigRegistry } from "@/modelManagement";
 
 jest.mock("@/constants", () => ({}));
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
-// Exercise real model-list writes without loading the barrel's provider SDKs and UI.
 jest.mock("@/modelManagement", () => ({
   BackendConfigRegistry: jest.requireActual("@/modelManagement/backends/BackendConfigRegistry")
     .BackendConfigRegistry,
@@ -32,7 +31,6 @@ jest.mock("@/utils/appPaths", () => ({
   getVaultId: () => "test-vault",
 }));
 jest.mock("./backends/shared/agentSystemPrompt", () => ({
-  // Like the real prompt, varies per backend with the builtin skill opt-outs.
   buildAgentSystemPrompt: (id: string) =>
     `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}`,
 }));
@@ -70,7 +68,6 @@ jest.mock("./ui/permissionPrompter", () => ({
   createDefaultPermissionPrompter: jest.fn(),
   createDefaultAskUserQuestionPrompter: jest.fn(),
 }));
-// The host barrel also exports UI and provider integrations; none participate in startup wiring.
 jest.mock("./ui/AgentModeChat", () => ({}));
 jest.mock("./ui/CopilotAgentView", () => ({}));
 jest.mock("./ui/useBackendDescriptor", () => ({}));
@@ -100,7 +97,6 @@ const mockDescriptors = ["claude", "opencode"].map((id) => ({
   id,
   onPluginLoad: jest.fn(async (_plugin: CopilotPlugin) => {}),
   skillsProjectDir: `.${id}/skills`,
-  // Only subprocess backends bake provider and model config into their spawn.
   restartOnProviderConfigChange: id === "opencode",
   restartOnSystemPromptChange: id === "opencode",
   getInstallState: () => mockStates[id],
@@ -118,7 +114,6 @@ const mockManager = {
 };
 let plugin: CopilotPlugin;
 const reconcile = jest.mocked(reconcileBuiltinSkills);
-/** Settings holding one configured model whose `info` carries `overrides`. */
 function settingsWith(overrides: Record<string, unknown>): CopilotSettings {
   return {
     agentMode: { skills: {} },
@@ -143,7 +138,6 @@ function settingsWith(overrides: Record<string, unknown>): CopilotSettings {
   } as unknown as CopilotSettings;
 }
 
-/** Drive every settings subscriber the way the settings store would. */
 function emitSettingsChange(prev: CopilotSettings, next: CopilotSettings): void {
   mockSettings = next;
   for (const subscriber of mockSettingsSubscribers) subscriber(prev, next);
@@ -276,7 +270,6 @@ describe("agentMode", () => {
         },
       } as unknown as CopilotSettings);
 
-      // The skill must leave the agent's folder before the new prompt stops naming it.
       expect(mockManager.noteSpawnConfigChanged).not.toHaveBeenCalled();
       reconciled.resolve();
       await noted.promise;
@@ -288,9 +281,6 @@ describe("agentMode", () => {
     });
 
     it(`refreshes a spawn-config backend when a model's published effort levels change ${LINEUP_ISSUE}`, () => {
-      // The Plus lineup reconcile rewrites the row in place, so no provider or
-      // enabled-list emission fires; without this the live agent keeps offering
-      // an effort level the service has withdrawn.
       createAgentSessionManager({} as App, plugin);
 
       emitSettingsChange(
@@ -317,8 +307,6 @@ describe("agentMode", () => {
     });
 
     it(`leaves a running agent alone when only a model's display metadata changes ${LINEUP_ISSUE}`, () => {
-      // The agent is asked to reload for this, which a reworded description is
-      // not worth: the spawn config never carries it.
       createAgentSessionManager({} as App, plugin);
 
       emitSettingsChange(
@@ -412,7 +400,6 @@ describe("agentMode", () => {
         const notifyProvider = jest.mocked(plugin.modelManagement.providerRegistry.subscribe).mock
           .calls[0][0];
 
-        // A key rotation can emit without changing settings or its keychain ID.
         notifyProvider(providerId);
 
         if (reload) {

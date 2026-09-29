@@ -8,9 +8,6 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-// `runRenameSkill` calls `renameWithRetry` for the canonical dir-rename.
-// Provide an in-memory implementation that mutates the FS map so tests can
-// assert on the renamed paths.
 let renameImpl: ((from: string, to: string) => Promise<void>) | null = null;
 jest.mock("./renameWithRetry", () => ({
   __esModule: true,
@@ -46,7 +43,6 @@ function mkFs(initial: Record<string, Node> = {}): PropertiesFs & {
     map.set(p, n);
   }
 
-  // Wire the rename-with-retry stub to mutate this map.
   renameImpl = async (from: string, to: string) => {
     const fromNode = map.get(from);
     if (fromNode === undefined) {
@@ -56,7 +52,6 @@ function mkFs(initial: Record<string, Node> = {}): PropertiesFs & {
       throw Object.assign(new Error(`EEXIST: ${to}`), { code: "EEXIST" });
     }
     ensureAncestors(to);
-    // Walk every path with the `from` prefix and re-key under `to`.
     const fromPrefix = from + "/";
     const toPrefix = to + "/";
     const renamed: Array<[string, Node]> = [];
@@ -67,7 +62,6 @@ function mkFs(initial: Record<string, Node> = {}): PropertiesFs & {
         renamed.push([toPrefix + k.slice(fromPrefix.length), v]);
       }
     }
-    // Delete old entries.
     for (const [k] of Array.from(map.entries())) {
       if (k === from || k.startsWith(fromPrefix)) map.delete(k);
     }
@@ -138,7 +132,6 @@ const AGENT_DIRS_ABS = {
   opencode: `${VAULT}/.opencode/skills`,
 } as const;
 
-/** Build a minimal SKILL.md fixture. Optional unknown metadata keys preserved. */
 const SKILL_MD = (
   name: string,
   opts: { agents?: string; description?: string; authorMeta?: string } = {}
@@ -182,7 +175,6 @@ describe("runUpdateProperties", () => {
     expect((skillMd as { kind: "file"; content: string }).content).toMatch(
       /description: An updated short skill\./
     );
-    // Symlink untouched.
     expect(fs.__dump()["/vault/.claude/skills/foo"]).toEqual({
       kind: "link",
       target: `${CANON}/foo`,
@@ -190,9 +182,6 @@ describe("runUpdateProperties", () => {
   });
 
   it("preserves unknown top-level keys and unknown metadata.* keys byte-equal", async () => {
-    // Hand-construct a SKILL.md that carries an unknown top-level key
-    // (`license`) and an unknown metadata key (`author`). The patch should
-    // touch only `description`; everything else must survive untouched.
     const original = [
       "---",
       "name: foo",
@@ -219,13 +208,11 @@ describe("runUpdateProperties", () => {
     const skillMd = fs.__dump()[`${CANON}/foo/SKILL.md`];
     const next = (skillMd as { kind: "file"; content: string }).content;
 
-    // Parse the result and assert structural preservation.
     const parsed = parseSkillFile(next, "foo");
     expect(parsed.frontmatter.description).toBe("new description");
     expect(parsed.frontmatter.license).toBe("MIT");
     expect(parsed.frontmatter.enabledAgents).toEqual(["claude"]);
 
-    // The unknown metadata key should still appear verbatim in the raw output.
     expect(next).toMatch(/author: alice/);
   });
 
@@ -276,12 +263,10 @@ describe("runRenameSkill", () => {
 
     expect(result.ok).toBe(true);
 
-    // Old paths gone, new paths exist.
     expect(fs.__dump()[`${CANON}/foo`]).toBeUndefined();
     expect(fs.__dump()[`${CANON}/foo/SKILL.md`]).toBeUndefined();
     expect(fs.__dump()[`${CANON}/bar`]).toEqual({ kind: "dir" });
 
-    // Both symlinks repointed to the new absolute target with new basename.
     expect(fs.__dump()["/vault/.claude/skills/foo"]).toBeUndefined();
     expect(fs.__dump()["/vault/.opencode/skills/foo"]).toBeUndefined();
     expect(fs.__dump()["/vault/.claude/skills/bar"]).toEqual({
@@ -293,17 +278,12 @@ describe("runRenameSkill", () => {
       target: `${CANON}/bar`,
     });
 
-    // SKILL.md `name:` rewritten.
     const skillMd = fs.__dump()[`${CANON}/bar/SKILL.md`];
     expect(skillMd.kind).toBe("file");
     expect((skillMd as { kind: "file"; content: string }).content).toMatch(/^name: bar$/m);
   });
 
   it("project-single skill renames IN PLACE inside its agent folder (no canonical move, no symlinks)", async () => {
-    // Regression: a project skill must NOT be relocated into the canonical
-    // folder on rename (that would drop its inferred enabled-agents and let
-    // reconciliation sweep the orphan link, disabling it everywhere). Per
-    // Skills Discovery Redesign §244 the rename happens in place.
     const fs = mkFs({
       "/vault/.claude/skills/foo/SKILL.md": {
         kind: "file",
@@ -334,18 +314,15 @@ describe("runRenameSkill", () => {
       expect(result.newDirPath).toBe("/vault/.claude/skills/bar");
     }
 
-    // Renamed in place; old name gone, new name is a real dir in the agent folder.
     expect(fs.__dump()["/vault/.claude/skills/foo"]).toBeUndefined();
     expect(fs.__dump()["/vault/.claude/skills/bar"]).toEqual({ kind: "dir" });
 
-    // Crucially: NOT moved into the canonical folder, and no symlink created.
     expect(fs.__dump()[`${CANON}/bar`]).toBeUndefined();
     expect(fs.__dump()["/vault/.claude/skills/bar"]).not.toEqual({
       kind: "link",
       target: expect.anything(),
     });
 
-    // SKILL.md `name:` rewritten in place.
     const skillMd = fs.__dump()["/vault/.claude/skills/bar/SKILL.md"];
     expect(skillMd.kind).toBe("file");
     expect((skillMd as { kind: "file"; content: string }).content).toMatch(/^name: bar$/m);
@@ -378,7 +355,7 @@ describe("runRenameSkill", () => {
 
     const result = await runRenameSkill({
       skill: mkSkill("foo"),
-      newName: "Bad-Name", // uppercase
+      newName: "Bad-Name",
       canonicalAbsRoot: CANON,
       agentDirsAbs: AGENT_DIRS_ABS,
       fs,
@@ -398,8 +375,6 @@ describe("runRenameSkill", () => {
       "/vault/.opencode/skills/foo": { kind: "link", target: `${CANON}/foo` },
     });
 
-    // After old links are removed, blocking symlink creation triggers EPERM
-    // on every retarget. Canonical rename should still succeed.
     fs.__setSymlinkBlocked(true);
 
     const result = await runRenameSkill({
@@ -411,17 +386,13 @@ describe("runRenameSkill", () => {
     });
 
     expect(result).toEqual({ ok: false, reason: "eperm", mutated: true });
-    // Canonical rename did succeed.
     expect(fs.__dump()[`${CANON}/foo`]).toBeUndefined();
     expect(fs.__dump()[`${CANON}/bar`]).toEqual({ kind: "dir" });
-    // SKILL.md `name:` was rewritten.
     const skillMd = fs.__dump()[`${CANON}/bar/SKILL.md`];
     expect((skillMd as { kind: "file"; content: string }).content).toMatch(/^name: bar$/m);
   });
 
   it("EPERM partial: links that did succeed point to the new target", async () => {
-    // Block symlink creation only after the first successful one. We simulate
-    // by toggling the blocker mid-test via a custom symlink wrapper.
     const fs = mkFs({
       [`${CANON}/foo/SKILL.md`]: {
         kind: "file",
@@ -431,7 +402,6 @@ describe("runRenameSkill", () => {
       "/vault/.opencode/skills/foo": { kind: "link", target: `${CANON}/foo` },
     });
 
-    // Wrap `symlink` so the second call (for opencode) trips EPERM.
     let symlinkCallCount = 0;
     const origSymlink = fs.symlink.bind(fs);
     fs.symlink = async (target: string, linkPath: string) => {
@@ -451,12 +421,10 @@ describe("runRenameSkill", () => {
     });
 
     expect(result).toEqual({ ok: false, reason: "eperm", mutated: true });
-    // Successful link points to new target.
     expect(fs.__dump()["/vault/.claude/skills/bar"]).toEqual({
       kind: "link",
       target: `${CANON}/bar`,
     });
-    // Failed link's old basename was removed but never recreated.
     expect(fs.__dump()["/vault/.opencode/skills/foo"]).toBeUndefined();
     expect(fs.__dump()["/vault/.opencode/skills/bar"]).toBeUndefined();
   });

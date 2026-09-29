@@ -8,7 +8,6 @@ jest.mock("@/logger", () => ({ logInfo: jest.fn() }));
 
 const USAGE_METHOD = "usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET";
 
-/** A real response body from the SDK's usage API. */
 const LIVE_SNAPSHOT = {
   rate_limits_available: true,
   rate_limits: {
@@ -20,8 +19,6 @@ const LIVE_SNAPSHOT = {
 describe("claudePlanUsage", () => {
   describe("planUsageFromClaudeUsage()", () => {
     it("reads both windows as percentages, not fractions", () => {
-      // `utilization` is 0-100. The same numbers appear in the response's parallel
-      // `limits[]` array under a field named `percent`, which is what settles it.
       const reading = planUsageFromClaudeUsage(LIVE_SNAPSHOT, 1_000);
 
       expect(reading).toEqual({
@@ -53,9 +50,6 @@ describe("claudePlanUsage", () => {
     });
 
     it("reads the qualified weekly buckets the SDK documents (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", () => {
-      // A legacy plan's per-model weekly limit arrives as seven_day_opus /
-      // seven_day_sonnet, not as model_scoped, and OAuth-app usage has its own weekly
-      // bucket. For those accounts these are the caps they can actually hit.
       const reading = planUsageFromClaudeUsage({
         rate_limits_available: true,
         rate_limits: {
@@ -111,8 +105,6 @@ describe("claudePlanUsage", () => {
         rate_limits_available: true,
         rate_limits: {
           five_hour: { utilization: 10 },
-          // Buckets like this come and go between SDK releases; rendering one would put
-          // an unexplained row in front of the user.
           some_codename: { utilization: 99 },
         } as never,
       });
@@ -121,9 +113,6 @@ describe("claudePlanUsage", () => {
     });
 
     it("reports no caps only when the SDK says plan limits do not apply, so the caller clears what it was showing (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", () => {
-      // An API-key, Bedrock, or Vertex login is not metered by plan caps. That is a
-      // successful answer, not a failed read: keeping the previous subscription caps
-      // on screen would state a limit this account does not have.
       expect(planUsageFromClaudeUsage({ rate_limits_available: false })).toEqual({ kind: "none" });
     });
 
@@ -132,8 +121,6 @@ describe("claudePlanUsage", () => {
       ["a response carrying no rate limits", { rate_limits_available: true, rate_limits: null }],
       ["a shape we do not recognize", { unexpected: true } as never],
     ])("reports the read unusable for %s rather than clearing the meters", (_label, snapshot) => {
-      // Only an explicit "limits do not apply" clears. An answer we could not read is the
-      // absence of that statement, so the last good reading stands.
       expect(planUsageFromClaudeUsage(snapshot)).toEqual({ kind: "unavailable" });
     });
   });
@@ -165,8 +152,6 @@ describe("claudePlanUsage", () => {
         { [USAGE_METHOD]: () => ({ unexpected: true }) },
       ],
     ])("reports the read unusable when %s", async (_label, query) => {
-      // The method name says the API may change or vanish in any release. When it does,
-      // the meter keeps showing its last good reading instead of the turn breaking.
       await expect(readClaudePlanUsage(query)).resolves.toEqual({ kind: "unavailable" });
     });
 

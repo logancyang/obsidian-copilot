@@ -15,9 +15,6 @@ import type CopilotPlugin from "@/main";
 import type { SkillLoadIssue } from "./SkillLoadIssues";
 import { SkillsSettings } from "./SkillsSettings";
 
-// The manager owns filesystem discovery and a live subscription store; stub the
-// singleton so the component renders in isolation while letting us observe the
-// refresh triggered by a derived-path change.
 const setBuiltinSkillEnabled = jest.fn().mockResolvedValue({ ok: true });
 const setBuiltinAgentEnabled = jest.fn().mockResolvedValue({ ok: true });
 const refresh = jest.fn().mockResolvedValue({ ok: true, reconcileErrorCount: 0 });
@@ -71,8 +68,6 @@ jest.mock("./SkillLoadIssues", () => {
 jest.mock("@/utils/openWithSystemDefault", () => ({ openWithSystemDefault: jest.fn() }));
 jest.mock("@/utils/openVaultPath", () => ({ openVaultPath: jest.fn() }));
 
-// The registry pulls in every backend's icon/adapter chain; the row list is
-// empty in these tests, so an empty descriptor set keeps the surface minimal.
 jest.mock("@/agentMode/backends/registry", () => ({
   listBackendDescriptors: () => mockAgents,
 }));
@@ -414,8 +409,6 @@ describe("SkillsSettings", () => {
       await act(async () => {
         renderSettings();
       });
-      // The dedicated "Skills folder" setting row was removed: no editable input
-      // bound to the retired agentMode.skills.folder field, and no setting row.
       expect(screen.queryByLabelText("Skills folder")).toBeNull();
       expect(screen.queryByText("Skills folder")).toBeNull();
     });
@@ -424,22 +417,15 @@ describe("SkillsSettings", () => {
       await act(async () => {
         renderSettings();
       });
-      // Mount runs one discovery pass; the derived path surfaces in the
-      // empty-state hint (there is no folder-setting row).
       expect(screen.getByText(/copilot\/skills/)).not.toBeNull();
       expect(refresh).toHaveBeenCalledTimes(1);
 
-      // No manual rerender: useSettingsValue is a live jotai subscription, so
-      // the store update alone must re-render and re-scan. Asserting that here
-      // is what locks the reactive contract (a snapshot-only regression fails).
       await act(async () => {
         updateSetting("copilotFolder", "vault-tools");
       });
 
       expect(screen.getByText(/vault-tools\/skills/)).not.toBeNull();
       expect(screen.queryByText(/copilot\/skills/)).toBeNull();
-      // The discovery pass re-runs so the list reflects the new derived folder;
-      // guards against the effect regressing to a stale/retired dependency.
       expect(refresh).toHaveBeenCalledTimes(2);
     });
 

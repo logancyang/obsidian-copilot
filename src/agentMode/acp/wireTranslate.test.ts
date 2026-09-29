@@ -16,9 +16,6 @@ const VALID_TODOS = [
 
 const testAcpNotificationToEvents = () => {
   it("drops a user message chunk instead of reporting it as a titleless session update", () => {
-    // A backend may echo the prompt on every live turn. Translating it would reach
-    // the unknown-discriminant fallback, which reports a titleless session
-    // update — and a backend whose titles are trusted then clears the label.
     const events = acpNotificationToEvents(
       notification({
         sessionUpdate: "user_message_chunk",
@@ -87,8 +84,6 @@ const testAcpNotificationToEvents = () => {
   });
 
   it("rejects updates whose present title is not the native todowrite tool", () => {
-    // Without a tracker, a renamed/foreign title is skipped (its predecessor
-    // already delivered the same list).
     for (const title of ["3 todos", "bash", "mcp__tracker__todowrite"]) {
       const events = acpNotificationToEvents(
         notification({
@@ -104,7 +99,6 @@ const testAcpNotificationToEvents = () => {
 
   it("continues synthesizing for a renamed/titleless update once the id is registered", () => {
     const ids = new Set<string>();
-    // First sight: titled `todowrite` registers the id and synthesizes.
     const first = acpNotificationToEvents(
       notification({
         sessionUpdate: "tool_call",
@@ -115,7 +109,6 @@ const testAcpNotificationToEvents = () => {
       ids
     );
     expect(first).toHaveLength(2);
-    // Follow-up renamed "3 todos" for the SAME id still synthesizes.
     const renamed = acpNotificationToEvents(
       notification({
         sessionUpdate: "tool_call_update",
@@ -134,7 +127,6 @@ const testAcpNotificationToEvents = () => {
 
   it("does not synthesize for an unregistered id carrying a todos-shaped payload", () => {
     const ids = new Set<string>();
-    // A foreign tool's titleless update with a todos field must not masquerade.
     const events = acpNotificationToEvents(
       notification({
         sessionUpdate: "tool_call_update",
@@ -169,8 +161,6 @@ const testAcpNotificationToEvents = () => {
 
   it("emits an empty plan when a registered todo call reports todos: [] (a clear)", () => {
     const ids = new Set<string>();
-    // First the list arrives, then the agent clears it with an empty array —
-    // the synth must emit an empty plan so the snapshot resets downstream.
     acpNotificationToEvents(
       notification({
         sessionUpdate: "tool_call",
@@ -216,7 +206,6 @@ const testAcpNotificationToEvents = () => {
           sessionUpdate: "usage_update",
           size: 200_000,
           used: 42_000,
-          // cost is no longer part of the usage model — it must be dropped.
           cost: { amount: 0.1234, currency: "USD" },
         })
       );

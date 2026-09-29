@@ -32,7 +32,6 @@ export interface BuiltinSkillsTableProps {
   onToggleAgent: (name: string, agent: BackendId, enabled: boolean) => void;
 }
 
-/** Read-only bundled content with independent whole-skill and agent preferences. */
 export function BuiltinSkillsTable({
   skills,
   preferences,
@@ -68,8 +67,6 @@ export function BuiltinSkillsTable({
             onToggleAgent={onToggleAgent}
           />
         ))}
-        {/* Search can hide every catalog row; explain the result instead of implying missing bundled skills.
-            https://github.com/logancyang/obsidian-copilot/issues/3022 */}
         {skills.length === 0 && (
           <p className="tw-text-ui-smaller tw-text-muted">No built-in skills match your search.</p>
         )}
@@ -88,8 +85,6 @@ interface BuiltinSkillItemProps extends Pick<
   pending: boolean;
 }
 
-// Stable catalog entries and per-skill preferences let unrelated rows skip a toggle.
-// https://github.com/logancyang/obsidian-copilot/issues/3022
 const BuiltinSkillItem = React.memo(function BuiltinSkillItem({
   skill,
   preference,
@@ -112,8 +107,6 @@ const BuiltinSkillItem = React.memo(function BuiltinSkillItem({
         menuOpen={menuOpen}
         annotations={
           <>
-            {/* Whole-skill opt-outs need a visible label, beyond dimmed agent buttons.
-                      https://github.com/logancyang/obsidian-copilot/issues/3022 */}
             {!skillEnabled && (
               <>
                 <Badge
@@ -141,8 +134,6 @@ const BuiltinSkillItem = React.memo(function BuiltinSkillItem({
         controls={
           <div className="tw-flex tw-items-center tw-gap-1.5">
             {agents.map((agent) => {
-              // https://github.com/logancyang/obsidian-copilot/issues/3022
-              // Unconfigured agents must never appear enabled by a bundled default.
               const available = availableAgents.includes(agent.id);
               const enabled =
                 skillEnabled &&

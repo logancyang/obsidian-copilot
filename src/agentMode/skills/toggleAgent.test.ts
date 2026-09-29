@@ -7,10 +7,6 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-// `replaceAgentLink` uses `renameWithRetry` internally on the real-dir
-// branch. None of these tests hit that branch (no real dir at the link
-// slot), so the helper isn't exercised. Stub it anyway so we don't pull
-// in `node:fs` from inside Jest.
 jest.mock("./renameWithRetry", () => ({
   __esModule: true,
   renameWithRetry: jest.fn(async () => {
@@ -204,12 +200,10 @@ describe("runToggleAgent", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok === false) expect(result.reason).toBe("eperm");
-    // Frontmatter still reflects the new agent — reconciliation will heal later.
     const skillMd = fs.__dump()[`${CANON}/foo/SKILL.md`];
     expect((skillMd as { kind: "file"; content: string }).content).toMatch(
       /copilot-enabled-agents:\s*"?claude"?/
     );
-    // No link was created.
     expect(fs.__dump()["/vault/.claude/skills/foo"]).toBeUndefined();
   });
 

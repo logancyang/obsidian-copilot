@@ -198,8 +198,6 @@ describe("translateSdkMessage", () => {
 
   it("reports occupancy from the last assistant message, not the cumulative result total", () => {
     const state = createTranslatorState();
-    // Two tool-loop iterations. The SDK result SUMS these across the turn, but
-    // occupancy is only the final call's own prompt + reply.
     translateSdkMessage(
       assistantMsg({ input_tokens: 100, cache_creation_input_tokens: 10_000, output_tokens: 50 }),
       SESSION_ID,
@@ -212,7 +210,6 @@ describe("translateSdkMessage", () => {
     );
     const out = translateSdkMessage(
       resultMsg({
-        // Cumulative aggregate — deliberately larger than occupancy.
         usage: {
           input_tokens: 300,
           cache_read_input_tokens: 10_050,
@@ -227,8 +224,6 @@ describe("translateSdkMessage", () => {
     expect(out).toHaveLength(1);
     expect(out[0].update.sessionUpdate).toBe("usage_update");
     const usage = usageOf(out);
-    // Final call: 200 + 10_050 + 0 + 80 = 10_330 (occupancy), NOT the cumulative
-    // 300 + 10_050 + 10_000 + 130 = 20_480.
     expect(usage.usedTokens).toBe(10_330);
     expect(usage.contextWindow).toBe(200_000);
   });
@@ -243,8 +238,6 @@ describe("translateSdkMessage", () => {
     const out = translateSdkMessage(
       resultMsg({
         modelUsage: {
-          // A subagent used a larger window; the ring must divide by the MAIN
-          // model's window, not the max across the turn.
           main: { contextWindow: 200_000 },
           sub: { contextWindow: 1_000_000 },
         },
@@ -257,8 +250,6 @@ describe("translateSdkMessage", () => {
 
   it("ignores subagent assistant usage when sampling occupancy", () => {
     const state = createTranslatorState();
-    // Subagent turn (parent_tool_use_id set) — a different context; must not
-    // become the occupancy sample.
     translateSdkMessage(
       assistantMsg({ input_tokens: 99_999, output_tokens: 0 }, { parentToolUseId: "t1" }),
       SESSION_ID,
@@ -285,9 +276,6 @@ describe("translateSdkMessage", () => {
 
   it("falls back to the dominant model's window for a synthetic assistant turn", () => {
     const state = createTranslatorState();
-    // A "<synthetic>" model id keys into no modelUsage entry; the window comes
-    // from the model that carried the conversation (most tokens), never an aux
-    // model that happens to have a different window.
     translateSdkMessage(
       assistantMsg(
         { input_tokens: 500, cache_read_input_tokens: 4000, output_tokens: 40 },
@@ -323,7 +311,6 @@ describe("translateSdkMessage", () => {
 
   it("ignores assistant messages whose tool_use blocks were already streamed", () => {
     const state = createTranslatorState();
-    // Pretend the streaming path already saw this tool_use.
     state.emittedToolUseIds.add("tool-1");
     expect(
       translateSdkMessage(
@@ -607,7 +594,6 @@ describe("translateSdkMessage", () => {
       SESSION_ID,
       state
     );
-    // Only the tool_call — no current_mode_update.
     expect(out).toHaveLength(1);
     expect(out[0].update).toMatchObject({ sessionUpdate: "tool_call", mcpServer: "srv" });
   });
@@ -876,8 +862,6 @@ describe("translateSdkMessage", () => {
       translateSdkMessage(streamEvent({ type: "content_block_stop", index }), SESSION_ID, state);
     }
 
-    // Task frames only apply once we've tracked the launch (agentId "abc123" →
-    // card "tu-launch"); seed that so the gate lets them through.
     function seedLaunch(state: ReturnType<typeof createTranslatorState>): void {
       trackToolUse(state, "tu-launch", "Agent");
       translateSdkMessage(launchAckResult("tu-launch"), SESSION_ID, state);
@@ -953,7 +937,6 @@ describe("translateSdkMessage", () => {
       );
       expect(out).toHaveLength(1);
       expect(out[0].update).toMatchObject({ toolCallId: "tu-launch", status: "failed" });
-      // Empty summary contributes no content field (nothing to render).
       expect((out[0].update as { content?: unknown }).content).toBeUndefined();
     });
 
@@ -1051,9 +1034,7 @@ describe("translateSdkMessage", () => {
 
     it("ignores a task_notification that is not a tracked subagent launch (background Bash/Monitor)", () => {
       const state = createTranslatorState();
-      seedLaunch(state); // tracks agentId "abc123" → "tu-launch"
-      // A background Bash finishing: task_id/tool_use_id don't match the tracked
-      // launch, so it must NOT clobber that (or any) card.
+      seedLaunch(state);
       expect(
         translateSdkMessage(
           systemMessage({
@@ -1067,7 +1048,6 @@ describe("translateSdkMessage", () => {
           state
         )
       ).toEqual([]);
-      // Right task_id but a different tool_use_id (stale/other card) is also ignored.
       expect(
         translateSdkMessage(
           systemMessage({
@@ -1216,7 +1196,6 @@ describe("translateSdkMessage", () => {
         session_id: SESSION_ID,
       } as unknown as SDKMessage;
       const out = translateSdkMessage(batched, SESSION_ID, state);
-      // Only the sibling Read is translated; the launch ack is suppressed.
       expect(out).toHaveLength(1);
       expect(out[0].update).toMatchObject({ toolCallId: "tu-read", status: "completed" });
     });
@@ -1428,7 +1407,6 @@ describe("session todo-list normalization (TodoWrite / Task tools → plan)", ()
       sessionUpdate: "plan",
       entries: [{ content: "step A", status: "in_progress", priority: "medium" }],
     });
-    // The block-stop re-observation of the same final input must not re-emit.
     const stop = translateSdkMessage(
       streamEvent({ type: "content_block_stop", index: 0 }),
       SESSION_ID,
@@ -1458,7 +1436,6 @@ describe("session todo-list normalization (TodoWrite / Task tools → plan)", ()
         {
           type: "tool_result",
           tool_use_id: "task-create-1",
-          // The real claude CLI string shape — id is the `#N` ordinal.
           content: "Task #1 created successfully: Brainstorm imagery",
           is_error: false,
         },
@@ -1563,7 +1540,6 @@ describe("session todo-list normalization (TodoWrite / Task tools → plan)", ()
       turn1
     );
 
-    // Turn 2: fresh translator, same session-lived accumulator.
     const turn2 = createTranslatorState(turn1.claudeTasks);
     const out = translateSdkMessage(
       streamEvent({
@@ -1618,11 +1594,6 @@ describe("translateSdkMessage — result → usage_update", () => {
 
   it("matches the bare assistant model id to the suffixed modelUsage key", () => {
     const state = createTranslatorState();
-    // Real runtime shape: the assistant message reports the bare id
-    // "claude-opus-4-8" while the result keys it "claude-opus-4-8[1m]". An exact
-    // lookup misses — a prefix match must recover the main model's 1M window and
-    // NOT fall to the smaller-windowed aux model. Final call occupancy:
-    // 100 + 5000 + 300 + 20 = 5420.
     translateSdkMessage(
       assistantMsg(
         {
@@ -1638,7 +1609,6 @@ describe("translateSdkMessage — result → usage_update", () => {
     );
     const out = translateSdkMessage(
       resultMessage({
-        // Cumulative result usage — deliberately huge; now ignored for occupancy.
         usage: {
           input_tokens: 9999,
           output_tokens: 9999,
@@ -1683,7 +1653,6 @@ describe("translateSdkMessage — result → usage_update", () => {
           cache_read_input_tokens: 0,
           cache_creation_input_tokens: 0,
         },
-        // No matching model entry → no window: count-only, never a wrong ring.
       }),
       SESSION_ID,
       state

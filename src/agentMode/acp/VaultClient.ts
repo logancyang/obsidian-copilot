@@ -19,25 +19,10 @@ export interface PermissionPrompter {
 }
 
 export interface VaultClientHandlers {
-  /** Routes a session/update to the right AgentSession. */
   onSessionUpdate: (sessionId: SessionId, update: SessionNotification) => void;
-  /** Opens the permission UI; resolves with the user's choice. */
   requestPermission: PermissionPrompter;
 }
 
-/**
- * Implements the ACP `Client` interface against an Obsidian vault.
- *
- * - `readTextFile`/`writeTextFile` route through `app.vault.adapter`, with
- *   strict vault-relative path resolution. Out-of-vault paths are rejected
- *   with `invalidParams` so the agent gets a clear error.
- * - `sessionUpdate` is demultiplexed via `handlers.onSessionUpdate`.
- * - `requestPermission` defers to `handlers.requestPermission` which opens
- *   the modal UI.
- *
- * Terminal capabilities are deliberately *not* implemented — we don't
- * advertise the capability, and opencode falls back to its internal PTY.
- */
 export class VaultClient implements Client {
   constructor(
     private readonly app: App,
@@ -77,11 +62,6 @@ export class VaultClient implements Client {
     return {};
   }
 
-  /**
-   * Resolve `p` against the vault root. Returns a vault-relative,
-   * forward-slashed path for `app.vault.adapter`. Throws
-   * `RequestError.invalidParams` if the path escapes the vault.
-   */
   private resolveVaultRelative(p: string): string {
     const path = requireNodeModule<typeof import("node:path")>("path");
     const adapter = this.app.vault.adapter;
@@ -101,10 +81,6 @@ export class VaultClient implements Client {
       );
     }
     const normalized = normalizePath(rel.split(path.sep).join("/"));
-    // Block dotfile dirs/files at the vault root (`.obsidian/`, `.copilot/`,
-    // `.git/`, etc.). They contain plugin settings — including encrypted-at-
-    // rest API keys, hotkey config, vault metadata — that the agent has no
-    // business reading or writing without an explicit user-facing flow.
     const firstSegment = normalized.split("/")[0] ?? "";
     if (firstSegment.startsWith(".")) {
       throw RequestError.invalidParams(
@@ -116,11 +92,6 @@ export class VaultClient implements Client {
   }
 }
 
-/**
- * Extract a 1-based line slice with an optional limit. Mirrors ACP's
- * `ReadTextFileRequest.{line, limit}` semantics: read N lines starting from
- * line `line`. Out-of-range starts return empty.
- */
 export function sliceLines(content: string, line: number | null, limit: number | null): string {
   if (line == null && limit == null) return content;
   const lines = content.split("\n");

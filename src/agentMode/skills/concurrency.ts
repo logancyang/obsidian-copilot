@@ -1,4 +1,3 @@
-/** Run async work with a fixed concurrency limit while preserving order. */
 export async function mapWithConcurrency<T, R>(
   items: readonly T[],
   limit: number,

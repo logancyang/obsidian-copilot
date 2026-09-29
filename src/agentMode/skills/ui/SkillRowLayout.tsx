@@ -10,7 +10,6 @@ export interface SkillRowLayoutProps {
   menuOpen?: boolean;
 }
 
-/** Shared compact row chrome for user-owned and bundled skills. */
 export function SkillRowLayout({
   name,
   description,
@@ -30,8 +29,6 @@ export function SkillRowLayout({
         "data-[menu-open=true]:tw-bg-primary-alt data-[menu-open=true]:tw-border-normal/100"
       )}
     >
-      {/* Keep names and annotations readable before wrapping controls below them.
-          https://github.com/logancyang/obsidian-copilot/issues/3022 */}
       <div className="tw-min-w-0 tw-max-w-full tw-flex-1 tw-basis-48 tw-@container/skill-title">
         <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
           <span

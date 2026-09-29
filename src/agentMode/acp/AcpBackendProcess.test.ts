@@ -13,10 +13,6 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-// Controllable ACP SDK mock (richer than the shared `__mocks__` stub): lets a
-// test set the `initialize` response (to advertise capabilities) and capture
-// the `newSession` request. `mock`-prefixed names satisfy ts-jest's jest.mock
-// hoisting rules.
 let mockInitializeResult: unknown = { protocolVersion: 1 };
 const mockNewSession = jest.fn(async (..._args: unknown[]) => ({ sessionId: "test-session" }));
 const mockResumeSession = jest.fn(async (..._args: unknown[]) => ({}));
@@ -111,7 +107,6 @@ jest.mock("./AcpProcessManager", () => ({
   })),
 }));
 
-/** The error OpenCode 2 returns both for a dead private service and for some ordinary failures. */
 function serviceFailure(): RequestError {
   return new RequestError(-32603, "Internal error: Internal service failure");
 }
@@ -144,10 +139,6 @@ function buildStubDescriptor(overrides: Partial<BackendDescriptor> = {}): Backen
   } as unknown as BackendDescriptor;
 }
 
-/**
- * Trigger registered SDK handlers through the mock connection so routing and
- * permission tests exercise the same entry points as incoming agent messages.
- */
 function getVaultClient(backend: AcpBackendProcess): VaultClient {
   const connection = (backend as unknown as { connection: { _client: VaultClient } }).connection;
   return connection._client;
@@ -377,7 +368,6 @@ describe("AcpBackendProcess", () => {
         update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "ok" } },
       } as unknown as Parameters<typeof client.sessionUpdate>[0];
       await client.sessionUpdate(knownUpdate);
-      // Handler is called with a SessionEvent (translated from the wire shape).
       expect(handler).toHaveBeenCalledTimes(1);
       const got = handler.mock.calls[0][0];
       expect(got.sessionId).toBe("session-known");
@@ -407,7 +397,6 @@ describe("AcpBackendProcess", () => {
     backend.registerSessionHandler("sess-B", handlerB);
     const client = getVaultClient(backend);
 
-    // Session A registers "shared-id" as a todowrite call (synthesizes a plan).
     await client.sessionUpdate({
       sessionId: "sess-A",
       update: {
@@ -419,9 +408,6 @@ describe("AcpBackendProcess", () => {
     } as unknown as Parameters<typeof client.sessionUpdate>[0]);
     expect(handlerA.mock.calls.some(([e]) => e.update.sessionUpdate === "plan")).toBe(true);
 
-    // Session B sends a titleless update reusing the SAME id with a todos
-    // payload. With a process-wide Set this would masquerade as a plan; scoped
-    // per session, B's tracker is empty so no plan is synthesized.
     handlerB.mockClear();
     await client.sessionUpdate({
       sessionId: "sess-B",
@@ -444,9 +430,6 @@ describe("AcpBackendProcess", () => {
     await backend.start();
     const client = getVaultClient(backend);
 
-    // First handler registers "todo-1" as a todowrite call, then unsubscribes —
-    // but a SECOND handler for the same session is already registered, so the
-    // stale unsubscribe must not delete the live tracker.
     const stale = backend.registerSessionHandler("sess-X", jest.fn());
     await client.sessionUpdate({
       sessionId: "sess-X",
@@ -459,11 +442,9 @@ describe("AcpBackendProcess", () => {
     } as unknown as Parameters<typeof client.sessionUpdate>[0]);
 
     const fresh = jest.fn();
-    backend.registerSessionHandler("sess-X", fresh); // replaces the handler
-    stale(); // stale unsubscribe — must NOT drop sess-X's tracker
+    backend.registerSessionHandler("sess-X", fresh);
+    stale();
 
-    // A titleless follow-up for the registered id must still synthesize a plan,
-    // proving the tracker survived the stale unsubscribe.
     await client.sessionUpdate({
       sessionId: "sess-X",
       update: {
@@ -496,9 +477,6 @@ describe("AcpBackendProcess", () => {
       },
     } as unknown as Parameters<typeof client.sessionUpdate>[0]);
 
-    // Subprocess exits, then the process is restarted and the same sessionId +
-    // todo id reappear. With the onExit cleanup the tracker is gone, so a
-    // titleless update is NOT mistaken for the old todowrite call.
     for (const fn of exitListeners) fn();
     await backend.start();
     const client2 = getVaultClient(backend);
@@ -670,7 +648,6 @@ describe("AcpBackendProcess", () => {
     expect(presentPermissionOption).toHaveBeenCalledTimes(2);
     expect(presentPermissionOption.mock.calls[1][1]).toBe(policyMetadata);
     expect(prompter).toHaveBeenCalledTimes(1);
-    // Prompter receives a session-domain `PermissionPrompt`.
     const prompt = prompter.mock.calls[0][0];
     expect(prompt.sessionId).toBe("s1");
     expect(prompt.toolCall.toolCallId).toBe("tc1");
@@ -703,7 +680,6 @@ describe("AcpBackendProcess", () => {
     const handler = jest.fn();
     backend.registerSessionHandler("s1", handler);
 
-    // Simulate the subprocess dying.
     mockProcessIsRunning = false;
     for (const fn of exitListeners) fn();
 
@@ -734,7 +710,6 @@ describe("AcpBackendProcess", () => {
     }
 
     it("reflects the probed capability — false when the agent does not advertise it", async () => {
-      // codex 0.135 / opencode 1.2.27 shape: no additionalDirectories advertised.
       mockInitializeResult = {
         protocolVersion: 1,
         agentCapabilities: { sessionCapabilities: { list: {}, close: {} } },
@@ -792,8 +767,6 @@ describe("AcpBackendProcess", () => {
       expect(req).not.toHaveProperty("additionalDirectories");
     });
 
-    // Resume/load re-establish the roots the same way session/new does, so a
-    // restored project chat must re-send them — symmetry the wire adapter owns.
     it("forwards additionalDirectories at session/resume when capable", async () => {
       mockInitializeResult = {
         protocolVersion: 1,
@@ -814,7 +787,6 @@ describe("AcpBackendProcess", () => {
     });
 
     it("does NOT forward additionalDirectories at session/resume when uncapable", async () => {
-      // resume advertised, additionalDirectories NOT — the gate must still hold.
       mockInitializeResult = {
         protocolVersion: 1,
         agentCapabilities: { sessionCapabilities: { resume: {} } },
@@ -853,7 +825,6 @@ describe("AcpBackendProcess", () => {
   });
 
   describe("loadSession()", () => {
-    /** Reach the VaultClient the backend wired in, to push replayed frames. */
     function replayer(backend: AcpBackendProcess): (update: unknown) => void {
       const client = getVaultClient(backend) as unknown as {
         sessionUpdate: (n: unknown) => void;
@@ -899,7 +870,6 @@ describe("AcpBackendProcess", () => {
       const backend = await startLoadCapableBackend();
       mockLoadSession.mockImplementationOnce(async () => {
         const push = replayer(backend);
-        // Well past PENDING_UPDATE_LIMIT: the accumulator must not share that cap.
         for (let i = 0; i < 40; i++) {
           push({
             sessionUpdate: "user_message_chunk",
@@ -951,8 +921,6 @@ describe("AcpBackendProcess", () => {
         "load blew up"
       );
 
-      // A frame arriving after the failed call belongs to nobody, so it must
-      // reach normal routing rather than a retired accumulator.
       const handler = jest.fn();
       backend.registerSessionHandler("ses_load", handler);
       replayer(backend)({
@@ -966,7 +934,6 @@ describe("AcpBackendProcess", () => {
   });
 
   describe("newSession()", () => {
-    // OpenCode 2 advertises session/list, which recovery uses as its liveness probe.
     async function makeListingBackend(): Promise<AcpBackendProcess> {
       mockInitializeResult = {
         protocolVersion: 1,
@@ -1042,8 +1009,6 @@ describe("AcpBackendProcess", () => {
   });
 
   describe("prompt()", () => {
-    // Reach the mock connection's `prompt` jest.fn so a test can stub the
-    // turn-level `usage` the backend reads after `prompt()` resolves.
     function promptMock(backend: AcpBackendProcess): jest.Mock {
       return (backend as unknown as { connection: { prompt: jest.Mock } }).connection.prompt;
     }
@@ -1083,7 +1048,6 @@ describe("AcpBackendProcess", () => {
         inputTokens: 100,
         outputTokens: 20,
       });
-      // Fallback carries no window — AgentSession keeps any prior one.
       expect(usageEvents[0].update.usage.contextWindow).toBeUndefined();
     });
 
@@ -1093,14 +1057,11 @@ describe("AcpBackendProcess", () => {
       backend.registerSessionHandler("s1", handler);
       const client = getVaultClient(backend);
 
-      // A live usage_update reports current context occupancy (used/size).
       await client.sessionUpdate({
         sessionId: "s1",
         update: { sessionUpdate: "usage_update", used: 5000, size: 200_000 },
       } as unknown as Parameters<typeof client.sessionUpdate>[0]);
 
-      // The prompt result carries a cumulative total; it must not overwrite the
-      // live occupancy figure, so no second usage_update should be emitted.
       promptMock(backend).mockResolvedValueOnce({
         stopReason: "end_turn",
         usage: { totalTokens: 999_999, inputTokens: 1, outputTokens: 1 },
@@ -1150,7 +1111,6 @@ describe("AcpBackendProcess", () => {
     };
     const USAGE_READING = { kind: "usage", planUsage: PLAN_USAGE };
 
-    /** The read is fired without being awaited, so let its microtasks drain. */
     const settle = () => new Promise((resolve) => window.setTimeout(resolve, 0));
 
     function planEvents(handler: jest.Mock): unknown[] {
@@ -1173,8 +1133,6 @@ describe("AcpBackendProcess", () => {
     }
 
     it("publishes the caps as soon as a chat opens, without waiting for a turn", async () => {
-      // The caps outlive the process, so the first chat of a run has somewhere to read
-      // them from and should not make the user send a message to see them.
       const backend = await makeBackend(jest.fn().mockResolvedValue(USAGE_READING));
       const handler = jest.fn();
 
@@ -1187,8 +1145,6 @@ describe("AcpBackendProcess", () => {
     });
 
     it("republishes the caps a turn moved, to every attached session", async () => {
-      // The number describes the account, so it is equally true of every open chat.
-      // Routing it to one would leave the others stale until they each ran a turn.
       const spent = {
         windows: [{ id: "weekly", label: "Weekly", percent: 27 }],
         updatedAt: 2_000,
@@ -1235,8 +1191,6 @@ describe("AcpBackendProcess", () => {
     });
 
     it("drops an expired window instead of replaying it (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
-      // The process outlives many chats; a snapshot taken before a reset describes a
-      // period that has ended and must not be shown as the current one.
       const expiring = {
         windows: [{ id: "five_hour", label: "5h", percent: 55, resetsAt: Date.now() - 1 }],
         updatedAt: 1_000,
@@ -1271,8 +1225,6 @@ describe("AcpBackendProcess", () => {
         await settle();
       }
 
-      // One published event, and the snapshot still replays — a failed read is "no
-      // news", never a reason to blank a meter the user is reading.
       expect(planEvents(handler)).toHaveLength(1);
       const later = jest.fn();
       backend.registerSessionHandler("s2", later);
@@ -1280,8 +1232,6 @@ describe("AcpBackendProcess", () => {
     });
 
     it("clears the meters when a read says this login has no caps", async () => {
-      // "None" is an explicit provider statement — an unmetered login — not a failed
-      // read, so caps still on screen describe an account the user is no longer on.
       const readPlanUsage = jest
         .fn()
         .mockResolvedValueOnce(USAGE_READING)
@@ -1301,9 +1251,6 @@ describe("AcpBackendProcess", () => {
     });
 
     it("re-reads rather than reusing a snapshot from before the backend restarted", async () => {
-      // A backend that starts again may be pointed at different credentials, so the
-      // snapshot cannot outlive it — otherwise the first chat back shows the previous
-      // account's caps.
       const reauthed = {
         windows: [{ id: "weekly", label: "Weekly", percent: 3 }],
         updatedAt: 3_000,
@@ -1328,8 +1275,6 @@ describe("AcpBackendProcess", () => {
     });
 
     it("shares one read among chats that attach while it is in flight", async () => {
-      // Several chats restoring at startup must not fire one account read each, and an
-      // early success must not be discarded because a later duplicate failed.
       let release!: (reading: unknown) => void;
       const readPlanUsage = jest
         .fn()
@@ -1339,21 +1284,17 @@ describe("AcpBackendProcess", () => {
       const first = jest.fn();
       const second = jest.fn();
       backend.registerSessionHandler("s1", first);
-      backend.registerSessionHandler("s2", second); // joins s1's in-flight read
+      backend.registerSessionHandler("s2", second);
 
       release({ kind: "usage", planUsage: PLAN_USAGE });
       await settle();
 
       expect(planEvents(first)).toHaveLength(1);
       expect(planEvents(second)).toHaveLength(1);
-      // The joined trigger queues at most one follow-up read; no read per attach.
       expect(readPlanUsage.mock.calls.length).toBeLessThanOrEqual(2);
     });
 
     it("ignores an older read that resolves after a newer one", async () => {
-      // An attach-time read and a turn-end read can be in flight together, and nothing
-      // promises they resolve in start order. The older answer arriving last must not
-      // roll the meters backward.
       const fresh = {
         windows: [{ id: "weekly", label: "Weekly", percent: 40 }],
         updatedAt: 2_000,
@@ -1365,16 +1306,15 @@ describe("AcpBackendProcess", () => {
         .mockResolvedValue({ kind: "usage", planUsage: fresh });
       const backend = await makeBackend(readPlanUsage);
       const handler = jest.fn();
-      backend.registerSessionHandler("s1", handler); // starts the read that will stall
+      backend.registerSessionHandler("s1", handler);
 
-      await backend.prompt({ sessionId: "s1", prompt: [] }); // starts the newer read
+      await backend.prompt({ sessionId: "s1", prompt: [] });
       await settle();
-      releaseStaleRead({ kind: "usage", planUsage: PLAN_USAGE }); // the 13% snapshot
+      releaseStaleRead({ kind: "usage", planUsage: PLAN_USAGE });
       await settle();
 
       const events = planEvents(handler) as { update: { planUsage: unknown } }[];
       expect(events[events.length - 1]?.update.planUsage).toEqual(fresh);
-      // And the stale answer must not have replaced the cached snapshot either.
       const later = jest.fn();
       backend.registerSessionHandler("s2", later);
       const replayed = planEvents(later) as { update: { planUsage: unknown } }[];
@@ -1382,16 +1322,13 @@ describe("AcpBackendProcess", () => {
     });
 
     it("drops a read that resolves after the backend shut down", async () => {
-      // Without this, a slow read races shutdown(): its answer lands after the reset,
-      // survives into the next start(), and the first chat back replays caps from an
-      // account the backend may no longer be authenticated as.
       let releaseFirstRead!: (reading: unknown) => void;
       const readPlanUsage = jest
         .fn()
         .mockReturnValueOnce(new Promise((resolve) => (releaseFirstRead = resolve)))
         .mockResolvedValue({ kind: "unavailable" });
       const backend = await makeBackend(readPlanUsage);
-      backend.registerSessionHandler("s1", jest.fn()); // triggers the slow read
+      backend.registerSessionHandler("s1", jest.fn());
 
       await backend.shutdown();
       releaseFirstRead(USAGE_READING);
@@ -1431,11 +1368,6 @@ describe("AcpBackendProcess", () => {
       return events[events.length - 1];
     }
 
-    /**
-     * Backend gated the way OpencodeBackend is: the account caps meter only sessions on
-     * a `metered/` model. Two sessions are opened on different models so one broadcast
-     * exercises both sides of the gate.
-     */
     async function makeGatedSessions(): Promise<{
       backend: AcpBackendProcess;
       readPlanUsage: jest.Mock;
@@ -1482,8 +1414,6 @@ describe("AcpBackendProcess", () => {
     }
 
     it("shows the caps only to sessions whose model bills the metered account", async () => {
-      // Selection is the whole test: a session on the user's own key shares the process
-      // but not the billing, and must see no cap meters.
       const { metered, unmetered } = await makeGatedSessions();
 
       expect(lastPlanEvent(metered)?.update.planUsage).toEqual(PLAN_USAGE);
@@ -1518,10 +1448,6 @@ describe("AcpBackendProcess", () => {
         .filter((e) => e.update.sessionUpdate === "usage_update");
     }
 
-    /**
-     * Backend whose agent advertises a current model on `session/new`, wired the way
-     * OpencodeBackend is: the process asks `readContextWindow` with the wire model id.
-     */
     async function makeBackend(
       readContextWindow: jest.Mock
     ): Promise<{ backend: AcpBackendProcess; handler: jest.Mock }> {
@@ -1542,7 +1468,6 @@ describe("AcpBackendProcess", () => {
       return { backend, handler };
     }
 
-    /** Enough descriptor for `computeState` to translate a model config option. */
     function modelCapableDescriptor(): Partial<BackendDescriptor> {
       return {
         wire: {
@@ -1564,7 +1489,6 @@ describe("AcpBackendProcess", () => {
     }
 
     it("answers readContextWindow from one backend read, cached per model", async () => {
-      // The public seam a session uses to size a reopened chat's ring at seed time.
       const readContextWindow = jest.fn().mockResolvedValue(1_048_576);
       const { backend } = await makeBackend(readContextWindow);
 
@@ -1590,8 +1514,6 @@ describe("AcpBackendProcess", () => {
     });
 
     it("enriches later snapshots inline, not a beat behind", async () => {
-      // AgentSession ignores a windowless snapshot once it holds a windowed one, so an
-      // async-only fill would fight every later live update and stall the meter.
       const readContextWindow = jest.fn().mockResolvedValue(1_048_576);
       const { backend, handler } = await makeBackend(readContextWindow);
       await sendUsage(backend, 5_000);
@@ -1611,14 +1533,11 @@ describe("AcpBackendProcess", () => {
     });
 
     it("discards a window answer that arrives after the session switched models", async () => {
-      // Republishing the old model's snapshot would hand AgentSession a windowed
-      // reading it treats as authoritative, re-freezing the ring its model-change
-      // handling just cleared.
       let release!: (window: number) => void;
       const readContextWindow = jest.fn(() => new Promise((resolve) => (release = resolve)));
       const { backend, handler } = await makeBackend(readContextWindow);
 
-      await sendUsage(backend, 5_000); // windowless: starts the catalog read
+      await sendUsage(backend, 5_000);
       await backend.setSessionModel({ sessionId: "s1", modelId: "ollama/llama" });
       handler.mockClear();
       release(1_048_576);
@@ -1638,9 +1557,6 @@ describe("AcpBackendProcess", () => {
     });
 
     it("asks again after an unanswered read instead of caching the failure", async () => {
-      // The backend answers null both for a model it does not know and for a catalog it
-      // could not reach, so remembering null would turn one transient failure into a
-      // bare token count for the rest of the session.
       const readContextWindow = jest.fn().mockResolvedValueOnce(null).mockResolvedValue(1_048_576);
       const { backend, handler } = await makeBackend(readContextWindow);
 
@@ -1656,7 +1572,7 @@ describe("AcpBackendProcess", () => {
 
     it("passes the snapshot through untouched when the session's model is unknown", async () => {
       const readContextWindow = jest.fn().mockResolvedValue(1_048_576);
-      mockNewSession.mockResolvedValue({ sessionId: "s1" }); // no models state at all
+      mockNewSession.mockResolvedValue({ sessionId: "s1" });
       const backend = new AcpBackendProcess(
         buildApp(),
         { ...buildStubBackend(), readContextWindow },

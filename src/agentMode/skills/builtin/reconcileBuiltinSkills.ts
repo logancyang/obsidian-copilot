@@ -23,17 +23,10 @@ export interface ReconcileBuiltinOptions {
   registeredAgents: readonly string[];
 }
 
-/**
- * Reconcile bundled files from durable opt-outs and currently available agents.
- * Ownership and file-version handling stay with the existing seeder.
- * @param options - Current settings, agent availability, and filesystem.
- */
 export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): Promise<void> {
   const { folder, fs, settings, availableAgents, registeredAgents } = options;
   const errors: string[] = [];
-  // Retired skills must stop being discoverable even when no replacement or agent
-  // is enabled. Keep file ownership independent of user overrides so cleanup retries.
-  // https://github.com/logancyang/obsidian-copilot/issues/3022
+  // Retired skills are removed regardless of user overrides so cleanup can retry. https://github.com/logancyang/obsidian-copilot/issues/3022
   for (const skill of RETIRED_BUILTIN_SKILLS) {
     const result = await removeSeededBuiltin(folder, skill.name, fs);
     if (result === "failed") errors.push(`Could not remove retired built-in skill ${skill.name}.`);
@@ -44,11 +37,8 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
       isBuiltinSkillEnabledFor(settings, skill.name, agent)
     );
   }
-  // No effective consumer means no canonical files, including on a fresh vault.
-  // https://github.com/logancyang/obsidian-copilot/issues/3022
-  // Canonical metadata is synced; device availability must only govern local installation.
-  // An unavailable device retains existing canonical files so it cannot delete another
-  // device's tools through sync. https://github.com/logancyang/obsidian-copilot/issues/3022
+  // Canonical files sync between devices, so an unavailable device keeps them rather than
+  // deleting another device's tools. https://github.com/logancyang/obsidian-copilot/issues/3022
   const seed = ALL_MANAGED_SKILLS.filter((skill) =>
     enabledAgents[skill.name].some((agent) => availableAgents.includes(agent))
   );
@@ -62,8 +52,6 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
           skill.files.map((file) => fs.exists(joinPosix(joinPosix(folder, skill.name), file.path)))
         )
       ).every(Boolean);
-    // A seeder write can fail without rejecting; installation must report actual disk state.
-    // https://github.com/logancyang/obsidian-copilot/issues/3022
     if (!supportFilesPresent)
       errors.push(
         state === "collision"
@@ -81,17 +69,11 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
 
 const EMPTY_AVAILABLE_AGENTS = Object.freeze([]) as readonly string[];
 
-/**
- * Preserve installed skill files while a known agent undergoes a compatibility recheck.
- * @param states - Current readiness for backends that support skills.
- * @param previous - Agent ids confirmed ready earlier in this plugin lifecycle.
- */
 export function availableBuiltinAgents(
   states: Readonly<Record<string, InstallState>>,
   previous: readonly string[]
 ): readonly string[] {
-  // A transient check must not delete tools underneath an active turn; an unverified
-  // first install still receives no files. https://github.com/logancyang/obsidian-copilot/issues/3022
+  // A transient re-check must not delete tools underneath an active turn. https://github.com/logancyang/obsidian-copilot/issues/3022
   const available = Object.entries(states)
     .filter(
       ([id, state]) =>
@@ -99,8 +81,6 @@ export function availableBuiltinAgents(
     )
     .map(([id]) => id);
   if (available.length === 0) return EMPTY_AVAILABLE_AGENTS;
-  // Unchanged readiness must not redraw every skill after one preference changes.
-  // https://github.com/logancyang/obsidian-copilot/issues/3022
   if (available.length === previous.length && available.every((id, i) => id === previous[i])) {
     return previous;
   }

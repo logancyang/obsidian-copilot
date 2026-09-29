@@ -1,8 +1,6 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { ClaudeBackgroundTaskStateMachine } from "./claudeTaskProtocol";
 
-// These fixtures mirror carriers captured from Claude Code 2.1.206. Keeping
-// the carrier shapes visible makes each test read as one protocol transcript.
 interface ToolResultFixture {
   id: string;
   content?: unknown;

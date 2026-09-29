@@ -232,7 +232,6 @@ describe("reconcileBuiltinSkills", () => {
       const catalog = ALL_MANAGED_SKILLS as (typeof added)[];
       catalog.push(added);
       try {
-        // The base catalog supplies default feature eligibility too.
         (BUILTIN_SKILLS as (typeof added)[]).push(added);
         f.options.availableAgents = ["claude"];
         await reconcileBuiltinSkills(f.options);

@@ -1,11 +1,6 @@
 import { composeDenyList } from "./denyListComposer";
 import type { BackendId, Skill } from "./types";
 
-/**
- * Build a minimal Skill with only the fields composeDenyList consults.
- * Keeps the test cases dense — composer is pure, so the other fields don't
- * matter.
- */
 function skill(name: string, enabledAgents: BackendId[]): Skill {
   return {
     name,
@@ -18,12 +13,6 @@ function skill(name: string, enabledAgents: BackendId[]): Skill {
   };
 }
 
-/**
- * Mirror of each backend's `BackendDescriptor.crossDiscoveredAgents` for
- * test-only convenience — the production data lives on the descriptors
- * themselves; this is a local fixture so we don't repeat the list in every
- * assertion.
- */
 const CROSS: Record<BackendId, BackendId[]> = {
   opencode: ["claude", "codex"],
   claude: [],
@@ -85,7 +74,6 @@ describe("denyListComposer", () => {
       const b = skill("b", ["claude", "opencode"]);
       const c = skill("c", []);
       const d = skill("d", ["opencode"]);
-      // intentional ordering: unsorted input, ensure sorted output.
       const all = [d, a, c, b];
       expect(deny(all, "opencode")).toEqual(["a"]);
       expect(deny(all, "claude")).toEqual([]);

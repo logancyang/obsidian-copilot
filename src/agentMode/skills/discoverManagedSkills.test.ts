@@ -10,11 +10,6 @@ jest.mock("@/logger", () => ({
 
 const mockedLogWarn = logWarn as jest.MockedFunction<typeof logWarn>;
 
-/**
- * Build a minimal in-memory FS adapter where the only paths that exist are
- * those given in `files` (keys are full vault-relative paths). Folder
- * structure is inferred from the parent directories of each file.
- */
 function makeAdapter(files: Record<string, string>): SkillsFsAdapter {
   const fileSet = new Map(Object.entries(files));
   const folders = new Set<string>();
@@ -152,7 +147,6 @@ describe("discoverManagedSkills", () => {
     });
 
     it("returns a rejected SKILL.md with its repair details for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
-      // Uppercase name fails the spec regex.
       const adapter = makeAdapter({
         [`${SKILLS_ROOT}/Bad/SKILL.md`]: validSkillMd({ name: "Bad" }),
       });
@@ -181,7 +175,6 @@ describe("discoverManagedSkills", () => {
         [`${SKILLS_ROOT}/beta/SKILL.md`]: validSkillMd({ name: "beta" }),
         [`${SKILLS_ROOT}/gamma/SKILL.md`]: validSkillMd({ name: "gamma" }),
         [`${SKILLS_ROOT}/Bad1/SKILL.md`]: validSkillMd({ name: "Bad1" }),
-        // Wrong parent-dir match: file claims name "wrong" but folder is "x-y".
         [`${SKILLS_ROOT}/x-y/SKILL.md`]: validSkillMd({ name: "wrong" }),
       });
       const { accepted: skills, rejected } = await discoverManagedSkills({
@@ -286,8 +279,6 @@ describe("discoverManagedSkills", () => {
         skillsFolderAbsPath: null,
         adapter,
       });
-      // Round-trip preservation is exercised in skillFormat.test.ts; here we
-      // just verify that an extra metadata key doesn't break discovery.
       expect(skills).toHaveLength(1);
       expect(skills[0].enabledAgents).toEqual(["claude"]);
     });

@@ -25,7 +25,7 @@ describe("suffixOnCollision", () => {
   });
 
   it("throws when no suffix fits within the 64-char cap", () => {
-    const longName = "a".repeat(63); // "a-2" would already be 65 chars
+    const longName = "a".repeat(63);
     expect(() => suffixOnCollision(longName, new Set([longName]))).toThrow();
   });
 });

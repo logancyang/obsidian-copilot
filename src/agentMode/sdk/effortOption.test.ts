@@ -29,7 +29,6 @@ describe("probeClaudeSdkCatalog env passing", () => {
     ).options;
     expect(opts.pathToClaudeCodeExecutable).toBe("/bin/claude");
     expect(opts.env?.ANTHROPIC_MODEL).toBe("m-custom");
-    // process.env is preserved (Options.env replaces the child env wholesale).
     expect(opts.env).toEqual({ ...process.env, ANTHROPIC_MODEL: "m-custom" });
   });
 
@@ -59,7 +58,6 @@ describe("getCachedSdkCatalog is scoped to the probe's env overrides", () => {
     queryMock.mockReturnValue(fakeProbe(CATALOG2));
     await probeClaudeSdkCatalog("/bin/claude", { ANTHROPIC_MODEL: "second" });
     expect(getCachedSdkCatalog({ ANTHROPIC_MODEL: "second" })).toBe(CATALOG2);
-    // Single-slot, env-scoped: the prior env no longer hits.
     expect(getCachedSdkCatalog({ ANTHROPIC_MODEL: "first" })).toBeNull();
   });
 

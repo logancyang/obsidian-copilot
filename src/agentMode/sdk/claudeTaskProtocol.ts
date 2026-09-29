@@ -1,14 +1,3 @@
-/**
- * @fileoverview Owns Claude Agent/Task identity, lifecycle, and terminal output merging.
- *
- * One logical task has two identities whose carriers may arrive out of order:
- * `L`, the Agent/Task launch tool-call ID, and `T`, Claude's task ID. The launch
- * moves through awaiting identity, active, and terminal. Execution state and
- * output availability remain separate, identified correlation lasts for the
- * SDK session, and terminal status never regresses.
- * Keeping those rules behind one session-owned interface prevents the translator
- * from coordinating maps whose invariants can drift apart.
- */
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type {
   AgentToolProgress,
@@ -109,28 +98,12 @@ const NO_TASK_DECISION: ClaudeTaskDecision = Object.freeze({
   resultActions: EMPTY_RESULT_ACTIONS,
 });
 
-/**
- * Reconciles Claude Agent/Task carriers for one SDK session.
- *
- * Callers submit carrier snapshots without coordinating their order. The
- * protocol owns foreground and background identity correlation across query
- * boundaries plus monotonic execution state; callers only project its decisions
- * to session events.
- */
 export class ClaudeBackgroundTaskStateMachine {
   private readonly launchesByToolCallId = new Map<string, TaskLaunch>();
   private readonly launchToolCallIdByTaskId = new Map<string, string>();
-  // A fast task can settle with only its task id before the launch
-  // acknowledgement supplies the binding; the frame is parked here and
-  // replayed by `bindLaunch` the moment the identity arrives.
   private readonly pendingTerminalsByTaskId = new Map<string, PendingTerminalFrame>();
   private readonly replayedUpdates: ClaudeTaskToolUpdate[] = [];
 
-  /**
-   * Applies one carrier atomically and returns every resulting protocol decision.
-   *
-   * @param carrier A tool snapshot or SDK message from the owning session.
-   */
   accept(carrier: ClaudeTaskCarrier): ClaudeTaskDecision {
     const protocolEvent = protocolEventFromCarrier(carrier);
     if (!protocolEvent) return NO_TASK_DECISION;
@@ -179,10 +152,6 @@ export class ClaudeBackgroundTaskStateMachine {
   ): ClaudeTaskDecision {
     const launch = this.resolveLaunch(protocolEvent.toolCallId, protocolEvent.taskId);
     if (!launch) {
-      // Park only task-only frames: a frame carrying an explicit tool_use_id
-      // that still fails to resolve refers to a launch this session never
-      // observed (or a conflicting identity), and replaying it later would
-      // fabricate a card.
       if (protocolEvent.toolCallId === undefined) {
         const pending = this.pendingTerminalsByTaskId.get(protocolEvent.taskId);
         this.pendingTerminalsByTaskId.set(protocolEvent.taskId, {
@@ -224,8 +193,6 @@ export class ClaudeBackgroundTaskStateMachine {
         ? protocolEvent.asyncLaunchTaskId
         : undefined;
 
-    // Async acknowledgements stay active; every unambiguous ordinary result is
-    // terminal because the normal result pipeline already owns its final output.
     for (const { toolCallId, status } of protocolEvent.results) {
       const launch = this.launchesByToolCallId.get(toolCallId);
       if (launch && toolCallId !== launchAckToolCallId) {
@@ -277,8 +244,6 @@ export class ClaudeBackgroundTaskStateMachine {
     this.pendingTerminalsByTaskId.delete(taskId);
     const replay = this.mergeTerminal(identified, pending.status, pending.output, pending.progress);
     if (replay) this.replayedUpdates.push(replay);
-    // mergeTerminal advanced the stored launch; return the settled record so
-    // the caller's phase checks see the terminal state.
     return this.launchesByToolCallId.get(toolCallId) as IdentifiedTaskLaunch;
   }
 
@@ -298,8 +263,6 @@ export class ClaudeBackgroundTaskStateMachine {
     if (known) {
       return results.some(({ toolCallId }) => toolCallId === known) ? known : undefined;
     }
-    // Prompt and description describe work rather than identity. An explicit
-    // task binding or one pending launch is required before ownership is safe.
     const candidates = results.filter(
       ({ toolCallId }) => this.launchesByToolCallId.get(toolCallId)?.phase === "awaiting_identity"
     );
@@ -407,10 +370,6 @@ function protocolEventFromCarrier(carrier: ClaudeTaskCarrier): ClaudeTaskProtoco
     patch?: unknown;
   };
   if (frame.subtype === "task_updated") {
-    // `task_updated` carries a partial TaskState patch and no tool_use_id. A
-    // subagent may report its terminal transition only here, so map terminal
-    // patch statuses through the state machine; non-terminal patches carry
-    // nothing the launch card renders.
     const taskId = nonEmptyString(frame.task_id);
     const patch = asRecord(frame.patch);
     const status = mapTerminalTaskStatus(patch?.status);
