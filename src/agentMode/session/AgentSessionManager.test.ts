@@ -3844,7 +3844,6 @@ describe("AgentSessionManager chat history aggregation", () => {
   });
 
   it("probes each chat with its own scope cwd in the global flat view", async () => {
-    // global chat against the vault root AND a project chat against its project
     projectsState.updateCachedProjectRecords([
       {
         project: { id: "proj-1" },
