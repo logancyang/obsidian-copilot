@@ -13,25 +13,10 @@ if (!Array.isArray(runtimeDependencyRule)) {
   throw new Error("Obsidian's recommended dependency review rule is unavailable");
 }
 
-/**
- * Select the manifest that represents the package version being validated.
- *
- * @param {string} version - package.json version.
- * @returns {string} Stable or prerelease manifest filename.
- */
 export function getManifestFilename(version) {
   return version.includes("-") ? "manifest-beta.json" : "manifest.json";
 }
 
-/**
- * Return repository-specific package failures not covered by the upstream validators.
- *
- * @param {object} input - Package metadata to validate.
- * @param {Record<string, unknown>} input.manifest - Parsed selected manifest contents.
- * @param {Record<string, unknown>} input.packageJson - Parsed package.json contents.
- * @param {string} input.licenseText - Repository license file contents.
- * @returns {string[]} Human-readable release validation failures.
- */
 export function collectPackageFindings({ manifest, packageJson, licenseText }) {
   const findings = [];
   if (manifest.version !== packageJson.version) {
@@ -49,22 +34,11 @@ export function collectPackageFindings({ manifest, packageJson, licenseText }) {
   return findings;
 }
 
-/**
- * Validate a stable or prerelease manifest with Obsidian's upstream ESLint rule.
- * Schema findings block releases; copy guidance remains visible as warnings so
- * the preflight does not force user-visible metadata changes.
- *
- * @param {string} manifestPath - Selected manifest path used in diagnostics.
- * @param {string} manifestText - Selected manifest source text.
- * @returns {Promise<boolean>} Whether the manifest has no blocking findings.
- */
 export async function validateSelectedManifest(manifestPath, manifestText) {
   const eslint = new ESLint({
     overrideConfigFile: resolve(repositoryRoot, "eslint.review.config.mjs"),
   });
   const [result] = await eslint.lintText(manifestText, {
-    // The upstream rule recognizes manifest.json only. lintText lets prerelease
-    // metadata use the same rule without copying or modifying repository files.
     filePath: resolve(repositoryRoot, "manifest.json"),
   });
   const messages = result.messages.map((message) =>
@@ -81,13 +55,6 @@ export async function validateSelectedManifest(manifestPath, manifestText) {
   return !messages.some((message) => message.severity === 2);
 }
 
-/**
- * Apply Obsidian's dependency guidance to production dependencies without
- * inheriting allowances needed only by tests and development tooling.
- *
- * @param {Record<string, unknown>} packageJson - Parsed package.json contents.
- * @returns {Promise<import("eslint").ESLint.LintResult>} Upstream dependency findings.
- */
 export async function lintRuntimeDependencies(packageJson) {
   const eslint = new ESLint({
     cwd: repositoryRoot,

@@ -13,7 +13,6 @@ export interface ChatBackendModelOptions {
   resolveSelectionId: (selection: string | undefined) => string | undefined;
 }
 
-/** Native-select-ready chat backend options plus legacy-key compatibility resolution. */
 export function useChatBackendModelOptions(): ChatBackendModelOptions {
   const entries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
   const options = useMemo(() => {

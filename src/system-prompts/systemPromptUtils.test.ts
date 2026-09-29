@@ -12,23 +12,18 @@ import * as state from "@/system-prompts/state";
 import type { CopilotSettings } from "@/settings/model";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
-// Mock Obsidian
 jest.mock("obsidian", () => ({
   TFile: jest.fn(),
   TAbstractFile: jest.fn(),
   normalizePath: jest.fn((path: string) => path),
 }));
 
-// Mock settings
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(() => ({
     userSystemPromptsFolder: "SystemPrompts",
   })),
 }));
 
-// The folder read point derives from copilotFolder in production; these tests
-// exercise path-composition/file-matching, so the derived accessor is shimmed
-// to the folder each test configures via getSettings().userSystemPromptsFolder.
 jest.mock("@/settings/copilotFolder", () => {
   const { getSettings } = jest.requireMock<typeof import("@/settings/model")>("@/settings/model");
   return {
@@ -36,7 +31,6 @@ jest.mock("@/settings/copilotFolder", () => {
   };
 });
 
-// Mock state management
 jest.mock("@/system-prompts/state", () => ({
   updateCachedSystemPrompts: jest.fn(),
   addPendingFileWrite: jest.fn(),
@@ -84,7 +78,6 @@ describe("systemPromptUtils", () => {
         extension: "md",
       });
 
-      // Mock instanceof check
       Object.setPrototypeOf(mockFile, TFile.prototype);
 
       expect(isSystemPromptFile(mockFile)).toBe(true);

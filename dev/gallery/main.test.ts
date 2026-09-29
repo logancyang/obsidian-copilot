@@ -123,7 +123,6 @@ function getGeneratedMock(): { loaders: jest.Mock[] } {
     .galleryGeneratedMock;
 }
 
-/** Unfolds nested ancestors so a story button becomes clickable. */
 function expandStoryPath(gallery: RenderResult, storyId: string): void {
   const segments = storyId.split("/");
   segments.pop();
@@ -458,7 +457,6 @@ describe("main", () => {
           selectedSubtree: "UI/Button",
           width: 600,
         });
-        // Tree folds are view-local; only the width and story pick persist.
         expect(requestSaveLayout).toHaveBeenCalledTimes(2);
 
         gallery.unmount();

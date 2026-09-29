@@ -2,9 +2,6 @@ import { transform as svgrTransform } from "@svgr/core";
 import jsxPlugin from "@svgr/plugin-jsx";
 import { readFile } from "node:fs/promises";
 
-// Inline SVGR plugin: each `import Foo from "./foo.svg"` resolves to a React
-// component (`React.FC<SVGProps<SVGSVGElement>>`) instead of a raw string.
-// Source SVGs use `fill="currentColor"`, so theme color follows automatically.
 const svgrPlugin = {
   name: "svgr",
   setup(build) {

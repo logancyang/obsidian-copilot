@@ -1,8 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Bundle the TypeScript entry file into a temporary ESM module and execute it.
- */
 async function main() {
   const [{ build }, fs, os, path, url] = await Promise.all([
     import("esbuild"),
@@ -50,9 +47,7 @@ async function main() {
     const module = await import(url.pathToFileURL(outfile).href);
     await module.run(process.argv.slice(2));
   } finally {
-    await fs.unlink(outfile).catch(() => {
-      /* ignore cleanup errors */
-    });
+    await fs.unlink(outfile).catch(() => {});
   }
 }
 

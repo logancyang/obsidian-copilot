@@ -1,21 +1,12 @@
-// Uses Node's WebCrypto (imported explicitly, not the global) for ECDSA P-256 key
-// generation/signing, and injects it into verifyEntitlement via the `subtle`
-// option. This keeps the test independent of the environment's global WebCrypto —
-// jsdom ships only a partial SubtleCrypto (no generateKey/ECDSA), and patching it
-// proved unreliable across CI. The verification logic is WebCrypto-spec behavior,
-// identical between Node and the Obsidian webview.
 import { webcrypto } from "crypto";
 
 import type { EntitlementClaims } from "./types";
 import { verifyEntitlement, type VerifyEntitlementOptions } from "./verify";
 
-// Node's webcrypto.SubtleCrypto and the DOM SubtleCrypto differ only in unrelated
-// overloads (e.g. Ed25519); cast to the DOM type the API expects.
 const subtle = webcrypto.subtle as unknown as SubtleCrypto;
 const KID = "test-key";
 const USER_ID = "user-123";
 
-/** verifyEntitlement with Node's subtle injected; tests pass the rest of opts. */
 function verify(token: string, opts: Omit<VerifyEntitlementOptions, "subtle"> = {}) {
   return verifyEntitlement(token, { subtle, ...opts });
 }
@@ -42,7 +33,6 @@ async function signToken(
   return `${headerSegment}.${payloadSegment}.${base64UrlEncode(new Uint8Array(signature))}`;
 }
 
-// Far-future expiry (epoch seconds) so tokens are valid unless a test overrides it.
 const FUTURE_EXP = Math.floor(Date.UTC(2099, 0, 1) / 1000);
 
 function plusClaims(overrides: Partial<EntitlementClaims> = {}): Record<string, unknown> {

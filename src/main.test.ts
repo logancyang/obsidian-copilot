@@ -1,8 +1,4 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
-// The plugin module graph reaches Obsidian base classes the shared mock does
-// not model and provider SDKs Jest cannot resolve under jsdom; stubbing them
-// here (rather than in `__mocks__/obsidian.js`) keeps the blast radius to this
-// suite while letting the real `CopilotPlugin` class load.
 jest.mock("obsidian", () => {
   const actual = jest.requireActual<Record<string, unknown>>("obsidian");
   const { StateField } =
@@ -90,12 +86,6 @@ import {
 } from "@/utils/chatDeepLink";
 import { Notice, TFile, type WorkspaceLeaf } from "obsidian";
 
-/**
- * Build a plugin instance without running Obsidian's `Plugin` constructor or
- * `onload`, wiring only the collaborators `teardown()` touches. Each is a spy
- * that appends to `calls`, so a test can assert the unload order the previous
- * `async onunload` body established.
- */
 function createPluginUnderTest(calls: string[]) {
   const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
 
@@ -119,7 +109,6 @@ function createPluginUnderTest(calls: string[]) {
   return plugin;
 }
 
-/** Let the fire-and-forget teardown chain settle before asserting on it. */
 async function flushTeardown(): Promise<void> {
   await Promise.resolve();
   await new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -549,8 +538,6 @@ describe("main", () => {
 
         plugin.onunload();
 
-        // Everything above teardown()'s first `await` must run before the next
-        // `onload()` can start, which is what makes the vault boundary real.
         expect(flushPersistence).toHaveBeenCalledTimes(1);
         expect(calls).toEqual([]);
       });

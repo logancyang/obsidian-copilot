@@ -10,56 +10,22 @@ import {
 import RESEARCH_MEMO_THEME from "openartifacts/skill/openartifacts/themes/research-memo.md";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 
-/**
- * Plugin-shipped ("builtin") Agent Mode skills. Unlike user-authored skills,
- * these are seeded into the canonical skills folder by the plugin (see
- * `seedBuiltinSkills`) and refreshed when `version` bumps. A builtin may be
- * executable (the Copilot Plus relay skills below) or knowledge-only (the
- * Obsidian format and CLI skills).
- *
- * The Copilot Plus skills each ship a `SKILL.md` plus one runnable script per
- * OS: a POSIX `sh` script for macOS/Linux and a Windows `.cmd` wrapper that
- * drives an adjacent PowerShell `.ps1`. All read the Copilot Plus license +
- * relay base URL from env vars the plugin injects at spawn time (see
- * `buildBuiltinSkillEnv`) and call the Brevilabs relay directly — no key is
- * embedded in the skill files.
- *
- * Why one script per OS (and no Node): every runtime here is guaranteed present
- * without any install. On macOS/Linux the agent's shell has `sh`, `curl`, `sed`,
- * and `base64` in `/usr/bin`. On Windows, `cmd` and Windows PowerShell 5.1 ship
- * with the OS, so the `.cmd` → `.ps1` pair runs in a bare PowerShell with no Git
- * Bash and no Node. This matters because Obsidian launches with a reduced PATH
- * that usually excludes nvm/Volta/Homebrew node — a managed-opencode Windows
- * session frequently has neither `sh` nor `node`, which is why the earlier
- * `sh` → `node` fallback dead-ended (see the PDF report in #2634). Scripts need
- * no extra imports and no executable bit.
- */
 export interface BuiltinSkill {
-  /** Folder name + SKILL.md `name`. */
   readonly name: string;
-  /**
-   * Bump when `skillMd` or any support file changes so seeded copies refresh.
-   * Stamped into `metadata.copilot-builtin-version` in the seeded SKILL.md.
-   */
   readonly version: number;
-  /** Agents the skill fans out to (→ `metadata.copilot-enabled-agents`). */
   readonly enabledAgents: readonly BackendId[];
-  /** Full SKILL.md file contents (frontmatter + body). */
   readonly skillMd: string;
-  /** Supporting scripts, references, or notices written alongside SKILL.md. */
   readonly files: ReadonlyArray<{ readonly path: string; readonly content: string }>;
 }
 
 /**
  * Retain retired names so Copilot can remove their managed folders and preferences.
- * Renamed skills receive fresh defaults.
  * https://github.com/logancyang/obsidian-copilot/issues/3022
  */
 export const RETIRED_BUILTIN_SKILLS: readonly Pick<BuiltinSkill, "name">[] = [
   { name: "symposium-publish" },
 ];
 
-/** Env var names the plugin injects and the scripts read. Single source of truth. */
 export const PLUS_ENV = {
   licenseKey: "COPILOT_PLUS_LICENSE_KEY",
   baseUrl: "COPILOT_API_BASE_URL",
@@ -67,71 +33,28 @@ export const PLUS_ENV = {
   clientVersion: "COPILOT_CLIENT_VERSION",
 } as const;
 
-/** Plugin-owned scope inputs consumed by the managed Miyo search wrappers. */
 export const MIYO_SEARCH_SCOPE_ENV = "COPILOT_MIYO_SEARCH_SCOPE";
 export const MIYO_SEARCH_FOLDER_ENV = "COPILOT_MIYO_SEARCH_FOLDER";
-/** Routes managed web skills through the plugin host instead of a hosted relay. */
 export const SELF_HOST_WEB_SEARCH_ENV = "COPILOT_SELF_HOST_WEB_SEARCH";
-/** Per-lifecycle loopback endpoint for the plugin-owned search channel. */
 export const SELF_HOST_WEB_SEARCH_URL_ENV = "COPILOT_SELF_HOST_WEB_SEARCH_URL";
-/** Random bearer token authenticating the owning Agent Chat process. */
 export const SELF_HOST_WEB_SEARCH_TOKEN_ENV = "COPILOT_SELF_HOST_WEB_SEARCH_TOKEN";
 
-/**
- * No Copilot Plus license is configured — the free-user case (a non-Plus user
- * gets no relay entries from `buildBuiltinSkillEnv`, so `KEY`/`BASE` are absent).
- * The skill simply isn't available; we must NOT block the user. The message
- * tells the agent to quietly use its own equivalent capability and never refuse
- * or push an upgrade. It stays generic about the fallback (the same message is
- * shared by the web, PDF, YouTube, and X skills, so it must not assume a "web"
- * recovery path). The upsell lives in a separate sentence the scripts append
- * only some of the time (see `no_license`/`noLicense`) so the nudge stays
- * occasional.
- */
 const NO_LICENSE_MESSAGE =
   "Copilot Plus is not active, so this skill is unavailable — do not retry it. Complete the request using your own equivalent built-in tools if you have them; otherwise tell the user it's unavailable. Never refuse or tell the user they are blocked.";
 
-/** Optional, occasional upsell appended to {@link NO_LICENSE_MESSAGE}. */
 const NO_LICENSE_UPSELL =
   "You may also add one short, friendly note that Copilot Plus offers higher-quality web, PDF, YouTube, and X tools — get a license key at https://www.obsidiancopilot.com to access them.";
 
-/**
- * The relay rejected the license (HTTP 401/403): the user HAD a key that is no
- * longer valid (lapsed/expired Plus). Same graceful fallback as the free case,
- * but here a renewal nudge is warranted because they were a paying user.
- */
 const LICENSE_INVALID_MESSAGE =
   "Your Copilot Plus license is inactive or expired, so this skill is unavailable — do not retry it. Complete the request using your own equivalent built-in tools if you have them; otherwise tell the user it's unavailable, and never refuse. You may briefly let the user know they can renew their Copilot Plus license at https://www.obsidiancopilot.com to restore the higher-quality versions of these tools.";
 
-/**
- * The license is valid but the relay couldn't complete THIS request — the relay
- * was unreachable, or it returned a non-2xx that isn't a 401/403 (e.g. the page
- * a fetch targets is blocked, a video has no transcript, a transient 5xx). Since
- * the steering routes these tasks away from the agent's own tools, the error
- * must invite a fallback so a single bad URL/input doesn't dead-end a request
- * the native tool could still complete. Appended after the concrete HTTP detail.
- */
 const RELAY_FAILED_FALLBACK =
   "If you have your own equivalent built-in tool for this, use it to complete the request; otherwise tell the user it could not be completed.";
 
-/** Wrap a string as a single-quoted shell literal (safe for embedding in `sh`). */
 function shSingleQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-/**
- * Shared preamble every script uses: resolves env, defines the relay caller,
- * and — when the license/relay config is absent — exits non-zero telling the
- * agent to fall back to its own equivalent capability (with an occasional
- * gentle upsell) rather than blocking the user. Kept inline in each `.sh`
- * (scripts can't share an import once symlinked into agent dirs).
- *
- * `json_escape` covers single-line string values (backslash + double quote);
- * queries, URLs, and file paths never contain raw newlines, so this is enough
- * without depending on `jq`, which is not guaranteed to be installed. The
- * request body is fed to curl over stdin (`--data-binary @-`) so a large
- * base64 PDF never hits the command-line length limit.
- */
 function scriptPreamble(): string {
   return `#!/bin/sh
 # Calls the Brevilabs relay with curl and prints the JSON result to stdout.
@@ -191,23 +114,10 @@ relay() {
 `;
 }
 
-/** Wrap a string as a single-quoted PowerShell literal (`'` doubled to escape). */
 function psSingleQuote(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
-/**
- * Windows (PowerShell) equivalent of {@link scriptPreamble}, run by the `.cmd`
- * launcher each skill ships. Targets Windows PowerShell 5.1 — which ships with
- * the OS, so it needs no Git Bash and no Node, the two runtimes a reduced-PATH
- * managed-opencode session often lacks. Uses only the .NET BCL + built-in
- * cmdlets (`Invoke-WebRequest`, `[System.Convert]`), so it runs from a bare
- * vault folder.
- *
- * Behaviour mirrors the shell script exactly: same env vars, same relay call,
- * same no-license / 401/403 → fall-back-to-your-own-tools mapping, same
- * non-zero exits.
- */
 function powershellPreamble(): string {
   return `# Windows (PowerShell) sibling of the matching .sh script, launched by the .cmd
 # wrapper next to it. Calls the Brevilabs relay and prints the JSON result to
@@ -281,15 +191,6 @@ function Invoke-Relay($endpoint, $body) {
 `;
 }
 
-/**
- * The Windows `.cmd` entry point each relay skill ships. A bare quoted path is a
- * string (not a command) in PowerShell, so the agent runs this `.cmd`, which in
- * turn launches the adjacent `.ps1` with an absolute `powershell.exe` path
- * (System32 stays on PATH even in the reduced shells where `node` is missing)
- * and `-ExecutionPolicy Bypass` so an unsigned script still runs. `%~dp0`
- * resolves the script's own folder, so the `.ps1` is found wherever the skill
- * dir is symlinked. `%*` forwards every argument verbatim.
- */
 function cmdLauncher(ps1File: string): string {
   return `@echo off
 setlocal
@@ -301,11 +202,8 @@ exit /b %errorlevel%
 }
 
 /**
- * Names the tool that runs a skill's command. OpenCode exposes a code-execution
- * tool (`execute`) beside its shell tool, and a model handed the bare command
- * passes it there as code, which fails to parse. Codex reaches its shell tool
- * from inside its own code tool, so the rule forbids shell text as code rather
- * than forbidding code tools. Tool names differ per agent, so examples cover each.
+ * OpenCode exposes a code-execution tool (`execute`) beside its shell tool, and a model handed
+ * the bare command passes it there as code, which fails to parse.
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/599
  */
 const SHELL_TOOL_SENTENCE = `Run it as a shell command with your shell command tool (for example
@@ -313,14 +211,6 @@ const SHELL_TOOL_SENTENCE = `Run it as a shell command with your shell command t
 is shell syntax, not JavaScript or TypeScript: never pass it as the code of a
 code-execution tool.`;
 
-/**
- * The SKILL.md "How to run" section shared by every script-backed builtin
- * skill that takes one argument. Ships one runnable script per OS — `sh` for
- * macOS/Linux, a `.cmd` wrapper for Windows — each backed by a runtime that is
- * always present (no Git Bash, no Node), so the agent never dead-ends on a
- * missing runtime. `extraNote` appends a skill-specific sentence (e.g. PDF's
- * "pass an absolute path") at the end.
- */
 function howToRunSection(opts: {
   shFile: string;
   cmdFile: string;
@@ -352,13 +242,6 @@ ${opts.extraNote ? `\n${opts.extraNote}\n` : ""}
 Both print the result to stdout.`;
 }
 
-/**
- * The SKILL.md "if Copilot Plus isn't active" section shared by every builtin
- * relay skill. Mirrors the scripts' runtime behaviour: when Plus is unavailable
- * the agent must fall back to its own tools rather than block the user, and the
- * upgrade/renewal nudge is gentle and occasional (driven by the script message,
- * not repeated on the agent's own initiative).
- */
 const LICENSE_PROBLEM_SECTION = `## If Copilot Plus is not active
 
 If the script exits saying Copilot Plus is unavailable, do NOT retry it. Do what
@@ -368,20 +251,12 @@ refuse or block the user. Only mention upgrading or renewing Copilot Plus when
 the script's message explicitly invites it, and keep any such note short and
 friendly.`;
 
-/**
- * Build a skill that maps a single positional argument onto one relay
- * endpoint (the web search/fetch, YouTube, and X tools are identical apart from
- * the endpoint, argument name, and copy). PDF is hand-written below because it
- * reads a local file and base64-encodes it before calling the relay.
- */
 function relaySkill(opts: {
   name: string;
-  /** SKILL.md `description` — the agent's "when to use" signal. */
   description: string;
   heading: string;
   intro: string;
   endpoint: string;
-  /** Relay body key + usage-doc placeholder, e.g. `["query", "<your search query>"]`. */
   arg: [key: string, placeholder: string];
   scriptFile: string;
   license?: string;
@@ -392,9 +267,8 @@ function relaySkill(opts: {
   const cmdFile = opts.scriptFile.replace(/\.sh$/, ".cmd");
   const ps1File = opts.scriptFile.replace(/\.sh$/, ".ps1");
   const version = 7;
-  // Self-host search crosses back into the owning Obsidian renderer so API
-  // keys never enter the agent process; fetch fails closed because there is no
-  // provider-neutral page-fetch contract.
+  // Self-host search crosses back into the Obsidian renderer so API keys never enter the
+  // agent process.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
   const selfHostSh =
     opts.selfHostMode === "search"
@@ -607,10 +481,7 @@ const FETCH_X = relaySkill({
 
 const OPENARTIFACTS_PUBLISH_VERSION = 6;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
-/** Where the wrapper sends requests unless a test or self-host points it elsewhere. */
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
-/** Theme design specs come from the openartifacts npm package; a user theme with the
- * same name under `.openartifacts/themes/` in the vault takes precedence. */
 const OPENARTIFACTS_DEFAULT_THEME = "research-memo";
 const OPENARTIFACTS_MISSING_KEY_MESSAGE =
   "Publishing to OpenArtifacts needs a Copilot Plus license key. Add it in Copilot Settings and try again.";
@@ -618,11 +489,6 @@ const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   version: OPENARTIFACTS_PUBLISH_VERSION,
   enabledAgents: ["claude", "codex", "opencode"],
-  // Published notes need a visible identity without repeating an equivalent title
-  // that is already part of the note body.
-  // https://github.com/logancyang/obsidian-copilot/issues/3196
-  // Existing HTML is already the complete page and must bypass Markdown rendering and cleanup.
-  // https://github.com/logancyang/obsidian-copilot/issues/3294
   skillMd: `---
 name: openartifacts-publish
 description: Publish an existing Markdown note or local HTML file, update a published Markdown note, or withdraw an OpenArtifacts page. Use when the user asks to publish, share, update, delete, remove, or withdraw an OpenArtifacts page.
@@ -759,8 +625,8 @@ Never tell the user to delete the page at its public URL.
     { path: `themes/${OPENARTIFACTS_DEFAULT_THEME}.md`, content: RESEARCH_MEMO_THEME },
     {
       path: `${OPENARTIFACTS_PUBLISH_USAGE}.sh`,
-      // POSIX sh + curl + awk only. The JSON string encoder is the whole reason this
-      // script exists: three agents improvising it would each get it subtly wrong.
+      // The JSON string encoder is the whole reason this script exists: agents improvising it
+      // each get it subtly wrong.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/394
       content: String.raw`#!/bin/sh
 # Publish one HTML file to OpenArtifacts over HTTPS with the license key Copilot
@@ -894,9 +760,6 @@ esac
     },
     {
       path: `${OPENARTIFACTS_PUBLISH_USAGE}.ps1`,
-      // Windows PowerShell 5.1 and PowerShell 7 both ship ConvertTo-Json and
-      // Invoke-WebRequest, so no curl.exe or Node is needed there either.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/394
       content: String.raw`[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 # Publish one HTML file to OpenArtifacts over HTTPS with the license key Copilot
@@ -987,7 +850,6 @@ exit 0
   ],
 };
 
-/** All always-seeded plugin-shipped skills, in display order. */
 export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   WEB_SEARCH,
   WEB_FETCH,
@@ -1001,7 +863,6 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
 const MIYO_SEARCH_VERSION = 4;
 const MIYO_PARSE_VERSION = 2;
 
-/** Shared by both Miyo wrappers; the host script must define `die` before it. */
 const MIYO_POSIX_RESOLVER = `# Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
 if [ -x "$HOME/.miyo/bin/miyo" ]; then
   MIYO="$HOME/.miyo/bin/miyo"
@@ -1021,15 +882,6 @@ if not defined MIYO (
   exit /b 3
 )`;
 
-/**
- * POSIX (macOS/Linux) wrapper for the Miyo CLI; Windows uses the `.cmd` below.
- * Resolves the `miyo` binary itself — leading with the absolute install path
- * (`~/.miyo/bin/miyo`) because Obsidian-launched shells often inherit a reduced
- * PATH that misses it — then runs one `miyo search … --json` and prints the
- * JSON. A single deterministic command (vs. a PATH-first/absolute-fallback
- * procedure the agent has to reason through) is what makes smaller models invoke
- * it reliably.
- */
 const MIYO_SEARCH_SH = `#!/bin/sh
 # Semantic vault search via the local Miyo CLI; prints Miyo's JSON to stdout.
 # Resolves the miyo binary so the agent never has to deal with PATH.
@@ -1061,12 +913,6 @@ esac
 printf '%s\\n' "$OUT"
 `;
 
-/**
- * Windows wrapper for the Miyo CLI; macOS/Linux uses the `.sh` above. `cmd` is
- * always present and runnable from cmd or PowerShell (no Git Bash or Node
- * needed — a managed-opencode Windows session may lack both). Resolves the exe
- * under `%LOCALAPPDATA%` (where the Miyo installer copies it) first, then PATH.
- */
 const MIYO_SEARCH_CMD = `@echo off
 setlocal enableextensions
 rem Semantic vault search via the local Miyo CLI; prints Miyo's JSON to stdout.
@@ -1124,20 +970,6 @@ ${MIYO_WINDOWS_RESOLVER}
 "%MIYO%" parse "%~1"
 `;
 
-/**
- * Vault semantic search via the local Miyo desktop app's `miyo` CLI.
- *
- * Ships a runnable wrapper per OS — `.sh` for macOS/Linux, `.cmd` for Windows —
- * rather than prose telling the agent to construct the command. Each resolves
- * the binary across the absolute install path and PATH, so the agent runs ONE
- * deterministic command (no Node, no shell/OS branching to reason through).
- * Smaller models were giving up after the old PATH-first prose attempt failed in
- * Obsidian's reduced-PATH shells.
- *
- * The host seeds this skill only when the dedicated Miyo search-skill setting
- * is enabled (see `seedManagedBuiltins` in `agentMode/index`) and prunes the
- * managed copy when the setting is turned off.
- */
 export const MIYO_SEARCH_SKILL: BuiltinSkill = {
   name: "miyo-search",
   version: MIYO_SEARCH_VERSION,
@@ -1201,13 +1033,6 @@ The script exits with a clear message when Miyo can't be used:
   ],
 };
 
-/**
- * Parses local PDF and EPUB files through the standalone Miyo CLI.
- *
- * This skill is gated by the Document Processor setting. Unlike the Plus PDF
- * relay, it keeps document contents local and deliberately fails closed: the
- * instructions forbid silently switching to a cloud parser if Miyo fails.
- */
 export const MIYO_PARSE_SKILL: BuiltinSkill = {
   name: "miyo-parse",
   version: MIYO_PARSE_VERSION,
@@ -1250,25 +1075,12 @@ Processor to Plus.
   ],
 };
 
-/** Every builtin the host may seed, gated or not — the universe it reconciles. */
 export const ALL_MANAGED_SKILLS: readonly BuiltinSkill[] = [
   ...BUILTIN_SKILLS,
   MIYO_SEARCH_SKILL,
   MIYO_PARSE_SKILL,
 ];
 
-/**
- * Splits the managed builtins into what to write and what to remove, so the host
- * can't seed a gate without pruning its opposite.
- *
- * Miyo-owned documents drop `copilot-read-pdf` outright instead of merely
- * steering away from it: that choice is fail-closed (see
- * `resolveDocProcessorBackend`), and a cloud PDF skill left on disk is one
- * ignored instruction away from uploading a document the user kept local.
- *
- * @param gates `search` mirrors `enableMiyoSearchSkill`, `documents` mirrors
- *   `docProcessorBackend === "miyo"`.
- */
 export function planManagedBuiltins(gates: { search: boolean; documents: boolean }): {
   seed: readonly BuiltinSkill[];
   prune: readonly string[];
@@ -1289,16 +1101,6 @@ export function planManagedBuiltins(gates: { search: boolean; documents: boolean
   };
 }
 
-/**
- * Whether a managed builtin is installed for an agent: it passes the Miyo gates
- * and the user has not opted out of it globally or for that agent. Installation
- * and the agent system prompt both read this, so the prompt never names a skill
- * the agent cannot load.
- *
- * @param settings Current settings holding the Miyo gates and builtin opt-outs.
- * @param skillName Managed builtin folder name, e.g. `copilot-web-search`.
- * @param agentId Backend id as stored in `disabledAgents`, e.g. `opencode`.
- */
 export function isBuiltinSkillEnabledFor(
   settings: CopilotSettings,
   skillName: string,

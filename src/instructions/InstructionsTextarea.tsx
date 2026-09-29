@@ -3,13 +3,8 @@ import { cn } from "@/lib/utils";
 import React from "react";
 
 export interface InstructionsTextareaProps {
-  /** Current instruction text. */
   value: string;
   onChange: (next: string) => void;
-  /**
-   * Accessible name for the editor. Its hosts render the visible title as plain text rather
-   * than a `<label>`, so without this the field reaches a screen reader unnamed.
-   */
   label: string;
   className?: string;
 }

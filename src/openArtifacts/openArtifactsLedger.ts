@@ -8,13 +8,10 @@ const LEGACY_LEDGER_FOLDER = ".symposium";
 const LEGACY_LEDGER_PATH = `${LEGACY_LEDGER_FOLDER}/publish-history.md`;
 
 /**
- * Moves a vault's Symposium-era publishing history to its OpenArtifacts home so it
- * stays one file after the cutover. The whole folder moves when the new one does not
- * exist yet. When it does (a staged handoff or another device created it first), only
- * the history file moves, and only while the new one is still absent, so two histories
- * are never merged. Runs at plugin start and again before every ledger append, so a
- * rename that failed once is retried rather than leaving the old history stranded.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/337
+ * Moves a vault's Symposium-era publishing history to its OpenArtifacts home. When the new
+ * folder already exists only the history file moves, and only while the new one is absent, so
+ * two histories are never merged. Retried before every ledger append so a failed rename does
+ * not strand the old history. https://github.com/Brevilabs/obsidian-copilot-private/issues/337
  *
  * @param vault The vault whose publishing history may still live under the old name.
  */
@@ -55,8 +52,6 @@ export async function appendOpenArtifactsLedgerEntry(
   vault: Vault,
   entry: OpenArtifactsLedgerEntry
 ): Promise<void> {
-  // A failed move throws before anything is written, so the caller's ledger warning
-  // fires and the next append retries instead of starting a second history.
   await migrateOpenArtifactsFolder(vault);
   await ensureFolderExists(vault, OPENARTIFACTS_LEDGER_FOLDER).catch(async (error) => {
     if (!(await vault.adapter.exists(OPENARTIFACTS_LEDGER_FOLDER))) throw error;

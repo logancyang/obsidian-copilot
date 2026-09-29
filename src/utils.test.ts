@@ -22,7 +22,6 @@ import {
 } from "./utils";
 import { TimeoutError } from "./error";
 
-// Mock Obsidian's TFile class
 jest.mock("obsidian", () => {
   class MockTFile {
     path: string;
@@ -76,12 +75,10 @@ jest.mock("obsidian", () => {
   };
 });
 
-// Mock the metadata cache
 const mockMetadataCache = {
   getFileCache: jest.fn(),
 };
 
-// Mock file metadata for different test cases
 const mockFileMetadata = {
   "test/test2/note1.md": {
     tags: [{ tag: "#inlineTag1" }, { tag: "#inlineTag2" }],
@@ -101,7 +98,6 @@ const mockFileMetadata = {
   },
 };
 
-// Mock the global app object
 const mockApp = {
   vault: new Obsidian.Vault(),
   metadataCache: mockMetadataCache,
@@ -205,7 +201,6 @@ describe("getNotesFromPath", () => {
 
   it("should return only files from the specified subfolder path", async () => {
     const vault = new Obsidian.Vault();
-    // Mock the getMarkdownFiles method to return our test structure
     vault.getMarkdownFiles = jest
       .fn()
       .mockReturnValue([
@@ -275,7 +270,6 @@ describe("getNotesFromTags", () => {
     // @ts-ignore
     window.app = mockApp;
 
-    // Setup metadata cache mock
     mockMetadataCache.getFileCache.mockImplementation((file: TFile) => {
       return mockFileMetadata[file.path as keyof typeof mockFileMetadata];
     });
@@ -341,7 +335,7 @@ describe("getNotesFromTags", () => {
     const tags = ["#inlineTag1"];
     const result = getNotesFromTags(mockApp, tags);
 
-    expect(result).toEqual([]); // Should return empty since inline tags are ignored
+    expect(result).toEqual([]);
   });
 });
 
@@ -488,8 +482,6 @@ describe("utils", () => {
   });
 
   describe("getPropertyValuesFromNote()", () => {
-    // getPropertyValuesFromNote only reads app.metadataCache.getFileCache(file),
-    // which is mocked per-case, so the file argument itself is never inspected.
     const file = new TFile();
     const withFrontmatter = (frontmatter: Record<string, unknown>) =>
       mockMetadataCache.getFileCache.mockReturnValue({ frontmatter });
@@ -543,7 +535,7 @@ describe("utils", () => {
       const result1 = getPropertyValuesFromNote(mockApp, file, "Topics");
       const result2 = getPropertyValuesFromNote(mockApp, file, "Topics");
       expect(result1).toEqual([]);
-      expect(result1).toBe(result2); // referential stability
+      expect(result1).toBe(result2);
     });
 
     it("returns the canonical empty array for empty list values", () => {
@@ -551,7 +543,7 @@ describe("utils", () => {
       const result1 = getPropertyValuesFromNote(mockApp, file, "Topics");
       const result2 = getPropertyValuesFromNote(mockApp, file, "Topics");
       expect(result1).toEqual([]);
-      expect(result1).toBe(result2); // referential stability
+      expect(result1).toBe(result2);
     });
 
     it("returns the canonical empty array for non-scalar-only lists", () => {
@@ -559,7 +551,7 @@ describe("utils", () => {
       const result1 = getPropertyValuesFromNote(mockApp, file, "Topics");
       const result2 = getPropertyValuesFromNote(mockApp, file, "Topics");
       expect(result1).toEqual([]);
-      expect(result1).toBe(result2); // referential stability
+      expect(result1).toBe(result2);
     });
   });
 
@@ -832,7 +824,6 @@ describe("withTimeout", () => {
       // Expected to timeout
     }
 
-    // Give time for abort event to fire
     await new Promise((resolve) => window.setTimeout(resolve, 10));
     expect(wasAborted).toBe(true);
   });
@@ -852,9 +843,6 @@ describe("withTimeout", () => {
     };
 
     await expect(withTimeout(operation, 200, "Test operation")).rejects.toThrow("Operation failed");
-
-    // If timeout cleanup failed, this would log warnings about unhandled timeouts
-    // The fact that this test passes cleanly indicates proper cleanup
   });
 });
 
@@ -876,27 +864,24 @@ describe("getUtf8ByteLength", () => {
   });
 
   it("should correctly calculate byte length for Cyrillic text", () => {
-    // Each Cyrillic character is 2 bytes in UTF-8
-    expect(getUtf8ByteLength("Привет")).toBe(12); // 6 chars × 2 bytes
-    expect(getUtf8ByteLength("мир")).toBe(6); // 3 chars × 2 bytes
+    expect(getUtf8ByteLength("Привет")).toBe(12);
+    expect(getUtf8ByteLength("мир")).toBe(6);
   });
 
   it("should correctly calculate byte length for Chinese/Japanese/Korean text", () => {
-    // CJK characters are typically 3 bytes in UTF-8
-    expect(getUtf8ByteLength("你好")).toBe(6); // 2 chars × 3 bytes
-    expect(getUtf8ByteLength("こんにちは")).toBe(15); // 5 chars × 3 bytes
-    expect(getUtf8ByteLength("안녕")).toBe(6); // 2 chars × 3 bytes
+    expect(getUtf8ByteLength("你好")).toBe(6);
+    expect(getUtf8ByteLength("こんにちは")).toBe(15);
+    expect(getUtf8ByteLength("안녕")).toBe(6);
   });
 
   it("should correctly calculate byte length for emoji", () => {
-    // Emoji are typically 4 bytes in UTF-8
     expect(getUtf8ByteLength("🚀")).toBe(4);
     expect(getUtf8ByteLength("🌟")).toBe(4);
     expect(getUtf8ByteLength("🚀🌟")).toBe(8);
   });
 
   it("should correctly calculate byte length for mixed text", () => {
-    expect(getUtf8ByteLength("Hello мир 你好")).toBe(19); // 5 + 1 + 6 + 1 + 6 = 19
+    expect(getUtf8ByteLength("Hello мир 你好")).toBe(19);
   });
 
   it("should handle empty string", () => {
@@ -917,31 +902,22 @@ describe("truncateToByteLimit", () => {
 
   it("should truncate Cyrillic text without breaking characters", () => {
     const cyrillic = "Привет мир";
-    // "Привет" = 12 bytes, " " = 1 byte, "мир" = 6 bytes
-    // Total = 19 bytes
     const result = truncateToByteLimit(cyrillic, 13);
-    // Should include "Привет " (13 bytes) or "Привет" (12 bytes) depending on space handling
     expect(getUtf8ByteLength(result)).toBeLessThanOrEqual(13);
-    // Verify no broken characters (each result should be valid UTF-8)
     expect(result.length).toBeGreaterThan(0);
   });
 
   it("should truncate emoji without breaking characters", () => {
     const emoji = "🚀🌟✨🎉";
-    // Each emoji is 4 bytes, total = 16 bytes
     const result = truncateToByteLimit(emoji, 8);
-    // Should include exactly 2 emoji (8 bytes)
     expect(getUtf8ByteLength(result)).toBeLessThanOrEqual(8);
     expect(result).toBe("🚀🌟");
   });
 
   it("should handle mixed Unicode text", () => {
     const mixed = "Hello мир 你好";
-    // "Hello" = 5, " " = 1, "мир" = 6, " " = 1, "你好" = 6
-    // Total = 19 bytes
     const result = truncateToByteLimit(mixed, 12);
     expect(getUtf8ByteLength(result)).toBeLessThanOrEqual(12);
-    // Should include at least "Hello мир" (12 bytes)
     expect(result).toContain("Hello");
   });
 
@@ -962,15 +938,11 @@ describe("truncateToByteLimit", () => {
       "используй словарь уже установленных терминов Словарь перевода Songs of Syx";
     const result = truncateToByteLimit(longCyrillic, 50);
     expect(getUtf8ByteLength(result)).toBeLessThanOrEqual(50);
-    // Should not break in the middle of a character
     expect(result.length).toBeGreaterThan(0);
   });
 
   it("should handle edge case where single character exceeds limit", () => {
-    // If a single emoji (4 bytes) exceeds the limit of 3 bytes
     const result = truncateToByteLimit("🚀Test", 3);
-    // Binary search may find a partial character, but we can't include it
-    // The function should return an empty string or the longest valid prefix
     expect(getUtf8ByteLength(result)).toBeLessThanOrEqual(3);
   });
 });
@@ -1019,7 +991,6 @@ title: Test
 
   Content with leading whitespace after frontmatter.`;
     const result = stripFrontmatter(content);
-    // trimStart removes the newlines and spaces
     expect(result).toBe("Content with leading whitespace after frontmatter.");
   });
 
@@ -1075,12 +1046,10 @@ describe("formatDateTime", () => {
 
   it("local format is structurally valid and matches host timezone offset", () => {
     const result = formatDateTime(fixedDate, "local");
-    // Display must always be "YYYY/MM/DD HH:mm:ss" regardless of host TZ.
     expect(result.display).toMatch(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/);
     expect(result.fileName).toMatch(/^\d{8}_\d{6}$/);
     expect(result.epoch).toBe(fixedDate.getTime());
 
-    // The local display should equal what the host JS Date renders.
     const pad = (n: number) => String(n).padStart(2, "0");
     const expectedDisplay =
       `${fixedDate.getFullYear()}/${pad(fixedDate.getMonth() + 1)}/${pad(fixedDate.getDate())} ` +
@@ -1150,11 +1119,8 @@ describe("getModelInfo", () => {
   });
 
   it("does not treat dated snapshot IDs as adaptive thinking minors", () => {
-    // claude-opus-4-20250514 is the dated snapshot of Opus 4.0, not Opus 4.20250514.
     expect(getModelInfo("claude-opus-4-20250514").usesAdaptiveThinking).toBe(false);
-    // claude-opus-4-1-20250805 is dated 4.1.
     expect(getModelInfo("claude-opus-4-1-20250805").usesAdaptiveThinking).toBe(false);
-    // Dated 4.7 still matches because the minor is delimited by "-".
     expect(getModelInfo("claude-opus-4-7-20260115").usesAdaptiveThinking).toBe(true);
   });
 });
@@ -1163,9 +1129,6 @@ describe("insertAtCursor", () => {
   const from = { line: 0, ch: 0 };
   const to = { line: 0, ch: 5 };
 
-  // Builds an app whose most-recent leaf is a markdown view with the given
-  // selection. `editor.cm` is undefined so `insertIntoEditor` takes its Editor
-  // API fallback path, letting us assert on `replaceRange`.
   function makeApp(selection: string) {
     const editor = {
       getSelection: jest.fn(() => selection),
@@ -1208,7 +1171,6 @@ describe("insertAtCursor", () => {
 
     await insertAtCursor(app as never, "hello");
 
-    // The write resolves its leaf through the passed app, not a global one.
     expect(app.workspace.getMostRecentLeaf).toHaveBeenCalled();
     expect(editor.replaceRange).toHaveBeenCalled();
   });

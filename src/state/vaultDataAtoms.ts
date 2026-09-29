@@ -5,53 +5,20 @@ import { settingsStore } from "@/settings/model";
 import { getTagsFromNote, isAllowedFileForNoteContext } from "@/utils";
 import { logInfo } from "@/logger";
 
-/**
- * Debounce delay for vault file operations (in milliseconds).
- * Batches rapid file create/delete/rename/modify events to prevent excessive re-scans.
- */
 const VAULT_DEBOUNCE_DELAY = 250;
 
-/**
- * Jotai atoms for vault data - centralized, singleton-managed vault state
- *
- * Note: Atoms store ALL available data. Hooks filter based on parameters.
- * - notesAtom: ALL files (markdown + PDFs + canvas)
- * - foldersAtom: ALL folders
- * - tagsFrontmatterAtom: Frontmatter tags only
- * - tagsAllAtom: All tags (frontmatter + inline)
- */
 export const notesAtom = atom<TFile[]>([]);
 export const foldersAtom = atom<TFolder[]>([]);
 export const tagsFrontmatterAtom = atom<string[]>([]);
 export const tagsAllAtom = atom<string[]>([]);
 
-/**
- * Singleton manager for vault data with debounced event handling.
- * Ensures only ONE set of vault event listeners exists, shared across all hook instances.
- *
- * Architecture:
- * - Registers vault event listeners once on initialization
- * - Debounces refresh operations to batch rapid file changes
- * - Updates Jotai atoms (notesAtom, foldersAtom, tagsAtom)
- * - Provides stable array references when data hasn't changed
- *
- * Performance benefits:
- * - Eliminates duplicate event listeners (was 3x per typeahead component)
- * - Reduces vault scans by 70-90% via debouncing
- * - Prevents cascading re-renders with stable references
- */
 export class VaultDataManager {
   private static instance: VaultDataManager | null = null;
   private initialized = false;
   private app: App | null = null;
 
-  private constructor() {
-    // Private constructor for singleton pattern
-  }
+  private constructor() {}
 
-  /**
-   * Gets the singleton instance of VaultDataManager
-   */
   public static getInstance(): VaultDataManager {
     if (!VaultDataManager.instance) {
       VaultDataManager.instance = new VaultDataManager();
@@ -59,13 +26,6 @@ export class VaultDataManager {
     return VaultDataManager.instance;
   }
 
-  /**
-   * Initializes the vault data manager with event listeners.
-   * Should be called once during plugin initialization.
-   *
-   * Note: VaultDataManager tracks ALL files (md + PDFs + canvas) and ALL tags.
-   * Filtering is done by hooks based on parameters.
-   */
   public initialize(app: App): void {
     if (this.initialized) {
       logInfo("VaultDataManager: Already initialized, skipping");
@@ -81,13 +41,11 @@ export class VaultDataManager {
 
     logInfo("VaultDataManager: Initializing with vault event listeners");
 
-    // Initial data load
     this.refreshNotes();
     this.refreshFolders();
     this.refreshTagsFrontmatter();
     this.refreshTagsAll();
 
-    // Register event listeners
     app.vault.on("create", this.handleFileCreate);
     app.vault.on("delete", this.handleFileDelete);
     app.vault.on("rename", this.handleFileRename);
@@ -97,9 +55,6 @@ export class VaultDataManager {
     this.initialized = true;
   }
 
-  /**
-   * Handles file creation events
-   */
   private handleFileCreate = (file: TAbstractFile): void => {
     if (file instanceof TFile) {
       if (isAllowedFileForNoteContext(file)) {
@@ -112,9 +67,6 @@ export class VaultDataManager {
     }
   };
 
-  /**
-   * Handles file deletion events
-   */
   private handleFileDelete = (file: TAbstractFile): void => {
     if (file instanceof TFile) {
       if (isAllowedFileForNoteContext(file)) {
@@ -127,11 +79,6 @@ export class VaultDataManager {
     }
   };
 
-  /**
-   * Handles file rename events
-   * Note: oldPath parameter is required by Obsidian's event signature but not used
-   * since we simply refresh all affected data structures
-   */
   private handleFileRename = (file: TAbstractFile, _oldPath: string): void => {
     if (file instanceof TFile) {
       if (isAllowedFileForNoteContext(file)) {
@@ -144,18 +91,12 @@ export class VaultDataManager {
     }
   };
 
-  /**
-   * Handles file modify events (for inline tag changes)
-   */
   private handleFileModify = (file: TAbstractFile): void => {
     if (file instanceof TFile && file.extension === "md") {
       this.debouncedRefreshTagsAll();
     }
   };
 
-  /**
-   * Handles metadata cache changes (for frontmatter tag updates)
-   */
   private handleMetadataChange = (file: TFile): void => {
     if (file.extension === "md") {
       this.debouncedRefreshTagsFrontmatter();
@@ -163,25 +104,16 @@ export class VaultDataManager {
     }
   };
 
-  /**
-   * Debounced notes refresh - batches rapid file operations via debounce
-   */
   private debouncedRefreshNotes = debounce(() => this.refreshNotes(), VAULT_DEBOUNCE_DELAY, {
     leading: true,
     trailing: true,
   });
 
-  /**
-   * Debounced folders refresh - batches rapid file operations via debounce
-   */
   private debouncedRefreshFolders = debounce(() => this.refreshFolders(), VAULT_DEBOUNCE_DELAY, {
     leading: true,
     trailing: true,
   });
 
-  /**
-   * Debounced frontmatter tags refresh - batches rapid file operations via debounce
-   */
   private debouncedRefreshTagsFrontmatter = debounce(
     () => this.refreshTagsFrontmatter(),
     VAULT_DEBOUNCE_DELAY,
@@ -191,18 +123,11 @@ export class VaultDataManager {
     }
   );
 
-  /**
-   * Debounced all tags refresh - batches rapid file operations via debounce
-   */
   private debouncedRefreshTagsAll = debounce(() => this.refreshTagsAll(), VAULT_DEBOUNCE_DELAY, {
     leading: true,
     trailing: true,
   });
 
-  /**
-   * Refreshes the notes atom with ALL vault files (markdown + PDFs + canvas).
-   * Hooks will filter based on their parameters.
-   */
   private refreshNotes = (): void => {
     if (!this.app?.vault) return;
 
@@ -211,15 +136,9 @@ export class VaultDataManager {
       (file): file is TFile => file instanceof TFile && isAllowedFileForNoteContext(file)
     );
 
-    // Always update atom with new array reference to ensure React components re-render
-    // Note: Obsidian mutates TFile objects in-place (e.g., on rename), so we need new
-    // array references to trigger re-renders even when paths are the same
     settingsStore.set(notesAtom, newFiles);
   };
 
-  /**
-   * Refreshes the folders atom with current vault folders
-   */
   private refreshFolders = (): void => {
     if (!this.app?.vault) return;
 
@@ -227,13 +146,9 @@ export class VaultDataManager {
       .getAllLoadedFiles()
       .filter((file: TAbstractFile): file is TFolder => file instanceof TFolder);
 
-    // Always update atom with new array reference to ensure React components re-render
     settingsStore.set(foldersAtom, newFolders);
   };
 
-  /**
-   * Refreshes the frontmatter tags atom with current vault tags (frontmatter only)
-   */
   private refreshTagsFrontmatter = (): void => {
     if (!this.app?.vault || !this.app?.metadataCache) return;
     const app = this.app;
@@ -241,7 +156,7 @@ export class VaultDataManager {
     const tagSet = new Set<string>();
 
     app.vault.getMarkdownFiles().forEach((file: TFile) => {
-      const fileTags = getTagsFromNote(app, file, true); // frontmatterOnly = true
+      const fileTags = getTagsFromNote(app, file, true);
       fileTags.forEach((tag) => {
         const tagWithHash = tag.startsWith("#") ? tag : `#${tag}`;
         tagSet.add(tagWithHash);
@@ -250,13 +165,9 @@ export class VaultDataManager {
 
     const newTags = Array.from(tagSet).sort();
 
-    // Always update atom with new array reference to ensure React components re-render
     settingsStore.set(tagsFrontmatterAtom, newTags);
   };
 
-  /**
-   * Refreshes the all tags atom with current vault tags (frontmatter + inline)
-   */
   private refreshTagsAll = (): void => {
     if (!this.app?.vault || !this.app?.metadataCache) return;
     const app = this.app;
@@ -264,7 +175,7 @@ export class VaultDataManager {
     const tagSet = new Set<string>();
 
     app.vault.getMarkdownFiles().forEach((file: TFile) => {
-      const fileTags = getTagsFromNote(app, file, false); // frontmatterOnly = false (all tags)
+      const fileTags = getTagsFromNote(app, file, false);
       fileTags.forEach((tag) => {
         const tagWithHash = tag.startsWith("#") ? tag : `#${tag}`;
         tagSet.add(tagWithHash);
@@ -273,14 +184,9 @@ export class VaultDataManager {
 
     const newTags = Array.from(tagSet).sort();
 
-    // Always update atom with new array reference to ensure React components re-render
     settingsStore.set(tagsAllAtom, newTags);
   };
 
-  /**
-   * Cleans up event listeners and debounced functions.
-   * Should be called during plugin unload.
-   */
   public cleanup(): void {
     if (!this.initialized) {
       return;
@@ -288,13 +194,11 @@ export class VaultDataManager {
 
     logInfo("VaultDataManager: Cleaning up event listeners");
 
-    // Cancel pending debounced calls
     this.debouncedRefreshNotes.cancel();
     this.debouncedRefreshFolders.cancel();
     this.debouncedRefreshTagsFrontmatter.cancel();
     this.debouncedRefreshTagsAll.cancel();
 
-    // Remove event listeners
     if (this.app?.vault) {
       this.app.vault.off("create", this.handleFileCreate);
       this.app.vault.off("delete", this.handleFileDelete);
@@ -308,9 +212,6 @@ export class VaultDataManager {
     this.initialized = false;
   }
 
-  /**
-   * Alias for cleanup() to match plugin lifecycle method naming
-   */
   public unload(): void {
     this.cleanup();
   }

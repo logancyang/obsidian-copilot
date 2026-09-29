@@ -1,7 +1,6 @@
 import { ContextProcessor } from "@/contextProcessor";
 import { DATAVIEW_BLOCK_TAG } from "@/constants";
 
-// Typed helper to access plugins on the mocked global app
 function getPlugins(): Record<string, unknown> {
   return (window.app as unknown as { plugins: { plugins: Record<string, unknown> } }).plugins
     .plugins;
@@ -12,7 +11,6 @@ function setPlugins(plugins: Record<string, unknown>): void {
     plugins;
 }
 
-// Mock the global app object for Dataview plugin access
 window.app = {
   plugins: {
     plugins: {},
@@ -25,15 +23,12 @@ describe("ContextProcessor - Dataview Integration", () => {
 
   beforeEach(() => {
     contextProcessor = ContextProcessor.getInstance(window.app);
-    // Reset plugins for each test
     setPlugins({});
-    // Save and mock console.error to suppress expected error messages
     originalConsoleError = console.error;
     console.error = jest.fn();
   });
 
   afterEach(() => {
-    // Restore original console.error
     console.error = originalConsoleError;
   });
 
@@ -54,7 +49,6 @@ describe("ContextProcessor - Dataview Integration", () => {
 
   describe("processDataviewBlocks - Regex Pattern Matching", () => {
     beforeEach(() => {
-      // Mock successful Dataview plugin with API
       getPlugins().dataview = {
         api: {
           query: jest.fn().mockResolvedValue({
@@ -142,7 +136,6 @@ TABLE file.name
 `;
       const result = await contextProcessor.processDataviewBlocks(content, "test.md");
 
-      // Should contain two dataview block tags
       const blockMatches = result.match(new RegExp(`<${DATAVIEW_BLOCK_TAG}>`, "g"));
       expect(blockMatches).toHaveLength(2);
     });
@@ -161,11 +154,9 @@ LIST
 `;
       const result = await contextProcessor.processDataviewBlocks(content, "test.md");
 
-      // Should contain two dataview block tags
       const blockMatches = result.match(new RegExp(`<${DATAVIEW_BLOCK_TAG}>`, "g"));
       expect(blockMatches).toHaveLength(2);
 
-      // Both should have different results (since mock returns different values)
       expect(result).toContain("[[note1.md]]");
       expect(result).toContain("[[note2.md]]");
     });
@@ -200,7 +191,6 @@ LIST
           query: jest.fn().mockImplementation(
             () =>
               new Promise((resolve) => {
-                // Never resolve to simulate timeout
                 window.setTimeout(resolve, 10000);
               })
           ),
@@ -211,7 +201,7 @@ LIST
       const result = await contextProcessor.processDataviewBlocks(content, "test.md");
 
       expect(result).toContain("<error>Query timeout</error>");
-    }, 10000); // Increase test timeout to 10s
+    }, 10000);
 
     it("should handle query execution errors", async () => {
       getPlugins().dataview = {
@@ -349,7 +339,6 @@ LIST
       const content = "```dataview\nLIST\n```";
       const result = await contextProcessor.processDataviewBlocks(content, "test.md");
 
-      // Should skip null/undefined values
       expect(result).toContain("- ");
       expect(result).toContain("- [[note1.md]]");
     });

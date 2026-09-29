@@ -21,7 +21,6 @@ import {
   YOUTUBE_VIDEO_CONTEXT_TAG,
 } from "./constants";
 
-/** Minimal typing for the Dataview plugin API (third-party plugin, no official types). */
 interface DataviewApi {
   query(
     query: string,
@@ -65,11 +64,6 @@ export class ContextProcessor {
     this.app = app;
   }
 
-  /**
-   * Returns the singleton. `app` is required on the first call (which creates
-   * the instance) and ignored afterward; the plugin seeds it once at load
-   * (see main.ts) so subsequent call sites can omit it.
-   */
   static getInstance(app?: App): ContextProcessor {
     if (!ContextProcessor.instance) {
       if (!app) {
@@ -113,39 +107,30 @@ export class ContextProcessor {
     return content;
   }
 
-  /**
-   * Process Dataview blocks in content, executing queries and replacing them with structured results
-   */
   async processDataviewBlocks(content: string, sourcePath: string): Promise<string> {
-    // Check if Dataview plugin is available
     const dataviewPlugin = (
       this.app as unknown as { plugins?: { plugins?: { dataview?: { api?: DataviewApi } } } }
     ).plugins?.plugins?.dataview;
     if (!dataviewPlugin) {
-      return content; // Dataview not installed, return content as-is
+      return content;
     }
 
     const dataviewApi = dataviewPlugin.api;
     if (!dataviewApi) {
-      return content; // API not available
+      return content;
     }
 
-    // Match dataview and dataviewjs code blocks
-    // Fixed regex: \s* handles trailing spaces and different line endings
     const blockRegex = /```(dataview|dataviewjs)\s*\n([\s\S]*?)```/g;
     const matches = [...content.matchAll(blockRegex)];
 
-    // Process matches in reverse order to avoid position shifts when replacing
-    // This also handles multiple identical blocks correctly
     for (let i = matches.length - 1; i >= 0; i--) {
       const match = matches[i];
-      const queryType = match[1]; // 'dataview' or 'dataviewjs'
+      const queryType = match[1];
       const query = match[2].trim();
       const matchStart = match.index;
       const matchEnd = matchStart + match[0].length;
 
       try {
-        // Execute query with timeout
         const result = await Promise.race([
           this.executeDataviewQuery(dataviewApi, query, queryType, sourcePath),
           new Promise((_, reject) =>
@@ -153,13 +138,11 @@ export class ContextProcessor {
           ),
         ]);
 
-        // Replace block with structured output using slice (position-based, handles duplicates)
         const resultStr = typeof result === "string" ? result : JSON.stringify(result);
         const replacement = `\n\n<${DATAVIEW_BLOCK_TAG}>\n<query_type>${queryType}</query_type>\n<original_query>\n${query}\n</original_query>\n<executed_result>\n${resultStr}\n</executed_result>\n</${DATAVIEW_BLOCK_TAG}>\n\n`;
         content = content.slice(0, matchStart) + replacement + content.slice(matchEnd);
       } catch (error) {
         logError(`Error executing Dataview query:`, error);
-        // On error, include query with error message
         const replacement = `\n\n<${DATAVIEW_BLOCK_TAG}>\n<query_type>${queryType}</query_type>\n<original_query>\n${query}\n</original_query>\n<error>${error instanceof Error ? error.message : "Query execution failed"}</error>\n</${DATAVIEW_BLOCK_TAG}>\n\n`;
         content = content.slice(0, matchStart) + replacement + content.slice(matchEnd);
       }
@@ -168,9 +151,6 @@ export class ContextProcessor {
     return content;
   }
 
-  /**
-   * Execute a Dataview query and format the results
-   */
   private async executeDataviewQuery(
     dataviewApi: DataviewApi,
     query: string,
@@ -178,30 +158,23 @@ export class ContextProcessor {
     sourcePath: string
   ): Promise<string> {
     if (queryType === "dataviewjs") {
-      // DataviewJS requires more complex handling - for now, return a message
       return "[DataviewJS execution not yet supported - showing original query]";
     }
 
-    // Parse and execute DQL query
     const result = await dataviewApi.query(query, sourcePath);
 
     if (!result.successful) {
       throw new Error(result.error ?? "Query failed");
     }
 
-    // Format results based on type
     return this.formatDataviewResult(result.value);
   }
 
-  /**
-   * Format Dataview query results into readable text
-   */
   private formatDataviewResult(result: DataviewResult): string {
     if (!result) {
       return "No results";
     }
 
-    // Handle different result types
     if (result.type === "list") {
       return this.formatDataviewList(result.values);
     } else if (result.type === "table") {
@@ -215,9 +188,6 @@ export class ContextProcessor {
     return JSON.stringify(result);
   }
 
-  /**
-   * Format Dataview list results
-   */
   private formatDataviewList(values: DataviewRow[]): string {
     if (!values || values.length === 0) {
       return "No results";
@@ -225,15 +195,11 @@ export class ContextProcessor {
     return values.map((item) => `- ${this.formatDataviewValue(item)}`).join("\n");
   }
 
-  /**
-   * Format Dataview table results
-   */
   private formatDataviewTable(headers: string[], rows: unknown[][]): string {
     if (!rows || rows.length === 0) {
       return "No results";
     }
 
-    // Create markdown table
     let table = `| ${headers.join(" | ")} |\n`;
     table += `| ${headers.map(() => "---").join(" | ")} |\n`;
 
@@ -244,9 +210,6 @@ export class ContextProcessor {
     return table;
   }
 
-  /**
-   * Format Dataview task results
-   */
   private formatDataviewTasks(tasks: DataviewTaskItem[]): string {
     if (!tasks || tasks.length === 0) {
       return "No results";
@@ -259,20 +222,15 @@ export class ContextProcessor {
       .join("\n");
   }
 
-  /**
-   * Format individual Dataview values
-   */
   private formatDataviewValue(value: unknown): string {
     if (value === null || value === undefined) {
       return "";
     }
 
-    // Handle links
     if (value && typeof value === "object" && "path" in value) {
       return `[[${(value as DataviewLinkLike).path}]]`;
     }
 
-    // Handle arrays
     if (Array.isArray(value)) {
       return (value as unknown[]).map((v) => this.formatDataviewValue(v)).join(", ");
     }
@@ -281,13 +239,9 @@ export class ContextProcessor {
       return JSON.stringify(value);
     }
 
-    // value is a primitive (string, number, boolean, bigint) at this point
     return `${value as string | number | boolean | bigint}`;
   }
 
-  /**
-   * Build markdown content for context inclusion by resolving embeds, PDFs, and Dataview blocks.
-   */
   private async buildMarkdownContextContent(
     note: TFile,
     vault: Vault,
@@ -305,20 +259,6 @@ export class ContextProcessor {
     return await this.processDataviewBlocks(content, note.path);
   }
 
-  /**
-   * Replace embedded note syntax within markdown content.
-   *
-   * Scans the content for all `![[...]]` embed patterns and expands them once
-   * into structured `<embedded_note>` blocks. Nested embeds are left as-is to
-   * keep processing predictable and lightweight.
-   *
-   * @param content - The markdown content to process
-   * @param sourceNote - The note containing this content (for relative link resolution)
-   * @param vault - Obsidian vault instance
-   * @param fileParserManager - Manager for parsing different file types
-   * @param chainType - Current chain type (affects feature availability)
-   * @returns Content with top-level embeds replaced by structured blocks
-   */
   private async processEmbeddedNotes(
     content: string,
     sourceNote: TFile,
@@ -350,9 +290,6 @@ export class ContextProcessor {
     return result;
   }
 
-  /**
-   * Build a rendered embedded note block for the given target.
-   */
   private async buildEmbeddedNoteBlock(
     rawTarget: string,
     rawMatch: string,
@@ -425,9 +362,6 @@ export class ContextProcessor {
     }
   }
 
-  /**
-   * Parse embedded note syntax into a structured target.
-   */
   private parseEmbeddedLinkTarget(rawTarget: string): EmbeddedLinkTarget | null {
     if (!rawTarget) {
       return null;
@@ -465,9 +399,6 @@ export class ContextProcessor {
     };
   }
 
-  /**
-   * Extract a markdown segment representing a heading section or block reference.
-   */
   private extractMarkdownSegment(
     note: TFile,
     fileContent: string,
@@ -521,16 +452,10 @@ export class ContextProcessor {
     return { content: fileContent, found: true };
   }
 
-  /**
-   * Normalize heading text for comparison.
-   */
   private normalizeHeadingForMatch(heading: string): string {
     return heading.trim().toLowerCase().replace(/\s+/g, " ");
   }
 
-  /**
-   * Format an embedded note payload using the shared XML-like structure.
-   */
   private formatEmbeddedNoteBlock(params: {
     title: string;
     path: string;
@@ -560,22 +485,6 @@ export class ContextProcessor {
     return block;
   }
 
-  /**
-   * Processes context notes, excluding any already handled by custom prompts.
-   *
-   * NOTE: This method reads and includes note content as-is. URLs within note content
-   * are NOT extracted or processed with url4llm. Only URLs directly typed in the user's
-   * chat input are processed, not URLs that happen to be in the content of context notes.
-   *
-   * @param excludedNotePaths A set of file paths that should be skipped.
-   * @param fileParserManager
-   * @param vault
-   * @param contextNotes
-   * @param includeActiveNote
-   * @param activeNote
-   * @param currentChain
-   * @returns The combined content string of the processed context notes.
-   */
   async processContextNotes(
     excludedNotePaths: Set<string>,
     fileParserManager: FileParserManager,
@@ -589,34 +498,27 @@ export class ContextProcessor {
 
     const processNote = async (note: TFile, prompt_tag: string = NOTE_CONTEXT_PROMPT_TAG) => {
       try {
-        // Check if this note was already processed (via custom prompt)
         if (excludedNotePaths.has(note.path)) {
           logInfo(`Skipping note ${note.path} as it was included via custom prompt.`);
           return;
         }
 
-        // 1. Check if the file extension is supported by any parser
         if (!fileParserManager.supportsExtension(note.extension)) {
           logWarn(`Unsupported file type: ${note.extension}`);
           return;
         }
 
-        // 2. Apply chain restrictions only to supported files that are NOT text-readable
         if (!isPlusChain(currentChain) && !isTextReadableFile(note)) {
-          // This file type is supported, but requires Plus mode (e.g., PDF)
           logWarn(`File type ${note.extension} requires Copilot Plus mode for context processing.`);
-          // Show user-facing notice about the restriction
           new Notice(RESTRICTION_MESSAGES.NON_MARKDOWN_FILES_RESTRICTED);
           return;
         }
 
-        // 3. If we reach here, parse the file (md, canvas, or other supported type in Plus mode)
         const content =
           note.extension === "md"
             ? await this.buildMarkdownContextContent(note, vault, fileParserManager, currentChain)
             : await fileParserManager.parseFile(note, vault);
 
-        // Get file metadata
         const stats = await vault.adapter.stat(note.path);
         const ctime = stats ? new Date(stats.ctime).toISOString() : "Unknown";
         const mtime = stats ? new Date(stats.mtime).toISOString() : "Unknown";
@@ -630,13 +532,11 @@ export class ContextProcessor {
 
     const includedFilePaths = new Set<string>();
 
-    // Process active note if included
     if (includeActiveNote && activeNote) {
       await processNote(activeNote, "active_note");
       includedFilePaths.add(activeNote.path);
     }
 
-    // Process context notes
     for (const note of contextNotes) {
       if (includedFilePaths.has(note.path)) {
         continue;
@@ -648,10 +548,6 @@ export class ContextProcessor {
     return additionalContext;
   }
 
-  /**
-   * Format the selections owned by a message for its model context.
-   * @param selectedTextContexts - Saved note or web excerpts attached to the message
-   */
   processSelectedTextContexts(
     selectedTextContexts: readonly SelectedTextContext[] | undefined
   ): string {
@@ -663,10 +559,8 @@ export class ContextProcessor {
 
     for (const selectedText of selectedTextContexts) {
       if (selectedText.sourceType === "web") {
-        // Web selected text context
         additionalContext += `\n\n<${WEB_SELECTED_TEXT_TAG}>\n<title>${escapeXml(selectedText.title)}</title>\n<url>${escapeXml(selectedText.url)}</url>\n<content>\n${escapeXml(selectedText.content)}\n</content>\n</${WEB_SELECTED_TEXT_TAG}>`;
       } else {
-        // Note selected text context (default for backward compatibility)
         const lineTags =
           selectedText.startLine > 0
             ? `\n<start_line>${selectedText.startLine}</start_line>\n<end_line>${selectedText.endLine}</end_line>`
@@ -678,24 +572,6 @@ export class ContextProcessor {
     return additionalContext;
   }
 
-  /**
-   * Process web tab contexts and return formatted content for LLM.
-   * Uses WebViewerService to fetch reader mode markdown from each tab.
-   * Handles cases where webview content is not yet loaded (e.g., after Obsidian restart).
-   *
-   * Performance optimizations:
-   * - Deduplicates tabs by URL
-   * - Uses bounded concurrency to avoid UI blocking and resource exhaustion
-   *
-   * Design notes (potential future enhancements):
-   * - Tab count limit: Currently no limit on number of tabs. Could add MAX_WEB_TABS similar to
-   *   how activeNote is handled (single note vs multiple). For now, users self-limit by only
-   *   adding tabs they need.
-   * - Content length limit: Currently no truncation of long pages. Could add MAX_CHARS_PER_TAB
-   *   similar to how large notes are handled. For now, reader mode already strips most bloat.
-   * - Total context budget: Could implement a shared budget across all tabs. For now, the LLM's
-   *   context window and token costs naturally discourage excessive context.
-   */
   async processContextWebTabs(
     webTabs: Array<{ url: string; title?: string; faviconUrl?: string; isActive?: boolean }>
   ): Promise<string> {
@@ -704,18 +580,10 @@ export class ContextProcessor {
     }
 
     const WEBVIEW_READY_TIMEOUT_MS = 2_500;
-    // Timeout for reader mode content extraction to avoid hanging the message send
     const READER_MODE_CONTENT_TIMEOUT_MS = 8_000;
-    // Timeout for YouTube transcript extraction (longer due to DOM manipulation)
     const YOUTUBE_TRANSCRIPT_TIMEOUT_MS = 15_000;
-    // Limit concurrent webview operations to avoid UI blocking and IPC congestion
     const MAX_CONCURRENCY = 2;
 
-    /**
-     * Build a web tab context XML block.
-     * Centralizes XML generation to avoid duplication and ensure consistent escaping.
-     * @param tagName - The XML tag name to use (active_web_tab or web_tab_context)
-     */
     const buildWebTabBlock = (
       tagName: string,
       options: {
@@ -739,7 +607,6 @@ export class ContextProcessor {
       if (options.error) {
         parts.push(`\n<error>${escapeXml(options.error)}</error>`);
       } else if (options.content !== undefined) {
-        // Content is markdown; escape to prevent XML/prompt injection
         parts.push(`\n<content>\n${escapeXml(options.content)}\n</content>`);
       }
 
@@ -747,10 +614,6 @@ export class ContextProcessor {
       return parts.join("");
     };
 
-    /**
-     * Build a YouTube video context XML block.
-     * All content is properly escaped to prevent XML/prompt injection.
-     */
     const buildYouTubeBlock = (options: {
       title: string;
       url: string;
@@ -795,12 +658,10 @@ export class ContextProcessor {
         parts.push(`\n<description>${escapeXml(options.description)}</description>`);
       }
 
-      // Error for real failures (tab closed, extraction failed, etc.)
       if (options.error) {
         parts.push(`\n<error>${escapeXml(options.error)}</error>`);
       }
 
-      // Content: transcript if available, otherwise a message
       const content = options.transcript || "No transcript available for this video";
       parts.push(`\n<content>\n${escapeXml(content)}\n</content>`);
 
@@ -808,18 +669,12 @@ export class ContextProcessor {
       return parts.join("");
     };
 
-    // Separate active tab from normal tabs and deduplicate by URL (and videoId for YouTube)
     let activeTab: { url: string; title?: string; faviconUrl?: string } | null = null;
     const normalTabs: Array<{ url: string; title?: string; faviconUrl?: string }> = [];
     const seenUrls = new Set<string>();
-    const seenVideoIds = new Set<string>(); // Deduplicate YouTube videos by videoId
+    const seenVideoIds = new Set<string>();
     const service = getWebViewerService(this.app);
 
-    /**
-     * Check if a tab should be skipped due to deduplication.
-     * For YouTube videos, deduplicate by videoId (handles youtu.be vs youtube.com/watch).
-     * For other URLs, deduplicate by normalized URL string.
-     */
     const isDuplicate = (url: string): boolean => {
       const videoId = service.getYouTubeVideoId(url);
       if (videoId) {
@@ -832,18 +687,16 @@ export class ContextProcessor {
       return false;
     };
 
-    // First pass: find active tab
     for (const tab of webTabs) {
       const url = normalizeUrlString(tab.url);
       if (!url) continue;
 
       if (tab.isActive && !activeTab) {
         activeTab = { ...tab, url };
-        isDuplicate(url); // Mark as seen
+        isDuplicate(url);
       }
     }
 
-    // Second pass: collect normal tabs (excluding duplicates)
     for (const tab of webTabs) {
       const url = normalizeUrlString(tab.url);
       if (!url || isDuplicate(url)) continue;
@@ -851,12 +704,10 @@ export class ContextProcessor {
       normalTabs.push({ ...tab, url });
     }
 
-    // Check if we have any tabs to process
     if (!activeTab && normalTabs.length === 0) {
       return "";
     }
 
-    // Check Web Viewer availability first
     const availability = service.getAvailability();
     if (!availability.supported || !availability.available) {
       const reason =
@@ -887,10 +738,6 @@ export class ContextProcessor {
       return blocks.join("");
     }
 
-    /**
-     * Process a single tab and return its XML block.
-     * YouTube videos are handled specially to extract transcript.
-     */
     const processTab = async (
       tab: { url: string; title?: string; faviconUrl?: string },
       tagName: string
@@ -898,7 +745,6 @@ export class ContextProcessor {
       try {
         const url = tab.url;
 
-        // Check if this is a YouTube video - handle specially
         const videoId = service.getYouTubeVideoId(url);
         if (videoId) {
           const isActive = tagName === ACTIVE_WEB_TAB_CONTEXT_TAG;
@@ -914,12 +760,8 @@ export class ContextProcessor {
           });
         }
 
-        // Get initial page info (available even if webview not ready)
         let pageInfo = service.getPageInfo(leaf);
 
-        // Check if webview is ready (content loaded)
-        // Note: webviewMounted/webviewFirstLoadFinished are internal Obsidian fields
-        // If they don't exist (undefined), assume ready (fallback for older versions)
         const view = leaf.view as { webviewMounted?: boolean; webviewFirstLoadFinished?: boolean };
         const webviewReady =
           view.webviewMounted === undefined || view.webviewFirstLoadFinished === undefined
@@ -940,7 +782,6 @@ export class ContextProcessor {
           }
         }
 
-        // Use AbortSignal for cancellable timeout
         const abortController = new AbortController();
         const timeoutId = window.setTimeout(() => {
           abortController.abort();
@@ -974,21 +815,12 @@ export class ContextProcessor {
       }
     };
 
-    /**
-     * Process a YouTube video tab and extract transcript.
-     * Automatically clicks the transcript button, extracts content, and closes the panel.
-     */
     const processYouTubeTab = async (
       tab: { url: string; title?: string; faviconUrl?: string },
       videoId: string,
       isActive: boolean
     ): Promise<string> => {
       try {
-        // Find leaf by videoId (handles all URL formats and redirects)
-        // This is more reliable than URL string matching because:
-        // - youtu.be/xxx redirects to youtube.com/watch?v=xxx
-        // - URL may have different query params (t=, list=, etc.)
-        // - www vs non-www differences
         let leaf = null;
         let actualUrl = tab.url;
 
@@ -996,7 +828,7 @@ export class ContextProcessor {
           const leafUrl = service.getPageInfo(l).url;
           if (service.getYouTubeVideoId(leafUrl) === videoId) {
             leaf = l;
-            actualUrl = leafUrl; // Use the actual URL from the leaf
+            actualUrl = leafUrl;
             break;
           }
         }
@@ -1011,7 +843,6 @@ export class ContextProcessor {
           });
         }
 
-        // Wait for webview to be ready
         const view = leaf.view as { webviewMounted?: boolean; webviewFirstLoadFinished?: boolean };
         const webviewReady =
           view.webviewMounted === undefined || view.webviewFirstLoadFinished === undefined
@@ -1032,12 +863,10 @@ export class ContextProcessor {
           }
         }
 
-        // Extract video metadata and transcript
         const result = await service.getYouTubeTranscript(leaf, {
           timeoutMs: YOUTUBE_TRANSCRIPT_TIMEOUT_MS,
         });
 
-        // Format transcript (may be empty if no transcript available)
         const transcriptText =
           result.transcript.length > 0
             ? result.transcript.map((seg) => `${seg.timestamp}: ${seg.text}`).join("\n")
@@ -1068,14 +897,12 @@ export class ContextProcessor {
       }
     };
 
-    // Process active tab first (if exists)
     const blocks: string[] = [];
     if (activeTab) {
       const activeBlock = await processTab(activeTab, ACTIVE_WEB_TAB_CONTEXT_TAG);
       blocks.push(activeBlock);
     }
 
-    // Process normal tabs with bounded concurrency
     for (let i = 0; i < normalTabs.length; i += MAX_CONCURRENCY) {
       const chunk = normalTabs.slice(i, i + MAX_CONCURRENCY);
       const chunkResults = await Promise.all(

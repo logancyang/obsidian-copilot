@@ -25,21 +25,10 @@ interface MockNodeModules {
 
 type NodeRequireShape = (id: string) => unknown;
 
-/**
- * Reset the singleton state between tests.
- */
 function resetMiyoServiceDiscoverySingleton(): void {
   (MiyoServiceDiscovery as unknown as { instance?: MiyoServiceDiscovery }).instance = undefined;
 }
 
-/**
- * Build a mocked Node-style require function for discovery tests.
- *
- * @param platform - Simulated OS platform.
- * @param homeDir - Simulated user home directory.
- * @param config - Service discovery payload to return from fs.readFile.
- * @returns Mock require function plus module spies.
- */
 function createMockNodeRequire(
   platform: string,
   homeDir: string,

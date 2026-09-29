@@ -66,13 +66,7 @@ type ModernRender = (
   component: Component
 ) => Promise<void>;
 
-/**
- * Reports the measured or projected UTF-8 payload size when a document exceeds OpenArtifacts' limit.
- */
 export class OpenArtifactsDocumentTooLargeError extends Error {
-  /**
-   * @param byteLength The measured or projected serialized document size.
-   */
   constructor(public readonly byteLength: number) {
     super(
       `OpenArtifacts HTML is ${byteLength} bytes; the limit is ${OPENARTIFACTS_MAX_HTML_BYTES} bytes.`
@@ -82,12 +76,6 @@ export class OpenArtifactsDocumentTooLargeError extends Error {
   }
 }
 
-/**
- * Captures one exact HTML string as the immutable payload reviewed and sent to OpenArtifacts.
- *
- * @param title The title sent alongside the HTML payload.
- * @param html The complete HTML bytes represented as a JavaScript string.
- */
 export function createOpenArtifactsDocument(title: string, html: string): OpenArtifactsDocument {
   const byteLength = new TextEncoder().encode(html).byteLength;
   if (byteLength > OPENARTIFACTS_MAX_HTML_BYTES) {
@@ -96,14 +84,6 @@ export function createOpenArtifactsDocument(title: string, html: string): OpenAr
   return Object.freeze({ title, html, byteLength });
 }
 
-/**
- * Builds the exact HTML payload sent to OpenArtifacts from Obsidian's settled reading-view DOM.
- *
- * @param app The Obsidian application that owns the source vault and renderer.
- * @param file The Markdown file whose current vault contents should be published.
- * @param component The lifecycle owner used by Obsidian's renderer and postprocessors.
- * @param ownerDocument The window-specific document in which the detached render tree is built.
- */
 export async function buildOpenArtifactsDocument(
   app: App,
   file: TFile,

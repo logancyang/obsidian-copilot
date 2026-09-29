@@ -6,7 +6,6 @@ function providerRows(providers: Record<string, unknown>): CopilotSettings["prov
   return providers as unknown as CopilotSettings["providers"];
 }
 
-/** A cached lineup where only some models are switched on by a license. */
 const CATALOG: CopilotSettings["copilotPlusCatalog"] = {
   models: [
     { id: "copilot-plus-flash", displayName: "Copilot Plus Flash", description: "The default." },
@@ -45,16 +44,12 @@ describe("lockedCopilotEntries", () => {
 
   describe("lockedCopilotEntries()", () => {
     it("previews only the default Copilot model, so the offer costs one picker row", () => {
-      // Every extra row pushes the checkmark on the user's own model toward the
-      // fold of a 288px picker, and one row makes the offer just as well.
       expect(lockedCopilotEntries(CATALOG).map((entry) => entry.name)).toEqual([
         "copilot-plus-flash",
       ]);
     });
 
     it("advertises nothing before the first lineup has been cached (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
-      // Better an absent preview than one naming models the service may have
-      // withdrawn, which is what a client-side lineup would give.
       expect(lockedCopilotEntries(EMPTY_CATALOG)).toEqual([]);
     });
 
@@ -80,7 +75,6 @@ describe("lockedCopilotEntries", () => {
       const [row] = lockedCopilotEntries(CATALOG);
 
       expect(row._needsLicense).toBe(true);
-      // `_disabledReason` is what actually disables the row; the lock explains it.
       expect(row._disabledReason).toBe("Copilot license required");
       expect(row.enabled).toBe(true);
     });

@@ -6,11 +6,8 @@ export async function updateChatMemory(
   messages: ChatMessage[],
   memoryManager: MemoryManager
 ): Promise<void> {
-  // Clear existing memory
   await memoryManager.clearChatMemory();
 
-  // Process each message in sequence
-  // Use memoryManager.saveContext to apply compaction for any old uncompacted messages
   for (let i = 0; i < messages.length - 1; i++) {
     const msg = messages[i];
 

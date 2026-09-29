@@ -1,7 +1,6 @@
 import plugin from "tailwindcss/plugin";
 import type { CSSRuleObject } from "tailwindcss/types/config";
 
-// Types
 interface ColorValue {
   DEFAULT?: string;
   [key: string]: string | ColorValue | undefined;
@@ -9,12 +8,10 @@ interface ColorValue {
 
 type ColorProperty = "background-color" | "border-color" | "color";
 
-// Color Utilities
 const getColorMixValue = (color: string, opacity: number): string => {
   return `color-mix(in srgb, ${color} ${opacity}%, transparent)`;
 };
 
-// Class Name Utilities
 const getPropertyPrefix = (property: ColorProperty): string => {
   const prefixMap: Record<ColorProperty, string> = {
     "background-color": "bg",
@@ -24,7 +21,6 @@ const getPropertyPrefix = (property: ColorProperty): string => {
   return prefixMap[property];
 };
 
-// Utility Generator
 const generateUtility =
   (e: (className: string) => string) =>
   (property: ColorProperty, name: string, color: string, opacity: number) => {
@@ -38,7 +34,6 @@ const generateUtility =
     };
   };
 
-// Color Processing
 const generateAllUtilities =
   (e: (className: string) => string) => (color: string, name: string, opacity: number) => {
     const properties: ColorProperty[] = ["background-color", "border-color", "color"];
@@ -81,20 +76,10 @@ const processColorObject =
     }
   };
 
-/**
- * Tailwind plugin for adding color opacity support using color-mix
- * Supports deeply nested color objects and variants
- *
- * Examples:
- * bg-primary/20 -> .bg-primary\/20 { background-color: color-mix(in srgb, var(--interactive-accent) 20%, transparent); }
- * bg-modifier-error/50
- * text-background-modifier-success/30
- */
 export const colorOpacityPlugin = plugin((api) => {
   const { theme, e } = api;
   const opacityUtilities: CSSRuleObject = {};
 
-  // 处理所有颜色相关的主题配置
   const processThemeColors = (themeKey: string, prefix?: string) => {
     const colors: Record<string, string | ColorValue> = theme(themeKey);
     Object.entries(colors).forEach(([colorName, colorValue]) => {
@@ -103,7 +88,6 @@ export const colorOpacityPlugin = plugin((api) => {
     });
   };
 
-  // 处理所有颜色配置
   processThemeColors("textColor", "");
   processThemeColors("backgroundColor", "");
   processThemeColors("borderColor", "");

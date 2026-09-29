@@ -14,8 +14,6 @@ const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const reviewSourceRoots = ["src", "dev/gallery"];
 const reviewSourceExtensions = new Set([".cjs", ".js", ".jsx", ".mjs", ".ts", ".tsx"]);
 
-// Negative examples must not be real source files because the authenticated
-// community reviewer scans them without the repository's local ignore rules.
 const invalidSourceFixture = `import "node:fs";
 export { promisify } from "node:util";
 const path = require("path");
@@ -52,21 +50,9 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-/**
- * Prove the review config keeps an untyped target out of type-aware rule scope.
- *
- * ESLint aborts the entire run when a rule cannot load, so a type-aware rule
- * that reaches a file carrying no type information silences the whole gate
- * rather than failing it. Force such a rule on ahead of the repository's own
- * config blocks and confirm those blocks still switch it off.
- *
- * @param {string} filePath - Repository-relative untyped review target.
- */
 async function expectOutsideTypeAwareScope(filePath) {
   const eslint = new ESLint({
     cwd: repositoryRoot,
-    // The forced rule must sit ahead of the repository's blocks, which rules
-    // out overrideConfig (applied last) and the config file (loaded first).
     overrideConfigFile: true,
     baseConfig: [{ rules: { "obsidianmd/no-plugin-as-component": "error" } }, ...reviewConfig],
   });
@@ -95,7 +81,6 @@ async function lintSourceFixture(code, filePath) {
     overrideConfig: {
       languageOptions: {
         parserOptions: {
-          // CI single-run programs otherwise replace lintText input with the anchor file on disk.
           disallowAutomaticSingleRunInference: true,
         },
       },
@@ -186,7 +171,6 @@ async function main() {
     ),
     "browser polyfills or guarded/type-only Node access were rejected"
   );
-  // Browser storage bypasses Obsidian's vault scope, including when aliased or destructured.
   const browserStorageAccesses = [
     'localStorage.getItem("key")',
     'sessionStorage.setItem("key", "value")',

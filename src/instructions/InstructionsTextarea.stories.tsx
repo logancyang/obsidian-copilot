@@ -9,10 +9,8 @@ const meta = {
 } satisfies Meta<InstructionsTextareaProps>;
 export default meta;
 
-/** Empty instructions show a fixed example. */
 export const Empty: StoryObj<InstructionsTextareaProps> = {};
 
-/** Saved instructions replace the placeholder. */
 export const UserAuthored: StoryObj<InstructionsTextareaProps> = {
   args: {
     value:

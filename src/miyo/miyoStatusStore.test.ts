@@ -1,9 +1,6 @@
 import type { MiyoHealthResponse } from "@/miyo/miyoHealth";
 import type { CopilotSettings } from "@/settings/model";
 
-// The store constructs a MiyoClient and registers a settings subscription at
-// module load, so every collaborator is mocked. Tests reset modules between
-// cases to clear the store's module-level snapshot state.
 const mockFetchHealth = jest.fn<Promise<MiyoHealthResponse | null>, [string?]>();
 
 jest.mock("@/miyo/MiyoClient", () => ({
@@ -41,7 +38,6 @@ jest.mock("@/logger", () => ({
 
 type Store = typeof import("@/miyo/miyoStatusStore");
 
-/** Load a fresh copy of the store with its module-level snapshot state reset. */
 function loadStore(): Store {
   let store!: Store;
   jest.isolateModules(() => {
@@ -68,8 +64,6 @@ describe("module side effects", () => {
   it("does not subscribe to settings on import; registers lazily on first refresh", async () => {
     mockFetchHealth.mockResolvedValue(okHealth());
     const store = loadStore();
-    // Importing the store must have no side effect — otherwise the import chain
-    // would call subscribeToSettingsChange during unrelated test setup.
     expect(settingsSubscriber).toBeNull();
 
     await store.refreshMiyoStatus();
@@ -133,9 +127,6 @@ describe("refreshMiyoStatus health mapping", () => {
   });
 
   it("keeps the connector unknown while relay reports an indeterminate status", async () => {
-    // The Electron app hasn't pushed relay state yet: `status: "unknown"` (or a
-    // present-but-status-less relay block) must stay "unknown", never a hard
-    // "disconnected"/unavailable.
     mockFetchHealth.mockResolvedValue(okHealth({ relay: { status: "unknown" } }));
     const store = loadStore();
     expect((await store.refreshMiyoStatus()).connector).toBe("unknown");
@@ -244,7 +235,6 @@ describe("stale downgrade", () => {
       await store.refreshMiyoStatus();
       expect(store.getMiyoStatusSnapshot().connector).toBe("available");
 
-      // Advance past the 60s stale horizon.
       jest.setSystemTime(120_000);
       const stale = store.getMiyoStatusSnapshot();
       expect(stale.backend).toBe("stale");
@@ -293,10 +283,8 @@ describe("invalidateMiyoStatus + subscription", () => {
     const store = loadStore();
     const pending = store.refreshMiyoStatus();
 
-    // Config changes while the fetch is still in flight.
     store.invalidateMiyoStatus();
 
-    // The stale response lands afterwards — it must not resurrect status.
     resolveFetch(okHealth({ relay: { status: "connected" } }));
     await pending;
 
@@ -305,7 +293,6 @@ describe("invalidateMiyoStatus + subscription", () => {
   });
 
   it("starts a fresh fetch after invalidation instead of reusing the stale in-flight request", async () => {
-    // First refresh: an endpoint whose response is still pending.
     let resolveFirst!: (value: MiyoHealthResponse) => void;
     mockFetchHealth.mockReturnValueOnce(
       new Promise<MiyoHealthResponse>((resolve) => {
@@ -315,17 +302,11 @@ describe("invalidateMiyoStatus + subscription", () => {
     const store = loadStore();
     const first = store.refreshMiyoStatus();
 
-    // Endpoint changes mid-flight: invalidate must clear the in-flight handle so
-    // the next refresh probes the new endpoint rather than dedup'ing onto the
-    // stale request (whose result the generation guard would discard, leaving the
-    // new endpoint never probed).
     store.invalidateMiyoStatus();
 
-    // Second refresh targets the new endpoint and returns connected.
     mockFetchHealth.mockResolvedValueOnce(okHealth({ relay: { status: "connected" } }));
     const second = await store.refreshMiyoStatus();
 
-    // The stale first request settles late — it must not clobber the new result.
     resolveFirst(okHealth({ relay: { status: "disconnected" } }));
     await first;
 
@@ -341,7 +322,6 @@ describe("invalidateMiyoStatus + subscription", () => {
     await store.refreshMiyoStatus();
     expect(store.getMiyoStatusSnapshot().backend).toBe("available");
 
-    // Simulate a settings change to the server URL.
     const prev = {} as CopilotSettings;
     const next = { miyoServerUrl: "http://remote:1" } as CopilotSettings;
     mockGetMiyoCustomUrl.mockImplementation((s) => (s === next ? "http://remote:1" : ""));

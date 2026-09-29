@@ -1,12 +1,4 @@
-// Lightweight mock for @anthropic-ai/claude-agent-sdk so unit tests can
-// import modules that reference its runtime values (`query`,
-// `createSdkMcpServer`, `tool`) without pulling the real ESM package
-// through ts-jest. Tests that exercise SDK behavior should stub these.
- 
-
 function query() {
-  // Minimal Query stub: empty async generator + control methods. Tests
-  // that need real behavior should mock `query` themselves.
   const iter = (async function* () {})();
   return Object.assign(iter, {
     interrupt: async () => {},

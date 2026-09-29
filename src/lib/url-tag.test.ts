@@ -65,10 +65,6 @@ describe("url-tag", () => {
     });
 
     it("does NOT harvest bare-host tokens from a multi-token blob", () => {
-      // The single biggest fix: prose tokens that look like hosts (`1.`,
-      // `(context.urls)`, `Mention.mentions:`, a CJK sentence whose 。 folds to a
-      // dot) must not become URLs when a document is pasted. Only the explicit
-      // https:// link survives.
       const blob = [
         "1. first point",
         "see (context.urls) and Mention.mentions: for details",
@@ -126,11 +122,6 @@ describe("url-tag", () => {
     });
 
     it("handles a long unbalanced trailing bracket run without quadratic blowup", () => {
-      // Perf tripwire: trimming used to re-split the whole string per stripped char
-      // (O(n²)), freezing the main thread on a pathological paste. The linear
-      // rewrite resolves this 100k-')' run instantly; reintroducing the quadratic
-      // form would blow the test timeout. (Correctness of the rewrite itself is
-      // covered by the small balanced/unbalanced cases above.)
       const url = "https://example.com";
       expect(extractUrlsFromText(`${url}${")".repeat(100_000)}`)).toEqual([url]);
     });

@@ -2,10 +2,6 @@ import { COPILOT_AGENT_ICON_ID } from "@/constants";
 import type CopilotPlugin from "@/main";
 import { MarkdownView } from "obsidian";
 
-/**
- * Keep the note-to-Agent action on every Markdown header, including views Obsidian opens later.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/579
- */
 export function registerNoteHeaderAction(plugin: CopilotPlugin): void {
   const { workspace } = plugin.app;
   const actions = new WeakMap<MarkdownView, HTMLElement>();
@@ -22,7 +18,6 @@ export function registerNoteHeaderAction(plugin: CopilotPlugin): void {
         "Open Copilot Agent Chat with this note",
         () => {
           // Revealing Agent Chat can move focus, so use the note under this button.
-          // An empty Markdown view has no note to attach yet.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/579
           const file = view.file;
           if (file) void plugin.addNoteToAgentChat(file, true);

@@ -9,11 +9,6 @@ const LOADING = Object.freeze({
   status: "loading" as const,
   details: undefined,
 });
-/** Follow the last focused chat, debouncing only draft edits.
- * @param app - Vault and workspace source.
- * @param enabled - Whether Live is enabled.
- * @param connectionKey - Endpoint/credential identity invalidating outstanding work.
- */
 export function useChatRelevantNotes(app: App, enabled: boolean, connectionKey: string) {
   const store = getChatRelevantNotesStore(app);
   const selected = useSyncExternalStore(store.subscribe, store.getSnapshot);
@@ -32,7 +27,6 @@ export function useChatRelevantNotes(app: App, enabled: boolean, connectionKey: 
     result: RelevantNotesResult;
   } | null>(null);
   const [revision, setRevision] = useState(0);
-  // Completion controls the initial debounce without making results a search trigger.
   const hasSettled = useRef(false);
   const previous = useRef<{ id: string; draft: string | undefined } | null>(null);
   useEffect(() => {
@@ -46,8 +40,6 @@ export function useChatRelevantNotes(app: App, enabled: boolean, connectionKey: 
     const draftChanged =
       previous.current?.id === context.id && previous.current.draft !== context.request.draft;
     previous.current = { id: context.id, draft: context.request.draft };
-    // Keep rows while refreshing one chat, but never carry another session's rows across.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
     const timer = window.setTimeout(
       () => {
         void findChatRelevantNotes(app, context).then((result) => {
@@ -71,7 +63,6 @@ export function useChatRelevantNotes(app: App, enabled: boolean, connectionKey: 
       ? settled.result
       : LOADING;
   // Unsupported chat retrieval must leave the existing editor-note flow usable.
-  // Empty context and real retrieval failures still belong to the selected chat.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
   return {
     context: result.status === "unsupported-service" ? null : context,

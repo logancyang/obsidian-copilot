@@ -3,9 +3,6 @@ import { getSettings } from "@/settings/model";
 import { err2String } from "@/utils";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 
-/**
- * Service discovery payload for Miyo local service.
- */
 export interface MiyoServiceConfig {
   host: string;
   port: number;
@@ -15,16 +12,10 @@ export interface MiyoServiceConfig {
 type NodeRequire = (id: string) => unknown;
 type ServiceConfigReadResult = MiyoServiceConfig | "missing" | null;
 
-/**
- * Resolves the Miyo base URL using self-host settings or local service discovery.
- */
 export class MiyoServiceDiscovery {
   private static instance: MiyoServiceDiscovery;
   private cachedBaseUrl: string | null = null;
 
-  /**
-   * Get the singleton instance.
-   */
   public static getInstance(): MiyoServiceDiscovery {
     if (!MiyoServiceDiscovery.instance) {
       MiyoServiceDiscovery.instance = new MiyoServiceDiscovery();
@@ -32,14 +23,6 @@ export class MiyoServiceDiscovery {
     return MiyoServiceDiscovery.instance;
   }
 
-  /**
-   * Resolve the Miyo base URL.
-   *
-   * @param options - Optional overrides and refresh behavior.
-   * @param options.overrideUrl - Explicit base URL to use (highest priority).
-   * @param options.forceRefresh - Whether to bypass cached results.
-   * @returns The base URL (without trailing slash) or null if unavailable.
-   */
   public async resolveBaseUrl(
     options: {
       overrideUrl?: string;
@@ -79,41 +62,22 @@ export class MiyoServiceDiscovery {
   }
 
   /**
-   * Forget the discovered local endpoint so the next resolve re-reads Miyo's
-   * service file. A locally discovered Miyo that restarts on a different port
-   * is otherwise unreachable until the plugin reloads, because the cached URL
-   * survives every retry. Configured remote URLs are never cached, so they are
-   * unaffected.
+   * Forget the discovered local endpoint so the next resolve re-reads Miyo's service file. A
+   * local Miyo that restarts on a different port is otherwise unreachable until reload.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/356
    */
   public invalidateLocalDiscovery(): void {
     this.cachedBaseUrl = null;
   }
 
-  /**
-   * Normalize a base URL by trimming whitespace and trailing slashes.
-   *
-   * @param url - Raw base URL.
-   * @returns Normalized base URL.
-   */
   private normalizeBaseUrl(url: string): string {
     return url.trim().replace(/\/+$/, "");
   }
 
-  /**
-   * Get the default local Miyo endpoint used when discovery file is missing.
-   *
-   * @returns Normalized localhost fallback URL.
-   */
   private getDefaultBaseUrl(): string {
     return this.normalizeBaseUrl("http://127.0.0.1:8742");
   }
 
-  /**
-   * Compute service discovery file path candidates for the current platform.
-   *
-   * @returns Ordered absolute paths to candidate Miyo service.json files.
-   */
   private getServiceFilePaths(): string[] {
     const nodeRequire = this.getNodeRequire();
     if (!nodeRequire) {
@@ -155,11 +119,6 @@ export class MiyoServiceDiscovery {
     return [];
   }
 
-  /**
-   * Read and parse the Miyo service discovery file.
-   *
-   * @returns Parsed service config, "missing" when file is absent, or null if unavailable.
-   */
   private async readServiceConfig(): Promise<ServiceConfigReadResult> {
     const servicePaths = this.getServiceFilePaths();
     if (servicePaths.length === 0) {
@@ -207,22 +166,11 @@ export class MiyoServiceDiscovery {
     return sawMissingFile ? "missing" : null;
   }
 
-  /**
-   * Check if a read error indicates that service.json is missing.
-   *
-   * @param error - Unknown error thrown while reading the discovery file.
-   * @returns True when the file does not exist.
-   */
   private isMissingFileError(error: unknown): boolean {
     const maybeCode = (error as { code?: unknown } | undefined)?.code;
     return maybeCode === "ENOENT";
   }
 
-  /**
-   * Get Node-style require from the runtime (desktop-only).
-   *
-   * @returns Node require function or null when unavailable.
-   */
   private getNodeRequire(): NodeRequire | null {
     const maybeRequire = (window as unknown as { require?: NodeRequire } | undefined)?.require;
     if (typeof maybeRequire === "function") {

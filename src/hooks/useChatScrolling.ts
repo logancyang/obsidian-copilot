@@ -34,20 +34,16 @@ export const useChatScrolling = ({
   const chatHistoryRef = useRef(chatHistory);
   chatHistoryRef.current = chatHistory;
 
-  // Generate consistent message key for DOM identification
-  // Using message IDs is better, as in the case of a network disconnection, the timestamps of two messages could be identical.
   const getMessageKey = useCallback((message: ChatMessage, index: number): string => {
     return `message-${message.id || message.timestamp?.epoch || index}`;
   }, []);
 
-  // Calculate min-height based on actual last user message size
   const calculateDynamicMinHeight = useCallback(() => {
     if (!scrollContainerRef.current) return 0;
 
     const messagesContainer = scrollContainerRef.current;
     const containerHeight = messagesContainer.clientHeight;
 
-    // Find the last user message element to measure its actual height
     const history = chatHistoryRef.current;
     const lastUserMessageIndex = history
       .map((msg, idx) => ({ msg, idx }))
@@ -57,7 +53,6 @@ export const useChatScrolling = ({
     let lastUserMessageHeight = 0;
 
     if (lastUserMessageIndex !== undefined) {
-      // Try to find the corresponding DOM element
       const lastUserMessageKey = getMessageKey(history[lastUserMessageIndex], lastUserMessageIndex);
       const lastUserMessageElement = messagesContainer.querySelector(
         `[data-message-key="${lastUserMessageKey}"]`
@@ -66,10 +61,9 @@ export const useChatScrolling = ({
       if (lastUserMessageElement) {
         lastUserMessageHeight = lastUserMessageElement.getBoundingClientRect().height;
       } else {
-        // Fallback: estimate based on message length (rough approximation)
         const messageLength = history[lastUserMessageIndex].message.length;
-        const estimatedLines = Math.ceil(messageLength / 80); // ~80 chars per line
-        lastUserMessageHeight = Math.max(60, estimatedLines * 24); // ~24px per line + padding
+        const estimatedLines = Math.ceil(messageLength / 80);
+        lastUserMessageHeight = Math.max(60, estimatedLines * 24);
       }
     }
 
@@ -94,20 +88,16 @@ export const useChatScrolling = ({
   const onScroll = useCallback(() => {
     const node = scrollContainerRef.current;
     if (!node) return;
-    // Readers can inspect older turns without losing their place during a growing response.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/277
     if (isNearEnd(node)) {
       isFollowingRef.current = true;
       setIsScrollPaused(false);
     } else if (node.scrollTop < lastScrollTopRef.current) {
-      // Content can grow without a reader action, so only upward movement pauses following.
       isFollowingRef.current = false;
       setIsScrollPaused(true);
     }
     lastScrollTopRef.current = node.scrollTop;
   }, []);
 
-  // Memoized callback ref that gets called only when the DOM element actually changes
   const scrollContainerCallbackRef = useCallback(
     (node: HTMLDivElement | null) => {
       if (node === scrollContainerRef.current) return;
@@ -139,7 +129,6 @@ export const useChatScrolling = ({
     if (node) resizeObserverRef.current?.observe(node);
   }, []);
 
-  // Recalculate min-height when chat history changes (new messages)
   useLayoutEffect(() => {
     if (scrollContainerRef.current && chatHistory.length > 0) {
       const newCalculatedMinHeight = calculateDynamicMinHeight();
@@ -148,7 +137,6 @@ export const useChatScrolling = ({
     if (isFollowingRef.current) alignToEnd();
   }, [chatHistory, calculateDynamicMinHeight, alignToEnd]);
 
-  // Cleanup ResizeObserver on unmount
   useEffect(() => {
     return () => {
       if (resizeObserverRef.current) {
@@ -157,10 +145,6 @@ export const useChatScrolling = ({
     };
   }, []);
 
-  // Scroll only when a new user message is appended. Tracks the latest
-  // visible user-message id rather than the trailing element's sender so the
-  // scroll fires even when an AI placeholder is added in the same render
-  // (e.g. Agent Mode appends user + assistant placeholder in one notify).
   const lastSeenUserMessageIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     let latestUserMessage: ChatMessage | undefined;
@@ -175,7 +159,6 @@ export const useChatScrolling = ({
       ? `${latestUserMessage.id ?? latestUserMessage.timestamp?.epoch ?? ""}`
       : undefined;
 
-    // The layout effect has already aligned the initial transcript.
     if (lastSeenUserMessageIdRef.current === undefined) {
       lastSeenUserMessageIdRef.current = latestId;
       return;

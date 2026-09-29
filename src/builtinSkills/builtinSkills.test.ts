@@ -19,7 +19,6 @@ import {
   OPENARTIFACTS_WORKSPACE_ROOT_ENV,
 } from "@/openArtifacts/constants";
 
-/** A script file shipped by a skill, matched by extension (".sh", ".cmd", ".ps1"). */
 function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
   const skill = BUILTIN_SKILLS.find((s) => s.name === name);
   if (!skill) throw new Error(`no builtin skill ${name}`);
@@ -32,7 +31,6 @@ const RELAY_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("cop
 
 const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
 
-/** Default settings with the given builtin opt-outs and Miyo gates applied. */
 function settingsWith(
   builtinPreferences: NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>,
   overrides: Partial<CopilotSettings> = {}
@@ -81,19 +79,13 @@ describe("builtinSkills", () => {
         expect(sh).toBeDefined();
         expect(cmd).toBeDefined();
         expect(ps1).toBeDefined();
-        // The three scripts share a base name (web-search.sh ↔ .cmd ↔ .ps1).
         expect(cmd!.path).toBe(sh!.path.replace(/\.sh$/, ".cmd"));
         expect(ps1!.path).toBe(sh!.path.replace(/\.sh$/, ".ps1"));
-        // SKILL.md routes macOS/Linux at sh and Windows at the cmd wrapper (run
-        // with PowerShell's `&` call operator), with no Node anywhere.
         expect(skill.skillMd).toContain(`sh "/absolute/path/to/this/skill/directory/${sh!.path}"`);
         expect(skill.skillMd).toContain(`& "/absolute/path/to/this/skill/directory/${cmd!.path}"`);
         expect(skill.skillMd).not.toContain("install Node.js");
         expect(skill.skillMd).not.toContain("node ");
-        // No Node runtime ships anymore.
         expect(skill.files.some((f) => f.path.endsWith(".mjs"))).toBe(false);
-        // The cmd launcher drives the sibling ps1 via Windows PowerShell with the
-        // execution policy relaxed, locating it relative to its own folder.
         expect(cmd!.content).toContain("WindowsPowerShell\\v1.0\\powershell.exe");
         expect(cmd!.content).toContain("-ExecutionPolicy Bypass");
         expect(cmd!.content).toContain(`-File "%~dp0${ps1!.path}"`);
@@ -106,10 +98,8 @@ describe("builtinSkills", () => {
         expect(sh).toContain(`#!/bin/sh`);
         expect(sh).toContain(PLUS_ENV.licenseKey);
         expect(sh).toContain(PLUS_ENV.baseUrl);
-        // Auth flows through the env var, not a literal embedded key.
         expect(sh).toContain("Authorization: Bearer $KEY");
         expect(sh).toContain("X-Client-Version: $CLIENT_VERSION");
-        // Guard + soft fallback when the license/relay config is absent.
         expect(sh).toContain("require_relay()");
         expect(sh).toContain("require_relay\n");
         expect(sh).toContain("Copilot Plus");
@@ -119,17 +109,12 @@ describe("builtinSkills", () => {
         expect(ps1).toContain(`[Environment]::GetEnvironmentVariable('${PLUS_ENV.baseUrl}')`);
         expect(ps1).toContain('Authorization = "Bearer $KEY"');
         expect(ps1).toContain("'X-Client-Version' = $CLIENT_VERSION");
-        // Same license guard as the shell script.
         expect(ps1).toContain("function RequireRelay");
         expect(ps1).toContain("RequireRelay\n");
         expect(ps1).toContain("Copilot Plus");
-        // The body is sent as explicit UTF-8 bytes — Windows PowerShell 5.1 would
-        // otherwise ASCII-encode a string body and corrupt non-ASCII input.
         expect(ps1).toContain("[System.Text.Encoding]::UTF8.GetBytes($json)");
         expect(ps1).toContain("application/json; charset=utf-8");
         expect(ps1).toContain("-Body $bytes");
-        // Output side: force UTF-8 so non-ASCII relay output isn't mojibaked by
-        // Windows PowerShell 5.1's default code-page console encoding.
         expect(ps1).toContain("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8");
         expect(ps1).toContain("$OutputEncoding = [System.Text.Encoding]::UTF8");
       }
@@ -138,26 +123,15 @@ describe("builtinSkills", () => {
     it("falls back to the agent's own tools instead of blocking when Plus is absent", () => {
       for (const skill of RELAY_SKILLS) {
         const sh = scriptOf(skill.name, ".sh");
-        // No license: tell the agent to use its own equivalent tools, never
-        // refuse, and only append the upsell occasionally (gated on the pid). The
-        // fallback wording is generic (not web-specific) so it suits the PDF skill
-        // too, which shares this message.
         expect(sh).toContain("your own equivalent built-in tools");
         expect(sh).not.toContain("web tools");
         expect(sh).toContain("never refuse");
         expect(sh).toContain("$(( $$ % 4 ))");
-        // The upsell carries the actionable instruction to obtain a license key.
         expect(sh).toContain("get a license key at https://www.obsidiancopilot.com");
-        // The invalid/expired-license (401/403) path is distinct and warrants a
-        // renewal note, but still falls back rather than refusing.
         expect(sh).toContain('401|403) die "$LICENSE_INVALID"');
         expect(sh).toContain("renew their Copilot Plus license");
-        // The old hard "requires Copilot Plus / upgrade" block is gone.
         expect(sh).not.toContain("require Copilot Plus");
 
-        // A non-license relay failure (unreachable, or a non-2xx that isn't
-        // 401/403 — e.g. a page that can't be fetched) still routes the agent to
-        // its own tool rather than dead-ending the request.
         expect(sh).toContain("$RELAY_FAILED_FALLBACK");
         expect(sh).toContain("your own equivalent built-in tool for this");
 
@@ -224,10 +198,8 @@ describe("builtinSkills", () => {
       expect(scriptOf("copilot-web-search", ".sh")).toContain('\\"query\\"');
       expect(scriptOf("copilot-youtube-transcript", ".sh")).toContain('relay "/youtube4llm"');
       expect(scriptOf("copilot-fetch-x", ".sh")).toContain('relay "/twitter4llm"');
-      // Single-arg tools JSON-escape the argument they pass.
       expect(scriptOf("copilot-web-search", ".sh")).toContain('$(json_escape "$ARG")');
 
-      // The PowerShell sibling hits the same endpoints with a structured body.
       expect(scriptOf("copilot-web-search", ".ps1")).toContain('Invoke-Relay "/websearch"');
       expect(scriptOf("copilot-web-search", ".ps1")).toContain(
         "@{ query = $ARG; user_id = $USER_ID }"
@@ -393,12 +365,9 @@ describe("builtinSkills", () => {
       expect(MIYO_SEARCH_SKILL.skillMd).toContain(
         `sh "/absolute/path/to/this/skill/directory/miyo-search.sh"`
       );
-      // Windows is shown with the PowerShell call operator `&` (a bare quoted
-      // path is a string in PowerShell and wouldn't run).
       expect(MIYO_SEARCH_SKILL.skillMd).toContain(
         `& "/absolute/path/to/this/skill/directory/miyo-search.cmd"`
       );
-      // No Node runtime anywhere — neither a .mjs file nor a node invocation.
       expect(MIYO_SEARCH_SKILL.files.some((f) => f.path.endsWith(".mjs"))).toBe(false);
       expect(MIYO_SEARCH_SKILL.skillMd).not.toContain("node ");
     });
@@ -418,10 +387,8 @@ describe("builtinSkills", () => {
 
     it("documents concrete triggers for when to call it", () => {
       const md = MIYO_SEARCH_SKILL.skillMd;
-      // The description is the agent's primary "when to use" signal.
       expect(md).toMatch(/description:[^\n]*too slow/i);
       expect(md).toMatch(/description:[^\n]*explicitly asks for Miyo search/i);
-      // The body reinforces the same triggers.
       expect(md).toMatch(/When to use it/);
       expect(md).toMatch(/doesn't surface enough relevant notes/i);
     });
@@ -462,10 +429,8 @@ describe("builtinSkills", () => {
     });
 
     it("resolves the binary absolute-path-first with a PATH fallback, per OS", () => {
-      // POSIX (.sh): absolute install path tried before falling back to PATH.
       expect(miyoScript(".sh")).toContain("$HOME/.miyo/bin/miyo");
       expect(miyoScript(".sh")).toContain("command -v miyo");
-      // Windows (.cmd): the %LOCALAPPDATA% install, then PATH.
       expect(miyoScript(".cmd")).toContain("%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe");
       expect(miyoScript(".cmd")).toContain("where miyo");
     });
@@ -515,8 +480,6 @@ describe("builtinSkills", () => {
     });
 
     it("names the recovery path when the CLI is absent, since a remote server can't parse", () => {
-      // `miyo parse` runs locally and never reads MIYO_URL, so a remote-only
-      // user has to install the CLI or move the picker back to Plus.
       expect(MIYO_PARSE_SKILL.skillMd).toMatch(/remote\s+Miyo\s+server\s+does\s+not\s+help/i);
       expect(MIYO_PARSE_SKILL.skillMd).toMatch(/Document\s+Processor to Plus/i);
     });
@@ -558,7 +521,6 @@ describe("builtinSkills", () => {
 
     it("seeds only the always-on builtins when both Miyo gates are off", () => {
       const plan = planManagedBuiltins({ search: false, documents: false });
-      // Stable reference, per the project's referential-stability rule.
       expect(plan.seed).toBe(BUILTIN_SKILLS);
       expect(plan.prune).toEqual(["miyo-search", "miyo-parse"]);
     });
@@ -578,8 +540,6 @@ describe("builtinSkills", () => {
     });
 
     it("replaces the cloud PDF skill with Miyo parse when Miyo owns documents", () => {
-      // Steering alone would leave copilot-read-pdf on disk, one ignored
-      // instruction away from uploading a document the user chose to keep local.
       const plan = planManagedBuiltins({ search: true, documents: true });
       expect(names(plan.seed)).not.toContain("copilot-read-pdf");
       expect(plan.prune).toEqual(["copilot-read-pdf"]);

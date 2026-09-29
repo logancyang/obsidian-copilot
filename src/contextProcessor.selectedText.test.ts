@@ -1,31 +1,20 @@
-/**
- * Tests for processSelectedTextContexts in ContextProcessor
- *
- * Verifies that note and web selected text contexts are correctly
- * formatted with appropriate XML tags.
- */
-
 import { SELECTED_TEXT_TAG, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
 
-// Mock the aiParams module
 const mockSelectedTextContexts: (NoteSelectedTextContext | WebSelectedTextContext)[] = [];
 
 jest.mock("@/aiParams", () => ({
   getSelectedTextContexts: () => mockSelectedTextContexts,
 }));
 
-// Import after mocking
 import { ContextProcessor } from "@/contextProcessor";
 
 describe("ContextProcessor.processSelectedTextContexts", () => {
   let processor: ContextProcessor;
 
   beforeEach(() => {
-    // Clear mock data
     mockSelectedTextContexts.length = 0;
 
-    // Get singleton instance
     processor = ContextProcessor.getInstance(window.app);
   });
 
@@ -59,7 +48,6 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
     expect(result).toContain("function fibonacci");
     expect(result).toContain("</content>");
 
-    // Should NOT contain web-specific tags
     expect(result).not.toContain(`<${WEB_SELECTED_TEXT_TAG}>`);
     expect(result).not.toContain("<url>");
   });
@@ -105,7 +93,6 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
     expect(result).toContain("React Documentation");
     expect(result).toContain("</content>");
 
-    // Should NOT contain note-specific tags
     expect(result).not.toContain(`<${SELECTED_TEXT_TAG}>`);
     expect(result).not.toContain("<path>");
     expect(result).not.toContain("<start_line>");
@@ -135,21 +122,17 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
 
     const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
 
-    // Verify both context types are present
     expect(result).toContain(`<${SELECTED_TEXT_TAG}>`);
     expect(result).toContain(`</${SELECTED_TEXT_TAG}>`);
     expect(result).toContain(`<${WEB_SELECTED_TEXT_TAG}>`);
     expect(result).toContain(`</${WEB_SELECTED_TEXT_TAG}>`);
 
-    // Verify note selection has path and line numbers
     expect(result).toContain("<path>dev/react-patterns.md</path>");
     expect(result).toContain("<start_line>15</start_line>");
     expect(result).toContain("<end_line>20</end_line>");
 
-    // Verify web selection has url
     expect(result).toContain("<url>https://react.dev/best-practices</url>");
 
-    // Verify content from both
     expect(result).toContain("Local note content about React patterns");
     expect(result).toContain("Web content about React best practices");
   });
@@ -169,7 +152,6 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
 
     const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
 
-    // Title and path should be escaped
     expect(result).toContain("<title>Test &lt;Note&gt;</title>");
     expect(result).toContain("<path>test/path&amp;file.md</path>");
   });
@@ -187,7 +169,6 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
 
     const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
 
-    // Title and URL should be escaped
     expect(result).toContain("<title>Page &lt;Title&gt;</title>");
     expect(result).toContain("<url>https://example.com/page?a=1&amp;b=2</url>");
   });

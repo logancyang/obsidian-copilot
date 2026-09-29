@@ -9,47 +9,16 @@ interface Position {
 interface UseDraggableOptions {
   initialPosition?: Position;
   bounds?: "window" | "parent" | null;
-  /**
-   * Optional external ref for the draggable element.
-   * Useful when the element ref is shared with other hooks (e.g., resize).
-   */
   dragRef?: React.RefObject<HTMLDivElement>;
-  /**
-   * Optional getter for the current element position at drag start.
-   * Use when the element is positioned outside of React state.
-   */
   getPosition?: () => Position;
-  /**
-   * Called whenever a new position is applied (RAF-throttled).
-   * Useful when the caller controls positioning outside the hook.
-   */
   onPositionChange?: (position: Position) => void;
-  /**
-   * Whether to write `left/top` to the DOM.
-   * Disable when the element is positioned by an external owner.
-   */
   writeToDom?: boolean;
 }
 
-/**
- * Clamps a number between the given min/max.
- */
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-/**
- * useDraggable
- *
- * A draggable hook optimized for performance:
- * - Optionally writes `left/top` directly to the DOM (no React re-render on mousemove)
- * - Uses `requestAnimationFrame` to throttle updates
- * - Applies `preventDefault()` and disables body selection / sets grabbing cursor
- *   during drag (the class disables text selection and sets a grabbing cursor)
- *
- * API is kept compatible:
- * `position, setPosition, isDragging, dragRef, handleMouseDown`
- */
 export function useDraggable(options: UseDraggableOptions = {}) {
   const {
     initialPosition = { x: 0, y: 0 },
@@ -75,12 +44,6 @@ export function useDraggable(options: UseDraggableOptions = {}) {
   const cleanupDragRef = useRef<((commit: boolean) => void) | null>(null);
   const isMountedRef = useRef(true);
 
-  /**
-   * Writes position to the drag element via CSS custom properties.
-   * The consumer must include `!tw-left-[var(--copilot-drag-x,0px)]` and
-   * `!tw-top-[var(--copilot-drag-y,0px)]` (or equivalent) on the element so
-   * these variables map to actual `left`/`top` values.
-   */
   const writePositionToDom = useCallback(
     (next: Position): void => {
       if (!writeToDom) return;
@@ -96,9 +59,6 @@ export function useDraggable(options: UseDraggableOptions = {}) {
     [dragRef, writeToDom]
   );
 
-  /**
-   * Applies bounds (if enabled), updates refs, and optionally writes to DOM.
-   */
   const applyPosition = useCallback(
     (raw: Position): Position => {
       let nextX = raw.x;
@@ -136,9 +96,6 @@ export function useDraggable(options: UseDraggableOptions = {}) {
     [bounds, dragRef, writePositionToDom, onPositionChange]
   );
 
-  /**
-   * Schedules a DOM update on the next animation frame.
-   */
   const scheduleApply = useCallback((): void => {
     if (rafIdRef.current != null) return;
 
@@ -154,18 +111,10 @@ export function useDraggable(options: UseDraggableOptions = {}) {
     });
   }, [applyPosition, dragRef]);
 
-  /**
-   * Initial mount: write the starting position to CSS variables so the element
-   * paints at the correct location on first render (before any drag occurs).
-   */
   useLayoutEffect(() => {
     writePositionToDom(positionRef.current);
   }, [writePositionToDom]);
 
-  /**
-   * Compatible setter: updates state + ref, and also writes to DOM immediately.
-   * (No throttling here; `setPosition` is expected to be called infrequently.)
-   */
   const setPosition = useCallback<React.Dispatch<React.SetStateAction<Position>>>(
     (value) => {
       const base = positionRef.current;
@@ -179,12 +128,8 @@ export function useDraggable(options: UseDraggableOptions = {}) {
     [writePositionToDom, onPositionChange]
   );
 
-  /**
-   * Starts dragging: captures pointer offset and installs global listeners.
-   */
   const handleMouseDown = useCallback(
     (e: React.MouseEvent): void => {
-      // Only respond to left mouse button
       if (e.button !== 0) return;
       e.preventDefault();
 
@@ -207,9 +152,6 @@ export function useDraggable(options: UseDraggableOptions = {}) {
 
       body.classList.add("tw-select-none", "tw-cursor-grabbing");
 
-      /**
-       * Mouse move handler: updates pending position and schedules RAF apply.
-       */
       const handleMouseMove = (event: MouseEvent): void => {
         pendingPositionRef.current = {
           x: event.clientX - dragOffsetRef.current.x,
@@ -218,9 +160,6 @@ export function useDraggable(options: UseDraggableOptions = {}) {
         scheduleApply();
       };
 
-      /**
-       * Drag cleanup (commit=true on mouseup; commit=false on unmount safety cleanup).
-       */
       const cleanup = (commit: boolean): void => {
         if (cleanupDragRef.current !== cleanup) return;
 
@@ -247,9 +186,6 @@ export function useDraggable(options: UseDraggableOptions = {}) {
         }
       };
 
-      /**
-       * Mouse up handler: ends dragging and commits position to React state once.
-       */
       const handleMouseUp = (): void => {
         cleanup(true);
       };
@@ -270,7 +206,6 @@ export function useDraggable(options: UseDraggableOptions = {}) {
   }, []);
 
   useLayoutEffect(() => {
-    // Keep DOM aligned with the latest ref position even if parent re-renders.
     writePositionToDom(positionRef.current);
   });
 

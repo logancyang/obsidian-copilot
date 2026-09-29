@@ -219,11 +219,6 @@ function hasVisibleUnsupportedColor(value: string): boolean {
   return Boolean(normalized && normalized !== "none" && normalized !== "transparent");
 }
 
-/**
- * Resolves the current document's Obsidian color custom properties into comparable RGBA values.
- *
- * @param doc - Document hosting the rendered story and its active theme variables.
- */
 export function resolveObsidianColorTokens(doc: Document): ReadonlySet<string> {
   const colors = new Set<string>();
   const probe = doc.body.createSpan();
@@ -250,13 +245,6 @@ export function resolveObsidianColorTokens(doc: Document): ReadonlySet<string> {
   return colors;
 }
 
-/**
- * Reports measurable rendering defects for one mounted story case.
- *
- * @param storyElement - The sole mounted case carrying its stable story identity.
- * @param tokenColors - Resolved theme colors used to distinguish token-backed styles from literals.
- * @param additionalRoots - Story-owned portal roots mounted outside the primary story element.
- */
 export function inspectStoryCase(
   storyElement: HTMLElement,
   tokenColors: ReadonlySet<string> = resolveObsidianColorTokens(storyElement.doc),
@@ -355,12 +343,6 @@ export function inspectStoryCase(
   return findings;
 }
 
-/**
- * Names the active read-only Obsidian theme and light/dark mode for audit reports.
- *
- * @param doc - Document whose theme classes and attributes are currently applied.
- * @param configuredTheme - Community theme name read from Obsidian's vault configuration.
- */
 export function getGalleryTheme(doc: Document, configuredTheme?: string): string {
   const mode =
     doc.body.classList.contains("theme-dark") ||

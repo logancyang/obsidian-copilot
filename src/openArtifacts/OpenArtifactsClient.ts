@@ -15,16 +15,7 @@ const NETWORK_ERROR_MESSAGE = "Could not reach OpenArtifacts. Please try again."
 const AMBIGUOUS_PUBLISH_MESSAGE =
   "OpenArtifacts may have published this note, but Copilot did not receive a valid receipt. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
 
-/**
- * Carries an OpenArtifacts failure to the UI without interpreting server-side authorization policy.
- */
 export class OpenArtifactsClientError extends Error {
-  /**
-   * @param message The human-readable server message or a transport-safe fallback.
-   * @param code The stable server error code or a client transport/validation code.
-   * @param status The HTTP status, or null when no response was received.
-   * @param retryable Whether retrying the same operation can resolve the failure.
-   */
   constructor(
     message: string,
     public readonly code: string,
@@ -37,14 +28,7 @@ export class OpenArtifactsClientError extends Error {
   }
 }
 
-/**
- * Owns the fixed OpenArtifacts HTTP wire contract without managing credentials or note identity.
- */
 export class OpenArtifactsClient {
-  /**
-   * @param document The complete HTML document to publish.
-   * @param licenseKey The decrypted license key used only for this request.
-   */
   async publish(
     document: OpenArtifactsDocument,
     licenseKey: string
@@ -52,11 +36,6 @@ export class OpenArtifactsClient {
     return this.push("POST", DOCS_ENDPOINT, document, licenseKey);
   }
 
-  /**
-   * @param docId The existing OpenArtifacts document identity.
-   * @param document The complete HTML document for the new version.
-   * @param licenseKey The decrypted license key used only for this request.
-   */
   async update(
     docId: string,
     document: OpenArtifactsDocument,
@@ -71,10 +50,6 @@ export class OpenArtifactsClient {
     );
   }
 
-  /**
-   * @param docId The OpenArtifacts document identity to withdraw.
-   * @param licenseKey The decrypted license key used only for this request.
-   */
   async delete(docId: string, licenseKey: string): Promise<void> {
     const response = await this.request({
       url: `${DOCS_ENDPOINT}/${encodeURIComponent(docId)}`,
@@ -224,8 +199,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isOpenArtifactsDocumentUrl(value: string, docId: string): boolean {
   try {
     const url = new URL(value);
-    // New server receipts must use the canonical document host; the legacy host is accepted only
-    // when reading an identity already persisted in a note.
+    // Only the canonical document host is accepted for new server receipts.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/337
     return (
       url.origin === OPENARTIFACTS_DOCUMENT_ORIGIN &&

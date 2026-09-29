@@ -1,6 +1,5 @@
 import { Change } from "diff";
 
-// Group changes into blocks for better UI presentation
 export function getChangeBlocks(changes: Change[]): Change[][] {
   const blocks: Change[][] = [];
   let currentBlock: Change[] = [];

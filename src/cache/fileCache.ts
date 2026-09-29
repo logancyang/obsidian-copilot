@@ -31,7 +31,6 @@ export class FileCache<T> {
   }
 
   getCacheKey(file: TFile, additionalContext?: string): string {
-    // Use file path, size and mtime for a unique but efficient cache key
     const metadata = `${file.path}:${file.stat.size}:${file.stat.mtime}${additionalContext ? `:${additionalContext}` : ""}`;
     return md5(metadata);
   }
@@ -42,7 +41,6 @@ export class FileCache<T> {
 
   async get(vault: Vault, cacheKey: string): Promise<T | null> {
     try {
-      // Check memory cache first
       const memoryResult = this.memoryCache.get(cacheKey);
       if (memoryResult) {
         logInfo("Memory cache hit for file:", cacheKey);
@@ -54,12 +52,8 @@ export class FileCache<T> {
         logInfo("File cache hit:", cacheKey);
         const cacheContent = await vault.adapter.read(cachePath);
 
-        // .md files contain either plain string content or JSON-serialized content
-        // The safest approach is to go back to a simpler method that doesn't try to embed metadata in the content itself.
-        // Since preserving timestamps in file-based cache is not critical (memory cache handles active sessions)
         let parsedContent: T;
 
-        // Try to parse as JSON first (for non-string types that were serialized)
         const trimmedContent = cacheContent.trim();
         if (
           (trimmedContent.startsWith("{") && trimmedContent.endsWith("}")) ||
@@ -68,21 +62,17 @@ export class FileCache<T> {
           try {
             parsedContent = JSON.parse(cacheContent);
           } catch {
-            // JSON parsing failed, treat as string content
             parsedContent = cacheContent as T;
           }
         } else {
-          // Plain text content (primary case for markdown)
           parsedContent = cacheContent as T;
         }
 
-        // Create cache entry for memory storage (file-based cache doesn't preserve timestamps)
         const cacheEntry: FileCacheEntry<T> = {
           content: parsedContent,
           timestamp: Date.now(),
         };
 
-        // Store in memory cache
         this.memoryCache.set(cacheKey, cacheEntry);
 
         return cacheEntry.content;
@@ -107,16 +97,12 @@ export class FileCache<T> {
         timestamp,
       };
 
-      // Store in memory cache
       this.memoryCache.set(cacheKey, cacheEntry);
 
-      // Serialize content properly for file storage
       let serializedContent: string;
       if (typeof content === "string") {
-        // If content is already a string, use it directly
         serializedContent = content;
       } else {
-        // For non-string content, serialize as JSON
         serializedContent = JSON.stringify(content, null, 2);
       }
 
@@ -129,10 +115,8 @@ export class FileCache<T> {
 
   async clear(vault: Vault): Promise<void> {
     try {
-      // Clear memory cache
       this.memoryCache.clear();
 
-      // Clear file cache
       if (await vault.adapter.exists(this.cacheDir)) {
         const files = await vault.adapter.list(this.cacheDir);
         logInfo("Clearing file cache, removing files:", files.files.length);

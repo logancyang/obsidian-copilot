@@ -2,8 +2,6 @@ import { startReleaseUpdateCheck } from "@/services/releaseUpdateNotice";
 import { releaseCursorAssociation } from "@/editor/releaseCursorAssociation";
 import { registerNoteHeaderAction } from "@/editor/registerNoteHeaderAction";
 import type { AgentSessionManager, SkillManager } from "@/agentMode";
-// Deep import (not the barrel): these run on the load path for every
-// platform, and the barrel pulls Node-only modules that crash mobile.
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import {
   buildChatDeepLink,
@@ -146,10 +144,7 @@ import {
   type SelfHostWebSearchAgentBridge,
 } from "@/LLMProviders/selfHostServices";
 
-// Removed unused FileTrackingState interface
-
 export default class CopilotPlugin extends Plugin {
-  // Plugin components
   chainOwner: ChainOwner;
   brevilabsClient: BrevilabsClient;
   userMessageHistory: string[] = [];
@@ -166,15 +161,11 @@ export default class CopilotPlugin extends Plugin {
   private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
   private agentModelDiscoveryUnsubscriber?: () => void;
   modelManagement!: ModelManagementApi;
-  /** Provider-credential-free channel available to the managed Agent Chat search skill. */
   selfHostWebSearchAgentBridge?: Readonly<SelfHostWebSearchAgentBridge>;
   private ribbonIconEl?: HTMLElement;
   userMemoryManager: UserMemoryManager;
   quickAskController: QuickAskController;
   chatSelectionHighlightController: ChatSelectionHighlightController;
-  // Most-recently-focused chat view, used to route "add … to chat context"
-  // commands when both chat views are open. Defaults to legacy so a
-  // never-focused-a-chat state is harmless.
   private lastActiveChatViewType: typeof CHAT_VIEWTYPE | typeof CHAT_AGENT_VIEWTYPE = CHAT_VIEWTYPE;
   private selectionDebounceTimer?: number;
   private lastSelectionSignature?: string;
@@ -183,26 +174,12 @@ export default class CopilotPlugin extends Plugin {
   private startupMigrationItems: StartupMigrationItem[] = [];
   private pluginLifecycleActive = true;
 
-  /** Whether this plugin instance still owns lifecycle-sensitive mutations. */
   public isPluginLifecycleActive(): boolean {
     return this.pluginLifecycleActive;
   }
 
   async onload(): Promise<void> {
-    // Patch Node's `events.setMaxListeners` so the Claude Agent SDK's call with
-    // a web-realm AbortSignal stops throwing in Electron's renderer. No-ops on
-    // mobile (no node:events / no SDK). Must run before any Agent Mode session;
-    // doing it here (not as a module-load side effect) keeps mobile from
-    // evaluating `node:events` at import and crashing the whole plugin.
     installRendererEventsShim();
-    // Reason: clear stale module-level persistence state + KeychainService
-    // singleton left over from a previous plugin lifecycle in the same
-    // process (disable→enable, dev hot reload, "Open another vault" without
-    // restart). Doing this at the START of onload (instead of at the end of
-    // onunload) avoids a race: onunload is fire-and-forget from Obsidian's
-    // perspective, so its `await flushPersistence()` continuation can fire
-    // AFTER the next onload has already initialized — and would then null
-    // out the new instance, breaking saves until another full reload.
     resetPersistenceState();
     KeychainService.resetInstance();
     KeychainService.getInstance(this.app);
@@ -210,15 +187,8 @@ export default class CopilotPlugin extends Plugin {
     this.modelManagement = createModelManagement({
       app: this.app,
     });
-    // Register/unregister the Copilot Plus provider (and its models) to match
-    // Plus state, so Plus models surface in the chat + opencode pickers. The
-    // license key is already hydrated from Keychain by the settings boundary.
-    // Idempotent, so the redundant initial call below + per-change calls are
-    // safe. Serialized through `plusSyncChain` so a fast
-    // sign-out→sign-in (each its own settings change) settles in issue order,
-    // not in whichever overlapping reconcile happens to finish last.
-    // Reads the public models endpoint, and nothing below awaits it: every
-    // consumer of the Plus lineup reads the cached snapshot.
+    // Serialized so a fast sign-out then sign-in settles in issue order, not in whichever
+    // overlapping reconcile finishes last. Nothing awaits it: consumers read the cached snapshot.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
     let plusSyncChain: Promise<void> = Promise.resolve();
     const syncPlus = (isPaidUser: boolean | undefined, licenseKey: string): void => {
@@ -226,31 +196,20 @@ export default class CopilotPlugin extends Plugin {
         syncCopilotPlusProvider(this.modelManagement, !!isPaidUser, licenseKey)
       );
     };
-    // Initial reconcile: an already-signed-in user's `isPaidUser` is restored
-    // from disk without firing the subscription, so register on load.
     syncPlus(getSettings().isPaidUser, getSettings().plusLicenseKey);
     this.settingsUnsubscriber = subscribeToSettingsChange((prev, next) => {
       void (async () => {
         try {
           await persistSettings(next, (data) => this.saveData(data), prev);
         } catch (error) {
-          // Reason: Do NOT rollback memory state on persist failure.
-          // The writeQueue serializes I/O, so a later setSettings() may already
-          // be queued. Rolling back memory would create a split where memory is S0
-          // but disk ends up at S2 when the later write succeeds.
-          // Instead, just notify the user — the in-memory state remains current,
-          // and the next successful persist will reconcile disk with memory.
           logError("Failed to persist settings.", error);
           new Notice("Copilot failed to save settings. Check logs and try again.");
         }
-        // Sign-in / sign-out (isPaidUser flip) or key rotation while signed in.
         if (plusSyncNeeded(prev, next)) {
           syncPlus(next.isPaidUser, next.plusLicenseKey);
         }
       })();
     });
-    // Startup notices remember their own last shown release; Agent Home dismissal
-    // is independent. Hydration and the save subscriber must precede this check.
     this.register(
       startReleaseUpdateCheck(
         this.app,
@@ -259,16 +218,7 @@ export default class CopilotPlugin extends Plugin {
         (version) => updateSetting("lastShownStartupVersion", version)
       )
     );
-    // One-time settings migrations. Runs after the persist subscriber is wired
-    // (so every mutation is saved) and after createModelManagement, and before
-    // agent/model-discovery init below — so migrated BYOK providers are present
-    // when OpenCode first enumerates models. Awaited for deterministic ordering;
-    // it's a fast, one-time, no-op for already-migrated/fresh vaults.
     await runSettingsMigrations(this.modelManagement);
-    // Remnants of the retired index pipeline live on this device, not in the
-    // synced settings, so they are gated by a device-local marker instead of
-    // `settingsVersion`. Not awaited: nothing below reads its result.
-    // https://github.com/logancyang/obsidian-copilot/pull/3094#discussion_r3926692787
     void cleanupLegacyIndexArtifacts({
       adapter: this.app.vault.adapter,
       configDir: this.app.vault.configDir,
@@ -285,32 +235,16 @@ export default class CopilotPlugin extends Plugin {
     const isLegacyUpgrade = getSettings().upgradedToV8FromLegacy;
     this.addSettingTab(new CopilotSettingTab(this.app, this));
 
-    // Core plugin initialization
-
-    // Initialize built-in tools with app access
     initializeBuiltinTools(this.app);
 
-    // Seed the ContextProcessor singleton with `app` before anything reaches
-    // for it via the no-arg getInstance().
     ContextProcessor.getInstance(this.app);
     CustomCommandManager.getInstance(this.app);
     logFileManager.setApp(this.app);
 
-    // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
     this.brevilabsClient.setPluginVersion(this.manifest.version);
-    // Re-verify the cached entitlement token offline so the strict Plus and
-    // self-host gates fail closed against an edited data.json until the
-    // signature re-proves itself. The network re-validation below overrides
-    // with the server's token.
     void verifyCachedEntitlement();
     if (!isLegacyUpgrade) void checkIsPaidUser(this.app, { trigger: "startup" });
-    // Entitlement tokens expire (~14 days), and the gates honor that expiry even
-    // mid-session. Without a refresh, an Obsidian window left open past `exp`
-    // loses self-host — which silently reroutes web search and document parsing
-    // through the cloud — despite the user being online and still entitled.
-    // Each /license call mints a fresh token, so re-validating daily keeps an
-    // online session current; offline users still lapse at `exp`, as intended.
     this.registerInterval(
       window.setInterval(
         () => void checkIsPaidUser(this.app, { trigger: "refresh" }),
@@ -318,7 +252,6 @@ export default class CopilotPlugin extends Plugin {
       )
     );
 
-    // Initialize the owner of the shared Quick Chat chain
     this.chainOwner = ChainOwner.getInstance(this.app, this.modelManagement);
 
     // Must precede Agent Chat: startup model discovery may spawn OpenCode.
@@ -332,10 +265,6 @@ export default class CopilotPlugin extends Plugin {
       }
     });
 
-    // Initialize Agent Mode coordinator (desktop only — ACP needs subprocess
-    // support). Gate on `isDesktopRuntime()`, not `Platform.isDesktopApp`:
-    // under `app.emulateMobile(true)` the latter stays true while Node is stubbed,
-    // so importing the `@/agentMode` barrel there would crash the plugin at load.
     if (isDesktopRuntime()) {
       const {
         CopilotAgentView,
@@ -351,57 +280,43 @@ export default class CopilotPlugin extends Plugin {
       this.PlanPreviewView = PlanPreviewView;
       this.planPreviewViewType = PLAN_PREVIEW_VIEW_TYPE;
 
-      // Seed the frame-log sink with the vault base path (desktop FileSystemAdapter only).
       const adapter = this.app.vault.adapter;
       setFrameSinkVaultBasePath(
         adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null
       );
       // A log left permissive by an older build is only reachable here when
-      // frame logging is switched off, because nothing else would read it
-      // again. https://github.com/logancyang/obsidian-copilot-preview/issues/250
+      // frame logging is off. https://github.com/logancyang/obsidian-copilot-preview/issues/250
       void acpFrameSink.narrowLegacyLogs();
 
       this.agentSessionManager = createAgentSessionManager(this.app, this);
       this.skills = SkillManager.getInstance();
-      // Enroll agent-reported models on probe settle, even when the settings
-      // tab is closed. See `agentModelDiscovery.ts`.
       this.agentModelDiscoveryUnsubscriber = wireAgentModelDiscovery(
         this,
         this.agentSessionManager
       );
     }
 
-    // Initialize VaultDataManager for centralized vault data (notes, folders, tags)
-    // Note: VaultDataManager tracks ALL data; hooks filter based on parameters
     const vaultDataManager = VaultDataManager.getInstance();
     vaultDataManager.initialize(this.app);
 
-    // Initialize FileParserManager early with other core services
     this.fileParserManager = new FileParserManager(this.brevilabsClient, this.app.vault);
 
-    // Initialize ChatUIState with new architecture
     const messageRepo = new MessageRepository();
     const chainManager = this.chainOwner.getCurrentChainManager();
     const chatManager = new ChatManager(messageRepo, chainManager, this.fileParserManager, this);
     this.chatUIState = new ChatManagerChatUIState(chatManager);
 
-    // Initialize UserMemoryManager
     this.userMemoryManager = new UserMemoryManager(this.app);
 
-    // Initialize QuickAskController and register CM6 extension
     this.quickAskController = new QuickAskController(this);
     this.registerEditorExtension(this.quickAskController.createExtension());
     this.registerEditorExtension(releaseCursorAssociation);
 
-    // Initialize Chat selection highlight controller
     this.chatSelectionHighlightController = new ChatSelectionHighlightController(this, {
       closeQuickAskOnChatFocus: false,
     });
     this.chatSelectionHighlightController.initialize();
 
-    // Single source of truth for Active Web Tab ({activeWebTab}) state
-    // Preserves activeWebTab when switching to Chat view
-    // Only run on desktop - Web Viewer is not available on mobile
     if (isDesktopRuntime()) {
       const { activeLeafRef, layoutRef } = startActiveWebTabTracking(this.app, {
         preserveOnViewTypes: [CHAT_VIEWTYPE],
@@ -410,7 +325,6 @@ export default class CopilotPlugin extends Plugin {
       this.registerEvent(layoutRef);
     }
 
-    // Register the custom Agent Mode icon before any view/ribbon/command references it.
     addIcon(COPILOT_AGENT_ICON_ID, COPILOT_AGENT_ICON_SVG);
 
     if (isDesktopRuntime()) registerNoteHeaderAction(this);
@@ -465,8 +379,6 @@ export default class CopilotPlugin extends Plugin {
     this.register(() => openArtifactsPublisher.dispose());
     registerCommands(this, publishFile);
 
-    // Tool initialization is now handled automatically in CopilotPlusChainRunner and AutonomousAgentChainRunner
-
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu: Menu) => {
         registerContextMenu(menu, this.app);
@@ -475,7 +387,6 @@ export default class CopilotPlugin extends Plugin {
 
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", (leaf) => {
-        // Delegate to chat selection highlight controller
         this.chatSelectionHighlightController.handleActiveLeafChange(leaf ?? null);
 
         const activeViewType = leaf?.getViewState().type;
@@ -490,18 +401,14 @@ export default class CopilotPlugin extends Plugin {
     this.projectRegister = new ProjectRegister(this.app);
 
     this.app.workspace.onLayoutReady(() => {
-      // Migration sources initialize independently, but presentation waits until
-      // all of them settle so an upgrade produces one complete summary.
       void this.runStartupMigrations(isLegacyUpgrade).catch((error) => {
         logError("Failed to finish startup migrations", error);
         new Notice("Copilot could not finish startup migration. Reload Obsidian to retry.");
       });
     });
 
-    // Initialize automatic selection handler
     this.initSelectionHandler();
 
-    // Initialize web selection watcher (Desktop only)
     this.initWebSelectionWatcher();
 
     // A queued URI may fire as soon as its handler is registered, so register
@@ -512,13 +419,11 @@ export default class CopilotPlugin extends Plugin {
     });
   }
 
-  /** Collect one-time manual folder moves without opening a separate modal. */
   private async collectLegacyUpgradeRelocation(): Promise<StartupMigrationItem | null> {
     if (!getSettings().upgradedToV8FromLegacy) return null;
 
     const entries = buildUpgradeRelocationEntries(getSettings());
     if (entries.length > 0) {
-      // Pre-create destinations, while leaving user files untouched as before.
       await ensureCopilotSubfolders(this.app.vault, getSettings());
     }
     if (entries.length === 0) {
@@ -536,7 +441,6 @@ export default class CopilotPlugin extends Plugin {
     };
   }
 
-  /** Run all layout-dependent migration work before presenting one summary. */
   private async runStartupMigrations(isLegacyUpgrade: boolean): Promise<void> {
     const initialSettings = getSettings();
     const needsLicenseReentry =
@@ -636,15 +540,6 @@ export default class CopilotPlugin extends Plugin {
     });
   }
 
-  /**
-   * Register a view, tolerating a type that is already registered. Obsidian
-   * throws "Attempting to register an existing view type" when a prior plugin
-   * lifecycle left a stale registration behind (e.g. an `onunload` that threw
-   * before its teardown completed). Swallowing here keeps one stale view type
-   * from aborting the rest of `onload` and leaving a half-initialized plugin
-   * that then crashes on `onunload`. The null-safe `onunload` below is the
-   * primary fix that prevents the stale state; this is defense-in-depth.
-   */
   private safeRegisterView(type: string, viewCreator: ViewCreator): void {
     try {
       this.registerView(type, viewCreator);
@@ -654,19 +549,9 @@ export default class CopilotPlugin extends Plugin {
   }
 
   onunload(): void {
-    // A settings tree can briefly outlive this plugin instance. Revoke its
-    // mutation rights synchronously so an in-flight registration cannot write
-    // into the next lifecycle after its asynchronous setup finishes.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
     this.pluginLifecycleActive = false;
-    // Obsidian never awaits onunload, so the async tail of teardown is
-    // fire-and-forget by nature; declaring onunload void makes that explicit.
-    // teardown() is invoked synchronously, so everything above its first
-    // `await` still runs before this call returns, and a failure partway
-    // through is logged instead of becoming an unhandled rejection.
-    // The audio module is shared across hot-reloaded plugin instances, so an
-    // outgoing async teardown must release its context before a successor can
-    // create one. https://github.com/logancyang/obsidian-copilot/issues/2987
+    // The audio module is shared across hot-reloaded plugin instances, so the outgoing
+    // teardown must release its context before a successor can create one. https://github.com/logancyang/obsidian-copilot/issues/2987
     disposeNotificationSound();
     this.teardown().catch((error) => {
       logError("Copilot: plugin teardown failed during unload:", error);
@@ -674,40 +559,23 @@ export default class CopilotPlugin extends Plugin {
   }
 
   private async teardown(): Promise<void> {
-    // Best-effort flush of pending keychain/data.json writes.
-    // Reason: Obsidian does not await teardown, but awaiting here keeps the
-    // remaining steps ordered after the flush, consistent with the log flush
-    // below. (The KeychainService singleton and the persistence module's own
-    // state reset at the START of the next onload — see the comment there for
-    // the late-write race that motivated it.)
     await flushPersistence();
 
-    // Clear all persistent selection highlights before unload
-    // This prevents "stuck" highlights after hot reload (dev environment)
     this.clearAllPersistentSelectionHighlights();
 
-    // Cleanup chat selection highlight controller
     this.chatSelectionHighlightController?.cleanup();
 
     this.agentModelDiscoveryUnsubscriber?.();
     await this.agentSessionManager?.shutdown();
 
-    // Cleanup VaultDataManager event listeners
     const vaultDataManager = VaultDataManager.getInstance();
     vaultDataManager.cleanup();
 
-    // Optional-chained because `onload` assigns these late: if it threw before
-    // reaching their construction, the fields are undefined at unload time and
-    // an unguarded `.cleanup()` would throw `Cannot read properties of
-    // undefined`, aborting the rest of teardown.
     this.customCommandRegister?.cleanup();
     this.systemPromptRegister?.cleanup();
     this.projectRegister?.cleanup();
     this.settingsUnsubscriber?.();
 
-    // Tear down skills vault watchers + debounce timers. Gate matches onload so
-    // we never import the `@/agentMode` barrel on a Node-less runtime (mobile /
-    // emulateMobile), which would crash during unload.
     if (isDesktopRuntime()) {
       const { SkillManager } = await import("@/agentMode");
       if (SkillManager.hasInstance()) {
@@ -719,7 +587,6 @@ export default class CopilotPlugin extends Plugin {
     this.cleanupWebSelectionWatcher();
     this.clearSelectionContext();
 
-    // Cleanup Web Viewer state tracking (webview event listeners)
     try {
       const webViewerService = getWebViewerService(this.app);
       webViewerService.stopActiveWebTabTracking();
@@ -729,15 +596,10 @@ export default class CopilotPlugin extends Plugin {
 
     this.modelManagement?.dispose();
 
-    // Best-effort flush of log file
     await logFileManager.flush();
     logInfo("Copilot plugin unloaded");
   }
 
-  /**
-   * Clear all persistent selection highlights across all Markdown editors.
-   * Called during plugin unload to prevent "stuck" highlights after hot reload.
-   */
   private clearAllPersistentSelectionHighlights(): void {
     try {
       const leaves = this.app.workspace.getLeavesOfType("markdown");
@@ -782,7 +644,6 @@ export default class CopilotPlugin extends Plugin {
       await this.activateView();
     }
 
-    // Without the timeout, the view is not yet active
     window.setTimeout(() => {
       const activeCopilotView = this.app.workspace
         .getLeavesOfType(CHAT_VIEWTYPE)
@@ -799,10 +660,6 @@ export default class CopilotPlugin extends Plugin {
   }
 
   emitChatIsVisible(viewType: typeof CHAT_VIEWTYPE | typeof CHAT_AGENT_VIEWTYPE = CHAT_VIEWTYPE) {
-    // Both chat views expose a `ChatViewEventTarget`; the React tree focuses the
-    // composer in response (CopilotView via Chat.tsx, CopilotAgentView via
-    // useChatInputAutoFocus). The instanceof guard skips deferred (unloaded)
-    // leaves, whose placeholder view has no eventTarget.
     const view = this.app.workspace
       .getLeavesOfType(viewType)
       .map((leaf) => leaf.view)
@@ -830,7 +687,6 @@ export default class CopilotPlugin extends Plugin {
     );
   }
 
-  /** Capture note selections in Edit and Reading view before focus can move to chat. */
   initSelectionHandler() {
     this.registerEditorExtension(
       EditorView.updateListener.of((update) => {
@@ -849,7 +705,6 @@ export default class CopilotPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("window-open", (win) => watchDocument(win.doc)));
   }
 
-  /** Debounces selection updates so dragging a selection does not rewrite chat context on every step. */
   private scheduleSelectionUpdate(update: () => void): void {
     window.clearTimeout(this.selectionDebounceTimer);
     this.selectionDebounceTimer = window.setTimeout(update, 500);
@@ -901,17 +756,10 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  /**
-   * Clears the auto-selected text context if one was previously captured
-   */
   private clearSelectionContext() {
     setSelectedTextContexts([]);
   }
 
-  /**
-   * Clears the auto-selected web text context for a specific URL.
-   * Preserves contexts from other sourceTypes and other URLs.
-   */
   private clearWebSelectionContextForUrl(url: string): void {
     const current = getSelectedTextContexts();
     const next = current.filter((c) => c.sourceType !== "web" || c.url !== url);
@@ -921,30 +769,20 @@ export default class CopilotPlugin extends Plugin {
     setSelectedTextContexts(next);
   }
 
-  /**
-   * Stores the provided selection as the active selected text context.
-   * Only keeps the latest selection - note and web selections are mutually exclusive.
-   */
   private setSelectionContext(context: SelectedTextContext) {
     setSelectedTextContexts([context]);
   }
 
-  /**
-   * Updates chat context from a note editor's current selection.
-   * @param info - Editor and note that changed, including editors in popout windows.
-   */
   handleSelectionChange({ editor, file }: MarkdownFileInfo) {
     const selectionRange = editor?.listSelections()[0];
     if (!editor || !selectionRange) {
       return;
     }
 
-    // Compute selection signature to avoid redundant updates
     const signature = file
       ? `${file.path}:${selectionRange.anchor.line}:${selectionRange.anchor.ch}:${selectionRange.head.line}:${selectionRange.head.ch}`
       : "";
 
-    // Skip if selection hasn't changed
     if (signature === this.lastSelectionSignature) {
       return;
     }
@@ -952,7 +790,6 @@ export default class CopilotPlugin extends Plugin {
 
     const selectedText = editor.getSelection();
 
-    // If selection is empty, clear note-type contexts
     if (!selectedText || !selectedText.trim()) {
       this.clearNoteSelectionContexts();
       return;
@@ -967,7 +804,6 @@ export default class CopilotPlugin extends Plugin {
     const startLine = Math.min(anchorLine, headLine);
     const endLine = Math.max(anchorLine, headLine);
 
-    // Create selected text context
     const selectedTextContext: NoteSelectedTextContext = {
       id: uuidv4(),
       content: selectedText,
@@ -981,12 +817,7 @@ export default class CopilotPlugin extends Plugin {
     this.setSelectionContext(selectedTextContext);
   }
 
-  /**
-   * Initialize web selection watcher for auto-adding web tab selections.
-   * Desktop only - uses WebSelectionTracker with self-scheduling pattern.
-   */
   initWebSelectionWatcher() {
-    // Only run on desktop
     if (!isDesktopRuntime()) {
       return;
     }
@@ -1000,7 +831,6 @@ export default class CopilotPlugin extends Plugin {
       getLeaf: () => webViewerService.getActiveLeaf() ?? webViewerService.getLastActiveLeaf(),
       getActiveLeaf: () => webViewerService.getActiveLeaf(),
       onSelectionChange: (context) => {
-        // Use symmetric update strategy via setSelectionContext
         this.setSelectionContext(context);
       },
       onSelectionClear: ({ url }) => {
@@ -1011,19 +841,11 @@ export default class CopilotPlugin extends Plugin {
     this.webSelectionTracker.start();
   }
 
-  /**
-   * Clean up web selection watcher
-   */
   cleanupWebSelectionWatcher() {
     this.webSelectionTracker?.stop();
     this.webSelectionTracker = undefined;
   }
 
-  /**
-   * Suppress the current web selection so it won't be auto-captured again until it changes or is cleared.
-   * Called by UI when user removes web selection or starts a new chat.
-   * @param url - Optional URL to suppress (prevents leaf-binding issues when lastActiveLeaf has changed)
-   */
   suppressCurrentWebSelection(url?: string): void {
     if (url && url.trim()) {
       this.webSelectionTracker?.suppressSelectionForUrl(url);
@@ -1039,7 +861,6 @@ export default class CopilotPlugin extends Plugin {
       getSelection: () => {
         const selection = activeView?.editor?.getSelection();
         if (selection) return selection;
-        // Default to the entire active file if no selection
         const activeFile = this.app.workspace.getActiveFile();
         return activeFile ? this.app.vault.read(activeFile) : "";
       },
@@ -1063,18 +884,11 @@ export default class CopilotPlugin extends Plugin {
 
   async activateView(): Promise<void> {
     await this.openOrRevealView(CHAT_VIEWTYPE);
-    // Small delay to ensure React component is ready to receive the focus event
     window.setTimeout(() => {
       this.emitChatIsVisible();
     }, 50);
   }
 
-  /**
-   * Which chat view "add … to chat" actions should target:
-   *   - both chat views open → the one focused most recently (`lastActiveChatViewType`)
-   *   - exactly one open      → that one
-   *   - none open             → the agent chat when usable, else the legacy chat
-   */
   private pickContextChatViewType(): typeof CHAT_VIEWTYPE | typeof CHAT_AGENT_VIEWTYPE {
     const agentUsable = this.canUseAgentView();
     const agentOpen =
@@ -1092,11 +906,6 @@ export default class CopilotPlugin extends Plugin {
     return useAgent ? CHAT_AGENT_VIEWTYPE : CHAT_VIEWTYPE;
   }
 
-  /**
-   * The "add … to chat context" commands write into a shared atom that both chat
-   * views render, so this only picks which chat to bring into focus (see
-   * `pickContextChatViewType`).
-   */
   async activateChatViewForContext(): Promise<void> {
     if (this.pickContextChatViewType() === CHAT_AGENT_VIEWTYPE) {
       await this.activateAgentView();
@@ -1119,15 +928,9 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  /** Open or reveal Agent Chat, optionally placing a new pane in the right sidebar. */
   async activateAgentView(openInRightSidebar = false): Promise<WorkspaceLeaf | null> {
     if (!this.requireAgentView()) return null;
     const leaf = await this.openOrRevealView(CHAT_AGENT_VIEWTYPE, openInRightSidebar);
-    // Focus the composer on open. Latching the request on the view's event bus
-    // (rather than a setTimeout) means a freshly-opened view drains it once its
-    // React tree mounts and an already-open view focuses immediately — no
-    // mount-timing guess. Also covers the already-open-and-active case, where
-    // revealLeaf fires no active-leaf-change to drive focus.
     const view = leaf?.view;
     if (this.isCopilotAgentView(view)) {
       view.eventTarget.queueVisible();
@@ -1135,12 +938,6 @@ export default class CopilotPlugin extends Plugin {
     return leaf;
   }
 
-  /**
-   * Open or reveal Agent Chat with a note attached to its active draft.
-   * @param note - Note to send with the user's next Agent Chat message.
-   * @param openInRightSidebar - Place a newly opened pane in the right sidebar
-   *   instead of the user's default open area.
-   */
   async addNoteToAgentChat(note: TFile, openInRightSidebar = false): Promise<void> {
     try {
       const leaf = await this.activateAgentView(openInRightSidebar);
@@ -1160,15 +957,8 @@ export default class CopilotPlugin extends Plugin {
     return this.openOrRevealView(RELEVANT_NOTES_VIEWTYPE);
   }
 
-  /**
-   * Add a note to the chat view the user last focused (see `pickContextChatViewType`),
-   * opening that view if none is open.
-   * @param note - Note the Relevant Notes pane offers as chat context.
-   */
   async addNoteToActiveChat(note: TFile): Promise<void> {
-    // Agent Chat attaches the note itself so the agent reads it as context,
-    // while Quick Chat keeps the [[wikilink]] its composer already resolves
-    // (https://github.com/Brevilabs/obsidian-copilot-private/issues/579).
+    // Agent Chat attaches the note as context; Quick Chat keeps the [[wikilink]] (https://github.com/Brevilabs/obsidian-copilot-private/issues/579).
     if (this.pickContextChatViewType() === CHAT_AGENT_VIEWTYPE) {
       await this.addNoteToAgentChat(note);
       return;
@@ -1181,8 +971,6 @@ export default class CopilotPlugin extends Plugin {
     if (!leaf) return;
 
     this.app.workspace.revealLeaf(leaf);
-    // The bus latches the text if the view's React tree hasn't mounted its
-    // listener yet, so a freshly-opened view drains it on mount.
     if (leaf.view instanceof CopilotView) {
       leaf.view.eventTarget.queueInsertText(`[[${note.basename}]]`);
     }
@@ -1200,14 +988,10 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  /** Open a fresh global Agent chat with reviewable text left unsent in its composer. */
   async newAgentChatWithDraft(initialDraft: string): Promise<void> {
     const manager = this.requireAgentView();
     if (!manager) return;
     try {
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
-      // Create the drafted session before mounting the Agent view. A first-time
-      // mount otherwise auto-creates an empty session before this one exists.
       await manager.createGlobalSessionWithDraft(initialDraft);
       await this.activateAgentView();
     } catch (error) {
@@ -1267,7 +1051,8 @@ export default class CopilotPlugin extends Plugin {
     // already in dehydrated, on-disk shape, so it must bypass the
     // `dehydrateDeviceProfile` override below via `super.saveData` — routing it
     // through `this.saveData` would read the absent flat fields as "cleared"
-    // and delete this device's `deviceProfiles` segment (GitHub #2539).
+    // and delete this device's `deviceProfiles` segment
+    // (https://github.com/logancyang/obsidian-copilot/issues/2539).
     const settings = await loadSettingsWithKeychain(
       this.app,
       rawData,
@@ -1280,23 +1065,12 @@ export default class CopilotPlugin extends Plugin {
         }),
       (item) => this.startupMigrationItems.push(item)
     );
-    // Mirror this device's `agentMode.deviceProfiles` segment into the flat
-    // agent fields the rest of the code reads (GitHub #2539). `saveData` below
-    // performs the inverse on the way out.
     setSettings(hydrateDeviceProfile(settings, getDeviceId(this.app)));
   }
 
-  /**
-   * Move device-specific agent fields into `agentMode.deviceProfiles[deviceId]`
-   * and strip the global flat copies before writing, so a synced `data.json`
-   * never carries one device's binary paths as a global value (GitHub #2539).
-   *
-   * Overriding here is the single choke point for every persisted write of the
-   * hydrated in-memory settings — the settings subscriber and the keychain
-   * transactions all route through `this.saveData`. The one deliberate
-   * exception is the load-time keychain bootstrap, which persists a raw on-disk
-   * snapshot via `super.saveData` (see `loadSettings`) so it isn't dehydrated.
-   */
+  // Single choke point for persisted writes; the load-time keychain bootstrap bypasses it via
+  // `super.saveData` (see `loadSettings`).
+  // https://github.com/logancyang/obsidian-copilot/issues/2539
   async saveData(data: unknown): Promise<void> {
     return super.saveData(dehydrateDeviceProfile(data as CopilotSettings, getDeviceId(this.app)));
   }
@@ -1307,14 +1081,10 @@ export default class CopilotPlugin extends Plugin {
   ): CustomModel[] {
     const modelMap = new Map<string, CustomModel>();
 
-    // Create a unique key for each model, it's model (name + provider)
-
-    // Add or update existing models in the map
     existingActiveModels.forEach((model) => {
       const key = getModelKeyFromModel(model);
       const existingModel = modelMap.get(key);
       if (existingModel) {
-        // If it's a built-in model, preserve the built-in status
         modelMap.set(key, {
           ...model,
           isBuiltIn: existingModel.isBuiltIn || model.isBuiltIn,
@@ -1345,8 +1115,6 @@ export default class CopilotPlugin extends Plugin {
     const folderFiles = await listMarkdownFiles(this.app, getEffectiveConversationsFolder());
     if (folderFiles.length === 0) return [];
 
-    // Reason: pass all files to filterChatHistoryFiles which checks frontmatter projectId.
-    // A prefix prefilter would miss renamed or legacy files that still have correct frontmatter.
     return filterChatHistoryFiles(this.app, folderFiles);
   }
 
@@ -1357,18 +1125,10 @@ export default class CopilotPlugin extends Plugin {
     );
   }
 
-  /**
-   * Record that a chat history file was accessed by updating its `lastAccessedAt`
-   * YAML frontmatter field (epoch ms), with in-memory tracking and throttled persistence.
-   *
-   * Memory is always updated immediately (for UI sorting), but disk writes are throttled and monotonic.
-   */
   private async touchChatHistoryLastAccessedAt(file: TFile): Promise<void> {
     try {
-      // Always update memory for immediate UI feedback
       this.chatHistoryLastAccessedAtManager.touch(file.path);
 
-      // Check if we should persist to disk (throttled)
       const persistedLastAccessedAtMs = extractChatLastAccessedAtMs(this.app, file);
       const timestampToPersist = this.chatHistoryLastAccessedAtManager.shouldPersist(
         file.path,
@@ -1388,7 +1148,6 @@ export default class CopilotPlugin extends Plugin {
         await this.app.fileManager.processFrontMatter(
           file,
           (frontmatter: Record<string, unknown>) => {
-            // Monotonic protection: ensure we never write an older timestamp
             const existingValue = Number(frontmatter.lastAccessedAt);
             const existingAtMs =
               Number.isFinite(existingValue) && existingValue > 0 ? existingValue : 0;
@@ -1406,39 +1165,28 @@ export default class CopilotPlugin extends Plugin {
         await patchFrontmatter(this.app, file.path, { lastAccessedAt: persistedAtMs });
       }
 
-      // Mark persistence successful for throttling purposes
       this.chatHistoryLastAccessedAtManager.markPersisted(file.path, persistedAtMs);
     } catch (error) {
       logWarn(`[CopilotPlugin] Failed to update chat lastAccessedAt for ${file.path}`, error);
     }
   }
 
-  /**
-   * Get the chat history last accessed at manager for use in sorting.
-   * This allows UI components to use in-memory values for immediate feedback.
-   */
   getChatHistoryLastAccessedAtManager(): RecentUsageManager<string> {
     return this.chatHistoryLastAccessedAtManager;
   }
 
   async loadChatHistory(file: TFile) {
-    // First autosave the current chat if the setting is enabled
     await this.autosaveCurrentChat();
 
-    // Check if the Copilot view is already active
     const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
     if (!existingView) {
-      // Only activate the view if it's not already open
       await this.activateView();
     }
 
-    // Load messages using ChatUIState (which now uses ChatPersistenceManager internally)
     await this.chatUIState.loadChatHistory(file);
 
-    // Touch "lastAccessedAt" timestamp (throttled to avoid frequent writes)
     void this.touchChatHistoryLastAccessedAt(file);
 
-    // Update the view
     const copilotView = (existingView || this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0])
       ?.view as CopilotView;
     if (copilotView) {
@@ -1454,11 +1202,6 @@ export default class CopilotPlugin extends Plugin {
     const file = await resolveFileByPath(this.app, fileId);
     if (!file) throw new Error("Chat file not found.");
 
-    // Hidden-folder notes (e.g. a dot-folder save location) aren't indexed by
-    // metadataCache, so fall back to an adapter read before deciding this
-    // isn't an agent chat — otherwise a hidden agent note that Recent Chats
-    // surfaces would misroute to the legacy chat loader instead of resuming
-    // the agent session.
     const cachedMode = this.app.metadataCache.getFileCache(file)?.frontmatter?.mode;
     let mode = typeof cachedMode === "string" ? cachedMode : undefined;
     if (!mode) {
@@ -1476,7 +1219,6 @@ export default class CopilotPlugin extends Plugin {
     await this.loadChatHistory(file);
   }
 
-  /** Copy a portable link to a saved note or a native agent session. */
   async copyChatLink(chatId: string): Promise<void> {
     try {
       const id = isNativeChatId(chatId) ? chatId : await getSavedChatDeepLinkId(this.app, chatId);
@@ -1492,11 +1234,9 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  /** Route a `copilot-chat` URI through the existing history loaders. */
   async openChatDeepLink(params: Record<string, string>): Promise<void> {
     const id = params.id ?? "";
     try {
-      // Only epoch ids resolve to a file path, so a URI can never name an arbitrary path.
       const chatId = isNativeChatId(id) ? id : (await findChatFileByDeepLinkId(this.app, id))?.path;
       if (!chatId) {
         new Notice("Chat link not found.");
@@ -1509,12 +1249,6 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  /**
-   * Open a chat that lives only in a backend's native session store (recent
-   * chats entry with no markdown note). Resumes through the agent manager;
-   * recency tracking is handled by the session index rather than file
-   * frontmatter.
-   */
   private async loadNativeAgentChat(chatId: string): Promise<void> {
     const ref = parseNativeChatId(chatId);
     if (!ref) throw new Error("Chat not found.");
@@ -1573,8 +1307,6 @@ export default class CopilotPlugin extends Plugin {
         }
       );
 
-      // Wait for metadata cache to update with improved error handling
-      // This ensures that subsequent calls to extractChatTitle will get the updated data
       await new Promise<void>((resolve) => {
         const handler = (updatedFile: TFile) => {
           if (updatedFile.path === fileId) {
@@ -1586,13 +1318,10 @@ export default class CopilotPlugin extends Plugin {
 
         this.app.metadataCache.on("changed", handler);
 
-        // Fallback timeout with shorter duration and better error handling
         const timeoutId = window.setTimeout(() => {
           this.app.metadataCache.off("changed", handler);
-          // Don't reject, just resolve - the frontmatter update might have worked
-          // even if we didn't catch the event
           resolve();
-        }, 500); // Reduced timeout for better performance
+        }, 500);
       });
 
       new Notice("Chat title updated.");
@@ -1621,10 +1350,8 @@ export default class CopilotPlugin extends Plugin {
     clearRecordedPromptPayload();
     await logFileManager.clear();
 
-    // Analyze chat messages for memory if enabled
     if (getSettings().enableRecentConversations) {
       try {
-        // Get the current chat model from the chain manager
         const chainManager = this.chainOwner.getCurrentChainManager();
         const chatModel = chainManager.chatModelManager.getChatModel();
         this.userMemoryManager.addRecentConversation(this.chatUIState.getMessages(), chatModel);
@@ -1633,38 +1360,28 @@ export default class CopilotPlugin extends Plugin {
       }
     }
 
-    // First autosave the current chat if the setting is enabled
     await this.autosaveCurrentChat();
 
-    // Abort any ongoing streams before clearing chat
     const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
     if (existingView) {
       const copilotView = existingView.view as CopilotView;
-      // Dispatch abort event to stop any ongoing streams
       const abortEvent = new CustomEvent(EVENT_NAMES.ABORT_STREAM, {
         detail: { reason: ABORT_REASON.NEW_CHAT },
       });
       copilotView.eventTarget.dispatchEvent(abortEvent);
     }
 
-    // Clear messages through ChatUIState (which also clears chain memory)
     this.chatUIState.clearMessages();
 
-    // Update view if it exists
     if (existingView) {
       const copilotView = existingView.view as CopilotView;
       copilotView.updateView();
     } else {
-      // If view doesn't exist, open it
       await this.activateView();
     }
-
-    // Note: UI-specific state like includeActiveNote setting is handled in the Chat component
-    // This ensures proper separation of concerns between plugin logic and UI state
   }
 
   async newChat() {
-    // Just delegate to the shared method
     await this.handleNewChat();
   }
 }

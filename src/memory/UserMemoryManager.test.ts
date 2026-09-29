@@ -1,4 +1,3 @@
-// Mock dependencies first to avoid circular dependencies
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logError: jest.fn(),
@@ -31,7 +30,6 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { AIMessageChunk } from "@langchain/core/messages";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
-// Typed accessor for private UserMemoryManager methods used in tests.
 type UserMemoryManagerInternal = {
   updateMemory: (messages: ChatMessage[], chatModel?: BaseChatModel) => Promise<void>;
   extractJsonFromResponse: (content: string) => string;
@@ -40,7 +38,6 @@ type UserMemoryManagerInternal = {
 const asInternal = (m: UserMemoryManager): UserMemoryManagerInternal =>
   m as unknown as UserMemoryManagerInternal;
 
-// Helper to create TFile mock instances
 const createMockTFile = (path: string): TFile => {
   const name = path.split("/").pop() || "";
   return mockTFile({
@@ -61,7 +58,6 @@ describe("UserMemoryManager", () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Mock settings
     mockSettings = {
       enableRecentConversations: true,
       enableSavedMemory: true,
@@ -70,7 +66,6 @@ describe("UserMemoryManager", () => {
     };
     (getSettings as jest.Mock).mockReturnValue(mockSettings);
 
-    // Mock vault
     mockVault = {
       getAbstractFileByPath: jest.fn(),
       read: jest.fn(),
@@ -79,21 +74,16 @@ describe("UserMemoryManager", () => {
       createFolder: jest.fn(),
     } as unknown as jest.Mocked<Vault>;
 
-    // Mock app
     mockApp = {
       vault: mockVault,
     } as unknown as jest.Mocked<App>;
 
-    // Reset ensureFolderExists mock
     (ensureFolderExists as jest.Mock).mockClear();
 
-    // Mock chat model
     mockChatModel = {
       invoke: jest.fn(),
     } as unknown as jest.Mocked<BaseChatModel>;
 
-    // Reset explicitly: `clearAllMocks` drops calls but keeps a mockReturnValue,
-    // and a test that moves the root mid-operation would otherwise leak it.
     mockedMemoryFolder.mockReturnValue("copilot/memory");
     userMemoryManager = new UserMemoryManager(mockApp);
   });
@@ -131,7 +121,6 @@ describe("UserMemoryManager", () => {
     });
 
     it("should complete end-to-end memory update with new simple format", async () => {
-      // Setup: Create test messages simulating a real conversation
       const messages = [
         createMockMessage(
           "1",
@@ -149,7 +138,6 @@ describe("UserMemoryManager", () => {
         createMockMessage("4", "Certainly! You can add automatic tags to your template...", "ai"),
       ];
 
-      // Mock existing memory file with previous conversations
       const existingMemoryContent = `## Previous Conversation
 **Time:** 2024-01-01 09:00
 **Summary:** User asked about plugin installation and learned that plugins enhance Obsidian functionality.
@@ -161,16 +149,12 @@ describe("UserMemoryManager", () => {
 
       const mockMemoryFile = createMockTFile("copilot/memory/Recent Conversations.md");
 
-      // Mock ensureFolderExists to resolve successfully
       (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
 
-      // Mock app instance for file operations
       mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
 
-      // Mock reading existing file content
       mockVault.read.mockResolvedValue(existingMemoryContent);
 
-      // Mock LLM response for title and summary
       const mockResponse = new AIMessageChunk({
         content: JSON.stringify({
           title: "Daily Note Template Setup",
@@ -180,28 +164,22 @@ describe("UserMemoryManager", () => {
       });
       mockChatModel.invoke.mockResolvedValueOnce(mockResponse);
 
-      // Execute the updateMemory function directly to ensure proper awaiting
       await asInternal(userMemoryManager).updateMemory(messages, mockChatModel);
 
-      // Verify the end result: file was modified with new conversation
       const modifyCall = mockVault.modify.mock.calls[0];
       const actualContent = modifyCall[1];
 
-      // Check that the new format is used
       expect(actualContent).toContain("## Daily Note Template Setup");
       expect(actualContent).toMatch(/\*\*Time:\*\* \d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
       expect(actualContent).toContain(
         "**Summary:** User asked about creating daily note templates"
       );
 
-      // Verify previous conversations are preserved
       expect(actualContent).toContain("## Previous Conversation");
       expect(actualContent).toContain("## Another Conversation");
 
-      // Verify that the title and summary were extracted via single LLM call
       expect(mockChatModel.invoke).toHaveBeenCalledTimes(1);
 
-      // Verify the LLM call format
       expect(mockChatModel.invoke).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({
@@ -219,13 +197,11 @@ describe("UserMemoryManager", () => {
       mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
       mockVault.read.mockResolvedValue("");
 
-      // Mock LLM response with invalid JSON
       const mockResponse = new AIMessageChunk({ content: "Invalid JSON response" });
       mockChatModel.invoke.mockResolvedValueOnce(mockResponse);
 
       await asInternal(userMemoryManager).updateMemory(messages, mockChatModel);
 
-      // Should still create a conversation entry with fallback values
       const modifyCall = mockVault.modify.mock.calls[0];
       const actualContent = modifyCall[1];
 
@@ -240,11 +216,6 @@ describe("UserMemoryManager", () => {
 
   describe("updateMemory", () => {
     it("writes the summary to the root that is current when the model returns", async () => {
-      // The memory folder derives from the Copilot root, and the model call is an
-      // unbounded network await. A root change during it must not leave the
-      // operation ensuring one directory and writing into another — the summary
-      // does not depend on the old location, so the current root is correct and
-      // the folder it ensures must be the one it writes.
       mockedMemoryFolder.mockReturnValue("copilot/memory");
       const model = {
         invoke: jest.fn(async () => {
@@ -271,9 +242,6 @@ describe("UserMemoryManager", () => {
 
   describe("updateSavedMemory", () => {
     it("reports the path it wrote, not one re-resolved after the root moved", async () => {
-      // The write intentionally stays in the folder captured before the model
-      // call, so a caller re-resolving afterwards would name a file this save
-      // never touched — and the memory would look missing.
       mockedMemoryFolder.mockReturnValue("copilot/memory");
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(null);
       const model = {
@@ -557,17 +525,13 @@ The conversation covered advanced features and included code examples.`,
     it("should save memory content to Saved Memories file", async () => {
       mockSettings.enableSavedMemory = true;
 
-      // Mock ensureFolderExists to resolve successfully
       (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
 
-      // Mock no existing file (new file creation)
       mockVault.getAbstractFileByPath.mockReturnValue(null);
 
-      // Mock file creation
       const mockNewFile = createMockTFile("copilot/memory/Saved Memories.md");
       mockVault.create.mockResolvedValue(mockNewFile);
 
-      // Mock LLM merge result content
       const llmMergedContent = `- The user prefers concise responses`;
       (mockChatModel.invoke as jest.Mock).mockResolvedValue(
         new AIMessageChunk({ content: llmMergedContent })
@@ -578,10 +542,8 @@ The conversation covered advanced features and included code examples.`,
         mockChatModel
       );
 
-      // Verify folder creation was called
       expect(ensureFolderExists).toHaveBeenCalledWith(mockVault, "copilot/memory");
 
-      // Verify file creation was called with proper content
       expect(mockVault.create).toHaveBeenCalledWith(
         "copilot/memory/Saved Memories.md",
         expect.stringContaining("- The user prefers concise responses")
@@ -605,14 +567,11 @@ The conversation covered advanced features and included code examples.`,
 
       const mockMemoryFile = createMockTFile("copilot/memory/Saved Memories.md");
 
-      // Mock ensureFolderExists to resolve successfully
       (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
 
-      // Mock existing file
       mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
       mockVault.read.mockResolvedValue(existingContent);
 
-      // Mock LLM to return merged full list
       const mergedContent = `- Previous memory content\n- Another important fact\n- New important information`;
       (mockChatModel.invoke as jest.Mock).mockResolvedValue(
         new AIMessageChunk({ content: mergedContent })
@@ -623,7 +582,6 @@ The conversation covered advanced features and included code examples.`,
         mockChatModel
       );
 
-      // Verify file modification was called with appended content
       expect(mockVault.modify).toHaveBeenCalledWith(
         mockMemoryFile,
         expect.stringContaining("- Previous memory content")
@@ -645,7 +603,6 @@ The conversation covered advanced features and included code examples.`,
     it("should handle errors during save operation", async () => {
       mockSettings.enableSavedMemory = true;
 
-      // Mock ensureFolderExists to reject
       (ensureFolderExists as jest.Mock).mockRejectedValue(new Error("Folder creation failed"));
 
       const result = await userMemoryManager.updateSavedMemory("Test content", mockChatModel);

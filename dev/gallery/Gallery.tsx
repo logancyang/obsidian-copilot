@@ -40,7 +40,6 @@ export interface StoryDefinition {
   host: Host;
   id: string;
   layout: Layout;
-  /** Extra class for the `modal` host's frame; see `GalleryParameters`. */
   modalClass?: string;
   name: string;
   render(): React.ReactNode;
@@ -300,9 +299,6 @@ class GalleryStoryModal extends ReactModal {
   }
 
   private getContentWidth(): string {
-    // Fullscreen modal stories model content whose production frame owns its
-    // width. Constraining that child creates a false gutter in the preview.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/317
     return this.story.layout === "fullscreen" ? "100%" : `${this.width}px`;
   }
 
@@ -694,12 +690,6 @@ function StoryTree({
   );
 }
 
-/**
- * Converts dynamically imported story modules into the stable catalog consumed by the gallery.
- *
- * @param storyModules - Loaded CSF modules paired with generator-derived component identities.
- * @param presentationalComponentCount - Number of presentational components found by the indexer.
- */
 export function createGalleryCatalog(
   storyModules: LoadedStoryModule[],
   presentationalComponentCount: number
@@ -759,12 +749,6 @@ export function createGalleryCatalog(
   };
 }
 
-/**
- * Restores only valid gallery state and falls back to the first available story when needed.
- *
- * @param value - ItemView state supplied by Obsidian or the current controlled gallery state.
- * @param stories - Available stories used to validate persisted identities.
- */
 export function resolveGalleryViewState(
   value: unknown,
   stories: StoryDefinition[]
@@ -792,11 +776,6 @@ export function resolveGalleryViewState(
   };
 }
 
-/**
- * Renders the gallery navigation and canvas while the ItemView remains the persistence owner.
- *
- * @param props - Catalog, persisted state, and the callback used to save user navigation changes.
- */
 export function Gallery({
   catalog,
   onHostChange,

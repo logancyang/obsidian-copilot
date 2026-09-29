@@ -9,7 +9,6 @@ import {
 describe("System Prompts State Management", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Reset state by clearing prompts
     updateCachedSystemPrompts([]);
     setSelectedPromptTitle("");
     setDisableBuiltinSystemPrompt(false);

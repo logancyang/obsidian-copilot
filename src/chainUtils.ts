@@ -27,12 +27,9 @@ export async function getStandaloneQuestion(
     .map(({ role, content }) => `${role}: ${content}`)
     .join("\n");
 
-  // Wrap the model call with token warning suppression
   return await withSuppressedTokenWarnings(async () => {
     const chatModel = ChainOwner.instance.getCurrentChainManager().chatModelManager.getChatModel();
 
-    // Use stream() instead of invoke() to avoid LangChain's _generate() path,
-    // which triggers tiktoken CDN fetch via _getEstimatedTokenCountFromPrompt.
     let text = "";
     const stream = await chatModel.stream([
       {
