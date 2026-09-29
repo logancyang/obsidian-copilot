@@ -22,6 +22,7 @@ function fakeHost() {
 const HELLO: ClientFrame = { type: "hello", v: 1, app: "x" };
 const PAYLOAD: ServerFrame = {
   type: "ops",
+  epoch: "e1",
   scope: "host",
   from: 1,
   ops: [{ t: "tab.patch", id: "s", patch: { label: null } }],

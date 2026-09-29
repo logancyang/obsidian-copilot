@@ -10,3 +10,4 @@ export * from "@/agentMode/protocol/selectors";
 export * from "@/agentMode/protocol/SessionClient";
 export * from "@/agentMode/protocol/state";
 export * from "@/agentMode/protocol/transport";
+export * from "@/agentMode/protocol/frameCodec";

@@ -349,10 +349,10 @@ describe("commandHandlers", () => {
 
     it("createSession forwards an explicit project scope", async () => {
       const t = setup();
-      await t.run({ name: "createSession", projectId: "proj-1" });
+      await t.run({ name: "createSession", projectId: "known-project" });
       expect(t.manager.calls.at(-1)).toEqual({
         method: "createSession",
-        args: [undefined, "proj-1", undefined],
+        args: [undefined, "known-project", undefined],
       });
     });
 
@@ -364,6 +364,10 @@ describe("commandHandlers", () => {
         { name: "createSession", seedSelection: { baseModelId: "m", effort: 3 } },
       ],
       ["a non-string project scope", { name: "createSession", projectId: 7 }],
+      [
+        "a project id the desktop does not know https://github.com/Brevilabs/obsidian-copilot-private/issues/613",
+        { name: "createSession", projectId: "deleted-project" },
+      ],
     ])("createSession answers invalid for %s and creates nothing", async (_label, command) => {
       const t = setup();
       const { result } = await t.run(command as unknown as Command);
@@ -594,7 +598,12 @@ describe("commandHandlers", () => {
     it("answers invalid for an unknown command name", async () => {
       const t = setup();
       const result = await runCommand(
-        { manager: t.manager, resolveNote: () => null, isKnownBackend: () => true },
+        {
+          manager: t.manager,
+          resolveNote: () => null,
+          isKnownBackend: () => true,
+          isKnownProject: () => true,
+        },
         { name: "explode" } as unknown as Command
       );
       expect(result).toMatchObject({ ok: false, code: "invalid" });

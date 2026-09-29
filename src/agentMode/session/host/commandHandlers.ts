@@ -44,6 +44,7 @@ export interface CommandContext {
   manager: SessionHostManager;
   resolveNote(path: string): TFile | null;
   isKnownBackend(backendId: string): boolean;
+  isKnownProject(projectId: string): boolean;
 }
 
 type Failure = Extract<CommandResult, { ok: false }>;
@@ -237,6 +238,12 @@ async function createSessionCommand(
   if (invalid) return invalid;
   if (command.projectId !== undefined && typeof command.projectId !== "string") {
     return failure("invalid", "A project scope must be a string");
+  }
+  // A phone names the project scope it is showing by id; an id the desktop does not know would
+  // start a session in a scope nothing else can display.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+  if (command.projectId !== undefined && !ctx.isKnownProject(command.projectId)) {
+    return failure("invalid", `Unknown project ${command.projectId}`);
   }
   const session = await ctx.manager.createSession(
     command.backendId,

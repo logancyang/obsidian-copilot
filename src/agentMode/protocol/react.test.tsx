@@ -24,13 +24,15 @@ describe("react", () => {
       const { transport, client } = liveClient();
       const { result } = renderHook(() => useHostSelector(client, (h) => h.tabs.length));
       expect(result.current).toBeNull();
-      act(() => transport.deliver({ type: "snapshot", scope: "host", seq: 0, state: HOST }));
+      act(() =>
+        transport.deliver({ type: "snapshot", epoch: "e1", scope: "host", seq: 0, state: HOST })
+      );
       expect(result.current).toBe(2);
     });
 
     it("does not re-render when an op leaves the selected value unchanged", () => {
       const { transport, client } = liveClient();
-      transport.deliver({ type: "snapshot", scope: "host", seq: 0, state: HOST });
+      transport.deliver({ type: "snapshot", epoch: "e1", scope: "host", seq: 0, state: HOST });
       let renders = 0;
       const select = (h: HostState) => h.tabs.length;
       renderHook(() => {
@@ -41,6 +43,7 @@ describe("react", () => {
       act(() =>
         transport.deliver({
           type: "ops",
+          epoch: "e1",
           scope: "host",
           from: 1,
           ops: [{ t: "tab.patch", id: "s1", patch: { status: "running" } }],
@@ -51,7 +54,7 @@ describe("react", () => {
 
     it("keeps the previous value when a custom equality says the new selection is equivalent", () => {
       const { transport, client } = liveClient();
-      transport.deliver({ type: "snapshot", scope: "host", seq: 0, state: HOST });
+      transport.deliver({ type: "snapshot", epoch: "e1", scope: "host", seq: 0, state: HOST });
       const select = (h: HostState) => h.tabs.map((t) => t.id);
       const eq = (a: string[], b: string[]) => a.join() === b.join();
       const { result } = renderHook(() => useHostSelector(client, select, eq));
@@ -59,6 +62,7 @@ describe("react", () => {
       act(() =>
         transport.deliver({
           type: "ops",
+          epoch: "e1",
           scope: "host",
           from: 1,
           ops: [{ t: "tab.patch", id: "s1", patch: { status: "running" } }],
@@ -77,9 +81,10 @@ describe("react", () => {
       expect(result.current).toBeNull();
       act(() => {
         client.watchSession("s1");
-        transport.deliver({ type: "snapshot", scope: "host", seq: 0, state: HOST });
+        transport.deliver({ type: "snapshot", epoch: "e1", scope: "host", seq: 0, state: HOST });
         transport.deliver({
           type: "snapshot",
+          epoch: "e1",
           scope: "session:s1",
           seq: 0,
           state: INITIAL_SESSION_STATE,
@@ -89,6 +94,7 @@ describe("react", () => {
       act(() =>
         transport.deliver({
           type: "ops",
+          epoch: "e1",
           scope: "host",
           from: 1,
           ops: [{ t: "tab.patch", id: "s1", patch: { status: "running" } }],
@@ -99,7 +105,7 @@ describe("react", () => {
 
     it("returns null while no session id is given", () => {
       const { transport, client } = liveClient();
-      transport.deliver({ type: "snapshot", scope: "host", seq: 0, state: HOST });
+      transport.deliver({ type: "snapshot", epoch: "e1", scope: "host", seq: 0, state: HOST });
       const { result } = renderHook(() => useSessionSelector(client, null, () => 1));
       expect(result.current).toBeNull();
     });
@@ -116,7 +122,7 @@ describe("react", () => {
 
     it("selects the tabs in the view's scope and the tab the view shows", () => {
       const { transport, client } = liveClient();
-      transport.deliver({ type: "snapshot", scope: "host", seq: 0, state: scoped });
+      transport.deliver({ type: "snapshot", epoch: "e1", scope: "host", seq: 0, state: scoped });
       const view = new ClientView("__global__");
       view.activate({ id: "g2", projectId: "__global__" });
       const { result } = renderHook(() => useClientView(client, view));
@@ -136,7 +142,7 @@ describe("react", () => {
 
     it("re-renders when the view moves to another tab or scope", () => {
       const { transport, client } = liveClient();
-      transport.deliver({ type: "snapshot", scope: "host", seq: 0, state: scoped });
+      transport.deliver({ type: "snapshot", epoch: "e1", scope: "host", seq: 0, state: scoped });
       const view = new ClientView("__global__");
       view.activate({ id: "g1", projectId: "__global__" });
       const { result } = renderHook(() => useClientView(client, view));
@@ -148,7 +154,7 @@ describe("react", () => {
 
     it("keeps the same scope tab list when a patch changes no tab in the scope", () => {
       const { transport, client } = liveClient();
-      transport.deliver({ type: "snapshot", scope: "host", seq: 0, state: scoped });
+      transport.deliver({ type: "snapshot", epoch: "e1", scope: "host", seq: 0, state: scoped });
       const view = new ClientView("__global__");
       view.activate({ id: "g1", projectId: "__global__" });
       const { result } = renderHook(() => useClientView(client, view));
@@ -156,6 +162,7 @@ describe("react", () => {
       act(() =>
         transport.deliver({
           type: "ops",
+          epoch: "e1",
           scope: "host",
           from: 1,
           ops: [{ t: "tab.patch", id: "p1", patch: { status: "running" } }],
@@ -166,7 +173,7 @@ describe("react", () => {
 
     it("re-renders when another client's tab arrives in the scope, without moving the shown tab https://github.com/Brevilabs/obsidian-copilot-private/issues/612", () => {
       const { transport, client } = liveClient();
-      transport.deliver({ type: "snapshot", scope: "host", seq: 0, state: scoped });
+      transport.deliver({ type: "snapshot", epoch: "e1", scope: "host", seq: 0, state: scoped });
       const view = new ClientView("__global__");
       view.attach(client);
       view.activate({ id: "g1", projectId: "__global__" });
@@ -174,6 +181,7 @@ describe("react", () => {
       act(() =>
         transport.deliver({
           type: "ops",
+          epoch: "e1",
           scope: "host",
           from: 1,
           ops: [{ t: "tab.add", index: 0, tab: buildTab({ id: "phone" }) }],

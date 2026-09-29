@@ -17,6 +17,7 @@ function liveClient() {
   transport.deliver({ type: "hello", v: PROTOCOL_VERSION, app: "h", hostId: "h1", ok: true });
   transport.deliver({
     type: "snapshot",
+    epoch: "e1",
     scope: "host",
     seq: 0,
     state: buildHostState({ tabs: [buildTab({ id: "s1", status: "running" })] }),
@@ -56,7 +57,13 @@ describe("useChatRuntime", () => {
       const { result } = renderHook(() => useChatRuntime(client, "s1"));
 
       act(() =>
-        transport.deliver({ type: "snapshot", scope: "session:s1", seq: 0, state: SESSION })
+        transport.deliver({
+          type: "snapshot",
+          epoch: "e1",
+          scope: "session:s1",
+          seq: 0,
+          state: SESSION,
+        })
       );
 
       expect(result.current?.messages.map((message) => message.id)).toEqual(["shown"]);
@@ -68,13 +75,20 @@ describe("useChatRuntime", () => {
       const { transport, client } = liveClient();
       const { result } = renderHook(() => useChatRuntime(client, "s1"));
       act(() =>
-        transport.deliver({ type: "snapshot", scope: "session:s1", seq: 0, state: SESSION })
+        transport.deliver({
+          type: "snapshot",
+          epoch: "e1",
+          scope: "session:s1",
+          seq: 0,
+          state: SESSION,
+        })
       );
       const before = result.current;
 
       act(() =>
         transport.deliver({
           type: "ops",
+          epoch: "e1",
           scope: "session:s1",
           from: 1,
           ops: [{ t: "slice", key: "usage", value: { usedTokens: 5, updatedAt: 1 } }],

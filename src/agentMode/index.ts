@@ -24,6 +24,7 @@ import { SessionHost } from "./session/host/SessionHost";
 import { ClientView } from "./protocol/ClientView";
 import type { SessionClient } from "./protocol/SessionClient";
 import { GLOBAL_SCOPE } from "./session/scope";
+import { getCachedProjectRecordById } from "@/projects/state";
 import { watchAttachedTabs } from "./ui/watchAttachedTabs";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
 import { SkillManager } from "./skills";
@@ -56,6 +57,7 @@ export { useAgentModePicker } from "./ui/useAgentModePicker";
 export type { AgentModePickerOverride } from "./ui/useAgentModePicker";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
 export type { SessionHost } from "./session/host/SessionHost";
+export { serveRemoteConnection } from "./session/host/serveRemoteConnection";
 export type { SessionClient } from "./protocol/SessionClient";
 export type { ClientView } from "./protocol/ClientView";
 export type {
@@ -426,6 +428,8 @@ export function createAgentSessionHost(
     }),
     resolveNote: (path) => resolveVaultNote(app, path),
     isKnownBackend: isRegisteredBackend,
+    isKnownProject: (projectId) =>
+      projectId === GLOBAL_SCOPE || getCachedProjectRecordById(projectId) !== undefined,
     appVersion: plugin.manifest.version,
   });
   manager.setFocusProbe((id) => host.isSessionFocused(id));
