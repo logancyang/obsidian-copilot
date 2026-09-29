@@ -198,6 +198,7 @@ export const InterruptedTurn: StoryObj<AgentChatMessagesProps> = {
     ],
     isLoading: false,
     hasInterruptedTurn: true,
+    canResumeInterruptedTurn: true,
   },
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };

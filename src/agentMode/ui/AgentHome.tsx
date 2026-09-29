@@ -104,6 +104,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     pendingToolPermissions,
     pendingAskUserQuestions,
     hasInterruptedTurn,
+    canResumeInterruptedTurn,
   } = useAgentChatRuntimeState(backend);
   const isLoading = draft.loading || isTurnInFlight;
 
@@ -702,6 +703,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       chatBackend={backend}
                       isLoading={isLoading}
                       hasInterruptedTurn={hasInterruptedTurn}
+                      canResumeInterruptedTurn={canResumeInterruptedTurn}
                     />
                     <AgentChatControls
                       chatLinkId={chatLinkId}

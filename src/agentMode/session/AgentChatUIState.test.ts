@@ -301,6 +301,30 @@ describe("AgentChatUIState", () => {
       expect(chat.getInterruptedTurn()).toBeNull();
     });
 
+    it("offers Resume for a single-agent prompt but not for a fan-out prompt, whose answers came from sub-sessions (https://github.com/Brevilabs/obsidian-copilot-private/issues/607)", () => {
+      expect(interruptedChat({ text: "plain" }).chat.canResumeInterruptedTurn()).toBe(true);
+      expect(
+        interruptedChat({
+          text: "mine",
+          mentionedAgents: ["claude"],
+        }).chat.canResumeInterruptedTurn()
+      ).toBe(true);
+      expect(
+        interruptedChat({
+          text: "compare",
+          mentionedAgents: ["claude", "codex"],
+        }).chat.canResumeInterruptedTurn()
+      ).toBe(false);
+    });
+
+    it("offers no Resume when no turn is marked interrupted", () => {
+      const { chat, session } = interruptedChat();
+
+      session.setInterruptedTurn(null);
+
+      expect(chat.canResumeInterruptedTurn()).toBe(false);
+    });
+
     it("Retry does nothing when no turn is marked interrupted", () => {
       const { chat, promptMock } = interruptedChat();
       chat.retryInterruptedTurn();

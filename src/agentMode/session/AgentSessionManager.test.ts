@@ -1324,6 +1324,51 @@ describe("AgentSessionManager", () => {
 
     describe("scheduleAutoSave()", () => {
       setupSavedNoteTests();
+      it("a turn that finishes on its own while shutdown flushes saves still clears its recorded prompt (https://github.com/Brevilabs/obsidian-copilot-private/issues/607)", async () => {
+        const storage = new Map<string, unknown>();
+        const app = buildApp() as unknown as {
+          loadLocalStorage: jest.Mock;
+          saveLocalStorage: jest.Mock;
+        };
+        app.loadLocalStorage = jest.fn((key: string) => storage.get(key) ?? null);
+        app.saveLocalStorage = jest.fn((key: string, value: unknown) => {
+          if (value === null) storage.delete(key);
+          else storage.set(key, value);
+        });
+        (mockedGetSettings as jest.Mock).mockReturnValue({
+          ...mockedGetSettings(),
+          autosaveChat: true,
+        });
+        let finishSave!: (result: { path: string }) => void;
+        const saveSession = jest.fn(
+          () =>
+            new Promise<{ path: string }>((resolve) => {
+              finishSave = resolve;
+            })
+        );
+        const mgr = buildManager(
+          {},
+          { saveSession } as unknown as ConstructorParameters<
+            typeof AgentSessionManager
+          >[2]["persistenceManager"],
+          app as unknown as App
+        );
+        const session = await mgr.createSession();
+        const journal = sessionCreateSpy.mock.calls[0][0].turnJournal!;
+        const key = buildNativeChatId(session.backendId, session.getBackendSessionId()!);
+        journal.record(key, { text: "about to finish" });
+        getSessionTestHandle(session).setMessages([{ message: "Question" }], true);
+        await jest.advanceTimersByTimeAsync(2000);
+        expect(saveSession).toHaveBeenCalledTimes(1);
+
+        const shuttingDown = mgr.shutdown();
+        journal.clear(key);
+        finishSave({ path: "chats/saved.md" });
+        await shuttingDown;
+
+        expect([...storage.values()].join()).not.toContain("about to finish");
+      });
+
       it("still creates notes automatically with autosave on for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
         (mockedGetSettings as jest.Mock).mockReturnValue({
           ...mockedGetSettings(),
@@ -3351,6 +3396,10 @@ describe("AgentSessionManager chat history aggregation", () => {
       if (content === undefined) throw new Error(`ENOENT: ${p}`);
       return content;
     });
+    const localStorage = new Map<string, unknown>();
+    if (opts?.journal) {
+      localStorage.set("copilot:agent-turn-journal:v1", JSON.stringify(opts.journal));
+    }
     const app = {
       vault: {
         adapter,
@@ -3367,12 +3416,11 @@ describe("AgentSessionManager chat history aggregation", () => {
         on: jest.fn(() => ({}) as never),
         offref: jest.fn(),
       },
-      loadLocalStorage: jest.fn((key: string) =>
-        key === "copilot:agent-turn-journal:v1" && opts?.journal
-          ? JSON.stringify(opts.journal)
-          : null
-      ),
-      saveLocalStorage: jest.fn(),
+      loadLocalStorage: jest.fn((key: string) => localStorage.get(key) ?? null),
+      saveLocalStorage: jest.fn((key: string, value: unknown) => {
+        if (value === null) localStorage.delete(key);
+        else localStorage.set(key, value);
+      }),
     } as unknown as App;
     const plugin = {
       manifest: { version: "1.0.0" },
@@ -3432,7 +3480,7 @@ describe("AgentSessionManager chat history aggregation", () => {
         sessionIndex: index,
       }
     );
-    return { manager, index, persistence, descriptor };
+    return { manager, index, persistence, descriptor, localStorage };
   }
 
   it("merges markdown and native entries, de-duplicated on backend session id", async () => {
@@ -3566,6 +3614,62 @@ describe("AgentSessionManager chat history aggregation", () => {
     await manager.deleteChatHistory("chats/agent__a.md");
     expect(persistence.deleteFile).toHaveBeenCalledWith("chats/agent__a.md");
     expect(await index.isTombstoned("opencode", "s1")).toBe(true);
+  });
+
+  describe("recorded prompts of deleted chats", () => {
+    const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/607";
+    const JOURNAL_KEY = "copilot:agent-turn-journal:v1";
+    const doomed = buildNativeChatId("opencode", "s1");
+    const kept = buildNativeChatId("opencode", "s2");
+
+    function journalKeys(localStorage: Map<string, unknown>): string[] {
+      const raw = localStorage.get(JOURNAL_KEY);
+      return typeof raw === "string" ? Object.keys(JSON.parse(raw)) : [];
+    }
+
+    it(`deleting a native entry forgets its recorded prompt and keeps other chats' prompts (${ISSUE})`, async () => {
+      const { manager, index, localStorage } = buildHistoryHarness({
+        journal: { [doomed]: { text: "cut off" }, [kept]: { text: "also cut off" } },
+      });
+      await index.recordSession({
+        backendId: "opencode",
+        sessionId: "s1",
+        title: "Doomed",
+        createdAtMs: 1_000,
+        lastAccessedAtMs: 2_000,
+      });
+
+      await manager.deleteChatHistory(doomed);
+
+      expect(journalKeys(localStorage)).toEqual([kept]);
+    });
+
+    it(`deleting a markdown chat forgets the recorded prompt of its agent session (${ISSUE})`, async () => {
+      const { manager, localStorage } = buildHistoryHarness({
+        files: {
+          "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", sessionId: "s1" },
+        },
+        journal: { [doomed]: { text: "cut off" } },
+      });
+
+      await manager.deleteChatHistory("chats/agent__a.md");
+
+      expect(journalKeys(localStorage)).toEqual([]);
+    });
+
+    it(`hiding a chat whose agent session is gone from this device forgets its recorded prompt (${ISSUE})`, async () => {
+      const { manager, localStorage } = buildHistoryHarness({
+        files: {
+          "chats/agent__gone.md": { epoch: 1_000, backendId: "opencode", sessionId: "s1" },
+        },
+        warmSessionExistsLocally: jest.fn(async () => false),
+        journal: { [doomed]: { text: "cut off" } },
+      });
+
+      await manager.getChatHistoryItems();
+
+      expect(journalKeys(localStorage)).toEqual([]);
+    });
   });
 
   it("renaming a native entry updates the index title", async () => {

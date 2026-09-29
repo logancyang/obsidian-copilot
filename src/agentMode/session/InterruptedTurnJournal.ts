@@ -67,8 +67,11 @@ export class InterruptedTurnJournal implements TurnJournalSink {
     journal[chatKey] = toStoredPrompt(prompt, true);
     if (this.writeAll(journal)) return;
     // Images can push a prompt past the browser storage quota. Keeping the text and context
-    // still lets Retry re-send the request. https://github.com/Brevilabs/obsidian-copilot-private/issues/607
-    journal[chatKey] = toStoredPrompt(prompt, false);
+    // still lets Retry re-send the request; a prompt that was only images has nothing left to
+    // re-send, so it is not recorded. https://github.com/Brevilabs/obsidian-copilot-private/issues/607
+    const withoutImages = toStoredPrompt(prompt, false);
+    if (!withoutImages.text.trim() && !withoutImages.promptContent?.length) return;
+    journal[chatKey] = withoutImages;
     this.writeAll(journal);
   }
 

@@ -625,8 +625,7 @@ export class AgentSessionManager {
     const native = parseNativeChatId(fileId);
     if (native) {
       if (!index) throw new Error("Agent session index is not configured.");
-      this.cancelPendingIndexTouch(native.backendId, native.sessionId);
-      await index.deleteSession(native.backendId, native.sessionId);
+      await this.removeIndexedSession(index, native.backendId, native.sessionId);
       return;
     }
     const persistence = this.opts.persistenceManager;
@@ -634,11 +633,25 @@ export class AgentSessionManager {
     if (index) {
       const ref = await this.readSessionRefFromFile(fileId);
       if (ref) {
-        this.cancelPendingIndexTouch(ref.backendId, ref.sessionId);
-        await index.deleteSession(ref.backendId, ref.sessionId);
+        await this.removeIndexedSession(index, ref.backendId, ref.sessionId);
       }
     }
     await persistence.deleteFile(fileId);
+  }
+
+  /**
+   * Drops a chat's index entry together with its recorded prompt, so a chat that can no longer be
+   * reopened does not leave its prompt and images in local storage.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/607
+   */
+  private async removeIndexedSession(
+    index: AgentSessionIndex,
+    backendId: BackendId,
+    sessionId: string
+  ): Promise<void> {
+    this.cancelPendingIndexTouch(backendId, sessionId);
+    this.turnJournal.clear(buildNativeChatId(backendId, sessionId));
+    await index.deleteSession(backendId, sessionId);
   }
 
   private cancelPendingIndexTouch(backendId: BackendId, sessionId: string): void {
@@ -735,8 +748,7 @@ export class AgentSessionManager {
       await Promise.all(
         entries.map(async (entry, i) => {
           if (keep[i] || !entry.backendId || !entry.sessionId) return;
-          this.cancelPendingIndexTouch(entry.backendId, entry.sessionId);
-          await index.deleteSession(entry.backendId, entry.sessionId);
+          await this.removeIndexedSession(index, entry.backendId, entry.sessionId);
         })
       );
     }
@@ -1914,7 +1926,6 @@ export class AgentSessionManager {
   async shutdown(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
-    this.turnJournal.seal();
     this.settingsUnsub();
     this.projectRecordsUnsubscriber?.();
     this.projectRecordsUnsubscriber = undefined;
@@ -1931,6 +1942,7 @@ export class AgentSessionManager {
       this.detachAutoSave(id);
     }
 
+    this.turnJournal.seal();
     await Promise.allSettled(
       allSessions.map(async (session) => {
         try {

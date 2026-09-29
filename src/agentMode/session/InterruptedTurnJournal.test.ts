@@ -86,6 +86,18 @@ describe("InterruptedTurnJournal", () => {
       });
     });
 
+    it(`records nothing for an image-only prompt whose images the storage quota rejects, so Retry never sends an empty request (${ISSUE})`, () => {
+      const { app, mocks } = makeApp();
+      mocks.saveLocalStorage.mockImplementationOnce(() => {
+        throw new Error("QuotaExceededError");
+      });
+      const journal = new InterruptedTurnJournal(app);
+
+      journal.record(KEY, { text: "", promptContent: [IMAGE] });
+
+      expect(journal.read(KEY)).toBeNull();
+    });
+
     it("never throws when storage is unavailable, so sending a prompt cannot fail on it", () => {
       const { app, mocks } = makeApp();
       mocks.saveLocalStorage.mockImplementation(() => {

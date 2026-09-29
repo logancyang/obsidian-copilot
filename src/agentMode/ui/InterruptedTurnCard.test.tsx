@@ -32,4 +32,11 @@ describe("InterruptedTurnCard", () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(onResume).not.toHaveBeenCalled();
   });
+
+  it("offers only Retry when the turn cannot be resumed", () => {
+    render(<InterruptedTurnCard onRetry={jest.fn()} />);
+
+    expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+  });
 });

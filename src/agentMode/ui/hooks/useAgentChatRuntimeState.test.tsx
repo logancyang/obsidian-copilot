@@ -50,6 +50,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     getPendingToolPermissions: () => state.pendingToolPermissions,
     getPendingAskUserQuestions: () => state.pendingAskUserQuestions,
     getInterruptedTurn: () => state.interruptedTurn,
+    canResumeInterruptedTurn: () => state.interruptedTurn !== null,
   } as unknown as AgentChatBackend;
 
   return {
@@ -79,6 +80,7 @@ describe("useAgentChatRuntimeState", () => {
     const fake = makeFakeBackend({ interruptedTurn: { text: "cut off" } });
     const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
     expect(result.current.hasInterruptedTurn).toBe(true);
+    expect(result.current.canResumeInterruptedTurn).toBe(true);
 
     act(() => {
       fake.state.interruptedTurn = null;

@@ -32,6 +32,7 @@ export interface AgentChatBackend {
   isTurnInFlight(): boolean;
 
   getInterruptedTurn(): RecordedPrompt | null;
+  canResumeInterruptedTurn(): boolean;
   resumeInterruptedTurn(): void;
   retryInterruptedTurn(): void;
 

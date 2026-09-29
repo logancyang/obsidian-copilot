@@ -32,6 +32,7 @@ interface AgentChatMessagesProps {
   chatBackend: AgentChatBackend;
   isLoading: boolean;
   hasInterruptedTurn?: boolean;
+  canResumeInterruptedTurn?: boolean;
 }
 
 function toChatMessageView(m: AgentChatMessage): ChatMessage {
@@ -170,6 +171,7 @@ const AgentChatMessages = memo(
     chatBackend,
     isLoading,
     hasInterruptedTurn = false,
+    canResumeInterruptedTurn = false,
   }: AgentChatMessagesProps) => {
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
@@ -240,7 +242,11 @@ const AgentChatMessages = memo(
           {inlinePlanCard}
           {hasInterruptedTurn && !isLoading ? (
             <InterruptedTurnCard
-              onResume={() => resendInterruptedTurn(() => chatBackend.resumeInterruptedTurn())}
+              onResume={
+                canResumeInterruptedTurn
+                  ? () => resendInterruptedTurn(() => chatBackend.resumeInterruptedTurn())
+                  : undefined
+              }
               onRetry={() => resendInterruptedTurn(() => chatBackend.retryInterruptedTurn())}
             />
           ) : null}

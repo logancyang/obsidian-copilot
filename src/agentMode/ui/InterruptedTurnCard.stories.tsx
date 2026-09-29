@@ -14,3 +14,7 @@ export default meta;
 export const Default: StoryObj<InterruptedTurnCardProps> = {
   args: { onResume: () => undefined, onRetry: () => undefined },
 };
+
+export const RetryOnly: StoryObj<InterruptedTurnCardProps> = {
+  args: { onRetry: () => undefined },
+};

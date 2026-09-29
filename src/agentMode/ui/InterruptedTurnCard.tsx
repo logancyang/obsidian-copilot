@@ -4,7 +4,7 @@ import { PauseCircle } from "lucide-react";
 import React from "react";
 
 interface InterruptedTurnCardProps {
-  onResume: () => void;
+  onResume?: () => void;
   onRetry: () => void;
 }
 
@@ -22,15 +22,17 @@ export const InterruptedTurnCard: React.FC<InterruptedTurnCardProps> = ({ onResu
         This turn was cut off when Obsidian closed. Nothing has been sent again.
       </p>
       <div className="tw-flex tw-gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          className="tw-border tw-border-solid tw-border-border"
-          title="Ask the agent to continue from where it left off"
-          onClick={onResume}
-        >
-          Resume
-        </Button>
+        {onResume ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="tw-border tw-border-solid tw-border-border"
+            title="Ask the agent to continue from where it left off"
+            onClick={onResume}
+          >
+            Resume
+          </Button>
+        ) : null}
         <Button
           variant="secondary"
           size="sm"

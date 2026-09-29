@@ -15,6 +15,7 @@ import type {
   PlanUsage,
   SessionUsage,
 } from "@/agentMode/session/types";
+import { isFanout } from "@/agentMode/session/fanout/answerers";
 import type { RecordedPrompt } from "@/agentMode/session/InterruptedTurnJournal";
 import type { MessageContext } from "@/types/message";
 
@@ -111,6 +112,16 @@ export class AgentChatUIState implements AgentChatBackend {
 
   getInterruptedTurn(): RecordedPrompt | null {
     return this.session.getInterruptedTurn();
+  }
+
+  /**
+   * Whether Resume makes sense for the interrupted turn. A fan-out turn ran in disposable
+   * sub-sessions, so this chat's own agent session has nothing to continue and only Retry applies.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/607
+   */
+  canResumeInterruptedTurn(): boolean {
+    const prompt = this.session.getInterruptedTurn();
+    return prompt !== null && !isFanout(prompt.mentionedAgents ?? [], this.session.backendId);
   }
 
   resumeInterruptedTurn(): void {
