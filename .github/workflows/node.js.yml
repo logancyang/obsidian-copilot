@@ -46,7 +46,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - name: Verify PR size labels
-        run: node --test scripts/pr-size.test.mjs
+        run: node --test scripts/pr-size.test.mjs scripts/ready-gate-check.test.mjs
 
   review:
     name: Obsidian review (22.x)
