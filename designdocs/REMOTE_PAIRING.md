@@ -131,7 +131,8 @@ than once go through the plugin.
 
 [#608](https://github.com/Brevilabs/obsidian-copilot-private/issues/608). `KeepAwakeService` (`src/keepAwake/`)
 holds at most one Electron `powerSaveBlocker` (`prevent-app-suspension`: idle system sleep is blocked, the
-display may still sleep) for the vault window, and releases it on plugin unload.
+display may still sleep) for the vault window, and releases it on plugin unload and on `pagehide`, because the
+blocker lives in Electron's main process and would otherwise outlive a reloaded or closed window.
 
 | Holds the blocker when                                                | Notes                                                                                                   |
 | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
