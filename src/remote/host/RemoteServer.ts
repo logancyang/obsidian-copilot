@@ -6,6 +6,8 @@ import {
   encodeText,
   FrameDecoder,
   FrameProtocolError,
+  isValidCloseCode,
+  type IncomingMessage,
 } from "@/remote/host/webSocketFrames";
 import {
   AUTH_FRAME_MAX_BYTES,
@@ -24,6 +26,7 @@ type HttpServer = import("node:http").Server;
 export const AUTH_TIMEOUT_MS = 5000;
 export const MAX_PENDING_CONNECTIONS = 8;
 const MAX_CONNECTIONS = 64;
+const MAX_UNAUTHENTICATED_PER_ADDRESS = 4;
 const MAX_MESSAGE_BYTES = 8 * 1024 * 1024;
 const CLOSE_GRACE_MS = 1500;
 const HANDSHAKE_KEY = /^[A-Za-z0-9+/]{22}==$/;
@@ -36,7 +39,10 @@ export interface RemoteConnection extends RemoteChannel {
 
 export interface DeviceAuthority {
   authenticate(token: string): PairedDevice | null;
-  create(deviceName: string): { device: PairedDevice; token: string };
+  create(
+    deviceName: string,
+    clientId?: string
+  ): { device: PairedDevice; token: string; replacedDeviceIds: readonly string[] };
   markSeen(deviceId: string): void;
 }
 
@@ -46,16 +52,7 @@ export interface RemoteServerOptions {
   desktopName: string;
   authTimeoutMs?: number;
   maxPendingConnections?: number;
-}
-
-// A peer's close frame may carry no status (1005) or a reserved one; echoing it would be a protocol
-// error on the wire. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
-function isSendableCloseCode(code: number): boolean {
-  return (
-    (code >= 1000 && code <= 1003) ||
-    (code >= 1007 && code <= 1014) ||
-    (code >= 3000 && code <= 4999)
-  );
+  maxUnauthenticatedPerAddress?: number;
 }
 
 class SocketPeer {
@@ -66,7 +63,7 @@ class SocketPeer {
   private finished = false;
   private graceTimer: number | undefined;
 
-  constructor(private readonly socket: Duplex) {
+  constructor(readonly socket: Duplex) {
     socket.on("data", (chunk: Uint8Array) => this.receive(chunk));
     socket.on("error", () => socket.destroy());
     socket.once("close", () => {
@@ -78,14 +75,29 @@ class SocketPeer {
   receive(chunk: Uint8Array): void {
     if (this.closing) return;
     try {
-      for (const message of this.decoder.push(chunk)) {
-        if (this.closing) return;
-        if (message.type === "text") this.onText(message.text);
-        else if (message.type === "ping") this.write(encodePong(message.payload));
-        else if (message.type === "close") this.close(message.code);
-      }
+      this.decoder.push(chunk, (message) => this.dispatch(message));
     } catch (error) {
       this.close(error instanceof FrameProtocolError ? error.closeCode : 1011);
+    }
+  }
+
+  private dispatch(message: IncomingMessage): void {
+    if (this.closing) return;
+    switch (message.type) {
+      case "text":
+        this.onText(message.text);
+        break;
+      case "ping":
+        // A pong is optional when several pings are outstanding (RFC 6455 section 5.5.3). Answering
+        // only while nothing waits to be written keeps a peer that pings without reading from
+        // growing this process's memory. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+        if (this.socket.writableLength === 0) this.write(encodePong(message.payload));
+        break;
+      case "close":
+        this.close(message.code);
+        break;
+      case "pong":
+        break;
     }
   }
 
@@ -96,7 +108,9 @@ class SocketPeer {
   close(code: number): void {
     if (this.closing) return;
     this.closing = true;
-    this.write(encodeClose(isSendableCloseCode(code) ? code : 1000));
+    // A peer's close frame may carry no status (1005) or a reserved one, and echoing it would be a
+    // protocol error on the wire. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+    this.write(encodeClose(isValidCloseCode(code) ? code : 1000));
     this.socket.end();
     this.graceTimer = window.setTimeout(() => this.socket.destroy(), CLOSE_GRACE_MS);
     this.finish(code);
@@ -115,7 +129,11 @@ class SocketPeer {
 
 export class RemoteServer {
   private server: HttpServer | null = null;
+  private starting: Promise<number> | null = null;
   private pending = 0;
+  private readonly unauthenticatedByAddress = new Map<string, number>();
+  private readonly releaseUnauthenticated = new WeakMap<Duplex, () => void>();
+  private readonly handshakeTimers = new WeakMap<Duplex, number>();
   private readonly connectionHandlers = new Set<(connection: RemoteConnection) => void>();
   private readonly changeListeners = new Set<() => void>();
   private readonly peers = new Set<SocketPeer>();
@@ -125,33 +143,48 @@ export class RemoteServer {
 
   listen(host: string, port: number): Promise<number> {
     const http = requireNodeModule<typeof import("node:http")>("http");
-    return new Promise((resolve, reject) => {
+    const authTimeoutMs = this.options.authTimeoutMs ?? AUTH_TIMEOUT_MS;
+    const starting = new Promise<number>((resolve, reject) => {
       const server = http.createServer((_request, response) => {
-        response.writeHead(426, { Upgrade: "websocket", "Content-Length": "0" });
+        response.writeHead(426, {
+          Upgrade: "websocket",
+          Connection: "close",
+          "Content-Length": "0",
+        });
         response.end();
       });
       server.maxConnections = MAX_CONNECTIONS;
-      server.headersTimeout = this.options.authTimeoutMs ?? AUTH_TIMEOUT_MS;
+      server.headersTimeout = authTimeoutMs;
+      server.on("connection", (socket) => this.admitSocket(socket, authTimeoutMs));
       server.on("upgrade", (request, socket, head) => this.handleUpgrade(request, socket, head));
       server.on("clientError", (_error, socket) => socket.destroy());
-      const onStartupError = (error: Error): void => reject(error);
+      const onStartupError = (error: Error): void => {
+        if (this.server === server) this.server = null;
+        reject(error);
+      };
       server.once("error", onStartupError);
+      this.server = server;
       server.listen({ host, port }, () => {
         server.off("error", onStartupError);
         server.on("error", (error) => logWarn("Remote server error", error.message));
-        this.server = server;
         const address = server.address();
         resolve(typeof address === "object" && address ? address.port : port);
       });
     });
+    this.starting = starting;
+    return starting;
   }
 
-  close(): Promise<void> {
+  // close() may run while listen() is still binding, and the bind would then outlive the close.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+  async close(): Promise<void> {
+    await this.starting?.catch(() => 0);
+    this.starting = null;
     const server = this.server;
     this.server = null;
-    if (!server) return Promise.resolve();
+    if (!server) return;
     for (const peer of [...this.peers]) peer.close(CLOSE_CODE.serverStopping);
-    return new Promise((resolve) => {
+    await new Promise<void>((resolve) => {
       server.close(() => resolve());
       (server as { closeAllConnections?: () => void }).closeAllConnections?.();
     });
@@ -177,6 +210,34 @@ export class RemoteServer {
     }
   }
 
+  // Every connection has the authentication window to finish its handshake and first frame, however
+  // slowly it sends, and one address may hold only a few unauthenticated connections so a single
+  // peer cannot occupy every slot. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+  private admitSocket(socket: Duplex, authTimeoutMs: number): void {
+    const address = (socket as Partial<{ remoteAddress: string }>).remoteAddress ?? "";
+    const held = this.unauthenticatedByAddress.get(address) ?? 0;
+    if (held >= (this.options.maxUnauthenticatedPerAddress ?? MAX_UNAUTHENTICATED_PER_ADDRESS)) {
+      socket.destroy();
+      return;
+    }
+    this.unauthenticatedByAddress.set(address, held + 1);
+    const release = (): void => {
+      if (!this.releaseUnauthenticated.delete(socket)) return;
+      const remaining = (this.unauthenticatedByAddress.get(address) ?? 1) - 1;
+      if (remaining > 0) this.unauthenticatedByAddress.set(address, remaining);
+      else this.unauthenticatedByAddress.delete(address);
+    };
+    this.releaseUnauthenticated.set(socket, release);
+    this.handshakeTimers.set(
+      socket,
+      window.setTimeout(() => socket.destroy(), authTimeoutMs)
+    );
+    socket.once("close", () => {
+      window.clearTimeout(this.handshakeTimers.get(socket));
+      release();
+    });
+  }
+
   private handleUpgrade(request: HttpRequest, socket: Duplex, head: Buffer): void {
     const key = request.headers["sec-websocket-key"];
     const isValidHandshake =
@@ -196,6 +257,7 @@ export class RemoteServer {
       return;
     }
 
+    window.clearTimeout(this.handshakeTimers.get(socket));
     const crypto = requireNodeModule<typeof import("node:crypto")>("crypto");
     const accept = crypto
       .createHash("sha1")
@@ -246,7 +308,11 @@ export class RemoteServer {
       if (!this.options.consumePairingSecret(frame.secret)) {
         return this.deny(peer, "pairing-rejected");
       }
-      const { device, token } = this.options.devices.create(frame.deviceName);
+      const { device, token, replacedDeviceIds } = this.options.devices.create(
+        frame.deviceName,
+        frame.clientId
+      );
+      for (const replacedId of replacedDeviceIds) this.disconnectDevice(replacedId);
       this.sendFrame(peer, {
         type: "paired",
         token,
@@ -274,7 +340,8 @@ export class RemoteServer {
     const devicePeers = this.peersByDevice.get(device.id) ?? new Set<SocketPeer>();
     devicePeers.add(peer);
     this.peersByDevice.set(device.id, devicePeers);
-    this.options.devices.markSeen(device.id);
+    this.releaseUnauthenticated.get(peer.socket)?.();
+    this.recordSeen(device.id);
     peer.decoder.limit = MAX_MESSAGE_BYTES;
 
     const messageHandlers = new Set<(text: string) => void>();
@@ -287,7 +354,7 @@ export class RemoteServer {
       releaseSlot(code);
       devicePeers.delete(peer);
       if (devicePeers.size === 0) this.peersByDevice.delete(device.id);
-      this.options.devices.markSeen(device.id);
+      this.recordSeen(device.id);
       for (const handler of [...closeHandlers]) handler({ code });
       this.notifyChanged();
     };
@@ -308,6 +375,19 @@ export class RemoteServer {
     };
     this.notifyChanged();
     for (const handler of [...this.connectionHandlers]) handler(connection);
+  }
+
+  // The last-seen time is informational, so a failed save must not drop a valid connection or skip
+  // the cleanup that follows it. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+  private recordSeen(deviceId: string): void {
+    try {
+      this.options.devices.markSeen(deviceId);
+    } catch (error) {
+      logWarn(
+        "Remote device last-seen time not saved",
+        error instanceof Error ? error.message : "unknown"
+      );
+    }
   }
 
   private notifyChanged(): void {

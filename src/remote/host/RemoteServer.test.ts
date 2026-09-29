@@ -1,5 +1,6 @@
 import { once } from "node:events";
 import http from "node:http";
+import net from "node:net";
 import WebSocket from "ws";
 import { parseReply, rawText, sleep } from "@/remote/host/serverTestKit";
 import { PairedDeviceStore } from "@/remote/host/PairedDeviceStore";
@@ -7,6 +8,74 @@ import { PairingWindow } from "@/remote/host/PairingWindow";
 import { RemoteServer, type RemoteConnection } from "@/remote/host/RemoteServer";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/610";
+
+const RAW_MASK = [1, 2, 3, 4];
+
+/** A masked client frame for the raw-socket tests, which need bytes the `ws` client would not send. https://github.com/Brevilabs/obsidian-copilot-private/issues/610 */
+function maskedFrame(opcode: number, payload: Uint8Array): Uint8Array {
+  const length = payload.length;
+  const header =
+    length < 126
+      ? [0x80 | opcode, 0x80 | length]
+      : length < 65536
+        ? [0x80 | opcode, 0x80 | 126, length >> 8, length & 0xff]
+        : [
+            0x80 | opcode,
+            0x80 | 127,
+            0,
+            0,
+            0,
+            0,
+            (length >>> 24) & 0xff,
+            (length >> 16) & 0xff,
+            (length >> 8) & 0xff,
+            length & 0xff,
+          ];
+  const body = payload.map((byte, index) => byte ^ RAW_MASK[index % 4]);
+  return new Uint8Array([...header, ...RAW_MASK, ...body]);
+}
+
+function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
+  const joined = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    joined.set(part, offset);
+    offset += part.length;
+  }
+  return joined;
+}
+
+const textFrame = (value: string): Uint8Array => maskedFrame(0x1, new TextEncoder().encode(value));
+
+interface RawClient {
+  socket: net.Socket;
+  /** Resolves once the server answered the upgrade with 101. https://github.com/Brevilabs/obsidian-copilot-private/issues/610 */
+  upgraded: Promise<void>;
+  closed: Promise<void>;
+  bytesReceived: () => number;
+}
+
+function rawClient(port: number, { upgrade = true }: { upgrade?: boolean } = {}): RawClient {
+  const socket = net.connect({ host: "127.0.0.1", port });
+  socket.on("error", () => {});
+  let received = 0;
+  let buffered = "";
+  let resolveUpgraded: () => void = () => {};
+  const upgraded = new Promise<void>((resolve) => (resolveUpgraded = resolve));
+  socket.on("data", (chunk) => {
+    received += chunk.length;
+    if (buffered.length < 4096) buffered += chunk.toString("latin1");
+    if (buffered.includes("101 Switching Protocols")) resolveUpgraded();
+  });
+  const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+  if (upgrade) {
+    socket.write(
+      `GET / HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n` +
+        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+    );
+  }
+  return { socket, upgraded, closed, bytesReceived: () => received };
+}
 
 interface Harness {
   server: RemoteServer;
@@ -21,6 +90,7 @@ async function startHarness(
   options: {
     authTimeoutMs?: number;
     maxPendingConnections?: number;
+    maxUnauthenticatedPerAddress?: number;
     pairingTtlMs?: number;
     devices?: ConstructorParameters<typeof RemoteServer>[0]["devices"];
   } = {}
@@ -34,6 +104,7 @@ async function startHarness(
     desktopName: "Studio Mac",
     authTimeoutMs: options.authTimeoutMs,
     maxPendingConnections: options.maxPendingConnections,
+    maxUnauthenticatedPerAddress: options.maxUnauthenticatedPerAddress,
   });
   const connections: RemoteConnection[] = [];
   server.onConnection((connection) => connections.push(connection));
@@ -63,9 +134,9 @@ async function exchange(harness: Harness, firstFrame: unknown) {
   return { client, messages, closed };
 }
 
-async function pairDevice(harness: Harness, deviceName = "iPhone") {
+async function pairDevice(harness: Harness, deviceName = "iPhone", clientId?: string) {
   const { secret } = harness.pairing.start();
-  const paired = await exchange(harness, { type: "pair", secret, deviceName });
+  const paired = await exchange(harness, { type: "pair", secret, deviceName, clientId });
   await waitFor(() => paired.messages.length > 0);
   return { ...paired, reply: parseReply(paired.messages[0]) };
 }
@@ -156,6 +227,40 @@ describe("RemoteServer", () => {
 
           expect(await attempt.closed).toBe(4401);
           expect(harness.store.list()).toEqual([]);
+        });
+
+        it(`admits exactly one of two connections that present the same secret at the same moment (${ISSUE})`, async () => {
+          harness = await startHarness();
+          const { secret } = harness.pairing.start();
+          const first = open(harness);
+          const second = open(harness);
+          const firstReplies = collect(first);
+          const secondReplies = collect(second);
+          await Promise.all([once(first, "open"), once(second, "open")]);
+
+          first.send(JSON.stringify({ type: "pair", secret, deviceName: "A" }));
+          second.send(JSON.stringify({ type: "pair", secret, deviceName: "B" }));
+          await waitFor(() => firstReplies.messages.length + secondReplies.messages.length === 2);
+
+          const replies = [...firstReplies.messages, ...secondReplies.messages].map(
+            (message) => parseReply(message).type
+          );
+          expect(replies.sort()).toEqual(["denied", "paired"]);
+          expect(harness.store.list()).toHaveLength(1);
+        });
+
+        it(`replaces the earlier entry of a phone that pairs again, revokes its token and closes its connection (${ISSUE})`, async () => {
+          harness = await startHarness();
+          const first = await pairDevice(harness, "iPhone", "phone-1");
+          const firstSession = await exchange(harness, { type: "auth", token: first.reply.token });
+          await waitFor(() => firstSession.messages.length > 0);
+
+          const second = await pairDevice(harness, "iPhone", "phone-1");
+
+          expect(await firstSession.closed).toBe(4403);
+          expect(harness.store.list().map((device) => device.id)).toEqual([second.reply.deviceId]);
+          expect(harness.store.authenticate(first.reply.token)).toBeNull();
+          expect(harness.server.isDeviceConnected(first.reply.deviceId)).toBe(false);
         });
 
         it(`answers a store failure during pairing with a denial and no crash (${ISSUE})`, async () => {
@@ -258,6 +363,51 @@ describe("RemoteServer", () => {
           expect(await closed).toBe(1003);
         });
 
+        it(`keeps a connection whose last-seen time could not be saved instead of dropping a valid phone (${ISSUE})`, async () => {
+          let raw: string | null = null;
+          const store = new PairedDeviceStore({ read: () => raw, write: (value) => (raw = value) });
+          const { token, device } = store.create("iPhone");
+          harness = await startHarness({
+            devices: {
+              authenticate: (presented) => store.authenticate(presented),
+              create: (name) => store.create(name),
+              markSeen: () => {
+                throw new Error("keychain unavailable");
+              },
+            },
+          });
+
+          const session = await exchange(harness, { type: "auth", token });
+          await waitFor(() => harness.connections.length === 1);
+          session.client.close();
+          await session.closed;
+          await waitFor(() => !harness.server.isDeviceConnected(device.id));
+
+          expect(parseReply(session.messages[0])).toEqual({ type: "authed", deviceId: device.id });
+        });
+
+        it(`decodes a large message that follows the authentication frame in the same network chunk under the authenticated limit (${ISSUE})`, async () => {
+          harness = await startHarness();
+          const { reply } = await pairDevice(harness);
+          const received: string[] = [];
+          harness.server.onConnection((connection) =>
+            connection.onMessage((text) => received.push(text))
+          );
+          const raw = rawClient(harness.port);
+          await raw.upgraded;
+
+          raw.socket.write(
+            concatBytes([
+              textFrame(JSON.stringify({ type: "auth", token: reply.token })),
+              textFrame("z".repeat(200_000)),
+            ])
+          );
+          await waitFor(() => received.length === 1);
+
+          expect(received[0]).toHaveLength(200_000);
+          raw.socket.destroy();
+        });
+
         it(`turns away connections beyond the pending limit until earlier ones authenticate or time out (${ISSUE})`, async () => {
           harness = await startHarness({ maxPendingConnections: 2, authTimeoutMs: 5000 });
           const idle = [open(harness), open(harness)];
@@ -270,6 +420,30 @@ describe("RemoteServer", () => {
           ];
 
           expect(response.statusCode).toBe(503);
+        });
+
+        it(`refuses further unauthenticated connections from one address so a single peer cannot hold every slot (${ISSUE})`, async () => {
+          harness = await startHarness({ maxUnauthenticatedPerAddress: 2, authTimeoutMs: 5000 });
+          const idle = [rawClient(harness.port), rawClient(harness.port)];
+          await Promise.all(idle.map((client) => client.upgraded));
+
+          const refused = rawClient(harness.port);
+          await refused.closed;
+
+          expect(refused.bytesReceived()).toBe(0);
+          idle.forEach((client) => client.socket.destroy());
+        });
+
+        it(`admits a new connection from the same address once an earlier one authenticated (${ISSUE})`, async () => {
+          harness = await startHarness({ maxUnauthenticatedPerAddress: 1, authTimeoutMs: 5000 });
+          const { reply, client } = await pairDevice(harness);
+          await waitFor(() => harness.connections.length === 1);
+
+          const session = await exchange(harness, { type: "auth", token: reply.token });
+          await waitFor(() => session.messages.length > 0);
+
+          expect(parseReply(session.messages[0]).type).toBe("authed");
+          client.close();
         });
 
         it("frees a pending slot when an idle connection closes", async () => {
@@ -297,6 +471,40 @@ describe("RemoteServer", () => {
           );
 
           expect(status).toBe(426);
+        });
+
+        it(`closes the connection after answering a plain HTTP request so keep-alive cannot hold a connection slot (${ISSUE})`, async () => {
+          harness = await startHarness();
+
+          const connection = await new Promise<string | undefined>((resolve) =>
+            http.get(
+              { host: "127.0.0.1", port: harness.port, headers: { Connection: "keep-alive" } },
+              (response) => {
+                response.resume();
+                resolve(response.headers.connection);
+              }
+            )
+          );
+
+          expect(connection).toBe("close");
+        });
+
+        it(`closes a connection that never sends a request within the authentication window (${ISSUE})`, async () => {
+          harness = await startHarness({ authTimeoutMs: 100 });
+          const silent = rawClient(harness.port, { upgrade: false });
+
+          await silent.closed;
+
+          expect(silent.bytesReceived()).toBe(0);
+        });
+
+        it(`closes a connection that keeps sending request headers a byte at a time past the authentication window (${ISSUE})`, async () => {
+          harness = await startHarness({ authTimeoutMs: 150 });
+          const dripping = rawClient(harness.port, { upgrade: false });
+          const drip = window.setInterval(() => dripping.socket.write("X"), 30);
+
+          await dripping.closed;
+          window.clearInterval(drip);
         });
 
         it("refuses an upgrade with a malformed key or wrong version", async () => {
@@ -396,6 +604,27 @@ describe("RemoteServer", () => {
 
         const [payload] = (await pong) as [Buffer];
         expect(payload.toString()).toBe("beat");
+      });
+
+      it(`does not queue an unbounded backlog of pongs for a peer that pings without ever reading (${ISSUE})`, async () => {
+        harness = await startHarness();
+        const raw = rawClient(harness.port);
+        await raw.upgraded;
+        const ping = maskedFrame(0x9, new Uint8Array(125));
+        const burst = concatBytes(Array.from({ length: 2000 }, () => ping));
+        raw.socket.pause();
+
+        for (let round = 0; round < 40; round++) {
+          raw.socket.write(burst);
+          await sleep(5);
+        }
+        await sleep(200);
+        raw.socket.resume();
+        await sleep(300);
+
+        // 40 rounds x 2000 pings x 127-byte pongs is about 10 MB if every ping were answered. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+        expect(raw.bytesReceived()).toBeLessThan(8_000_000);
+        raw.socket.destroy();
       });
 
       it("stops delivering to a handler that unsubscribed", async () => {
@@ -530,6 +759,31 @@ describe("RemoteServer", () => {
         const late = open(harness);
         const [error] = (await once(late, "error")) as [Error & { code?: string }];
         expect(error.code).toBe("ECONNREFUSED");
+      });
+
+      it(`releases the port when it is closed while the listener is still starting (${ISSUE})`, async () => {
+        harness = await startHarness();
+        const port = harness.port;
+        await harness.server.close();
+        const starting = new RemoteServer({
+          devices: harness.store,
+          consumePairingSecret: () => false,
+          desktopName: "x",
+        });
+
+        const listening = starting.listen("127.0.0.1", port);
+        await starting.close();
+        await listening.catch(() => 0);
+
+        const refused = rawClient(port, { upgrade: false });
+        const error = await new Promise<string>((resolve) => {
+          refused.socket.once("error", (failure: Error & { code?: string }) =>
+            resolve(failure.code ?? "")
+          );
+          refused.socket.once("connect", () => resolve("connected"));
+        });
+        expect(error).toBe("ECONNREFUSED");
+        refused.socket.destroy();
       });
 
       it("is safe to call when the server never started", async () => {
