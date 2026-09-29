@@ -215,6 +215,22 @@ If Miyo is reachable but the vault is not registered, the connection dialog offe
 
 See [Miyo: Local-First Search and AI Ownership](vault-search-and-indexing.md) for setup, privacy, search behavior, and troubleshooting.
 
+## Remote
+
+Remote pairs a phone with this vault over [Tailscale](https://tailscale.com/). It needs Copilot Plus and Tailscale signed in on both devices. Without Copilot Plus the tab explains the requirement, and Copilot never listens on your network.
+
+On desktop, **Pair a phone** shows a QR code. Before you scan it, open the same vault in Obsidian on the phone: Obsidian drops the link if a different vault is open. Scan the code with the phone's Camera app and tap the Obsidian link. If scanning is awkward, choose **Copy link**, send the link to the phone, and paste it into **Settings → Copilot → Remote → Paste a pairing link** there. The code works once and expires after 5 minutes.
+
+| Control on desktop | What it does                                                                                                                                                                                                                      |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Pair a phone**   | Starts listening on this computer's Tailscale address only, never on your local network or the internet, and shows the QR code and link. Listening stops when the code expires or is cancelled, unless a phone is already paired. |
+| **Paired phones**  | Lists each phone with when it paired and when it last connected. **Revoke** disconnects that phone immediately and rejects its token from then on.                                                                                |
+| **Check again**    | Appears when Tailscale is not detected. Copilot looks for the Tailscale address again.                                                                                                                                            |
+
+Each vault window pairs separately. A phone lists only desktops paired for the vault it has open, and one vault can be paired with several desktops. Device tokens are stored in the Obsidian keychain on each device, never in your vault or in `data.json`.
+
+On the phone, the Remote tab lists paired desktops with **Test connection** and **Remove**. Removing a desktop only forgets it on the phone; revoke the phone on the desktop to invalidate its token.
+
 ## Skills
 
 Skills are reusable instruction packets centered on a `SKILL.md` file. The Skills tab is desktop-only and does not require a Copilot license. Individual cloud-backed skills can still require paid Copilot access or another service.

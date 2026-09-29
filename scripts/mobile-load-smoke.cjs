@@ -121,6 +121,62 @@ function checkAgentModeImportBoundaries() {
   }
 }
 
+function listSourceFiles(relativeDir) {
+  return fs
+    .readdirSync(path.join(repoRoot, relativeDir), { withFileTypes: true })
+    .flatMap((entry) => {
+      const relativePath = `${relativeDir}/${entry.name}`;
+      if (entry.isDirectory()) return listSourceFiles(relativePath);
+      return /\.tsx?$/.test(entry.name) && !/\.(test|stories)\.tsx?$/.test(entry.name)
+        ? [relativePath]
+        : [];
+    });
+}
+
+// The desktop listener imports Node built-ins and must load only behind isDesktopRuntime().
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+function checkRemoteImportBoundaries() {
+  const staticHostImport =
+    /import\s+(?:type\s+)?[^;]+?\s+from\s+["']@\/remote\/host(?:\/[^"']*)?["']\s*;?/g;
+  const dynamicHostImport = /import\s*\(\s*["']@\/remote\/host(?:\/[^"']*)?["']\s*\)/g;
+  const nodeImport =
+    /from\s+["'](?:node:)?(?:fs|os|http|https|net|tls|crypto|stream|zlib|child_process|path|ws)["']|requireNodeModule/;
+
+  for (const relativePath of loadCriticalFiles.concat(
+    "src/settings/v2/components/RemoteSettings.tsx"
+  )) {
+    const source = readRepoFile(relativePath);
+    for (const match of source.matchAll(staticHostImport)) {
+      if (!isTypeOnlyImport(match[0])) {
+        fail(`${relativePath}: value import from the Remote host is on the mobile load path.`);
+      }
+    }
+    if (
+      Array.from(source.matchAll(dynamicHostImport)).length > 0 &&
+      !source.includes("isDesktopRuntime")
+    ) {
+      fail(`${relativePath}: dynamic Remote host import must be gated by isDesktopRuntime().`);
+    }
+  }
+
+  const phoneFiles = [
+    ...listSourceFiles("src/remote/client"),
+    ...listSourceFiles("src/remote/ui"),
+    ...["address", "channel", "hostState", "pairingLink", "wire"].map(
+      (name) => `src/remote/${name}.ts`
+    ),
+  ];
+  for (const relativePath of phoneFiles) {
+    const source = readRepoFile(relativePath);
+    if (nodeImport.test(source))
+      fail(`${relativePath}: the phone loads this file, so it may not use Node.`);
+    for (const match of source.matchAll(staticHostImport)) {
+      if (!isTypeOnlyImport(match[0]))
+        fail(`${relativePath}: the phone may not import the Remote host.`);
+    }
+  }
+}
+
 function checkContextCacheImportBoundaries() {
   const desktopOnlyImports =
     /import\s+(?:type\s+)?[^;]+?\s+from\s+["']@\/context\/(?:conversionsLocation|contextCacheFs)["']\s*;?/g;
@@ -443,6 +499,7 @@ function runBundleEvaluationSmoke() {
 
 checkAgentModeImportBoundaries();
 checkContextCacheImportBoundaries();
+checkRemoteImportBoundaries();
 checkProtocolBundle();
 runBundleEvaluationSmoke();
 

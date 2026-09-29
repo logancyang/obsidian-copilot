@@ -37,7 +37,7 @@ For most people, opencode is the best starting point. Copilot can install and ma
 
 ## Settings
 
-[Copilot Settings](settings.md) walks through every tab in the order it appears in Obsidian: **Basic**, **BYOK**, **Miyo**, **Skills**, **Command**, **Self-Host**, and **Advanced**.
+[Copilot Settings](settings.md) walks through every tab in the order it appears in Obsidian: **Basic**, **BYOK**, **Miyo**, **Remote**, **Skills**, **Command**, **Self-Host**, and **Advanced**.
 
 ## Help
 
