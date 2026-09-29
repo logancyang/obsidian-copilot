@@ -119,7 +119,6 @@ describe("parseSkillFile — validation errors", () => {
   });
 
   it("rejects an empty description", () => {
-    // build by hand to avoid YAML interpreting the empty value as null
     const content = ["---", "name: foo", 'description: ""', "---", ""].join("\n");
     expect(() => parseSkillFile(content, "foo")).toThrow(/non-empty/);
   });

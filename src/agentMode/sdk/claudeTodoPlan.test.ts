@@ -47,13 +47,11 @@ describe("claudeTodoPlan — TodoWrite whole-list shape", () => {
     planUpdateFromClaudeToolUse(state, "tu1", "TodoWrite", {
       todos: [{ content: "a", status: "pending" }],
     });
-    // A non-empty array that filters to nothing is garbage — keep the good list.
     expect(
       planUpdateFromClaudeToolUse(state, "tu2", "TodoWrite", {
         todos: [{ content: "", status: "pending" }],
       })
     ).toBeNull();
-    // A real `todos: []` is a clear — emit empty entries to reset downstream.
     expect(planUpdateFromClaudeToolUse(state, "tu3", "TodoWrite", { todos: [] })).toEqual({
       sessionUpdate: "plan",
       entries: [],
@@ -64,7 +62,6 @@ describe("claudeTodoPlan — TodoWrite whole-list shape", () => {
 describe("claudeTodoPlan — Task tools split shape", () => {
   it("accumulates TaskCreate → tool_result id binding → TaskUpdate status changes", () => {
     const state = createClaudeTaskPlanState();
-    // Creates carry no id yet — nothing to show until the result binds one.
     expect(
       planUpdateFromClaudeToolUse(state, "tuA", "TaskCreate", {
         subject: "Brainstorm imagery",
@@ -95,10 +92,8 @@ describe("claudeTodoPlan — Task tools split shape", () => {
 
   it("binds ids from every observed tool_result shape (incl. the real `Task #N` string)", () => {
     for (const content of [
-      // The shape real claude CLIs (>= 2.1.142) actually emit.
       "Task #1 created successfully: keep",
       [{ type: "text", text: "Task #1 created successfully: keep" }],
-      // Object / JSON shapes kept for forward-compat with other CLI versions.
       { task: { id: "k", subject: "keep" } },
       JSON.stringify({ task: { id: "k", subject: "keep" } }),
       [{ type: "text", text: JSON.stringify({ task: { id: "k", subject: "keep" } }) }],
@@ -115,8 +110,6 @@ describe("claudeTodoPlan — Task tools split shape", () => {
   it("binds the `#N` ordinal from the real string result and resolves TaskUpdate by it", () => {
     const state = createClaudeTaskPlanState();
     planUpdateFromClaudeToolUse(state, "tu1", "TaskCreate", { subject: "Choose theme" });
-    // Real CLI result is a human string; the id is the `#N` ordinal, and the
-    // echoed subject is ignored in favor of the authoritative pending subject.
     const bound = planUpdateFromClaudeToolResult(
       state,
       "tu1",
@@ -125,8 +118,6 @@ describe("claudeTodoPlan — Task tools split shape", () => {
     expect(entriesOf(bound)).toEqual([
       { content: "Choose theme", status: "pending", priority: "medium" },
     ]);
-    // TaskUpdate references that same ordinal `"1"` — the link that was broken
-    // when the string result couldn't be parsed into an id.
     const updated = planUpdateFromClaudeToolUse(state, "tu2", "TaskUpdate", {
       taskId: "1",
       status: "completed",
@@ -143,7 +134,6 @@ describe("claudeTodoPlan — Task tools split shape", () => {
     planUpdateFromClaudeToolUse(state, "b", "TaskCreate", { subject: "drop" });
     planUpdateFromClaudeToolResult(state, "b", { task: { id: "d" } });
 
-    // Unknown id / unmatched result: no emission, no state change.
     expect(
       planUpdateFromClaudeToolUse(state, "x", "TaskUpdate", {
         taskId: "ghost",
@@ -162,7 +152,6 @@ describe("claudeTodoPlan — Task tools split shape", () => {
       { content: "keep", status: "pending", priority: "medium" },
     ]);
 
-    // Deleting the last entry emits an EMPTY plan so downstream clears.
     const afterLast = planUpdateFromClaudeToolUse(state, "z", "TaskUpdate", {
       taskId: "k",
       status: "deleted",
@@ -174,22 +163,14 @@ describe("claudeTodoPlan — Task tools split shape", () => {
     const state = createClaudeTaskPlanState();
     planUpdateFromClaudeToolUse(state, "tu", "TaskCreate", { subject: "ghost" });
 
-    // is_error result is passed as null content by the translator → the pending
-    // entry is consumed (spent) and nothing is emitted.
     expect(planUpdateFromClaudeToolResult(state, "tu", null)).toBeNull();
 
-    // A second (stray re-delivered) result for the SAME id must NOT resurrect
-    // the entry — the pending was already consumed, so even a well-formed
-    // payload now no-ops instead of binding a phantom task.
     expect(
       planUpdateFromClaudeToolResult(state, "tu", { task: { id: "1", subject: "ghost" } })
     ).toBeNull();
   });
 
   it("drops a fully-completed group when the next topic's first TaskCreate binds", () => {
-    // Official Todo lifecycle step 4: "Removed when all tasks in a group are
-    // completed." A new session topic (e.g. HK guide → Japan guide) must not
-    // stack its tasks onto the previous, already-finished group.
     const state = createClaudeTaskPlanState();
     for (const [tu, id, subject] of [
       ["hk1", "1", "Plan HK transit"],
@@ -203,8 +184,6 @@ describe("claudeTodoPlan — Task tools split shape", () => {
       });
     }
 
-    // The new topic's FIRST create lands while every prior task is completed —
-    // the old group is dropped, leaving only the fresh task.
     planUpdateFromClaudeToolUse(state, "jp1", "TaskCreate", { subject: "Plan Japan transit" });
     const firstJapan = planUpdateFromClaudeToolResult(
       state,
@@ -215,8 +194,6 @@ describe("claudeTodoPlan — Task tools split shape", () => {
       { content: "Plan Japan transit", status: "pending", priority: "medium" },
     ]);
 
-    // The SECOND create of the same batch sees a pending task → it appends,
-    // it does NOT wipe the just-started group.
     planUpdateFromClaudeToolUse(state, "jp2", "TaskCreate", { subject: "Plan Japan food" });
     const secondJapan = planUpdateFromClaudeToolResult(
       state,
@@ -230,12 +207,6 @@ describe("claudeTodoPlan — Task tools split shape", () => {
   });
 
   it("keeps a still-active group intact when a mid-plan TaskCreate binds", () => {
-    // The clear only fires when EVERY task is completed. While a plan is still
-    // in flight (some done, some open) a freshly-added step must APPEND, not
-    // wipe — completed steps stay visible as progress within the live plan.
-    // (Real claude burst-creates a whole plan up front, so binds always land
-    // while tasks are pending; completion only happens afterwards. This guards
-    // that a genuine mid-plan addition is never mistaken for a new group.)
     const state = createClaudeTaskPlanState();
     for (const [tu, id, subject] of [
       ["c1", "1", "Outline"],
@@ -253,7 +224,6 @@ describe("claudeTodoPlan — Task tools split shape", () => {
       status: "in_progress",
     });
 
-    // #2 is still in_progress → the group is NOT fully completed → append.
     planUpdateFromClaudeToolUse(state, "c3", "TaskCreate", { subject: "Polish" });
     const update = planUpdateFromClaudeToolResult(
       state,
@@ -268,8 +238,6 @@ describe("claudeTodoPlan — Task tools split shape", () => {
   });
 
   it("survives across translator generations — the state is session-lived", () => {
-    // Simulates turn 1 creating the task and turn 2 (fresh translator, same
-    // shared state) updating it by id.
     const state = createClaudeTaskPlanState();
     planUpdateFromClaudeToolUse(state, "t1", "TaskCreate", { subject: "step" });
     planUpdateFromClaudeToolResult(state, "t1", { task: { id: "42" } });

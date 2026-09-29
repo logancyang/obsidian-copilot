@@ -7,16 +7,6 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-/**
- * In-memory FS tailored to the reconcile pass. Stores three kinds of nodes:
- *
- * - `dir`  — real directory.
- * - `file` — regular file (only used as filler).
- * - `link` — symlink/junction with an absolute target.
- *
- * Provides the {@link ReconcileFs} surface plus debug accessors. Ancestor
- * directories are auto-synthesized on insert.
- */
 type Node = { kind: "dir" } | { kind: "file" } | { kind: "link"; target: string };
 
 interface TestFs extends ReconcileFs {
@@ -95,9 +85,6 @@ function mkFs(initial: Record<string, Node> = {}): TestFs {
       if (n === undefined || n.kind !== "file") {
         throw Object.assign(new Error(`ENOENT: ${p}`), { code: "ENOENT" });
       }
-      // Test fixtures store files as `{ kind: "file" }` markers without
-      // content — return an empty string. None of the reconcile cases
-      // need real file contents (it's symlink-only).
       return "";
     },
     async writeFile(p, _content) {
@@ -185,7 +172,6 @@ describe("reconcile", () => {
       [`${CANONICAL}/alive`]: { kind: "dir" },
       [`${CANONICAL}/alive/SKILL.md`]: { kind: "file" },
       "/vault/.claude/skills/alive": { kind: "link", target: `${CANONICAL}/alive` },
-      // Orphan: link basename has no matching managed skill.
       "/vault/.claude/skills/orphan": { kind: "link", target: `${CANONICAL}/orphan` },
     });
     const skills = [mkSkill("alive", ["claude"])];
@@ -199,7 +185,6 @@ describe("reconcile", () => {
 
     expect(report.removedOrphans).toContain("/vault/.claude/skills/orphan");
     expect(fs.__dump()["/vault/.claude/skills/orphan"]).toBeUndefined();
-    // The alive link is left alone.
     expect(fs.__dump()["/vault/.claude/skills/alive"]).toEqual({
       kind: "link",
       target: `${CANONICAL}/alive`,
@@ -269,7 +254,6 @@ describe("reconcile", () => {
       fs,
     });
 
-    // The real dir is untouched.
     expect(fs.__dump()["/vault/.claude/skills/bar"]).toEqual({ kind: "dir" });
     expect(fs.__dump()["/vault/.claude/skills/bar/SKILL.md"]).toEqual({ kind: "file" });
     expect(report.removedOrphans).not.toContain("/vault/.claude/skills/bar");
@@ -294,7 +278,6 @@ describe("reconcile", () => {
     expect(report.errors).toHaveLength(1);
     expect(report.errors[0].path).toBe("/vault/.claude/skills/foo");
     expect(report.errors[0].reason).toBe("eperm");
-    // No link landed.
     expect(fs.__dump()["/vault/.claude/skills/foo"]).toBeUndefined();
   });
 
@@ -303,7 +286,6 @@ describe("reconcile", () => {
       [`${CANONICAL}/foo`]: { kind: "dir" },
       [`${CANONICAL}/foo/SKILL.md`]: { kind: "file" },
       "/vault/.claude/skills/foo": { kind: "link", target: `${CANONICAL}/foo` },
-      // User-owned link to somewhere else — reconciliation must not touch it.
       "/vault/.claude/skills/userOwned": { kind: "link", target: "/elsewhere/x" },
     });
     const skills = [mkSkill("foo", ["claude"])];
@@ -327,7 +309,6 @@ describe("reconcile", () => {
       [`${CANONICAL}/foo`]: { kind: "dir" },
       [`${CANONICAL}/foo/SKILL.md`]: { kind: "file" },
     });
-    // No `.claude/skills` directory at all.
     const skills = [mkSkill("foo", [])];
 
     const report = await reconcile({

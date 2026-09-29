@@ -102,8 +102,6 @@ describe("decideToggleAction", () => {
     });
 
     it("returns disable-last-agent confirm when toggling OFF the last remaining of an originally-mirrored skill", () => {
-      // After several removals, the skill is now project-single (one agent
-      // dir). The decision rule applies identically: disable-last-agent.
       const skill = projectSkill(["codex"]);
       expect(decideToggleAction(skill, "codex", false)).toEqual({
         kind: "migrate-confirm",

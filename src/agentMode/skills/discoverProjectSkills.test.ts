@@ -11,11 +11,6 @@ type Node =
   | { kind: "dir" }
   | { kind: "symlink"; target: string };
 
-/**
- * Build a small in-memory FS shaped like {@link ProjectDiscoveryFs}.
- * Files are stored by absolute path; ancestor directories are synthesized
- * so `isDirectory` returns true for any intermediate path.
- */
 function mkFs(initial: Record<string, Node> = {}): ProjectDiscoveryFs {
   const map = new Map<string, Node>(Object.entries(initial));
   for (const p of [...map.keys()]) {
@@ -167,7 +162,6 @@ describe("discoverProjectSkills", () => {
       fs,
     });
     expect(out.map((c) => c.agent).sort()).toEqual(["claude", "codex"]);
-    // Same content → same hash; the merge layer collapses these into one row.
     expect(out[0].contentHash).toBe(out[1].contentHash);
   });
 

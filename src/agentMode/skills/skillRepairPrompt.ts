@@ -4,7 +4,6 @@ export interface SkillRepairEvidence {
   offendingText?: string;
 }
 
-/** Build a reviewable Agent draft from factual validator diagnostics. */
 export function buildSkillRepairPrompt(issues: readonly SkillRepairEvidence[]): string {
   const plural = issues.length !== 1;
   const evidence = issues

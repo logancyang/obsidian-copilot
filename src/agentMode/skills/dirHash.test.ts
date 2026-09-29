@@ -1,10 +1,5 @@
 import { computeDirHash, type DirHashFs } from "./dirHash";
 
-/**
- * Build an in-memory {@link DirHashFs} from a flat `{ absPath → file }` map.
- * Directory entries are inferred from the path hierarchy of the files.
- * Symlinks are encoded as files whose path is prefixed with `__link__:`.
- */
 function makeFs(files: Record<string, string>, symlinks: ReadonlyArray<string> = []): DirHashFs {
   const fileMap = new Map<string, string>(Object.entries(files));
   const symlinkSet = new Set<string>(symlinks);
@@ -24,8 +19,6 @@ function makeFs(files: Record<string, string>, symlinks: ReadonlyArray<string> =
 
   return {
     async isDirectory(p) {
-      // Symlinks are not directories from the fingerprint walker's POV
-      // (we skip them anyway), and files aren't either.
       if (symlinkSet.has(p)) return false;
       return dirs.has(p);
     },
@@ -93,7 +86,6 @@ describe("computeDirHash", () => {
       "/a/extra-1.md": "one",
       "/a/extra-2.md": "two",
     });
-    // Reverse the listing for one walk; the hash must still match.
     const reverseFs: DirHashFs = {
       isDirectory: baseFs.isDirectory.bind(baseFs),
       isSymlink: baseFs.isSymlink.bind(baseFs),

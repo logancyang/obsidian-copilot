@@ -1,11 +1,3 @@
-/**
- * Bridge between the Claude SDK's `canUseTool` callback and Agent Mode's
- * session-domain prompters. Each `canUseTool` invocation is translated to a
- * `PermissionPrompt`, dispatched through the permission prompter, then
- * translated back to a SDK `PermissionResult`. AskUserQuestion gets a separate
- * branch that dispatches through the ask-question prompter — the session
- * surfaces a card in the action rail and returns the answers map.
- */
 import type {
   CanUseTool,
   PermissionResult,
@@ -30,58 +22,27 @@ import { deriveToolKind, deriveToolTitle, vendorMetaFields } from "./toolMeta";
 
 export type Prompter = (req: PermissionPrompt) => Promise<PermissionDecision>;
 
-/**
- * Session-domain handler for the SDK's `AskUserQuestion` tool. Mirrors the
- * permission `Prompter`: the bridge fetches it lazily via
- * `getAskUserQuestionPrompter` so it can be registered after construction.
- */
 export type AskUserQuestionPrompter = (req: AskUserQuestionPrompt) => Promise<AgentQuestionAnswers>;
 
 type InProcessCanUseTool = (...args: Parameters<CanUseTool>) => Promise<PermissionResult>;
 
-/** SDK-side shape of the `AskUserQuestion` tool input. */
 export interface AskUserQuestionInput {
   questions: AgentQuestion[];
 }
 
 export interface PermissionBridgeOptions {
   getPrompter: () => Prompter | null;
-  /**
-   * Lazily fetch the session-domain ask-question prompter. Absent / returning
-   * `null` makes AskUserQuestion deny with "not yet supported", matching the
-   * pre-inline behavior when no handler was wired.
-   */
   getAskUserQuestionPrompter?: () => AskUserQuestionPrompter | null;
-  /**
-   * Predicate identifying plan-mode plan files. When provided, the bridge
-   * auto-allows `Write` calls whose `file_path` satisfies the predicate so
-   * plan mode can finalize its proposal at `~/.claude/plans/*.md` without
-   * a prompt. Every other `Write` is routed through the permission
-   * prompter like any other tool.
-   */
   isPlanModePlanFilePath?: (absolutePath: string) => boolean;
-  /**
-   * Lazily fetch the predicate deciding whether a backend session is an
-   * ephemeral read-only fan-out QA sub-session. Lazy (like `getPrompter`) so
-   * the manager can register it after the backend is constructed. Consulted at
-   * the TOP of `canUseTool`, BEFORE the plan-file auto-allow: a read-only
-   * session hard-denies every write/exec tool (including plan-file `Write`s) so
-   * the auto-allow can never reopen a write path during a read-only QA turn.
-   * Closes the hole generically even if a mode switch failed to sandbox the
-   * backend.
-   */
   getIsReadOnlySession?: () => ((sessionId: SessionId) => boolean) | null;
 }
 
-/** Translates Claude tool requests for one immutable backend session. */
 export class PermissionBridge {
   constructor(
     private readonly sessionId: SessionId,
     private readonly opts: PermissionBridgeOptions
   ) {}
 
-  // This bridge always sends its response through the SDK. The upstream
-  // nullable return is reserved for hosts that answered out of band.
   canUseTool: InProcessCanUseTool = async (toolName, input, ctx) => {
     if (toolName === "AskUserQuestion") {
       return this.handleAskUserQuestion(input as unknown as AskUserQuestionInput, ctx);
@@ -94,20 +55,10 @@ export class PermissionBridge {
       sessionId
     );
 
-    // Read-only fan-out QA sub-sessions hard-deny writes/exec BEFORE the
-    // plan-file auto-allow below, so a read-only turn can never finalize a
-    // plan file (or any other write) even if the sandbox mode switch was wrong
-    // for this backend. Reads/searches/fetches fall through to the normal path
-    // (the prompter then allows them).
     const isReadOnlySession = this.opts.getIsReadOnlySession?.();
     if (sessionId && isReadOnlySession?.(sessionId)) {
       const { tool, mcpServer } = resolveToolName(toolName);
       const kind = deriveToolKind(tool, mcpServer);
-      // An MCP tool whose name isn't a known built-in derives to `other`, which
-      // is otherwise allowed. We can't verify a third-party MCP tool is
-      // read-only (e.g. `mcp__filesystem__write_file`), so fail safe and deny
-      // unknown MCP tools in a read-only QA turn; known-classified MCP reads
-      // (read/search/fetch) still fall through.
       const isUnverifiableMcpTool = Boolean(mcpServer) && kind === "other";
       if (isVaultWriteToolKind(kind) || isUnverifiableMcpTool) {
         return this.deny(
@@ -153,9 +104,6 @@ export class PermissionBridge {
       );
     }
     try {
-      // Reuse the SDK's `tool_use_id` as the requestId so the inline card's
-      // resolver pairs the answer with this call, mirroring the permission
-      // prompt's `toolCallId`.
       const answers = await prompter({
         sessionId,
         requestId: ctx.toolUseID,
@@ -209,8 +157,6 @@ function synthesizePermissionPrompt(
   return {
     sessionId,
     toolCall: {
-      // Reuse the SDK's `tool_use_id` so prompt and `tool_call` notification
-      // share an id — the trail UI and plan-card resolver pair them by id.
       toolCallId: ctx.toolUseID,
       kind: deriveToolKind(name, mcpServer),
       status: "pending",
@@ -231,14 +177,11 @@ function mapDecisionToSdk(
   if (decision.outcome.outcome === "cancelled") {
     return { behavior: "deny", message: "User cancelled" };
   }
-  // Defensive default: unknown ids collapse to deny so they don't silently allow.
   const optionKind = STANDARD_OPTION_IDS.has(decision.outcome.optionId)
     ? (decision.outcome.optionId as PermissionOptionKind)
     : "reject_once";
   switch (optionKind) {
     case "allow_once":
-      // SDK runtime schema requires `updatedInput` even though the type marks
-      // it optional. Echo the original — we don't modify tool args from the prompt.
       return { behavior: "allow", updatedInput: input };
     case "allow_always":
       return { behavior: "allow", updatedInput: input, updatedPermissions: suggestions ?? [] };

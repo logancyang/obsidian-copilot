@@ -340,8 +340,6 @@ describe("SkillManager", () => {
         };
         const refreshSpy = jest.spyOn(manager, "refresh").mockResolvedValue(refreshResult);
 
-        // No vault event arrives to satisfy the expectations. The safety timer
-        // fires, clears the stale predicates, and queues a healing reconcile.
         jest.advanceTimersByTime(10_000);
         jest.advanceTimersByTime(250);
         expect(refreshSpy).toHaveBeenCalledTimes(1);
@@ -363,7 +361,6 @@ describe("SkillManager", () => {
         };
         const refreshSpy = jest.spyOn(manager, "refresh").mockResolvedValue(refreshResult);
 
-        // External vault rename schedules a reconcile (250ms debounce).
         fireVaultEvent(
           app,
           "rename",
@@ -371,12 +368,9 @@ describe("SkillManager", () => {
           "copilot/skills/foo/SKILL.md"
         );
 
-        // Before the debounce expires, the user toggles an agent.
         mockedRunToggleAgent.mockResolvedValueOnce({ ok: true });
         await manager.toggleAgent(skill, "claude", true);
 
-        // The pre-existing reconcile timer must still fire — the external work
-        // hasn't been serviced yet.
         jest.advanceTimersByTime(250);
         expect(refreshSpy).toHaveBeenCalledTimes(1);
       });

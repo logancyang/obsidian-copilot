@@ -37,8 +37,6 @@ describe("sliceLines", () => {
 
 describe("VaultClient", () => {
   function buildApp(basePath = "/vault"): App {
-    // The mocked FileSystemAdapter takes the basePath via constructor; the
-    // real Obsidian type has a no-arg constructor, hence the cast.
     const adapter = new (FileSystemAdapter as unknown as new (basePath: string) => unknown)(
       basePath
     );

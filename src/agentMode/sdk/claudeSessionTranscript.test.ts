@@ -25,12 +25,10 @@ describe("parseClaudeTranscript", () => {
         timestamp: TS,
         message: { role: "assistant", content: [{ type: "text", text: "here is the answer" }] },
       }),
-      // pure tool-use assistant turn — no prose, skipped
       line({
         type: "assistant",
         message: { role: "assistant", content: [{ type: "tool_use", id: "t1" }] },
       }),
-      // tool_result comes back as a user record with array content — not user input
       line({
         type: "user",
         message: { role: "user", content: [{ type: "tool_result", content: "ok" }] },
@@ -95,8 +93,6 @@ describe("parseClaudeTranscript", () => {
   });
 
   it("unwraps the <user-message> envelope when a note follows it in another block", () => {
-    // An image this backend cannot send is replaced with a text note, so the
-    // envelope is no longer the last thing in the joined prompt.
     const wrapped =
       "<copilot-context>\nNotes:\n- a.md\n</copilot-context>\n\n<user-message>\ndescribe this\n</user-message>";
     const jsonl = line({

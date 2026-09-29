@@ -410,10 +410,8 @@ describe("ClaudeSdkBackendProcess", () => {
         PreToolUse: [{ hooks: [enforceForegroundToolUse] }],
       });
       expect((call.options.hooks as Record<string, unknown>).Stop).toBeUndefined();
-      // First turn → sessionId is seeded, no resume.
       expect(call.options.sessionId).toBe(sessionId);
       expect(call.options.resume).toBeUndefined();
-      // No append configured, but the preset is still pinned to its cacheable form.
       expect(call.options.systemPrompt).toEqual({
         type: "preset",
         preset: "claude_code",
@@ -532,7 +530,6 @@ describe("ClaudeSdkBackendProcess", () => {
       expect(opts.systemPrompt).toEqual({
         type: "preset",
         preset: "claude_code",
-        // Keeps cwd, git status and memory paths out of the cached system prefix.
         excludeDynamicSections: true,
         append: "DO THIS THING WITH SKILLS",
       });
@@ -554,8 +551,6 @@ describe("ClaudeSdkBackendProcess", () => {
       });
 
       const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      // Mutate the "setting" after newSession → the session's first turn must
-      // still use the original prompt, proving capture-at-newSession semantics.
       current = "SECOND DIRECTIVE";
       await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
 
@@ -567,15 +562,6 @@ describe("ClaudeSdkBackendProcess", () => {
         append: "FIRST DIRECTIVE",
       });
     });
-
-    // The SDK adapter's contract is "forward `getSystemPromptAppend()` verbatim
-    // into `options.systemPrompt.append`", proven above. The Claude descriptor
-    // wires that callback to `buildAgentSystemPrompt`, whose composition — the
-    // Copilot base prompt, pill directive, tool guidance, and disable-builtin
-    // behavior — is unit-tested in
-    // `backends/shared/agentSystemPrompt.test.ts`. (The `sdk` layer can't import
-    // a `backend` module under `boundaries/dependencies`, so that assertion
-    // lives there, not here.)
 
     it("buffers events emitted before a session handler is registered and replays them", async () => {
       queryMock.mockImplementation(() =>
@@ -599,7 +585,6 @@ describe("ClaudeSdkBackendProcess", () => {
       });
 
       const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      // Kick off prompt without a handler — events are buffered.
       const promptPromise = proc.prompt({
         sessionId,
         prompt: [{ type: "text", text: "hi" }],
@@ -738,8 +723,6 @@ describe("ClaudeSdkBackendProcess", () => {
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
         proc.registerSessionHandler(sessionId, () => {});
 
-        // First turn ends with a non-success result carrying no error detail
-        // (the "saved login expired" shape) → cache is invalidated.
         queryMock.mockImplementationOnce(() => makeQuery([errorResultMessage([])]));
         await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
         expect(checkAuth).toHaveBeenCalledTimes(1);
@@ -761,13 +744,6 @@ describe("ClaudeSdkBackendProcess", () => {
         });
       }
 
-      /**
-       * A query whose stream emits a couple of mid-message deltas (arming the
-       * watchdog) and then goes silent forever — until the backend's abort
-       * controller fires, at which point the generator returns (the SDK "stops and
-       * cleans up"). Reproduces a dropped/half-open response with no terminal
-       * `result`, which would otherwise park `for await` and wedge the turn.
-       */
       function makeStallingQuery(arg: unknown) {
         const { options } = arg as { options: { abortController: AbortController } };
         const { signal } = options.abortController;
@@ -799,17 +775,12 @@ describe("ClaudeSdkBackendProcess", () => {
         jest.useFakeTimers();
         try {
           const turn = proc.prompt({ sessionId, prompt: [{ type: "text", text: "draft a plan" }] });
-          // The thrown stall error is what `AgentSession` renders as the in-chat
-          // turn error via `markMessageError`.
           const assertion = expect(turn).rejects.toThrow(/stalled/i);
-          // Past the idle window; advanceTimersByTimeAsync flushes microtasks so the
-          // two deltas are consumed and the watchdog timer fires.
           await jest.advanceTimersByTimeAsync(61_000);
           await assertion;
         } finally {
           jest.useRealTimers();
         }
-        // The query was aborted (not left dangling) so the turn can be retried.
         const call = getPromptQueryCalls()[0][0] as {
           options: { abortController: AbortController };
         };
@@ -865,8 +836,6 @@ describe("ClaudeSdkBackendProcess", () => {
         (m) => m.baseModelId === "claude-fake-pro"
       );
       expect(pro?.effortOptions.map((o) => o.value)).toEqual(["low", "medium", "high"]);
-      // The SDK's per-model `description` is carried into the entry (used as the
-      // capability second line in the picker + settings).
       expect(pro?.description).toBe("test");
     });
 
@@ -1045,8 +1014,6 @@ describe("ClaudeSdkBackendProcess", () => {
     });
 
     it("threads the backend's env overrides into the probe on a cold cache", async () => {
-      // Cold module cache forces a real probe; the SDK reflects ANTHROPIC_MODEL
-      // into init.models itself, so the env just has to reach the probe.
       (getCachedSdkCatalog as jest.Mock).mockReturnValue(undefined);
       const initializationResult = jest.fn().mockResolvedValue({ models: FAKE_CATALOG });
       queryMock.mockReturnValue({
@@ -1070,7 +1037,6 @@ describe("ClaudeSdkBackendProcess", () => {
       };
       expect(probeCall.options.pathToClaudeCodeExecutable).toBe("/usr/local/bin/claude");
       expect(probeCall.options.env?.ANTHROPIC_MODEL).toBe("claude-fable-5");
-      // Child env is process.env plus the overrides, not a bare override map.
       expect(probeCall.options.env).toEqual({ ...process.env, ANTHROPIC_MODEL: "claude-fable-5" });
     });
   });
@@ -1188,7 +1154,6 @@ describe("ClaudeSdkBackendProcess", () => {
 
   describe("sessionExistsLocally()", () => {
     const cwd = "/vault";
-    // Mirrors the CLI's project-dir encoding: non-alphanumerics → "-".
     const projectDir = cwd.replace(/[^a-zA-Z0-9]/g, "-");
     let configDir: string;
 
@@ -1293,9 +1258,6 @@ describe("ClaudeSdkBackendProcess", () => {
 
   describe("plan usage", () => {
     it("replays the last known caps to a newly attached session", async () => {
-      // The caps belong to the account, not the conversation. Without this, opening or
-      // switching to another chat showed no caps until that chat had taken its own turn,
-      // which reads as the meters having vanished.
       const proc = new ClaudeSdkBackendProcess({
         pathToClaudeCodeExecutable: "/usr/local/bin/claude",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1308,7 +1270,6 @@ describe("ClaudeSdkBackendProcess", () => {
         windows: [{ id: "seven_day", label: "Weekly", percent: 21 }],
         updatedAt: 1,
       };
-      // Stand in for a read that already happened on an earlier session.
       (proc as unknown as { lastPlanUsage: unknown }).lastPlanUsage = planUsage;
 
       const { sessionId } = await proc.newSession({ cwd: "/vault" });
@@ -1338,8 +1299,6 @@ describe("ClaudeSdkBackendProcess", () => {
     });
 
     it("does not replay a window whose reset has already passed (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
-      // This process outlives many chats. Replaying a snapshot taken before a reset shows
-      // the previous period's percentage as if it described the current one.
       const proc = new ClaudeSdkBackendProcess({
         pathToClaudeCodeExecutable: "/usr/local/bin/claude",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1367,9 +1326,6 @@ describe("ClaudeSdkBackendProcess", () => {
     });
 
     it("publishes a reading to every live session, not only the one that took the turn", async () => {
-      // The caps describe the account, so they are equally true of every open chat.
-      // Routing them to one leaves the others showing a stale number until they each run
-      // a turn (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
       const proc = new ClaudeSdkBackendProcess({
         pathToClaudeCodeExecutable: "/usr/local/bin/claude",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1403,8 +1359,6 @@ describe("ClaudeSdkBackendProcess", () => {
     });
 
     it("clears the meters when the account turns out not to be metered by plan caps (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
-      // Switching an external Claude login from OAuth to an API key mid-session leaves
-      // subscription caps on screen that no longer apply to anything.
       const proc = new ClaudeSdkBackendProcess({
         pathToClaudeCodeExecutable: "/usr/local/bin/claude",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1460,7 +1414,6 @@ describe("ClaudeSdkBackendProcess", () => {
           Promise.reject(new Error("transport closed")),
       });
 
-      // A failed read is the absence of news, never a reason to blank a live meter.
       expect(events).toHaveLength(0);
       expect((proc as unknown as { lastPlanUsage: unknown }).lastPlanUsage).toBe(planUsage);
     });

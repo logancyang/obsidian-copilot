@@ -15,13 +15,10 @@ import type {
 
 type ElicitationContent = Record<string, ElicitationContentValue>;
 
-/** Codex's choice that tells it to read the answer from the question's note field. */
 const CODEX_OTHER_OPTION = "None of the above";
 
-/** A supported form shown as inline questions, plus the encoder for the card's answers. */
 export interface ElicitationQuestionForm {
   prompt: AskUserQuestionPrompt;
-  /** Serialize the card's answers into the form's field ids and option values. */
   toContent: (answers: AgentQuestionAnswers) => ElicitationContent;
 }
 
@@ -32,14 +29,8 @@ function codexMeta(field: ElicitationPropertySchema): Record<string, unknown> | 
     : undefined;
 }
 
-/**
- * Convert a Codex `request_user_input` form to the shared inline question
- * contract. Codex sends each question as a required single-select string with
- * `_meta.codex`, and pairs a question that accepts typed answers with a
- * `user_note` field. Any other form is declined, since the card cannot
- * collect it faithfully.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/551
- */
+// Any form other than Codex's `request_user_input` shape is declined: the card cannot collect
+// it faithfully. https://github.com/Brevilabs/obsidian-copilot-private/issues/551
 export function formToQuestionPrompt(
   request: CreateElicitationRequest,
   requestId: string
@@ -94,7 +85,6 @@ export function formToQuestionPrompt(
         if (choice) {
           content[id] = choice.const;
         } else if (noteId) {
-          // Codex reads a typed answer as its sentinel choice plus the paired note.
           content[id] = CODEX_OTHER_OPTION;
           content[noteId] = answer;
         }

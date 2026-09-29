@@ -70,11 +70,6 @@ import {
   stopReasonFromAcp,
 } from "./wireTranslate";
 
-/**
- * Capabilities the agent may or may not implement. Tracked in a single Set so
- * adding a new capability is one constant + one branch in the unsupported
- * handler instead of touching reset / probe / getter sites.
- */
 export type AcpCapability =
   | "session/close"
   | "session/list"
@@ -84,11 +79,6 @@ export type AcpCapability =
   | "session/set_config_option"
   | "session/additional_directories";
 
-/**
- * Detect a JSON-RPC -32601 (method not found) error from the ACP SDK. The SDK
- * surfaces these as `RequestError` instances; we also tolerate plain objects
- * shaped like `{ code: number }` defensively.
- */
 function isMethodNotFoundError(err: unknown): boolean {
   if (err instanceof RequestError) return err.code === JSONRPC_METHOD_NOT_FOUND;
   if (typeof err === "object" && err !== null && "code" in err) {
@@ -100,35 +90,15 @@ function isMethodNotFoundError(err: unknown): boolean {
 const COPILOT_CLIENT_NAME = "obsidian-copilot";
 const JSONRPC_INTERNAL_ERROR = -32603;
 
-/**
- * Per-session bookkeeping for the latest known wire-shaped catalogs. We keep
- * these so that mid-session `current_mode_update` / `config_option_update`
- * notifications and per-dimension `setSession*` calls can produce a fresh
- * `BackendState` without having to refetch from the agent.
- */
 interface SessionWireState {
   modes: SessionModeState | null;
   configOptions: SessionConfigOption[] | null;
 }
 
-/**
- * One-per-vault wrapper around an ACP-speaking subprocess. Owns the
- * `ClientConnection`, the `AcpProcessManager`, and the demultiplexer
- * that fans `session/update` notifications out to the right `AgentSession`.
- *
- * Lifecycle: `start()` exactly once, then any number of `newSession`/`prompt`
- * calls, finally `shutdown()`. All sessions on this backend share the
- * subprocess and die together if it exits.
- */
 export class AcpBackendProcess implements BackendProcess {
   private process: AcpProcessManager | null = null;
   private connection: ClientConnection | null = null;
   private readonly domainHandlers = new Map<SessionId, DomainSessionUpdateHandler>();
-  /**
-   * Per-session FIFO of `session/update` notifications that arrived before a
-   * handler was registered. Buffers the wire-shaped notification so we
-   * translate at replay time (the destination handler is domain-typed).
-   */
   private readonly pendingUpdates = new Map<SessionId, SessionNotification[]>();
   private static readonly PENDING_UPDATE_LIMIT = 32;
   private permissionPrompter: ((req: PermissionPrompt) => Promise<PermissionDecision>) | null =
@@ -138,65 +108,16 @@ export class AcpBackendProcess implements BackendProcess {
     | null = null;
   private exitListeners = new Set<() => void>();
   private unhealthyHandler: (() => void) | null = null;
-  // Set once any session request succeeds, so a service that is dead from
-  // spawn is reported instead of restarted forever.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
+  // A service that is dead from spawn is reported, not restarted forever. https://github.com/Brevilabs/obsidian-copilot-private/issues/561
   private hasServedSession = false;
   private capabilities = new Map<AcpCapability, boolean>();
   private readonly sessionWireState = new Map<SessionId, SessionWireState>();
-  // Tool-call ids first seen as a `todowrite`-titled call, so later
-  // tool_call_updates for the same id keep synthesizing a plan update even
-  // after opencode renames the title (e.g. "3 todos"). See wireTranslate's
-  // todoToolPlanFromAcp. Keyed by session like every other per-session map on
-  // this shared (per-backend) process — a single backend instance serves all
-  // its sessions, so a bare Set would leak ids across sessions and grow
-  // unbounded for the process lifetime. Pruned on session teardown + shutdown.
   private readonly todoToolCallIdsBySession = new Map<SessionId, Set<string>>();
-  // Sessions that pushed at least one live `usage_update` notification. Its
-  // `used` is current context occupancy; the prompt-result `usage.totalTokens`
-  // is a cumulative session total. Once a live update has been seen we suppress
-  // the coarser prompt-result fallback so it can't overwrite occupancy with the
-  // cumulative figure. Keyed by session like the other per-session maps; pruned
-  // on session teardown + shutdown.
   private readonly sawLiveUsage = new Set<SessionId>();
-  // Replay accumulators, one per in-flight `loadSession`. A `session/update`
-  // for a session with an active accumulator is fed to it instead of being
-  // routed, which is what keeps the replay burst clear of `pendingUpdates` and
-  // its PENDING_UPDATE_LIMIT — a real transcript easily exceeds 32 frames.
-  //
-  // DESIGN NOTE — deliberately unbounded. A replay is bounded by the
-  // conversation the user is reopening, and the Claude adapter already reads a
-  // whole session jsonl into memory the same way (`readPersistedTranscript`).
-  // Capping it would truncate exactly the long histories this exists to
-  // restore, and no measurement suggests the size is a problem. If a future
-  // review flags this again, point them at this note.
   private readonly loadSessionCollectors = new Map<SessionId, ReplayTranscriptState>();
-  /**
-   * Last plan-cap snapshot read from the backend.
-   *
-   * The caps belong to the account, not to a conversation, so one session's reading is
-   * true for every other. Held process-wide and replayed on attach, a new or switched
-   * chat shows the caps immediately instead of blanking until its own first turn.
-   */
   private lastPlanUsage: PlanUsage | null = null;
-  /**
-   * The in-flight plan-usage read, when one is running. Reads are strictly sequential:
-   * a trigger that arrives mid-read joins it instead of racing it — overlapping reads
-   * can resolve out of start order and roll the meters backward, and several chats
-   * attaching at once would otherwise fire one identical account read each — and sets
-   * {@link planUsageReadQueued} so exactly one follow-up read runs afterwards, because
-   * a turn that ended mid-read has moved the numbers the running read will report.
-   */
   private planUsageRead: Promise<void> | null = null;
   private planUsageReadQueued = false;
-  /**
-   * Context windows the backend supplied for models the wire reports no window for,
-   * keyed by wire model id — windows belong to models, so a model switch needs no
-   * invalidation. A synchronous mirror of the backend's async answer on purpose:
-   * AgentSession ignores a windowless snapshot once it holds a windowed one, so every
-   * usage update after the first must be enriched inline or the meter would go stale
-   * for the rest of the session.
-   */
   private readonly backendContextWindows = new Map<string, number>();
 
   constructor(
@@ -206,11 +127,6 @@ export class AcpBackendProcess implements BackendProcess {
     private readonly descriptor: BackendDescriptor
   ) {}
 
-  /**
-   * Spawn the subprocess and complete the ACP `initialize` handshake.
-   * Idempotent: a second call while an existing connection is live is a
-   * no-op.
-   */
   async start(): Promise<void> {
     if (this.connection) return;
     const adapter = this.app.vault.adapter;
@@ -246,9 +162,6 @@ export class AcpBackendProcess implements BackendProcess {
       this.permissionPrompter = null;
       this.askUserQuestionPrompter = null;
       this.capabilities.clear();
-      // Dropped rather than kept: a backend that starts again may be pointed at
-      // different credentials, and a snapshot held across that would show the previous
-      // account's caps. The next chat to attach reads fresh.
       this.lastPlanUsage = null;
       this.planUsageReadQueued = false;
       this.backendContextWindows.clear();
@@ -282,10 +195,8 @@ export class AcpBackendProcess implements BackendProcess {
         clientCapabilities: {
           fs: { readTextFile: true, writeTextFile: true },
           elicitation: { form: {} },
-          // The plan-approval card and editor already show a proposed plan. Without
-          // this capability codex-acp also streams the plan body as assistant text,
-          // duplicating it in the chat above the card.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+          // Without this, codex-acp also streams the plan body as chat text, duplicating the
+          // plan-approval card. https://github.com/Brevilabs/obsidian-copilot-private/issues/551
           plan: {},
         },
         clientInfo: {
@@ -293,8 +204,6 @@ export class AcpBackendProcess implements BackendProcess {
           version: this.clientVersion,
         },
       });
-      // Closing a local chat must not claim to release resources on an unsupported agent.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
       if (init.agentCapabilities?.sessionCapabilities?.close != null) {
         this.capabilities.set("session/close", true);
       }
@@ -307,10 +216,6 @@ export class AcpBackendProcess implements BackendProcess {
       if (init.agentCapabilities?.loadSession === true) {
         this.capabilities.set("session/load", true);
       }
-      // Experimental ACP capability: presence of the (possibly empty) object
-      // means the agent honors `additionalDirectories` on session lifecycle
-      // requests. codex 0.135 / opencode 1.2.27 don't advertise it, so they
-      // receive no field. Gating here auto-enables future versions that do.
       if (init.agentCapabilities?.sessionCapabilities?.additionalDirectories != null) {
         this.capabilities.set("session/additional_directories", true);
       }
@@ -352,9 +257,6 @@ export class AcpBackendProcess implements BackendProcess {
     this.askUserQuestionPrompter = fn;
   }
 
-  /** Notify the owner when this ACP process needs replacement.
-   * @param fn Schedules replacement of the failing process.
-   */
   setUnhealthyHandler(fn: () => void): void {
     this.unhealthyHandler = fn;
   }
@@ -373,8 +275,6 @@ export class AcpBackendProcess implements BackendProcess {
         }
       }
     }
-    // Expired windows are dropped rather than replayed: this process outlives many
-    // chats, and a snapshot taken before a reset describes a period that has ended.
     this.lastPlanUsage = this.lastPlanUsage && withoutExpiredWindows(this.lastPlanUsage);
     if (this.lastPlanUsage) {
       try {
@@ -386,18 +286,11 @@ export class AcpBackendProcess implements BackendProcess {
         logWarn(`[AgentMode] replay of plan usage threw for ${sessionId}`, e);
       }
     } else {
-      // Nothing read yet this run. The caps outlive the process, so the first chat to
-      // open has somewhere to read them from and should not have to run a turn first.
       void this.refreshPlanUsage();
     }
     return () => {
-      // Only tear down if THIS handler is still the registered one — a later
-      // re-register for the same sessionId (resume/reconnect) must not have its
-      // live tracker deleted by the stale unsubscribe.
       if (this.domainHandlers.get(sessionId) === handler) {
         this.domainHandlers.delete(sessionId);
-        // Teardown (not per-turn): the handler is unregistered only when the
-        // AgentSession disposes, so drop this session's per-session trackers too.
         this.todoToolCallIdsBySession.delete(sessionId);
         this.sawLiveUsage.delete(sessionId);
       }
@@ -436,12 +329,6 @@ export class AcpBackendProcess implements BackendProcess {
         throw await this.serviceStoppedOr(err);
       });
     this.hasServedSession = true;
-    // Fallback usage source for agents that never push a live `usage_update`
-    // notification: the prompt result may carry a turn `usage` with no context
-    // window. `usage.totalTokens` is a cumulative session total (not current
-    // context occupancy), so once a live `usage_update` has reported occupancy
-    // for this session we skip the fallback rather than overwrite the finer
-    // value. AgentSession's precedence rule then keeps the live window too.
     const usage = resp.usage;
     if (usage && !this.sawLiveUsage.has(params.sessionId)) {
       const handler = this.domainHandlers.get(params.sessionId);
@@ -464,28 +351,13 @@ export class AcpBackendProcess implements BackendProcess {
         );
       }
     }
-    // A turn is what moves the caps, so its end is the moment to look again. Not
-    // awaited: the turn is over, and making the user wait on the read to see it end
-    // would trade a visible delay for a meter that refreshes a beat later.
     void this.refreshPlanUsage();
     return { stopReason: stopReasonFromAcp(resp.stopReason) };
   }
 
-  /**
-   * Ask the backend for the account's plan-cap utilization and publish what it says.
-   *
-   * Best-effort by construction: a backend with no source omits `readPlanUsage`
-   * entirely, and a read that failed or was unusable changes nothing — we learned
-   * nothing about the account, so the last good snapshot stands rather than blanking a
-   * meter the user is reading. A read that succeeded and reported no caps is different:
-   * this login is not metered by plan limits, so any caps on screen describe an account
-   * the user is no longer on and are cleared
-   * (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
-   *
-   * Published to every attached session, not to whichever one prompted the read: the
-   * number describes the account, so it is equally true of every open chat, and routing
-   * it to one would leave the others showing a stale number until they each ran a turn.
-   */
+  // A failed read keeps the last snapshot; a successful read with no caps clears it. The result
+  // goes to every attached session because the caps belong to the account, not the chat.
+  // https://github.com/logancyang/obsidian-copilot-preview/issues/193
   private refreshPlanUsage(): Promise<void> {
     if (!this.backend.readPlanUsage || !this.connection) return Promise.resolve();
     if (this.planUsageRead) {
@@ -511,8 +383,6 @@ export class AcpBackendProcess implements BackendProcess {
       logWarn(`[AgentMode] ${this.backend.id} plan usage read threw`, e);
       return;
     }
-    // Shut down (or exited) while the read was in flight: the answer describes an
-    // account the next start() may no longer be on, so it must not outlive the reset.
     if (!this.connection) return;
     if (reading.kind === "unavailable") return;
     this.lastPlanUsage = reading.kind === "usage" ? reading.planUsage : null;
@@ -528,25 +398,12 @@ export class AcpBackendProcess implements BackendProcess {
     }
   }
 
-  /**
-   * The account cap snapshot as one session should see it: the caps meter a session
-   * only while its current model bills the metered account (see
-   * {@link AcpBackend.planUsageAppliesTo}), so a session on some other billing source
-   * gets `null` — its meters stay off, or clear — while the snapshot itself stays
-   * cached for the sessions the caps do describe.
-   */
   private planUsageFor(sessionId: SessionId): PlanUsage | null {
     if (!this.lastPlanUsage) return null;
     const applies = this.backend.planUsageAppliesTo?.(this.currentWireModelId(sessionId)) ?? true;
     return applies ? this.lastPlanUsage : null;
   }
 
-  /**
-   * Re-send one session's gated view of the caps after its model may have changed: a
-   * switch off a metered model clears its meters at once, a switch onto one shows the
-   * cached snapshot at once, and neither waits for the next turn to end. A no-op until
-   * a snapshot exists — with nothing cached there is nothing to show or clear.
-   */
   private republishPlanUsage(sessionId: SessionId): void {
     if (!this.lastPlanUsage || !this.backend.planUsageAppliesTo) return;
     this.domainHandlers.get(sessionId)?.({
@@ -555,10 +412,6 @@ export class AcpBackendProcess implements BackendProcess {
     });
   }
 
-  /**
-   * Release backend resources for one session while preserving the shared subprocess.
-   * @param params Identifies the live session to release.
-   */
   async closeSession(params: { sessionId: SessionId }): Promise<void> {
     await this.dispatchCapability(
       "session/close",
@@ -583,13 +436,6 @@ export class AcpBackendProcess implements BackendProcess {
     return this.hasCapability("session/additional_directories");
   }
 
-  // Extra searchable roots ride on every session-lifecycle request (new, resume,
-  // load), but only when the agent advertises the experimental
-  // `additionalDirectories` capability — resume/load re-establish the roots just
-  // like `session/new`, so they must carry them too or a restored project chat
-  // loses its off-vault context roots. Agents that don't advertise the capability
-  // get no field at all; sending one they'll silently ignore would be misleading.
-  // Empty/absent roots also send nothing, so non-project sessions stay untouched.
   private additionalDirectoriesField(roots: string[] | undefined): {
     additionalDirectories?: string[];
   } {
@@ -602,8 +448,7 @@ export class AcpBackendProcess implements BackendProcess {
     const option = this.sessionWireState
       .get(params.sessionId)
       ?.configOptions?.find((option) => option.type === "select" && option.category === "model");
-    // Current agents expose model switching only through advertised config options.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/550
+    // Current agents expose model switching only through advertised config options. https://github.com/Brevilabs/obsidian-copilot-private/issues/550
     if (!option) throw new MethodUnsupportedError("session/set_config_option");
     return this.setSessionConfigOption({
       sessionId: params.sessionId,
@@ -651,8 +496,6 @@ export class AcpBackendProcess implements BackendProcess {
     if (wire) {
       wire.configOptions = resp.configOptions;
     }
-    // A config option can be the model itself (opencode ≥ 1.15.13), so the session's
-    // gated view of the caps may just have changed with it.
     this.republishPlanUsage(params.sessionId);
     return this.computeState(params.sessionId);
   }
@@ -661,11 +504,6 @@ export class AcpBackendProcess implements BackendProcess {
     return this.capabilitySupported("session/set_config_option");
   }
 
-  /**
-   * Run an RPC gated by capability. Throws `MethodUnsupportedError` if the
-   * capability is known unsupported (advertised off, or a previous -32601).
-   * On a fresh -32601 reply, cache the negative result and rethrow.
-   */
   private async dispatchCapability<T>(
     capability: AcpCapability,
     run: (c: ClientConnection) => Promise<T>,
@@ -735,8 +573,6 @@ export class AcpBackendProcess implements BackendProcess {
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
     const sessionId = params.sessionId;
-    // Installed before the request goes out: the agent replays the conversation
-    // while it is in flight, so a collector added afterwards would miss it.
     const collector = createReplayTranscriptState();
     this.loadSessionCollectors.set(sessionId, collector);
 
@@ -763,22 +599,6 @@ export class AcpBackendProcess implements BackendProcess {
         transcript: finishReplayTranscript(collector),
       };
     } finally {
-      // Only retire OUR accumulator: `loadSession` is public and has more than
-      // one caller (history resume and the model preloader), so a concurrent
-      // load for the same session would otherwise have its accumulator deleted
-      // here and its frames folded into ours. Mirrors the same guard in
-      // `registerSessionHandler`.
-      //
-      // DESIGN NOTE — this guard does not make two *overlapping* loads of the
-      // same session safe, and deliberately so. ACP notifications carry only a
-      // session id, no request id, so overlapping replays of one session are
-      // unsplittable at this layer and would need single-flighting here. No
-      // caller can produce that overlap: history resume already single-flights
-      // per (backend, session) in `AgentSessionManager.tryResumeSessionFromHistory`,
-      // and the preloader only ever loads its own probe session, on a process it
-      // owns until that load has resolved. Single-flighting again here would be
-      // a second copy of a guard the one reachable caller already has. If a
-      // future review flags this again, point them at this note.
       if (this.loadSessionCollectors.get(sessionId) === collector) {
         this.loadSessionCollectors.delete(sessionId);
       }
@@ -796,8 +616,6 @@ export class AcpBackendProcess implements BackendProcess {
     this.permissionPrompter = null;
     this.askUserQuestionPrompter = null;
     this.capabilities.clear();
-    // Same reasoning as the exit handler: the next start() may authenticate as a
-    // different account, so nothing about this one may survive the restart.
     this.lastPlanUsage = null;
     this.backendContextWindows.clear();
     if (this.process) {
@@ -810,20 +628,11 @@ export class AcpBackendProcess implements BackendProcess {
     }
   }
 
-  /**
-   * OpenCode 2 leaves ACP alive when its private service dies, so the process
-   * must be replaced before a prompt or a new chat can succeed again. Session
-   * creation is included because after an idle crash it is the first request,
-   * and a new chat is the user's natural retry. A process that never served a
-   * session request is not replaced: its replacement would start the same way,
-   * and each failed rebuild would schedule another restart.
-   * https://github.com/Brevilabs/obsidian-copilot-private/issues/561
-   *
-   * A healthy service reports some request failures (such as a missing cwd)
-   * with the same error as a dead one, so a failed `session/list` probe is what
-   * marks the service as stopped.
-   * https://github.com/anomalyco/opencode/issues/51716
-   */
+  // OpenCode 2 leaves ACP alive when its private service dies, so the process must be replaced.
+  // A process that never served a session is not replaced: its replacement would fail the same
+  // way and restart forever. A healthy service reports some failures with the same error as a
+  // dead one, so a failed `session/list` probe decides. https://github.com/Brevilabs/obsidian-copilot-private/issues/561
+  // https://github.com/anomalyco/opencode/issues/51716
   private async serviceStoppedOr(err: unknown): Promise<unknown> {
     if (
       !(err instanceof RequestError && err.code === JSONRPC_INTERNAL_ERROR) ||
@@ -862,11 +671,6 @@ export class AcpBackendProcess implements BackendProcess {
     this.sessionWireState.set(sessionIdFromAcp(sessionId), wire);
   }
 
-  /**
-   * The todo-tool id tracker for one session, created on first use. Scoping it
-   * per session keeps one session's `todowrite` ids from being honored for
-   * another on this shared backend process (see the field's declaration).
-   */
   private todoToolCallIdsFor(sessionId: SessionId): Set<string> {
     let ids = this.todoToolCallIdsBySession.get(sessionId);
     if (!ids) {
@@ -887,24 +691,9 @@ export class AcpBackendProcess implements BackendProcess {
   private routeSessionUpdate(acpSessionId: AcpSessionId, update: SessionNotification): void {
     const sessionId = sessionIdFromAcp(acpSessionId);
 
-    // If there's an active loadSession collector for this session, feed it
-    // user/agent message chunks and skip normal routing.
-    // A replay in progress claims the conversation frames; everything it does
-    // not claim (mode, config, usage, title) still belongs to the session and
-    // falls through to normal routing below.
-    //
-    // DESIGN NOTE — the `session/load` response is the replay barrier. ACP
-    // requires the agent to finish replaying before it answers, so a
-    // conversation frame arriving afterwards is a backend violation and is
-    // dropped by the normal path rather than reopening a retired accumulator.
-    // Holding one open past the response would mean mutating a transcript the
-    // session has already rendered. If a future review flags this again, point
-    // them at this note.
     const collector = this.loadSessionCollectors.get(sessionId);
     if (collector && consumeReplayUpdate(collector, update.update)) return;
 
-    // Mirror per-dimension wire updates into our cache so subsequent
-    // setSession* calls (and the next `state_changed` event) reflect reality.
     const wire = this.sessionWireState.get(sessionId);
     if (wire) {
       const u = update.update;
@@ -915,7 +704,6 @@ export class AcpBackendProcess implements BackendProcess {
         wire.configOptions = u.configOptions;
       }
     }
-    // Record a live occupancy source so the prompt-result fallback stays quiet.
     if (update.update.sessionUpdate === "usage_update") {
       this.sawLiveUsage.add(sessionId);
     }
@@ -938,18 +726,12 @@ export class AcpBackendProcess implements BackendProcess {
       return;
     }
 
-    // Per-dimension wire updates already mutated `wire` above; AgentSession
-    // ignores them and waits for the synthesized `state_changed` we publish
-    // below. Skip the original to avoid a wasted translation + dispatch.
     const sub = update.update.sessionUpdate;
     if (sub === "current_mode_update" || sub === "config_option_update") {
       handler({
         sessionId,
         update: { sessionUpdate: "state_changed", state: this.computeState(sessionId) },
       });
-      // An agent-initiated config change can carry a new model (opencode ≥ 1.15.13
-      // keeps its catalog in a config option), moving the session on or off the
-      // metered account.
       if (sub === "config_option_update") this.republishPlanUsage(sessionId);
       return;
     }
@@ -958,17 +740,11 @@ export class AcpBackendProcess implements BackendProcess {
       handler(this.withBackendContextWindow(event));
   }
 
-  /**
-   * Fill in a context window the wire did not supply, from the backend's own knowledge
-   * of the model (see {@link AcpBackend.readContextWindow}). Enriched inline when the
-   * window is already known; the first windowless snapshot for a model triggers the
-   * async read instead, and is republished once the answer arrives.
-   */
   private withBackendContextWindow(event: SessionEvent): SessionEvent {
     if (!this.backend.readContextWindow) return event;
     if (event.update.sessionUpdate !== "usage_update") return event;
     const usage = event.update.usage;
-    if (usage.contextWindow) return event; // the wire knew; nothing to add
+    if (usage.contextWindow) return event;
     const wireModelId = this.currentWireModelId(event.sessionId);
     if (!wireModelId) return event;
     const known = this.backendContextWindows.get(wireModelId);
@@ -982,16 +758,6 @@ export class AcpBackendProcess implements BackendProcess {
     };
   }
 
-  /**
-   * The context window the backend's own catalog gives a model, through this process's
-   * cache. Public as `BackendProcess.readContextWindow`: a session seeding persisted
-   * usage asks here so a reopened chat's ring does not wait for its next turn.
-   *
-   * A null answer is deliberately not cached: the backend answers null both for a
-   * model it does not know and for a source it could not reach, so remembering it
-   * would turn one transient failure into a bare token count for the rest of the
-   * session.
-   */
   async readContextWindow(wireModelId: string | null | undefined): Promise<number | null> {
     if (!wireModelId || !this.backend.readContextWindow) return null;
     const known = this.backendContextWindows.get(wireModelId);
@@ -1014,21 +780,13 @@ export class AcpBackendProcess implements BackendProcess {
   ): Promise<void> {
     const contextWindow = await this.readContextWindow(wireModelId);
     if (!contextWindow) return;
-    // The session may have switched models while the catalog answered. Republishing the
-    // old model's snapshot now would hand AgentSession a windowed reading it treats as
-    // authoritative — re-freezing the very ring its model-change handling just cleared.
     if (this.currentWireModelId(sessionId) !== wireModelId) return;
-    // Republish the snapshot that arrived windowless so the ring fills in now rather
-    // than on the next usage report.
     this.domainHandlers.get(sessionId)?.({
       sessionId,
       update: { sessionUpdate: "usage_update", usage: { ...usage, contextWindow } },
     });
   }
 
-  /**
-   * Current model id from the session's advertised model config option.
-   */
   private currentWireModelId(sessionId: SessionId): string | null {
     const wire = this.sessionWireState.get(sessionId);
     if (!wire) return null;

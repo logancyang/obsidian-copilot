@@ -9,63 +9,34 @@ import {
 } from "./symlinks";
 import type { BackendId, Skill } from "./types";
 
-/**
- * FS surface for {@link runToggleAgent}. Mirrors the read/write subset of
- * {@link ReconcileFs} that's actually needed for a toggle pass — kept
- * separate so tests can construct a tiny in-memory adapter without
- * pulling in the full reconcile fixture.
- */
 export interface ToggleAgentFs {
-  /** Does the path exist (any kind)? */
   exists(absPath: string): Promise<boolean>;
-  /** Is the path a directory (real or junction)? */
   isDirectory(absPath: string): Promise<boolean>;
-  /** Is the path itself a symlink/junction? */
   isSymlink(absPath: string): Promise<boolean>;
-  /** Create a directory symlink/junction. May throw with code "EPERM". */
   symlink(target: string, linkPath: string): Promise<void>;
-  /** Remove a symlink/junction. No-op when missing. */
   unlink(absPath: string): Promise<void>;
-  /** Recursively remove a real directory. */
   rmRecursive(absPath: string): Promise<void>;
-  /** Read a UTF-8 file. */
   readFile(absPath: string): Promise<string>;
-  /** Write a UTF-8 file (overwriting). */
   writeFile(absPath: string, content: string): Promise<void>;
 }
 
-/** FS surface for delete, including targeted stale-link sweeps. */
 export type DeleteSkillFs = ToggleAgentFs & LinkSweepFs;
 
-/** Discriminated result identical to {@link SymlinkResult}, re-exported for callers. */
 export type ToggleAgentResult = { ok: true } | { ok: false; reason: string };
 
-/** Options for {@link runToggleAgent}. */
 export interface ToggleAgentOptions {
   skill: Skill;
   agent: BackendId;
   enabled: boolean;
-  /** Absolute path of this agent's project skills directory. */
   agentDirAbs: string;
   fs: ToggleAgentFs;
 }
 
-/**
- * Pure-fs core of `SkillManager.toggleAgent`. Two steps:
- *
- * 1. Rewrite `metadata.copilot-enabled-agents` in the canonical SKILL.md.
- *    On failure, return early — the source of truth never goes stale.
- * 2. Create or remove the agent's symlink. EPERM bubbles up as
- *    `{ ok: false, reason: 'eperm' }`; the frontmatter is **not** rolled
- *    back so reconciliation can heal the link on a future pass once the
- *    user enables Windows Developer Mode.
- */
 export async function runToggleAgent(options: ToggleAgentOptions): Promise<ToggleAgentResult> {
   const { skill, agent, enabled, agentDirAbs: agentDir, fs } = options;
 
   const nextAgents = computeNextAgents(skill.enabledAgents, agent, enabled);
 
-  // Step 1 — update SKILL.md (source of truth).
   try {
     const raw = await fs.readFile(skill.filePath);
     const parsed = parseSkillFile(raw, skill.name);
@@ -77,7 +48,6 @@ export async function runToggleAgent(options: ToggleAgentOptions): Promise<Toggl
     return { ok: false, reason };
   }
 
-  // Step 2 — create / remove the symlink.
   if (enabled) {
     const result: SymlinkResult = await replaceAgentLink(fs, agentDir, skill.name, skill.dirPath);
     if (!result.ok) return { ok: false, reason: result.reason };
@@ -94,20 +64,12 @@ export async function runToggleAgent(options: ToggleAgentOptions): Promise<Toggl
   return { ok: true };
 }
 
-/** Options for {@link runDeleteSkill}. */
 export interface DeleteSkillOptions {
   skill: Skill;
-  /** Absolute path of each registered agent's project skills directory. */
   agentDirsAbs: Readonly<Record<BackendId, string>>;
   fs: DeleteSkillFs;
 }
 
-/**
- * Pure-fs core of `SkillManager.deleteSkill`. Removes every enabled
- * agent's symlink first (so any orphan-sweep race sees no dangling
- * links), then rms the canonical directory recursively. Symlink-removal
- * failures are non-fatal — they're logged but don't block the rm.
- */
 export async function runDeleteSkill(
   options: DeleteSkillOptions
 ): Promise<{ ok: boolean; reason?: string }> {
@@ -142,11 +104,6 @@ export async function runDeleteSkill(
   return { ok: true };
 }
 
-/**
- * Compute the new `enabledAgents` list when toggling `agent`. Preserves
- * the order of unaffected agents so the canonical SKILL.md rewrite stays
- * diff-friendly.
- */
 function computeNextAgents(current: BackendId[], agent: BackendId, enabled: boolean): BackendId[] {
   const has = current.includes(agent);
   if (enabled && !has) return [...current, agent];

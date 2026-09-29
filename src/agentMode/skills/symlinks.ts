@@ -3,57 +3,22 @@ import { errCode } from "@/utils/errorUtils";
 import { joinPosix, normalizeAbsPath } from "@/utils/pathUtils";
 import { renameWithRetry } from "./renameWithRetry";
 
-/**
- * Subset of `node:fs` used by the symlink helpers. Modeled as a small
- * adapter so tests can pass an in-memory FS without touching disk.
- *
- * The Windows EPERM fallback lives at this seam: implementations should
- * throw an Error whose `code` is `"EPERM"` when `fs.symlink()` fails for
- * lack of privilege, and the helpers translate that into the typed
- * `{ ok: false, reason: 'eperm' }` result.
- */
 export interface SymlinksFs {
-  /** Whether the path exists (any kind). */
   exists(absPath: string): Promise<boolean>;
-  /** Whether the path is a directory (real or junction). */
   isDirectory(absPath: string): Promise<boolean>;
-  /** Whether the path itself is a symlink/junction. */
   isSymlink(absPath: string): Promise<boolean>;
-  /**
-   * Create a directory symlink (POSIX) or junction (Windows) at `linkPath`
-   * pointing at the **absolute** `target`. May throw with `code: "EPERM"`.
-   */
   symlink(target: string, linkPath: string): Promise<void>;
-  /** Remove a symlink/junction at `absPath`. No-op if it doesn't exist. */
   unlink(absPath: string): Promise<void>;
-  /** Recursively remove a real directory at `absPath`. */
   rmRecursive(absPath: string): Promise<void>;
 }
 
-/**
- * FS surface for targeted link sweeps. Used by single-skill delete/rename
- * flows so they can clean stale managed links without running a full
- * repository reconciliation pass.
- */
 export interface LinkSweepFs extends SymlinksFs {
-  /** List immediate entries under an agent skills directory. */
   list(absPath: string): Promise<string[]>;
-  /** Resolve a symlink or junction to an absolute target. */
   readlinkAbs(absPath: string): Promise<string | null>;
 }
 
-/**
- * Result discriminator for symlink ops. The Windows-EPERM-without-Developer-Mode
- * path is surfaced as a typed value rather than a raw throw so callers can
- * render the one-time banner without try/catch boilerplate.
- */
 export type SymlinkResult = { ok: true } | { ok: false; reason: "eperm"; message: string };
 
-/**
- * Create a symlink at `<agentDir>/<name>` pointing at `canonicalAbs` (must
- * be absolute). If the path already exists, the caller wants
- * {@link replaceAgentLink} instead — this helper assumes the slot is empty.
- */
 export async function createAgentLink(
   fs: SymlinksFs,
   agentDir: string,
@@ -75,11 +40,6 @@ export async function createAgentLink(
   }
 }
 
-/**
- * Remove the symlink at `<agentDir>/<name>`. If the entry is a real
- * directory (not a symlink/junction), this is a no-op — we never delete
- * user-owned directories. Missing entry is also a no-op.
- */
 export async function removeAgentLink(
   fs: SymlinksFs,
   agentDir: string,
@@ -96,7 +56,6 @@ export async function removeAgentLink(
   }
 
   if (!isLink) {
-    // Real directory — don't touch it.
     logWarn(`[skills] Refusing to remove real directory at ${linkPath}`);
     return;
   }
@@ -110,22 +69,6 @@ export async function removeAgentLink(
   }
 }
 
-/**
- * Atomic-replace the entry at `<agentDir>/<name>` with a symlink pointing
- * at `canonicalAbs`.
- *
- * - If nothing sits there, create the link directly.
- * - If a symlink/junction sits there, unlink it and recreate. (Some
- *   platforms allow direct overwrite; doing it in two steps is portable.)
- * - If a **real directory** sits there (e.g. a partial move from an
- *   aborted run), rename it aside to `.<name>.replacing`, create the
- *   link, then delete the aside dir. If link creation fails, the aside
- *   dir is renamed back so the user never loses data.
- *
- * Returns `{ ok: false, reason: 'eperm' }` when symlink creation fails
- * for lack of Windows privilege. In that case the original directory is
- * restored if we'd moved it aside.
- */
 export async function replaceAgentLink(
   fs: SymlinksFs,
   agentDir: string,
@@ -156,11 +99,8 @@ export async function replaceAgentLink(
     return createAgentLink(fs, agentDir, name, canonicalAbs);
   }
 
-  // Real directory case — move aside, link, delete aside.
   const asidePath = joinPosix(agentDir, `.${name}.replacing`);
 
-  // If a previous aborted run left an aside dir behind, clear it first
-  // so the rename doesn't EEXIST.
   if (await fs.exists(asidePath)) {
     try {
       await fs.rmRecursive(asidePath);
@@ -182,7 +122,6 @@ export async function replaceAgentLink(
 
   const linkResult = await createAgentLink(fs, agentDir, name, canonicalAbs);
   if (!linkResult.ok) {
-    // Restore the original so we leave no half-finished state behind.
     try {
       await renameWithRetry(asidePath, linkPath);
     } catch (restoreErr) {
@@ -195,11 +134,9 @@ export async function replaceAgentLink(
     return linkResult;
   }
 
-  // Link is in place — delete the moved-aside real dir.
   try {
     await fs.rmRecursive(asidePath);
   } catch (err) {
-    // The link is live; leftover aside dir is cosmetic. Log and move on.
     logWarn(
       `[skills] Failed to clean aside ${asidePath} after relink: ${
         err instanceof Error ? err.message : String(err)
@@ -210,11 +147,6 @@ export async function replaceAgentLink(
   return { ok: true };
 }
 
-/**
- * Remove symlinks in every agent skills directory that point exactly at
- * `targetAbs`. Real directories and symlinks to any other target are left
- * untouched.
- */
 export async function removeAgentLinksPointingTo(
   fs: LinkSweepFs,
   agentDirsAbs: Readonly<Record<string, string>>,
@@ -230,7 +162,6 @@ export async function removeAgentLinksPointingTo(
   };
 }
 
-/** Sweep one agent directory for symlinks whose target matches `normalizedTarget`. */
 async function sweepAgentDir(
   fs: LinkSweepFs,
   agentDir: string,

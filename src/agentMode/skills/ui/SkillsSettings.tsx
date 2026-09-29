@@ -46,18 +46,12 @@ import { useApp } from "@/context";
 import { usePlugin } from "@/contexts/PluginContext";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-/**
- * Substring → brand-name lookup for the sync-folder warning banner. The
- * detection is case-insensitive against the absolute vault path, so the
- * substrings carry only their brand fragment.
- */
 const SYNC_BRANDS: ReadonlyArray<{ substr: string; brand: string }> = [
   { substr: "onedrive", brand: "OneDrive" },
   { substr: "icloud", brand: "iCloud" },
   { substr: "dropbox", brand: "Dropbox" },
 ];
 
-// Catalog content is immutable for the plugin lifetime; preferences belong to each row.
 const BUILTIN_ROWS = ALL_MANAGED_SKILLS.map((skill) => ({
   name: skill.name,
   description: parseSkillFile(skill.skillMd, skill.name).frontmatter.description,
@@ -65,19 +59,11 @@ const BUILTIN_ROWS = ALL_MANAGED_SKILLS.map((skill) => ({
   enabledAgents: skill.enabledAgents,
 }));
 
-/** Skills management for user-owned files and persistent built-in preferences. */
 export const SkillsSettings: React.FC = () => {
   const app = useApp();
   const plugin = usePlugin();
   const settings = useSettingsValue();
-  // Skills live under the single configurable Copilot root. The derived path
-  // drives discovery (the effect below) and the empty-state hint; it is not
-  // user-editable here, so there is no folder-setting row.
   const skillsFolder = deriveSkillsFolder(settings);
-  // Brand projection of every registered backend. Sourced from the public
-  // registry — descriptors are module-level constants so the list is stable
-  // per session; the `useMemo` keeps the reference identity stable across
-  // renders for child props.
   const descriptors = useMemo(() => listBackendDescriptors(), []);
   const agents = useMemo<ReadonlyArray<AgentBrand>>(
     () =>
@@ -98,8 +84,6 @@ export const SkillsSettings: React.FC = () => {
   const [refreshError, setRefreshError] = useState<string>();
   const userSkills = useMemo(() => skills.filter((skill) => !skill.builtin), [skills]);
   const installStates = useBackendInstallStates(plugin, descriptors);
-  // Installed built-ins establish readiness if Settings opens during a recheck.
-  // https://github.com/logancyang/obsidian-copilot/issues/3022
   const lastAvailableAgents = useRef<readonly string[]>(
     skills.filter((skill) => skill.builtin).flatMap((skill) => skill.enabledAgents)
   );
@@ -109,13 +93,8 @@ export const SkillsSettings: React.FC = () => {
     search: settings.enableMiyoSearchSkill === true,
     documents: settings.docProcessorBackend === "miyo",
   }).seed;
-  // https://github.com/logancyang/obsidian-copilot/issues/3022
-  // Eligible catalog rows survive file removal so users can restore disabled built-ins.
-  // Miyo tools stay hidden until their feature setting enables them.
   const unavailableReasons: Record<string, string> = {};
   for (const skill of eligibleBuiltins) {
-    // Rejected user files still occupy their canonical path and cannot be overwritten.
-    // https://github.com/logancyang/obsidian-copilot/issues/3022
     const collision =
       userSkills.some(
         (userSkill) => userSkill.name === skill.name && userSkill.location.kind === "canonical"
@@ -146,8 +125,6 @@ export const SkillsSettings: React.FC = () => {
             ? await manager.setBuiltinSkillEnabled(name, enabled)
             : await manager.setBuiltinAgentEnabled(name, agent, enabled);
         if (!result.ok) setBuiltinError(result.message);
-        // Successful mutations include reconciliation, so an older refresh failure is resolved.
-        // https://github.com/logancyang/obsidian-copilot/issues/3022
         else setRefreshError(undefined);
       } catch (error) {
         setBuiltinError(
@@ -172,25 +149,15 @@ export const SkillsSettings: React.FC = () => {
     [handleBuiltinChange]
   );
 
-  // Anchor for Radix portals on this tab (e.g. SkillRow's overflow menu).
-  // Portaling into the tab's own DOM keeps menus inside Obsidian's Settings
-  // modal focus scope so Radix focus-follows-hover works.
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Session-local banner-dismissal state. The sync-folder banner has its
-  // own dismiss flag because the user can clear it independently of the
-  // EPERM banner. Neither persists across plugin reloads — by design.
   const [syncBannerDismissed, setSyncBannerDismissed] = useState(false);
 
-  // Trigger discovery on mount, whenever the Copilot root changes, and when
-  // this Settings window regains focus. The focus refresh is necessary because
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/166 can require
-  // editing a hidden agent file in an external editor, outside Obsidian's watcher.
+  // Refresh on focus: fixing a hidden agent file in an external editor bypasses Obsidian's
+  // watcher. https://github.com/Brevilabs/obsidian-copilot-private/issues/166
   useEffect(() => {
     const manager = SkillManager.getInstance();
     let active = true;
-    // https://github.com/logancyang/obsidian-copilot/issues/3022
-    // Reopening Settings must still explain unresolved background cleanup failures.
     const refresh = async () => {
       const result = await manager.refresh();
       if (active) {
@@ -215,7 +182,6 @@ export const SkillsSettings: React.FC = () => {
     };
   }, [skillsFolder]);
 
-  /** Open the canonical SKILL.md of a managed skill in Obsidian's editor. */
   const handleEditSkillMd = useCallback(
     (skill: Skill) => {
       openVaultPath(app, skill.filePath, { newLeaf: true });
@@ -223,11 +189,8 @@ export const SkillsSettings: React.FC = () => {
     [app]
   );
 
-  /**
-   * Reveal indexed skills in Obsidian and hidden agent skills in the OS file manager.
-   * https://github.com/Brevilabs/obsidian-copilot-private/issues/166
-   * Hidden agent folders are outside Obsidian's index, so they cannot use the vault reveal path.
-   */
+  // Hidden agent folders are outside Obsidian's index, so they cannot use the vault reveal
+  // path. https://github.com/Brevilabs/obsidian-copilot-private/issues/166
   const handleRevealSkillFolder = useCallback(
     (dirPath: string) => {
       const folderRel = toVaultRelative(dirPath, getVaultBase(app));
@@ -242,9 +205,6 @@ export const SkillsSettings: React.FC = () => {
 
   const handleFixWithAgent = useCallback(
     (issues: readonly SkillRepairEvidence[]): void => {
-      // The Agent view opens behind Obsidian's Settings modal unless Settings
-      // is closed first. The user should land on the reviewable draft, not on
-      // the now-stale list of rejected skills.
       (app as unknown as { setting: { close: () => void } }).setting.close();
       void plugin.newAgentChatWithDraft(buildSkillRepairPrompt(issues));
     },
@@ -278,12 +238,6 @@ export const SkillsSettings: React.FC = () => {
 
   const displayFolder = skillsFolder;
 
-  /**
-   * Open the per-skill Properties modal. The modal owns its own save and
-   * collision state; the `onSave` callback runs the rename + patch and
-   * reports back whether the modal should close, stay open, or show a
-   * name-collision inline error.
-   */
   const handleEditProperties = useCallback(
     (skill: Skill) => {
       new PropertiesModal(
@@ -299,7 +253,6 @@ export const SkillsSettings: React.FC = () => {
           if (!result.ok) {
             if (result.code === "collision") return "collision";
             if (result.code === "invalid") {
-              // Shouldn't happen — the modal gates Save on inline validation.
               return "stay";
             }
             new Notice(
@@ -314,7 +267,6 @@ export const SkillsSettings: React.FC = () => {
     [app, displayFolder]
   );
 
-  /** Open the native delete confirmation modal. */
   const handleAskDelete = useCallback(
     (skill: Skill) => {
       const manager = SkillManager.getInstance();
@@ -334,8 +286,6 @@ export const SkillsSettings: React.FC = () => {
     [app, displayFolder]
   );
 
-  // Detect a sync-folder vault on every render — the absolute path is
-  // stable across the session so the work is trivial.
   const syncBrand = useMemo(() => detectSyncBrand(app), [app]);
 
   return (
@@ -357,7 +307,6 @@ export const SkillsSettings: React.FC = () => {
           </div>
         )}
 
-        {/* Durable banners — stack at the top of the tab body, above the toolbar. */}
         {(epermSeen || (syncBrand !== null && !syncBannerDismissed)) && (
           <div className="tw-mt-3 tw-flex tw-flex-col tw-gap-2">
             {epermSeen && <EpermBanner onDismiss={dismissEpermBanner} />}
@@ -380,7 +329,6 @@ export const SkillsSettings: React.FC = () => {
           </div>
         )}
 
-        {/* Toolbar — search + count */}
         <div className="tw-mt-4 tw-flex tw-items-center tw-gap-2">
           <div className="tw-relative tw-flex-1 sm:tw-flex-initial">
             <Search
@@ -398,7 +346,6 @@ export const SkillsSettings: React.FC = () => {
           <span className="tw-text-xs tw-text-muted">{userSkills.length} loaded</span>
         </div>
 
-        {/* Body — empty placeholder, or the Tidy list. */}
         <div className="tw-mt-4" role="region" aria-label="Your Skills">
           <div
             role="heading"
@@ -408,9 +355,7 @@ export const SkillsSettings: React.FC = () => {
             Your Skills
           </div>
           {userSkills.length === 0 ? (
-            // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
-            // Rejected files prove skills exist, so the ordinary creation-first
-            // empty state would falsely tell the user they have none.
+            // Rejected files prove skills exist; the empty state would claim there are none. https://github.com/Brevilabs/obsidian-copilot-private/issues/166
             rejectedSkills.length > 0 ? (
               <AllSkillsNotLoaded />
             ) : (
@@ -456,10 +401,6 @@ export const SkillsSettings: React.FC = () => {
   );
 };
 
-/**
- * Windows-EPERM warn banner. Verbatim copy is product-blessed; the title
- * + paragraph split mirrors wireframe state H.
- */
 const EpermBanner: React.FC<{ onDismiss: () => void }> = ({ onDismiss }) => {
   return (
     <div
@@ -483,8 +424,6 @@ const EpermBanner: React.FC<{ onDismiss: () => void }> = ({ onDismiss }) => {
       <button
         type="button"
         onClick={onDismiss}
-        // Preflight is off: zero the native button chrome inline so the
-        // dismiss ✕ doesn't render as a beveled grey square.
         style={{ appearance: "none", border: 0, background: "transparent", padding: 0 }}
         className="tw-px-1 tw-text-faint hover:tw-text-normal"
         aria-label="Dismiss"
@@ -495,10 +434,6 @@ const EpermBanner: React.FC<{ onDismiss: () => void }> = ({ onDismiss }) => {
   );
 };
 
-/**
- * Sync-folder info banner. Brand name is computed at mount from the
- * vault's absolute path. Verbatim copy is product-blessed.
- */
 const SyncFolderBanner: React.FC<{ brand: string; onDismiss: () => void }> = ({
   brand,
   onDismiss,
@@ -521,8 +456,6 @@ const SyncFolderBanner: React.FC<{ brand: string; onDismiss: () => void }> = ({
       <button
         type="button"
         onClick={onDismiss}
-        // Preflight is off: zero the native button chrome inline so the
-        // dismiss ✕ doesn't render as a beveled grey square.
         style={{ appearance: "none", border: 0, background: "transparent", padding: 0 }}
         className="tw-px-1 tw-text-faint hover:tw-text-normal"
         aria-label="Dismiss"
@@ -533,11 +466,6 @@ const SyncFolderBanner: React.FC<{ brand: string; onDismiss: () => void }> = ({
   );
 };
 
-/**
- * Case-insensitive substring filter on the displayed name + description.
- * Uses {@link formatSkillDisplayName} (not the bare `name`) so the visible
- * `(claude)`/`(codex)` disambiguator suffix on split rows is searchable.
- */
 function filterSkills(skills: Skill[], query: string): Skill[] {
   const trimmed = query.trim().toLowerCase();
   if (trimmed.length === 0) return skills;
@@ -548,11 +476,6 @@ function filterSkills(skills: Skill[], query: string): Skill[] {
   );
 }
 
-/**
- * Detect whether the vault path contains a well-known sync-client folder
- * fragment. Returns the brand name to display, or `null` when the vault
- * doesn't appear to be under a known sync root.
- */
 function detectSyncBrand(app: App): string | null {
   const adapter = app.vault.adapter;
   if (!(adapter instanceof FileSystemAdapter)) return null;

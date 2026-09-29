@@ -19,7 +19,6 @@ async function collect(stream: AsyncIterable<SDKMessage>): Promise<string[]> {
   return seen;
 }
 
-/** A source whose messages and completion are driven by the test. */
 function controllableSource() {
   const queue: SDKMessage[] = [];
   let wake: (() => void) | null = null;
@@ -78,8 +77,6 @@ describe("guardSdkStreamStall", () => {
   it("aborts and throws the stall error when a message stalls mid-stream", async () => {
     const abortController = new AbortController();
     const onStall = jest.fn();
-    // Emits two mid-message chunks (arming the watchdog) then hangs until the
-    // guard aborts — a half-open response with no terminal `result`.
     async function* source(): AsyncGenerator<SDKMessage> {
       yield streamEvent("message_start");
       yield streamEvent("content_block_delta");
@@ -146,18 +143,15 @@ describe("guardSdkStreamStall", () => {
         guardSdkStreamStall(src.iterable, { abortController, timeoutMs: 1_000, onStall })
       );
 
-      // Stream a complete message, then go quiet *between* messages.
       src.push(streamEvent("message_start"));
       src.push(streamEvent("content_block_delta"));
       src.push(streamEvent("message_stop"));
       await jest.advanceTimersByTimeAsync(0);
 
-      // A gap far longer than the window must not trip the guard here.
       await jest.advanceTimersByTimeAsync(5_000);
       expect(onStall).not.toHaveBeenCalled();
       expect(abortController.signal.aborted).toBe(false);
 
-      // The stream resumes and ends normally.
       src.push(resultMessage());
       src.finish();
       await expect(run).resolves.toEqual([

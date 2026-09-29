@@ -6,11 +6,6 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-/**
- * Capture a per-test mutable handle to the active in-memory FS so the
- * mocked `renameWithRetry` can operate on the same map as the FS adapter.
- * Set inside `mkFs` before any migration runs.
- */
 let activeRename: ((from: string, to: string) => void) | null = null;
 
 jest.mock("./renameWithRetry", () => ({
@@ -27,11 +22,6 @@ type Node =
   | { kind: "dir" }
   | { kind: "symlink"; target: string };
 
-/**
- * Build a small in-memory FS that's just rich enough for the migration
- * orchestration. Files are stored by absolute path; ancestor directories
- * are synthesized.
- */
 function mkFs(initial: Record<string, Node> = {}): MigrateSkillFs & {
   dump(): Record<string, Node>;
   blockSymlink(blocked: boolean): void;
@@ -48,11 +38,6 @@ function mkFs(initial: Record<string, Node> = {}): MigrateSkillFs & {
 
   let symlinkBlocked = false;
 
-  /**
-   * Move every entry in `map` whose key matches `from` or `from/...` to
-   * the corresponding `to` / `to/...` key. Synthesizes ancestor dirs of
-   * `to`. Mirrors POSIX `rename` for a directory subtree.
-   */
   function renameSubtree(from: string, to: string): void {
     if (!map.has(from)) {
       throw Object.assign(new Error(`ENOENT: ${from}`), { code: "ENOENT" });
@@ -103,7 +88,6 @@ function mkFs(initial: Record<string, Node> = {}): MigrateSkillFs & {
       if (map.has(linkPath)) {
         throw Object.assign(new Error(`EEXIST: ${linkPath}`), { code: "EEXIST" });
       }
-      // Ensure parent dir exists (mimics mkdir + symlink).
       const parent = linkPath.slice(0, linkPath.lastIndexOf("/"));
       if (parent.length > 0 && !map.has(parent)) map.set(parent, { kind: "dir" });
       map.set(linkPath, { kind: "symlink", target });
@@ -128,7 +112,6 @@ function mkFs(initial: Record<string, Node> = {}): MigrateSkillFs & {
       return e.content;
     },
     async writeFile(p, content) {
-      // Synthesize parent dir if missing.
       const parent = p.slice(0, p.lastIndexOf("/"));
       if (parent.length > 0 && !map.has(parent)) map.set(parent, { kind: "dir" });
       map.set(p, { kind: "file", content });
@@ -207,22 +190,14 @@ describe("migrateProjectSkill", () => {
     expect(result.newDirPath).toBe(`${CANONICAL}/foo`);
 
     const dump = fs.dump();
-    // Canonical SKILL.md exists and was stamped with both agents.
     const canonicalFile = dump[`${CANONICAL}/foo/SKILL.md`];
     expect(canonicalFile?.kind).toBe("file");
     if (canonicalFile?.kind === "file") {
       expect(canonicalFile.content).toContain(`"claude,codex"`);
     }
 
-    // Source SKILL.md was consumed by the move (its contents now live
-    // under canonical). After replaceAgentLink, the agent dir holds a
-    // symlink at `<agent>/foo` pointing to canonical — see the symlink
-    // assertions just below.
     expect(dump[`${CLAUDE_DIR}/foo/SKILL.md`]).toBeUndefined();
 
-    // After replaceAgentLink, each agent dir holds a symlink at
-    // <agent>/foo pointing into canonical (replacing the real dir we
-    // just moved out from under).
     const claudeLink = dump[`${CLAUDE_DIR}/foo`];
     const codexLink = dump[`${CODEX_DIR}/foo`];
     expect(claudeLink?.kind).toBe("symlink");
@@ -243,7 +218,6 @@ describe("migrateProjectSkill", () => {
 
     const result = await migrateProjectSkill({
       sourceName: "foo",
-      // Representative is the alphabetically-first agent's copy.
       sourceDirAbs: `${CLAUDE_DIR}/foo`,
       duplicateSourceDirsAbs: [`${CODEX_DIR}/foo`],
       canonicalAbsRoot: CANONICAL,
@@ -259,19 +233,13 @@ describe("migrateProjectSkill", () => {
 
     expect(result.ok).toBe(true);
     const dump = fs.dump();
-    // Duplicate is gone.
     expect(dump[`${CODEX_DIR}/foo/SKILL.md`]).toBeUndefined();
-    // Symlinks created for all three agents.
     expect(dump[`${CLAUDE_DIR}/foo`]?.kind).toBe("symlink");
     expect(dump[`${CODEX_DIR}/foo`]?.kind).toBe("symlink");
     expect(dump[`${OPENCODE_DIR}/foo`]?.kind).toBe("symlink");
   });
 
   it("refuses to clobber a different real skill of the same name in a target agent slot", async () => {
-    // Split-row case: `foo` in .claude (content A) and a DIFFERENT `foo`
-    // already in .agents (content B). Expanding the claude row to codex must
-    // NOT delete codex's real .agents/skills/foo — replaceAgentLink's
-    // real-dir branch would otherwise move it aside and rmRecursive it.
     const fs = mkFs({
       [`${CLAUDE_DIR}/foo/SKILL.md`]: { kind: "file", content: skillMd("foo") },
       [`${CODEX_DIR}/foo/SKILL.md`]: { kind: "file", content: "DIFFERENT CONTENT B" },
@@ -280,7 +248,6 @@ describe("migrateProjectSkill", () => {
     const result = await migrateProjectSkill({
       sourceName: "foo",
       sourceDirAbs: `${CLAUDE_DIR}/foo`,
-      // Not a known duplicate — it's a different skill that merely shares the name.
       duplicateSourceDirsAbs: [],
       canonicalAbsRoot: CANONICAL,
       enabledAgentsAfter: ["claude", "codex"],
@@ -291,10 +258,8 @@ describe("migrateProjectSkill", () => {
 
     expect(result.ok).toBe(true);
     const dump = fs.dump();
-    // Claude's copy migrated + linked.
     expect(dump[`${CANONICAL}/foo/SKILL.md`]?.kind).toBe("file");
     expect(dump[`${CLAUDE_DIR}/foo`]?.kind).toBe("symlink");
-    // Codex's DIFFERENT skill is preserved as a real dir — NOT replaced by a link.
     expect(dump[`${CODEX_DIR}/foo`]?.kind).toBe("dir");
     const codexFile = dump[`${CODEX_DIR}/foo/SKILL.md`];
     expect(codexFile?.kind).toBe("file");
@@ -348,11 +313,8 @@ describe("migrateProjectSkill", () => {
 
     expect(result.ok).toBe(true);
     const dump = fs.dump();
-    // Canonical exists.
     expect(dump[`${CANONICAL}/foo/SKILL.md`]?.kind).toBe("file");
-    // No symlink created at the agent dir.
     expect(dump[`${CLAUDE_DIR}/foo`]).toBeUndefined();
-    // metadata.copilot-enabled-agents was stamped empty.
     const canonical = dump[`${CANONICAL}/foo/SKILL.md`];
     if (canonical?.kind === "file") {
       expect(canonical.content).toContain('copilot-enabled-agents: ""');
@@ -379,7 +341,6 @@ describe("migrateProjectSkill", () => {
     });
 
     expect(result.ok).toBe(false);
-    // Source dir restored.
     const dump = fs.dump();
     expect(dump[`${CLAUDE_DIR}/foo/SKILL.md`]?.kind).toBe("file");
     expect(dump[`${CANONICAL}/foo`]).toBeUndefined();
@@ -406,7 +367,6 @@ describe("migrateProjectSkill", () => {
     if (result.ok) return;
     expect(result.reason).toBe("eperm");
     expect(result.mutated).toBe(true);
-    // Canonical still exists — frontmatter is the source of truth.
     const dump = fs.dump();
     expect(dump[`${CANONICAL}/foo/SKILL.md`]?.kind).toBe("file");
   });

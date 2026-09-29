@@ -19,11 +19,6 @@ describe("PermissionBridge.canUseTool", () => {
     });
   }
 
-  /**
-   * Minimal stand-in for an `AgentSession`'s ask-question resolver path: holds
-   * the in-flight request and a `resolve` handle so a test can drive the
-   * inline-card "submit" / "cancel" transitions the bridge awaits.
-   */
   class FakeQuestionSession {
     pending: AskUserQuestionPrompt | null = null;
     private resolver: ((answers: AgentQuestionAnswers) => void) | null = null;
@@ -68,10 +63,6 @@ describe("PermissionBridge.canUseTool", () => {
   });
 
   it("propagates ctx.toolUseID as PermissionPrompt.toolCall.toolCallId", async () => {
-    // The trail UI pairs each permission prompt with the corresponding
-    // `tool_call` notification by id. If the bridge mints a fresh uuid
-    // here instead of reusing the SDK's `tool_use_id`, the prompt and the
-    // notification disagree and the action card cannot be resolved.
     let captured: PermissionPrompt | null = null;
     const bridge = makeBridge(async (req) => {
       captured = req;
@@ -189,17 +180,12 @@ describe("PermissionBridge.canUseTool", () => {
   });
 
   it("submitting answers resolves AskUserQuestion with allow + the { questions, answers } payload", async () => {
-    // End-to-end inline-card resolver path: the bridge awaits the session's
-    // pending question, then maps the submitted answers back to a SDK allow —
-    // the same payload the old modal produced.
     const fake = new FakeQuestionSession();
     const bridge = makeBridge(null, fake.handle);
     const questions = [
       { question: "Pick a fruit", options: [{ label: "Apple" }, { label: "Pear" }] },
     ];
     const resultPromise = bridge.canUseTool("AskUserQuestion", { questions }, ctx);
-    // The card is pending until the user submits — the prompter saw the
-    // session-domain request keyed by the SDK tool_use_id.
     expect(fake.pending).toEqual({
       sessionId: "session-1",
       requestId: "toolu_test_id",
@@ -223,7 +209,6 @@ describe("PermissionBridge.canUseTool", () => {
       ctx
     );
 
-    // Dismissing the card resolves the resolver with `{}`.
     fake.resolve({});
     const result = await resultPromise;
     expect(result.behavior).toBe("deny");
@@ -309,7 +294,6 @@ describe("PermissionBridge.canUseTool", () => {
       const bridge = new PermissionBridge("session-1", {
         getPrompter: () => prompter,
         isPlanModePlanFilePath: planMatcher,
-        // The current session is a read-only fan-out sub-session.
         getIsReadOnlySession: () => () => true,
       });
 
@@ -319,8 +303,6 @@ describe("PermissionBridge.canUseTool", () => {
         ctx
       );
 
-      // The read-only deny fires first: the plan-file auto-allow never runs and
-      // the prompter is never consulted.
       expect(result.behavior).toBe("deny");
       if (result.behavior === "deny") {
         expect(result.message).toContain("Read-only QA turn");
@@ -339,7 +321,6 @@ describe("PermissionBridge.canUseTool", () => {
       });
 
       const result = await bridge.canUseTool("Read", { file_path: "/tmp/a.md" }, ctx);
-      // A read tool falls through to the normal prompter path.
       expect(prompter).toHaveBeenCalled();
       expect(result.behavior).toBe("allow");
     });
@@ -351,8 +332,6 @@ describe("PermissionBridge.canUseTool", () => {
         getIsReadOnlySession: () => () => true,
       });
 
-      // A third-party MCP tool whose name isn't a known built-in derives to
-      // `other`; it can't be verified read-only, so the gate must deny it.
       const result = await bridge.canUseTool("mcp__notion__create_page", { title: "x" }, ctx);
       expect(result.behavior).toBe("deny");
       expect(prompter).not.toHaveBeenCalled();
@@ -371,7 +350,6 @@ describe("PermissionBridge.canUseTool", () => {
         { file_path: "/Users/x/.claude/plans/foo.md", content: "# plan" },
         ctx
       );
-      // Not read-only → the plan-file auto-allow proceeds as before.
       expect(result.behavior).toBe("allow");
       expect(prompter).not.toHaveBeenCalled();
     });

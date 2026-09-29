@@ -86,39 +86,18 @@ export {
 export { frameSink as acpFrameSink, setFrameSinkVaultBasePath } from "./session/debugSink";
 export { getManagedSkills, SkillManager, SkillsSettings, useManagedSkills } from "./skills";
 export type { Skill } from "./skills";
-/**
- * True when the platform supports Agent Mode. Agent Mode is always on, but
- * requires subprocess support, so this is always false on mobile.
- */
 export function isAgentModeEnabled(): boolean {
   return !Platform.isMobile;
 }
 
-/** Hook variant for symmetry with other settings-derived hooks. */
 export function useIsAgentModeEnabled(): boolean {
   return isAgentModeEnabled();
 }
 
-/**
- * Seed `configuredModelId` as the default model of every registered backend
- * that can route it — the plugin host's entry point for
- * {@link seedCopilotDefaultModel}, called when a license is applied. Lives here
- * because `session/` may not import the registry, the same reason as
- * `collectAgentSkillsDirsProjectRel` below.
- *
- * @param configuredModelId - The model to install as the default.
- * @returns Ids of the backends whose default was written.
- */
 export function applyCopilotDefaultModel(configuredModelId: string): BackendId[] {
   return seedCopilotDefaultModel(listBackendDescriptors(), configuredModelId);
 }
 
-/**
- * Collect each registered backend's project-relative skills directory into
- * a `BackendId → path` map. The skills layer is forbidden by
- * `boundaries/dependencies` from importing the registry, so this lives in
- * the host-side barrel and is injected into `SkillManager.initialize`.
- */
 function collectAgentSkillsDirsProjectRel(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const descriptor of listBackendDescriptors()) {
@@ -127,11 +106,6 @@ function collectAgentSkillsDirsProjectRel(): Record<string, string> {
   return out;
 }
 
-/**
- * Order-independent dedup key for a backend's env overrides, so the restart
- * subscription fires iff the effective record actually changes (not on key
- * reordering or unrelated settings writes).
- */
 function backendEnvOverridesKey(settings: CopilotSettings, backendId: BackendId): string {
   const backends = settings.agentMode?.backends as
     | Partial<Record<BackendId, { envOverrides?: Record<string, string> }>>
@@ -140,12 +114,6 @@ function backendEnvOverridesKey(settings: CopilotSettings, backendId: BackendId)
   return JSON.stringify(Object.entries(env).sort(([a], [b]) => a.localeCompare(b)));
 }
 
-/**
- * Dedup key over enabled models injected into subprocess spawn config:
- * routing identity, capabilities and published effort levels, not display strings.
- * Order-independent, so a rewrite that only reorders the rows reads as
- * unchanged.
- */
 function spawnModelConfigKey(
   settings: CopilotSettings,
   backendId: keyof CopilotSettings["backends"]
@@ -154,8 +122,6 @@ function spawnModelConfigKey(
   return settings.configuredModels
     .filter((model) => {
       const provider = settings.providers[model.providerId];
-      // Native catalogs belong to the agent; their picker toggles do not change
-      // injected config. https://github.com/Brevilabs/obsidian-copilot-private/issues/475
       return enabled.has(model.configuredModelId) && provider && provider.origin.kind !== "agent";
     })
     .map((model) =>
@@ -173,23 +139,6 @@ function spawnModelConfigKey(
     .join("\n");
 }
 
-/**
- * Single seam between the plugin host (`main.ts`) and Agent Mode. Initialises
- * the SkillManager singleton, wires the default permission prompter into a
- * fresh `AgentSessionManager`, kicks off every registered backend
- * descriptor's load-time reconcile (e.g. clear stale managed install), and
- * starts the model-catalog preload probes. The manager itself is
- * backend-agnostic — backends are spawned lazily on first session creation.
- *
- * SkillManager must be initialized before the preload probes fire: any
- * spawn-time directive that reads `SkillManager.getInstance()` synchronously
- * inside `newSession()` would otherwise throw "called before initialize"
- * when the probe runs. Doing it in this function (rather than from
- * `main.ts` via a separate call) keeps the dependency order obvious.
- *
- * `main.ts` calls this once on plugin load. To swap prompters, shut down
- * the existing manager and call this again.
- */
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
   const os = requireNodeModule<typeof import("node:os")>("os");
   const path = requireNodeModule<typeof import("node:path")>("path");
@@ -229,16 +178,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     beforeBackendStart
   );
   const persistenceManager = new AgentChatPersistenceManager(app);
-  // Plugin-local (per-vault) record of resumable backend sessions, so recent
-  // chats can list and resume sessions that were never saved as markdown.
-  //
-  // Stored OUTSIDE the vault, under `~/.obsidian-copilot/vaults/<vaultId>/`,
-  // because the index mirrors device-local backend stores (`~/.claude/projects`,
-  // opencode's own session dirs) and references session ids that only resolve
-  // on the machine that created them. Keeping it off vault sync avoids ghost
-  // entries and write conflicts across synced devices (iCloud/Syncthing/
-  // Obsidian Sync). Scoped by a vault id (hash of the vault path) so vaults
-  // don't share one file. Agent Mode is desktop-only, so Node fs is fine.
   const vaultId = getVaultId(app);
   const indexPath = path.join(
     copilotAppDataDir(os.homedir()),
@@ -247,9 +186,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     "agent-chat-index.json"
   );
   const sessionIndex = new AgentSessionIndex(createNodeFileStorage(), indexPath);
-  // Mutable ref breaks the construction cycle: the prompter needs the
-  // manager, but handlers only fire after a session exists, which can't
-  // happen before assignment below.
   let managerRef: AgentSessionManager | null = null;
   const prompter = createDefaultPermissionPrompter(
     (id) => managerRef?.getSessionByBackendId(id) ?? null,
@@ -268,12 +204,8 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     sessionIndex,
   });
   managerRef = manager;
-  // Skill-set changes reach the affected backend when its descriptor opts in
-  // via `restartOnManagedSkillsChange`, so native skill command caches stay
-  // fresh. `noteSpawnConfigChanged` holds the restart behind the chat's Reload
-  // while a session is open — a skill file an agent just wrote must not close
-  // the conversation that asked for it.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+  // `noteSpawnConfigChanged` holds the restart behind Reload while a session is open: a skill
+  // file an agent just wrote must not close the conversation that asked for it. https://github.com/Brevilabs/obsidian-copilot-private/issues/475
   skillManager.subscribeToSkillSetChange((backendId) => {
     const descriptor = backendRegistry[backendId];
     if (!descriptor?.restartOnManagedSkillsChange) return;
@@ -283,18 +215,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         logError(`[Skills] Failed to refresh backend after skill change: ${backendId}`, error)
       );
   });
-  // Provider rows, API keys, and per-backend enabled-models lists are baked
-  // into subprocess backends' spawn config (e.g. opencode's
-  // `OPENCODE_CONFIG_CONTENT`). Refresh any descriptor that opts in so a
-  // new spawn picks them up. Without this, a key entered after the
-  // subprocess started never reaches it — opencode keeps making un-
-  // authenticated requests and surfaces them as silent zero-token turns.
-  //
-  // A single BYOK save fires several emits in quick succession (provider row →
-  // API key → enabled models). Coalescing them into one re-probe lives a layer
-  // down: a running backend folds rapid restarts via the manager's restart
-  // queue, and a warm preload probe folds them via `preloader.refresh` — both
-  // re-read the *final* config once the burst settles, so no debounce here.
   for (const descriptor of listBackendDescriptors()) {
     if (!descriptor.restartOnProviderConfigChange) continue;
     const backendId = descriptor.id as keyof CopilotSettings["backends"];
@@ -309,9 +229,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       const settings = getSettings();
       const provider = settings.providers[providerId];
       const enabled = new Set(settings.backends[backendId]?.enabledModels);
-      // A different agent's setup or an unused BYOK provider cannot change this
-      // process. Key rotations still notify even when settings are unchanged.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+      // Unused BYOK providers cannot change this process; key rotations still notify. https://github.com/Brevilabs/obsidian-copilot-private/issues/475
       if (
         provider &&
         provider.origin.kind !== "agent" &&
@@ -323,25 +241,12 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       }
     });
     subscribeToSettingsChange((prev, next) => {
-      // Other agents' model toggles and catalog discoveries must not offer a
-      // reload for this backend. Only its own enabled models feed its config.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
       if (spawnModelConfigKey(prev, backendId) !== spawnModelConfigKey(next, backendId)) {
-        // Lineup reconciliation can change capabilities without changing the
-        // enabled list, withdrawing an effort level the running agent offers.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+        // Lineup reconciliation can withdraw an effort level without changing the enabled list. https://github.com/Brevilabs/obsidian-copilot-private/issues/319
         refresh("model config changed");
       }
     });
   }
-  // The composed Agent Mode built-in prompt is baked into opencode/codex
-  // spawn-time config and shared across sessions. Restart the opted-in backends
-  // when its effective content changes; Claude re-reads it per `newSession()`.
-  //
-  // The system-prompt store also emits for Chat mode prompt changes, so dedupe
-  // on each backend's real prompt (it names only that backend's enabled skills).
-  // On initial load this is a harmless no-op: nothing is running yet, so the
-  // refresh has neither a proc nor a session.
   const lastSystemPromptKeys = new Map<BackendId, string>();
   for (const descriptor of listBackendDescriptors()) {
     if (descriptor.restartOnSystemPromptChange) {
@@ -362,13 +267,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
   };
   subscribeToSystemPromptChange(refreshSystemPromptAffected);
-  // Env overrides are baked into subprocess spawn env, and the Claude SDK
-  // folds them into its model catalog (a custom `ANTHROPIC_MODEL` becomes a
-  // picker entry). Either way an edit only reaches the live or warm process on
-  // a fresh spawn/probe, so restart the backend whose record actually changed.
-  // The editor debounces commits and the manager/preloader coalesce rapid
-  // restarts, so a burst of edits folds into one re-probe (same rationale as
-  // the provider-config subscription above).
   subscribeToSettingsChange((prev, next) => {
     for (const descriptor of listBackendDescriptors()) {
       if (
@@ -383,19 +281,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         );
     }
   });
-  // SkillManager serializes seeding with every discovery entry point, including settings UI
-  // refreshes. https://github.com/logancyang/obsidian-copilot/issues/3022
   const seedManagedBuiltins = async (): Promise<void> => {
     await skillManager.refresh(true);
   };
   subscribeToSettingsChange((prev, next) => {
-    // The managed env injected at spawn (see `buildBuiltinSkillEnv`) changes with
-    // Copilot Plus sign-in/out or license rotation (the decrypted license the
-    // builtin Plus skill scripts read), with the Miyo server URL (the `MIYO_URL`
-    // the bundled miyo CLI reads), with the Miyo Search scope, or with
-    // OpenCode's Self-Host routing boundary. These values are only read on a
-    // fresh spawn. The policy selects only affected backends and restarts
-    // coalesce with any Miyo-availability re-seed restart below.
     for (const descriptor of listBackendDescriptors()) {
       const managedEnvRestartPolicy = getBuiltinSkillEnvRestartPolicy(prev, next, descriptor.id);
       if (managedEnvRestartPolicy === "none") continue;
@@ -413,19 +302,8 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         logError(`[AgentMode] restart after managed env change failed: ${descriptor.id}`, e)
       );
     }
-    // Re-seed builtins when the canonical skills folder changes (so the tools
-    // appear in the new folder without a reload) or when Miyo availability
-    // flips (so each gated Miyo skill is seeded/pruned to match). Both run the
-    // same gate-aware seed pass against the current folder.
-    // Reason: the skills folder is derived from the configurable copilotFolder
-    // root; compare derived paths rather than the retired agentMode.skills.folder.
     const prevFolder = deriveSkillsFolder(prev);
     const nextFolder = deriveSkillsFolder(next);
-    // `enableMiyoSearchSkill` and `docProcessorBackend` are the two gates
-    // `planManagedBuiltins` reads, and each also selects prompt steering that
-    // codex/opencode bake at spawn. `enableMiyo` / `miyoServerUrl` are still
-    // watched because the injected env (MIYO_URL) changes with them, and
-    // `isPaidUser` because it changes the license the seeded Plus scripts read.
     const miyoAvailabilityChanged =
       prev.enableMiyoSearchSkill !== next.enableMiyoSearchSkill ||
       prev.docProcessorBackend !== next.docProcessorBackend ||
@@ -438,26 +316,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       miyoAvailabilityChanged ||
       prev.agentMode.skills.builtinPreferences !== next.agentMode.skills.builtinPreferences
     ) {
-      // The Miyo gates and builtin opt-outs also decide which skills the system
-      // prompt names for each backend (see `buildAgentSystemPrompt`).
-      // codex/opencode bake the prompt at spawn, so a mid-session change needs a
-      // restart to apply. Chain the restart AFTER the seed +
-      // `skillManager.refresh()` resolve so the skill is written and reconciled
-      // into the agent dirs before the agent respawns — otherwise
-      // codex (which has `restartOnManagedSkillsChange: false`) could come back
-      // with steering pointing at a skill that isn't on disk yet. The seed pass
-      // swallows its own errors and always refreshes, so this normally runs
-      // after reconcile; `refreshSystemPromptAffected` dedupes on the real prompt
-      // key, so it's a no-op when the rebuilt prompt is unchanged.
       void seedManagedBuiltins()
         .then(() => {
           refreshSystemPromptAffected();
           if (prev.docProcessorBackend === next.docProcessorBackend) return;
-          // Backends skipped above rebuild the prompt per `newSession()`, so a new
-          // chat is already correct — but one already open keeps the route it was
-          // born with, and after a switch to Miyo that means a live Claude session
-          // still holds the Plus steering while `copilot-read-pdf` is gone, whose
-          // fallback clause then sends the PDF to its own reader.
           for (const descriptor of listBackendDescriptors()) {
             if (descriptor.restartOnSystemPromptChange) continue;
             void manager
@@ -473,19 +335,12 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         .catch((e) => logError("[Skills] builtin skill re-seeding failed", e));
     }
   });
-  // A backend's binary path (or a binary install/update) is resolved at spawn
-  // time, so a change must reach the running/warm process — otherwise it only
-  // updates the settings status line and the agent keeps the old binary until
-  // a plugin reload. Each descriptor scopes its subscription to settings that
-  // require its process to refresh, so unrelated saves do not churn backends.
   for (const descriptor of listBackendDescriptors()) {
     descriptor.subscribeInstallState(plugin, () => {
-      // Startup already reads the final installation after upgrading. Reacting to
-      // its intermediate writes would launch duplicate probes or restart a waiter.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
+      // Startup reads the final installation; reacting to intermediate writes would duplicate
+      // probes. https://github.com/Brevilabs/obsidian-copilot-private/issues/530
       if (initializing.has(descriptor.id)) return;
-      // A first warm probe must see the newly installed skills, especially for backends
-      // that do not restart on skill changes. https://github.com/logancyang/obsidian-copilot/issues/3022
+      // The first warm probe must see newly installed skills. https://github.com/logancyang/obsidian-copilot/issues/3022
       void seedManagedBuiltins()
         .then(() => manager.onInstallStateChanged(descriptor.id))
         .catch((error) =>
@@ -493,15 +348,9 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         );
     });
   }
-  // Seed plugin-shipped builtin skills into the canonical folder, THEN run
-  // discovery so the first pass picks them up and fans them out to the agent
-  // dirs. Non-blocking for plugin load.
   const initialSkillsReady = seedManagedBuiltins().catch((error) => {
     logError("[Skills] Initial discovery pass failed", error);
   });
-  // Installation must settle before any probe or chat starts this backend.
-  // Other agents and the rest of Obsidian remain usable during a download.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
   for (const descriptor of listBackendDescriptors()) {
     const ready = Promise.resolve()
       .then(() => descriptor.onPluginLoad?.(plugin))

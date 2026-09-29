@@ -8,12 +8,6 @@ import React from "react";
 import { Root } from "react-dom/client";
 import type { BackendId, Skill } from "@/agentMode/skills/types";
 
-/**
- * Body of the delete confirmation modal. Enumerates every concrete path
- * that will be removed (canonical dir + each agent symlink currently in
- * `copilot-enabled-agents`) so the user can verify the blast radius
- * before confirming. Mirrors wireframe state G.
- */
 const DeleteConfirmBody: React.FC<{
   skill: Skill;
   skillsFolderRel: string;
@@ -75,12 +69,6 @@ const DeleteConfirmBody: React.FC<{
   );
 };
 
-/**
- * Native Obsidian delete confirmation modal for a managed skill. Built on
- * Obsidian's `Modal` for popout-window safety, native header chrome, and
- * ESC handling — consistent with the rest of the plugin's confirm flows
- * (see `src/components/modals/ConfirmModal.tsx`).
- */
 export class DeleteConfirmModal extends Modal {
   private root: Root | null = null;
 
@@ -92,7 +80,6 @@ export class DeleteConfirmModal extends Modal {
     private readonly onConfirm: () => void | Promise<void>
   ) {
     super(app);
-    // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
     this.setTitle(`Delete ${skill.name}?`);
   }
@@ -122,18 +109,6 @@ export class DeleteConfirmModal extends Modal {
   }
 }
 
-/**
- * Build the bullet list shown in the body, scoped to exactly what
- * `SkillManager.deleteSkill` → `runDeleteSkill` removes:
- *
- *   - Canonical skills: the canonical dir, then one symlink line per
- *     enabled agent.
- *   - Project skills: the real `SKILL.md` directory inside each owning
- *     agent's project folder. There is no canonical copy and no symlink
- *     to remove — `removeAgentLink` explicitly refuses to touch real
- *     directories, so listing those here would misrepresent the blast
- *     radius.
- */
 function collectDeletePaths(
   skill: Skill,
   folder: string,

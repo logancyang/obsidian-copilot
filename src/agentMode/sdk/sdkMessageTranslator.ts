@@ -1,4 +1,3 @@
-/** Pure translator: Claude Agent SDK `SDKMessage` → session-domain `SessionUpdate`. */
 import type {
   SDKAssistantMessage,
   SDKMessage,
@@ -24,14 +23,8 @@ import {
 import { deriveToolKind, deriveToolTitle, vendorMetaFields } from "./toolMeta";
 import { ClaudeBackgroundTaskStateMachine, type ClaudeTaskToolUpdate } from "./claudeTaskProtocol";
 
-/** Every SDK `system` frame — the `type: "system"` slice of the message union. */
 type SDKSystemLike = Extract<SDKMessage, { type: "system" }>;
 
-/**
- * Mutable translator state. One instance lives for a single `query()` call;
- * stream parsing fields reset with each turn, while the Claude task owners are
- * deliberately shared across queries in the same session.
- */
 export interface TranslatorState {
   toolUseBlocks: Map<
     number,
@@ -43,38 +36,21 @@ export interface TranslatorState {
       lastParsedInput: unknown;
     }
   >;
-  /** Tool-use ids already emitted in this turn — used to dedupe in the assistant-message fallback path. */
   emittedToolUseIds: Set<string>;
-  /** Session-lived owner of Claude background-task identity and lifecycle. */
   backgroundTasks: ClaudeBackgroundTaskStateMachine;
-  /** Session-lived todo/Task accumulator (see claudeTodoPlan.ts). */
   claudeTasks: ClaudeTaskPlanState;
-  /**
-   * Occupancy sample from the most recent TOP-LEVEL assistant message this turn
-   * (subagent messages excluded). The `result` message's aggregate `usage` sums
-   * every API call in the turn — tool loops re-read the whole context from cache
-   * each iteration — so it overstates current context; the last main-model
-   * response's own per-call usage is the true occupancy. Reset per query.
-   */
   lastAssistantUsage?: AssistantUsageSample;
 }
 
-/** Per-call token occupancy captured from one assistant message. */
 interface AssistantUsageSample {
   usedTokens: number;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
-  /** Model that produced this turn — keys into the result's `modelUsage` for the window. */
   model: string;
 }
 
-/**
- * Creates query-local parsing state backed by the owning session's Claude task state.
- * @param claudeTasks - The task-plan state to preserve when translator generations share one conversation.
- * @param backgroundTasks - The background-task state to preserve across queries in one session.
- */
 export function createTranslatorState(
   claudeTasks?: ClaudeTaskPlanState,
   backgroundTasks?: ClaudeBackgroundTaskStateMachine
@@ -91,12 +67,6 @@ function event(sessionId: SessionId, update: SessionUpdate): SessionEvent {
   return { sessionId, update };
 }
 
-/**
- * Preserves the SDK boundary by turning vendor messages into session-domain events for backend-independent consumers.
- * @param msg - The vendor message to translate.
- * @param sessionId - The session that should receive the translated events.
- * @param state - The cross-message correlation state for the active translation stream.
- */
 export function translateSdkMessage(
   msg: SDKMessage,
   sessionId: SessionId,
@@ -118,23 +88,12 @@ export function translateSdkMessage(
   }
 }
 
-/**
- * A `result` closes a turn. Its aggregate `usage` sums every API call in the
- * turn (each tool-loop iteration re-reads the whole context from cache), so it
- * is a cumulative bill, not current context occupancy — dividing it by the
- * window would peg the meter to 100% after a tool-heavy turn even when the live
- * context still fits. We instead report the last top-level assistant message's
- * own per-call usage ({@link TranslatorState.lastAssistantUsage}) as occupancy,
- * paired with THAT model's window from `modelUsage`.
- */
 function translateResultMessage(
   msg: SDKResultMessage,
   sessionId: SessionId,
   state: TranslatorState
 ): SessionEvent[] {
   const sample = state.lastAssistantUsage;
-  // No main-model turn to measure (e.g. an errored/empty result): leave the
-  // meter on its prior occupancy rather than invent a cumulative number.
   if (!sample) return [];
 
   const sessionUsage: SessionUsage = {
@@ -149,16 +108,6 @@ function translateResultMessage(
   return [event(sessionId, { sessionUpdate: "usage_update", usage: sessionUsage })];
 }
 
-/**
- * The active model's context window — the one that produced the occupancy
- * sample. The result keys `modelUsage` with a context-variant/date suffix (e.g.
- * `claude-opus-4-8[1m]`, `claude-haiku-4-5-20251001`) while the assistant
- * message reports the bare id (`claude-opus-4-8`), so an exact lookup misses on
- * real data — match on prefix too. Falling back to the model that accumulated
- * the most tokens keeps this correct for a bare `<synthetic>` turn and avoids
- * ever taking the max window (a larger-windowed aux/subagent model would
- * otherwise deflate the main conversation's percentage).
- */
 function windowForModel(
   modelUsage: SDKResultMessage["modelUsage"],
   sampleModel: string
@@ -179,10 +128,6 @@ function modelTokens(m: SDKResultMessage["modelUsage"][string]): number {
   return m.inputTokens + m.outputTokens + m.cacheReadInputTokens + m.cacheCreationInputTokens;
 }
 
-/**
- * Delegates Claude's out-of-order task protocol to the background-task state machine and
- * converts its normalized decision into the session event vocabulary.
- */
 function translateSystemMessage(
   msg: SDKSystemLike,
   sessionId: SessionId,
@@ -251,8 +196,6 @@ function translateStreamEvent(
             makeToolCallUpdate(block.id, block.name, block.input ?? {}, parentToolUseId)
           ),
         ];
-        // Native plan tool only — an MCP tool sharing the bare name must not
-        // flip the UI into plan mode.
         if (!mcpServer && name === "EnterPlanMode") {
           out.push(
             event(sessionId, {
@@ -298,11 +241,6 @@ function translateStreamEvent(
         const block = state.toolUseBlocks.get(sdkEvent.index);
         if (!block) return [];
         block.inputJsonAcc += delta.partial_json;
-        // Cheap pre-check: a complete JSON value's last non-whitespace byte
-        // is `}`, `]`, `"`, a digit, or one of the literals' last letters.
-        // Skipping JSON.parse on obviously-incomplete buffers (mid-key,
-        // mid-string) avoids O(N) work per delta when a large tool input
-        // streams across many small chunks.
         if (!couldBeCompleteJson(block.inputJsonAcc)) return [];
         const parsed = tryParseJson(block.inputJsonAcc);
         if (!parsed.ok) return [];
@@ -376,8 +314,6 @@ function translateAssistantMessage(
     };
   };
   const parentToolUseId = msg.parent_tool_use_id ?? undefined;
-  // Sample occupancy from the main agent's own response only; a subagent's
-  // per-call usage measures a different context and must not drive the meter.
   if (parentToolUseId === undefined && message.usage) {
     state.lastAssistantUsage = assistantUsageSample(message.usage, message.model);
   }
@@ -398,13 +334,6 @@ function translateAssistantMessage(
   return out;
 }
 
-/**
- * Occupancy for one API call = its full prompt (fresh input + both cache buckets)
- * plus the reply it generated. On a cached turn most input arrives as
- * `cache_read`, so all three input buckets must be summed to recover the prompt
- * size. This is the same formula the SDK result uses — the fix is the *source*:
- * one call's usage (occupancy), not the turn's summed total (cumulative).
- */
 function assistantUsageSample(
   usage: {
     input_tokens?: number;
@@ -428,13 +357,6 @@ function assistantUsageSample(
   };
 }
 
-/**
- * Session todo-list normalization (claudeTodoPlan.ts): feed native, TOP-LEVEL
- * TodoWrite / TaskCreate / TaskUpdate calls into the session accumulator and
- * surface the resulting `plan` update. MCP tools sharing a name and subagent
- * calls (`parent_tool_use_id` set) are excluded — a subagent's todos must not
- * pollute the session-level Progress.
- */
 function todoPlanEvents(
   sessionId: SessionId,
   state: TranslatorState,
@@ -486,10 +408,6 @@ function translateUserMessage(
         content: outputs,
       })
     );
-    // A TaskCreate's result carries the task id; only ids pending in the
-    // accumulator match, so subagent results are inherently ignored. An
-    // is_error result still consumes its pending entry (passed as null content
-    // → no plan emitted) so failures can't accumulate over a long session.
     const planUpdate = planUpdateFromClaudeToolResult(
       state.claudeTasks,
       b.tool_use_id,
@@ -572,19 +490,12 @@ function couldBeCompleteJson(raw: string): boolean {
   let i = raw.length - 1;
   while (i >= 0) {
     const c = raw.charCodeAt(i);
-    // Skip ASCII whitespace.
     if (c === 0x20 || c === 0x09 || c === 0x0a || c === 0x0d) {
       i--;
       continue;
     }
-    // }, ], ", e (true/false), l (null), or any digit can end a JSON value.
     return (
-      c === 0x7d || // }
-      c === 0x5d || // ]
-      c === 0x22 || // "
-      c === 0x65 || // e
-      c === 0x6c || // l
-      (c >= 0x30 && c <= 0x39) // 0-9
+      c === 0x7d || c === 0x5d || c === 0x22 || c === 0x65 || c === 0x6c || (c >= 0x30 && c <= 0x39)
     );
   }
   return false;

@@ -3,16 +3,11 @@ import { formatSkillDisplayName, mergeDiscovery } from "./mergeDiscovery";
 import { parseSkillFile } from "./skillFormat";
 import type { BackendId, Skill } from "./types";
 
-/**
- * Build a parsed SKILL.md so test candidates can carry realistic frontmatter
- * without forcing each test to spell out the YAML in full.
- */
 function buildParsed(name: string, body = "body", description = "A skill.") {
   const content = `---\nname: ${name}\ndescription: ${description}\n---\n${body}`;
   return parseSkillFile(content, name);
 }
 
-/** Helper: a canonical Skill row with sensible defaults. */
 function canonicalSkill(name: string, enabledAgents: BackendId[] = []): Skill {
   return {
     name,
@@ -25,7 +20,6 @@ function canonicalSkill(name: string, enabledAgents: BackendId[] = []): Skill {
   };
 }
 
-/** Helper: a project candidate matching a specific agent + name + hash. */
 function candidate(
   agent: BackendId,
   name: string,
@@ -79,7 +73,6 @@ describe("mergeDiscovery", () => {
       [candidate("codex", "foo", "h1"), candidate("claude", "foo", "h1")]
     );
     expect(merged).toHaveLength(1);
-    // claude < codex → representative is the claude copy.
     expect(merged[0].dirPath).toBe("/vault/.claude/skills/foo");
   });
 
