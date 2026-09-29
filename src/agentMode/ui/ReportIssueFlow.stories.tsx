@@ -8,12 +8,6 @@ import {
 import type { Meta, StoryObj } from "@/lib/story";
 import * as React from "react";
 
-/**
- * The sources as `ReportIssueModal.buildSources()` offers them on a fresh
- * install with opencode active: the activity log carries a description only
- * once it has been turned off, and the chat log is pre-selected only with
- * Debug Mode on.
- */
 const SOURCES: ReportSourceOption[] = [
   { id: "screenshot", label: "Screenshot of the Agent Mode pane", defaultChecked: true },
   { id: "activityLog", label: "Agent Mode activity log", defaultChecked: true },
@@ -31,7 +25,6 @@ const SOURCES: ReportSourceOption[] = [
   },
 ];
 
-/** A packed report whose manifest covers an included, a truncated, and an excluded source. */
 const REPORT: PreparedReport = {
   zipDir: "/tmp/copilot-report-a1b2c3",
   zipPath: "/tmp/copilot-report-a1b2c3/copilot-report-a1b2c3.zip",
@@ -68,7 +61,6 @@ const UPLOADED: UploadOutcome = {
   issueUrl: "https://github.com/logancyang/obsidian-copilot/issues/new?body=...",
 };
 
-/** Never settles — parks the flow on whichever state the story wants to show. */
 const pending = <T,>(): Promise<T> => new Promise<T>(() => undefined);
 
 const BASE: ReportIssueFlowProps = {
@@ -82,11 +74,6 @@ const BASE: ReportIssueFlowProps = {
   revealFile: () => undefined,
 };
 
-/**
- * Drives the flow to a later state the way a user does, since the page is
- * internal state rather than a prop. Clicks the named buttons in order, polling
- * because each one only becomes clickable once the previous step resolves.
- */
 const AtStep: React.FC<{ steps: string[]; props?: Partial<ReportIssueFlowProps> }> = ({
   steps,
   props,
@@ -122,35 +109,24 @@ const meta = {
 } satisfies Meta<ReportIssueFlowProps>;
 export default meta;
 
-/** Details page: what to include, plus the disclosure of what leaves the device. */
 export const Details: StoryObj<ReportIssueFlowProps> = {
   render: () => <ReportIssueFlow {...BASE} />,
 };
 
-/**
- * Review page mid-prepare. There is no separate progress screen — the page is
- * up from the first frame with a preparing message until the manifest arrives.
- */
 export const Preparing: StoryObj<ReportIssueFlowProps> = {
   render: () => <AtStep steps={[PREPARE]} props={{ prepare: () => pending<PreparedReport>() }} />,
 };
 
-/** Review page: one line per source, included or not, plus the zip itself. */
 export const Review: StoryObj<ReportIssueFlowProps> = {
   render: () => <AtStep steps={[PREPARE]} />,
 };
 
-/** Review page with the upload in flight — the actions are gone, not merely disabled. */
 export const Uploading: StoryObj<ReportIssueFlowProps> = {
   render: () => (
     <AtStep steps={[PREPARE, UPLOAD]} props={{ upload: () => pending<UploadOutcome>() }} />
   ),
 };
 
-/**
- * Review page after a failed upload. Every failure gets the same three ways
- * out: retry the same attempt, reveal the zip, or file the issue by hand.
- */
 export const UploadFailed: StoryObj<ReportIssueFlowProps> = {
   render: () => (
     <AtStep

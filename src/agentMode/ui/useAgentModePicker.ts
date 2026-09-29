@@ -12,16 +12,6 @@ export interface AgentModePickerOverride {
   disabled?: boolean;
 }
 
-/**
- * Subscribe to manager changes that affect the *mode* picker view, and
- * return a string key that mutates whenever any of them change. The key
- * is purely a memo invalidator — `buildAgentModePicker` reads fresh state
- * directly off the manager.
- *
- * Encodes only mode-relevant slices: active session id, active backend id,
- * and the mode-state signature of the active session's state. Picking a
- * different model on the active backend does not change this key.
- */
 function useAgentModeSignal(manager: AgentSessionManager | null): string {
   const subscribe = useManagerSubscribe(manager);
 
@@ -32,8 +22,6 @@ function useAgentModeSignal(manager: AgentSessionManager | null): string {
     return [
       session?.internalId ?? "",
       session?.backendId ?? "",
-      // Include status so the picker's `disabled` flips when the session
-      // transitions out of "starting" (canSwitchMode gates on status).
       session?.getStatus() ?? "",
       modeStateSignature(state),
     ].join("|");
@@ -42,21 +30,11 @@ function useAgentModeSignal(manager: AgentSessionManager | null): string {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-/**
- * Build the `modePickerOverride` for `ChatInput` — the canonical
- * Copilot-mode picker (default/plan/auto) for the active session, or
- * `null` when the active backend exposes no modes. The picker is
- * deliberately separate from `useAgentModelPicker` because mode and
- * model+effort have no functional overlap; splitting them lets each
- * re-render only on its own concern's changes.
- */
 export function useAgentModePicker(
   manager: AgentSessionManager | null
 ): AgentModePickerOverride | null {
   const signal = useAgentModeSignal(manager);
   return useMemo(() => {
-    // `signal` is the memo invalidator — referenced here so
-    // react-hooks/exhaustive-deps accepts it in the dep array.
     void signal;
     return buildAgentModePicker({ manager });
   }, [manager, signal]);

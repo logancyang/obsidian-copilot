@@ -16,7 +16,6 @@ const meta = {
 } satisfies Meta<AgentProjectHeaderProps>;
 export default meta;
 
-/** The workspace header matches the project list's neutral folder treatment. */
 export const Default: StoryObj<AgentProjectHeaderProps> = {
   render: (args) => (
     <TooltipProvider>

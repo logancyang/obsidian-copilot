@@ -7,8 +7,6 @@ import type CopilotPlugin from "@/main";
 import { render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
-// Readiness of the backend the pane would run, swapped per test. Declared with
-// the `mock` prefix so Jest allows the mock factory below to close over it.
 let mockInstallAction = { kind: "idle" } as { kind: string; label?: string; percent?: number };
 let mockAuthStatus: { signedIn: boolean } | null = { signedIn: true };
 let mockHasAuth = false;
@@ -20,10 +18,6 @@ jest.mock("@/agentMode/session/useBackendAuthState", () => ({
 let mockManagedInstall: object | undefined;
 let mockInstallState: InstallState = { kind: "ready", source: "custom" };
 
-// Stub the descriptor hooks so the effect's `preloadReady`/install gates are
-// satisfied without the real backend registry / jotai atoms. The mock factory
-// names must match the real `use*` exports, so the no-hook `use` prefix is
-// expected here.
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
   useSessionBackendDescriptor: () => ({
@@ -38,8 +32,6 @@ jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
-// Heavy children are irrelevant to the guards under test — render markers so
-// the no-session fallback's branch is observable without their real trees.
 jest.mock("@/agentMode/ui/AgentHome", () => ({
   AgentHome: () => <div data-testid="agent-home" />,
 }));
@@ -93,7 +85,6 @@ function renderChat(manager: AgentSessionManager) {
   );
 }
 
-/** Render the no-session fallback with the given readiness and boot error. */
 function renderFallback(installState: InstallState, lastError: string | null, starting = false) {
   mockInstallState = installState;
   const { manager } = makeManager({
@@ -163,9 +154,6 @@ describe("AgentModeChat", () => {
 
   describe("auto-spawn guard (scope-aware)", () => {
     it("regression: spawns the current project scope's session even when another scope still has sessions", async () => {
-      // The closed scope (project-1) is empty, but the global pool still holds a
-      // session. A whole-pool guard would skip the spawn and strand the pane on
-      // the no-session fallback; the scope-aware guard must re-spawn project-1.
       const { manager, getOrCreateActiveSession } = makeManager({
         activeProjectId: "project-1",
         scopeSessions: [],
@@ -198,7 +186,6 @@ describe("AgentModeChat", () => {
 
       renderChat(manager);
 
-      // Flush effects, then assert the guard short-circuited.
       await waitFor(() => expect(manager.getSessionsForScope).toHaveBeenCalled());
       expect(getOrCreateActiveSession).not.toHaveBeenCalled();
     });
@@ -365,8 +352,6 @@ describe("AgentModeChat", () => {
     });
 
     it("keeps the compact card while a readiness check is in flight", () => {
-      // `checking` resolves on its own; flashing the select view and swapping it
-      // straight back out is worse than the card's one-line "Checking…".
       renderFallback({ kind: "checking", source: "custom" }, null);
 
       expect(screen.getByTestId("status-card")).toBeTruthy();

@@ -24,19 +24,11 @@ import { App } from "obsidian";
 
 interface AgentTrailProps {
   parts: AgentMessagePart[];
-  /** True iff this message is the one currently being streamed by the
-   *  agent. Drives the reasoning block and whole-turn live states. */
   isStreaming: boolean;
-  /** Turn start used by the live whole-turn timer. */
   turnStartedAtMs?: number;
-  /** Frozen whole-turn duration retained after the latest turn completes. */
   turnDurationMs?: number;
-  /** Message creation time used when this turn has no visible duration. */
   timestamp?: string;
-  /** Obsidian `App` for the markdown renderer used by `text` parts. */
   app: App;
-  /** Backend stopReason once the turn has ended. Only `cancelled` suppresses
-   *  the Copy / Insert affordances (treated as having no user-visible answer). */
   turnStopReason?: StopReason;
 }
 
@@ -49,9 +41,6 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   app,
   turnStopReason,
 }) => {
-  // Copy / Insert act on the agent's full textual response. Gate them off while
-  // the message is still streaming and on cancelled turns (treated as having no
-  // user-visible answer), plus whenever there is no prose to act on.
   const answer = agentResponseText(parts);
   const hasRunningDuration = isStreaming && turnStartedAtMs !== undefined;
   const footer =
@@ -83,36 +72,21 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   );
 };
 
-/** What every node in one trail renders against, regardless of its position. */
 interface TrailContext {
   app: App;
-  /** The trail's trailing part, reference-compared to freeze stale reasoning. */
   lastPart: AgentMessagePart | undefined;
-  /** Which activity groups the user has opened; owned above the node list so an
-   *  open group survives the reshaping that streaming causes. */
   expansion: TrailExpansion;
   summaryCtx: ToolSummaryContext;
 }
 
-/** Renders the full trail in chronological order — the pre-collapse view. */
 const LinearTrail: React.FC<{
   parts: AgentMessagePart[];
   isStreaming: boolean;
   app: App;
 }> = ({ parts, isStreaming, app }) => {
   const expansion = useTrailExpansion();
-  // `vaultBase` is stable for the plugin lifetime, but memoizing keeps the
-  // summary inputs referentially stable across re-renders.
   const summaryCtx = useMemo(() => ({ vaultBase: getVaultBase(app) }), [app]);
   const nodes = foldActivityGroups(buildAgentTrail(parts));
-  // A reasoning block is "still active" only while the turn is in flight AND
-  // its `thought` part is the trailing entry of `msg.parts[]`. Anything later
-  // (a tool_call, a sibling thought split by a tool_call, an `agent_message_chunk`)
-  // proves the agent has moved on — even though ACP itself emits no explicit
-  // "reasoning ended" notification. Comparing by reference against the last
-  // part is robust to the hidden-tool filter inside `buildAgentTrail`: if the
-  // last part is hidden, no reasoning node will match, so all reasoning blocks
-  // freeze — which is the right outcome.
   const ctx: TrailContext = {
     app,
     lastPart: parts.length > 0 ? parts[parts.length - 1] : undefined,
@@ -128,12 +102,6 @@ const LinearTrail: React.FC<{
   );
 };
 
-/**
- * @param atLiveEdge - Whether this node closes every containing peer list in
- *   the streaming trail. Activity inside an earlier parent has finished.
- * @param trailId - Stable identity of this peer list, used to keep expansion
- *   state independent across nesting levels.
- */
 function renderNode(
   node: GroupedTrailNode,
   key: string | number,
@@ -164,7 +132,6 @@ function renderNode(
         />
       );
     case "subagent": {
-      // Peers nest, so a sub-agent's own children group exactly like the root.
       const children = foldActivityGroups(node.children);
       const lastChild = children[children.length - 1];
       const childTrailId = `${trailId}/subagent:${node.parent.id}`;
@@ -196,14 +163,11 @@ function renderNode(
 
 interface ActivityGroupRowProps {
   group: ActivityGroupNode;
-  /** Whether this group is the one the agent is still working in. */
   atLiveEdge: boolean;
   ctx: TrailContext;
   trailId: string;
 }
 
-// A component rather than a branch of `renderNode` because each group owns its
-// own thinking clock, and hooks cannot run in a loop.
 const ActivityGroupRow: React.FC<ActivityGroupRowProps> = ({ group, atLiveEdge, ctx, trailId }) => {
   const trailingMember = group.members[group.members.length - 1];
   // A hidden trailing tool is absent from the rendered group but still ends
@@ -263,10 +227,6 @@ interface PlanPillProps {
   entries: { content: string; status: "pending" | "in_progress" | "completed" }[];
 }
 
-// Inline plan-checklist pill for `kind: "plan"` parts. Permission-gated
-// plan proposals are handled separately by `PlanProposalCard`. An empty
-// entries list (the agent deleted every task) renders nothing, not an
-// empty shell.
 const PlanPill: React.FC<PlanPillProps> = ({ entries }) =>
   entries.length === 0 ? null : (
     <div className="tw-my-1 tw-rounded tw-border tw-border-border tw-bg-secondary tw-px-2 tw-py-1">

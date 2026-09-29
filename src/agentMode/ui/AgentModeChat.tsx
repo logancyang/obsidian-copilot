@@ -20,12 +20,6 @@ interface Props {
   updateUserMessageHistory: (newMessage: string) => void;
 }
 
-/**
- * Keeps the dedicated Agent Mode pane synchronized with the active scope and backend throughout session startup.
- * @param plugin - The plugin instance that owns Agent Mode runtime services.
- * @param onSaveChat - The callback that exposes the current conversation's save action.
- * @param updateUserMessageHistory - The callback that records submitted messages for input history.
- */
 export const AgentModeChat: React.FC<Props> = ({
   plugin,
   onSaveChat,
@@ -47,30 +41,11 @@ export const AgentModeChat: React.FC<Props> = ({
     return manager.subscribe(() => setTick((v) => v + 1));
   }, [manager]);
 
-  // Manager fires `notify()` on preload settle, which bumps `tick` above and
-  // re-renders this component — so we can read the flag directly each render.
-  // Gate only on the backend being started or shown so a slow unrelated
-  // backend never holds the chat hostage; the picker shows per-backend
-  // loading rows for the others.
   const preloadReady = manager?.isPreloadReady(descriptor.id) ?? true;
 
-  // Auto-spawn the first session on mount. The manager de-dupes concurrent
-  // creators via creatingSession, so this is safe to fire whenever the
-  // dependencies change. Skip if the backend isn't installed (the install
-  // pill takes over), there's a prior boot error (Retry handles it), or
-  // the active backend's preload hasn't settled (its catalog isn't in
-  // cache yet — kicking off `newSession` would trigger a redundant
-  // on-demand probe).
   React.useEffect(() => {
     if (!manager) return;
     if (!preloadReady || managedInstall.kind === "running" || awaitingAuth || signedOut) return;
-    // Gate on the *current scope's* sessions, not the whole pool: closing the
-    // last session in a scope (project or global) nulls the active session but
-    // keeps `activeProjectId` put, so we must re-spawn that scope's landing even
-    // when another scope still holds sessions. A whole-pool guard would leave the
-    // pane on the no-session fallback instead of the scope's landing.
-    // `getOrCreateActiveSession` is scope-aware and the manager de-dupes per
-    // scope, so this can't double-spawn.
     if (manager.getSessionsForScope(manager.getActiveProjectId()).length > 0) return;
     if (manager.getIsStarting()) return;
     if (manager.getLastError()) return;
@@ -78,7 +53,6 @@ export const AgentModeChat: React.FC<Props> = ({
     manager.getOrCreateActiveSession().catch((e) => {
       logError("[AgentMode] auto-start failed", e);
     });
-    // tick forces re-evaluation when the manager's pool changes.
   }, [
     manager,
     installState.kind,
@@ -98,9 +72,6 @@ export const AgentModeChat: React.FC<Props> = ({
   const activeSession = manager.getActiveSession();
   const backend = manager.getActiveChatUIState();
   if (activeSession && backend) {
-    // AgentHome owns the tab strip + chat surface and persists across tab
-    // switches: it keys input drafts by session id internally, so switching
-    // tabs swaps the active draft rather than remounting and discarding input.
     return (
       <AgentHome
         backend={backend}
@@ -159,8 +130,6 @@ export const AgentModeChat: React.FC<Props> = ({
     );
   }
 
-  // Render the chain switcher below the status surface so the user can still
-  // leave Agent Mode without going through settings or the command palette.
   return (
     <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
       <div className="tw-flex-1" />

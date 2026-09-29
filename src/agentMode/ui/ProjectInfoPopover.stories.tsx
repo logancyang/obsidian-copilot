@@ -14,17 +14,8 @@ const meta = {
 } satisfies Meta<ProjectFilesListProps>;
 export default meta;
 
-/**
- * A project whose folder holds only its own bookkeeping. AGENTS.md is a fixed row rather than a
- * listed file, so it is present even though nothing else is.
- */
 export const InstructionsRowOnly: StoryObj<ProjectFilesListProps> = {};
 
-/**
- * The common case: `project.md` and `AGENTS.md` are represented by fixed rows or hidden, and a
- * CLAUDE.md carrying nothing but Copilot's `@AGENTS.md` import is filtered out upstream — so
- * only the user's own context files reach these rows.
- */
 export const ContextFiles: StoryObj<ProjectFilesListProps> = {
   args: {
     files: [
@@ -39,11 +30,6 @@ export const ContextFiles: StoryObj<ProjectFilesListProps> = {
   },
 };
 
-/**
- * A CLAUDE.md the user wrote their own rules into stays visible: Claude reads it as live
- * instructions, so hiding it the way the generated import-only wiring is hidden would leave
- * instructions in force with nothing in the UI to show for them.
- */
 export const UserAuthoredClaudeFile: StoryObj<ProjectFilesListProps> = {
   args: {
     files: [
@@ -53,7 +39,6 @@ export const UserAuthoredClaudeFile: StoryObj<ProjectFilesListProps> = {
   },
 };
 
-/** Long names truncate rather than widening the popover or wrapping to a second line. */
 export const LongFileNames: StoryObj<ProjectFilesListProps> = {
   args: {
     files: [

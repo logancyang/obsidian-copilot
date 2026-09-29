@@ -3,12 +3,6 @@ import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManage
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
 
-/**
- * Minimal manager stand-in exposing only the surfaces the hooks read:
- * `subscribe` (returns an unsubscribe) plus the two live id-set getters (both
- * serve the same backing set — each test exercises one hook at a time). A
- * handle lets the test swap the current set and fire the subscriber.
- */
 function makeFakeManager(initial: ReadonlySet<string>) {
   let current = initial;
   const listeners = new Set<() => void>();
@@ -48,7 +42,6 @@ describe("useRunningChatIds", () => {
     const fake = makeFakeManager(new Set(["a"]));
     const { result } = renderHook(() => useRunningChatIds(fake.manager));
     const before = result.current;
-    // Same membership in a freshly-allocated Set must not churn the snapshot.
     act(() => fake.emit(new Set(["a"])));
     expect(result.current).toBe(before);
   });
@@ -62,8 +55,6 @@ describe("useRunningChatIds", () => {
 });
 
 describe("useAttentionChatIds", () => {
-  // The shared snapshot machinery is exercised above; this only pins that the
-  // attention wrapper reads the attention getter and stays subscribed.
   it("tracks the manager's attention set", () => {
     const fake = makeFakeManager(new Set(["done-1"]));
     const { result } = renderHook(() => useAttentionChatIds(fake.manager));

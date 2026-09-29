@@ -21,11 +21,6 @@ interface FakeBackendState {
   pendingAskUserQuestions: AskUserQuestionPrompt[];
 }
 
-/**
- * Minimal stand-in for the backend the hook subscribes to. Only the getters
- * and `subscribe` the hook touches are implemented; the rest of
- * `AgentChatBackend` is irrelevant here and cast away.
- */
 function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
   const state: FakeBackendState = {
     messages: initial.messages ?? [],
@@ -121,8 +116,6 @@ describe("useAgentChatRuntimeState", () => {
 
     rerender({ backend: second.backend });
 
-    // The lazy initializers only ran for `first`; switching backends must pull
-    // the new snapshot imperatively rather than keep stale values.
     expect(result.current.messages).toEqual([msg("second")]);
     expect(result.current.isStarting).toBe(true);
   });
@@ -174,7 +167,6 @@ describe("useAgentChatRuntimeState", () => {
         fake.emit();
       })
     ).not.toThrow();
-    // The hook detached its listener, so the late emit is a no-op.
     expect(result.current.messages).toEqual([]);
   });
 });

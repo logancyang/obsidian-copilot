@@ -56,7 +56,6 @@ describe("useAgentInputDrafts", () => {
     act(() => result.current.setInput("draft for a"));
     expect(result.current.input).toBe("draft for a");
 
-    // Switch to b: its draft is fresh.
     rerender({
       chatInputId: "b",
       defaultIncludeActiveNote: false,
@@ -64,7 +63,6 @@ describe("useAgentInputDrafts", () => {
     expect(result.current.input).toBe("");
     act(() => result.current.setInput("draft for b"));
 
-    // Back to a: the unsent text survived the round-trip.
     rerender({
       chatInputId: "a",
       defaultIncludeActiveNote: false,
@@ -132,7 +130,6 @@ describe("useAgentInputDrafts", () => {
     expect(result.current.images).toEqual([]);
     expect(result.current.includeActiveNote).toBe(false);
     expect(result.current.includeActiveWebTab).toBe(false);
-    // Loading and the queue belong to the in-flight turn, not the compose box.
     expect(result.current.loading).toBe(true);
     expect(result.current.queue.map((q) => q.id)).toEqual(["q1"]);
   });

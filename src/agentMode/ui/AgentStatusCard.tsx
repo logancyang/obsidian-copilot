@@ -24,25 +24,14 @@ interface AgentStatusLinkAction {
 type AgentStatusAction = AgentStatusButtonAction | AgentStatusLinkAction;
 
 interface AgentStatusCardProps {
-  /** Full recovery explanation, preserved verbatim for copying. */
   message: string;
-  /** Concise state-specific heading; omitted for short statuses. */
   summary?: string;
   tone?: AgentStatusTone;
   progress?: { percent?: number };
   action?: AgentStatusAction;
-  /**
-   * `"row"` puts the action beside the message instead of under it, for a
-   * one-line advisory whose stacked form would read as a failure card. Only
-   * valid without `summary`, which needs the column to keep its body text.
-   */
   layout?: "stack" | "row";
 }
 
-/**
- * Presents compact Agent Mode status and recovery actions while leaving backend state decisions
- * to its parent.
- */
 export const AgentStatusCard: React.FC<AgentStatusCardProps> = ({
   message,
   summary,
@@ -83,8 +72,6 @@ export const AgentStatusCard: React.FC<AgentStatusCardProps> = ({
         {summary ?? message}
       </span>
     </span>
-    {/* Error strings can contain recovery steps as well as diagnostics; keep them visible and exact.
-        https://github.com/Brevilabs/obsidian-copilot-private/issues/410 */}
     {summary && (
       <p className="tw-m-0 tw-w-full tw-select-text tw-whitespace-pre-wrap tw-text-normal [overflow-wrap:anywhere]">
         {message}
@@ -113,8 +100,6 @@ export const AgentStatusCard: React.FC<AgentStatusCardProps> = ({
         <Button
           className={cn(
             "tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-break-words tw-border tw-border-solid tw-border-border tw-py-1 disabled:tw-opacity-100",
-            // Beside the message the action must hold its width; the message
-            // wraps instead.
             layout === "row" && "tw-shrink-0"
           )}
           variant={tone === "error" ? "ghost" : "secondary"}

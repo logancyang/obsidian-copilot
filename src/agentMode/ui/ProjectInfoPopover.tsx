@@ -23,14 +23,8 @@ import {
 import { App, Notice, TFile, TFolder } from "obsidian";
 import React, { memo, useEffect, useState } from "react";
 
-// Files the popover represents with its own fixed row rather than listing as plain project
-// files: the metadata record and the instruction file (the AGENTS.md row above). CLAUDE.md is
-// handled separately below — hidden only while it is purely Copilot's `@AGENTS.md` wiring,
-// listed once the user writes their own rules into it (Claude reads those as live
-// instructions, so the file must stay visible).
 const HIDDEN_BASENAMES = new Set(["project.md", "agents.md"]);
 
-/** Semantic per-extension badge tints for quickly distinguishing file types. */
 const BADGE_CLASSES: Record<string, string> = {
   pdf: "tw-bg-project-red tw-text-project-red",
   md: "tw-bg-project-blue tw-text-project-blue",
@@ -56,11 +50,6 @@ interface ProgressSectionProps {
   todoList: AgentTodoListEntry[] | null;
 }
 
-/**
- * The agent's live execution todo list (`getCurrentTodoList`). Per the design
- * (and matching the backends' own behavior), NO active list renders nothing —
- * the section never placeholder-pads the popover.
- */
 function ProgressSection({ todoList }: ProgressSectionProps) {
   if (!todoList || todoList.length === 0) return null;
   const done = todoList.filter((t) => t.status === "completed").length;
@@ -92,9 +81,6 @@ function ProgressSection({ todoList }: ProgressSectionProps) {
             <span
               className={cn(
                 "tw-min-w-0 tw-truncate tw-text-ui-small",
-                // Done is de-emphasized (faint + strikethrough); everything not
-                // yet done — in_progress AND pending — stays full-strength so the
-                // contrast reads "completed vs remaining" at a glance.
                 todo.status === "completed" ? "tw-text-faint tw-line-through" : "tw-text-normal"
               )}
               title={todo.content}
@@ -108,7 +94,6 @@ function ProgressSection({ todoList }: ProgressSectionProps) {
   );
 }
 
-/** One listed project file, reduced to what a row draws. */
 export interface ProjectFileEntry {
   path: string;
   name: string;
@@ -116,19 +101,12 @@ export interface ProjectFileEntry {
 }
 
 export interface ProjectFilesListProps {
-  /** Folder files to list under the fixed AGENTS.md row, already filtered and sorted. */
   files: ProjectFileEntry[];
   onOpenInstructions: () => void;
   onOpenFile: (path: string) => void;
   onReveal: () => void;
 }
 
-/**
- * The Project files section as drawn: a fixed AGENTS.md row, the folder's remaining files, and
- * the Outputs placeholder. Presentational on purpose — which files belong here depends on the
- * project record and on reading CLAUDE.md, and that resolution lives in the container below so
- * these rows stay renderable from fixture data.
- */
 export function ProjectFilesList({
   files,
   onOpenInstructions,
@@ -152,7 +130,6 @@ export function ProjectFilesList({
         </Button>
       </div>
 
-      {/* Fixed first row: the project's canonical instructions file. */}
       <div
         role="button"
         tabIndex={0}
@@ -185,9 +162,6 @@ export function ProjectFilesList({
         </div>
       ))}
 
-      {/* Outputs: files generated during agent conversations. The producing
-          feature hasn't shipped yet, so this is the collapsed empty state the
-          design reserves — wired up once outputs land in the project folder. */}
       <div
         role="button"
         tabIndex={0}
@@ -219,10 +193,7 @@ interface ProjectFilesSectionProps {
   onClose: () => void;
 }
 
-/** Resolves the project folder's listable files and the vault actions the rows trigger. */
 function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps) {
-  // State rather than a memo: CLAUDE.md's visibility depends on its content (import-only
-  // wiring is hidden, user-authored rules are listed), and reading content is async.
   const [files, setFiles] = useState<TFile[]>([]);
   useEffect(() => {
     const record = getCachedProjectRecordById(project.id);
@@ -272,8 +243,6 @@ function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps
     const record = getCachedProjectRecordById(project.id);
     if (!record) return;
     onClose();
-    // Move any legacy `project.md` text in first, so opening the file shows the user their
-    // real instructions rather than a blank page they would have to re-type.
     void moveProjectPromptToAgentsFile(app, record)
       .then(() =>
         openAgentsFile(
@@ -305,23 +274,12 @@ function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps
 interface ProjectInfoPopoverProps {
   app: App;
   project: ProjectConfig;
-  /** Live execution todo list of the active session (null = no Progress section). */
   todoList: AgentTodoListEntry[] | null;
-  /** Fired after a successful edit via the gear (caller refreshes its cache). */
   onEdited?: (project: ProjectConfig) => void;
-  /** Portal container — the AgentHome ROOT (the header sits outside the chat container). */
   container?: HTMLElement | null;
   className?: string;
 }
 
-/**
- * Project-info popover anchored to the project header's trailing button,
- * replacing the old `⋯` overflow menu (design: PROJECT_INFO_POPOVER.md,
- * project-info-panel-hifi.html F1–F3). Top card (name + Edit gear + reveal) →
- * Progress (live todo list, hidden when none) → Project files (AGENTS.md
- * row + folder files + Outputs placeholder). Deliberately NO Delete and no
- * config chips — deletion stays on the project list rows' inline actions.
- */
 export const ProjectInfoPopover = memo(
   ({ app, project, todoList, onEdited, container, className }: ProjectInfoPopoverProps) => {
     const [open, setOpen] = useState(false);
@@ -338,11 +296,6 @@ export const ProjectInfoPopover = memo(
             );
             onEdited?.(updated.project);
           } catch (e) {
-            // Reason: log for diagnostics, then rethrow so AddProjectModal keeps the
-            // form open and surfaces the failure (duplicate name / folder collision)
-            // instead of resolving onSave, closing, and discarding the user's edits.
-            // Mirrors the inline edit action in AgentProjectRowActions, which lets
-            // updateProject throw into the modal's own error handling.
             logError("[ProjectInfoPopover] updateProject failed", e);
             throw e;
           }

@@ -1,21 +1,8 @@
 import type { ActivityMember } from "@/agentMode/ui/activityGroups";
 import { lookupToolSummary, type ToolSummaryContext } from "@/agentMode/ui/toolSummaries";
 
-/** Matches `AgentReasoningBlock`'s active-state wording. */
 const REASONING_LABEL = "Reasoning";
 
-/**
- * Whether the group is reasoning right now. Like the trail's own check, a
- * `thought` counts as live only while it trails the run and has no frozen
- * duration: anything after it proves the agent moved on, and no backend emits
- * a "reasoning ended" event.
- *
- * @param members - The group's members, in stream order.
- * @param atLiveEdge - Whether this group is the streaming trail's live edge —
- *   its last node while the turn is in flight. A whole-trail streaming flag is
- *   not enough: an earlier group that ends in a `thought` would otherwise stay
- *   "reasoning" until the entire turn finished.
- */
 export function isReasoningActive(members: ActivityMember[], atLiveEdge: boolean): boolean {
   const trailingMember = members[members.length - 1];
   // A frozen thought can remain at the visible edge when a trailing internal
@@ -28,17 +15,6 @@ export function isReasoningActive(members: ActivityMember[], atLiveEdge: boolean
   );
 }
 
-/**
- * Label for the one step a collapsed group has in flight, or null when the
- * group is quiet. This is the only motion grouping allows: one row that swaps
- * as the agent moves on and retires when the work ends, never a list that
- * collapses under the user (see `designdocs/AGENT_TRAIL_GROUPING.md`).
- *
- * @param members - The group's members, in stream order.
- * @param atLiveEdge - Whether this group is the streaming trail's live edge;
- *   see `isReasoningActive`.
- * @param ctx - Vault base used to shorten paths in the tool's own label.
- */
 export function activityLiveStep(
   members: ActivityMember[],
   atLiveEdge: boolean,
@@ -46,8 +22,6 @@ export function activityLiveStep(
 ): string | null {
   if (!atLiveEdge) return null;
   if (isReasoningActive(members, atLiveEdge)) return REASONING_LABEL;
-  // Tool calls can resolve out of order, so the trailing member is not
-  // necessarily the unfinished one — take the latest that has yet to settle.
   for (let i = members.length - 1; i >= 0; i--) {
     const member = members[i];
     if (member.type !== "action") continue;

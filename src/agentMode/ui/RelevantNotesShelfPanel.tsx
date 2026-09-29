@@ -3,16 +3,12 @@ import { ExternalLink } from "lucide-react";
 import React from "react";
 
 export interface RelevantNotesShelfPanelProps {
-  /** Open the dedicated Relevant Notes pane (the shelf is transient). */
   onPopOut: () => void;
   children: React.ReactNode;
 }
 
-/** Keep the dedicated-pane action available below the transient shelf's results. */
 export function RelevantNotesShelfPanel({ onPopOut, children }: RelevantNotesShelfPanelProps) {
   return (
-    // Every shelf control preserves the last retrieval source, including the pane opener.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
     <div
       data-relevant-notes
       className="tw-flex tw-min-h-0 tw-w-full tw-flex-1 tw-flex-col tw-overflow-hidden"

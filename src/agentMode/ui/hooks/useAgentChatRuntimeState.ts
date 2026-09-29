@@ -8,13 +8,6 @@ import type {
 } from "@/agentMode/session/types";
 import { useEffect, useRef, useState } from "react";
 
-/**
- * Reactive snapshot of the backend's per-turn runtime state, kept in sync via
- * a single subscription. Messages, starting flag, plan/permission state all
- * change together as the backend streams a turn, so they share one subscribe
- * + one `sync()` — splitting them into separate subscription hooks would
- * multiply listeners and risk inconsistent intermediate renders.
- */
 export interface AgentChatRuntimeState {
   messages: AgentChatMessage[];
   isStarting: boolean;
@@ -60,12 +53,6 @@ export function useAgentChatRuntimeState(backend: AgentChatBackend): AgentChatRu
     };
   }, []);
 
-  // The initial sync on each `backend` change is needed because the lazy
-  // useState initializers only ran for the first backend; the next backend's
-  // values must be pulled imperatively. The backend exposes plain getters that
-  // return fresh arrays/objects (e.g. getMessages()), so `useSyncExternalStore`
-  // would see a new snapshot every render and tear — keep explicit subscribe +
-  // setState.
   useEffect(() => {
     const sync = () => {
       setSnapshot(readBackendRuntimeSnapshot(backend));
@@ -77,8 +64,5 @@ export function useAgentChatRuntimeState(backend: AgentChatBackend): AgentChatRu
     });
   }, [backend]);
 
-  // A replacement backend renders before the passive subscription effect can
-  // synchronize. Never expose the prior runtime's readiness or permissions
-  // alongside the new backend during that render.
   return snapshot.backend === backend ? snapshot.state : readBackendRuntimeSnapshot(backend).state;
 }

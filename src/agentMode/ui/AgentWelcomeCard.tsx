@@ -4,27 +4,11 @@ import { FolderPlus, Sparkles, X } from "lucide-react";
 import React, { memo } from "react";
 
 interface AgentWelcomeCardProps {
-  /** Start the name-only project creation flow, anchored to the trigger button. */
   onCreate: (anchor: HTMLElement) => void;
-  /**
-   * Dismiss the card. The parent persists this to `agentMode.welcomeDismissed`
-   * so the nudge never returns; the card itself holds no dismissed state.
-   */
   onDismiss: () => void;
   className?: string;
 }
 
-/**
- * "Try a project" nudge for the global Agent Home landing. The parent floats it
- * between the composer and the shelf and only mounts it when no projects exist
- * and `welcomeDismissed` is false — this component is pure presentation, owning
- * neither the visibility condition nor the persisted dismissal (it just signals
- * intent via {@link AgentWelcomeCardProps.onDismiss}).
- *
- * Visual authority: design-handoff stage A.1. We take its copy/layout but not the
- * sketch styling (no orange "NEW" badge, no handwriting) — Obsidian theme vars +
- * existing `tw-` tokens only.
- */
 export const AgentWelcomeCard = memo(
   ({ onCreate, onDismiss, className }: AgentWelcomeCardProps): React.ReactElement => (
     <div
@@ -38,7 +22,6 @@ export const AgentWelcomeCard = memo(
         size="icon"
         onClick={onDismiss}
         aria-label="Dismiss"
-        // Pull into the padding so the × hugs the corner without crowding the title.
         className="tw-absolute tw-right-1 tw-top-1 tw-size-6 tw-text-muted hover:tw-text-normal"
       >
         <X className="tw-size-4" />

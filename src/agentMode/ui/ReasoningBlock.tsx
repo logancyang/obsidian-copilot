@@ -4,23 +4,13 @@ import type { ThoughtPart } from "@/agentMode/ui/agentTrail";
 
 interface ReasoningBlockProps {
   part: ThoughtPart;
-  /** True when this part belongs to the actively streaming assistant
-   *  message — drives the active label and captures its final duration. */
   isStreaming: boolean;
 }
 
-/**
- * Adapter that maps an agent-mode `thought` part onto the existing
- * `AgentReasoningBlock` UI (brain icon, final duration, collapse-on-done). The store
- * folds consecutive `agent_thought_chunk`s into one `thought` part per
- * uninterrupted reasoning span. `steps` derives from paragraph splits within
- * `part.text`.
- */
 export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({ part, isStreaming }) => {
   const fallbackStartedAtRef = useRef(Date.now());
   const [now, setNow] = useState(() => Date.now());
 
-  // Tick the clock while streaming.
   useEffect(() => {
     if (!isStreaming) return;
     const id = window.setInterval(() => setNow(Date.now()), 1000);

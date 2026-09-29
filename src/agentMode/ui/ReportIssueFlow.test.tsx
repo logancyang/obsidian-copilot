@@ -37,7 +37,6 @@ const uploaded: UploadOutcome = {
 
 const failed: UploadOutcome = { ok: false, error: "Network request failed" };
 
-/** A promise the test settles by hand, to park the flow on an in-flight state. */
 function deferred<T>() {
   let resolve: (value: T) => void = () => {};
   let reject: (err: Error) => void = () => {};
@@ -82,12 +81,10 @@ const uploadButton = () => screen.getByRole("button", { name: /Upload & open iss
 const checkedStates = () =>
   screen.getAllByRole("checkbox").map((box) => box.getAttribute("data-state"));
 
-/** Resolves once the packed report has replaced the preparation progress rows. */
 async function awaitPrepared() {
   await waitFor(() => expect(screen.getByText(prepared.zipName)).toBeTruthy());
 }
 
-/** Drives the flow to the review page with the upload already failed. */
 async function reachFailedUpload(overrides: Partial<ReportIssueFlowProps> = {}) {
   const rendered = renderFlow({ upload: jest.fn().mockResolvedValue(failed), ...overrides });
   submit();
@@ -105,9 +102,6 @@ describe("ReportIssueFlow", () => {
 
         expect(checkedStates()).toEqual(["checked", "checked", "unchecked", "unchecked"]);
         expect(screen.getByText("Newest 2 MB of the log")).toBeTruthy();
-        // What leaves the device has to be said before the user commits to
-        // anything. The copy is maintainer-approved verbatim, so assert its
-        // load-bearing halves.
         expect(screen.getByText(/screenshots are not automatically redacted/)).toBeTruthy();
         expect(screen.getByText(/Reports are private and deleted after 60 days/)).toBeTruthy();
       });
@@ -153,8 +147,6 @@ describe("ReportIssueFlow", () => {
         renderFlow();
 
         submit();
-        // No separate progress screen to flash: the review page is up at once,
-        // with one preparing message until the manifest arrives.
         expect(screen.getByText("Report contents")).toBeTruthy();
         expect(screen.getByRole("status").textContent).toBe("Preparing report…");
 
@@ -173,7 +165,6 @@ describe("ReportIssueFlow", () => {
         await act(async () => pending.resolve(prepared));
 
         expect(uploadButton().getAttribute("disabled")).toBeNull();
-        // Preparing alone must never trigger an upload — it needs its own click.
         expect(props.upload).not.toHaveBeenCalled();
       });
 
@@ -186,8 +177,6 @@ describe("ReportIssueFlow", () => {
         unmount();
         await act(async () => pending.resolve(prepared));
 
-        // The zip is plaintext nobody will ever send, and no UI is left to tell
-        // the user where it is.
         expect(discardReport).toHaveBeenCalledWith(prepared);
       });
 
@@ -227,9 +216,6 @@ describe("ReportIssueFlow", () => {
         submit();
 
         await waitFor(() => expect(screen.getByText("acp-frames.ndjson.txt")).toBeTruthy());
-        // The manifest is the assembler's word on what the zip holds, so a source
-        // the user ticked but that did not make it in is listed as excluded rather
-        // than dropped or re-derived from the checkbox state.
         expect(screen.getByText("copilot-chat-log.md")).toBeTruthy();
         expect(screen.getByText("failed: EACCES")).toBeTruthy();
         expect(screen.getByText("truncated to the newest entries of 40 MB")).toBeTruthy();
@@ -272,8 +258,6 @@ describe("ReportIssueFlow", () => {
           reportId: uploaded.reportId,
           issueUrl: uploaded.issueUrl,
         });
-        // Opening the browser and closing the dialog are the host's; the flow
-        // neither opens anything itself nor renders a confirmation page.
         expect(props.openIssuePage).not.toHaveBeenCalled();
         expect(screen.queryByText(/Report uploaded/)).toBeNull();
         expect(screen.getByText(prepared.zipName)).toBeTruthy();
@@ -287,15 +271,9 @@ describe("ReportIssueFlow", () => {
 
         fireEvent.click(uploadButton());
         await waitFor(() => expect(screen.getByText(/Uploading — this can/)).toBeTruthy());
-        // An actual spinner, not just a label: the upload has no progress to
-        // report, so motion is the only thing telling the user it is alive.
         expect(container.querySelector(".tw-animate-spin")).not.toBeNull();
-        // The transport has no abort, so a Cancel here would be a promise the
-        // upload cannot keep.
         expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
         expect(screen.queryByRole("button", { name: /Upload & open issue/ })).toBeNull();
-        // The manifest is what the user just approved sending; it stays legible
-        // while that send is in flight.
         expect(screen.getByText("report.md")).toBeTruthy();
 
         await act(async () => pending.resolve(uploaded));
@@ -313,8 +291,6 @@ describe("ReportIssueFlow", () => {
         unmount();
         await act(async () => pending.resolve(uploaded));
 
-        // The user has left; a browser tab opening now would be a surprise, and
-        // there is no tree left to write a failure into either.
         expect(props.onUploaded).not.toHaveBeenCalled();
       });
     });
@@ -324,8 +300,6 @@ describe("ReportIssueFlow", () => {
         const { props } = await reachFailedUpload();
 
         expect(screen.getByText(/Network request failed/)).toBeTruthy();
-        // The escape hatch has to say what it costs: the issue it opens has no
-        // report ID, so the user is on the hook for attaching the zip themselves.
         expect(screen.getByText(/attach the zip to it yourself/)).toBeTruthy();
         expect(
           screen.getByRole("button", { name: "Retry upload" }).getAttribute("disabled")
@@ -343,8 +317,6 @@ describe("ReportIssueFlow", () => {
         fireEvent.click(screen.getByRole("button", { name: "Retry upload" }));
 
         await waitFor(() => expect(upload).toHaveBeenCalledTimes(2));
-        // Same object, not an equal one: the idempotency key inside is what lets
-        // the server dedupe a retry whose first outcome was never confirmed.
         expect(upload.mock.calls[1][0].uploadAttempt).toBe(prepared.uploadAttempt);
         expect(props.prepare).toHaveBeenCalledTimes(1);
         expect(props.onUploaded).toHaveBeenCalledWith({

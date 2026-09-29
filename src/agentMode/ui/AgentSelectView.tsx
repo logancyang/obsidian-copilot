@@ -12,16 +12,6 @@ interface StatusBadgeSpec {
   Icon: LucideIcon;
 }
 
-/**
- * Status vocabulary shown beside an agent's name. `absent` is deliberately
- * absent from this map: the design communicates "not set up" through the
- * footer note and the Configure call to action, not a badge on the row.
- *
- * `error` is not drawn in the design. It reuses the `outdated` treatment and
- * says only "Error" — the row's `statusMessage` already reaches the user
- * through the footer note whenever that row is selected, so repeating the
- * prose here would only cost width in a 300px leaf.
- */
 const STATUS_BADGES: Partial<Record<AgentSelectStatus, StatusBadgeSpec>> = {
   checking: { label: "Checking…", variant: "secondary", Icon: LoaderCircle },
   installed: { label: "Installed", variant: "success", Icon: Check },
@@ -35,19 +25,11 @@ interface AgentSelectViewProps {
   selectedId: BackendId;
   onSelect: (id: BackendId) => void;
   ctaLabel: string;
-  /** Full-width explanation above the button when the selected agent needs attention. */
   footerNote: string | null;
   onCta: () => void;
-  /** Prevents a transient readiness state from exposing an action. */
   ctaDisabled?: boolean;
 }
 
-/**
- * First-run agent chooser: lists every agent with its readiness and ends in a
- * single call to action. Pure presentation — the caller owns which agent is
- * selected, what the button says, and what pressing it does, so this component
- * can be mounted from the component gallery with fixture props alone.
- */
 export const AgentSelectView: React.FC<AgentSelectViewProps> = ({
   rows,
   selectedId,
@@ -60,11 +42,8 @@ export const AgentSelectView: React.FC<AgentSelectViewProps> = ({
   const headingId = React.useId();
   const rowRefs = React.useRef<(HTMLButtonElement | null)[]>([]);
   const selectedIndex = rows.findIndex((row) => row.id === selectedId);
-  // Roving tabindex anchors on the selected row, falling back to the first row
-  // so keyboard users can always tab into the group.
   const tabStopIndex = selectedIndex === -1 ? 0 : selectedIndex;
 
-  /** Move focus and selection to the adjacent row, wrapping around. */
   const selectAdjacent = (currentIndex: number, direction: 1 | -1) => {
     const nextIndex = (currentIndex + direction + rows.length) % rows.length;
     rowRefs.current[nextIndex]?.focus();
@@ -113,13 +92,6 @@ export const AgentSelectView: React.FC<AgentSelectViewProps> = ({
               tabIndex={index === tabStopIndex ? 0 : -1}
               onClick={() => onSelect(row.id)}
               onKeyDown={(event) => handleKeyDown(event, index)}
-              // `!` overrides: this is a raw <button>, so Obsidian's native button
-              // chrome (background, box-shadow, rounding, one-line 30px height,
-              // centered nowrap text) would otherwise win on specificity and
-              // collapse the row into a pill with its description clipped. Height
-              // and alignment must give way for a multi-line row. Background lives
-              // only in the selected/unselected branch, never both, so nothing
-              // collides.
               className={cn(
                 "tw-flex tw-h-auto tw-w-full tw-cursor-pointer tw-items-start tw-gap-2 !tw-whitespace-normal !tw-rounded-md tw-border-none !tw-p-2 tw-text-left !tw-shadow-none tw-transition-colors focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-ring",
                 isSelected

@@ -27,21 +27,12 @@ const realIssueReport =
 const rm = jest.fn<Promise<void>, [string, unknown?]>();
 const writeFile = jest.fn<Promise<void>, [string, Uint8Array]>();
 
-// `rm` and `writeFile` are the two calls the modal makes on its own behalf, so
-// they are the two a test can fail; everything else (`mkdtemp`, `open`, `stat`)
-// is the real module so the directory a test creates can be inspected on disk.
-//
-// Mocked under the unprefixed id, which is the one `requireNodeModule` resolves;
-// Jest keys its registry on the literal specifier, so a `node:`-prefixed mock
-// would sit beside the module under test rather than replacing it.
 jest.mock("fs/promises", () => ({
   ...jest.requireActual("fs/promises"),
   rm: (path: string, opts?: unknown) => rm(path, opts),
   writeFile: (path: string, data: Uint8Array) => writeFile(path, data),
 }));
 
-// Only the platform probe is faked; `requireNodeModule` stays real so every
-// filesystem call in this suite still reaches the (partly mocked) Node modules.
 let mockDesktopRuntime = true;
 
 jest.mock("@/utils/desktopRuntime", () => ({
@@ -55,9 +46,6 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
 }));
 
-// The two log sources `prepare` reads on its own: the sink names where the
-// activity log lives, and the chat log comes straight out of the in-memory
-// buffer. Each test says what they hand back; by default, nothing.
 const getValidatedPath = jest.fn<Promise<string | null>, []>();
 const exportLogText = jest.fn<string, []>();
 
@@ -69,8 +57,6 @@ jest.mock("@/logFileManager", () => ({
   logFileManager: { exportLogText: () => exportLogText() },
 }));
 
-// The assembler stays real so the manifest a test inspects is the genuine one;
-// the spy only records what `prepare` hands it.
 const buildReportBundle = jest.fn<
   ReturnType<typeof realIssueReport.buildReportBundle>,
   Parameters<typeof realIssueReport.buildReportBundle>
@@ -82,16 +68,12 @@ jest.mock("@/utils/issueReport", () => ({
     buildReportBundle(...args),
 }));
 
-// The capture needs a settled pane and a renderer to photograph it, neither of
-// which jsdom has; each test says what the camera hands back.
 const captureBehindOverlay = jest.fn<Promise<Uint8Array | null>, unknown[]>();
 
 jest.mock("@/agentMode/ui/reportScreenshot", () => ({
   captureBehindOverlay: (...args: unknown[]) => captureBehindOverlay(...args),
 }));
 
-// The plugin is not built against Electron, so the bridge only exists at
-// runtime; a virtual module stands in for it here.
 const openExternal = jest.fn<Promise<void>, [string]>();
 
 jest.mock("electron", () => ({ shell: { openExternal: (url: string) => openExternal(url) } }), {
@@ -159,12 +141,9 @@ describe("ReportIssueModal", () => {
       return dir;
     };
 
-    // POSIX only: Windows has no mode bits, and the temp dir is per-user there.
     (process.platform === "win32" ? it.skip : it)(
       "hands back a directory no other local account can enter",
       async () => {
-        // The zip inside holds an unredacted screenshot of the user's vault, and
-        // on Linux the OS temp dir is shared with every other account.
         const dir = await create();
 
         expect((await realFs.stat(dir)).mode & 0o777).toBe(0o700);
@@ -172,9 +151,6 @@ describe("ReportIssueModal", () => {
     );
 
     it("never hands back the same directory twice", async () => {
-      // A predictable path can be created first by someone else, and a name
-      // planted in it ahead of time is followed by the write that lands there.
-      // Two reports in the same second must not collide either.
       const [first, second] = [await create(), await create()];
 
       expect(second).not.toBe(first);
@@ -192,9 +168,6 @@ describe("ReportIssueModal", () => {
     });
 
     it("logs a directory that would not go and resolves anyway (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-      // A lock or a virus scanner can refuse the delete. The caller is closing
-      // a dialog or handling an error of its own, so a rejection here would
-      // only turn one problem into two; the log names what stayed behind.
       rm.mockRejectedValue(new Error("EBUSY: resource busy or locked"));
 
       await expect(discardReport(prepared)).resolves.toBeUndefined();
@@ -213,15 +186,10 @@ describe("ReportIssueModal", () => {
 
       const outcome = await uploadReport(uploader, prepared);
 
-      // The attempt object travels whole: the bytes and the idempotency key
-      // were minted as a pair, and splitting them here would let a retry send
-      // one half with the other half stale.
       expect(uploader).toHaveBeenCalledWith(prepared.uploadAttempt);
       if (!outcome.ok) throw new Error("expected success");
       expect(outcome.reportId).toBe(reportId);
       const body = new URLSearchParams(outcome.issueUrl.split("?")[1]).get("body") ?? "";
-      // Prefixed, not appended: a long body must never be able to push the id
-      // out through truncation. And an id, never a URL — the issue is public.
       expect(body.indexOf(reportId)).toBeLessThan(60);
       expect(body).not.toContain("http");
     });
@@ -238,8 +206,6 @@ describe("ReportIssueModal", () => {
     });
 
     it("turns any other rejection into a failure the user can read", async () => {
-      // A TypeError from deep inside the transport is not for the user's eyes;
-      // the review page renders the outcome, so it must never reject.
       const uploader: ReportUploader = jest.fn().mockRejectedValue(new TypeError("x is null"));
 
       const outcome = await uploadReport(uploader, prepared);
@@ -268,9 +234,6 @@ describe("ReportIssueModal", () => {
     });
 
     it("resolves false when the bridge throws before returning a promise", async () => {
-      // The failure shape a bare `.catch()` cannot see. By the time this runs
-      // the report is already uploaded, so an escaping error would abandon a
-      // page transition that cannot be redone.
       openExternal.mockImplementation(() => {
         throw new Error("bridge disposed");
       });
@@ -280,12 +243,6 @@ describe("ReportIssueModal", () => {
   });
 
   describe("ReportIssueModal", () => {
-    /**
-     * Builds the modal without its constructor and hands it only the fields the
-     * method under test reads. The real constructor needs an Obsidian modal host
-     * this suite has no reason to stand up, and every collaborator these methods
-     * reach for is either module-level or one of these fields.
-     */
     interface ModalUnderTest {
       close: jest.Mock;
       root: { unmount: jest.Mock } | null;
@@ -318,9 +275,6 @@ describe("ReportIssueModal", () => {
       });
 
       it("refuses to open where there is no Node runtime, instead of failing at the first disk write", () => {
-        // Every source is read through Node and the zip lands in the OS temp
-        // folder, so on mobile the dialog could only fail — after the user had
-        // already described their problem and picked what to attach.
         mockDesktopRuntime = false;
         const modal = modalWith({});
 
@@ -340,8 +294,6 @@ describe("ReportIssueModal", () => {
           .map((source) => source.id);
 
       it("offers the screenshot only while there is a pane to photograph", () => {
-        // Not greyed out, not hinted: a shot that cannot be taken is simply not
-        // on the list, so the user is never asked to decide about it.
         expect(ids({})).toContain("screenshot");
         expect(ids({ canCaptureTarget: () => false })).not.toContain("screenshot");
       });
@@ -352,8 +304,6 @@ describe("ReportIssueModal", () => {
       });
 
       it("leaves the opencode log unchecked by default", () => {
-        // Opt-in: this is opencode's newest global log, so it may carry activity
-        // from a session that has nothing to do with the report.
         const opencodeLog = modalWith({
           params: { canCaptureTarget: () => true, activeBackend: "opencode" },
         })
@@ -388,7 +338,6 @@ describe("ReportIssueModal", () => {
             return report;
           });
 
-      /** What `prepare` handed the assembler on its one call. */
       const bundleInput = (): ReportInput => buildReportBundle.mock.calls[0][0];
 
       it("writes the zip, and nothing else, into a fresh private directory", async () => {
@@ -409,9 +358,6 @@ describe("ReportIssueModal", () => {
       });
 
       it("removes the directory and rethrows when the zip cannot be written (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-        // A half-written zip is plaintext prompts and note contents in a folder
-        // nothing will ever name again; the error goes back to the form, the
-        // directory goes with it.
         writeFile.mockRejectedValue(new Error("ENOSPC: no space left on device"));
 
         await expect(prepare(new Set())).rejects.toThrow("ENOSPC");
@@ -423,8 +369,6 @@ describe("ReportIssueModal", () => {
       });
 
       it("goes on without the screenshot when the capture fails, and says so in the manifest (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-        // The logs are the diagnostic part; a pane that went away between the
-        // form and the capture must not cost the user the whole report.
         captureBehindOverlay.mockRejectedValue(new Error("the pane went away"));
 
         const report = await prepare(new Set(["screenshot"]));
@@ -447,9 +391,6 @@ describe("ReportIssueModal", () => {
       });
 
       it("hands the assembler null when the screenshot was selected but nothing was captured", async () => {
-        // A pane that never settles makes the camera return nothing rather
-        // than throw; the manifest still owes the user a line for the source
-        // they ticked.
         captureBehindOverlay.mockResolvedValue(null);
 
         await prepare(new Set(["screenshot"]));
@@ -458,9 +399,6 @@ describe("ReportIssueModal", () => {
       });
 
       it("leaves the screenshot out of the assembler's input entirely when it was not selected (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-        // A screenshot the user did not ask for is not a missing one, so the
-        // review page and report.md get no "no screenshot was captured" line
-        // to explain away; only an `undefined` tells the assembler that.
         await prepare(new Set());
 
         expect(captureBehindOverlay).not.toHaveBeenCalled();
@@ -468,10 +406,6 @@ describe("ReportIssueModal", () => {
       });
 
       it("packs the activity log and the chat log it was asked for into the zip (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-        // The three log lines in `prepare` are the only thing between a ticked
-        // source and the zip. A report that shipped without its logs would
-        // pass every other case here, since none of them selects one; this
-        // one reads the zip back to see both logs land under their names.
         const frameDir = await realFs.mkdtemp(nodePath.join(nodeOs.tmpdir(), "acp-frames-"));
         created.push(frameDir);
         const framePath = nodePath.join(frameDir, "acp-frames.ndjson");
@@ -500,9 +434,6 @@ describe("ReportIssueModal", () => {
       });
 
       it("reads no activity log, and says why, when it was selected while turned off (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-        // Turning the toggle off leaves the previous plaintext log on disk, and
-        // a report must never resurface it: the sink is not even asked where
-        // it is, and the request names the toggle instead of a path.
         const agentMode = getSettings().agentMode;
         setSettings({ agentMode: { ...agentMode, debugFullFrames: false } });
         try {
@@ -532,10 +463,6 @@ describe("ReportIssueModal", () => {
       });
 
       it("announces the report id with a link to the issue when the upload lands after the dialog closed (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-        // The transport has no abort, so closing the dialog lets the upload
-        // finish on its own. Opening a browser tab then would be a surprise —
-        // the user has moved on — but the id is the one thing they cannot
-        // reconstruct, so it is handed over where they can still find it.
         const modal = modalWith({ params: { uploader: uploaderResolving() }, root: null });
 
         await modal.upload(prepared);
@@ -572,8 +499,6 @@ describe("ReportIssueModal", () => {
       });
 
       it("still closes, and hands over the id and the issue link, when the browser cannot be opened (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-        // The report is stored either way; what the user is missing is the way
-        // to the issue page, so the notice carries it instead of the browser.
         openExternal.mockRejectedValue(new Error("no handler"));
         const modal = modalWith({});
 
@@ -585,8 +510,6 @@ describe("ReportIssueModal", () => {
       });
 
       it("leaves the zip on disk after a successful upload", async () => {
-        // The user may still need it: the issue page opens in a browser that can
-        // fail, and the maintainer may ask for the file itself.
         const modal = modalWith({ prepared });
 
         await modal.onUploaded({ reportId, issueUrl });
@@ -646,9 +569,6 @@ describe("ReportIssueModal", () => {
       });
 
       it("discards a prepared report the user closed the dialog on instead of uploading (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-        // ESC on the review page is the one exit the flow's own Cancel button
-        // does not cover, and what it leaves behind is plaintext prompts and
-        // note contents in the OS temp folder.
         const modal = modalWith({ prepared });
 
         modal.onClose();
@@ -668,8 +588,6 @@ describe("ReportIssueModal", () => {
       });
 
       it("leaves an upload in flight alone so it can still land (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-        // The bytes are already on their way; deleting the zip now would only
-        // take away the copy the user is told about if the upload fails.
         let finish: (result: { reportId: string; expiresAt: string }) => void = () => {};
         const uploader = jest.fn(
           () => new Promise<{ reportId: string; expiresAt: string }>((res) => (finish = res))

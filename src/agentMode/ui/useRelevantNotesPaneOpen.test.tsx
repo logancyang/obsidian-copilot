@@ -57,7 +57,6 @@ describe("useRelevantNotesPaneOpen", () => {
       relevant.isShown.mockReturnValue(true);
       fixture.emit("active-leaf-change");
       expect(result.current).toBe(true);
-      // The focus event may precede the final hidden layout during collapse.
       fixture.emit("active-leaf-change");
       relevant.isShown.mockReturnValue(false);
       fixture.emit("resize");

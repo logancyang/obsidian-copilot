@@ -1,11 +1,3 @@
-/**
- * The "Report an issue" dialog UI: a details page (what went wrong, what to
- * attach) and a review page (what the zip holds, then upload). Deliberately
- * free of Electron, Node, and Obsidian singletons: every capability it needs
- * (prepare, upload, discard, reveal, open browser) arrives as a prop from
- * `ReportIssueModal`, so the whole flow can be driven in a unit test.
- */
-
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,13 +8,11 @@ import { type ReportUploadAttempt } from "@/utils/reportUpload";
 import { AlertTriangle, Check, FileArchive, Loader2, X, type LucideIcon } from "lucide-react";
 import React from "react";
 
-/** The optional attachments the user can opt into, keyed for stable rendering. */
 export type ReportSourceId = "screenshot" | "activityLog" | "chatLog" | "opencodeLog";
 
 export interface ReportSourceOption {
   id: ReportSourceId;
   label: string;
-  /** Muted line under the label saying what the source is or how much of it is sent. */
   description?: string;
   defaultChecked: boolean;
 }
@@ -30,27 +20,15 @@ export interface ReportSourceOption {
 type ReportPhase = "details" | "review";
 
 export interface PreparedReport {
-  /** Private temp dir holding only the zip; discarding the report removes the dir. */
   zipDir: string;
-  /** Absolute path of the zip, computed by the host so the UI never joins paths. */
   zipPath: string;
   zipName: string;
-  /**
-   * The packed bytes and the idempotency key minted with them. "Retry upload"
-   * re-sends this exact object, so the server can dedupe a retry whose first
-   * outcome was never confirmed. Its size is `body.byteLength`; there is no
-   * separate size field so the zip has one source of truth.
-   */
   uploadAttempt: ReportUploadAttempt;
-  /** Title/body the linked issue URL is built from once the upload succeeds. */
   issueDraft: ReportIssueDraft;
-  /** No-ID fallback URL, opened when the user attaches the zip by hand. */
   manualIssueUrl: string;
-  /** The assembler's word on what the zip holds; never re-derived from the selection. */
   attachments: AttachmentResult[];
 }
 
-/** What `upload` resolves to. Every failure can be retried, so it carries only the reason. */
 export type UploadOutcome =
   | { ok: true; reportId: string; issueUrl: string }
   | { ok: false; error: string };
@@ -59,30 +37,13 @@ export interface ReportIssueFlowProps {
   sources: ReportSourceOption[];
   prepare: (note: string, selected: ReadonlySet<ReportSourceId>) => Promise<PreparedReport>;
   upload: (report: PreparedReport) => Promise<UploadOutcome>;
-  /**
-   * Delete a zip nobody will send: the user cancelled on the review page, or a
-   * report finished preparing after the dialog was gone. Cleanup failures are
-   * the host's to log; this never rejects. A manual handoff releases the zip
-   * from cleanup, even if the user later cancels.
-   */
   discardReport: (report: PreparedReport) => Promise<void>;
   onCancel: () => void;
-  /**
-   * Fired once when the upload lands. The host opens the browser, closes the
-   * dialog and shows the notice; the flow has no page of its own after this.
-   */
   onUploaded: (outcome: { reportId: string; issueUrl: string }) => void;
-  /** Open the no-ID issue page for "Open issue anyway". */
   openIssuePage: (url: string) => void;
-  /** Reveal the zip in the OS file manager for "Show zip". */
   revealFile: (path: string) => void;
 }
 
-/**
- * Whether the component is still on screen. `prepare` and `upload` cannot be
- * aborted, so both outlive the dialog when the user hits ESC mid-flight, and
- * nothing they produce afterwards may reach the host or an unmounted tree.
- */
 function useMountedRef() {
   const mountedRef = React.useRef(true);
   React.useEffect(() => {
@@ -120,8 +81,6 @@ export function ReportIssueFlow(props: ReportIssueFlowProps) {
       setReport(result);
     } catch (err) {
       if (!mountedRef.current) return;
-      // A failed prepare must not leave the user on the review page: there is
-      // nothing to upload. Back to the form with the note intact.
       setError(err instanceof Error ? err.message : String(err));
       setPhase("details");
     }
@@ -225,7 +184,6 @@ function DetailsPage({
         ))}
       </div>
 
-      {/* Verbatim maintainer-approved consent copy — do not reword. */}
       <Callout tone="warning" title="Before you upload">
         Copilot redacts common sensitive data from diagnostic text on your device before upload.
         Review it before sending; screenshots are not automatically redacted. Reports are private
@@ -245,7 +203,6 @@ function DetailsPage({
 }
 
 interface ManifestRowProps extends React.LiHTMLAttributes<HTMLLIElement> {
-  /** Green for what is in or done, grey for what is not; the name is dimmed to match. */
   tone: "success" | "muted";
   icon: LucideIcon;
   name: string;
@@ -253,12 +210,9 @@ interface ManifestRowProps extends React.LiHTMLAttributes<HTMLLIElement> {
   note?: string;
 }
 
-/** One attachment in the completed report manifest. */
 function ManifestRow({ tone, icon: Icon, name, size, note, ...liProps }: ManifestRowProps) {
   return (
     <li {...liProps} className="tw-flex tw-items-start tw-gap-2">
-      {/* `h-5` matches the `text-sm` line box, so the badge optically centres on
-          the row's first line whatever icon it holds. */}
       <span className="tw-flex tw-h-5 tw-shrink-0 tw-items-center">
         <span
           aria-hidden="true"
@@ -282,7 +236,6 @@ function ManifestRow({ tone, icon: Icon, name, size, note, ...liProps }: Manifes
 }
 
 interface ReviewPageProps {
-  /** Null until prepare lands; the page fills in rather than swapping. */
   report: PreparedReport | null;
   upload: (report: PreparedReport) => Promise<UploadOutcome>;
   onUploaded: (outcome: { reportId: string; issueUrl: string }) => void;
@@ -291,10 +244,6 @@ interface ReviewPageProps {
   onCancel: () => void;
 }
 
-/**
- * No success state: once the upload lands the host closes the dialog, so the
- * page simply stays as it is until it is unmounted.
- */
 type UploadState = "idle" | "uploading" | { failed: string };
 
 function ReviewPage({
@@ -310,8 +259,6 @@ function ReviewPage({
   const uploading = uploadState === "uploading";
   const failure = typeof uploadState === "object" ? uploadState.failed : null;
 
-  // No `catch`: `upload` reports a failed send as an `ok: false` outcome
-  // rather than by rejecting, so there is no throw here to guard.
   const runUpload = async (packed: PreparedReport) => {
     setUploadState("uploading");
     const outcome = await upload(packed);
@@ -321,8 +268,6 @@ function ReviewPage({
     // (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
     if (!mountedRef.current) return;
     if (outcome.ok) {
-      // The host takes it from here and unmounts this page; the button stays
-      // disabled so the same zip cannot be sent twice in the meantime.
       onUploaded({ reportId: outcome.reportId, issueUrl: outcome.issueUrl });
     } else {
       setUploadState({ failed: outcome.error });
@@ -360,9 +305,6 @@ function ReviewPage({
       </div>
 
       {failure !== null && (
-        // `failure` is the transport's complete, user-facing sentence; the flow
-        // only appends what the user can do next, so the error's wording stays
-        // the transport's.
         <Callout tone="error" title="Could not upload the report">
           {failure} The zip is still on your machine; retrying sends the same report and stores it
           at most once. Or use <span className="tw-font-medium">Open issue anyway</span> — that
@@ -371,8 +313,6 @@ function ReviewPage({
       )}
 
       {uploading ? (
-        // No Cancel next to this: the transport has no abort, so a Cancel
-        // button would be a promise the upload cannot keep.
         <span
           className="tw-flex tw-items-center tw-justify-end tw-gap-2 tw-text-xs tw-text-muted"
           role="status"

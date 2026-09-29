@@ -31,8 +31,6 @@ function renderSection(
   );
 }
 
-// The attention dot is `aria-hidden` (purely decorative overlay), so query it
-// by its accent class the way ChatIconWithAttention paints it.
 function queryAttentionDot(container: HTMLElement): Element | null {
   return container.querySelector(".tw-bg-interactive-accent");
 }
@@ -41,8 +39,6 @@ function makeItem(
   id: string,
   overrides: Partial<React.ComponentProps<typeof GlobalRecentChatsSection>["items"][number]> = {}
 ): React.ComponentProps<typeof GlobalRecentChatsSection>["items"][number] {
-  // `lastAccessedAt` set to "now" so the relative-time label renders the stable
-  // `now` bucket regardless of when the test runs.
   return {
     id,
     title: `Chat ${id}`,
@@ -138,8 +134,6 @@ describe("GlobalRecentChatsSection", () => {
     });
 
     it("shows the attention dot from the live set even when the item snapshot lacks it", () => {
-      // The handoff case: a backgrounded session finished AFTER the history items
-      // were loaded — the stale snapshot says no attention, the live set says yes.
       const item = makeItem("done-live");
       expect(item.needsAttention).toBeUndefined();
       const { container } = renderSection({
@@ -328,14 +322,6 @@ describe("GlobalRecentChatsSection", () => {
     });
 
     it("refreshes once when the parent re-renders with the items that refresh produced", () => {
-      // The mount refresh is keyed to `onLoadHistory`, and a completed load
-      // stores a fresh items array that re-renders the parent. A parent that
-      // hands over a newly allocated wrapper each render therefore re-arms this
-      // effect with the result of its own load and loops until the tab
-      // unmounts. AgentHome wraps inline, so the identity has to come from
-      // `safeAsyncHandler` itself.
-      // `loadHistory` stands in for AgentHome's `useCallback`-stable loader; the
-      // wrapper around it is built during render, as AgentHome builds it.
       const loadHistory = jest.fn(async () => {});
       const Parent = ({ items }: { items: SectionItems }) => (
         <GlobalRecentChatsSection

@@ -10,37 +10,13 @@ import { AgentActivityCard } from "@/components/chat-components/AgentActivityCar
 
 export interface ActivityGroupCardProps {
   group: ActivityGroupNode;
-  /**
-   * Live elapsed time for the trailing reasoning span. Completed spans keep
-   * their duration on the thought parts, while the trail owns the active clock.
-   */
   thinkingMs?: number;
-  /**
-   * Whether the body is showing. Fully controlled: a group must stay open
-   * across streaming updates, which only works if the owner of the trail holds
-   * this state.
-   */
   open: boolean;
   onToggle: () => void;
-  /**
-   * Renders one member. Injected rather than imported so this file stays
-   * unaware of the concrete cards the trail dispatches to.
-   */
   renderMember: (member: ActivityMember, key: string | number) => React.ReactNode;
-  /**
-   * Transient row for the step currently in flight, shown under the summary
-   * line while the group is collapsed. When the group is open the live member
-   * is already visible in the body, so the row would only duplicate it.
-   */
   liveStep?: React.ReactNode;
 }
 
-/**
- * One collapsed run of the agent's tool calls and reasoning, summarized as a
- * single line the user can open. Groups are born collapsed and never close
- * themselves, so nothing the user is mid-read disappears; see
- * `designdocs/AGENT_TRAIL_GROUPING.md`.
- */
 export const ActivityGroupCard: React.FC<ActivityGroupCardProps> = ({
   group,
   thinkingMs,
@@ -79,11 +55,6 @@ export const ActivityGroupCard: React.FC<ActivityGroupCardProps> = ({
   );
 };
 
-/**
- * The group's leading glyph: its members' own icon when they all resolve to
- * one, and a neutral stack when the run mixes families — inventing a winner
- * among unrelated tools would misdescribe the row.
- */
 function groupIcon(members: ActivityMember[]): LucideIcon {
   const icons = new Set<LucideIcon>();
   for (const m of members) {

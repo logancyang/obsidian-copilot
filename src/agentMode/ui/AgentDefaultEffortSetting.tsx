@@ -9,12 +9,6 @@ export interface AgentDefaultEffortSettingProps {
   onChange: (effort: string | null) => void;
 }
 
-/**
- * Stable settings row for a backend's default effort. Capability changes only
- * enable or disable its select so the model list below never shifts vertically.
- *
- * @param props - Current effort state and the options exposed by the selected model.
- */
 export function AgentDefaultEffortSetting({
   value,
   options,

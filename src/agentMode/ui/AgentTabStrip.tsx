@@ -23,16 +23,10 @@ interface Props {
 }
 
 const TAB_GAP_PX = 4;
-const TAB_WIDTH_PX = 128; // tw-w-32.
-const PLUS_BUTTON_PX = 28 + TAB_GAP_PX; // new-session button + leading gap.
-const OVERFLOW_BUTTON_PX = 28 + TAB_GAP_PX; // 3-dot trigger + leading gap.
+const TAB_WIDTH_PX = 128;
+const PLUS_BUTTON_PX = 28 + TAB_GAP_PX;
+const OVERFLOW_BUTTON_PX = 28 + TAB_GAP_PX;
 
-/**
- * Decide how many fixed-width tabs fit in `stripWidth` without overlapping
- * the trailing `+` button or, when overflow is needed, the 3-dot trigger.
- * Pure: no DOM, no React. Returns a value in `[1, sessionCount]` unless
- * `sessionCount` is 0.
- */
 export function computeVisibleCount(stripWidth: number, sessionCount: number): number {
   if (sessionCount === 0) return 0;
 
@@ -60,12 +54,6 @@ interface Partition<T> {
   overflowSessions: T[];
 }
 
-/**
- * Split `sessions` into the visible row and the overflow dropdown given
- * `visibleCount`, then pin the active session into the visible row by
- * swapping it with the last visible slot when it would otherwise be hidden.
- * Pure: no DOM, no React.
- */
 export function partitionSessions<T extends { internalId: string }>({
   sessions,
   visibleCount,
@@ -87,11 +75,6 @@ export function partitionSessions<T extends { internalId: string }>({
   return { visibleSessions: visible, overflowSessions: overflow };
 }
 
-/**
- * Live `(status, label, descriptor, displayLabel)` view of a session.
- * Subscribes once so per-session status / label changes don't require a
- * global manager notify and don't multiply listeners on the session.
- */
 function useSessionDisplay(session: AgentSession) {
   const [, setTick] = React.useState(0);
   React.useEffect(
@@ -115,21 +98,10 @@ function useSessionDisplay(session: AgentSession) {
   };
 }
 
-/**
- * In-panel tab strip rendered above `<AgentChat />`. Shows one tab per
- * session with the backend's brand icon (hover swaps to an X close
- * affordance), a subtle bottom-border highlight on the active tab, and
- * a 3-dot overflow dropdown when there are more tabs than fit. Hidden
- * when no sessions exist — the surrounding router renders the empty-
- * state UI in that case.
- */
 export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
   const [, setTick] = React.useState(0);
   React.useEffect(() => manager.subscribe(() => setTick((v) => v + 1)), [manager]);
 
-  // Scope the strip to the active workspace: a project shows only its own
-  // sessions, the global workspace shows the global ones. `getSessions()` stays
-  // reserved for whole-pool consumers (draft prune / auto-spawn), per §2.4.
   const sessions = manager.getSessionsForScope(manager.getActiveProjectId());
   const sessionCount = sessions.length;
   const activeId = manager.getActiveSession()?.internalId ?? null;
@@ -140,8 +112,6 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
   const [stripWidth, setStripWidth] = React.useState(0);
 
   React.useLayoutEffect(() => {
-    // An empty scope renders no strip (see the `return null` below), so depend
-    // on `sessionCount` to re-run and measure once the strip mounts on 0 -> N.
     if (sessionCount === 0) return;
     const strip = stripRef.current;
     if (!strip) return;
@@ -151,20 +121,9 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
       setStripWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
     };
 
-    // Prime synchronously so a remount can't paint with stripWidth stuck at 0,
-    // which collapses tabs into overflow despite available space (#206).
     measure();
 
-    // Guard for test/JSDOM environments where ResizeObserver may not exist.
     if (typeof ResizeObserver === "undefined") return;
-    // DESIGN NOTE: uses the bare global ResizeObserver rather than
-    // strip.win.ResizeObserver, which is technically the popout-unsafe pattern
-    // PLUGIN_DEV_GUIDE warns about.
-    // Left as-is deliberately: cross-realm observation still delivers in practice,
-    // this was not #206's root cause, and all 6 ResizeObserver call sites use the
-    // bare global — fixing only this one breaks that consistency. Tracked for a
-    // codebase-wide sweep in #206's open questions; if a future review flags this,
-    // point them here.
     const ro = new ResizeObserver(measure);
     ro.observe(strip);
     return () => ro.disconnect();
@@ -273,8 +232,6 @@ const SessionTab: React.FC<TabProps> = ({
   const [menuOpen, setMenuOpen] = React.useState(false);
 
   if (isRenaming) {
-    // Keyed on session id so a switch to renaming a different tab remounts
-    // the input with a fresh draft seeded from that session's label.
     return (
       <RenameInput
         key={session.internalId}
@@ -293,9 +250,6 @@ const SessionTab: React.FC<TabProps> = ({
           aria-selected={isActive}
           tabIndex={0}
           onPointerDown={(e) => {
-            // DropdownMenuTrigger opens on primary-button pointerDown; suppress
-            // that so left-click only activates the tab. The menu opens via
-            // onContextMenu below.
             if (e.button !== 2) e.preventDefault();
           }}
           onClick={onActivate}
@@ -346,12 +300,6 @@ interface RenameInputProps {
   onCancel: () => void;
 }
 
-/**
- * Rename text-field for `SessionTab`. Owns the draft locally and is keyed
- * by session id so each rename session starts with a fresh draft seeded
- * from `initialValue`. Escape sets a ref so the unmount-triggered onBlur
- * doesn't commit the discarded draft.
- */
 const RenameInput: React.FC<RenameInputProps> = ({ initialValue, onSubmit, onCancel }) => {
   const [draft, setDraft] = React.useState(initialValue);
   const cancelledRef = React.useRef(false);
@@ -382,23 +330,10 @@ const RenameInput: React.FC<RenameInputProps> = ({ initialValue, onSubmit, onCan
 interface BrandIconProps {
   descriptor: BackendDescriptor | undefined;
   status: AgentSessionStatus;
-  /** Accent dot — set when the session demands the user's attention. */
   needsAttention?: boolean;
-  /** When set, hovering the parent `group` swaps the icon for an X close button. */
   onCloseOnHover?: () => void;
 }
 
-/**
- * Backend brand icon with status overlays. While the session is `running`
- * a spinner replaces the brand icon. Otherwise the brand icon shows, with
- * a tiny dot at the bottom-right when the tab actually demands the user's
- * eye: a steady accent dot when `needsAttention` is set (something
- * happened on a backgrounded tab), or a red dot on error. When
- * `onCloseOnHover` is set, hovering the parent `.group` swaps the icon
- * for an X close button — used by visible tabs. Dropdown rows pass no
- * handler and render only the icon (close affordance lives on the right
- * of the row instead).
- */
 const BrandIcon: React.FC<BrandIconProps> = ({
   descriptor,
   status,
@@ -508,12 +443,6 @@ interface OverflowRowProps {
 const OverflowRow: React.FC<OverflowRowProps> = ({ session, isActive, onActivate, onClose }) => {
   const { status, needsAttention, descriptor, displayLabel } = useSessionDisplay(session);
 
-  // Plain div row instead of DropdownMenuItem: MenuItem synthesizes a select
-  // on pointerup (`currentTarget.click()`) which would activate the session
-  // and unmount this row before our X button's onClick fires. The chat-history
-  // popover (`ChatHistoryPopover`) uses the same pattern — group hover reveals
-  // action buttons whose onClick handlers stopPropagation to keep row clicks
-  // separate from button clicks.
   return (
     <div
       role="menuitem"

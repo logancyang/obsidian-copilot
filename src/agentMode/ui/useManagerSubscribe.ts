@@ -1,12 +1,6 @@
 import { useCallback } from "react";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 
-/**
- * Build a `useSyncExternalStore` `subscribe` that fans out manager,
- * preloader-cache, and active-session UI-state notifications to a single
- * callback. Re-wires the active-session listener whenever the manager's
- * active session changes so the snapshot stays current after tab switches.
- */
 export function useManagerSubscribe(
   manager: AgentSessionManager | null
 ): (cb: () => void) => () => void {

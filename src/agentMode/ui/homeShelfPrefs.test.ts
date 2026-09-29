@@ -8,12 +8,10 @@ jest.mock("@/logger", () => ({
 
 const mockLogWarn = logWarn as jest.MockedFunction<typeof logWarn>;
 
-/** Minimal stand-in for Obsidian's vault-scoped device-local storage. */
 function createFakeApp(store = new Map<string, string>()) {
   const app = {
     loadLocalStorage: jest.fn((key: string): unknown => store.get(key) ?? null),
     saveLocalStorage: jest.fn((key: string, data: unknown): void => {
-      // Production code only ever stores strings, so the fake narrows directly.
       if (data == null) store.delete(key);
       else store.set(key, data as string);
     }),
@@ -21,7 +19,6 @@ function createFakeApp(store = new Map<string, string>()) {
   return { app: app as unknown as App, store };
 }
 
-/** App whose storage methods throw, as when the API is unusable. */
 function createThrowingApp(): App {
   return {
     loadLocalStorage: () => {

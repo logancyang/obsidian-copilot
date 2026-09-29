@@ -10,11 +10,8 @@ import { Notice, TFile, type App } from "obsidian";
 import type { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
 import React from "react";
 
-// Mock factory names must match the real `use*` exports, so the no-hook `use`
-// prefix is expected on the mocked hooks below.
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
-// Entitlement gate — flipped per test.
 const mockUseCanUseMultiAgent = jest.fn<boolean, []>();
 const mockNavigateToPlusPage = jest.fn();
 jest.mock("@/plusUtils", () => ({
@@ -22,7 +19,6 @@ jest.mock("@/plusUtils", () => ({
   navigateToPlusPage: (...args: unknown[]) => mockNavigateToPlusPage(...args),
 }));
 
-// Installed agents the gate either surfaces or suppresses.
 const FAKE_BRANDS = Object.freeze([{ id: "claude", displayName: "Claude", Icon: () => null }]);
 jest.mock("@/agentMode/ui/mentionedAgents", () => ({
   EMPTY_ANSWERERS: Object.freeze([]),
@@ -31,10 +27,6 @@ jest.mock("@/agentMode/ui/mentionedAgents", () => ({
   useInstalledAgentBrands: () => FAKE_BRANDS,
 }));
 
-// One ChatInput mock serves both suites: it captures the brands handed to the
-// editor (agent-mention gate) AND renders a clickable send button that routes
-// through `handleSendMessage` — the same entry the real Lexical editor's Enter
-// key hits (send-flow regression tests).
 let capturedAgentBrands: ReadonlyArray<unknown> | undefined;
 let capturedTopRightAccessory: React.ReactNode | undefined;
 const mockPrependContent = jest.fn();
@@ -117,7 +109,6 @@ const makeApp = (): App => ({ workspace: { getActiveFile: () => null } }) as unk
 const makeFile = (path: string): TFile =>
   new (TFile as unknown as new (path: string) => TFile)(path);
 
-// A 3-byte PNG and the content block the composer converts it into.
 const image = {
   type: "image/png",
   arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
@@ -532,10 +523,6 @@ describe("AgentChatInput", () => {
       expect(getDraft().loading).toBe(false);
     });
     it("regression: clears draft.loading when the turn resolves after the composer unmounted", async () => {
-      // First send from a landing: the user message lands, AgentHome flips
-      // landing→conversation, and the composer remounts mid-turn. The unmounting
-      // instance's runSend must still clear the shared draft's loading flag,
-      // or the Thinking spinner / stop button stick forever (#stuck-thinking).
       let resolveTurn!: () => void;
       const turn = new Promise<void>((resolve) => {
         resolveTurn = resolve;
@@ -552,8 +539,6 @@ describe("AgentChatInput", () => {
       await waitFor(() => expect(draft.setLoading).toHaveBeenCalledWith(true));
       expect(backend.sendMessage).toHaveBeenCalledTimes(1);
 
-      // The landing→conversation flip unmounts this composer instance while the
-      // turn is still in flight.
       unmount();
 
       await act(async () => {
@@ -634,7 +619,6 @@ describe("AgentChatInput", () => {
         cancel: jest.fn(),
       }) as unknown as AgentChatBackend;
 
-    /** Apply the functional updater handed to setQueue and return the enqueued item. */
     const enqueuedItem = (setQueue: jest.Mock) => {
       const updater = setQueue.mock.calls[0][0] as (
         q: readonly unknown[]
@@ -738,9 +722,6 @@ describe("AgentChatInput", () => {
   });
 
   describe("status-icon boundary", () => {
-    // Locks the #205 layering decision: AgentChatInput owns the project-context
-    // status node and hands it to the shared ChatInput only through the neutral
-    // topRightAccessory slot — the shared component never learns what it is.
     beforeEach(() => {
       capturedTopRightAccessory = undefined;
       mockUseCanUseMultiAgent.mockReturnValue(true);
@@ -768,11 +749,6 @@ describe("AgentChatInput", () => {
     });
 
     it("regression: clears the composer before awaiting attached-image conversion (#211)", async () => {
-      // Hold the image read open so ordering is observable. The composer must
-      // clear the instant the user sends, not after every File.arrayBuffer()
-      // resolves — leaving the draft populated across those awaits let the
-      // Lexical editor race resetCompose and strand the just-sent text in the
-      // input when text was sent alongside images.
       let resolveRead!: (buf: ArrayBuffer) => void;
       const slowImage = {
         type: "image/png",
@@ -791,12 +767,9 @@ describe("AgentChatInput", () => {
       renderInput(backend, draft);
       fireEvent.click(screen.getByText("send"));
 
-      // Composer is cleared while the image read is still pending, before the
-      // turn is dispatched.
       await waitFor(() => expect(draft.resetCompose).toHaveBeenCalledTimes(1));
       expect(backend.sendMessage).not.toHaveBeenCalled();
 
-      // Finishing the read lets the turn fire with the converted image attached.
       await act(async () => {
         resolveRead(new ArrayBuffer(1));
         await Promise.resolve();
@@ -810,10 +783,6 @@ describe("AgentChatInput", () => {
 
   describe("hard-disable", () => {
     it("drops a send when the composer is disabled (orphaned project)", async () => {
-      // The mocked ChatInput's send button routes through handleSendMessage — the
-      // same entry the real Lexical editor's Enter key hits. A hard-disabled
-      // composer only dims + blocks pointer events in the DOM, so this keyboard
-      // path must be gated in the handler or a turn leaks into a dead project.
       const backend = {
         sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
         cancel: jest.fn(),

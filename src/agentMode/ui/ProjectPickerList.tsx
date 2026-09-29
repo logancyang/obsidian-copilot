@@ -15,37 +15,18 @@ import { RecentUsageManager, sortByStrategy, type SortStrategy } from "@/utils/r
 import { App } from "obsidian";
 import React, { memo, useMemo, useState } from "react";
 
-// Reason: the landing surfaces a fixed most-recently-used order with no switcher
-// and never writes the strategy back to settings.
 const LANDING_SORT_STRATEGY: SortStrategy = "recent";
 
 interface ProjectPickerListProps {
-  /** Full project list (already reactive from useProjects upstream). */
   projects: ProjectConfig[];
-  /** Caller-owned selection handler. PR2a wires this to `enterProject`. */
   onSelect: (project: ProjectConfig) => void;
-  /**
-   * Optional create action, rendered as the leading "New project" row. Receives
-   * the row's button element so the caller can anchor the create popover to it.
-   */
   onCreate?: (anchor: HTMLElement) => void;
-  /** Threaded to each row's inline actions (Reveal / Edit / Delete). */
   app: App;
-  /** Forwarded to the row actions so the caller can exit a deleted active scope. */
   onProjectDeleted?: (projectId: string) => void;
-  /**
-   * Shared in-memory usage manager. Blended into the sort + row time so entering a
-   * project reorders the list immediately, ahead of the throttled disk persist.
-   */
   projectUsageTimestampsManager?: RecentUsageManager<string>;
   className?: string;
 }
 
-/**
- * Effective last-used time for a project: the in-memory value (if more recent than
- * the persisted one) so a just-entered project sorts/displays as most-recent before
- * its timestamp persists, falling back to `created` when never used.
- */
 function effectiveLastUsedMs(
   project: ProjectConfig,
   manager: RecentUsageManager<string> | undefined
@@ -57,16 +38,6 @@ function effectiveLastUsedMs(
   );
 }
 
-/**
- * Most-recently-used ordering for the project list.
- *
- * The landing is interactive — entering a project touches its usage — so this blends
- * the in-memory {@link RecentUsageManager} via `getEffectiveLastUsedAt` exactly like
- * the chat-mode `ProjectList`, and both read the SAME shared manager instance. The
- * revision subscription drives a re-sort when memory changes between throttled
- * persists, so a just-entered project jumps to the top before its timestamp lands on
- * disk.
- */
 function useSortedProjects(
   projects: ProjectConfig[],
   manager: RecentUsageManager<string> | undefined
@@ -88,11 +59,6 @@ function useSortedProjects(
 
 interface ProjectRowProps {
   project: ProjectConfig;
-  /**
-   * Effective last-used time, computed by the parent. Passed as a prop (not read
-   * from `project` here) so this `memo`'d row re-renders when only the in-memory
-   * time changes — the project reference itself stays stable across a touch.
-   */
   timeMs: number;
   onSelect: (project: ProjectConfig) => void;
   app: App;
@@ -110,14 +76,6 @@ const ProjectRow = memo(({ project, timeMs, onSelect, app, onDeleted }: ProjectR
 ));
 ProjectRow.displayName = "ProjectRow";
 
-/**
- * Searchable project browser for the Agent Home landing.
- *
- * Searches the full collection and mounts rows in batches as the list scrolls.
- * Selection and the optional create action are delegated to the caller; this
- * component never mutates project state directly. Entering a project (via the
- * caller) touches usage on the shared manager, which reorders this list live.
- */
 export const ProjectPickerList = memo(
   ({
     projects,
@@ -142,9 +100,6 @@ export const ProjectPickerList = memo(
     const visibleProjects = filteredProjects.slice(0, displayCount);
 
     return (
-      // h-full fills the shelf panel's fixed floor (AgentHomeShelf) so the
-      // empty-state copy below can center inside the card; the "New project"
-      // action row stays pinned at the top either way.
       <div
         className={cn(
           "tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-divide-y tw-divide-border",
@@ -162,8 +117,6 @@ export const ProjectPickerList = memo(
             />
           </div>
         )}
-        {/* Keep empty and no-match states in the same shelf as project search.
-            https://github.com/Brevilabs/obsidian-copilot-private/issues/372 */}
         {filteredProjects.length === 0 ? (
           <div className="tw-flex tw-flex-1 tw-items-center tw-justify-center tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">
             {projects.length > 0 ? "No matching projects" : "No projects available"}

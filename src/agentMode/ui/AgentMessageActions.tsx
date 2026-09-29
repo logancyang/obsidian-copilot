@@ -9,22 +9,12 @@ import { App, Platform } from "obsidian";
 import React from "react";
 
 interface AgentMessageActionsProps {
-  /** The cleaned, user-visible final answer — already run through
-   *  `cleanMessageForCopy` by the trail. Copied / inserted verbatim. */
   text: string;
   app: App;
-  /** Frozen wall-clock duration shown beside the completed response controls. */
   durationMs?: number;
-  /** Message creation time used when no completed duration is available. */
   timestamp?: string;
 }
 
-/**
- * Copy / Insert action row beneath a completed assistant turn in Agent Mode.
- * Shares `MessageActionButton` / `CopyButton` with legacy chat's `ChatButtons`,
- * but acts on the trail's final answer text rather than a `ChatMessage` —
- * regenerate / edit / delete can slot into this same row later.
- */
 export const AgentMessageActions: React.FC<AgentMessageActionsProps> = ({
   text,
   app,

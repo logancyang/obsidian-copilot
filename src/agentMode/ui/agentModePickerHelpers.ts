@@ -22,12 +22,6 @@ function collectModeActiveContext(manager: AgentSessionManager): ModeActiveConte
   };
 }
 
-/**
- * Build the mode picker. Returns `null` when the active backend has no
- * mode options. `disabled` mirrors `activeChatUIState.canSwitchMode()` —
- * wire routing (`setMode` vs `setConfigOption`) lives behind that intent
- * method.
- */
 export function buildAgentModePicker(args: {
   manager: AgentSessionManager | null;
 }): AgentModePickerOverride | null {

@@ -11,14 +11,6 @@ import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { App, MarkdownView } from "obsidian";
 import { useEffect, useMemo, useRef } from "react";
 
-/** Publish composition snapshots to the vault's last-focused source.
- * @param app - Vault owner.
- * @param root - Chat surface in its current window.
- * @param id - Logical input identity, isolated across session/project switches.
- * @param draft - Current composition.
- * @param messages - Visible message store, including in-flight response state.
- * @param project - Current project's explicit source configuration.
- */
 export function useChatRelevantNotesContext(
   app: App,
   root: HTMLElement | null,
@@ -48,8 +40,6 @@ export function useChatRelevantNotesContext(
   const streamingId =
     draft.loading && tail?.sender === "AI" && !tail.turnStopReason ? tail.id : undefined;
   const history = messages.filter((message) => message.id !== streamingId);
-  // Queue entries remain visible after the composer resets and before dispatch.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
   const queued = draft.queue;
   const contexts = [...history, ...queued].flatMap((message) =>
     message.context ? [message.context] : []
@@ -136,8 +126,6 @@ export function useChatRelevantNotesContext(
     else store.update(current);
   }, [store, current, root, id]);
   useEffect(() => {
-    // The source owner stays mounted while both recommendation hosts are closed.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
     const ref = app.workspace.on("active-leaf-change", (leaf) => {
       if (leaf?.view instanceof MarkdownView) store.select(null);
     });

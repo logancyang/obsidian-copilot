@@ -1,8 +1,6 @@
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import type { AgentAnswer, AgentAnswerStatus } from "@/agentMode/session/fanout/fanoutTypes";
 
-// Mock the registry so the helper resolves brands without dragging in the
-// heavy real backend descriptors (each pulls its ACP/permission chain).
 jest.mock("@/agentMode/backends/registry", () => {
   const Icon = () => null;
   return {
@@ -56,7 +54,6 @@ describe("agentStateForStatus", () => {
 describe("agentStateForAnswer", () => {
   it("maps a done slot with text to answer, but a done slot with no text to empty", () => {
     expect(agentStateForAnswer(answer("opencode", "done", "hi"))).toBe("answer");
-    // The bug: a finished-but-empty slot must NOT read as a success check.
     expect(agentStateForAnswer(answer("opencode", "done", "   "))).toBe("empty");
   });
   it("defers to the raw status for non-done slots", () => {
@@ -96,7 +93,6 @@ describe("buildFanoutOptions", () => {
     ]);
     expect(options[0].label).toBe("Summary");
     expect(options[0].Icon).toBeUndefined();
-    // Brand name + icon resolved from the registry; state mirrors slot status.
     const claude = options.find((o) => o.value === "claude");
     expect(claude?.label).toBe("Claude");
     expect(claude?.Icon).toBeDefined();

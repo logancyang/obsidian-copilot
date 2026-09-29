@@ -17,19 +17,9 @@ interface SubAgentCardProps {
   childNodes: GroupedTrailNode[];
   truncated?: boolean;
   app: App;
-  // Passed in by AgentTrail rather than imported, so this file never has to
-  // know about the concrete card components AgentTrail dispatches to.
   renderNode: (node: GroupedTrailNode, key: string | number) => React.ReactNode;
 }
 
-/**
- * Keeps delegated work attached to its launch so the prompt, progress, and report remain one traceable unit.
- * @param parent - The tool call that launched the delegated work.
- * @param childNodes - The nested activity produced by the delegated work.
- * @param truncated - Whether omitted activity should be disclosed to the user.
- * @param app - The Obsidian application used to render note-aware content.
- * @param renderNode - The renderer for nested agent-trail nodes.
- */
 export const SubAgentCard: React.FC<SubAgentCardProps> = ({
   parent,
   childNodes,
@@ -114,9 +104,6 @@ function countChildren(nodes: GroupedTrailNode[]): ChildCounts {
         else reasoning += 1;
       }
     }
-    // `text` and `plan` are intentionally not counted — the sub-agent header
-    // surfaces *work* done (tools + reasoning), not narration. Streamed prose
-    // and plan checklists still render in the expanded body.
   }
   return { tools, reasoning };
 }

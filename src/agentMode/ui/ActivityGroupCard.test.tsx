@@ -17,7 +17,6 @@ function group(members: ActivityMember[]): ActivityGroupNode {
   return { type: "activityGroup", id: "activity-0", members };
 }
 
-/** Stand-in for the trail's real dispatch, so the card's own behavior is what's asserted. */
 function renderMember(member: ActivityMember, key: string | number): React.ReactNode {
   return <div key={key}>{member.type === "action" ? member.part.title : "reasoning"}</div>;
 }
@@ -104,7 +103,6 @@ describe("ActivityGroupCard", () => {
 
       fireEvent.click(header);
       expect(onToggle).toHaveBeenCalledTimes(1);
-      // Controlled: the card stays closed until the owner says otherwise.
       expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe("false");
     });
 

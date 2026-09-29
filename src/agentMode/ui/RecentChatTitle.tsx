@@ -6,7 +6,6 @@ export interface RecentChatProjectBadgeProps {
   name: string;
 }
 
-/** Compact project marker that keeps long names from taking over a chat row. */
 export function RecentChatProjectBadge({ name }: RecentChatProjectBadgeProps): React.ReactElement {
   return (
     <Badge
@@ -25,7 +24,6 @@ export interface RecentChatTitleProps {
   className?: string;
 }
 
-/** Conversation title that consumes the row space left by trailing metadata. */
 export function RecentChatTitle({ title, className }: RecentChatTitleProps): React.ReactElement {
   return (
     <span

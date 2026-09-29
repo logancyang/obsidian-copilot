@@ -25,70 +25,28 @@ import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
-/** Stable noop for rows that aren't being renamed (they never invoke onSaveEdit). */
 const NOOP_SAVE = (): void => {};
 
-/**
- * Which landing this section renders under. `global` is the original Agent Home
- * "Recent Chats" tab (every chat, flat). `project` is the per-project landing's
- * "Project Chats" tab — same component and identical row affordances, scoped
- * data supplied by the caller; the variant only changes the empty-state copy.
- * The section title/count live in the shelf chip above, so the variant never
- * renders a visible heading.
- */
 export type RecentChatsVariant = "global" | "project";
 
 interface GlobalRecentChatsSectionProps {
-  /** Recent chats supplied by core (global or project-scoped getChatHistoryItems). */
   items: ChatHistoryItem[];
-  /**
-   * Landing context — drives the empty-state copy only (the shelf owns the
-   * visible title). Defaults to `global`, preserving the original behavior.
-   */
   variant?: RecentChatsVariant;
-  /**
-   * Human label for this section (e.g. "Recent Chats" / "Project Chats"). The
-   * shelf chip renders the visible title, so this is used only as the section's
-   * accessible label. Optional — omit to leave the group unlabeled.
-   */
   title?: string;
-  /** Open a chat by id (markdown path or native session id). */
   onLoadChat: (id: string) => Promise<void>;
   onUpdateTitle: (id: string, newTitle: string) => Promise<void>;
   onDeleteChat: (id: string) => Promise<void>;
-  /**
-   * Open the chat's source note. Only meaningful for markdown-saved chats;
-   * native (autosave-off) entries have no file, so the row hides the action.
-   */
   onOpenSourceFile: (id: string) => Promise<void>;
-  /** Refresh the items (called once when the section mounts). */
   onLoadHistory?: () => void;
-  /**
-   * Recent-list ids whose backend turn is running in the background. Matching
-   * rows swap their relative-time chip for a spinner. Omitted means "none".
-   */
   runningChatIds?: ReadonlySet<string>;
   openChatIds?: ReadonlySet<string>;
   onCloseSession?: (id: string) => Promise<void>;
-  /**
-   * Recent-list ids whose live session is flagging needs-attention. OR'd with
-   * each item's baked-in `needsAttention` snapshot so the done-dot appears the
-   * moment a backgrounded turn finishes — the snapshot alone goes stale once
-   * the list is mounted. Omitted means "snapshot only".
-   */
   attentionChatIds?: ReadonlySet<string>;
-  /** Current project names keyed by id. Used only by the global variant. */
   projectNamesById?: Readonly<Record<string, string>>;
-  /** Saved ordering used by the complete chat-history surface. */
   sortStrategy?: SortStrategy;
   className?: string;
 }
 
-/**
- * Brand icon for the backend a chat ran on. Returns `undefined` for legacy
- * chats without a `backendId`, in which case the row falls back to a generic
- * message glyph.
- */
 function resolveChatIcon(
   item: ChatHistoryItem
 ): React.ComponentType<{ className?: string }> | undefined {
@@ -107,14 +65,6 @@ function sortChats(items: ChatHistoryItem[], strategy: SortStrategy): ChatHistor
   });
 }
 
-/**
- * Neutral tile holding the chat's backend brand glyph (or the generic
- * fallback), sized to match the project tiles so the two shelf tabs share one
- * leading-slot width. The attention dot mirrors the tab strip's cue for a
- * backgrounded live session that finished / errored — without it the landing
- * list would be the only chat surface hiding the signal (the conversation
- * History popover renders it via the same wrapper).
- */
 const ChatIconTile = memo(
   ({
     Icon,
@@ -151,23 +101,14 @@ interface RecentChatRowProps {
   onStartDelete: (id: string) => void;
   onConfirmDelete: (id: string) => void;
   onCancelDelete: () => void;
-  /** Whether this chat has a source note to open (markdown-saved only). */
   canOpenSourceFile: boolean;
   onOpenSourceFile: (id: string) => void;
-  /** Whether this chat's backend turn is running in the background. */
   isRunning: boolean;
   isSessionOpen: boolean;
   onCloseSession?: (id: string) => Promise<void>;
-  /** Snapshot ∪ live needs-attention — drives the icon tile's done-dot. */
   hasAttention: boolean;
 }
 
-/**
- * One chat row: click to open, hover to reveal go-to-file (markdown only),
- * rename (inline edit), and delete (two-step confirm). Mirrors the chat
- * history popover's row affordances so the landing surface manages chats
- * directly instead of deferring everything to a separate popover.
- */
 const RecentChatRow = memo(function RecentChatRow({
   item,
   projectName,
@@ -225,10 +166,6 @@ const RecentChatRow = memo(function RecentChatRow({
       )}
       onClick={() => onOpen(item.id)}
       onKeyDown={(e) => {
-        // Only the row itself opens on Enter/Space. Without this, a keydown on
-        // a focused action button (rename/delete/open-source) bubbles up here
-        // and would also open the chat — the buttons stop click propagation,
-        // not keydown.
         if (e.target !== e.currentTarget) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -241,12 +178,6 @@ const RecentChatRow = memo(function RecentChatRow({
       <ChatIconTile Icon={Icon} needsAttention={hasAttention} isSessionLive={isSessionOpen} />
       <RecentChatTitle title={item.title} />
 
-      {/* Relative time by default; a backgrounded running session shows an accent
-          spinner in its place. The action cluster replaces either on hover or
-          keyboard focus so a narrow sidebar doesn't have to fit both. The
-          `group-focus-within` path keeps the actions reachable for keyboard
-          users (focusing the row reveals them, so Tab can move into them) —
-          on hover alone they'd stay `display:none` and out of the tab order. */}
       <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5">
         {projectName && <RecentChatProjectBadge name={projectName} />}
         {isRunning ? (
@@ -356,18 +287,6 @@ const RecentChatRow = memo(function RecentChatRow({
   );
 });
 
-/**
- * "Recent Chats" section for the Agent Home landing. A searchable list whose
- * rows manage chats in place — open, rename, delete, and (for markdown-saved
- * chats only) open the source note — the same affordances as the chat history
- * popover. Every chat stays in this section's scrollable list, and search
- * filters that same list without opening a second surface. Rows mount in
- * bounded batches as the user scrolls, while sorting and search still consider
- * the complete history. Native (autosave-off) sessions appear here too; they
- * just have no source note. The per-project landing reuses it
- * (`variant="project"`) with scoped items and project empty copy — identical
- * rows, no extra chrome.
- */
 export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   items,
   variant = "global",
@@ -390,8 +309,6 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   const [editingTitle, setEditingTitle] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  // Refresh once when the section first mounts so opening Recent Chats does
-  // not rely on a stale history snapshot.
   useEffect(() => {
     onLoadHistory?.();
   }, [onLoadHistory]);
@@ -426,8 +343,6 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
       await onUpdateTitle(id, trimmed);
       setEditingId(null);
     } catch (error) {
-      // Keep the draft editable when the underlying vault operation fails.
-      // https://github.com/logancyang/obsidian-copilot/issues/3040
       logError("Error updating title:", error);
     }
   }, [editingId, editingTitle, onUpdateTitle]);
@@ -438,8 +353,6 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
         await onDeleteChat(id);
         setConfirmDeleteId(null);
       } catch (error) {
-        // Keep confirmation available so the user can retry the failed delete.
-        // https://github.com/logancyang/obsidian-copilot/issues/3040
         logError("Error deleting chat:", error);
       }
     },
@@ -456,14 +369,8 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
     [onOpenSourceFile]
   );
 
-  // Stable across renders because `safeAsyncHandler` keeps one wrapper per
-  // handler identity — RecentChatRow's memo, which the surrounding props go out
-  // of their way to preserve, would otherwise break on every keystroke of the
-  // search and rename fields.
   const handleOpen = safeAsyncHandler(onLoadChat);
 
-  // Stable references so the memoized rows aren't all re-rendered on every
-  // section render (an inline arrow here would defeat RecentChatRow's memo).
   const handleCancelEdit = useCallback(() => setEditingId(null), []);
   const handleCancelDelete = useCallback(() => setConfirmDeleteId(null), []);
   const getProjectName = useCallback(
@@ -475,15 +382,10 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
     <div
       role={title ? "group" : undefined}
       aria-label={title}
-      // h-full fills the shelf panel's fixed floor (AgentHomeShelf) so the
-      // empty / no-match copy below can center inside the card instead of
-      // hugging the top of a mostly blank panel.
       className={cn("tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-2", className)}
     >
       {items.length > 0 && (
         <div className="tw-p-1">
-          {/* Compact height so the search row reads as a list utility, not a
-              full-size form field towering over the 36px rows below. */}
           <SearchBar
             value={query}
             onChange={setQuery}
@@ -509,17 +411,11 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
                 item={item}
                 projectName={getProjectName(item)}
                 isEditing={editingId === item.id}
-                // Only the row being renamed needs the live draft; passing a
-                // stable "" to the rest keeps their memo from re-rendering on
-                // every keystroke.
                 editingTitle={editingId === item.id ? editingTitle : ""}
                 confirmingDelete={confirmDeleteId === item.id}
                 onOpen={handleOpen}
                 onStartEdit={handleStartEdit}
                 onEditingTitleChange={setEditingTitle}
-                // Only the editing row needs the live save handler (it changes
-                // per keystroke via editingTitle); the rest get a stable noop so
-                // their memo isn't defeated mid-rename.
                 onSaveEdit={editingId === item.id ? handleSaveEditSafely : NOOP_SAVE}
                 onCancelEdit={handleCancelEdit}
                 onStartDelete={setConfirmDeleteId}
