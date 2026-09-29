@@ -2,6 +2,7 @@ import type { ServerFrame } from "@/agentMode/protocol/frames";
 import type { ConnectOutcome } from "@/remote/client/RemoteClient";
 import {
   DEFAULT_BACKOFF_MS,
+  FIRST_FRAME_TIMEOUT_MS,
   RemoteSessionTransport,
   type VisibilitySource,
 } from "@/agentMode/mobile/RemoteSessionTransport";
@@ -109,14 +110,14 @@ describe("RemoteSessionTransport", () => {
     it("dials once, reports open to the client and delivers the desktop's frames", async () => {
       const r = rig();
       r.transport.start();
-      expect(r.transport.getLinkState()).toMatchObject({ phase: "connecting", hasBeenOpen: false });
+      expect(r.transport.getLinkState()).toMatchObject({ phase: "connecting" });
 
       const channel = r.answer("channel")!;
       await flush();
       channel.receive(JSON.stringify({ type: "hello", v: 1, app: "1.0", hostId: "h", ok: true }));
 
       expect(r.opens).toEqual([true]);
-      expect(r.transport.getLinkState()).toMatchObject({ phase: "open", hasBeenOpen: true });
+      expect(r.transport.getLinkState().phase).toBe("open");
       expect(r.frames).toEqual([{ type: "hello", v: 1, app: "1.0", hostId: "h", ok: true }]);
     });
 
@@ -280,6 +281,53 @@ describe("RemoteSessionTransport", () => {
     });
   });
 
+  describe("silent desktop", () => {
+    it(`drops a channel whose desktop sends nothing within the reply window and reports an unexpected reply, since a desktop on an older Copilot never answers hello (${ISSUE})`, async () => {
+      const r = rig();
+      r.transport.start();
+      const channel = r.answer("channel")!;
+      await flush();
+
+      jest.advanceTimersByTime(FIRST_FRAME_TIMEOUT_MS);
+
+      expect(channel.closedWith).toBe(1000);
+      expect(r.opens).toEqual([true, false]);
+      expect(r.transport.getLinkState()).toMatchObject({
+        phase: "retrying",
+        failure: "protocol",
+        attempts: 1,
+      });
+      jest.advanceTimersByTime(DEFAULT_BACKOFF_MS[0]);
+      expect(r.attempts).toHaveLength(1);
+    });
+
+    it("keeps a channel whose desktop answers within the window", async () => {
+      const r = rig();
+      r.transport.start();
+      const channel = r.answer("channel")!;
+      await flush();
+
+      jest.advanceTimersByTime(FIRST_FRAME_TIMEOUT_MS - 1);
+      channel.receive(JSON.stringify({ type: "hello", v: 1, app: "1.0", hostId: "h", ok: true }));
+      jest.advanceTimersByTime(FIRST_FRAME_TIMEOUT_MS * 2);
+
+      expect(channel.closedWith).toBeNull();
+      expect(r.transport.getLinkState().phase).toBe("open");
+    });
+
+    it("does not count a frame that is not a protocol frame as an answer", async () => {
+      const r = rig();
+      r.transport.start();
+      const channel = r.answer("channel")!;
+      await flush();
+
+      channel.receive("not json");
+      jest.advanceTimersByTime(FIRST_FRAME_TIMEOUT_MS);
+
+      expect(channel.closedWith).toBe(1000);
+    });
+  });
+
   describe("reconnectNow()", () => {
     it(`replaces an open channel when the app returns to the foreground even though it still looks open ${ISSUE}`, async () => {
       const r = rig();
@@ -331,7 +379,7 @@ describe("RemoteSessionTransport", () => {
       expect(r.opens).toEqual([true]);
     });
 
-    it("dials at once and resets the backoff when called during a retry wait", async () => {
+    it("dials at once when called during a retry wait", async () => {
       const r = rig();
       r.transport.start();
       r.answer(TIMED_OUT);

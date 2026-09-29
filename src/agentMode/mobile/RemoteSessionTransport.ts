@@ -13,7 +13,6 @@ export interface LinkState {
   phase: "connecting" | "open" | "retrying" | "denied" | "closed";
   failure: LinkFailure | null;
   attempts: number;
-  hasBeenOpen: boolean;
 }
 
 export interface VisibilitySource {
@@ -29,13 +28,18 @@ export interface RemoteSessionTransportDeps {
 
 const STABLE_AFTER_MS = 5000;
 
+// A desktop that speaks the protocol answers hello at once. One that accepts the connection and
+// stays silent runs a Copilot without the session protocol, and the phone would otherwise wait
+// on "Connecting" forever instead of asking for an update.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+export const FIRST_FRAME_TIMEOUT_MS = 8000;
+
 export const DEFAULT_BACKOFF_MS: readonly number[] = [1000, 2000, 4000, 8000, 15000];
 
 const INITIAL_STATE: LinkState = Object.freeze({
   phase: "connecting",
   failure: null,
   attempts: 0,
-  hasBeenOpen: false,
 });
 
 // iOS closes the socket about a second after the app leaves the foreground yet keeps reporting it
@@ -49,6 +53,7 @@ export class RemoteSessionTransport implements ClientTransport {
   private generation = 0;
   private retryTimer: number | undefined;
   private stableTimer: number | undefined;
+  private silenceTimer: number | undefined;
   private started = false;
   private readonly frameListeners = new Set<(frame: ServerFrame) => void>();
   private readonly openListeners = new Set<(open: boolean) => void>();
@@ -129,6 +134,7 @@ export class RemoteSessionTransport implements ClientTransport {
     this.channel = null;
     this.pauseRetries();
     window.clearTimeout(this.stableTimer);
+    window.clearTimeout(this.silenceTimer);
     if (!channel) return;
     try {
       channel.close(1000);
@@ -170,10 +176,11 @@ export class RemoteSessionTransport implements ClientTransport {
       if (generation !== this.generation) return;
       const frame = parseServerFrame(text);
       if (!frame) return;
+      window.clearTimeout(this.silenceTimer);
       for (const listener of [...this.frameListeners]) listener(frame);
     });
     channel.onClose(({ code }) => this.handleClosed(generation, code));
-    this.setState({ ...this.state, phase: "open", failure: null, hasBeenOpen: true });
+    this.setState({ ...this.state, phase: "open", failure: null });
     // A desktop that accepts the connection and drops it at once must not reset the backoff, or a
     // refusal loop would redial every second forever.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
@@ -182,6 +189,11 @@ export class RemoteSessionTransport implements ClientTransport {
         this.setState({ ...this.state, attempts: 0 });
       }
     }, STABLE_AFTER_MS);
+    this.silenceTimer = window.setTimeout(() => {
+      if (generation !== this.generation) return;
+      this.dropChannel();
+      this.scheduleRetry("protocol");
+    }, FIRST_FRAME_TIMEOUT_MS);
     this.setOpen(true);
   }
 
@@ -190,6 +202,7 @@ export class RemoteSessionTransport implements ClientTransport {
     this.channel = null;
     this.generation += 1;
     window.clearTimeout(this.stableTimer);
+    window.clearTimeout(this.silenceTimer);
     this.setOpen(false);
     if (code === CLOSE_CODE.denied || code === CLOSE_CODE.revoked) {
       this.setState({ ...this.state, phase: "denied", failure: null });
