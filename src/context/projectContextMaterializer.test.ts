@@ -320,7 +320,6 @@ describe("ensureProjectContextMaterialized — single-flight", () => {
   });
 
   it("dedupes two projects converting the SAME url to a single fetch (global per-artifact lock)", async () => {
-    // global mutex. The first fetches and writes; the second re-reads the meta
     getRecord.mockImplementation((id: string) => record({ webUrls: "https://shared.com" }, id));
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
