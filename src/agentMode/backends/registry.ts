@@ -40,18 +40,3 @@ export function getActiveBackendDescriptor(settings: CopilotSettings): BackendDe
 export function listBackendDescriptors(): BackendDescriptor[] {
   return Object.values(backendRegistry);
 }
-
-let cloudAgentIdsCache: ReadonlySet<BackendId> | null = null;
-
-export function getCloudAgentIds(): ReadonlySet<BackendId> {
-  if (!cloudAgentIdsCache) {
-    cloudAgentIdsCache = Object.freeze(
-      new Set(
-        Object.values(backendRegistry)
-          .filter((descriptor) => !descriptor.selfHostable)
-          .map((descriptor) => descriptor.id)
-      )
-    );
-  }
-  return cloudAgentIdsCache;
-}
