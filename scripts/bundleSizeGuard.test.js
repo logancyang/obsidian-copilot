@@ -4,6 +4,7 @@ const {
   assertBundleSize,
   createBundleSizeGuard,
   dedupeEsbuildLegalComments,
+  finalizeProductionBundle,
   rewriteExactZodImports,
 } = require("./bundleSizeGuard.js");
 
@@ -129,6 +130,54 @@ describe("bundleSizeGuard", () => {
     it("measures UTF-8 bytes and enforces a strict boundary for https://github.com/Brevilabs/obsidian-copilot-private/issues/94", () => {
       expect(assertBundleSize("é", 3)).toBe(2);
       expect(() => assertBundleSize("é", 2)).toThrow("strictly below 2 bytes");
+    });
+  });
+
+  describe("finalizeProductionBundle()", () => {
+    it("minifies representative code and preserves the deduplicated legal block for https://github.com/Brevilabs/obsidian-copilot-private/issues/325", async () => {
+      const notice = "  (** @license Example 1.0 *)";
+      const source = legalBundle(
+        legalEntry("first.js", notice),
+        legalEntry("second.js", notice)
+      ).replace(
+        "runtime();",
+        "function add(firstNumber, secondNumber) { return firstNumber + secondNumber; } add(1, 2);"
+      );
+
+      const output = await finalizeProductionBundle(source);
+
+      expect(Buffer.byteLength(output, "utf8")).toBeLessThan(Buffer.byteLength(source, "utf8"));
+      expect(output).toContain("/*! Bundled license information:");
+      expect(output).toContain("first.js (+1 identical notices)");
+      expect(output).toContain("@license Example 1.0");
+    });
+
+    it("removes unused top-level declarations to preserve localization headroom for https://github.com/Brevilabs/obsidian-copilot-private/issues/325", async () => {
+      const source = legalBundle(legalEntry("example.js", "  (** @license Example 1.0 *)")).replace(
+        "runtime();",
+        "const unusedLocalizationHeadroom = 'unused'; globalThis.keptValue = 'kept';"
+      );
+
+      const output = await finalizeProductionBundle(source);
+
+      expect(output).not.toContain("unusedLocalizationHeadroom");
+      expect(output).not.toContain("unused");
+      expect(output).toContain("kept");
+    });
+
+    it("enforces the strict size limit on the minified artifact for https://github.com/Brevilabs/obsidian-copilot-private/issues/325", async () => {
+      const source = legalBundle(legalEntry("example.js", "  (** @license Example 1.0 *)")).replace(
+        "runtime();",
+        "function identity(longArgumentName) { return longArgumentName; } identity(1);"
+      );
+      const finalized = await finalizeProductionBundle(source);
+      const finalizedBytes = Buffer.byteLength(finalized, "utf8");
+
+      expect(Buffer.byteLength(source, "utf8")).toBeGreaterThan(finalizedBytes + 1);
+      await expect(finalizeProductionBundle(source, finalizedBytes + 1)).resolves.toBe(finalized);
+      await expect(finalizeProductionBundle(source, finalizedBytes)).rejects.toThrow(
+        `strictly below ${finalizedBytes} bytes`
+      );
     });
   });
 });
