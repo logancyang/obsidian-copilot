@@ -1,0 +1,178 @@
+{
+  "name": "permission",
+  "backendId": "claude",
+  "steps": [
+    {
+      "step": "send",
+      "text": "lyn pil ijqh udar jy jkl gdctengl zihg nyzqfg q ylglstqhotaxqps  jyl nyjw xcr qdmri"
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-1",
+        "title": "ijqh",
+        "kind": "execute",
+        "status": "in_progress",
+        "rawInput": {},
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-1",
+        "rawInput": {
+          "command": "zihg nyzqfg q ylglstqhotaxqps",
+          "description": "xgxsd nyzqfg jy j ozcz ebel"
+        },
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-1",
+        "rawInput": {
+          "command": "zihg nyzqfg q ylglstqhotaxqps",
+          "description": "xgxsd nyzqfg jy j ozcz ebel"
+        },
+        "status": "in_progress",
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "permission",
+      "request": {
+        "toolCall": {
+          "toolCallId": "id-1",
+          "kind": "execute",
+          "status": "pending",
+          "title": "ederw zihg nyzqfg q ylglstqhotaxqps",
+          "rawInput": {
+            "command": "zihg nyzqfg q ylglstqhotaxqps",
+            "description": "xgxsd nyzqfg jy j ozcz ebel",
+            "run_in_background": false
+          },
+          "vendorToolName": "Bash"
+        },
+        "options": [
+          { "optionId": "allow_once", "name": "tsrud hibg", "kind": "allow_once" },
+          { "optionId": "allow_always", "name": "tsrud dgrsvs", "kind": "allow_always" },
+          { "optionId": "reject_once", "name": "mzut hibg", "kind": "reject_once" },
+          { "optionId": "reject_always", "name": "mzut dgrsvs", "kind": "reject_always" }
+        ]
+      },
+      "optionId": "allow_once"
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-1",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": { "type": "text", "text": "ufmrw nchihklgf wxql nu armtszo" }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "gdady" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "\n\ndql dcharmdyza jyl" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " vgfezy mny shmbuds" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " ifev lwrwdshylulgf fgluzm" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " fsv uzo tun iledc xsl w" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "gfczgz adov po w" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "zgfef jm xw enibo" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "wdutct mhmfwju jy apmv" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "mrk iledc" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "usage_update",
+        "usage": {
+          "usedTokens": 32324,
+          "contextWindow": 1000000,
+          "inputTokens": 2,
+          "outputTokens": 3,
+          "cacheReadTokens": 28487,
+          "cacheWriteTokens": 3832,
+          "updatedAt": 1790675194833
+        }
+      }
+    },
+    { "step": "end", "stopReason": "end_turn" }
+  ]
+}

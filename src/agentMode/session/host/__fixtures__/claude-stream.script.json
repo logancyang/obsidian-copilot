@@ -1,0 +1,166 @@
+{
+  "name": "stream",
+  "backendId": "claude",
+  "steps": [
+    {
+      "step": "send",
+      "text": "vgnsvex jm ipklwfw kbshm kbcza cfmzstcti shs zevezg wjcxkf qxypol hq tef tun uli zwvolu"
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "fcfats" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " wjcxkf insnu" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " tm j ravkdo khepm" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " nu pgrwnk pil lspuhq qdujkjk jyl" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " ivqlqdun nu jy pil lgxaxm" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "e rm pil lgxaxm el gngdize" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "a nu hmno" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "mjip pil pe" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "dmx pmnaf" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " jyl bq pkbs nwbqhiz nu" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " fazkxkhe pil zixkj pwbyd dq" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " cngpcfc uzez tm pil nmfm" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "hanyv redy gjwjs nu" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " yhmxm pil lgxaxm" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " po jkl" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "z sxm bi re" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "gjavcdk wj nu gvc" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "mv nezaneh ja" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "w vixwr" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "usage_update",
+        "usage": {
+          "usedTokens": 28521,
+          "contextWindow": 1000000,
+          "inputTokens": 2,
+          "outputTokens": 6,
+          "cacheReadTokens": 12710,
+          "cacheWriteTokens": 15803,
+          "updatedAt": 1790675194767
+        }
+      }
+    },
+    { "step": "end", "stopReason": "end_turn" }
+  ]
+}

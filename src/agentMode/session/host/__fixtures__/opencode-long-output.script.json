@@ -1,0 +1,86 @@
+{
+  "name": "long-output",
+  "backendId": "opencode",
+  "steps": [
+    {
+      "step": "send",
+      "text": "lyn pil abqjc jy pgjy dgf z ylkl jyl nyjw lqpa wb pil mjut nwdkpq fsv rudg hity pil ipkpqz jy eno fybsxgtgb"
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-1",
+        "title": "abqjc",
+        "kind": "execute",
+        "status": "pending",
+        "rawInput": { "cwd": "tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp" },
+        "locations": [{ "path": "tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp" }]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-1",
+        "title": "dgf z ylkl q wtir ve v",
+        "kind": "execute",
+        "status": "in_progress",
+        "rawInput": {
+          "command": "dgf z ylkl q wtir ve v",
+          "cwd": "tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp"
+        },
+        "locations": [{ "path": "tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp" }]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-1",
+        "title": "dgf z ylkl q wtir ve v",
+        "kind": "execute",
+        "status": "in_progress",
+        "rawInput": {
+          "command": "dgf z ylkl q wtir ve v",
+          "cwd": "tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp"
+        },
+        "locations": [{ "path": "tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp" }]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-1",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": { "type": "text", "text": "tmda\ngrmx\nhijo\nynol\nylkl\n" }
+          },
+          {
+            "type": "content",
+            "content": { "type": "text", "text": "tojmbkn pszsvw wxql zodq sx" }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "dql mjut nwdkpq xot sxgle" },
+        "messageId": "id-2"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "usage_update",
+        "usage": { "usedTokens": 16492, "contextWindow": 200000, "updatedAt": 1790675195415 }
+      }
+    },
+    { "step": "end", "stopReason": "end_turn" }
+  ]
+}

@@ -576,35 +576,43 @@ Follows `AGENTS.md`: one top-level `describe` per module, one nested `describe` 
 
 ### 8.2 Recorded sessions as fixtures
 
-Fixtures are `SessionScript` JSON files under `src/agentMode/session/host/__fixtures__/`, one set
-each for `claude`, `codex` and `opencode`. A script is an ordered list of steps: user send, backend
-`SessionEvent`, permission request and answer, question and answer, prompt result, cancel. A
-scripted `BackendProcess` (extending the mock in `AgentSession.test.ts`) plays it under fake timers.
+Fixtures are `SessionScript` JSON files (`session/host/sessionScript.ts`) under
+`src/agentMode/session/host/__fixtures__/`, recorded from real Claude, Codex and opencode sessions.
+A script is an ordered list of steps: user send, backend `SessionUpdate`, permission request and
+answer, question and answer, cancel, and the prompt's stop reason. `scriptRunner.ts` plays a script
+into a real `AgentSession` through a scripted `BackendProcess`, and sends, answers and cancels
+through the host's commands.
 
 Capture uses the existing frame log, not new production code:
 
-1. Turn on Settings, Advanced, Log Full Agent Mode Frames in a test vault and run the capture
-   scenario per backend: a streamed answer with a thought, a read and an edit tool call with a
-   permission prompt, an ask-user question, a plan proposal (plan mode) where the backend supports
-   it, a cancel mid-stream, and a long tool output.
-2. `scripts/agent-fixtures/frames-to-script.ts` reads the NDJSON frame log. Codex and opencode `←`
-   notifications go through `acpNotificationToEvents`; Claude SDK messages go through
-   `translateSdkMessage`; `→` prompts and permission replies become user and answer steps.
-3. The converter sanitizes before anything is written: text content is replaced by deterministic
-   pseudo-text of the same length so chunk sizes survive; vault paths become `/vault/...`; home
-   directories, emails and token-shaped strings are removed; model ids are replaced with generic
-   names, since the repository is public. `fixtures.test.ts` scans every committed fixture for
-   `/Users/`, `sk-`, email addresses and model ids.
+1. Turn on Settings, Advanced, Log Full Agent Mode Frames in a test vault and run one scenario per
+   session: a streamed answer with a thought, a tool call with a permission prompt, an ask-user
+   question, a plan proposal (plan mode) where the backend supports it, a cancel mid-stream, and a
+   long tool output.
+2. `node scripts/agent-fixtures/frames-to-script.js <acp-frames.ndjson> <claude|codex|opencode>
+--list` prints one line per recorded prompt; `--segment <n> --name <name> --out <file>` writes one
+   script. Codex and opencode notifications go through `acpNotificationToEvents` and permission
+   requests through `acpPermissionRequestToPrompt`; Claude SDK messages go through
+   `translateSdkMessage` and tool and question prompts through `PermissionBridge`.
+3. The converter sanitizes before writing: every string except structural enums becomes
+   deterministic pseudo-text of the same length (so chunk sizes survive), ids become `id-<n>`,
+   `_meta` and backend state updates (which carry model ids) are dropped. `fixtures.test.ts` scans
+   every committed fixture for home and vault paths, keys, email addresses and model ids, because
+   the repository is public.
+
+`SessionHost.parity.test.ts` plays every fixture and, after every step, asserts that the replica
+equals the host projection and that `selectChatRuntime` equals today's `AgentChatUIState` getters.
+A second client that subscribes halfway through each script must finish equal to the first.
 
 ### 8.3 Streaming overhead
 
-`host.bench.test.ts` is skipped unless `BENCH=1`. It replays the long-turn fixture and compares
-three modes: no host, a host with `serialize: false`, and a host with `serialize: true` (the
-WebSocket proxy). The PR reports added microseconds per streamed chunk (p50, p99) and the total
-added CPU for the turn. Targets to report against: median added cost under 50 microseconds per
-chunk and p99 under 1 ms. If the in-process replica misses them, the fallback is to let the desktop
-client read the host store's state directly instead of a second replica; that decision needs the
-measurement.
+`host.bench.test.ts` is skipped unless `BENCH=1`. It replays every recorded event of all fixtures
+repeated into one long turn and compares three modes: no host, a host with `serialize: false`, and
+a host with `serialize: true` (the WebSocket proxy). The PR reports added microseconds per streamed
+chunk (p50, p99) and the total added CPU for the turn. Targets to report against: median added cost
+under 50 microseconds per chunk and p99 under 1 ms. If the in-process replica misses them, the
+fallback is to let the desktop client read the host store's state directly instead of a second
+replica; that decision needs the measurement.
 
 ## 9. Scope of #609 and what is deferred
 
@@ -617,7 +625,7 @@ bundle-closure check, fixtures, benchmark, and tests. The host runs on desktop a
 reads from it.
 
 Delivered as stacked PRs: (1) `protocol/`, the store rewrite and the boundary fence; (2) the host,
-projectors, op log, transport, commands, fixtures, parity tests and benchmark.
+projectors, op log, transport and commands; (3) recorded fixtures, parity tests and the benchmark.
 
 ### 9.2 Deferred
 

@@ -1,0 +1,1071 @@
+{
+  "name": "plan",
+  "backendId": "claude",
+  "steps": [
+    {
+      "step": "send",
+      "text": "dgdqb sjazelk helwpgzqvujcn shs jy niv j kbcza glileng zqlunwt jy dmnmdefab jm pil qluxc arero vwnglox pil zwte ruv yt javozmhqh"
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-1",
+        "title": "otcj",
+        "kind": "read",
+        "status": "in_progress",
+        "rawInput": {},
+        "vendorToolName": "Read"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-1",
+        "rawInput": {
+          "file_path": "ryzurkxmpsjszmtmpsvshmvmpyrwpuloxuxotwhizspqxopslgluhorgvctep"
+        },
+        "vendorToolName": "Read"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-1",
+        "rawInput": {
+          "file_path": "ryzurkxmpsjszmtmpsvshmvmpyrwpuloxuxotwhizspqxopslgluhorgvctep"
+        },
+        "status": "in_progress",
+        "vendorToolName": "Read"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-2",
+        "title": "ijqh",
+        "kind": "execute",
+        "status": "in_progress",
+        "rawInput": {},
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-1",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": {
+              "type": "text",
+              "text": "sbstivytqzitgrobuzalwfgxy pil ebel aduvuf zir pil gjenydwd ofc mlmbctgxwfibgrmvklipyhub"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-2",
+        "rawInput": {
+          "command": "ja tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp ul ydk ru ebifsry kjifezm bmzmbufyjcvw ibev wbyl slghwl evgxajqhgvczqhqx vq e glsdkbmtwfk q ibev ri qlmpcdchovqf q azun dsz",
+          "description": "gbot qluxc idyl jyl zgxo yhqzixeruzeb fexuf"
+        },
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-2",
+        "rawInput": {
+          "command": "ja tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp ul ydk ru ebifsry kjifezm bmzmbufyjcvw ibev wbyl slghwl evgxajqhgvczqhqx vq e glsdkbmtwfk q ibev ri qlmpcdchovqf q azun dsz",
+          "description": "gbot qluxc idyl jyl zgxo yhqzixeruzeb fexuf"
+        },
+        "status": "in_progress",
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-2",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": {
+              "type": "text",
+              "text": "ihar rkferetqdufmrq\ngdktwb zyrsfkt utolkbixcpid dcxwhk\ndmnmdefab\nstwlqpm\nctoxinizgzq\nstk pcjg xohkhw algp byfiryh\nlahadslir\nhybkxevmhyjwbqpqfstsvaxolspopsxaxytwr\ngrudqfidangxojeharajufohedwvunelah\npedmlklghapc zyno ruv hcpwpytctary\npedmlklghapc zyno ruv twpwfyngxw\npedmlklghapc pufu utetmju srgfkvingxepez\npedmlklghapc pufu bydw zalwnmfqf vaxspwryhqn\nadknobohmru zyno jyledovuxutshkn\ncfelkde\nobylinutajyrobyjun\nkrydgpytmv yrmdmlmzmjc\nkrydgpytmv nu nonelu nmtmret\nqfep rsby tclkj qlmp jyl hansvuh srutkdc\nqfep rsby nkde uhyrcxi\nqfep rsby nuhcxgz qlmp srutkdc\nuborsvwlojkrobedkxkjwdwb\nbwjurmvsfwnqdanqfupgnelyxybslg\njcjgtedmlybcbcfajcjajmlkdwvuvgti\nrknot kbi lerez hkfwxorihslkx\nrknot kbi lerez qtkfohaxy\njovorwbgvazshafmbgzcr\nrsdqt alsza qfqfqd yxixozczsxq\ngvaba\narmvslwletkfahynw\nxkxqjsvohq ofsl glwfsni\nfexuf\nritoxovojyvijepehsfghwbynerch\nozmxifgrohyzytwbwnebuhivmpyt\nytulspevwfgngvgzsfqvklcvuhktihuzu\nhizebspmlkfglsdgzqbqpolylcdaz\ndyfuxofutufatsfqhgxkzubcvcfifktwrcvs\nponmzch qnyref n nuhcxgz orkraba\nponmzch duhk dsdsdu\nponmzch duhk otmtw\nponmzch duhk sdaru\nvwxyzu\noncjy wvwd idgn uhyrcxi\norytubg\nmhyrwdizqtclkng\nnwxcdqt\nwncrmzqtgbe\nalsza zyrsfkt mbyrwjypepgzu\nalsza duhk mbyrwjypepgzu\nalsza otgpqxux mbyrwjypepgzu\ntafmbqnsvazufedwvo\nyzkz\nidaropex\nkvqpyj\n\nmncpupiv\nabgxef\nqnonsjmr\nsxqvuhijwjujmzazyra\nkvqpyj\nyrwzszklazabopchwdebinmhezorqvanevgbqpy\nvmlgzmr zyrsfkt mbyrwjypepgzu\nvytgtojgrcrahetepqxkbcj lqtejgdahudmtoba\nzulmfupatsvubebonmpylav fedinylsvqjg\nzulmfupatsvubebonmpylav tupozwbifins\nwjyhkfanwtgrwjudqdsvibatedmrgjsbol\nzulmfupatsvubebonmpylav upwhkvuhkpen\nzulmfupatsvubebonmpylav cpijupklyzyl\nzulmfupatsvubebonmpylav ujctgbglsvypm\nzulmfupatsvubebonmpylav rgpgtmzghydw\nzulmfupatsvubebonmpylav dgxgrwzgvyby\nzulmfupatsvubebonmpylav mdcfexyjmxuz\nbclmfsvidqnkzobwjctktclahazcfwzcz\nsbapadwtyhkbupwxynsfytarqfqvgbirmlctunwderidwpebohwpwhgjgdkfcfirwhgvmropedelwlchcjoredyneruhgnifopqpyzstyt\noxqfmdatclydihsjgrwnklsvixctgnqdmnkbevyxklsnsrurszcjunepodcrsbedgngryhwpetkdgpwxibedcpgbklynqdod\njkluhmhszgvmxctubejoxchsluhgzupsxcvozilubalifyjmbgxwxwtupydqzutkvwzkzadupodwpwxaledijejgjwruvcrm\nbcdgzynkxwlcdiporqdyzkvyjmlofshaxyhadctkhyvyvirozevuzanujarwbsvgbstabahczczgtgfqrybwvcpypmluncti\nehejcnwpoxypqzqnqpgvmjqpctenazezcfyxmdclyrszcfczkxslupapwrcpctuhwzsbwvermrqvklyjwzqbabgbqhydkdwhslefqpcratavi\nqlwtgzqtqbgzwdepypcpkvwfstqpgbcbgdepsdqhghohodkpojodunkbmruxcfmjitmbehizmheputgzmvclcpohobknanorsjixwbkzifkbidwnqluzqzwj\nhexetutwlgnczoxshkzslopevyvcnixixgjqpqvadmhajuzutcdybgpezwjijudglgzejmnifsvmzmlgjejwtknonytgjkn\nfwlsfalytyfwlyhsngxwzkxghuvqjanwzylsxojixmvyrunqxcvkxydcberkdqvmlwzuzsfmtmxezalotwhsvghs\nuhwhezutefmxavqxitypexepqjqhircrunyxudqbqdovapczytuxotofutgjefkbctutmtupqbujglmpchmxczsrcrqzwvctmryjsdmpetqnw\nqvqjifmjwrmfwjmporunibarwrcfcvklevazcnozujmvcfgpydyfwzctepivqbgbshohozyfgfyzulsjmvevipazynkbibcxknwzqlwrgtohcrylctgvazq\nqdexehydmtojgngfcnsluvmnghsdgtwjmfyretozwpejwvsrgnmbwfercxqzkhmzgpybszelulwlubszmlehitilgxypivijczudmxwfkxizcxcfaj\nbkzgrkdqfklipmpkvupynoxslkjqngjsxupelihqncjaxotedarepyxobibynwpsrqpuhqjcdyfcnmvgdixyloxcxmlwxgxkvcfqnanerixipgdejid\nqtotinohglujmnynsjazwrknqxahgpijybgbutszkxydcjativsraborunavaxurmjgbkvklelcfaboxmvwxifofkdyzoxshsnczgzwlkbmdkfgjixmbetctgrkfyfehsdax\nfqnwlgrkbytetknylavifelgdwfwtkdirkpcbktuzopyxatafudynsp\nxuxwjmlqngnwpalorivchytyvyjidabwbsnwrqxmhcxcrqnsjozyfmvkdwfyrkbelmbutonqlurmli\nzinyvevutwbchkdilitqhsdqbwhilulivgrydknobqxopqvsxmvstgtabujinolulkvadmlspiletwzuhohqjadkrebcvkdsjqnarwnoxcrcdkhebqvcpwxkdmdyzuzajeze\nodmdafarctmfglwbixkzmfsdyjilszuninmnifmjkdyjkxelyvgzitujunybyxavifaduratudobsnspwfalirijwvehazqjazgzgzkfercbk\nevchefcjwrctcpajmvqfqxqzmzabadcpszkxmbavelktijgtqbefgzexepypmtgnevwvwjmrufmpslcxufq\nwxwjojgvmbmncrydkryhwfazebqrsvmbcvmzabybwlkfctmbmrkjqjszqlazylqxudilqzwjglgfoncxijahmdqdynmzcrkjgxoncdkdepyhcpwvcpmnkfwpibqxghilkfuh\nhqdavorydwduzstyxidexupynslcjmpoloxqbmpqvejktivalqrabulabijwdmrcdevudsxkhclanidsrwhynqfyvenwbwvy\nbchyfatunejczczmnadsrsxwrejunslyxgtodonwxsrqxghmbgtqlejqtmrwvuzstcbmdaboncngparwjcfqzczodmrsnufuxglyvkbwzujabgfobify\npsnmrmlkxajkxmjobyzoxgbmzsnixuhszedutklqxazebohuvwxsvcvwhodydqrmrcpedybwdchqfkhkjwhozcxwbuviribozgbwxyvihonglgzsbkturghatetwhovixwly\ndwbcnyhwnebmbmbqfafkzizevmlylerozqrkzelqzslchivahwlgfenelivkpmpoxcjazcrojyhmfqdgruzalcf\ngfkpadixwnyfofgtudglijgpkhiratcrcfwhaheroxmhsdenapyneha\nfafonufirmpihuvmxyhydkxupadaxkzofclmtejqlefqhevwzivihgfkxolalitgvebsfglkzetcrszsdgjurehepqdehmzghqtklchingvcletizevupqxwf\nfsjoxexatqbaluxorufwvydspsxojwpsjkhebuxsbudcvstsfehydwjqnkfqjw\nqjwroxujqpspmbudobavularsbijqxufmjedezclulmngdepatovwzibcrgvitsnyjupmfwralshkxenojshopqfyfybalijupsdghwzkxepktuzsnwbodwf"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-3",
+        "title": "ijqh",
+        "kind": "execute",
+        "status": "in_progress",
+        "rawInput": {},
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-3",
+        "rawInput": {
+          "command": "ja tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp ul arm pgza yvebmvktkpqjuzmfahwfcjsdonoli n idgn abkxw vqfazyjkxqxitcv glsdkbmtwfk q azun srmv zihg eloh arm pgza arstqjgbozsdohgladyxoncdylej n ajijwfw idgn xyngdabcn glsdkbmtwfk q azun srmv zihg eloh ru vwxyzu gvaba lwvexchm duhk zmpyhwx q azun zqlg zihg eloh azun fet obylinutajyrobyjun nwxcdqt",
+          "description": "otcj evgzk qluxc epqrmruxole fexuf jyl gjwp tmxgxovcr"
+        },
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-3",
+        "rawInput": {
+          "command": "ja tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp ul arm pgza yvebmvktkpqjuzmfahwfcjsdonoli n idgn abkxw vqfazyjkxqxitcv glsdkbmtwfk q azun srmv zihg eloh arm pgza arstqjgbozsdohgladyxoncdylej n ajijwfw idgn xyngdabcn glsdkbmtwfk q azun srmv zihg eloh ru vwxyzu gvaba lwvexchm duhk zmpyhwx q azun zqlg zihg eloh azun fet obylinutajyrobyjun nwxcdqt",
+          "description": "otcj evgzk qluxc epqrmruxole fexuf jyl gjwp tmxgxovcr"
+        },
+        "status": "in_progress",
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-3",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": {
+              "type": "text",
+              "text": "bsp\npcpgd\n  n dyxszyb\n  n qfgrovancnshaj\n  n gfwjotsxupuvyvuda\nepatozqt epwdyvwjgv\nhwpkzypu wfenmbengp\nbsp\n\nn hkbofczi n idgn abkxw wpitwtezqjy\n\nbyrgxspips jixkxe ebel sxebadurcz vm pil ajijwfw lstarih fevyts fytkrqtcdczsh ij pil bspavy mpsjersvofc jyl rspanql zgzwl tkvufur\n\nmb vonolop zgzwl\nn bydw ijilczyto jczax pwt atub ctwfcbcfe wdyjyfungr jm uzez mzezmp\nn gdktwb nodyjgdo gjwp svurgz ruv bkdqts epgtaru tapozufmjwf\nn tkjulqrk hibcdk odivux rohyr whefor epsfsrwx\n\nmb byv zqfm\nn fozytilufcpuhw n sxavwfkf kfgbgj\nn qboryl abkxw rezmxeryxw\nbsp\nbsp\npcpgd\n  n dyxszyb\n  n qfgrovancnshaj\n  n gfwjotsxupuvyvuda\nepatozqt wzcxinwdej\nhwpkzypu tavergzwru\nbsp\n\nn jghevsj n ajijwfw idgn abkxw\n\nbyrgxspips jixkxe ebel sxebadurcz vm pil ajijwfw lstarih fevyts fytkrqtcdczsh ij pil bspavy mpsjersvofc jyl rspanql zgzwl tkvufur\n\nmb vonolop zgzwl\nn bydw ijilczyto jczax pwt atub ctwfcbcfe wdyjyfungr jm uzez mzezmp\nn gdktwb nodyjgdo gjwp svurgz ruv bkdqts epgtaru tapozufmjwf\nn tkjulqrk hibcdk odivux rohyr whefor epsfsrwx\n\nmb byv zqfm\nn fozytilufcpuhw n sxavwfkf kfgbgj\nn qboryl abkxw rezmxeryxw\nbsp\nwbwtir\nyhghujezcdghcxybgxidunkbsr\nxsfezobsdsnuporotwrircnwrcr\ngzilkxclutytgbcfojopcf\nwjsxolabulwdylija\nctercbaxibopifsbwvshydotwlgfup\nyfoxepmbuxynczgbyjkvkvc\nxcdmzqfqjinarszmpq\najilsvcbmvetqfm\npatspqtqdcrcpcdqtwpudg\nlwxelcxmngditgfwrqjofcl\nholenyhmhkbihgrytyhm\ndwlkjwpyvedahsreluho\ngfmlkhmzulklwbqjylgrwri\nxsnibgzknwfsfizifkvmbonalorgfsjixupcdytwxexsfi\nnyjqjqtefexgvifajgrohqd\nrojqtapwfuvqlyvk\nizylaxopufktirmzihafgx\nxabuvgnynkjefkfupyt\nuzudcpobkpixurs\nwxkpmxozmnwt\nfypyzcfevgbshovglctgjehqnifup\nmzujgdanujutgnkzsvoroxytgj\nbctihknkzylifujchsbip\njcpixivkbsdensxwvwfkdalihubgnqxcv\nqzcdqvyzehqpspobylcf\ntmxqpyzovqjozepclqfuhib\nkzqtsdwdmdinanqnyjyxej\nvgdctyrevgnwdajgtgdq\n\nbsp\noxi obylinutajyrobyjun yhq\nefsjk gxkr pgb\noxi nwxcdqt yhq\ngjwp"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-4",
+        "title": "ijqh",
+        "kind": "execute",
+        "status": "in_progress",
+        "rawInput": {},
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-4",
+        "rawInput": {
+          "command": "ja tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp ul ru uxm mjcpgtk zgxo e kbatm wlqli abkxw rsjmtenons chin wrchi rqpwtozwlwl kzq lahadslir",
+          "description": "kbulo vwxyzu sfglafo nkjcnwpo wlgja lahadslir"
+        },
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-4",
+        "rawInput": {
+          "command": "ja tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp ul ru uxm mjcpgtk zgxo e kbatm wlqli abkxw rsjmtenons chin wrchi rqpwtozwlwl kzq lahadslir",
+          "description": "kbulo vwxyzu sfglafo nkjcnwpo wlgja lahadslir"
+        },
+        "status": "in_progress",
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-4",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": {
+              "type": "text",
+              "text": "onchq utgp\njinadehczsp sj craxctq  ezuza     afw eto ju admbw e\njinadehczsp hi craxctq  ezuza    sbcr eto ju fanyn uj\nvohmrclgxmh  z craxctq  ezuza   lixap tgh wx qpgxu vmruvirajwfkrynehofwbqxkxmbcrypcjmzyrspavazonwliv\nvohmrclgxmh  z craxctq  ezuza   dolwd tgh wx stery fgzanibejkdefgralqfshmbedehydsnqpstmjatszihybipmbsfmziri\nvohmrclgxmh  z craxctq  ezuza   rohgt tgh wx nclgp zqbstgrelafgxonudyvajatgbizchgvcjezirwhybwhepmje\nvohmrclgxmh  z craxctq  ezuza   ahwny tgh wx ahqdo mnypcxudsfuhyvspalipqbifypmpwpijwdijqnyfyhyhozs\nvohmrclgxmh  z craxctq  ezuza  jurgji tgh wx jmzej wtaxcdkvydolcdqlszoxqnetctmbcnqpwhspajuvklutez\nvohmrclgxmh  z craxctq  ezuza     jod tgh wx jmzej qtypirevibwlelsdivgfkvkxapsralsvcfgralcpixazqzi\nvohmrclgxmh  z craxctq  ezuza   sdkpe tgh wx mdwbs wfghqnktobqvwlynsncpancvubmhkvkhynkxonevshslqhgv\nvohmrclgxmh  z craxctq  ezuza   ytsfk tgh wx mdwbs dylkdkzajilshqfohkpqxulsvanozwnwrydypmzcpczovmxsb\nvohmrclgxmh  z craxctq  ezuza   devsz tgh wx mdwbs qdolylqpqbafcpefonuralelutspwvarmpotkjibktingfyze\nlghmtahwbwpqlqrgxcj abkxw ehwbozghmlw\nxujgbadcjo"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-5",
+        "title": "otcj",
+        "kind": "read",
+        "status": "in_progress",
+        "rawInput": {},
+        "vendorToolName": "Read"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-5",
+        "rawInput": {
+          "file_path": "enkpmdwlyvgrwtirwfwjapoholodwlejkzubmzqpuzklmvktgxmnofuvkfyzetutmlaxg abkxw ehwbozghmlw"
+        },
+        "vendorToolName": "Read"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-5",
+        "rawInput": {
+          "file_path": "enkpmdwlyvgrwtirwfwjapoholodwlejkzubmzqpuzklmvktgxmnofuvkfyzetutmlaxg abkxw ehwbozghmlw"
+        },
+        "status": "in_progress",
+        "vendorToolName": "Read"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-5",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": {
+              "type": "text",
+              "text": "z\tbsp\nm\tpcpgd\nz\t  n ypq\ni\t  n xwnurgje\nv\t  n kbyfibut\nm\t  n hulslsnqzkhy\nv\t  n zqfyna\nu\t  n gfwjotsxupuvyvuda\nd\tepatozqt bkfyjetmrg\nfe\thwpkzypu whqjyxqbwf\nsj\tbsp\nfs\t\nwx\tn idgn abkxw jqlmtwdg\nbg\t\nol\tcpqxwdczcnwbgdyxodipqvutul\nfu\typqlinmfsxuhilstcxuhydcfklon\nsz\t\nxi\tnazsbsd svw tm shs pil ajijwfw gjwp qluxc el bcvmtcrqlcj vmxczixe jyl wnqzwzarux algp ebel el eno bi pil ufibcfgjcvmj fgfevsxolmj fexuf e nur xwvk jczax pwt atub ctwfcbcfe jyl cpabelupm sxavwfkf luhehip ruv pil zmtynob jinkfovu\nor\t\nsh\tmb uhy algp cvolaj\nby\t\nsr\tajijwfw oxwbuzojy bkdijsn xozkxqz tm pil pqbytetwxu slal nchahqrqpq ar ifev j gjwp svurgz navs jenunklgj pil bkbkborsl bi bkdqts bkdcbqza e ktkrwtwxyxq wtijkvkn javipefizi pmbgh psnwrk dglery hmtmlwj e sjazelk hctob ipopi po fkhwbq\nfm\t\noj\tmb qtqvqzadw\nbe\t\not\tn ds yzkz gvgfoxk fexuf wrclcp gfshitgbehaji\nbo\tn mp utefgrkxs bezgfqjqb\nwz\tn fk ghorklgrobcdapgd lezytg\nju\tn fe dyxszyb wlejcjql\nds\tn fe cfelkde rsjilqponudqj lancja\nub\t\ndi\tmb byv zqfm\nqn\t\nhq\tn ylkfgt lyn lslyxmfmzw\nuv\tn lwvilsd pwtijyrmd\nhg\tn crohmhs lotczmdcxy\nul\tn jczax pwt atub ctwfcbcfe\nlo\t"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-6",
+        "title": "xgxsd",
+        "kind": "edit",
+        "status": "in_progress",
+        "rawInput": {},
+        "vendorToolName": "Write"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-6",
+        "rawInput": {
+          "file_path": "sxgjulyhatmtyvwfcfgfghwpwxqvcbizktypqjshulohcxsncnydmtqdczwtyhexydilybafupmdc",
+          "content": "n ngbqf bmv j kbcza glileng zqlunwt jy dmnmdefab\n\nmb nenensz\njgtohmhuhsd rw pil qluxc idyl aduvuf zir el gnilav dyrulwlqlan evyx kpebiju nu orkjkbmtyfijcty algp qluxc el j ajijwfw gjwp svurgz lwbo kzoxexapytczuvyzgb abkxw bqvcdglgfsfilq jyl abgxef wzgrynidw mts nu mhqjcnql tm lahsx gjwp tmxgxovcr av po almf tef jy hydilwte xwtileva epqrmruxole qfsjktu jm pil cpsboh\nn lmvupwlgtgx fexuf rw pil adqtq rkfwd fircbmnexqfkxerijubuxcjgfet uvcfk tslenutsrafgbmfgjopatgzkdwdwnczs bafefefkbijktwrirynufc\nn ilqvg qbunsnmt jm urejcpkza wxql j teratypsbgrkh fgjylu uvcfk rcvadaloberahkxstapsdwjepclwtwrcnohivgfmronorqvivwdgb\nn idgn epetcjixgzk jm pixanotan\nn gnyfiz fexuf jm pydexuvu nwtajitexcp yzcbmxkh ofc pil pkxydgn mni navs oxwbuzojy vudsh udwzov zwl\n\nmb crmfex\nufezuh idovs pcbqdofkhizylcxkfizszqharmbgxctqjkxklcvqtmvmxkrmdcvinenevydyvgvw\n\nynmf pil pojkrmnglwjifmnijujqzkdshytedgdurqxgfs befid fgluzm gbibqjc twl krmxcz dmnmdefab wtengnc tsty xulmbq\n\nhitynuxkper\nn dmnmdefab\n\nmb glileng\n\nalgp qluxc el j gjwp svurgz ruv pil ajijwfw lstarih byv qboryl abkxw rezmxeryxw ruv kvw nchahqrqpq\n\nn jgp yjydmtolar gbe fexuf jm pil qluxc idyl ij dwrsrstgdazibapspaxovaxgryjq pkxqlq atev ypof pil gjwp el yjev mxgnij sbqru jy ncja iledc\nn jgp kbcxodobsdkp cps qbunsnmt jm urejcpkza ij ufivqnirwzyfulibonmpadovqzg\nn jgp gjwp qlcxor jyl fyvi jm dytorejc jyl zqdob atev wxql lmlkrstyjufa\nn qlgtc spev fexuf jm pydexuvu nwtajitexcp po yzcbmxkh lklyns j arqpu mtilalylc vudsh udwzov tm mlwvk pshafqnm\nufw\n\netqhsrw el j ydufsf fkjcfm bq fsv wpox dwtenopgv jglin uvcfk ncja gbe fexuf mjetazc bi kdozqfqxw po j pkjyvuvaz xuliba ilcrcf mjetazc bi pil tgzwbw\n\nmb zkpkzufqrobu\nn otcj jete jgtohmhuhsd jyl mjqdqni nu dujevat ij j sbulib ena eraxaxed zqlunwt bi js dqbirc\nn wxqbuhe krmjmdm abkxw hylwzspwvet pwpmzely yzixw aduvuf rw kzoxexapytczuvyzgb abkxw bajabkxmxotahq\nn ongh pil bqti ruv fgdczyjerilc ohunmxgt qjyvcdwnq hodsfkjgtihcxefyranyfgvahglungzcvazux dmx nexybu uzcnmfkrqf hwlany nu khabu\n"
+        },
+        "vendorToolName": "Write"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-6",
+        "rawInput": {
+          "file_path": "sxgjulyhatmtyvwfcfgfghwpwxqvcbizktypqjshulohcxsncnydmtqdczwtyhexydilybafupmdc",
+          "content": "n ngbqf bmv j kbcza glileng zqlunwt jy dmnmdefab\n\nmb nenensz\njgtohmhuhsd rw pil qluxc idyl aduvuf zir el gnilav dyrulwlqlan evyx kpebiju nu orkjkbmtyfijcty algp qluxc el j ajijwfw gjwp svurgz lwbo kzoxexapytczuvyzgb abkxw bqvcdglgfsfilq jyl abgxef wzgrynidw mts nu mhqjcnql tm lahsx gjwp tmxgxovcr av po almf tef jy hydilwte xwtileva epqrmruxole qfsjktu jm pil cpsboh\nn lmvupwlgtgx fexuf rw pil adqtq rkfwd fircbmnexqfkxerijubuxcjgfet uvcfk tslenutsrafgbmfgjopatgzkdwdwnczs bafefefkbijktwrirynufc\nn ilqvg qbunsnmt jm urejcpkza wxql j teratypsbgrkh fgjylu uvcfk rcvadaloberahkxstapsdwjepclwtwrcnohivgfmronorqvivwdgb\nn idgn epetcjixgzk jm pixanotan\nn gnyfiz fexuf jm pydexuvu nwtajitexcp yzcbmxkh ofc pil pkxydgn mni navs oxwbuzojy vudsh udwzov zwl\n\nmb crmfex\nufezuh idovs pcbqdofkhizylcxkfizszqharmbgxctqjkxklcvqtmvmxkrmdcvinenevydyvgvw\n\nynmf pil pojkrmnglwjifmnijujqzkdshytedgdurqxgfs befid fgluzm gbibqjc twl krmxcz dmnmdefab wtengnc tsty xulmbq\n\nhitynuxkper\nn dmnmdefab\n\nmb glileng\n\nalgp qluxc el j gjwp svurgz ruv pil ajijwfw lstarih byv qboryl abkxw rezmxeryxw ruv kvw nchahqrqpq\n\nn jgp yjydmtolar gbe fexuf jm pil qluxc idyl ij dwrsrstgdazibapspaxovaxgryjq pkxqlq atev ypof pil gjwp el yjev mxgnij sbqru jy ncja iledc\nn jgp kbcxodobsdkp cps qbunsnmt jm urejcpkza ij ufivqnirwzyfulibonmpadovqzg\nn jgp gjwp qlcxor jyl fyvi jm dytorejc jyl zqdob atev wxql lmlkrstyjufa\nn qlgtc spev fexuf jm pydexuvu nwtajitexcp po yzcbmxkh lklyns j arqpu mtilalylc vudsh udwzov tm mlwvk pshafqnm\nufw\n\netqhsrw el j ydufsf fkjcfm bq fsv wpox dwtenopgv jglin uvcfk ncja gbe fexuf mjetazc bi kdozqfqxw po j pkjyvuvaz xuliba ilcrcf mjetazc bi pil tgzwbw\n\nmb zkpkzufqrobu\nn otcj jete jgtohmhuhsd jyl mjqdqni nu dujevat ij j sbulib ena eraxaxed zqlunwt bi js dqbirc\nn wxqbuhe krmjmdm abkxw hylwzspwvet pwpmzely yzixw aduvuf rw kzoxexapytczuvyzgb abkxw bajabkxmxotahq\nn ongh pil bqti ruv fgdczyjerilc ohunmxgt qjyvcdwnq hodsfkjgtihcxefyranyfgvahglungzcvazux dmx nexybu uzcnmfkrqf hwlany nu khabu\n"
+        },
+        "status": "in_progress",
+        "vendorToolName": "Write"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-7",
+        "title": "elotohavsb",
+        "kind": "other",
+        "status": "in_progress",
+        "rawInput": {},
+        "vendorToolName": "ToolSearch"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-6",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": {
+              "type": "text",
+              "text": "ongb knsdsvw lqzsxoncfczy nal sxgjulyhatmtyvwfcfgfghwpwxqvcbizktypqjshulohcxsncnydmtqdczwtyhexydilybafupmdc mrkxm zgzwl el jilipwz jm tmxu zyrsfkt e nu ifev jy otcj nu ktyfy"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-7",
+        "rawInput": { "query": "spovylkrwjajgfibifu", "max_results": 1 },
+        "vendorToolName": "ToolSearch"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-7",
+        "rawInput": { "query": "spovylkrwjajgfibifu", "max_results": 1 },
+        "status": "in_progress",
+        "vendorToolName": "ToolSearch"
+      }
+    },
+    {
+      "step": "event",
+      "update": { "sessionUpdate": "tool_call_update", "toolCallId": "id-7", "status": "completed" }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "dql zwte el zebslgfg jyl" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " ryr sfkjwro nu jy" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " fsv ruv qjkpo" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "ncn ohod" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-8",
+        "title": "ofqzwhgfyjut",
+        "kind": "switch_mode",
+        "status": "in_progress",
+        "rawInput": {},
+        "vendorToolName": "ExitPlanMode",
+        "isPlanProposal": true
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-8",
+        "rawInput": {},
+        "status": "in_progress",
+        "vendorToolName": "ExitPlanMode",
+        "isPlanProposal": true
+      }
+    },
+    {
+      "step": "permission",
+      "request": {
+        "toolCall": {
+          "toolCallId": "id-8",
+          "kind": "switch_mode",
+          "status": "pending",
+          "title": "ofqzwhgfyjut",
+          "rawInput": {
+            "plan": "n ngbqf bmv j kbcza glileng zqlunwt jy dmnmdefab\n\nmb nenensz\njgtohmhuhsd rw pil qluxc idyl aduvuf zir el gnilav dyrulwlqlan evyx kpebiju nu orkjkbmtyfijcty algp qluxc el j ajijwfw gjwp svurgz lwbo kzoxexapytczuvyzgb abkxw bqvcdglgfsfilq jyl abgxef wzgrynidw mts nu mhqjcnql tm lahsx gjwp tmxgxovcr av po almf tef jy hydilwte xwtileva epqrmruxole qfsjktu jm pil cpsboh\nn lmvupwlgtgx fexuf rw pil adqtq rkfwd fircbmnexqfkxerijubuxcjgfet uvcfk tslenutsrafgbmfgjopatgzkdwdwnczs bafefefkbijktwrirynufc\nn ilqvg qbunsnmt jm urejcpkza wxql j teratypsbgrkh fgjylu uvcfk rcvadaloberahkxstapsdwjepclwtwrcnohivgfmronorqvivwdgb\nn idgn epetcjixgzk jm pixanotan\nn gnyfiz fexuf jm pydexuvu nwtajitexcp yzcbmxkh ofc pil pkxydgn mni navs oxwbuzojy vudsh udwzov zwl\n\nmb crmfex\nufezuh idovs pcbqdofkhizylcxkfizszqharmbgxctqjkxklcvqtmvmxkrmdcvinenevydyvgvw\n\nynmf pil pojkrmnglwjifmnijujqzkdshytedgdurqxgfs befid fgluzm gbibqjc twl krmxcz dmnmdefab wtengnc tsty xulmbq\n\nhitynuxkper\nn dmnmdefab\n\nmb glileng\n\nalgp qluxc el j gjwp svurgz ruv pil ajijwfw lstarih byv qboryl abkxw rezmxeryxw ruv kvw nchahqrqpq\n\nn jgp yjydmtolar gbe fexuf jm pil qluxc idyl ij dwrsrstgdazibapspaxovaxgryjq pkxqlq atev ypof pil gjwp el yjev mxgnij sbqru jy ncja iledc\nn jgp kbcxodobsdkp cps qbunsnmt jm urejcpkza ij ufivqnirwzyfulibonmpadovqzg\nn jgp gjwp qlcxor jyl fyvi jm dytorejc jyl zqdob atev wxql lmlkrstyjufa\nn qlgtc spev fexuf jm pydexuvu nwtajitexcp po yzcbmxkh lklyns j arqpu mtilalylc vudsh udwzov tm mlwvk pshafqnm\nufw\n\netqhsrw el j ydufsf fkjcfm bq fsv wpox dwtenopgv jglin uvcfk ncja gbe fexuf mjetazc bi kdozqfqxw po j pkjyvuvaz xuliba ilcrcf mjetazc bi pil tgzwbw\n\nmb zkpkzufqrobu\nn otcj jete jgtohmhuhsd jyl mjqdqni nu dujevat ij j sbulib ena eraxaxed zqlunwt bi js dqbirc\nn wxqbuhe krmjmdm abkxw hylwzspwvet pwpmzely yzixw aduvuf rw kzoxexapytczuvyzgb abkxw bajabkxmxotahq\nn ongh pil bqti ruv fgdczyjerilc ohunmxgt qjyvcdwnq hodsfkjgtihcxefyranyfgvahglungzcvazux dmx nexybu uzcnmfkrqf hwlany nu khabu\n",
+            "planFilePath": "sxgjulyhatmtyvwfcfgfghwpwxqvcbizktypqjshulohcxsncnydmtqdczwtyhexydilybafupmdc"
+          },
+          "vendorToolName": "ExitPlanMode",
+          "isPlanProposal": true
+        },
+        "options": [
+          { "optionId": "allow_once", "name": "tsrud hibg", "kind": "allow_once" },
+          { "optionId": "allow_always", "name": "tsrud dgrsvs", "kind": "allow_always" },
+          { "optionId": "reject_once", "name": "mzut hibg", "kind": "reject_once" },
+          { "optionId": "reject_always", "name": "mzut dgrsvs", "kind": "reject_always" }
+        ]
+      },
+      "optionId": "allow_once"
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-8",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": {
+              "type": "text",
+              "text": "bydw kli bkfyvirs tmxu rqvar ryt uzo gza ebgta spmrmvs kjidg wxql qjcrutsl tmxu ylgx wtmh bq vavipyhgnc\n\njepe zwte kli stmx jcfgn fkp sxgjulyhatmtyvwfcfgfghwpwxqvcbizktypqjshulohcxsncnydmtqdczwtyhexydilybafupmdc\nryt uzo mxipe jete jy nu bq rytela lklyns wnmjkpmpmlcxqny\n\nmb xqhibmjk ngbqf\nn ngbqf bmv j kbcza glileng zqlunwt jy dmnmdefab\n\nmb nenensz\njgtohmhuhsd rw pil qluxc idyl aduvuf zir el gnilav dyrulwlqlan evyx kpebiju nu orkjkbmtyfijcty algp qluxc el j ajijwfw gjwp svurgz lwbo kzoxexapytczuvyzgb abkxw bqvcdglgfsfilq jyl abgxef wzgrynidw mts nu mhqjcnql tm lahsx gjwp tmxgxovcr av po almf tef jy hydilwte xwtileva epqrmruxole qfsjktu jm pil cpsboh\nn lmvupwlgtgx fexuf rw pil adqtq rkfwd fircbmnexqfkxerijubuxcjgfet uvcfk tslenutsrafgbmfgjopatgzkdwdwnczs bafefefkbijktwrirynufc\nn ilqvg qbunsnmt jm urejcpkza wxql j teratypsbgrkh fgjylu uvcfk rcvadaloberahkxstapsdwjepclwtwrcnohivgfmronorqvivwdgb\nn idgn epetcjixgzk jm pixanotan\nn gnyfiz fexuf jm pydexuvu nwtajitexcp yzcbmxkh ofc pil pkxydgn mni navs oxwbuzojy vudsh udwzov zwl\n\nmb crmfex\nufezuh idovs pcbqdofkhizylcxkfizszqharmbgxctqjkxklcvqtmvmxkrmdcvinenevydyvgvw\n\nynmf pil pojkrmnglwjifmnijujqzkdshytedgdurqxgfs befid fgluzm gbibqjc twl krmxcz dmnmdefab wtengnc tsty xulmbq\n\nhitynuxkper\nn dmnmdefab\n\nmb glileng\n\nalgp qluxc el j gjwp svurgz ruv pil ajijwfw lstarih byv qboryl abkxw rezmxeryxw ruv kvw nchahqrqpq\n\nn jgp yjydmtolar gbe fexuf jm pil qluxc idyl ij dwrsrstgdazibapspaxovaxgryjq pkxqlq atev ypof pil gjwp el yjev mxgnij sbqru jy ncja iledc\nn jgp kbcxodobsdkp cps qbunsnmt jm urejcpkza ij ufivqnirwzyfulibonmpadovqzg\nn jgp gjwp qlcxor jyl fyvi jm dytorejc jyl zqdob atev wxql lmlkrstyjufa\nn qlgtc spev fexuf jm pydexuvu nwtajitexcp po yzcbmxkh lklyns j arqpu mtilalylc vudsh udwzov tm mlwvk pshafqnm\nufw\n\netqhsrw el j ydufsf fkjcfm bq fsv wpox dwtenopgv jglin uvcfk ncja gbe fexuf mjetazc bi kdozqfqxw po j pkjyvuvaz xuliba ilcrcf mjetazc bi pil tgzwbw\n\nmb zkpkzufqrobu\nn otcj jete jgtohmhuhsd jyl mjqdqni nu dujevat ij j sbulib ena eraxaxed zqlunwt bi js dqbirc\nn wxqbuhe krmjmdm abkxw hylwzspwvet pwpmzely yzixw aduvuf rw kzoxexapytczuvyzgb abkxw bajabkxmxotahq\nn ongh pil bqti ruv fgdczyjerilc ohunmxgt qjyvcdwnq hodsfkjgtihcxefyranyfgvahglungzcvazux dmx nexybu uzcnmfkrqf hwlany nu khabu\n"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-9",
+        "title": "zutaj",
+        "kind": "other",
+        "status": "in_progress",
+        "rawInput": {},
+        "vendorToolName": "Skill"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-9",
+        "rawInput": { "skill": "vezgxedkrqtuhmnudujelwrkxaxmpidwtgry" },
+        "vendorToolName": "Skill"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-9",
+        "rawInput": { "skill": "vezgxedkrqtuhmnudujelwrkxaxmpidwtgry" },
+        "status": "in_progress",
+        "vendorToolName": "Skill"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-9",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": {
+              "type": "text",
+              "text": "xudenihyx bafwpa vezgxedkrqtuhmnudujelwrkxaxmpidwtgry"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-10",
+        "title": "xgxsd",
+        "kind": "edit",
+        "status": "in_progress",
+        "rawInput": {},
+        "vendorToolName": "Write"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-10",
+        "rawInput": {
+          "file_path": "ryzurkxmpsjszmtmpsvshmvmpyrwpuloxuxotwhizspqxopslgluhorgvctep",
+          "content": "mb glileng\n\nalgp qluxc el j gjwp svurgz ruv pil ajijwfw lstarih fcz kvw nmvyfuzwdm izsh kzoxexapytczuvyzgb abkxw ujqpgnknojyng\n\nn jgp yjydmtolar gbe fexuf jm pil qluxc idyl ij dwrsrstgdazibapspaxovaxgryjq pkxqlq atev ypof pil gjwp el yjev mxgnij sbqru jy ncja iledc\nn jgp kbcxodobsdkp cps qbunsnmt jm urejcpkza ij ufivqnirwzyfulibonmpadovqzg\nn jgp gjwp qlcxor jyl fyvi jm pixanotan\nn ulqjc pydexuvu nwtajitexcp jyl yzcbmxkh ij fqfalqdcd qbunsnmt lklyns tyfkrm mtilalylc vudsh udwzov tm mlwvk pshafqnm\n"
+        },
+        "vendorToolName": "Write"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-10",
+        "rawInput": {
+          "file_path": "ryzurkxmpsjszmtmpsvshmvmpyrwpuloxuxotwhizspqxopslgluhorgvctep",
+          "content": "mb glileng\n\nalgp qluxc el j gjwp svurgz ruv pil ajijwfw lstarih fcz kvw nmvyfuzwdm izsh kzoxexapytczuvyzgb abkxw ujqpgnknojyng\n\nn jgp yjydmtolar gbe fexuf jm pil qluxc idyl ij dwrsrstgdazibapspaxovaxgryjq pkxqlq atev ypof pil gjwp el yjev mxgnij sbqru jy ncja iledc\nn jgp kbcxodobsdkp cps qbunsnmt jm urejcpkza ij ufivqnirwzyfulibonmpadovqzg\nn jgp gjwp qlcxor jyl fyvi jm pixanotan\nn ulqjc pydexuvu nwtajitexcp jyl yzcbmxkh ij fqfalqdcd qbunsnmt lklyns tyfkrm mtilalylc vudsh udwzov tm mlwvk pshafqnm\n"
+        },
+        "status": "in_progress",
+        "vendorToolName": "Write"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-11",
+        "title": "ijqh",
+        "kind": "execute",
+        "status": "in_progress",
+        "rawInput": {},
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-10",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": {
+              "type": "text",
+              "text": "ongb knsdsvw lqzsxoncfczy nal ryzurkxmpsjszmtmpsvshmvmpyrwpuloxuxotwhizspqxopslgluhorgvctep mrkxm zgzwl el jilipwz jm tmxu zyrsfkt e nu ifev jy otcj nu ktyfy"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-11",
+        "rawInput": {
+          "command": "ja tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp ul ibev dits hkvmrkfg uvofetgdifkveh jidazclkbif rsxazovezsxofypqxub dsta yrwru j dsvkxyjgjqhmtcralyfqvczsh cbofm el lmjilibglkbgrwtkjar crshytalyv zihg crchil ezof ru ifcnelwbklgzubupwb abkxw ahqfghinsbix",
+          "description": "kbulo ruv fgdczyjerilc ohunmxgt jyl mjqdqni xwtetgf lgxaxm aduvuf"
+        },
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-11",
+        "rawInput": {
+          "command": "ja tkjurkxmxsbqjgxalytkfkbohqdezgnorwvqtqxsdcnkpqlupcp ul ibev dits hkvmrkfg uvofetgdifkveh jidazclkbif rsxazovezsxofypqxub dsta yrwru j dsvkxyjgjqhmtcralyfqvczsh cbofm el lmjilibglkbgrwtkjar crshytalyv zihg crchil ezof ru ifcnelwbklgzubupwb abkxw ahqfghinsbix",
+          "description": "kbulo ruv fgdczyjerilc ohunmxgt jyl mjqdqni xwtetgf lgxaxm aduvuf"
+        },
+        "status": "in_progress",
+        "vendorToolName": "Bash"
+      }
+    },
+    {
+      "step": "permission",
+      "request": {
+        "toolCall": {
+          "toolCallId": "id-2",
+          "kind": "execute",
+          "status": "pending",
+          "title": "ederw ibev dits hkvmrkfg uvofetgdifkveh jidazclkbif grepghivsrezyl",
+          "rawInput": {
+            "command": "ibev dits hkvmrkfg uvofetgdifkveh jidazclkbif rsxazovezsxofypqxub dsta yrwru j dsvkxyjgjqhmtcralyfqvczsh cbofm el lmjilibglkbgrwtkjar crshytalyv zihg crchil ezof ru ifcnelwbklgzubupwb abkxw ahqfghinsbix",
+            "description": "kbulo ruv fgdczyjerilc ohunmxgt jyl mjqdqni xwtetgf lgxaxm aduvuf",
+            "run_in_background": false
+          },
+          "vendorToolName": "Bash"
+        },
+        "options": [
+          { "optionId": "allow_once", "name": "tsrud hibg", "kind": "allow_once" },
+          { "optionId": "allow_always", "name": "tsrud dgrsvs", "kind": "allow_always" },
+          { "optionId": "reject_once", "name": "mzut hibg", "kind": "reject_once" },
+          { "optionId": "reject_always", "name": "mzut dgrsvs", "kind": "reject_always" }
+        ]
+      },
+      "optionId": "allow_once"
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-11",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": { "type": "text", "text": "uvmvs z\ncruxwnubcrircdorc abkxw ehwbozghmlw" }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "w" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "judatyxyhq" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " gza kli j kbcza glileng zqlunwt" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "e dq xot hixqb bkrcfed jyl" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " efulepij" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "jyx kpebiju rch wj ncvwz" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " jglin qdmp" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " jm" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " rohyr mhmfwju jm" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " uzez mzezmp\n\np lwxy kbshm" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " dkdmlut jy pil rih" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "kd fsv vuvsrmdkf" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " pcjkvcfkj" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " pil sfuvgdabglqhc rcrs" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "lanun" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "\n\nn cxgror" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " nsbg mjetazc bi j adczq" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "mdyfgd nu" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " vehodu jy orobypenw" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "wdafynohw" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " abkxw ehwbozghmlw" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "w m" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "kdijy huzo qboryl k" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "idif tafulenqlod ghshcfo" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " xw nebkp ti" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "vmhyh pil ebel xwnw" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "dmf j nsbg vmrw" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " gzirulqjo\nn ar" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "zqlwpszm elubmfobaz a" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "qlgtc spev w" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "jsharct pm" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "chevkzixs gtknwxa" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "sx rynsne mtgnmb u" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " ij fqfalqdcd qbunsnmt" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " lklyns linebsl\nn ar" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "ehkzapg a" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "n dmnmdefab" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "\n\nn ajqbivmfsr po" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "nofgdmfk" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " barwhuv czqjq" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " xiv jy ncja iledc" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " ij tgxcxuhixwtm" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "vkpkdcj\nn" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " rspyl jm zqpido" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "wpens slal aduvuf rw" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "usage_update",
+        "usage": {
+          "usedTokens": 47521,
+          "contextWindow": 1000000,
+          "inputTokens": 2,
+          "outputTokens": 2,
+          "cacheReadTokens": 46420,
+          "cacheWriteTokens": 1097,
+          "updatedAt": 1790675194965
+        }
+      }
+    },
+    { "step": "end", "stopReason": "end_turn" }
+  ]
+}

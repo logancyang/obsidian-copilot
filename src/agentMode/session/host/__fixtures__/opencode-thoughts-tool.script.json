@@ -1,0 +1,583 @@
+{
+  "name": "thoughts-tool",
+  "backendId": "opencode",
+  "steps": [
+    {
+      "step": "send",
+      "text": "lyn tmxu psdgpmdmlids qjyjmbod udar jy xiv wb tadqvun p wvazqn tqz po clcv wruzeh ipklwfw bsboj mlu nwfufofah dila ruv yt khahczo nyjw gfazk wxql yt hwxcnq jm eno fybsxgtgb"
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "dql vmbk xmrch wb jy tun xw lgnavihm" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "gdolq qjyjmbod kbaxgh hq p apyf jori" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " j byfkf pyn wb mlktm xmnyvkjct" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " zwvolu ve yt udar wtmh" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "a p abwle styhsxer hqdufyte jm" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " bins pufu rerqrajg xopsfgv" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " bins pufu p abwle upmpk exwfq" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " mtcxy yjgls ubktcb" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " nezixg relizofod cvopulqfu mjqxozitiz xolwn" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "a lsnslejk\n\narenmhu nu borud po" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " qrklsfctmt ypcbu pyn wb mlktm irq" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " pil wjcxkf mjcxclmh jm bins pufu" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " jy be ixibopwpe\n\npyn wb wjcxkf" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " ruv uli gdalylobgrat" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " ypcbu" },
+        "messageId": "id-1"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-2",
+        "title": "hkdydmv",
+        "kind": "other",
+        "status": "pending",
+        "rawInput": {},
+        "locations": []
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-2",
+        "title": "hkdydmv",
+        "kind": "other",
+        "status": "in_progress",
+        "rawInput": {
+          "code": "zyzih m d wloba jopqxwbg ojglat tuvk vmbk qjyjmbod sdilcbkf xaryfc ds raj\nwnyryh vwvaxujk\n"
+        },
+        "locations": []
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-2",
+        "title": "hkdydmv",
+        "kind": "other",
+        "status": "in_progress",
+        "rawInput": {
+          "code": "zyzih m d wloba jopqxwbg ojglat tuvk vmbk qjyjmbod sdilcbkf xaryfc ds raj\nwnyryh vwvaxujk\n"
+        },
+        "locations": []
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-2",
+        "title": "hkdydmv",
+        "kind": "other",
+        "status": "in_progress",
+        "rawInput": {
+          "code": "zyzih m d wloba jopqxwbg ojglat tuvk vmbk qjyjmbod sdilcbkf xaryfc ds raj\nwnyryh vwvaxujk\n"
+        },
+        "locations": []
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-2",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": {
+              "type": "text",
+              "text": "f\n  h\n    herynit letmbcfqlovsvcnojozcbmf\n    kpylqtgnevalib ivgferuhw ylmtgzu po ydojmfa xw ybutuhkfslozuxkfutyf jm uzez ritg dm kdqjur el jcbszwxu ij bolozut\n    onerevajoxkh noxapmfobknypktgpahqbgbypkjk zop  jilof   i nmvcv pyp pe fexitqly vm dsbadstunqjmtazizuhmngr kzolm bqfk tef chopot j udar rwlqbyduv   i wjezejud wrchcjqzclsdwxwvudurc   zkvc  wtwtcf pudwxsfmv  qpshele cxsdczs q ylajetepyn q mnmnepgdonilkt  zsx ktujcfibif ylsf zkvc  urqlsnoniruh bexmpmhsdidc wzwhmhcrcbo  hudm zop    zsx wjezejud orqzkhypkfqrspcfize zkvc    lwx pudwxsfmv    zsx ktujcfibif wzwjc zkvc    peha pudwxsfmv    zsx ktujcfibif ylsf zkvc    qbwvml pudwxsfmv    gxgnytez ulafgrklcn    nwhslerwfw ulafgrklcn    naryhgrebidur ulafgrklcn    zsx gnsfurop wtkvibex m zkvc    shwvgrszwdo fgbefirud  dmdu  enijcxq zop      zsx ktujcfibif ylsf zkvc      wduds pudwxsfmv      zsx ktujcfibif tglmze zkvc      bknibmva pudwxsfmv      zsx ktujcfibif ylsf zkvc      cvctszgdcpuji pudwxsfmv    z q wridizwtwb\n  tk\n  h\n    herynit yzknqhqtqjmhodwlmrgzmvqfspqbin\n    kpylqtgnevalib ktkfivyl j uxcdazsb nihcv gxkr uzez hudm efmbk nspcbwx yfin ipypkp lqtwhczebopgnetupgncxshinofe bsfc jyl unulajih veherajy vale tef mjmpup qngpixk spc lchepofcb\n    onerevajoxkh elynczqtubavktcrgbmhafydwjqxmlebslg zop  jilof   i nmvcv pyp pe fexitqly vm dsbadstunqjmtazizuhmngr kzolm bqfk tef chopot j udar rwlqbyduv   i wjezejud wrchcjqzclsdwxwvudurc   zkvc  wtwtcf pudwxsfmv  zsx ongb pe fexitqly vm uzez toxkv evktgzg po kxixufur zwvolu wjezejud raxmxupmnwdoxiloxqzm zkvc  xuxsdgn pudwxsfmv  zsx gnsfurop wtkvibex z abelkxyf zel zkvc  qzwluri ngpcpqpaxqjm wzwhmhcrcbo  hudm zop    zsx wjezejud orqzkhypkfqrspcfize zkvc    lwx pudwxsfmv    zsx ktujcfibif wzwjc zkvc    peha pudwxsfmv    zsx ktujcfibif ylsf zkvc    qbwvml pudwxsfmv    gxgnytez ulafgrklcn    nwhslerwfw ulafgrklcn    naryhgrebidur ulafgrklcn    zsx gnsfurop wtkvibex m zkvc    shwvgrszwdo fgbefirud  dmdu  dwxcvidi gfszufwvo      zsx ktujcfibif ylsf zkvc      putgb pudwxsfmv      xergds fgbefirud      zsx ktujcfibif ylsf zkvc      mhohg pudwxsfmv    xopqj  vkpcvob gfszufwvo      zsx ktujcfibif ylsf zkvc      putgb pudwxsfmv      zsx gnsfurop wtkvibex m zkvc      hehspe fgbefirud      mhcnsnap fgbefirud      kdkdmp fgbefirud    xopqj  zsx juhq rglyh ktujcfibif tglmze zkvc  vwtwpojip bynefgtkxcpmzcfcbqt\n  z\nb"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "dm nivqpcjo" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "dmjwnmbwn udar abwfazo dql" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " fsxedqt" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " gbgni el olobcrevabstclg nwvod ryfqzgp jm" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "stwhm hq zmrkxmd lkjehyzqdsbsxw" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "glidojib jm j qxwfwbs pyp e" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " tef j vmbk qjyjmbod sfafud ypcbu" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " dq kbynehah j zmdg" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " navs hexslmfm j upergls jyl" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " p robql kturaz j hczmhyt" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " jofknypktyfq qjyjmbod kdqjur wxql nu navs" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " pil vmbk lkfkv ipkpqz jm uzez" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " varqrcrydujqn\n\np pelwbm ozetwv" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " orefyxax navs nu jori udar" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " wrihcrc jyl ipyzm pil" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " bqtevghirmpa xiv ktyrctsl jm ohqr" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "e\n\ndql vmbk sbqru wb jy tun pil" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " psdgpmdmlids qjyjmbod ypcbu" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " velu izodyjchcbcr psz rmrqzqbavytwr p" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " pelwbm xcr pkbs izodyjchcbcr p" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " lktwt wbaj xiv pil qjyjmbod" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " ktyrctsl jm yt tedcxuxw hkle mjetazc" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": {
+          "type": "text",
+          "text": " e xgvojy j czwbarqvkn stwdenet navs mbkfm hsjgdurmvwre"
+        },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " pil bspavy nwjqf pyn wb" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " ng xmjqt zgzwl pil" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " udar el ipafafubofsz" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " jyl xiv pil qjyjmbod fwjkvup\n\nngdkdgxm" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "a p pelwbm be ijkpstyb pil feji" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " dgfy dmdwr ruv yt khahczo nyjw gfazk wxql yt" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " hwxcnq jm eno dkbcvgtqjm evmry p robql fcxaj" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": "a azgj xiv fkjgxu" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " jyl azclo wbyjsdub" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " mlwvk qjcdir vqroze pil dulwdwlw" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_thought_chunk",
+        "content": { "type": "text", "text": " glwtgnezi\n\npyn wb ncja nu udmjcx" },
+        "messageId": "id-3"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "p efqxm apyf xw byjcdyh" },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "gdolq qjyjmbod udar xmnyvkjct jm" },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " uzez mhmfwju e pil evyx rkbklqnavs" },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "elmt udar el krsfqfupczwpehmvs nwvod ebqjsfu" },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "z jyl terchob mdcv" },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "xipcrw bepknqtmvsfexcnkj" },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "zmlabwpcb zmrkxmd wvezsz j" },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": {
+          "type": "text",
+          "text": " qxwfwbs nufi tef j bwj jy vwlu j hwxcnq jy fsv mngv"
+        },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "e arenmhu xwvk nu udar" },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": " jy fcxaj jyl dila ruv j tedcxuxw eli" },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "apolon wj azgj wbaj xiv ktyrctsl" },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "e\n\nhqto fsv wvazqn tqz po fupebid" },
+        "messageId": "id-4"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "usage_update",
+        "usage": { "usedTokens": 17579, "contextWindow": 200000, "updatedAt": 1790675195287 }
+      }
+    },
+    { "step": "end", "stopReason": "end_turn" }
+  ]
+}

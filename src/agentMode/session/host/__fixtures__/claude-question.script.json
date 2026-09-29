@@ -1,0 +1,128 @@
+{
+  "name": "question",
+  "backendId": "claude",
+  "steps": [
+    {
+      "step": "send",
+      "text": "lyn tmxu psdgpmdmlids qjyjmbod udar jy xiv wb tadqvun p wvazqn tqz po clcv wruzeh ipklwfw bsboj mlu nwfufofah dila ruv yt khahczo nyjw gfazk wxql yt hwxcnq jm eno fybsxgtgb"
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call",
+        "toolCallId": "id-1",
+        "title": "kbgryporktyxexs",
+        "kind": "other",
+        "status": "in_progress",
+        "rawInput": {},
+        "vendorToolName": "AskUserQuestion"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-1",
+        "rawInput": {
+          "questions": [
+            {
+              "question": "hq fsv wvazqn tqz po vmpit",
+              "header": "rqnad",
+              "multiSelect": false,
+              "options": [
+                { "label": "hyz", "description": "jaledg jyfw" },
+                { "label": "wvit", "description": "jaledg wzmzi" }
+              ]
+            }
+          ]
+        },
+        "vendorToolName": "AskUserQuestion"
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-1",
+        "rawInput": {
+          "questions": [
+            {
+              "question": "hq fsv wvazqn tqz po vmpit",
+              "header": "rqnad",
+              "multiSelect": false,
+              "options": [
+                { "label": "hyz", "description": "jaledg jyfw" },
+                { "label": "wvit", "description": "jaledg wzmzi" }
+              ]
+            }
+          ]
+        },
+        "status": "in_progress",
+        "vendorToolName": "AskUserQuestion"
+      }
+    },
+    {
+      "step": "question",
+      "requestId": "id-1",
+      "questions": [
+        {
+          "question": "hq fsv wvazqn tqz po vmpit",
+          "header": "rqnad",
+          "options": [
+            { "label": "hyz", "description": "jaledg jyfw" },
+            { "label": "wvit", "description": "jaledg wzmzi" }
+          ],
+          "multiSelect": false
+        }
+      ],
+      "answers": { "hq fsv wvazqn tqz po vmpit": "hyz" }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "id-1",
+        "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": {
+              "type": "text",
+              "text": "jepe pyfcvwhyv apyf stmx fihihyfob bmx fsv wvazqn tqz po zszevobulupqt ryt uzo gza zapgtcrk wxql ncvwz terchob jm afefu"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "ryt gvo" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "agent_message_chunk",
+        "content": { "type": "text", "text": "yri jyfw" }
+      }
+    },
+    {
+      "step": "event",
+      "update": {
+        "sessionUpdate": "usage_update",
+        "usage": {
+          "usedTokens": 32447,
+          "contextWindow": 1000000,
+          "inputTokens": 2,
+          "outputTokens": 7,
+          "cacheReadTokens": 28543,
+          "cacheWriteTokens": 3895,
+          "updatedAt": 1790675263095
+        }
+      }
+    },
+    { "step": "end", "stopReason": "end_turn" }
+  ]
+}
