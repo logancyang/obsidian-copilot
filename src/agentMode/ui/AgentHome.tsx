@@ -266,8 +266,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (isOrphanedProject) new Notice("This project no longer exists.");
   }, [isOrphanedProject]);
 
-  const modelPickerOverride = useAgentModelPicker(manager, plugin);
-  const modePickerOverride = useAgentModePicker(manager);
+  const modelPickerOverride = useAgentModelPicker(client, view);
+  const modePickerOverride = useAgentModePicker(client, view);
 
   const handleCycleMode = useCallback(() => {
     if (!modePickerOverride || modePickerOverride.disabled) return;
@@ -346,8 +346,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   }
   const projectPlacement = placementRef.current;
 
-  const mainAgentId =
-    manager.getActiveSession()?.backendId ?? manager.getStartingBackendId() ?? null;
+  const mainAgentId = activeTab?.backendId ?? host?.host.startingBackendId ?? null;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- sessionId intentionally re-rolls the otherwise argument-free greeting factory
   const greeting = useMemo(() => pickRandomGreeting(), [sessionId]);
@@ -724,10 +723,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 };
 
 export const AgentHome: React.FC<AgentHomeProps> = (props) => {
-  const { client, plugin } = props;
+  const { client, plugin, manager } = props;
   const paneCapabilities = useMemo(
-    () => createDesktopPaneCapabilities(plugin.app, client),
-    [plugin.app, client]
+    () => createDesktopPaneCapabilities(plugin.app, client, manager),
+    [plugin.app, client, manager]
   );
   return (
     <ChatInputProvider>

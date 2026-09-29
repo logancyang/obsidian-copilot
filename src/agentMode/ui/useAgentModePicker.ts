@@ -1,9 +1,12 @@
-import { useCallback, useMemo, useSyncExternalStore } from "react";
-import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import { modeStateSignature } from "@/agentMode/session/translateBackendState";
+import type { ClientView } from "@/agentMode/protocol/ClientView";
+import { useClientView } from "@/agentMode/protocol/react";
+import type { SessionClient } from "@/agentMode/protocol/SessionClient";
+import type { SessionState } from "@/agentMode/protocol/state";
 import type { CopilotMode } from "@/agentMode/session/types";
-import { buildAgentModePicker } from "./agentModePickerHelpers";
-import { useManagerSubscribe } from "./useManagerSubscribe";
+import { useAgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
+import { reportSwitchFailure } from "@/agentMode/ui/agentModelPickerHelpers";
+import { useSessionSlice } from "@/agentMode/ui/hooks/useSessionSlice";
+import { useMemo } from "react";
 
 export interface AgentModePickerOverride {
   options: { label: string; value: CopilotMode }[];
@@ -12,30 +15,37 @@ export interface AgentModePickerOverride {
   disabled?: boolean;
 }
 
-function useAgentModeSignal(manager: AgentSessionManager | null): string {
-  const subscribe = useManagerSubscribe(manager);
+const selectMode = (session: SessionState) => session.backendState?.mode ?? null;
 
-  const getSnapshot = useCallback((): string => {
-    if (!manager) return "";
-    const session = manager.getActiveSession();
-    const state = session?.getState() ?? null;
-    return [
-      session?.internalId ?? "",
-      session?.backendId ?? "",
-      session?.getStatus() ?? "",
-      modeStateSignature(state),
-    ].join("|");
-  }, [manager]);
-
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-}
-
+/**
+ * The permission-mode choices for the shown session, applied through the `applyMode` command.
+ * The desktop remembers the pick as the agent's default mode after the host accepts it; the host
+ * never changes settings. Null while the session has not reported any modes.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+ */
 export function useAgentModePicker(
-  manager: AgentSessionManager | null
+  client: SessionClient,
+  view: ClientView
 ): AgentModePickerOverride | null {
-  const signal = useAgentModeSignal(manager);
+  const { activeTab } = useClientView(client, view);
+  const persist = useAgentPaneCapabilities().persistDefaults;
+  const mode = useSessionSlice(client, activeTab?.id ?? null, selectMode);
+
   return useMemo(() => {
-    void signal;
-    return buildAgentModePicker({ manager });
-  }, [manager, signal]);
+    if (!activeTab || !mode) return null;
+    return {
+      options: mode.options,
+      value: mode.current,
+      disabled: activeTab.canSwitchMode === false,
+      onChange: (value) => {
+        if (!mode.apply[value]) return;
+        void client
+          .command({ name: "applyMode", sessionId: activeTab.id, mode: value })
+          .then((result) => {
+            if (!result.ok) reportSwitchFailure(result, "mode");
+            else persist?.persistDefaultMode(activeTab.backendId, value);
+          });
+      },
+    };
+  }, [activeTab, mode, client, persist]);
 }

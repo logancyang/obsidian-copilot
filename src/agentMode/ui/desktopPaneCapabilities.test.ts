@@ -1,4 +1,5 @@
 import type { SessionClient } from "@/agentMode/protocol/SessionClient";
+import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { createDesktopPaneCapabilities } from "@/agentMode/ui/desktopPaneCapabilities";
 import { closePlanPreview, openPlanPreview } from "@/agentMode/ui/PlanPreviewView";
 import { insertAtCursor } from "@/utils";
@@ -16,6 +17,11 @@ jest.mock("@/agentMode/ui/PlanPreviewView", () => ({
 
 const app = { name: "app" } as unknown as App;
 const client = { name: "client" } as unknown as SessionClient;
+const manager = {
+  setDefaultBackend: jest.fn(),
+  persistDefaultMode: jest.fn().mockResolvedValue(undefined),
+} as unknown as AgentSessionManager;
+
 jest.mock("@/agentMode/backends/registry", () => ({
   backendRegistry: { claude: { Icon: () => null } },
 }));
@@ -25,19 +31,19 @@ describe("desktopPaneCapabilities", () => {
     beforeEach(() => jest.clearAllMocks());
 
     it("reports the vault's folder on disk", () => {
-      expect(createDesktopPaneCapabilities(app, client).vaultBase).toBe("/Users/me/vault");
+      expect(createDesktopPaneCapabilities(app, client, manager).vaultBase).toBe("/Users/me/vault");
       expect(getVaultBase).toHaveBeenCalledWith(app);
     });
 
     it("opens a path through the vault opener with the options it was given", () => {
-      createDesktopPaneCapabilities(app, client).openPath?.("notes/a.md", {
+      createDesktopPaneCapabilities(app, client, manager).openPath?.("notes/a.md", {
         newLeaf: true,
       });
       expect(openVaultPath).toHaveBeenCalledWith(app, "notes/a.md", { newLeaf: true });
     });
 
     it("inserts text through the workspace editor", () => {
-      createDesktopPaneCapabilities(app, client).insertAtCursor?.("Draft");
+      createDesktopPaneCapabilities(app, client, manager).insertAtCursor?.("Draft");
       expect(insertAtCursor).toHaveBeenCalledWith(app, "Draft");
     });
 
@@ -49,19 +55,27 @@ describe("desktopPaneCapabilities", () => {
         title: "Outline",
       };
 
-      await createDesktopPaneCapabilities(app, client).openPlanPreview?.(request);
+      await createDesktopPaneCapabilities(app, client, manager).openPlanPreview?.(request);
 
       expect(openPlanPreview).toHaveBeenCalledWith(app, { ...request, client });
     });
 
     it("supplies each registered agent's icon and none for an unknown agent https://github.com/Brevilabs/obsidian-copilot-private/issues/612", () => {
-      const { backendIcon } = createDesktopPaneCapabilities(app, client);
+      const { backendIcon } = createDesktopPaneCapabilities(app, client, manager);
       expect(backendIcon?.("claude")).toBeDefined();
       expect(backendIcon?.("mystery")).toBeUndefined();
     });
 
+    it("persists a picked agent and mode as the desktop's defaults through the manager https://github.com/Brevilabs/obsidian-copilot-private/issues/612", () => {
+      const { persistDefaults } = createDesktopPaneCapabilities(app, client, manager);
+      persistDefaults?.setDefaultBackend("codex");
+      persistDefaults?.persistDefaultMode("codex", "plan");
+      expect(manager.setDefaultBackend).toHaveBeenCalledWith("codex");
+      expect(manager.persistDefaultMode).toHaveBeenCalledWith("codex", "plan");
+    });
+
     it("closes the preview of a proposal", () => {
-      createDesktopPaneCapabilities(app, client).closePlanPreview?.("plan-1");
+      createDesktopPaneCapabilities(app, client, manager).closePlanPreview?.("plan-1");
       expect(closePlanPreview).toHaveBeenCalledWith(app, "plan-1");
     });
   });

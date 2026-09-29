@@ -1,16 +1,17 @@
-import { resolveEffort } from "@/lib/model-effort";
+import { resolveEffort, sortEffortOptions } from "@/lib/model-effort";
 import { SettingItem } from "@/components/ui/setting-item";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import React, { useSyncExternalStore } from "react";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import type { BackendDescriptor, EnabledModelEntry } from "@/agentMode/session/types";
+import { EMPTY_EFFORT_OPTIONS, MISSING_KEY_LABEL } from "@/agentMode/protocol/pickerEntries";
+import type {
+  BackendDescriptor,
+  BackendId,
+  EffortOption,
+  EnabledModelEntry,
+} from "@/agentMode/session/types";
 import { AgentDefaultEffortSetting } from "@/agentMode/ui/AgentDefaultEffortSetting";
-import {
-  EMPTY_EFFORT_OPTIONS,
-  MISSING_KEY_LABEL,
-  resolveEffortOptions,
-} from "./agentModelPickerHelpers";
 import { useManagerSubscribe } from "./useManagerSubscribe";
 
 interface Props {
@@ -21,6 +22,20 @@ interface Props {
 const AGENT_DEFAULT_VALUE = "__agent_default__";
 const AGENT_DEFAULT_LABEL = "Agent default";
 const EFFORT_NOT_SUPPORTED_LABEL = "Not supported";
+
+function resolveEffortOptions(
+  manager: AgentSessionManager,
+  backendId: BackendId,
+  baseModelId: string
+): readonly EffortOption[] {
+  const reported = manager
+    .getCachedModelCatalog(backendId)
+    ?.availableModels?.find((model) => model.baseModelId === baseModelId)?.effortOptions;
+  if (reported && reported.length > 0) return sortEffortOptions(reported);
+  return sortEffortOptions(
+    manager.getEffortCatalog(backendId)?.[baseModelId] ?? EMPTY_EFFORT_OPTIONS
+  );
+}
 
 export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager }) => {
   const subscribe = useManagerSubscribe(manager);
