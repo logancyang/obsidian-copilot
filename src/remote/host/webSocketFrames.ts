@@ -24,6 +24,21 @@ export class FrameProtocolError extends Error {
 
 const MAX_CONTROL_PAYLOAD = 125;
 const MAX_HEADER_BYTES = 10;
+// A message is a few frames at most. Counting fragments bounds the memory an empty or one-byte
+// fragment costs, which the byte limit alone does not. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+const MAX_FRAGMENTS = 1024;
+
+/**
+ * Whether a status code may appear in a close frame on the wire (RFC 6455 section 7.4).
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+ */
+export function isValidCloseCode(code: number): boolean {
+  return (
+    (code >= 1000 && code <= 1003) ||
+    (code >= 1007 && code <= 1014) ||
+    (code >= 3000 && code <= 4999)
+  );
+}
 
 function concat(chunks: readonly Uint8Array[], length: number): Uint8Array {
   const joined = new Uint8Array(length);
@@ -35,23 +50,45 @@ function concat(chunks: readonly Uint8Array[], length: number): Uint8Array {
   return joined;
 }
 
+/**
+ * Decodes the client-to-server half of an RFC 6455 connection: masked text frames, ping, pong and
+ * close, with every size bounded by `limit`. It throws `FrameProtocolError` for anything else and
+ * never buffers more than one frame beyond the limit.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+ */
 export class FrameDecoder {
   private chunks: Uint8Array[] = [];
   private buffered = 0;
   private fragments: Uint8Array[] = [];
   private fragmentBytes = 0;
   private assemblingText = false;
+  private closed = false;
 
+  /**
+   * @param limit - The largest frame or message, in payload bytes. It may be raised while the
+   * decoder is running, and the new value applies from the next frame.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+   */
   constructor(public limit: number) {}
 
-  push(chunk: Uint8Array): IncomingMessage[] {
+  /**
+   * Feeds received bytes and reports each complete message to `onMessage` as it is decoded, so the
+   * callback can change `limit` before the frames that follow in the same chunk are read. Nothing is
+   * reported after a close frame. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+   *
+   * @param chunk - Bytes from the socket, in any split.
+   * @param onMessage - Called synchronously for every complete message, in order.
+   */
+  push(chunk: Uint8Array, onMessage: (message: IncomingMessage) => void): void {
+    if (this.closed) return;
     this.chunks.push(chunk);
     this.buffered += chunk.length;
-    const messages: IncomingMessage[] = [];
-    for (;;) {
+    while (!this.closed) {
       const message = this.readFrame();
-      if (message === undefined) return messages;
-      if (message !== null) messages.push(message);
+      if (message === undefined) return;
+      if (message === null) continue;
+      if (message.type === "close") this.closed = true;
+      onMessage(message);
     }
   }
 
@@ -71,18 +108,25 @@ export class FrameDecoder {
       if (head.length < 4) return undefined;
       length = (head[2] << 8) | head[3];
       offset = 4;
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+      if (length < 126) throw new FrameProtocolError(1002, "non-minimal length");
     } else if (length === 127) {
       if (head.length < 10) return undefined;
       const view = new DataView(head.buffer, head.byteOffset, head.length);
       if (view.getUint32(2) !== 0) throw new FrameProtocolError(1009, "frame too large");
       length = view.getUint32(6);
       offset = 10;
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+      if (length < 65536) throw new FrameProtocolError(1002, "non-minimal length");
     }
     const isControl = opcode >= 0x8;
     if (isControl && (!fin || length > MAX_CONTROL_PAYLOAD)) {
       throw new FrameProtocolError(1002, "invalid control frame");
     }
-    if (length > this.limit) throw new FrameProtocolError(1009, "frame too large");
+    // A continuation counts against the message it extends, so the total is refused before its
+    // payload is buffered. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+    const messageBytes = isControl ? length : this.fragmentBytes + length;
+    if (messageBytes > this.limit) throw new FrameProtocolError(1009, "frame too large");
     if (this.buffered < offset + 4 + length) return undefined;
 
     const bytes = this.take(offset + 4 + length);
@@ -124,11 +168,22 @@ export class FrameDecoder {
   private readControl(opcode: number, payload: Uint8Array): IncomingMessage | null {
     if (opcode === OPCODE.ping) return { type: "ping", payload };
     if (opcode === OPCODE.pong) return { type: "pong" };
-    if (opcode === OPCODE.close) {
-      if (payload.length === 1) throw new FrameProtocolError(1002, "invalid close payload");
-      return { type: "close", code: payload.length >= 2 ? (payload[0] << 8) | payload[1] : 1005 };
-    }
+    if (opcode === OPCODE.close) return this.readClose(payload);
     throw new FrameProtocolError(1002, "unknown control opcode");
+  }
+
+  // A close frame is empty or a status code followed by a UTF-8 reason. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+  private readClose(payload: Uint8Array): IncomingMessage {
+    if (payload.length === 0) return { type: "close", code: 1005 };
+    if (payload.length === 1) throw new FrameProtocolError(1002, "invalid close payload");
+    const code = (payload[0] << 8) | payload[1];
+    if (!isValidCloseCode(code)) throw new FrameProtocolError(1002, "invalid close status");
+    try {
+      new TextDecoder("utf-8", { fatal: true }).decode(payload.subarray(2));
+    } catch {
+      throw new FrameProtocolError(1007, "invalid UTF-8 in close reason");
+    }
+    return { type: "close", code };
   }
 
   private readData(opcode: number, fin: boolean, payload: Uint8Array): IncomingMessage | null {
@@ -142,10 +197,10 @@ export class FrameDecoder {
     } else {
       throw new FrameProtocolError(1002, "unknown data opcode");
     }
-    this.fragmentBytes += payload.length;
-    if (this.fragmentBytes > this.limit) {
-      throw new FrameProtocolError(1009, "message too large");
+    if (this.fragments.length >= MAX_FRAGMENTS) {
+      throw new FrameProtocolError(1009, "too many fragments");
     }
+    this.fragmentBytes += payload.length;
     this.fragments.push(payload);
     if (!fin) return null;
 
