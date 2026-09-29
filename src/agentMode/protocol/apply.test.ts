@@ -1,11 +1,17 @@
 import { applyHostOp, applySessionOp } from "@/agentMode/protocol/apply";
 import { INITIAL_SESSION_STATE, type HostState } from "@/agentMode/protocol/state";
-import { buildMessage, buildTab, deepFreeze } from "@/agentMode/protocol/testBuilders";
+import {
+  buildBackendSummary,
+  buildHostState,
+  buildMessage,
+  buildTab,
+  deepFreeze,
+} from "@/agentMode/protocol/testBuilders";
 
 describe("apply", () => {
   describe("applyHostOp()", () => {
     const host = (...ids: string[]): HostState =>
-      deepFreeze({ tabs: ids.map((id) => buildTab({ id })) });
+      deepFreeze(buildHostState({ tabs: ids.map((id) => buildTab({ id })) }));
 
     it("tab.add inserts the tab at the requested index", () => {
       const next = applyHostOp(host("a", "c"), {
@@ -64,6 +70,43 @@ describe("apply", () => {
       expect(applyHostOp(state, { t: "tab.patch", id: "nope", patch: { status: "running" } })).toBe(
         state
       );
+    });
+
+    it("backend.set inserts a backend at the index and replaces one with the same id in place", () => {
+      const claude = buildBackendSummary({ id: "claude" });
+      const codex = buildBackendSummary({ id: "codex" });
+      const state = deepFreeze(buildHostState({ backends: [claude] }));
+      const inserted = applyHostOp(state, { t: "backend.set", index: 1, backend: codex });
+      expect(inserted.backends.map((b) => b.id)).toEqual(["claude", "codex"]);
+      const renamed = buildBackendSummary({ id: "claude", displayName: "Claude" });
+      const replaced = applyHostOp(inserted, { t: "backend.set", index: 0, backend: renamed });
+      expect(replaced.backends).toEqual([renamed, codex]);
+      expect(replaced.backends[1]).toBe(codex);
+    });
+
+    it("backend.set carrying the backend already at that index returns the same state", () => {
+      const claude = buildBackendSummary({ id: "claude" });
+      const state = deepFreeze(buildHostState({ backends: [claude] }));
+      expect(applyHostOp(state, { t: "backend.set", index: 0, backend: claude })).toBe(state);
+    });
+
+    it("host.patch merges the changed flags and leaves tabs and backends alone", () => {
+      const state = deepFreeze(buildHostState({ tabs: [buildTab({ id: "a" })] }));
+      const next = applyHostOp(state, {
+        t: "host.patch",
+        patch: { startingBackendId: "codex", startFailed: true },
+      });
+      expect(next.host).toEqual({
+        defaultBackendId: null,
+        startingBackendId: "codex",
+        startFailed: true,
+      });
+      expect(next.tabs).toBe(state.tabs);
+    });
+
+    it("host.patch that changes nothing returns the same state", () => {
+      const state = deepFreeze(buildHostState());
+      expect(applyHostOp(state, { t: "host.patch", patch: { startFailed: false } })).toBe(state);
     });
   });
 

@@ -1,5 +1,11 @@
 import type { ClientFrame, ServerFrame } from "@/agentMode/protocol/frames";
-import type { TabSummary, WireMessage } from "@/agentMode/protocol/state";
+import {
+  INITIAL_HOST_STATE,
+  type BackendSummary,
+  type HostState,
+  type TabSummary,
+  type WireMessage,
+} from "@/agentMode/protocol/state";
 
 export function deepFreeze<T>(value: T): T {
   if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
@@ -33,6 +39,27 @@ export function buildTab(overrides: Partial<TabSummary> = {}): TabSummary {
     canSwitchModel: true,
     canSwitchEffort: true,
     canSwitchMode: true,
+    ...overrides,
+  };
+}
+
+export function buildHostState(overrides: Partial<HostState> = {}): HostState {
+  return { ...INITIAL_HOST_STATE, ...overrides };
+}
+
+export function buildBackendSummary(overrides: Partial<BackendSummary> = {}): BackendSummary {
+  return {
+    id: "claude",
+    displayName: "Claude Code",
+    readiness: "ready",
+    preload: "ready",
+    selfHostable: true,
+    selfHostWarning: false,
+    enabled: [],
+    reported: [],
+    efforts: {},
+    defaultSelection: null,
+    lockedPreview: [],
     ...overrides,
   };
 }

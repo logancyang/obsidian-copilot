@@ -1,6 +1,8 @@
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import type { AgentMessagePart, SessionId, StopReason } from "@/agentMode/session/types";
 import type {
+  BackendSummary,
+  HostFlags,
   MessageOf,
   SessionState,
   TabPatch,
@@ -30,7 +32,9 @@ export type SessionOp = TranscriptOp<WireMessageContext> | SliceOp;
 export type HostOp =
   | { t: "tab.add"; index: number; tab: TabSummary }
   | { t: "tab.remove"; id: SessionId }
-  | { t: "tab.patch"; id: SessionId; patch: TabPatch };
+  | { t: "tab.patch"; id: SessionId; patch: TabPatch }
+  | { t: "backend.set"; index: number; backend: BackendSummary }
+  | { t: "host.patch"; patch: Partial<HostFlags> };
 
 export type ScopeOp = HostOp | SessionOp;
 

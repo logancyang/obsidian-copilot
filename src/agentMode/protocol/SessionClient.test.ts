@@ -1,9 +1,14 @@
 import { PROTOCOL_VERSION } from "@/agentMode/protocol/frames";
 import { SessionClient, type Diagnostic } from "@/agentMode/protocol/SessionClient";
 import { INITIAL_SESSION_STATE, type HostState } from "@/agentMode/protocol/state";
-import { buildMessage, buildTab, FakeTransport } from "@/agentMode/protocol/testBuilders";
+import {
+  buildHostState,
+  buildMessage,
+  buildTab,
+  FakeTransport,
+} from "@/agentMode/protocol/testBuilders";
 
-const HOST_STATE: HostState = { tabs: [buildTab({ id: "s1" })] };
+const HOST_STATE: HostState = buildHostState({ tabs: [buildTab({ id: "s1" })] });
 
 function connect(hostId = "host-1") {
   const transport = new FakeTransport();
@@ -172,7 +177,7 @@ describe("SessionClient", () => {
       });
       expect(client.getHost()?.tabs[0].status).toBe("idle");
 
-      const fresh: HostState = { tabs: [buildTab({ id: "s1", status: "error" })] };
+      const fresh: HostState = buildHostState({ tabs: [buildTab({ id: "s1", status: "error" })] });
       transport.deliver({ type: "snapshot", scope: "host", seq: 5, state: fresh });
       expect(client.getHost()).toBe(fresh);
       expect(client.getCursor("host")).toBe(5);

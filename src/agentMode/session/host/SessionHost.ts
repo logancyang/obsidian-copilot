@@ -1,3 +1,4 @@
+import { applyHostOp } from "@/agentMode/protocol/apply";
 import type { Command } from "@/agentMode/protocol/commands";
 import { PROTOCOL_VERSION, type ClientFrame, type ServerFrame } from "@/agentMode/protocol/frames";
 import {
@@ -10,6 +11,7 @@ import { SessionClient } from "@/agentMode/protocol/SessionClient";
 import type { ClientTransport } from "@/agentMode/protocol/transport";
 import {
   HOST_SCOPE,
+  INITIAL_HOST_STATE,
   sessionIdOfScope,
   sessionScope,
   type HostState,
@@ -22,6 +24,7 @@ import {
   type CommandContext,
   type SessionHostManager,
 } from "@/agentMode/session/host/commandHandlers";
+import { CatalogProjector, type CatalogSource } from "@/agentMode/session/host/CatalogProjector";
 import { createInProcessTransport } from "@/agentMode/session/host/inProcessTransport";
 import { OpLog } from "@/agentMode/session/host/OpLog";
 import { SessionProjector } from "@/agentMode/session/host/SessionProjector";
@@ -36,6 +39,7 @@ export const STREAM_FLUSH_MS = 16;
 
 export interface SessionHostOptions extends Omit<CommandContext, "manager"> {
   manager: SessionHostManager;
+  catalog: CatalogSource;
   appVersion: string;
   newHostId?: () => string;
   opLogLimits?: { maxOps: number; maxBytes: number };
@@ -63,18 +67,25 @@ interface Connection {
 export class SessionHost {
   private readonly hostId: string;
   private readonly hostLog: OpLog<HostOp>;
+  private hostState: HostState = INITIAL_HOST_STATE;
   private readonly tabs: TabProjector;
+  private readonly catalog: CatalogProjector;
   private readonly bindings = new Map<string, Binding>();
   private readonly connections = new Set<Connection>();
   private readonly unsubscribeManager: () => void;
+  private readonly unsubscribeCatalog: () => void;
   private flushTimer: number | null = null;
   private disposed = false;
 
   constructor(private readonly options: SessionHostOptions) {
     this.hostId = (options.newHostId ?? uuidv4)();
     this.hostLog = this.newLog<HostOp>();
-    this.tabs = new TabProjector((op) => this.emitHost(op));
+    const getState = (): HostState => this.hostState;
+    const emit = (op: HostOp): void => this.emitHost(op);
+    this.tabs = new TabProjector(getState, emit);
+    this.catalog = new CatalogProjector(options.catalog, getState, emit);
     this.unsubscribeManager = options.manager.subscribe(() => this.sync());
+    this.unsubscribeCatalog = options.catalog.subscribe(() => this.catalog.refresh());
     this.sync();
   }
 
@@ -114,6 +125,7 @@ export class SessionHost {
     if (this.disposed) return;
     this.disposed = true;
     this.unsubscribeManager();
+    this.unsubscribeCatalog();
     for (const binding of this.bindings.values()) binding.release();
     this.bindings.clear();
     for (const connection of [...this.connections]) connection.onClose?.();
@@ -123,7 +135,7 @@ export class SessionHost {
   }
 
   getHostState(): HostState {
-    return this.tabs.getState();
+    return this.hostState;
   }
 
   getSessionState(id: string): SessionState | null {
@@ -156,6 +168,7 @@ export class SessionHost {
     }
     for (const id of changed) this.announceScope(sessionScope(id));
     this.tabs.reconcile(manager.getTabSessions());
+    this.catalog.refresh();
   }
 
   private bind(session: AgentSession): Binding {
@@ -195,13 +208,14 @@ export class SessionHost {
   }
 
   private snapshotOf(scope: Scope): HostState | SessionState | null {
-    if (scope === HOST_SCOPE) return this.tabs.getState();
+    if (scope === HOST_SCOPE) return this.hostState;
     const id = sessionIdOfScope(scope);
     const binding = id === null ? undefined : this.bindings.get(id);
     return binding ? this.snapshotSession(binding) : null;
   }
 
   private emitHost(op: HostOp): void {
+    this.hostState = applyHostOp(this.hostState, op);
     this.emit(HOST_SCOPE, this.hostLog, op);
   }
 

@@ -9,11 +9,10 @@ import {
   type HostState,
   type SessionState,
 } from "@/agentMode/protocol/state";
-import { buildMessage, buildTab } from "@/agentMode/protocol/testBuilders";
+import { buildHostState, buildMessage, buildTab } from "@/agentMode/protocol/testBuilders";
 
-const host = (status: "idle" | "running" | "starting" | "awaiting_permission"): HostState => ({
-  tabs: [buildTab({ id: "s1", status })],
-});
+const host = (status: "idle" | "running" | "starting" | "awaiting_permission"): HostState =>
+  buildHostState({ tabs: [buildTab({ id: "s1", status })] });
 
 describe("selectors", () => {
   describe("selectTab()", () => {
@@ -54,7 +53,7 @@ describe("selectors", () => {
 
   describe("EMPTY_CHAT_RUNTIME", () => {
     it("equals the runtime of a session that has no messages, no prompts and no tab", () => {
-      expect(selectChatRuntime({ tabs: [] }, INITIAL_SESSION_STATE, "s1")).toEqual(
+      expect(selectChatRuntime(buildHostState(), INITIAL_SESSION_STATE, "s1")).toEqual(
         EMPTY_CHAT_RUNTIME
       );
     });
@@ -106,10 +105,12 @@ describe("selectors", () => {
     });
 
     it("reports a session without a tab as neither starting nor in flight", () => {
-      expect(selectChatRuntime({ tabs: [] }, { ...INITIAL_SESSION_STATE }, "s1")).toMatchObject({
-        isStarting: false,
-        isTurnInFlight: false,
-      });
+      expect(selectChatRuntime(buildHostState(), { ...INITIAL_SESSION_STATE }, "s1")).toMatchObject(
+        {
+          isStarting: false,
+          isTurnInFlight: false,
+        }
+      );
     });
   });
 });

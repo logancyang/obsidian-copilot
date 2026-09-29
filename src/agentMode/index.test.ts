@@ -48,7 +48,12 @@ jest.mock("./backends/shared/builtinSkillEnv", () => ({
 }));
 jest.mock("./backends/registry", () => ({
   backendRegistry: {},
+  backendNeedsSelfHostWarning: () => false,
   listBackendDescriptors: () => mockDescriptors,
+}));
+jest.mock("@/lib/lockedCopilotEntries", () => ({
+  lockedCopilotEntries: () => [],
+  shouldPreviewCopilotModels: () => false,
 }));
 jest.mock("./session/AgentChatPersistenceManager", () => ({
   AgentChatPersistenceManager: jest.fn(),
@@ -109,8 +114,11 @@ const mockDescriptors = ["claude", "opencode"].map((id) => ({
   restartOnProviderConfigChange: id === "opencode",
   restartOnSystemPromptChange: id === "opencode",
   getInstallState: () => mockStates[id],
+  displayName: id,
+  routesCopilotModels: false,
   subscribeInstallState: (_plugin: unknown, listener: () => void) => {
     mockInstallListeners[id] = listener;
+    return () => {};
   },
 }));
 const mockRefresh = jest.fn<Promise<unknown>, unknown[]>();
@@ -158,6 +166,21 @@ function deferred() {
     resolve = done;
   });
   return { promise, resolve };
+}
+
+function hostableManager(): AgentSessionManager {
+  return {
+    subscribe: jest.fn(() => () => {}),
+    subscribeModelCache: jest.fn(() => () => {}),
+    getSessions: () => [],
+    getTabSessions: () => [],
+    getStartingBackendId: () => null,
+    getLastError: () => null,
+    getCachedModelCatalog: () => null,
+    getEffortCatalog: () => null,
+    getPreloadStatus: () => "absent",
+    getDefaultSelection: () => null,
+  } as unknown as AgentSessionManager;
 }
 
 describe("agentMode", () => {
@@ -492,11 +515,7 @@ describe("agentMode", () => {
   });
 
   describe("createAgentSessionHost()", () => {
-    const manager = {
-      subscribe: jest.fn(() => () => {}),
-      getSessions: () => [],
-      getTabSessions: () => [],
-    } as unknown as AgentSessionManager;
+    const manager = hostableManager();
 
     function build(entries: Record<string, unknown>) {
       const app = {
@@ -520,11 +539,7 @@ describe("agentMode", () => {
 
   describe("createAgentSessionClient()", () => {
     it("connects the desktop panel to the host and receives the tab set https://github.com/Brevilabs/obsidian-copilot-private/issues/611", async () => {
-      const manager = {
-        subscribe: jest.fn(() => () => {}),
-        getSessions: () => [],
-        getTabSessions: () => [],
-      } as unknown as AgentSessionManager;
+      const manager = hostableManager();
       const host = createAgentSessionHost(
         {} as App,
         { manifest: { version: "9.9.9" } } as CopilotPlugin,
@@ -535,7 +550,11 @@ describe("agentMode", () => {
       await new Promise((resolve) => window.setTimeout(resolve, 0));
 
       expect(client.getConnection()).toBe("live");
-      expect(client.getHost()).toEqual({ tabs: [] });
+      expect(client.getHost()).toMatchObject({
+        tabs: [],
+        backends: [{ id: "claude" }, { id: "opencode" }],
+        host: { startingBackendId: null, startFailed: false },
+      });
       client.dispose();
       host.dispose();
     });

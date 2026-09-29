@@ -1,4 +1,9 @@
 import type { ServerFrame } from "@/agentMode/protocol/frames";
+import {
+  INITIAL_HOST_FLAGS,
+  type BackendSummary,
+  type HostFlags,
+} from "@/agentMode/protocol/state";
 import { SessionClient } from "@/agentMode/protocol/SessionClient";
 import type { ClientTransport } from "@/agentMode/protocol/transport";
 import { AgentSession } from "@/agentMode/session/AgentSession";
@@ -8,10 +13,14 @@ import {
   createInProcessTransport,
   type InProcessTransportOptions,
 } from "@/agentMode/session/host/inProcessTransport";
+import type { CatalogSource } from "@/agentMode/session/host/CatalogProjector";
 import { SessionHost, type SessionHostOptions } from "@/agentMode/session/host/SessionHost";
 import type {
+  BackendId,
   BackendProcess,
   BackendState,
+  CopilotMode,
+  ModelSelection,
   PromptOutput,
   SessionEvent,
   SessionUpdateHandler,
@@ -88,10 +97,94 @@ export function makeTestSession(
   return { session, backend };
 }
 
+export class FakeCatalog implements CatalogSource {
+  backends: BackendSummary[] = [];
+  flags: HostFlags = { ...INITIAL_HOST_FLAGS };
+  private listeners = new Set<() => void>();
+
+  listBackends(): readonly BackendSummary[] {
+    return this.backends;
+  }
+
+  getFlags(): HostFlags {
+    return this.flags;
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  change(next: { backends?: BackendSummary[]; flags?: Partial<HostFlags> }): void {
+    if (next.backends) this.backends = next.backends;
+    if (next.flags) this.flags = { ...this.flags, ...next.flags };
+    for (const listener of [...this.listeners]) listener();
+  }
+}
+
 export class FakeManager implements SessionHostManager {
   private sessions = new Map<string, AgentSession>();
   private detached = new Set<string>();
   private listeners = new Set<() => void>();
+  readonly calls: Array<{ method: string; args: unknown[] }> = [];
+  nextSession: (() => AgentSession) | null = null;
+  applyFailure: Error | null = null;
+
+  private record(method: string, ...args: unknown[]): void {
+    this.calls.push({ method, args });
+  }
+
+  async createSession(
+    backendId?: BackendId,
+    projectId?: string,
+    seedSelection?: ModelSelection
+  ): Promise<AgentSession> {
+    this.record("createSession", backendId, projectId, seedSelection);
+    const session = this.nextSession?.() ?? makeTestSession(`created-${this.calls.length}`).session;
+    this.add(session);
+    return session;
+  }
+
+  async replaceSessionInPlace(
+    oldId: string,
+    backendId?: BackendId,
+    options?: { preserveChatInput?: boolean; seedSelection?: ModelSelection }
+  ): Promise<AgentSession> {
+    this.record("replaceSessionInPlace", oldId, backendId, options);
+    const session =
+      this.nextSession?.() ?? makeTestSession(`replaced-${this.calls.length}`).session;
+    this.add(session);
+    return session;
+  }
+
+  openTab(id: string): void {
+    this.record("openTab", id);
+    if (this.detached.delete(id)) this.notify();
+  }
+
+  detachSessionFromTab(id: string): void {
+    this.record("detachSessionFromTab", id);
+    this.detach(id);
+  }
+
+  renameSession(id: string, label: string | null): void {
+    this.record("renameSession", id, label);
+    this.sessions.get(id)?.setLabel(label);
+  }
+
+  async applySelectionTo(
+    id: string,
+    patch: { baseModelId?: string; effort?: string | null }
+  ): Promise<void> {
+    this.record("applySelectionTo", id, patch);
+    if (this.applyFailure) throw this.applyFailure;
+  }
+
+  async applyModeTo(id: string, mode: CopilotMode): Promise<void> {
+    this.record("applyModeTo", id, mode);
+  }
 
   add(session: AgentSession): void {
     this.sessions.set(session.internalId, session);
@@ -156,6 +249,7 @@ export function buildHost(
 ): SessionHost {
   return new SessionHost({
     manager,
+    catalog: new FakeCatalog(),
     resolveNote: (path) => (path.startsWith("missing/") ? null : fakeNote(path)),
     isKnownBackend: (id) => ["claude", "codex", "opencode"].includes(id),
     appVersion: "test-1.0.0",
