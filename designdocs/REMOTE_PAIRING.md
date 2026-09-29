@@ -72,7 +72,7 @@ a frame over the limit.
 The listener does not check the `Origin` or `Host` header: a token is the only credential, a web page cannot
 obtain one, and a phone's `Origin` differs between iOS and Android.
 
-## Where #613 attaches
+## Where the session protocol attaches
 
 Desktop: `plugin.remoteHost.onConnection(handler)` calls `handler(connection)` once per authenticated
 connection.
@@ -94,7 +94,8 @@ directly: `send` is `connection.send`, `onClose` is `connection.onClose`, and `c
 connections with `4403`; `onClose` fires for every close.
 
 Phone: `plugin.remoteClient.connect(desktop)` resolves to `{ ok: true, channel, deviceId }` or
-`{ ok: false, reason: "unreachable" | "token-rejected" | "protocol" }`. `RemoteChannel` has the same
+`{ ok: false, reason: "unreachable", timedOut } | { ok: false, reason: "token-rejected" | "protocol" }`,
+where `timedOut` separates a desktop that never answered from one that refused the connection. `RemoteChannel` has the same
 `send`, `onMessage`, `onClose` and `close`, which is the shape a `ClientTransport` needs. `connect` applies an
 8-second connect timeout because Obsidian iOS leaves a socket to an unreachable address in `CONNECTING`.
 `store.list()` holds the desktops paired for the open vault.

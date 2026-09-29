@@ -5,6 +5,7 @@ import { PairedDeviceStore } from "@/remote/host/PairedDeviceStore";
 import { PairingWindow } from "@/remote/host/PairingWindow";
 import { RemoteServer } from "@/remote/host/RemoteServer";
 import type { SocketLike } from "@/remote/channel";
+import { setRemoteEventSink, type RemoteEvent } from "@/remote/remoteEvents";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/610";
 const VAULT_ID = "3f9a1c2e";
@@ -105,6 +106,22 @@ describe("RemoteClient", () => {
         pairedAt: 5_000,
       });
       expect(rig.hostStore.authenticate(stored.token)).not.toBeNull();
+    });
+
+    it("reports a completed pairing and each kind of failure as an event without any link content https://github.com/Brevilabs/obsidian-copilot-private/issues/613", async () => {
+      const events: RemoteEvent[] = [];
+      const restore = setRemoteEventSink((event) => events.push(event));
+
+      await rig.client.pairFromLink(rig.linkFor());
+      await rig.client.pairFromLink("hello");
+      await rig.client.pairFromLink(rig.linkFor({ vaultId: "deadbeef" }));
+      restore();
+
+      expect(events).toEqual([
+        { name: "remote_pair_completed" },
+        { name: "remote_pair_failed", reason: "invalid-link" },
+        { name: "remote_pair_failed", reason: "wrong-vault" },
+      ]);
     });
 
     it("lets the desktop list the phone under the name the phone reported", async () => {
@@ -288,7 +305,37 @@ describe("RemoteClient", () => {
       const desktop = await pairedDesktop();
       await rig.server.close();
 
-      expect(await rig.client.connect(desktop)).toEqual({ ok: false, reason: "unreachable" });
+      expect(await rig.client.connect(desktop)).toEqual({
+        ok: false,
+        reason: "unreachable",
+        timedOut: false,
+      });
+    });
+
+    it("reports a timeout when the socket never leaves CONNECTING because Tailscale is off https://github.com/Brevilabs/obsidian-copilot-private/issues/613", async () => {
+      const desktop = await pairedDesktop();
+      const stuck: SocketLike = {
+        readyState: 0,
+        send: () => {},
+        close: () => {},
+        addEventListener: () => {},
+      };
+      const client = new RemoteClient({
+        store: rig.desktopStore,
+        vaultId: VAULT_ID,
+        deviceName: "iPhone",
+        vaultName: "Work notes",
+        clientId: "phone-client-1",
+        confirmPairing: async () => true,
+        createId: () => "x",
+        channelOptions: { createSocket: () => stuck, connectTimeoutMs: 20 },
+      });
+
+      expect(await client.connect(desktop)).toEqual({
+        ok: false,
+        reason: "unreachable",
+        timedOut: true,
+      });
     });
   });
 

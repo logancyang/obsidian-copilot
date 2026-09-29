@@ -1,6 +1,7 @@
 import { openChannel, type OpenChannelOptions } from "@/remote/channel";
 import type { RemoteChannel } from "@/remote/wire";
 import { PairedDesktopStore, type PairedDesktop } from "@/remote/client/PairedDesktopStore";
+import { trackRemoteEvent } from "@/remote/remoteEvents";
 import { parsePairingLink, parsePairingParams, type PairingLinkParams } from "@/remote/pairingLink";
 
 export type PairOutcome =
@@ -30,9 +31,14 @@ export interface PairingConfirmation {
   openVaultName: string;
 }
 
+// `timedOut` separates a desktop that never answered (Tailscale off, or the desktop asleep) from
+// one that refused the connection at once (Obsidian closed on a reachable machine).
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/613
 export type ConnectOutcome =
   | { ok: true; channel: RemoteChannel; deviceId: string }
-  | { ok: false; reason: "unreachable" | "token-rejected" | "protocol" };
+  | { ok: false; reason: "unreachable"; timedOut: boolean }
+  | { ok: false; reason: "token-rejected" }
+  | { ok: false; reason: "protocol" };
 
 // `clientId` is this phone's stable id, which lets the desktop replace an earlier pairing of the same
 // phone, and `confirmPairing` resolves true when the person approves the desktop a link describes.
@@ -82,10 +88,21 @@ export class RemoteClient {
       return { ok: true, channel: result.channel, deviceId: result.reply.deviceId };
     }
     if (result.reason === "denied") return { ok: false, reason: "token-rejected" };
-    return { ok: false, reason: result.reason === "protocol" ? "protocol" : "unreachable" };
+    if (result.reason === "protocol") return { ok: false, reason: "protocol" };
+    return { ok: false, reason: "unreachable", timedOut: result.reason === "timeout" };
   }
 
   private async pair(params: PairingLinkParams | null): Promise<PairOutcome> {
+    const outcome = await this.pairUntracked(params);
+    trackRemoteEvent(
+      outcome.ok
+        ? { name: "remote_pair_completed" }
+        : { name: "remote_pair_failed", reason: outcome.reason }
+    );
+    return outcome;
+  }
+
+  private async pairUntracked(params: PairingLinkParams | null): Promise<PairOutcome> {
     if (!params) return { ok: false, reason: "invalid-link" };
     // A link scanned while another vault is open lands here, and pairing it would store a
     // token under the wrong vault. https://github.com/Brevilabs/obsidian-copilot-private/issues/610

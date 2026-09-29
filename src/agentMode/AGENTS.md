@@ -1,6 +1,6 @@
 # Agent Mode — layer rules
 
-Eight element types, strict imports. Enforced by `eslint-plugin-boundaries`
+Nine element types, strict imports. Enforced by `eslint-plugin-boundaries`
 (see root `eslint.config.mjs`). The list below mirrors `boundaries/elements` and
 `boundaries/dependencies` exactly — when in doubt, the lint config wins.
 
@@ -31,6 +31,11 @@ Eight element types, strict imports. Enforced by `eslint-plugin-boundaries`
    Node built-ins, `electron`, `obsidian` values, or `@/logger`, and its reducers,
    client and selectors must not read a clock or random source. Contract:
    [`designdocs/AGENT_SESSION_HOST.md`](../../designdocs/AGENT_SESSION_HOST.md).
+
+9. **`mobile/`** — the phone's agent entry: a client of a paired desktop that reaches it through a
+   reconnecting transport. It may import `protocol/`, `ui/`, `session/` and the plugin, and its static
+   closure must never reach `acp/`, `sdk/`, `backends/`, `skills/` or the host. Contract:
+   [`designdocs/AGENT_SESSION_HOST.md`](../../designdocs/AGENT_SESSION_HOST.md) section 5.2.1.
 
 ## Why two adapters under one session
 
