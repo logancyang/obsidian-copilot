@@ -1,5 +1,7 @@
 import { PAIRING_TTL_MS, PairingWindow } from "@/remote/host/PairingWindow";
 
+const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/610";
+
 function makeWindow(secrets: string[] = ["secret-one", "secret-two"]) {
   let now = 1_000_000;
   const queue = [...secrets];
@@ -135,6 +137,19 @@ describe("PairingWindow", () => {
   });
 
   describe("getActive()", () => {
+    it(`stays expired when the clock is corrected backward after expiry was observed (${ISSUE})`, () => {
+      let now = 1_000_000;
+      const pairing = new PairingWindow({ now: () => now, generateSecret: () => "secret-one" });
+      pairing.start();
+      now += PAIRING_TTL_MS + 1;
+      expect(pairing.getActive()).toBeNull();
+
+      now -= PAIRING_TTL_MS;
+
+      expect(pairing.getActive()).toBeNull();
+      expect(pairing.consume("secret-one")).toBe(false);
+    });
+
     it("reports no pairing once the time to live passed and notifies subscribers at expiry", () => {
       const { pairing, advance } = makeWindow();
       pairing.start();

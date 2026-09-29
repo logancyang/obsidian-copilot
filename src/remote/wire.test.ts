@@ -1,11 +1,31 @@
 import { parseClientFrame, parseServerFrame } from "@/remote/wire";
 
+const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/610";
+
 describe("wire", () => {
   describe("parseClientFrame()", () => {
     it("reads a pair frame with its secret and device name", () => {
       expect(
         parseClientFrame(JSON.stringify({ type: "pair", secret: "s3cret", deviceName: "iPhone" }))
       ).toEqual({ type: "pair", secret: "s3cret", deviceName: "iPhone" });
+    });
+
+    it(`reads the phone id a pair frame carries so a repeated pairing can replace the earlier entry (${ISSUE})`, () => {
+      expect(
+        parseClientFrame(
+          JSON.stringify({ type: "pair", secret: "s", deviceName: "iPhone", clientId: "phone-1" })
+        )
+      ).toEqual({ type: "pair", secret: "s", deviceName: "iPhone", clientId: "phone-1" });
+    });
+
+    it.each([
+      ["an empty phone id", ""],
+      ["a numeric phone id", 5],
+      ["an oversized phone id", "x".repeat(129)],
+    ])(`rejects a pair frame with %s (${ISSUE})`, (_label, clientId) => {
+      expect(
+        parseClientFrame(JSON.stringify({ type: "pair", secret: "s", deviceName: "x", clientId }))
+      ).toBeNull();
     });
 
     it("reads an auth frame with its token", () => {

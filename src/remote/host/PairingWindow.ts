@@ -52,8 +52,10 @@ export class PairingWindow {
     this.notify();
   }
 
+  // The expiry timer still notifies subscribers later; dropping the secret here keeps a wall clock
+  // that moves backward from reviving it. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
   getActive(): ActivePairing | null {
-    if (this.active && this.now() >= this.active.expiresAt) return null;
+    if (this.active && this.now() >= this.active.expiresAt) this.active = null;
     return this.active;
   }
 

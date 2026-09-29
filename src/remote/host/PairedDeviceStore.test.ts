@@ -1,5 +1,7 @@
 import { PairedDeviceStore, type SecretSlot } from "@/remote/host/PairedDeviceStore";
 
+const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/610";
+
 function makeStore(initial: string | null = null) {
   let raw = initial;
   let now = 1_000;
@@ -56,6 +58,61 @@ describe("PairedDeviceStore", () => {
 
       expect(device.name).toHaveLength(60);
       expect(device.name.startsWith("ab")).toBe(true);
+    });
+
+    it(`replaces the earlier entry of a phone that pairs again and reports which entry it replaced (${ISSUE})`, () => {
+      const { store } = makeStore();
+      const first = store.create("iPhone", "phone-1");
+
+      const second = store.create("iPhone", "phone-1");
+
+      expect(second.replacedDeviceIds).toEqual([first.device.id]);
+      expect(store.list()).toEqual([second.device]);
+      expect(store.authenticate(first.token)).toBeNull();
+      expect(store.authenticate(second.token)).toEqual(second.device);
+    });
+
+    it(`keeps the entries of other phones and of pairings that sent no phone id (${ISSUE})`, () => {
+      const { store } = makeStore();
+      const other = store.create("iPad", "phone-2");
+      const anonymous = store.create("Old phone");
+
+      const repaired = store.create("iPhone", "phone-1");
+
+      expect(repaired.replacedDeviceIds).toEqual([]);
+      expect(store.list()).toEqual([other.device, anonymous.device, repaired.device]);
+    });
+
+    it(`does not treat two pairings without a phone id as the same phone (${ISSUE})`, () => {
+      const { store } = makeStore();
+      store.create("Phone");
+
+      const second = store.create("Phone");
+
+      expect(second.replacedDeviceIds).toEqual([]);
+      expect(store.list()).toHaveLength(2);
+    });
+
+    it(`remembers the phone id across a restart so a later pairing still replaces the entry (${ISSUE})`, () => {
+      const { store, raw } = makeStore();
+      const first = store.create("iPhone", "phone-1");
+
+      const second = makeStore(raw()).store.create("iPhone", "phone-1");
+
+      expect(second.replacedDeviceIds).toEqual([first.device.id]);
+    });
+
+    it(`does not expose the phone id on the listed device (${ISSUE})`, () => {
+      const { store } = makeStore();
+
+      store.create("iPhone", "phone-1");
+
+      expect(Object.keys(store.list()[0]).sort()).toEqual([
+        "createdAt",
+        "id",
+        "lastSeenAt",
+        "name",
+      ]);
     });
 
     it("notifies subscribers", () => {

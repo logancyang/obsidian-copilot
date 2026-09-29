@@ -17,7 +17,7 @@ export const CLOSE_CODE = {
 export type DenyReason = "pairing-rejected" | "token-rejected" | "bad-request";
 
 export type ChannelClientFrame =
-  | { type: "pair"; secret: string; deviceName: string }
+  | { type: "pair"; secret: string; deviceName: string; clientId?: string }
   | { type: "auth"; token: string };
 
 export type ChannelServerFrame =
@@ -47,7 +47,13 @@ export function parseClientFrame(text: string): ChannelClientFrame | null {
   if (!frame) return null;
   if (frame.type === "pair") {
     if (!isBoundedString(frame.secret, 128) || typeof frame.deviceName !== "string") return null;
-    return { type: "pair", secret: frame.secret, deviceName: frame.deviceName.slice(0, 200) };
+    if (frame.clientId !== undefined && !isBoundedString(frame.clientId, 128)) return null;
+    return {
+      type: "pair",
+      secret: frame.secret,
+      deviceName: frame.deviceName.slice(0, 200),
+      ...(frame.clientId === undefined ? {} : { clientId: frame.clientId }),
+    };
   }
   if (frame.type === "auth") {
     return isBoundedString(frame.token, 128) ? { type: "auth", token: frame.token } : null;

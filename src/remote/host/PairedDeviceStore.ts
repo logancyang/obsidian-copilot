@@ -15,6 +15,7 @@ export interface PairedDevice {
 
 interface StoredDevice extends PairedDevice {
   tokenHash: string;
+  clientId?: string;
 }
 
 interface StoredDevices {
@@ -48,6 +49,7 @@ function isStoredDevice(value: unknown): value is StoredDevice {
     typeof device.id === "string" &&
     typeof device.name === "string" &&
     typeof device.tokenHash === "string" &&
+    (device.clientId === undefined || typeof device.clientId === "string") &&
     typeof device.createdAt === "number" &&
     (device.lastSeenAt === null || typeof device.lastSeenAt === "number")
   );
@@ -72,7 +74,18 @@ export class PairedDeviceStore {
     return this.snapshot;
   }
 
-  create(deviceName: string): { device: PairedDevice; token: string } {
+  /**
+   * Records a newly paired device and issues its token. A phone that pairs again sends the same
+   * `clientId`, so its earlier entries are removed and returned as `replacedDeviceIds` for the
+   * caller to disconnect. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+   *
+   * @param deviceName - The name the phone reports for itself.
+   * @param clientId - The phone's stable id, absent when the pairing cannot be matched to an earlier one.
+   */
+  create(
+    deviceName: string,
+    clientId?: string
+  ): { device: PairedDevice; token: string; replacedDeviceIds: string[] } {
     const crypto = requireNodeModule<typeof import("node:crypto")>("crypto");
     const token = crypto.randomBytes(32).toString("base64url");
     const stored: StoredDevice = {
@@ -81,9 +94,16 @@ export class PairedDeviceStore {
       tokenHash: sha256Hex(token),
       createdAt: this.now(),
       lastSeenAt: null,
+      ...(clientId ? { clientId } : {}),
     };
-    this.writeStored([...this.readStored(), stored]);
-    return { device: withoutHash(stored), token };
+    const earlier = this.readStored();
+    const replaced = clientId ? earlier.filter((device) => device.clientId === clientId) : [];
+    this.writeStored([...earlier.filter((device) => !replaced.includes(device)), stored]);
+    return {
+      device: withoutHash(stored),
+      token,
+      replacedDeviceIds: replaced.map((device) => device.id),
+    };
   }
 
   authenticate(token: string): PairedDevice | null {
