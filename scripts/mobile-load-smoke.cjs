@@ -594,6 +594,19 @@ async function checkMobileEntryBundle() {
   if (desktopOnly.length > 0) {
     fail(`${mobileEntry} loads desktop-only modules: ${desktopOnly.join(", ")}`);
   }
+  // A dynamic import runs later, so the static closure above does not see it. One that reaches a
+  // desktop-only module has to sit behind isDesktopRuntime(), or the phone loads the module on use.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+  for (const file of files) {
+    for (const edge of phone.metafile.inputs[file]?.imports ?? []) {
+      if (edge.kind !== "dynamic-import" || !desktopOnlyAgentInputs.test(edge.path)) continue;
+      if (!readRepoFile(file).includes("isDesktopRuntime")) {
+        fail(
+          `${file}: dynamic import of ${edge.path} on the phone's load path is not gated by isDesktopRuntime().`
+        );
+      }
+    }
+  }
   const sdkPackages = [...files].filter((file) =>
     /^node_modules\/(?:@anthropic-ai\/claude-agent-sdk|@agentclientprotocol)\//.test(file)
   );
