@@ -1,5 +1,8 @@
-import type { ComposerCommands } from "@/agentMode/ui/hooks/useComposerCommands";
+import type { ClientView } from "@/agentMode/protocol/ClientView";
 import { checkImageLimits, decodedBase64Bytes } from "@/agentMode/protocol/limits";
+import { useClientView } from "@/agentMode/protocol/react";
+import { EMPTY_CHAT_RUNTIME } from "@/agentMode/protocol/selectors";
+import type { SessionClient } from "@/agentMode/protocol/SessionClient";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
@@ -13,24 +16,20 @@ import {
 } from "@/aiParams";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCachedCustomCommands } from "@/commands/state";
-import ChatInput, {
-  type ChatInputHandle,
-  type ChatInputProps,
-} from "@/components/chat-components/ChatInput";
+import ChatInput, { type ChatInputHandle } from "@/components/chat-components/ChatInput";
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
+import { useAgentBrands } from "@/agentMode/ui/hooks/useAgentBrands";
+import { useChatRuntime } from "@/agentMode/ui/hooks/useChatRuntime";
+import { useSessionCommands } from "@/agentMode/ui/hooks/useSessionCommands";
+import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
+import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
 import { useCanUseMultiAgent } from "@/plusUtils";
 import { EventTargetContext } from "@/context";
 import { logError, logWarn } from "@/logger";
-import {
-  isFanout,
-  resolveAnswerers,
-  useInstalledAgentBrands,
-} from "@/agentMode/ui/mentionedAgents";
-import type { BackendId } from "@/agentMode/session/types";
-import type CopilotPlugin from "@/main";
-import { getCloudAgentIds } from "@/agentMode/backends/registry";
+import { isFanout, resolveAnswerers } from "@/agentMode/ui/mentionedAgents";
+import type { BackendId, SessionId } from "@/agentMode/session/types";
 import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/activeWebTabSnapshot";
 import {
   isNoteSelectedTextContext,
@@ -49,19 +48,13 @@ import { v4 as uuidv4 } from "uuid";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface AgentChatInputProps {
-  composer: ComposerCommands;
-  plugin: CopilotPlugin;
+  client: SessionClient;
+  view: ClientView;
+  sessionId: SessionId;
   chatInputId: string;
   draft: AgentInputDraftControls;
   app: App;
-  mainAgentId: BackendId | null;
   updateUserMessageHistory: (newMessage: string) => void;
-  isStarting: boolean;
-  isLoading: boolean;
-  hasPendingPlanPermission: boolean;
-  modelPickerOverride: ChatInputProps["modelPickerOverride"];
-  modePickerOverride: ChatInputProps["modePickerOverride"];
-  onCycleMode: () => void;
   activeProjectId?: string;
   contextLoadBlocking?: boolean;
   disabled?: boolean;
@@ -150,19 +143,13 @@ function imageBlockToFile(block: PromptContent, index: number): File | null {
 }
 
 export const AgentChatInput = memo(function AgentChatInput({
-  composer,
-  plugin,
+  client,
+  view,
+  sessionId,
   chatInputId,
   draft,
   app,
-  mainAgentId,
   updateUserMessageHistory,
-  isStarting,
-  isLoading: loading,
-  hasPendingPlanPermission,
-  modelPickerOverride,
-  modePickerOverride,
-  onCycleMode,
   activeProjectId,
   contextLoadBlocking = false,
   disabled = false,
@@ -180,7 +167,26 @@ export const AgentChatInput = memo(function AgentChatInput({
 
   const canUseMultiAgent = useCanUseMultiAgent();
 
-  const installedAgentBrands = useInstalledAgentBrands(plugin);
+  const commands = useSessionCommands(client, sessionId);
+  const { isStarting, isTurnInFlight, hasPendingPlanPermission } =
+    useChatRuntime(client, sessionId) ?? EMPTY_CHAT_RUNTIME;
+  const { host } = useClientView(client, view);
+  const mainAgentId: BackendId | null =
+    host?.tabs.find((tab) => tab.id === sessionId)?.backendId ??
+    host?.host.startingBackendId ??
+    null;
+  const modelPickerOverride = useAgentModelPicker(client, view);
+  const modePickerOverride = useAgentModePicker(client, view);
+  const handleCycleMode = useCallback(() => {
+    if (!modePickerOverride || modePickerOverride.disabled) return;
+    const { options, value, onChange } = modePickerOverride;
+    if (options.length === 0) return;
+    const currentIdx = options.findIndex((o) => o.value === value);
+    const next = options[(currentIdx + 1) % options.length];
+    if (next.value !== value) onChange(next.value);
+  }, [modePickerOverride]);
+
+  const { installed: installedAgentBrands, cloudAgentIds } = useAgentBrands(client);
   const agentBrands = canUseMultiAgent ? installedAgentBrands : EMPTY_AGENT_MENTION_BRANDS;
   const installedAgentIds = useMemo(
     () => new Set(installedAgentBrands.map((b) => b.id)),
@@ -191,6 +197,7 @@ export const AgentChatInput = memo(function AgentChatInput({
     mentionedAgentIdsRef.current = backendIds;
   }, []);
 
+  const loading = draft.loading || isTurnInFlight;
   const {
     input: inputMessage,
     images: selectedImages,
@@ -247,17 +254,17 @@ export const AgentChatInput = memo(function AgentChatInput({
       if (images.length > 0) setSelectedImages((previous) => [...images, ...previous]);
     }
     try {
-      await composer.cancel();
+      await commands.cancel();
     } catch (e) {
       logError("[AgentMode] cancel failed", e);
     }
-  }, [composer, queuedMessages, setContextNotes, setSelectedImages, setQueuedMessages]);
+  }, [commands, queuedMessages, setContextNotes, setSelectedImages, setQueuedMessages]);
 
   const runSend = useCallback(
     async (item: QueuedAgentMessage) => {
       setLoading(true);
       try {
-        const { turn } = await composer.sendMessage(
+        const { turn } = await commands.send(
           item.text,
           item.context,
           item.promptContent,
@@ -272,7 +279,7 @@ export const AgentChatInput = memo(function AgentChatInput({
         setLoading(false);
       }
     },
-    [composer, setLoading, updateUserMessageHistory]
+    [commands, setLoading, updateUserMessageHistory]
   );
 
   const handleSendMessage = useCallback(
@@ -469,7 +476,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           isGenerating={loading}
           onStopGenerating={safeAsyncHandler(handleStopGenerating)}
           onEscape={loading ? safeAsyncHandler(handleStopGenerating) : undefined}
-          onShiftTab={modePickerOverride ? onCycleMode : undefined}
+          onShiftTab={modePickerOverride ? handleCycleMode : undefined}
           app={app}
           contextNotes={contextNotes}
           setContextNotes={setContextNotes}
@@ -487,7 +494,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           selectedTextContexts={selectedTextContexts}
           onRemoveSelectedText={removeSelectedTextContext}
           agentBrands={agentBrands}
-          cloudAgentIds={getCloudAgentIds()}
+          cloudAgentIds={cloudAgentIds}
           onMentionedAgentsChange={handleMentionedAgentsChange}
           topRightAccessory={contextStatusIndicator}
         />
