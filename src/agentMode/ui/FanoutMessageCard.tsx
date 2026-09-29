@@ -9,14 +9,14 @@ import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import { renderFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
-import type { AgentChatMessage } from "@/agentMode/session/types";
+import type { WireMessage } from "@/agentMode/protocol/state";
 import type { ChatMessage } from "@/types/message";
-import { insertAtCursor } from "@/utils";
+import { useAgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
 import { App } from "obsidian";
-import React, { memo, useCallback, useMemo, useState } from "react";
+import React, { memo, useMemo, useState } from "react";
 
 interface FanoutMessageCardProps {
-  message: AgentChatMessage;
+  message: WireMessage;
   turn: FanoutTurn;
   app: App;
   footerStart?: React.ReactNode;
@@ -39,9 +39,11 @@ export const FanoutMessageCard: React.FC<FanoutMessageCardProps> = memo(
       [turn, activeValue]
     );
 
-    const handleInsert = useCallback(() => {
-      void insertAtCursor(app, currentText);
-    }, [app, currentText]);
+    const { insertAtCursor } = useAgentPaneCapabilities();
+    const handleInsert = useMemo(
+      () => (insertAtCursor ? () => insertAtCursor(currentText) : undefined),
+      [insertAtCursor, currentText]
+    );
 
     const buttonsMessage = useMemo<ChatMessage>(
       () => ({

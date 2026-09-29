@@ -2,14 +2,14 @@ import { CopyButton } from "@/components/chat-components/CopyButton";
 import { MessageActionButton } from "@/components/chat-components/MessageActionButton";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
-import { ChatMessage } from "@/types/message";
+import type { ChatMessageView } from "@/types/message";
 import { cleanMessageForCopy } from "@/utils";
 import { LibraryBig, PenSquare, RotateCw, TextCursorInput, Trash2 } from "lucide-react";
 import { Platform } from "obsidian";
 import React from "react";
 
 interface ChatButtonsProps {
-  message: ChatMessage;
+  message: ChatMessageView;
   onInsertIntoEditor?: () => void;
   onRegenerate?: () => void;
   onEdit?: () => void;
@@ -44,11 +44,13 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
           {hasSources && (
             <MessageActionButton label="Show Sources" icon={LibraryBig} onClick={onShowSources} />
           )}
-          <MessageActionButton
-            label="Insert / Replace at cursor"
-            icon={TextCursorInput}
-            onClick={onInsertIntoEditor}
-          />
+          {onInsertIntoEditor && (
+            <MessageActionButton
+              label="Insert / Replace at cursor"
+              icon={TextCursorInput}
+              onClick={onInsertIntoEditor}
+            />
+          )}
           <CopyButton text={cleanMessageForCopy(message.message)} />
           {onRegenerate && (
             <MessageActionButton label="Regenerate" icon={RotateCw} onClick={onRegenerate} />

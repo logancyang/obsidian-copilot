@@ -1,3 +1,7 @@
+import { EMPTY_CHAT_RUNTIME } from "@/agentMode/protocol/selectors";
+import type { SessionClient } from "@/agentMode/protocol/SessionClient";
+import type { WireMessage } from "@/agentMode/protocol/state";
+import type { SessionId } from "@/agentMode/session/types";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import { AskUserQuestionCard } from "@/agentMode/ui/AskUserQuestionCard";
 import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
@@ -8,29 +12,22 @@ import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
-import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
-import type {
-  AgentChatMessage,
-  AskUserQuestionPrompt,
-  CurrentPlan,
-  PermissionPrompt,
-} from "@/agentMode/session/types";
-import type { ChatMessage } from "@/types/message";
+import { useAgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
+import { useChatRuntime } from "@/agentMode/ui/hooks/useChatRuntime";
+import { useSessionCommands } from "@/agentMode/ui/hooks/useSessionCommands";
+import type { ChatMessageView } from "@/types/message";
 import { App } from "obsidian";
 import React, { memo, useMemo } from "react";
 
 interface AgentChatMessagesProps {
-  messages: AgentChatMessage[];
+  client: SessionClient;
+  sessionId: SessionId;
   app: App;
   sourcePath?: string;
-  currentPlan: CurrentPlan | null;
-  pendingToolPermissions: PermissionPrompt[];
-  pendingAskUserQuestions: AskUserQuestionPrompt[];
-  chatBackend: AgentChatBackend;
   isLoading: boolean;
 }
 
-function toChatMessageView(m: AgentChatMessage): ChatMessage {
+function toChatMessageView(m: WireMessage): ChatMessageView {
   return {
     id: m.id,
     sender: m.sender,
@@ -45,7 +42,10 @@ function toChatMessageView(m: AgentChatMessage): ChatMessage {
 
 // A permission card names the tool its request omits from the chat's own tool call.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/599
-function findToolCallTitle(messages: AgentChatMessage[], toolCallId: string): string | undefined {
+function findToolCallTitle(
+  messages: readonly WireMessage[],
+  toolCallId: string
+): string | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     const part = messages[i].parts?.find((p) => p.kind === "tool_call" && p.id === toolCallId);
     if (part?.kind === "tool_call") return part.title;
@@ -53,7 +53,7 @@ function findToolCallTitle(messages: AgentChatMessage[], toolCallId: string): st
   return undefined;
 }
 
-function lastAssistant(visible: AgentChatMessage[]): AgentChatMessage | undefined {
+function lastAssistant(visible: readonly WireMessage[]): WireMessage | undefined {
   for (let i = visible.length - 1; i >= 0; i--) {
     if (visible[i].sender !== USER_SENDER) return visible[i];
   }
@@ -61,7 +61,7 @@ function lastAssistant(visible: AgentChatMessage[]): AgentChatMessage | undefine
 }
 
 interface AgentMessageRowProps {
-  message: AgentChatMessage;
+  message: WireMessage;
   messageKey: string;
   app: App;
   sourcePath: string;
@@ -82,6 +82,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
   isStreaming,
   minHeight,
 }: AgentMessageRowProps) {
+  const { insertAtCursor } = useAgentPaneCapabilities();
   const adaptedMessage = toChatMessageView(message);
   const isAssistant = message.sender !== USER_SENDER;
   const hasParts = (message.parts?.length ?? 0) > 0;
@@ -138,6 +139,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
             app={app}
             isStreaming={false}
             footerStart={completedTurnDuration}
+            insertIntoEditor={insertAtCursor ?? null}
           />
           {runningTurnDuration ? <div className="tw-px-3">{runningTurnDuration}</div> : null}
         </>
@@ -147,17 +149,14 @@ const AgentMessageRow = memo(function AgentMessageRow({
 });
 
 const AgentChatMessages = memo(
-  ({
-    messages,
-    app,
-    sourcePath = "",
-    currentPlan,
-    pendingToolPermissions,
-    pendingAskUserQuestions,
-    chatBackend,
-    isLoading,
-  }: AgentChatMessagesProps) => {
-    const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
+  ({ client, sessionId, app, sourcePath = "", isLoading }: AgentChatMessagesProps) => {
+    const {
+      messages: visible,
+      currentPlan,
+      pendingToolPermissions,
+      pendingAskUserQuestions,
+    } = useChatRuntime(client, sessionId) ?? EMPTY_CHAT_RUNTIME;
+    const commands = useSessionCommands(client, sessionId);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
     const {
       containerMinHeight,
@@ -171,16 +170,16 @@ const AgentChatMessages = memo(
 
     const showPlanCard = currentPlan != null && currentPlan.decision === "pending";
     const inlinePlanCard = showPlanCard ? (
-      <PlanProposalCard plan={currentPlan} app={app} chatBackend={chatBackend} />
+      <PlanProposalCard plan={currentPlan} client={client} sessionId={sessionId} />
     ) : null;
     const pendingQuestion = pendingAskUserQuestions[0];
     const pendingPermission = pendingQuestion ? undefined : pendingToolPermissions[0];
     const pendingToolName = useMemo(
       () =>
         pendingPermission
-          ? findToolCallTitle(messages, pendingPermission.toolCall.toolCallId)
+          ? findToolCallTitle(visible, pendingPermission.toolCall.toolCallId)
           : undefined,
-      [messages, pendingPermission]
+      [visible, pendingPermission]
     );
     // Questions take priority so the separate resolver queues have a stable
     // presentation policy without carrying cross-type sequencing state.
@@ -239,13 +238,17 @@ const AgentChatMessages = memo(
               {pendingQuestion ? (
                 <AskUserQuestionCard
                   request={pendingQuestion}
-                  onResolve={chatBackend.resolveAskUserQuestion.bind(chatBackend)}
+                  onResolve={(requestId, answers) =>
+                    void commands.answerQuestion(requestId, answers)
+                  }
                 />
               ) : pendingPermission ? (
                 <ToolPermissionCard
                   request={pendingPermission}
                   toolName={pendingToolName}
-                  onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
+                  onResolve={(toolCallId, optionId) =>
+                    void commands.resolvePermission(toolCallId, optionId)
+                  }
                 />
               ) : null}
             </div>

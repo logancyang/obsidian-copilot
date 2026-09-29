@@ -1,4 +1,6 @@
 import { useApp } from "@/context";
+import { AgentPaneCapabilitiesProvider } from "@/agentMode/ui/AgentPaneContext";
+import { inertPaneCapabilities } from "@/agentMode/ui/agentPane.fixtures";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { AgentMessagePart } from "@/agentMode/session/types";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
@@ -86,15 +88,17 @@ const TrailDemo: React.FC<{
   const app = useApp();
   return (
     <TooltipProvider>
-      <AgentTrail
-        parts={parts}
-        isStreaming={isStreaming}
-        turnStartedAtMs={isStreaming ? Date.now() - 138_000 : undefined}
-        turnDurationMs={!isStreaming && showCompletedDuration ? 138_000 : undefined}
-        timestamp="2026/08/07 20:31:10"
-        app={app}
-        turnStopReason={isStreaming ? undefined : "end_turn"}
-      />
+      <AgentPaneCapabilitiesProvider value={inertPaneCapabilities}>
+        <AgentTrail
+          parts={parts}
+          isStreaming={isStreaming}
+          turnStartedAtMs={isStreaming ? Date.now() - 138_000 : undefined}
+          turnDurationMs={!isStreaming && showCompletedDuration ? 138_000 : undefined}
+          timestamp="2026/08/07 20:31:10"
+          app={app}
+          turnStopReason={isStreaming ? undefined : "end_turn"}
+        />
+      </AgentPaneCapabilitiesProvider>
     </TooltipProvider>
   );
 };

@@ -1,4 +1,5 @@
 import {
+  EMPTY_PENDING,
   EMPTY_TRANSCRIPT,
   type HostState,
   type SessionState,
@@ -23,6 +24,17 @@ export interface ChatRuntime {
   pendingToolPermissions: readonly PermissionPrompt[];
   pendingAskUserQuestions: readonly WireQuestionPrompt[];
 }
+
+export const EMPTY_CHAT_RUNTIME: ChatRuntime = Object.freeze({
+  messages: EMPTY_TRANSCRIPT,
+  isStarting: false,
+  isTurnInFlight: false,
+  hasPendingPlanPermission: false,
+  currentPlan: null,
+  currentTodoList: null,
+  pendingToolPermissions: EMPTY_PENDING.permissions,
+  pendingAskUserQuestions: EMPTY_PENDING.questions,
+});
 
 const visibleByTranscript = new WeakMap<readonly WireMessage[], readonly WireMessage[]>();
 const runtimeBySession = new WeakMap<

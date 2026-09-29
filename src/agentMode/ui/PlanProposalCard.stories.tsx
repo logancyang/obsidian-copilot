@@ -1,11 +1,13 @@
+import type { CurrentPlan, SessionId } from "@/agentMode/session/types";
+import { AgentPaneCapabilitiesProvider } from "@/agentMode/ui/AgentPaneContext";
+import { createFixtureClient, inertPaneCapabilities } from "@/agentMode/ui/agentPane.fixtures";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
-import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
-import type { CurrentPlan } from "@/agentMode/session/types";
 import type { Meta, StoryObj } from "@/lib/story";
-import type { App } from "obsidian";
-import type * as React from "react";
+import * as React from "react";
 
 type PlanProposalCardProps = React.ComponentProps<typeof PlanProposalCard>;
+
+const SESSION_ID = "gallery-session" as SessionId;
 
 const plan = {
   id: "gallery-plan",
@@ -17,24 +19,27 @@ const plan = {
   decision: "pending",
 } satisfies CurrentPlan;
 
-const app = {
-  workspace: {
-    getLeavesOfType: () => [],
-    getLeaf: () => ({ setViewState: async () => undefined }),
-    revealLeaf: () => undefined,
-  },
-} as unknown as App;
+const PendingDemo: React.FC = () => {
+  const fixture = React.useMemo(
+    () =>
+      createFixtureClient({
+        sessionId: SESSION_ID,
+        session: { plan, pending: { permissions: [], questions: [], planPermission: true } },
+      }),
+    []
+  );
+  return (
+    <AgentPaneCapabilitiesProvider value={inertPaneCapabilities}>
+      <PlanProposalCard plan={plan} client={fixture.client} sessionId={SESSION_ID} />
+    </AgentPaneCapabilitiesProvider>
+  );
+};
 
 const meta = {
   title: "Agent Mode/Plan Proposal Card",
   component: PlanProposalCard,
-  args: {
-    plan,
-    app,
-    chatBackend: { resolvePlanProposal: async () => undefined } as unknown as AgentChatBackend,
-  },
   parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<PlanProposalCardProps>;
 export default meta;
 
-export const Pending: StoryObj<PlanProposalCardProps> = {};
+export const Pending: StoryObj<PlanProposalCardProps> = { render: PendingDemo };

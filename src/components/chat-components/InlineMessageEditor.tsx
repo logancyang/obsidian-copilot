@@ -1,13 +1,13 @@
 import React, { useState, useCallback } from "react";
 import { TFile, App } from "obsidian";
 import ChatInput from "./ChatModeInput";
-import { ChatMessage } from "@/types/message";
+import type { ChatMessage, ChatMessageView } from "@/types/message";
 import { useActiveWebTabState } from "./hooks/useActiveWebTabState";
 import { appendUniqueFiles } from "@/utils/fileListUtils";
 
 interface InlineMessageEditorProps {
   initialValue: string;
-  initialContext?: ChatMessage["context"];
+  initialContext?: ChatMessageView["context"];
   onSave: (newText: string, newContext: ChatMessage["context"]) => void;
   onCancel: () => void;
   app: App;

@@ -1,14 +1,15 @@
 import { Button } from "@/components/ui/button";
 import { logWarn } from "@/logger";
-import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import type { SessionClient } from "@/agentMode/protocol/SessionClient";
 import type {
   CurrentPlan,
   PlanDecisionAction,
   PlanProposalDecision,
+  SessionId,
 } from "@/agentMode/session/types";
-import { closePlanPreview, openPlanPreview } from "@/agentMode/ui/PlanPreviewView";
+import { useAgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
+import { useSessionCommands } from "@/agentMode/ui/hooks/useSessionCommands";
 import { Check, ClipboardList, FileText, Send, X as XIcon } from "lucide-react";
-import { App } from "obsidian";
 import React, { useEffect, useState } from "react";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
@@ -16,11 +17,13 @@ const FEEDBACK_PLACEHOLDER = "Give feedback to redirect the plan…";
 
 interface PlanProposalCardProps {
   plan: CurrentPlan;
-  app: App;
-  chatBackend: AgentChatBackend;
+  client: SessionClient;
+  sessionId: SessionId;
 }
 
-export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, app, chatBackend }) => {
+export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, client, sessionId }) => {
+  const commands = useSessionCommands(client, sessionId);
+  const { openPlanPreview, closePlanPreview } = useAgentPaneCapabilities();
   const [feedback, setFeedback] = useState("");
   const [busy, setBusy] = useState(false);
   const isPending = plan.decision === "pending";
@@ -34,11 +37,11 @@ export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, app, c
 
   const handleOpen = async () => {
     try {
-      await openPlanPreview(app, {
+      await openPlanPreview?.({
         proposalId: plan.id,
+        sessionId,
         planMarkdown: plan.body,
         title: plan.title,
-        chatBackend,
       });
     } catch (e) {
       logWarn("[PlanProposalCard] failed to open preview", e);
@@ -49,8 +52,8 @@ export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, app, c
     if (busy) return;
     setBusy(true);
     try {
-      await chatBackend.resolvePlanProposal(plan.id, decision, text);
-      if (decision === "approve") closePlanPreview(app, plan.id);
+      await commands.resolvePlan(plan.id, decision, text);
+      if (decision === "approve") closePlanPreview?.(plan.id);
     } finally {
       setBusy(false);
     }
@@ -80,10 +83,12 @@ export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, app, c
       </div>
 
       <div className="copilot-divider-t tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-px-3 tw-py-2">
-        <Button variant="secondary" size="sm" onClick={safeAsyncHandler(handleOpen)}>
-          <FileText className="tw-size-4" />
-          Open
-        </Button>
+        {openPlanPreview ? (
+          <Button variant="secondary" size="sm" onClick={safeAsyncHandler(handleOpen)}>
+            <FileText className="tw-size-4" />
+            Open
+          </Button>
+        ) : null}
         {isPending ? (
           <>
             <Button

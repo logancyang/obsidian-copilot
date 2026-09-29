@@ -79,7 +79,11 @@ function makeManager({
 }
 
 function renderChat(manager: AgentSessionManager) {
-  const plugin = { app: {}, agentSessionManager: manager } as unknown as CopilotPlugin;
+  const plugin = {
+    app: {},
+    agentSessionManager: manager,
+    agentSessionClient: {},
+  } as unknown as CopilotPlugin;
   return render(
     <AgentModeChat plugin={plugin} onSaveChat={() => {}} updateUserMessageHistory={() => {}} />
   );
@@ -126,7 +130,13 @@ describe("AgentModeChat", () => {
       (manager.isPreloadReady as jest.Mock).mockReturnValue(true);
       rerender(
         <AgentModeChat
-          plugin={{ app: {}, agentSessionManager: manager } as unknown as CopilotPlugin}
+          plugin={
+            {
+              app: {},
+              agentSessionManager: manager,
+              agentSessionClient: {},
+            } as unknown as CopilotPlugin
+          }
           onSaveChat={() => {}}
           updateUserMessageHistory={() => {}}
         />
@@ -286,7 +296,9 @@ describe("AgentModeChat", () => {
         (manager.isPreloadReady as jest.Mock).mockReturnValue(false);
         rerender(
           <AgentModeChat
-            plugin={{ agentSessionManager: manager } as unknown as CopilotPlugin}
+            plugin={
+              { agentSessionManager: manager, agentSessionClient: {} } as unknown as CopilotPlugin
+            }
             onSaveChat={() => {}}
             updateUserMessageHistory={() => {}}
           />
@@ -307,7 +319,9 @@ describe("AgentModeChat", () => {
       const renderAgain = () =>
         rerender(
           <AgentModeChat
-            plugin={{ agentSessionManager: manager } as unknown as CopilotPlugin}
+            plugin={
+              { agentSessionManager: manager, agentSessionClient: {} } as unknown as CopilotPlugin
+            }
             onSaveChat={() => {}}
             updateUserMessageHistory={() => {}}
           />

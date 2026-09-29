@@ -1,5 +1,5 @@
 import { USER_SENDER } from "@/constants";
-import { ChatMessage } from "@/types/message";
+import type { ChatMessageView } from "@/types/message";
 import { useCallback, useRef, useState, useEffect, useLayoutEffect } from "react";
 
 const END_THRESHOLD_PX = 24;
@@ -8,7 +8,7 @@ const isNearEnd = (node: HTMLElement): boolean =>
   node.scrollHeight - node.clientHeight - node.scrollTop <= END_THRESHOLD_PX;
 
 interface UseChatScrollingOptions {
-  chatHistory: ChatMessage[];
+  chatHistory: ChatMessageView[];
 }
 
 interface UseChatScrollingReturn {
@@ -18,7 +18,7 @@ interface UseChatScrollingReturn {
   onScroll: () => void;
   isScrollPaused: boolean;
   scrollToEnd: () => void;
-  getMessageKey: (message: ChatMessage, index: number) => string;
+  getMessageKey: (message: ChatMessageView, index: number) => string;
 }
 
 export const useChatScrolling = ({
@@ -34,7 +34,7 @@ export const useChatScrolling = ({
   const chatHistoryRef = useRef(chatHistory);
   chatHistoryRef.current = chatHistory;
 
-  const getMessageKey = useCallback((message: ChatMessage, index: number): string => {
+  const getMessageKey = useCallback((message: ChatMessageView, index: number): string => {
     return `message-${message.id || message.timestamp?.epoch || index}`;
   }, []);
 
@@ -147,7 +147,7 @@ export const useChatScrolling = ({
 
   const lastSeenUserMessageIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    let latestUserMessage: ChatMessage | undefined;
+    let latestUserMessage: ChatMessageView | undefined;
     for (let i = chatHistory.length - 1; i >= 0; i--) {
       const m = chatHistory[i];
       if (m.isVisible && m.sender === USER_SENDER) {

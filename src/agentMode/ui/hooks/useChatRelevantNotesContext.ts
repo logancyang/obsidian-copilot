@@ -1,4 +1,4 @@
-import type { AgentChatMessage } from "@/agentMode/session/types";
+import type { WireMessage } from "@/agentMode/protocol/state";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useSelectedTextContexts, type ProjectConfig } from "@/aiParams";
 import { useActiveFile } from "@/hooks/useActiveFile";
@@ -16,7 +16,7 @@ export function useChatRelevantNotesContext(
   root: HTMLElement | null,
   id: string,
   draft: AgentInputDraftControls,
-  messages: AgentChatMessage[],
+  messages: readonly WireMessage[],
   project: ProjectConfig | undefined
 ): void {
   const store = getChatRelevantNotesStore(app);

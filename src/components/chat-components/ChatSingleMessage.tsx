@@ -35,7 +35,7 @@ import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallP
 import { parseReasoningBlock } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
 import { processInlineCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
 import { logError } from "@/logger";
-import { ChatMessage } from "@/types/message";
+import type { ChatMessageView } from "@/types/message";
 import { extractYoutubeVideoId, insertAtCursor } from "@/utils";
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
 import { renderMarkdown } from "@/utils/renderMarkdown";
@@ -182,7 +182,7 @@ const linkInlineCitations = (root: HTMLElement): void => {
   });
 };
 
-function MessageContext({ context }: { context: ChatMessage["context"] }) {
+function MessageContext({ context }: { context: ChatMessageView["context"] }) {
   if (
     !context ||
     (!context.notes?.length &&
@@ -273,13 +273,16 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
 }
 
 interface ChatSingleMessageProps {
-  message: ChatMessage;
+  message: ChatMessageView;
   app: App;
   sourcePath?: string;
   isStreaming: boolean;
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
   onDelete?: () => void;
+  // Omitted, the action writes into the workspace editor; `null` hides it where there is none.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/611
+  insertIntoEditor?: ((text: string) => void) | null;
   footerStart?: React.ReactNode;
 }
 
@@ -291,6 +294,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onRegenerate,
   onEdit,
   onDelete,
+  insertIntoEditor,
   footerStart,
 }) => {
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -776,9 +780,13 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     }
   };
 
-  const handleInsertIntoEditor = () => {
-    void insertAtCursor(app, message.message);
-  };
+  const handleInsertIntoEditor =
+    insertIntoEditor === null
+      ? undefined
+      : () => {
+          if (insertIntoEditor) insertIntoEditor(message.message);
+          else void insertAtCursor(app, message.message);
+        };
 
   const renderMessageContent = () => {
     if (message.content) {

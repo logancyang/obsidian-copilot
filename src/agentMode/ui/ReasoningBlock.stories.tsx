@@ -1,4 +1,6 @@
 import { AgentMessageActions } from "@/agentMode/ui/AgentMessageActions";
+import { AgentPaneCapabilitiesProvider } from "@/agentMode/ui/AgentPaneContext";
+import { inertPaneCapabilities } from "@/agentMode/ui/agentPane.fixtures";
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import { ReasoningBlock } from "@/agentMode/ui/ReasoningBlock";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -36,18 +38,19 @@ const ReasoningResponseDurationDemo: React.FC = () => {
   const app = useApp();
   return (
     <TooltipProvider>
-      <div className="tw-group tw-flex tw-flex-col tw-gap-1">
-        <ReasoningBlock part={REASONING} isStreaming={false} />
-        <AgentMarkdownText
-          text="The completed duration now shares a centered footer with the response controls."
-          app={app}
-        />
-        <AgentMessageActions
-          text="The completed duration now shares a centered footer with the response controls."
-          app={app}
-          durationMs={138_000}
-        />
-      </div>
+      <AgentPaneCapabilitiesProvider value={inertPaneCapabilities}>
+        <div className="tw-group tw-flex tw-flex-col tw-gap-1">
+          <ReasoningBlock part={REASONING} isStreaming={false} />
+          <AgentMarkdownText
+            text="The completed duration now shares a centered footer with the response controls."
+            app={app}
+          />
+          <AgentMessageActions
+            text="The completed duration now shares a centered footer with the response controls."
+            durationMs={138_000}
+          />
+        </div>
+      </AgentPaneCapabilitiesProvider>
     </TooltipProvider>
   );
 };

@@ -18,8 +18,8 @@ import type { ToolSummaryContext } from "@/agentMode/ui/toolSummaries";
 import { useThinkingClock } from "@/agentMode/ui/useThinkingClock";
 import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailExpansion";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
+import { useAgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
 import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
-import { getVaultBase } from "@/utils/vaultPath";
 import { App } from "obsidian";
 
 interface AgentTrailProps {
@@ -45,12 +45,7 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   const hasRunningDuration = isStreaming && turnStartedAtMs !== undefined;
   const footer =
     !isStreaming && turnStopReason !== "cancelled" && answer.length > 0 ? (
-      <AgentMessageActions
-        text={answer}
-        app={app}
-        durationMs={turnDurationMs}
-        timestamp={timestamp}
-      />
+      <AgentMessageActions text={answer} durationMs={turnDurationMs} timestamp={timestamp} />
     ) : turnDurationMs !== undefined ? (
       <AssistantResponseFooter
         leading={
@@ -85,7 +80,8 @@ const LinearTrail: React.FC<{
   app: App;
 }> = ({ parts, isStreaming, app }) => {
   const expansion = useTrailExpansion();
-  const summaryCtx = useMemo(() => ({ vaultBase: getVaultBase(app) }), [app]);
+  const { vaultBase } = useAgentPaneCapabilities();
+  const summaryCtx = useMemo(() => ({ vaultBase }), [vaultBase]);
   const nodes = foldActivityGroups(buildAgentTrail(parts));
   const ctx: TrailContext = {
     app,

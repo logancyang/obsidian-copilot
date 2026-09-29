@@ -1,20 +1,17 @@
-import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
-import type {
-  AgentChatMessage,
-  AskUserQuestionPrompt,
-  PermissionPrompt,
-  SessionId,
-} from "@/agentMode/session/types";
+import type { WireMessage, WireQuestionPrompt } from "@/agentMode/protocol/state";
+import type { PermissionPrompt, SessionId } from "@/agentMode/session/types";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
+import { AgentPaneCapabilitiesProvider } from "@/agentMode/ui/AgentPaneContext";
+import { createFixtureClient, inertPaneCapabilities } from "@/agentMode/ui/agentPane.fixtures";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 
 type AgentChatMessagesProps = React.ComponentProps<typeof AgentChatMessages>;
 
 const SESSION_ID = "gallery-session" as SessionId;
-const message: AgentChatMessage = {
+const message: WireMessage = {
   id: "gallery-response",
   sender: "ai",
   message: "I need a few decisions before I can continue.",
@@ -33,7 +30,7 @@ function permission(id: string, title: string): PermissionPrompt {
   };
 }
 
-function question(id: string, text: string): AskUserQuestionPrompt {
+function question(id: string, text: string): WireQuestionPrompt {
   return {
     sessionId: SESSION_ID,
     requestId: id,
@@ -50,7 +47,7 @@ const questions = [
   question("audience", "Should the brief target existing customers?"),
   question("publish", "Should I prepare a publish-ready version?"),
 ];
-const tallQuestion: AskUserQuestionPrompt = {
+const tallQuestion: WireQuestionPrompt = {
   sessionId: SESSION_ID,
   requestId: "deployment-strategy",
   questions: [
@@ -65,174 +62,178 @@ const tallQuestion: AskUserQuestionPrompt = {
   ],
 };
 
-const QueuedActionsDemo: React.FC<AgentChatMessagesProps> = (props) => {
+interface PaneScenario {
+  messages: WireMessage[];
+  pendingToolPermissions: PermissionPrompt[];
+  pendingAskUserQuestions: WireQuestionPrompt[];
+  isLoading: boolean;
+}
+
+const ActionsDemo: React.FC<{ scenario: PaneScenario }> = ({ scenario }) => {
   const app = useApp();
-  const [pendingToolPermissions, setPendingToolPermissions] = useState(
-    props.pendingToolPermissions
-  );
-  const [pendingAskUserQuestions, setPendingAskUserQuestions] = useState(
-    props.pendingAskUserQuestions
-  );
-  const chatBackend = useMemo(
+  const fixture = useMemo(
     () =>
-      ({
-        resolveToolPermission: (toolCallId: string) => {
-          setPendingToolPermissions((current) =>
-            current.filter((request) => request.toolCall.toolCallId !== toolCallId)
-          );
+      createFixtureClient({
+        sessionId: SESSION_ID,
+        tab: { status: scenario.isLoading ? "running" : "idle" },
+        session: {
+          transcript: scenario.messages,
+          pending: {
+            permissions: scenario.pendingToolPermissions,
+            questions: scenario.pendingAskUserQuestions,
+            planPermission: false,
+          },
         },
-        resolveAskUserQuestion: (requestId: string) => {
-          setPendingAskUserQuestions((current) =>
-            current.filter((request) => request.requestId !== requestId)
-          );
+        onCommand: (command, host) => {
+          const { pending } = host.getSession();
+          if (command.name === "resolvePermission") {
+            host.emitSession({
+              t: "slice",
+              key: "pending",
+              value: {
+                ...pending,
+                permissions: pending.permissions.filter(
+                  (request) => request.toolCall.toolCallId !== command.toolCallId
+                ),
+              },
+            });
+          } else if (command.name === "answerQuestion") {
+            host.emitSession({
+              t: "slice",
+              key: "pending",
+              value: {
+                ...pending,
+                questions: pending.questions.filter(
+                  (request) => request.requestId !== command.requestId
+                ),
+              },
+            });
+          }
+          return { ok: true, value: undefined };
         },
-      }) as unknown as AgentChatBackend,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a story renders one scenario for its lifetime
     []
   );
 
   return (
     <TooltipProvider>
-      <div className="tw-h-96 tw-overflow-hidden">
-        <AgentChatMessages
-          {...props}
-          app={app}
-          pendingToolPermissions={pendingToolPermissions}
-          pendingAskUserQuestions={pendingAskUserQuestions}
-          chatBackend={chatBackend}
-        />
-      </div>
+      <AgentPaneCapabilitiesProvider value={inertPaneCapabilities}>
+        <div className="tw-h-96 tw-overflow-hidden">
+          <AgentChatMessages
+            client={fixture.client}
+            sessionId={SESSION_ID}
+            app={app}
+            isLoading={scenario.isLoading}
+          />
+        </div>
+      </AgentPaneCapabilitiesProvider>
     </TooltipProvider>
   );
 };
 
-const actionRailArgs: AgentChatMessagesProps = {
+const baseScenario: PaneScenario = {
   messages: [message],
-  app: {} as AgentChatMessagesProps["app"],
-  currentPlan: null,
   pendingToolPermissions: permissions,
   pendingAskUserQuestions: questions,
-  chatBackend: {} as AgentChatBackend,
   isLoading: true,
 };
+
+const scenarioStory = (overrides: Partial<PaneScenario>): StoryObj<AgentChatMessagesProps> => ({
+  render: () => <ActionsDemo scenario={{ ...baseScenario, ...overrides }} />,
+});
 
 const meta = {
   title: "Agent Mode/Agent Chat Messages",
   component: AgentChatMessages,
-  args: actionRailArgs,
   parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<AgentChatMessagesProps>;
 export default meta;
 
-export const QueuedActions: StoryObj<AgentChatMessagesProps> = {
-  render: () => <QueuedActionsDemo {...actionRailArgs} />,
-};
+export const QueuedActions: StoryObj<AgentChatMessagesProps> = scenarioStory({});
 
-export const LongResponse: StoryObj<AgentChatMessagesProps> = {
-  args: {
-    ...actionRailArgs,
-    currentPlan: null,
-    pendingToolPermissions: [],
-    pendingAskUserQuestions: [],
-    messages: [
-      { ...message, id: "long-request", sender: "user", message: "Review the project notes." },
-      {
-        ...message,
-        id: "long-response",
-        message: Array.from(
-          { length: 12 },
-          (_, index) => `Finding ${index + 1}: The notes clarify the next step for the project.`
-        ).join("\n\n"),
-      },
-    ],
-    isLoading: true,
-  },
-  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
-};
+export const LongResponse: StoryObj<AgentChatMessagesProps> = scenarioStory({
+  pendingToolPermissions: [],
+  pendingAskUserQuestions: [],
+  messages: [
+    { ...message, id: "long-request", sender: "user", message: "Review the project notes." },
+    {
+      ...message,
+      id: "long-response",
+      message: Array.from(
+        { length: 12 },
+        (_, index) => `Finding ${index + 1}: The notes clarify the next step for the project.`
+      ).join("\n\n"),
+    },
+  ],
+  isLoading: true,
+});
 
-export const TallQuestion: StoryObj<AgentChatMessagesProps> = {
-  render: () => (
-    <QueuedActionsDemo
-      {...actionRailArgs}
-      pendingToolPermissions={[]}
-      pendingAskUserQuestions={[tallQuestion]}
-    />
-  ),
-};
+export const TallQuestion: StoryObj<AgentChatMessagesProps> = scenarioStory({
+  pendingToolPermissions: [],
+  pendingAskUserQuestions: [tallQuestion],
+});
 
-export const RunningAfterStop: StoryObj<AgentChatMessagesProps> = {
-  args: {
-    ...actionRailArgs,
-    pendingToolPermissions: [],
-    pendingAskUserQuestions: [],
-    messages: [
-      { ...message, id: "first-request", sender: "user", message: "Summarize this note." },
-      {
-        ...message,
-        id: "stopped-response",
-        message: "I will read the note and summarize its main points.",
-        turnStopReason: "cancelled",
-        turnDurationMs: 2300,
-      },
-      { ...message, id: "next-request", sender: "user", message: "List its action items instead." },
-      { ...message, id: "running-response", message: "" },
-    ],
-    isLoading: true,
-  },
-  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
-};
+export const RunningAfterStop: StoryObj<AgentChatMessagesProps> = scenarioStory({
+  pendingToolPermissions: [],
+  pendingAskUserQuestions: [],
+  messages: [
+    { ...message, id: "first-request", sender: "user", message: "Summarize this note." },
+    {
+      ...message,
+      id: "stopped-response",
+      message: "I will read the note and summarize its main points.",
+      turnStopReason: "cancelled",
+      turnDurationMs: 2300,
+    },
+    { ...message, id: "next-request", sender: "user", message: "List its action items instead." },
+    { ...message, id: "running-response", message: "" },
+  ],
+  isLoading: true,
+});
 
-export const ApprovedPlanRunning: StoryObj<AgentChatMessagesProps> = {
-  args: {
-    ...actionRailArgs,
-    currentPlan: null,
-    pendingToolPermissions: [],
-    pendingAskUserQuestions: [],
-    messages: [
-      { ...message, id: "plan-request", sender: "user", message: "Plan a note for my trip." },
-      {
-        ...message,
-        id: "plan-implementation",
-        message: "The plan is approved. I'm creating the note now.",
-      },
-    ],
-    isLoading: true,
-  },
-  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
-};
+export const ApprovedPlanRunning: StoryObj<AgentChatMessagesProps> = scenarioStory({
+  pendingToolPermissions: [],
+  pendingAskUserQuestions: [],
+  messages: [
+    { ...message, id: "plan-request", sender: "user", message: "Plan a note for my trip." },
+    {
+      ...message,
+      id: "plan-implementation",
+      message: "The plan is approved. I'm creating the note now.",
+    },
+  ],
+  isLoading: true,
+});
 
-export const PlanResponses: StoryObj<AgentChatMessagesProps> = {
-  args: {
-    ...actionRailArgs,
-    currentPlan: null,
-    pendingToolPermissions: [],
-    pendingAskUserQuestions: [],
-    messages: [
-      { ...message, id: "request", sender: "user", message: "Plan my trip." },
-      {
-        ...message,
-        id: "responses",
-        message: "",
-        parts: [
-          {
-            kind: "tool_call",
-            id: "answer",
-            title: "Answered: Checklist",
-            status: "completed",
-            userResponse: "Answered: Checklist",
-            output: [{ type: "text", text: "Choose a format: Checklist" }],
-          },
-          {
-            kind: "tool_call",
-            id: "plan-approval",
-            title: "Approved plan",
-            status: "completed",
-            toolKind: "switch_mode",
-            userResponse: "Approved plan",
-          },
-        ],
-      },
-    ],
-    isLoading: false,
-  },
-  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
-};
+export const PlanResponses: StoryObj<AgentChatMessagesProps> = scenarioStory({
+  pendingToolPermissions: [],
+  pendingAskUserQuestions: [],
+  messages: [
+    { ...message, id: "request", sender: "user", message: "Plan my trip." },
+    {
+      ...message,
+      id: "responses",
+      message: "",
+      parts: [
+        {
+          kind: "tool_call",
+          id: "answer",
+          title: "Answered: Checklist",
+          status: "completed",
+          userResponse: "Answered: Checklist",
+          output: [{ type: "text", text: "Choose a format: Checklist" }],
+        },
+        {
+          kind: "tool_call",
+          id: "plan-approval",
+          title: "Approved plan",
+          status: "completed",
+          toolKind: "switch_mode",
+          userResponse: "Approved plan",
+        },
+      ],
+    },
+  ],
+  isLoading: false,
+});

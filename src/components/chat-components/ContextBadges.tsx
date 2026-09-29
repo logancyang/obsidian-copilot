@@ -13,7 +13,12 @@ import { TruncatedText } from "@/components/TruncatedText";
 import { getDomainFromUrl } from "@/utils";
 import { cn } from "@/lib/utils";
 import { ContextBadgeWrapper } from "./ContextBadgeWrapper";
-import { SelectedTextContext, WebTabContext, isWebSelectedTextContext } from "@/types/message";
+import {
+  type NoteRef,
+  SelectedTextContext,
+  WebTabContext,
+  isWebSelectedTextContext,
+} from "@/types/message";
 
 interface BaseContextBadgeProps {
   onRemove?: () => void;
@@ -21,7 +26,7 @@ interface BaseContextBadgeProps {
 }
 
 interface ContextNoteBadgeProps extends BaseContextBadgeProps {
-  note: TFile;
+  note: NoteRef;
 }
 
 interface ContextUrlBadgeProps extends BaseContextBadgeProps {
@@ -152,8 +157,9 @@ export function ContextActiveWebTabBadge({
 
 export function ContextNoteBadge({ note, onRemove, onClick }: ContextNoteBadgeProps) {
   const tooltipContent = <div className="tw-text-left">{note.path}</div>;
-  const isPdf = note.extension === "pdf";
-  const isCanvas = note.extension === "canvas";
+  const extension = note.path.slice(note.path.lastIndexOf(".") + 1).toLowerCase();
+  const isPdf = extension === "pdf";
+  const isCanvas = extension === "canvas";
 
   return (
     <ContextBadgeWrapper

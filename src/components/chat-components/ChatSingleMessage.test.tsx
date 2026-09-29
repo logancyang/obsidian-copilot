@@ -711,5 +711,63 @@ describe("ChatSingleMessage", () => {
         restoreContentHeight();
       }
     });
+
+    it("calls the supplied insert action with the message text and hides the action when it is null (https://github.com/Brevilabs/obsidian-copilot-private/issues/611)", async () => {
+      const insertIntoEditor = jest.fn();
+      const { unmount } = render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{ ...baseMessage, message: "Draft to place" }}
+            app={createAppStub()}
+            isStreaming={false}
+            insertIntoEditor={insertIntoEditor}
+          />
+        </TooltipProvider>
+      );
+      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+      fireEvent.click(screen.getByTitle("Insert / Replace at cursor"));
+      expect(insertIntoEditor).toHaveBeenCalledWith("Draft to place");
+      unmount();
+
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{ ...baseMessage, message: "Draft to place" }}
+            app={createAppStub()}
+            isStreaming={false}
+            insertIntoEditor={null}
+          />
+        </TooltipProvider>
+      );
+      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+      expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
+    });
+
+    it("renders a chip for each note reference in a message context (https://github.com/Brevilabs/obsidian-copilot-private/issues/611)", () => {
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{
+              ...baseMessage,
+              sender: "user",
+              message: "Summarize these",
+              context: {
+                notes: [
+                  { path: "Projects/Research.md", basename: "Research" },
+                  { path: "Journal/Today.md", basename: "Today" },
+                ],
+                urls: [],
+              },
+            }}
+            app={createAppStub()}
+            isStreaming={false}
+          />
+        </TooltipProvider>
+      );
+
+      expect(screen.getByText("Research")).toBeTruthy();
+      expect(screen.getByText("Today")).toBeTruthy();
+    });
   });
 });
