@@ -1,0 +1,65 @@
+import type {
+  HostState,
+  SessionState,
+  TabSummary,
+  WireMessage,
+  WireQuestionPrompt,
+} from "@/agentMode/protocol/state";
+import type {
+  AgentTodoListEntry,
+  CurrentPlan,
+  PermissionPrompt,
+  SessionId,
+} from "@/agentMode/session/types";
+
+export interface ChatRuntime {
+  messages: readonly WireMessage[];
+  isStarting: boolean;
+  isTurnInFlight: boolean;
+  hasPendingPlanPermission: boolean;
+  currentPlan: CurrentPlan | null;
+  currentTodoList: readonly AgentTodoListEntry[] | null;
+  pendingToolPermissions: readonly PermissionPrompt[];
+  pendingAskUserQuestions: readonly WireQuestionPrompt[];
+}
+
+const visibleByTranscript = new WeakMap<readonly WireMessage[], readonly WireMessage[]>();
+const runtimeBySession = new WeakMap<
+  SessionState,
+  { tab: TabSummary | null; runtime: ChatRuntime }
+>();
+
+export function selectTab(host: HostState, id: SessionId): TabSummary | null {
+  return host.tabs.find((tab) => tab.id === id) ?? null;
+}
+
+export function selectVisibleMessages(session: SessionState): readonly WireMessage[] {
+  const cached = visibleByTranscript.get(session.transcript);
+  if (cached) return cached;
+  const visible = session.transcript.filter((message) => message.isVisible);
+  visibleByTranscript.set(session.transcript, visible);
+  return visible;
+}
+
+export function selectChatRuntime(
+  host: HostState,
+  session: SessionState,
+  id: SessionId
+): ChatRuntime {
+  const tab = selectTab(host, id);
+  const cached = runtimeBySession.get(session);
+  if (cached && cached.tab === tab) return cached.runtime;
+  const status = tab?.status;
+  const runtime: ChatRuntime = {
+    messages: selectVisibleMessages(session),
+    isStarting: status === "starting",
+    isTurnInFlight: status === "running" || status === "awaiting_permission",
+    hasPendingPlanPermission: session.pending.planPermission,
+    currentPlan: session.plan,
+    currentTodoList: session.todos,
+    pendingToolPermissions: session.pending.permissions,
+    pendingAskUserQuestions: session.pending.questions,
+  };
+  runtimeBySession.set(session, { tab, runtime });
+  return runtime;
+}

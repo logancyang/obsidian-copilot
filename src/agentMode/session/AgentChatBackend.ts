@@ -23,8 +23,6 @@ export interface AgentChatBackend {
     mentionedAgents?: ReadonlyArray<BackendId>
   ): { id: string; turn: Promise<void> };
   cancel(): Promise<void>;
-  deleteMessage(id: string): Promise<boolean>;
-  clearMessages(): void;
   getMessages(): AgentChatMessage[];
 
   isStarting(): boolean;

@@ -1,6 +1,6 @@
 # Agent Mode — layer rules
 
-Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
+Eight element types, strict imports. Enforced by `eslint-plugin-boundaries`
 (see root `eslint.config.mjs`). The list below mirrors `boundaries/elements` and
 `boundaries/dependencies` exactly — when in doubt, the lint config wins.
 
@@ -24,6 +24,13 @@ Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
    trail rendering all read session-domain types;
 7. **`skills/`** — canonical-store discovery, symlink lifecycle, reconciliation,
    and the Skills settings UI.
+8. **`protocol/`** — the state model, operations, reducers, frames, commands, client
+   and selectors that a UI reads through. It is the only agent code the phone loads,
+   so it may import **values** only from itself (plus `react`); type-only imports from
+   `session/` and the rest of the plugin are erased at build time. It must not reach
+   Node built-ins, `electron`, `obsidian` values, or `@/logger`, and its reducers,
+   client and selectors must not read a clock or random source. Contract:
+   [`designdocs/AGENT_SESSION_HOST.md`](../../designdocs/AGENT_SESSION_HOST.md).
 
 ## Why two adapters under one session
 
@@ -97,6 +104,8 @@ Then in either case:
 - "Canonical-store skill discovery, symlink lifecycle, SKILL.md
   parser/serializer, Skills settings tab (reads `backends/registry.ts`
   for the brand list)" → `skills/`
+- "State the UI reads, operations that change it, and the client that replicates it"
+  → `protocol/`
 - "Plugin-level wiring" → `index.ts` only
 
 ## Modals and dialogs
