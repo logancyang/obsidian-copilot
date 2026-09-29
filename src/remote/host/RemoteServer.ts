@@ -27,7 +27,10 @@ export const AUTH_TIMEOUT_MS = 5000;
 export const MAX_PENDING_CONNECTIONS = 8;
 const MAX_CONNECTIONS = 64;
 const MAX_UNAUTHENTICATED_PER_ADDRESS = 4;
-const MAX_MESSAGE_BYTES = 8 * 1024 * 1024;
+// A phone sends a command as one message, and an image travels inside it as base64, a third larger
+// than the file. The phone limits the images of one command to 5 MiB, so this leaves room for text.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+const MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
 // A phone that stops reading (out of range, Tailscale dropped) leaves TCP open for minutes while
 // the desktop keeps streaming, so a peer whose unsent backlog passes this is dropped. It has to
 // exceed the largest frame the session protocol sends, which is checked before it is queued.

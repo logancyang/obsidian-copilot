@@ -63,7 +63,7 @@ authentication timeout, `1001` desktop shutting down.
 
 Pre-authentication limits: 8 connections past the WebSocket upgrade that have not authenticated, 4 unauthenticated
 connections per source address, 64 connections in total, first frame at most 4096 bytes and text only. A plain
-HTTP request is answered with `426` and `Connection: close`. Authenticated messages are capped at 8 MiB and at
+HTTP request is answered with `426` and `Connection: close`. Authenticated messages are capped at 16 MiB and at
 1024 fragments. A ping is answered only while nothing waits to be written, so a peer that pings without
 reading cannot grow memory. Any other frame the codec cannot accept ends the connection with the close code
 RFC 6455 assigns to it: `1002` for a protocol error, `1003` for a binary frame, `1007` for invalid UTF-8, `1009` for

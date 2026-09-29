@@ -447,7 +447,7 @@ A paired phone reaches the host over the authenticated channel of [`REMOTE_PAIRI
   well-formed client frame closes the connection with `1003`. A frame over 32 MiB is sent again with every
   inline image of its transcript replaced by a placeholder (a user message carries its images as data
   URLs), and one still over the limit closes the connection with `1009`. Inbound messages are capped at
-  8 MiB by the listener, and the listener destroys a connection whose unsent backlog passes 64 MiB, which
+  16 MiB by the listener, and the listener destroys a connection whose unsent backlog passes 64 MiB, which
   is a phone that stopped reading while the desktop kept streaming.
 
 ### 5.3 Client core

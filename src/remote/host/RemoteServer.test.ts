@@ -599,6 +599,17 @@ describe("RemoteServer", () => {
         expect(received[0]).toHaveLength(1_000_000);
       });
 
+      it(`accepts a command message as large as a phone's biggest image send, 12 MiB (${ISSUE_613})`, async () => {
+        const { connection, client } = await connectPaired();
+        const received: string[] = [];
+        connection.onMessage((text) => received.push(text));
+
+        client.send("x".repeat(12 * 1024 * 1024));
+        await waitFor(() => received.length === 1, 5000);
+
+        expect(received[0]).toHaveLength(12 * 1024 * 1024);
+      });
+
       it("answers a ping with a pong", async () => {
         const { client } = await connectPaired();
         const pong = once(client, "pong");
