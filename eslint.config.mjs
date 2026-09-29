@@ -491,6 +491,8 @@ export default [
       "scripts/patchRendererUnsafeUnref.js",
       "scripts/bundleSizeGuard.js",
       "scripts/bundleSizeGuard.test.js",
+      "scripts/dedupeIdenticalPackages.js",
+      "scripts/dedupeIdenticalPackages.test.js",
     ],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
