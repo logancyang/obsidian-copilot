@@ -69,7 +69,6 @@ export function AgentHomeShelf({
   return (
     <div
       className={cn(
-        // region is short while overflow-hidden still clips the rounded corners.
         "tw-flex tw-min-h-0 tw-flex-col tw-overflow-hidden tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary",
         className
       )}

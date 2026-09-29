@@ -62,7 +62,6 @@ describe("useAgentHistoryControls scope", () => {
   });
 
   it("hides the previous scope's items on a scope change until the refetch lands", async () => {
-    // global flat view) before the scoped refetch completes.
     const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
     const { result, rerender } = renderControls(manager, "project-1");
 

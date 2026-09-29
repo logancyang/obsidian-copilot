@@ -360,7 +360,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (isLanding) void handleLoadChatHistory();
   }, [isLanding, handleLoadChatHistory]);
 
-  // global shelf unmounts whenever the user leaves the global landing — into a
   const [globalShelfTab, setGlobalShelfTabState] = useState<string | null>(() =>
     getHomeShelfTab(app, HOME_SHELF_TAB_STORAGE_KEY)
   );
