@@ -1,9 +1,12 @@
 import type {
   AgentQuestionAnswers,
   BackendId,
+  CopilotMode,
+  ModelSelection,
   PlanDecisionAction,
   SessionId,
 } from "@/agentMode/session/types";
+import type { ProjectScopeId } from "@/agentMode/session/scope";
 import type { WireMessageContext } from "@/agentMode/protocol/state";
 
 export interface SendContext extends Omit<WireMessageContext, "notes"> {
@@ -38,7 +41,31 @@ export type Command =
       proposalId: string;
       decision: PlanDecisionAction;
       feedbackText?: string;
-    };
+    }
+  | {
+      name: "createSession";
+      backendId?: BackendId;
+      projectId?: ProjectScopeId;
+      seedSelection?: ModelSelection;
+    }
+  | {
+      name: "replaceSession";
+      sessionId: SessionId;
+      backendId?: BackendId;
+      preserveChatInput?: boolean;
+      seedSelection?: ModelSelection;
+    }
+  | { name: "openTab"; sessionId: SessionId }
+  | { name: "closeTab"; sessionId: SessionId }
+  | { name: "renameSession"; sessionId: SessionId; label: string | null }
+  | {
+      name: "applySelection";
+      sessionId: SessionId;
+      backendId: BackendId;
+      baseModelId?: string;
+      effort?: string | null;
+    }
+  | { name: "applyMode"; sessionId: SessionId; mode: CopilotMode };
 
 export interface CommandValues {
   send: { userMessageId: string; droppedNotePaths: string[] };
@@ -46,6 +73,13 @@ export interface CommandValues {
   resolvePermission: void;
   answerQuestion: void;
   resolvePlan: void;
+  createSession: { sessionId: SessionId };
+  replaceSession: { sessionId: SessionId };
+  openTab: void;
+  closeTab: void;
+  renameSession: void;
+  applySelection: { sessionId: SessionId };
+  applyMode: void;
 }
 
 export type CommandName = Command["name"];
@@ -60,6 +94,7 @@ export type CommandErrorCode =
   | "stale"
   | "invalid"
   | "too_large"
+  | "unsupported"
   | "failed";
 
 export type CommandResult<V = void> =

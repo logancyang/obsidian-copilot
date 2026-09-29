@@ -8,6 +8,7 @@ import {
   makeTestSession,
   settle,
 } from "@/agentMode/session/host/hostTestHarness";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import type { PermissionPrompt } from "@/agentMode/session/types";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
@@ -329,6 +330,252 @@ describe("commandHandlers", () => {
       expect(result).toMatchObject({ ok: false, code });
       expect(t.client.getSession("s1")!.plan?.decision).toBe("pending");
     });
+
+    it("createSession creates a global session on the requested agent, seeded with the pick, and returns its id", async () => {
+      const t = setup();
+      const { result } = await t.run({
+        name: "createSession",
+        backendId: "codex",
+        seedSelection: { baseModelId: "gpt-5", effort: "high" },
+      });
+      expect(result).toMatchObject({ ok: true, value: { sessionId: expect.any(String) } });
+      expect(t.manager.calls.at(-1)).toEqual({
+        method: "createSession",
+        args: ["codex", "__global__", { baseModelId: "gpt-5", effort: "high" }],
+      });
+      const created = (result as { value: { sessionId: string } }).value.sessionId;
+      expect(t.client.getHost()?.tabs.map((tab) => tab.id)).toContain(created);
+    });
+
+    it("createSession forwards an explicit project scope", async () => {
+      const t = setup();
+      await t.run({ name: "createSession", projectId: "proj-1" });
+      expect(t.manager.calls.at(-1)).toEqual({
+        method: "createSession",
+        args: [undefined, "proj-1", undefined],
+      });
+    });
+
+    it.each([
+      ["an unknown agent", { name: "createSession", backendId: "mystery" }],
+      ["a seed without a model id", { name: "createSession", seedSelection: { effort: null } }],
+      [
+        "a seed with a numeric effort",
+        { name: "createSession", seedSelection: { baseModelId: "m", effort: 3 } },
+      ],
+      ["a non-string project scope", { name: "createSession", projectId: 7 }],
+    ])("createSession answers invalid for %s and creates nothing", async (_label, command) => {
+      const t = setup();
+      const { result } = await t.run(command as unknown as Command);
+      expect(result).toMatchObject({ ok: false, code: "invalid" });
+      expect(t.manager.calls).toEqual([]);
+    });
+
+    it("replaceSession swaps the tab's session and returns the replacement's id", async () => {
+      const t = setup();
+      const { result } = await t.run({
+        name: "replaceSession",
+        sessionId: "s1",
+        backendId: "codex",
+        preserveChatInput: true,
+        seedSelection: { baseModelId: "gpt-5", effort: null },
+      });
+      expect(result).toMatchObject({ ok: true, value: { sessionId: expect.any(String) } });
+      expect(t.manager.calls.at(-1)).toEqual({
+        method: "replaceSessionInPlace",
+        args: [
+          "s1",
+          "codex",
+          { preserveChatInput: true, seedSelection: { baseModelId: "gpt-5", effort: null } },
+        ],
+      });
+    });
+
+    it("replaceSession drops the composer draft unless asked to preserve it", async () => {
+      const t = setup();
+      await t.run({ name: "replaceSession", sessionId: "s1" });
+      expect(t.manager.calls.at(-1)?.args[2]).toMatchObject({ preserveChatInput: false });
+    });
+
+    it.each([
+      ["unknown_session", { name: "replaceSession", sessionId: "nope" }],
+      ["invalid", { name: "replaceSession", sessionId: "s1", backendId: "mystery" }],
+    ])("replaceSession answers %s without touching the manager (%#)", async (code, command) => {
+      const t = setup();
+      const { result } = await t.run(command as unknown as Command);
+      expect(result).toMatchObject({ ok: false, code });
+      expect(t.manager.calls).toEqual([]);
+    });
+
+    it("closeTab takes the session out of the shared tab set and keeps it running", async () => {
+      const t = setup();
+      const { result } = await t.run({ name: "closeTab", sessionId: "s1" });
+      expect(result).toEqual({ ok: true, value: undefined });
+      expect(t.client.getHost()?.tabs).toEqual([]);
+      expect(t.manager.getSession("s1")).not.toBeNull();
+    });
+
+    it("openTab puts a closed tab's session back in the shared tab set", async () => {
+      const t = setup();
+      await t.run({ name: "closeTab", sessionId: "s1" });
+      const { result } = await t.run({ name: "openTab", sessionId: "s1" });
+      expect(result).toEqual({ ok: true, value: undefined });
+      expect(t.client.getHost()?.tabs.map((tab) => tab.id)).toEqual(["s1"]);
+    });
+
+    it.each(["openTab", "closeTab"] as const)(
+      "%s answers unknown_session for a missing session",
+      async (name) => {
+        const t = setup();
+        const { result } = await t.run({ name, sessionId: "nope" });
+        expect(result).toMatchObject({ ok: false, code: "unknown_session" });
+      }
+    );
+
+    it("renameSession sets the tab label and clears it with null", async () => {
+      const t = setup();
+      await t.run({ name: "renameSession", sessionId: "s1", label: "  Trip plan " });
+      expect(t.client.getHost()?.tabs[0]).toMatchObject({
+        label: "Trip plan",
+        labelSource: "user",
+      });
+      await t.run({ name: "renameSession", sessionId: "s1", label: null });
+      expect(t.client.getHost()?.tabs[0]).toMatchObject({ label: null, labelSource: null });
+    });
+
+    it.each([
+      ["unknown_session", { name: "renameSession", sessionId: "nope", label: "x" }],
+      ["invalid", { name: "renameSession", sessionId: "s1", label: 5 }],
+    ])("renameSession answers %s and leaves the label alone (%#)", async (code, command) => {
+      const t = setup();
+      const { result } = await t.run(command as unknown as Command);
+      expect(result).toMatchObject({ ok: false, code });
+      expect(t.client.getHost()?.tabs[0].label).toBeNull();
+    });
+
+    it("applySelection on the session's own agent applies the model and effort to that session", async () => {
+      const t = setup();
+      const { result } = await t.run({
+        name: "applySelection",
+        sessionId: "s1",
+        backendId: "claude",
+        baseModelId: "opus",
+        effort: "high",
+      });
+      expect(result).toEqual({ ok: true, value: { sessionId: "s1" } });
+      expect(t.manager.calls.at(-1)).toEqual({
+        method: "applySelectionTo",
+        args: ["s1", { baseModelId: "opus", effort: "high" }],
+      });
+    });
+
+    it("applySelection with only an effort changes the effort and leaves the model unset", async () => {
+      const t = setup();
+      await t.run({ name: "applySelection", sessionId: "s1", backendId: "claude", effort: null });
+      expect(t.manager.calls.at(-1)).toEqual({
+        method: "applySelectionTo",
+        args: ["s1", { effort: null }],
+      });
+    });
+
+    it("applySelection to another agent's model replaces the session in place, keeping the draft and seeding the pick https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+      const t = setup();
+      const { result } = await t.run({
+        name: "applySelection",
+        sessionId: "s1",
+        backendId: "codex",
+        baseModelId: "gpt-5",
+      });
+      expect(result).toMatchObject({ ok: true, value: { sessionId: expect.any(String) } });
+      expect((result as { value: { sessionId: string } }).value.sessionId).not.toBe("s1");
+      expect(t.manager.calls.at(-1)).toEqual({
+        method: "replaceSessionInPlace",
+        args: [
+          "s1",
+          "codex",
+          { preserveChatInput: true, seedSelection: { baseModelId: "gpt-5", effort: null } },
+        ],
+      });
+    });
+
+    it("applySelection with only an effort for another agent answers stale https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+      const t = setup();
+      const { result } = await t.run({
+        name: "applySelection",
+        sessionId: "s1",
+        backendId: "codex",
+        effort: "low",
+      });
+      expect(result).toMatchObject({ ok: false, code: "stale" });
+      expect(t.manager.calls).toEqual([]);
+    });
+
+    it("applySelection answers unsupported when the agent cannot switch while running", async () => {
+      const t = setup();
+      t.manager.applyFailure = new MethodUnsupportedError("session/set_model");
+      const { result } = await t.run({
+        name: "applySelection",
+        sessionId: "s1",
+        backendId: "claude",
+        baseModelId: "opus",
+      });
+      expect(result).toMatchObject({ ok: false, code: "unsupported" });
+    });
+
+    it.each([
+      ["unknown_session", { sessionId: "nope", backendId: "claude", baseModelId: "m" }],
+      ["invalid", { sessionId: "s1", backendId: "mystery", baseModelId: "m" }],
+      ["invalid", { sessionId: "s1", backendId: "claude" }],
+      ["invalid", { sessionId: "s1", backendId: "claude", baseModelId: "" }],
+      ["invalid", { sessionId: "s1", backendId: "claude", baseModelId: 4 }],
+      ["invalid", { sessionId: "s1", backendId: "claude", baseModelId: "m", effort: 4 }],
+    ])("applySelection answers %s and applies nothing (%#)", async (code, args) => {
+      const t = setup();
+      const { result } = await t.run({ name: "applySelection", ...args } as unknown as Command);
+      expect(result).toMatchObject({ ok: false, code });
+      expect(t.manager.calls).toEqual([]);
+    });
+
+    it("applyMode applies a mode the session's agent reported", async () => {
+      const t = setup();
+      jest.spyOn(t.one.session, "getState").mockReturnValue({
+        model: null,
+        mode: {
+          current: "default",
+          options: [{ value: "plan", label: "Plan" }],
+          apply: { plan: { kind: "setMode", nativeId: "plan" } },
+        },
+      });
+      const { result } = await t.run({ name: "applyMode", sessionId: "s1", mode: "plan" });
+      expect(result).toEqual({ ok: true, value: undefined });
+      expect(t.manager.calls.at(-1)).toEqual({ method: "applyModeTo", args: ["s1", "plan"] });
+    });
+
+    it.each([
+      ["unknown_session", "nope", "plan"],
+      ["invalid", "s1", "auto"],
+      ["invalid", "s1", "yolo"],
+    ])(
+      "applyMode answers %s when the session or mode is not available (%#)",
+      async (code, sessionId, mode) => {
+        const t = setup();
+        jest.spyOn(t.one.session, "getState").mockReturnValue({
+          model: null,
+          mode: {
+            current: "default",
+            options: [{ value: "plan", label: "Plan" }],
+            apply: { plan: { kind: "setMode", nativeId: "plan" } },
+          },
+        });
+        const { result } = await t.run({
+          name: "applyMode",
+          sessionId,
+          mode: mode as "plan",
+        });
+        expect(result).toMatchObject({ ok: false, code });
+        expect(t.manager.calls).toEqual([]);
+      }
+    );
 
     it("answers invalid for an unknown command name", async () => {
       const t = setup();

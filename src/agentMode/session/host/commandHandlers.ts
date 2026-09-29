@@ -1,8 +1,16 @@
 import type { Command, CommandResult, CommandValues } from "@/agentMode/protocol/commands";
 import { checkImageLimits, decodedBase64Bytes } from "@/agentMode/protocol/limits";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
+import type { ReplaceSessionOptions } from "@/agentMode/session/AgentSessionManager";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { applyPlanDecision, findDecidablePlan } from "@/agentMode/session/planDecision";
-import type { PromptContent } from "@/agentMode/session/types";
+import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
+import type {
+  BackendId,
+  CopilotMode,
+  ModelSelection,
+  PromptContent,
+} from "@/agentMode/session/types";
 import { logError } from "@/logger";
 import type { MessageContext } from "@/types/message";
 import type { TFile } from "obsidian";
@@ -12,6 +20,24 @@ export interface SessionHostManager {
   getTabSessions(): AgentSession[];
   getSession(id: string): AgentSession | null;
   subscribe(listener: () => void): () => void;
+  createSession(
+    backendId?: BackendId,
+    projectId?: ProjectScopeId,
+    seedSelection?: ModelSelection
+  ): Promise<AgentSession>;
+  replaceSessionInPlace(
+    oldId: string,
+    backendId?: BackendId,
+    options?: ReplaceSessionOptions
+  ): Promise<AgentSession>;
+  openTab(id: string): void;
+  detachSessionFromTab(id: string): void;
+  renameSession(id: string, label: string | null): void;
+  applySelectionTo(
+    id: string,
+    patch: { baseModelId?: string; effort?: string | null }
+  ): Promise<void>;
+  applyModeTo(id: string, mode: CopilotMode): Promise<void>;
 }
 
 export interface CommandContext {
@@ -179,6 +205,145 @@ function resolvePlanCommand(
   return ok(undefined);
 }
 
+function isModelSelection(value: unknown): value is ModelSelection {
+  if (typeof value !== "object" || value === null) return false;
+  const { baseModelId, effort } = value as Record<string, unknown>;
+  return (
+    typeof baseModelId === "string" &&
+    baseModelId.length > 0 &&
+    (effort === null || typeof effort === "string")
+  );
+}
+
+function checkSeedAndBackend(
+  ctx: CommandContext,
+  backendId: string | undefined,
+  seedSelection: unknown
+): Failure | null {
+  if (backendId !== undefined && !ctx.isKnownBackend(backendId)) {
+    return failure("invalid", `Unknown agent ${String(backendId)}`);
+  }
+  if (seedSelection !== undefined && !isModelSelection(seedSelection)) {
+    return failure("invalid", "A seed selection needs a model id and an effort or null");
+  }
+  return null;
+}
+
+async function createSessionCommand(
+  ctx: CommandContext,
+  command: Extract<Command, { name: "createSession" }>
+): Promise<CommandResult<CommandValues["createSession"]>> {
+  const invalid = checkSeedAndBackend(ctx, command.backendId, command.seedSelection);
+  if (invalid) return invalid;
+  if (command.projectId !== undefined && typeof command.projectId !== "string") {
+    return failure("invalid", "A project scope must be a string");
+  }
+  const session = await ctx.manager.createSession(
+    command.backendId,
+    command.projectId ?? GLOBAL_SCOPE,
+    command.seedSelection
+  );
+  return ok({ sessionId: session.internalId });
+}
+
+async function replaceSessionCommand(
+  ctx: CommandContext,
+  command: Extract<Command, { name: "replaceSession" }>
+): Promise<CommandResult<CommandValues["replaceSession"]>> {
+  const session = findSession(ctx, command.sessionId);
+  if (isFailure(session)) return session;
+  const invalid = checkSeedAndBackend(ctx, command.backendId, command.seedSelection);
+  if (invalid) return invalid;
+  const created = await ctx.manager.replaceSessionInPlace(session.internalId, command.backendId, {
+    preserveChatInput: command.preserveChatInput === true,
+    seedSelection: command.seedSelection,
+  });
+  return ok({ sessionId: created.internalId });
+}
+
+function openTabCommand(
+  ctx: CommandContext,
+  command: Extract<Command, { name: "openTab" }>
+): CommandResult<void> {
+  const session = findSession(ctx, command.sessionId);
+  if (isFailure(session)) return session;
+  ctx.manager.openTab(session.internalId);
+  return ok(undefined);
+}
+
+function closeTabCommand(
+  ctx: CommandContext,
+  command: Extract<Command, { name: "closeTab" }>
+): CommandResult<void> {
+  const session = findSession(ctx, command.sessionId);
+  if (isFailure(session)) return session;
+  ctx.manager.detachSessionFromTab(session.internalId);
+  return ok(undefined);
+}
+
+function renameSessionCommand(
+  ctx: CommandContext,
+  command: Extract<Command, { name: "renameSession" }>
+): CommandResult<void> {
+  const session = findSession(ctx, command.sessionId);
+  if (isFailure(session)) return session;
+  if (command.label !== null && typeof command.label !== "string") {
+    return failure("invalid", "A label is text or null");
+  }
+  ctx.manager.renameSession(session.internalId, command.label);
+  return ok(undefined);
+}
+
+async function applySelectionCommand(
+  ctx: CommandContext,
+  command: Extract<Command, { name: "applySelection" }>
+): Promise<CommandResult<CommandValues["applySelection"]>> {
+  const session = findSession(ctx, command.sessionId);
+  if (isFailure(session)) return session;
+  const { backendId, baseModelId, effort } = command;
+  if (!ctx.isKnownBackend(backendId)) return failure("invalid", `Unknown agent ${backendId}`);
+  if (baseModelId === undefined && effort === undefined) {
+    return failure("invalid", "A selection needs a model or an effort");
+  }
+  if (baseModelId !== undefined && (typeof baseModelId !== "string" || baseModelId === "")) {
+    return failure("invalid", "A model id is a non-empty string");
+  }
+  if (effort !== undefined && effort !== null && typeof effort !== "string") {
+    return failure("invalid", "An effort is text or null");
+  }
+  if (session.backendId !== backendId) {
+    // Picking another agent's model swaps the tab's session for one on that agent, seeded with the
+    // pick, so the composer draft and the tab's place survive. An effort-only change has no model
+    // to seed and means the client was looking at a session that has since been replaced.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+    if (baseModelId === undefined) return failure("stale", "The session's agent changed");
+    const created = await ctx.manager.replaceSessionInPlace(session.internalId, backendId, {
+      preserveChatInput: true,
+      seedSelection: { baseModelId, effort: effort ?? null },
+    });
+    return ok({ sessionId: created.internalId });
+  }
+  await ctx.manager.applySelectionTo(session.internalId, {
+    ...(baseModelId !== undefined ? { baseModelId } : {}),
+    ...(effort !== undefined ? { effort } : {}),
+  });
+  return ok({ sessionId: session.internalId });
+}
+
+async function applyModeCommand(
+  ctx: CommandContext,
+  command: Extract<Command, { name: "applyMode" }>
+): Promise<CommandResult<void>> {
+  const session = findSession(ctx, command.sessionId);
+  if (isFailure(session)) return session;
+  const mode = session.getState()?.mode;
+  if (!mode?.apply[command.mode]) {
+    return failure("invalid", `The session has no ${String(command.mode)} mode`);
+  }
+  await ctx.manager.applyModeTo(session.internalId, command.mode);
+  return ok(undefined);
+}
+
 export async function runCommand(
   ctx: CommandContext,
   command: Command
@@ -195,10 +360,27 @@ export async function runCommand(
         return answerQuestionCommand(ctx, command);
       case "resolvePlan":
         return resolvePlanCommand(ctx, command);
+      case "createSession":
+        return await createSessionCommand(ctx, command);
+      case "replaceSession":
+        return await replaceSessionCommand(ctx, command);
+      case "openTab":
+        return openTabCommand(ctx, command);
+      case "closeTab":
+        return closeTabCommand(ctx, command);
+      case "renameSession":
+        return renameSessionCommand(ctx, command);
+      case "applySelection":
+        return await applySelectionCommand(ctx, command);
+      case "applyMode":
+        return await applyModeCommand(ctx, command);
       default:
         return failure("invalid", "Unknown command");
     }
   } catch (e) {
+    if (e instanceof MethodUnsupportedError) {
+      return failure("unsupported", "This agent does not support that change while running");
+    }
     logError("[AgentMode] command failed", e);
     return failure("failed", "The command could not be completed");
   }
