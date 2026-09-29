@@ -32,9 +32,8 @@ document: #611 (message pane on the client), #612 (composer, pickers, tabs on th
   optimistic client state.
 - **Session decisions stay in `AgentSession`.** Dropping cancelled-turn output, placeholder gating
   and multi-agent merging run before the store is called; the reducer never contains them.
-- **Reconnecting is the normal path.** iOS drops the socket about 1.3 s after every app switch
-  ([spike result](https://github.com/Brevilabs/obsidian-copilot-private/issues/605#issuecomment-5886357388)),
-  so resume from a sequence number is the common case and a fresh snapshot is the fallback.
+- **Reconnecting is the normal path.** iOS drops the socket shortly after every app switch, so
+  resume from a sequence number is the common case and a fresh snapshot is the fallback.
 
 Terms: a **scope** is an independently sequenced slice of host state (`host`, or `session:<id>`).
 A **snapshot** is the full state of one scope at a sequence number. An **op** is one reducer input.
@@ -474,8 +473,9 @@ provide (#611 narrows their prop types).
 `ImageBlock` is `{ mimeType: string; data: string /* base64 */ }`, the same shape as the existing
 `PromptContent` image block. The host builds the user message `content` data URLs
 (`buildUserDisplayContent`) exactly as today, so the image reaches every client through `msg.add`.
-Limits live in `protocol/limits.ts` and are enforced by the host and mirrored client-side:
-8 MiB per image decoded, 4 images and 24 MiB per command. Over-limit input returns `too_large`.
+Limits live in `protocol/limits.ts`, so a client can check them before sending, and the host
+enforces them: 8 MiB per image decoded, 4 images and 24 MiB per command. Over-limit input returns
+`too_large`.
 
 ## 7. File layout and the mobile boundary
 
@@ -591,9 +591,8 @@ Capture uses the existing frame log, not new production code:
 3. The converter sanitizes before anything is written: text content is replaced by deterministic
    pseudo-text of the same length so chunk sizes survive; vault paths become `/vault/...`; home
    directories, emails and token-shaped strings are removed; model ids are replaced with generic
-   names, since the repository is public and a Copilot Plus alias must not reveal its backing
-   model. `fixtures.test.ts` scans every committed fixture for `/Users/`, `sk-`, email addresses
-   and `copilot-plus`.
+   names, since the repository is public. `fixtures.test.ts` scans every committed fixture for
+   `/Users/`, `sk-`, email addresses and model ids.
 
 ### 8.3 Streaming overhead
 
