@@ -91,6 +91,9 @@ import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
 import { getDeviceId } from "@/utils/deviceId";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
+import { createRemoteClient, type RemoteClient } from "@/remote/client";
+import { handlePairingLinkAction } from "@/remote/client/pairingAction";
+import { PAIRING_ACTION } from "@/remote/pairingLink";
 import type { RemoteHostService } from "@/remote/host";
 import { disposeNotificationSound } from "@/utils/notificationSound";
 import { installRendererEventsShim } from "@/utils/rendererEventsShim";
@@ -167,6 +170,7 @@ export default class CopilotPlugin extends Plugin {
   agentSessionView?: ClientView;
   skills?: SkillManager;
   remoteHost?: RemoteHostService;
+  remoteClient?: RemoteClient;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
   private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
@@ -322,6 +326,8 @@ export default class CopilotPlugin extends Plugin {
       } catch (error) {
         logError("Remote access could not be initialised.", error);
       }
+    } else {
+      this.remoteClient = createRemoteClient(this.app);
     }
 
     const vaultDataManager = VaultDataManager.getInstance();
@@ -444,6 +450,11 @@ export default class CopilotPlugin extends Plugin {
     // https://github.com/logancyang/obsidian-copilot/issues/3271
     this.registerObsidianProtocolHandler("copilot-chat", (params) => {
       void this.openChatDeepLink(params);
+    });
+    this.registerObsidianProtocolHandler(PAIRING_ACTION, (params) => {
+      void handlePairingLinkAction(this.remoteClient, params, (message) => {
+        new Notice(message, 8000);
+      });
     });
   }
 
