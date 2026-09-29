@@ -7,6 +7,7 @@ import {
   type SessionOp,
 } from "@/agentMode/protocol/ops";
 import { SessionClient } from "@/agentMode/protocol/SessionClient";
+import type { ClientTransport } from "@/agentMode/protocol/transport";
 import {
   HOST_SCOPE,
   sessionIdOfScope,
@@ -21,10 +22,7 @@ import {
   type CommandContext,
   type SessionHostManager,
 } from "@/agentMode/session/host/commandHandlers";
-import {
-  createInProcessTransport,
-  type InProcessTransport,
-} from "@/agentMode/session/host/inProcessTransport";
+import { createInProcessTransport } from "@/agentMode/session/host/inProcessTransport";
 import { OpLog } from "@/agentMode/session/host/OpLog";
 import { SessionProjector } from "@/agentMode/session/host/SessionProjector";
 import { TabProjector } from "@/agentMode/session/host/TabProjector";
@@ -104,7 +102,7 @@ export class SessionHost {
 
   createClient(options: { serialize?: boolean } = {}): {
     client: SessionClient;
-    transport: InProcessTransport;
+    transport: ClientTransport;
   } {
     const serialize = options.serialize ?? process.env.NODE_ENV !== "production";
     const transport = createInProcessTransport(this, { serialize });
@@ -240,6 +238,13 @@ export class SessionHost {
     if (!log || sent === undefined) return;
     const head = log.getHead();
     if (head === sent) return;
+    // Ops evicted before this connection was sent them cannot be replayed; a partial frame would
+    // silently corrupt the replica.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/609
+    if (!log.covers(sent)) {
+      this.sendSnapshot(connection, scope);
+      return;
+    }
     connection.sent.set(scope, head);
     connection.send({ type: "ops", scope, from: sent + 1, ops: log.since(sent) });
   }

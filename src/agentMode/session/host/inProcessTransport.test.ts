@@ -94,34 +94,5 @@ describe("inProcessTransport", () => {
       expect(opens).toEqual([true, false]);
       expect(state.closed).toBe(1);
     });
-
-    it("disconnect drops in-flight frames, reconnect opens a fresh host connection, and dropNextFrame loses one frame", async () => {
-      const { host, state, received } = fakeHost();
-      const transport = createInProcessTransport(host, { serialize: false });
-      const seen: ServerFrame[] = [];
-      const opens: boolean[] = [];
-      transport.onFrame((frame) => seen.push(frame));
-      transport.onOpenChange((open) => opens.push(open));
-      await settle();
-      transport.send(HELLO);
-      await settle();
-
-      transport.disconnect();
-      state.push(PAYLOAD);
-      await settle();
-      expect(seen).toEqual([]);
-      expect(opens).toEqual([true, false]);
-
-      transport.reconnect();
-      transport.send(HELLO);
-      await settle();
-      expect(received).toHaveLength(2);
-
-      transport.dropNextFrame();
-      state.push(PAYLOAD);
-      state.push(PAYLOAD);
-      await settle();
-      expect(seen).toHaveLength(1);
-    });
   });
 });

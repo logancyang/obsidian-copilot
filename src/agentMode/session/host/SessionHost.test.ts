@@ -2,13 +2,14 @@ import { PROTOCOL_VERSION, type ServerFrame } from "@/agentMode/protocol/frames"
 import type { SessionClient } from "@/agentMode/protocol/SessionClient";
 import {
   buildHost,
+  createFaultyClient,
   FakeManager,
   fakeNote,
   makeTestSession,
   settle,
+  type FaultyTransport,
   type TestSession,
 } from "@/agentMode/session/host/hostTestHarness";
-import type { InProcessTransport } from "@/agentMode/session/host/inProcessTransport";
 import type { SessionHost } from "@/agentMode/session/host/SessionHost";
 import type { SessionEvent } from "@/agentMode/session/types";
 
@@ -31,7 +32,7 @@ interface Rig {
   host: SessionHost;
   one: TestSession;
   client: SessionClient;
-  transport: InProcessTransport;
+  transport: FaultyTransport;
   frames: ServerFrame[];
 }
 
@@ -40,7 +41,7 @@ async function rig(options: Parameters<typeof buildHost>[1] = {}): Promise<Rig> 
   const one = makeTestSession("s1");
   manager.add(one.session);
   const host = buildHost(manager, options);
-  const { client, transport } = host.createClient({ serialize: true });
+  const { client, transport } = createFaultyClient(host);
   const frames: ServerFrame[] = [];
   transport.onFrame((frame) => frames.push(frame));
   client.watchSession("s1");
@@ -242,6 +243,21 @@ describe("SessionHost", () => {
       r.frames.length = 0;
 
       r.transport.reconnect();
+      await settle();
+
+      expect(r.frames.some((f) => f.type === "snapshot" && f.scope === "session:s1")).toBe(true);
+      expectReplicaEqualsHost(r);
+    });
+
+    it("sends a snapshot when more ops than the log keeps arrive between two flushes (https://github.com/Brevilabs/obsidian-copilot-private/issues/609)", async () => {
+      const r = await rig({ opLogLimits: { maxOps: 3, maxBytes: 1_000_000 } });
+      r.one.backend.holdPrompt();
+      r.one.session.sendPrompt("hi");
+      await settle();
+      r.frames.length = 0;
+
+      for (let i = 0; i < 10; i++) r.one.backend.emit(text("acp-s1", `chunk${i}`));
+      jest.advanceTimersByTime(20);
       await settle();
 
       expect(r.frames.some((f) => f.type === "snapshot" && f.scope === "session:s1")).toBe(true);

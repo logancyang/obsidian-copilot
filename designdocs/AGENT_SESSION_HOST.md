@@ -347,7 +347,8 @@ one `ops` frame. Streaming ops (`msg.appendText`, `msg.appendThought`, `msg.upse
 synchronously and carries earlier unsent ops with it, preserving order. The flush uses `setTimeout`,
 not `requestAnimationFrame`, because rAF stops in a hidden Obsidian window and the phone would
 stall. The log is an in-memory ring per scope, bounded by op count (2000) and a byte budget (8 MiB,
-estimated per op at append); it is never persisted (#607 owns persistence).
+estimated per op at append); it is never persisted (#607 owns persistence). A flush for a
+connection whose last-sent sequence the log has already evicted sends a snapshot instead of ops.
 
 ## 5. Transports and client
 

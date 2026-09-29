@@ -1,7 +1,14 @@
+import type { ServerFrame } from "@/agentMode/protocol/frames";
+import { SessionClient } from "@/agentMode/protocol/SessionClient";
+import type { ClientTransport } from "@/agentMode/protocol/transport";
 import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import type { SessionHostManager } from "@/agentMode/session/host/commandHandlers";
+import {
+  createInProcessTransport,
+  type InProcessTransportOptions,
+} from "@/agentMode/session/host/inProcessTransport";
 import { SessionHost, type SessionHostOptions } from "@/agentMode/session/host/SessionHost";
 import type {
   BackendProcess,
@@ -168,4 +175,91 @@ export function buildHost(
 
 export async function settle(): Promise<void> {
   for (let i = 0; i < 6; i++) await Promise.resolve();
+}
+
+export interface FaultyTransport extends ClientTransport {
+  disconnect(): void;
+  reconnect(): void;
+  dropNextFrame(): void;
+}
+
+export function createFaultyTransport(
+  host: Pick<SessionHost, "connect">,
+  options: InProcessTransportOptions
+): FaultyTransport {
+  const frameListeners = new Set<(frame: ServerFrame) => void>();
+  const openListeners = new Set<(open: boolean) => void>();
+  let inner: ClientTransport | null = null;
+  let detach: Array<() => void> = [];
+  let framesToDrop = 0;
+  let isOpen = false;
+  let closed = false;
+
+  const setOpen = (open: boolean): void => {
+    isOpen = open;
+    for (const listener of [...openListeners]) listener(open);
+  };
+  const leave = (): void => {
+    for (const stop of detach) stop();
+    detach = [];
+    inner?.close();
+    inner = null;
+  };
+  const join = (): void => {
+    const next = createInProcessTransport(host, options);
+    inner = next;
+    detach = [
+      next.onFrame((frame) => {
+        if (framesToDrop > 0) {
+          framesToDrop -= 1;
+          return;
+        }
+        for (const listener of [...frameListeners]) listener(frame);
+      }),
+      next.onOpenChange(setOpen),
+    ];
+  };
+  join();
+
+  return {
+    send: (frame) => inner?.send(frame),
+    onFrame(cb) {
+      frameListeners.add(cb);
+      return () => {
+        frameListeners.delete(cb);
+      };
+    },
+    onOpenChange(cb) {
+      openListeners.add(cb);
+      return () => {
+        openListeners.delete(cb);
+      };
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      leave();
+      if (isOpen) setOpen(false);
+    },
+    disconnect() {
+      if (closed || !isOpen) return;
+      leave();
+      setOpen(false);
+    },
+    reconnect() {
+      if (closed || isOpen) return;
+      join();
+    },
+    dropNextFrame() {
+      framesToDrop += 1;
+    },
+  };
+}
+
+export function createFaultyClient(host: SessionHost): {
+  client: SessionClient;
+  transport: FaultyTransport;
+} {
+  const transport = createFaultyTransport(host, { serialize: true });
+  return { client: new SessionClient(transport, { app: "test-1.0.0" }), transport };
 }
