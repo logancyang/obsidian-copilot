@@ -13,13 +13,14 @@ import {
 } from "@/types/message";
 
 /**
- * Read-only QA preamble prepended to every fan-out agent's prompt. Per-backend
- * permission denial and sandbox mode are belt-and-suspenders on top of it.
+ * Read-only QA preamble prepended to every fan-out agent's prompt. Shell access
+ * is needed by agents that inspect files through commands instead of read tools.
  */
 export const FANOUT_READONLY_PREAMBLE =
   "You are answering a read-only question. Do NOT modify any files, run any " +
-  "commands that change state, or execute write/shell tools — answer only. " +
-  "You may freely read, search, grep, and fetch to inform your answer. " +
+  "commands that change state, or use write tools. You may use read-only " +
+  "shell commands to list directories, read files, search, and grep. " +
+  "You may also fetch information to inform your answer. " +
   "Respond with your analysis directly.";
 
 /**
@@ -118,8 +119,8 @@ export interface FanoutSummary {
  * sub-session. `execute` is intentionally NOT here: Copilot's relay
  * capabilities (web search/fetch, PDF, YouTube) ship as skill scripts the
  * backend runs via shell, so a blanket exec deny silently kills web search for
- * backends with no native equivalent (opencode). The read-only prompt preamble
- * plus each backend's native read-only sandbox keep exec from writing. `other`
+ * backends with no native equivalent (opencode). The preamble asks agents to
+ * use read-only commands; native sandbox policies vary by backend. `other`
  * is also not here: denying it would block legitimate read-only MCP tools.
  */
 const VAULT_WRITE_KINDS: ReadonlySet<AgentToolKind> = new Set<AgentToolKind>([
