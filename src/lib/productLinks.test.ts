@@ -2,17 +2,9 @@ import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import { readdirSync, readFileSync } from "fs";
 import { join, relative } from "path";
 
-/**
- * Links whose destination is reproduced as plain text rather than rendered as
- * an anchor, so a query string would show up as unclickable noise. Attribution
- * for these is a server-side concern.
- */
 const UNTAGGED_BY_DESIGN = [
-  // `USAGE_DASHBOARD_URL`, interpolated into an `ErrorBlock` message.
   ["constants.ts"],
-  // Prompt text the model repeats in its own prose.
   ["builtinSkills", "builtinSkills.ts"],
-  // OpenRouter's `HTTP-Referer` attribution header, not a user-facing link.
   ["LLMProviders", "chatModelManager.ts"],
 ];
 
@@ -40,8 +32,6 @@ describe("productLinks", () => {
 
   it("keeps product website URLs centralized so new links cannot bypass attribution — https://github.com/Brevilabs/obsidian-copilot-private/issues/318", () => {
     const sourceRoot = join(__dirname, "..");
-    // Joined rather than compared as literal strings so the separators match
-    // whatever platform runs the suite; CI runs it on Windows too.
     const allowed = new Set([
       join(__dirname, "productLinks.ts"),
       ...UNTAGGED_BY_DESIGN.map((segments) => join(sourceRoot, ...segments)),

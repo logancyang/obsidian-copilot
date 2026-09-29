@@ -5,16 +5,8 @@ import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { ChatMessage, MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
 
-/** Rich content payload (images etc.) attached to a message. */
 export type ChatMessageContent = NonNullable<ChatMessage["content"]>;
 
-/**
- * Public surface used by `<Chat />`, `useChatManager`, and CopilotView for
- * Quick Chat chains (LLM_CHAIN and COPILOT_PLUS_CHAIN).
- * Single implementation: `ChatManagerChatUIState`. Agent Mode uses the
- * narrower `AgentChatBackend` (in `src/LLMProviders/agentMode/`) instead and
- * never flows through this type.
- */
 export interface ChatUIState {
   subscribe(listener: () => void): () => void;
   sendMessage(
@@ -55,32 +47,15 @@ export interface ChatUIState {
   loadChatHistory(file: TFile): Promise<void>;
 }
 
-/**
- * ChatManagerChatUIState - Clean UI-only state manager backed by ChatManager
- * (legacy chains: chat, copilot-plus, autonomous, project).
- *
- * - Only handles UI state and React integration
- * - Delegates all business logic to ChatManager
- * - Provides subscription mechanism for React components
- * - No complex recovery or validation logic
- */
 export class ChatManagerChatUIState implements ChatUIState {
   private listeners: Set<() => void> = new Set();
 
   constructor(private chatManager: ChatManager) {
-    // Set up callback for immediate UI updates when messages are created
     this.chatManager.setOnMessageCreatedCallback(() => {
       this.notifyListeners();
     });
   }
 
-  // ================================
-  // UI STATE MANAGEMENT
-  // ================================
-
-  /**
-   * Subscribe to state changes for React integration
-   */
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => {
@@ -88,9 +63,6 @@ export class ChatManagerChatUIState implements ChatUIState {
     };
   }
 
-  /**
-   * Notify all listeners of state changes
-   */
   private notifyListeners(): void {
     this.listeners.forEach((listener) => {
       try {
@@ -101,13 +73,6 @@ export class ChatManagerChatUIState implements ChatUIState {
     });
   }
 
-  // ================================
-  // BUSINESS LOGIC DELEGATION
-  // ================================
-
-  /**
-   * Send a new message
-   */
   async sendMessage(
     displayText: string,
     context: MessageContext,
@@ -130,9 +95,6 @@ export class ChatManagerChatUIState implements ChatUIState {
     return messageId;
   }
 
-  /**
-   * Edit an existing message
-   */
   async editMessage(
     messageId: string,
     newText: string,
@@ -151,9 +113,6 @@ export class ChatManagerChatUIState implements ChatUIState {
     return success;
   }
 
-  /**
-   * Regenerate an AI response
-   */
   async regenerateMessage(
     messageId: string,
     onUpdateCurrentMessage: (message: string) => void,
@@ -167,7 +126,6 @@ export class ChatManagerChatUIState implements ChatUIState {
         this.notifyListeners();
       },
       () => {
-        // Notify immediately after truncation
         this.notifyListeners();
       }
     );
@@ -177,9 +135,6 @@ export class ChatManagerChatUIState implements ChatUIState {
     return success;
   }
 
-  /**
-   * Delete a message
-   */
   async deleteMessage(messageId: string): Promise<boolean> {
     const success = await this.chatManager.deleteMessage(messageId);
     if (success) {
@@ -188,122 +143,68 @@ export class ChatManagerChatUIState implements ChatUIState {
     return success;
   }
 
-  /**
-   * Clear all messages
-   */
   clearMessages(): void {
     this.chatManager.clearMessages();
     this.notifyListeners();
   }
 
-  /**
-   * Truncate messages after a specific message ID
-   */
   async truncateAfterMessageId(messageId: string): Promise<void> {
     await this.chatManager.truncateAfterMessageId(messageId);
     this.notifyListeners();
   }
 
-  // ================================
-  // DATA ACCESS
-  // ================================
-
   getSourcePath(): string {
     return this.chatManager.getSourcePath();
   }
 
-  /**
-   * Get messages for UI display
-   */
   getMessages(): ChatMessage[] {
     return this.chatManager.getDisplayMessages();
   }
 
-  /**
-   * Get a specific message by ID (display version)
-   */
   getMessage(id: string): ChatMessage | undefined {
     return this.chatManager.getMessage(id);
   }
 
-  /**
-   * Get a specific message for LLM processing
-   */
   getLLMMessage(id: string): ChatMessage | undefined {
     return this.chatManager.getLLMMessage(id);
   }
 
-  /**
-   * Get LLM messages (for debugging/advanced use)
-   */
   getLLMMessages(): ChatMessage[] {
     return this.chatManager.getLLMMessages();
   }
 
-  // ================================
-  // LEGACY COMPATIBILITY
-  // ================================
-
-  /**
-   * Legacy compatibility - get messages
-   */
   get chatHistory(): ChatMessage[] {
     return this.getMessages();
   }
 
-  /**
-   * Add a message
-   */
   addMessage(message: ChatMessage): void {
     this.chatManager.addMessage(message);
     this.notifyListeners();
   }
 
-  /**
-   * Legacy compatibility - clear chat history
-   */
   clearChatHistory(): void {
     this.clearMessages();
   }
 
-  /**
-   * Legacy compatibility - replace messages
-   */
   async replaceMessages(messages: ChatMessage[]): Promise<void> {
     await this.chatManager.loadMessages(messages);
     this.notifyListeners();
   }
 
-  // ================================
-  // DEBUG & UTILITIES
-  // ================================
-
-  /**
-   * Get debug information
-   */
   getDebugInfo() {
     return this.chatManager.getDebugInfo();
   }
 
-  /**
-   * Load messages from persistence
-   */
   async loadMessages(messages: ChatMessage[]): Promise<void> {
     await this.chatManager.loadMessages(messages);
     this.notifyListeners();
   }
 
-  /**
-   * Save current chat history
-   */
   async saveChat(modelKey: string): Promise<void> {
     await this.chatManager.saveChat(modelKey);
     this.notifyListeners();
   }
 
-  /**
-   * Load chat history from a file
-   */
   async loadChatHistory(file: TFile): Promise<void> {
     await this.chatManager.loadChatHistory(file);
     this.notifyListeners();

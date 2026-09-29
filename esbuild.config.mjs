@@ -5,7 +5,6 @@ import wasmPlugin from "./wasmPlugin.mjs";
 import nodeModuleShim, { nodeBuiltinExternals } from "./nodeModuleShim.mjs";
 import svgrPlugin from "./svgrPlugin.mjs";
 
-// CommonJS plugin loaded via createRequire — pure JS, no ESM export needed.
 const patchRendererUnsafeUnref = createRequire(import.meta.url)(
   "./scripts/patchRendererUnsafeUnref.js"
 );
@@ -79,7 +78,6 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outfile: "main.js",
-  // Skill text shipped by the openartifacts package is imported as a string.
   loader: { ".md": "text" },
   plugins: [nodeModuleShim, svgrPlugin, wasmPlugin, patchRendererUnsafeUnref, bundleSizeGuard],
   define: {

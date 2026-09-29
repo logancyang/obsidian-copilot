@@ -234,8 +234,6 @@ describe("OpenArtifactsPublisher", () => {
           })
         );
         expect(harness.client.publish).not.toHaveBeenCalled();
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/395 a successful update
-        // moves the identity to the current property.
         expect(harness.frontmatter).toEqual({ openartifacts: RECEIPT.url });
       });
 
@@ -251,8 +249,6 @@ describe("OpenArtifactsPublisher", () => {
         });
         expect(harness.client.update).toHaveBeenCalledWith(DOC_ID, DOCUMENT, "decrypted-license");
         expect(harness.client.publish).not.toHaveBeenCalled();
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/395 the legacy host and
-        // key are both replaced by the receipt's link under `openartifacts`.
         expect(harness.frontmatter).toEqual({ openartifacts: RECEIPT.url, tags: ["shared"] });
       });
 

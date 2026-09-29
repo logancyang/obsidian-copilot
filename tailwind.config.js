@@ -1,5 +1,3 @@
-// tailwind.config.js
-
 import { colorOpacityPlugin } from "./src/lib/plugins/colorOpacityPlugin";
 import colors from "tailwindcss/colors";
 import containerQueries from "@tailwindcss/container-queries";
@@ -9,13 +7,11 @@ module.exports = {
   prefix: "tw-",
   content: ["./src/**/*.{js,ts,jsx,tsx}", "./src/styles/tailwind.css"],
   darkMode: ["class"],
-  // tailwindcss-animate doesn't work with linter when using import statement.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   plugins: [require("tailwindcss-animate"), colorOpacityPlugin, containerQueries],
   corePlugins: {
     preflight: false,
   },
-  // https://github.com/tailwindlabs/tailwindcss/blob/main/stubs/config.full.js
   theme: {
     textColor: {
       inherit: colors.inherit,
@@ -50,8 +46,6 @@ module.exports = {
         purple: "var(--color-purple)",
         cyan: "var(--color-cyan)",
       },
-      // Per-project accent hues (Agent Home project tiles). Theme-aware via
-      // Obsidian's named color vars; paired with the matching `bg.project` tints.
       project: {
         red: "var(--color-red)",
         orange: "var(--color-orange)",
@@ -72,8 +66,6 @@ module.exports = {
       success: "rgba(var(--color-green-rgb),0.2)",
       warning: "var(--text-warning)",
       error: "rgba(var(--color-red-rgb),0.2)",
-      // Soft tints behind Agent Home project tiles; deeper `text.project` hue
-      // sits on top. Same six hues, kept in sync with `textColor.project`.
       project: {
         red: "rgba(var(--color-red-rgb),0.16)",
         orange: "rgba(var(--color-orange-rgb),0.16)",
@@ -138,7 +130,6 @@ module.exports = {
       current: colors.current,
       transparent: colors.transparent,
 
-      // preDefine CSS variables in Obsidian.(https://docs.obsidian.md/Reference/CSS+variables/Foundations/Colors)
       base: {
         "00": "var(--color-base-00)",
         "05": "var(--color-base-05)",
@@ -188,40 +179,40 @@ module.exports = {
       DEFAULT: "var(--border-width)",
     },
     zIndex: {
-      cover: "var(--layer-cover)", // 5
-      sidedock: "var(--layer-sidedock)", // 10
-      "status-bar": "var(--layer-status-bar)", // 15
-      popover: "var(--layer-popover)", // 30
-      slides: "var(--layer-slides)", // 45
-      modal: "var(--layer-modal)", // 50
-      notice: "var(--layer-notice)", // 60
-      menu: "var(--layer-menu)", // 65
-      tooltip: "var(--layer-tooltip)", // 70
-      "dragged-item": "var(--layer-dragged-item)", // 80
+      cover: "var(--layer-cover)",
+      sidedock: "var(--layer-sidedock)",
+      "status-bar": "var(--layer-status-bar)",
+      popover: "var(--layer-popover)",
+      slides: "var(--layer-slides)",
+      modal: "var(--layer-modal)",
+      notice: "var(--layer-notice)",
+      menu: "var(--layer-menu)",
+      tooltip: "var(--layer-tooltip)",
+      "dragged-item": "var(--layer-dragged-item)",
     },
     fontWeight: {
-      thin: "var(--font-thin)", // 100
-      extralight: "var(--font-extralight)", // 200
-      light: "var(--font-light)", // 300
-      normal: "var(--font-normal)", // 400
-      medium: "var(--font-medium)", // 500
-      semibold: "var(--font-semibold)", // 600
-      bold: "var(--font-bold)", // 700
-      extrabold: "var(--font-extrabold)", // 800
-      black: "var(--font-black)", // 900
+      thin: "var(--font-thin)",
+      extralight: "var(--font-extralight)",
+      light: "var(--font-light)",
+      normal: "var(--font-normal)",
+      medium: "var(--font-medium)",
+      semibold: "var(--font-semibold)",
+      bold: "var(--font-bold)",
+      extrabold: "var(--font-extrabold)",
+      black: "var(--font-black)",
     },
     extend: {
       borderRadius: {
         "clickable-icon": "var(--clickable-icon-radius)",
-        xl: "var(--radius-xl)", // 16px
-        lg: "var(--radius-l)", // 12px
-        md: "var(--radius-m)", // 8px
-        sm: "var(--radius-s)", // 4px
+        xl: "var(--radius-xl)",
+        lg: "var(--radius-l)",
+        md: "var(--radius-m)",
+        sm: "var(--radius-s)",
       },
       spacing: {
-        0.5: "calc(var(--size-4-1) / 2)", // 2px
-        1: "var(--size-4-1)", // 4px
-        1.5: "calc(var(--size-4-1) * 1.5)", // 6px
+        0.5: "calc(var(--size-4-1) / 2)",
+        1: "var(--size-4-1)",
+        1.5: "calc(var(--size-4-1) * 1.5)",
         2: "var(--size-4-2)",
         3: "var(--size-4-3)",
         4: "var(--size-4-4)",
@@ -235,46 +226,41 @@ module.exports = {
         pointer: "var(--cursor-link)",
       },
       fontSize: {
-        text: "var(--font-text-size)", // 16px
-        smallest: "var(--font-smallest)", // 0.8em
-        smaller: "var(--font-smaller)", // 0.875em
-        small: "var(--font-small)", // 0.933em
-        "ui-smaller": "var(--font-ui-smaller)", // 12px
-        "ui-small": "var(--font-ui-small)", // 13px
-        "ui-medium": "var(--font-ui-medium)", // 15px
-        // Obsidian's stock 20px UI token is `--font-ui-larger` (per the
-        // Typography docs), but some themes (e.g. Primary) ship `--font-ui-large`
-        // instead and omit the stock one. Chain both so the size resolves under
-        // either, falling back to a literal 20px if a theme defines neither
-        // (otherwise the font-size is invalid and the text drops to inherited).
-        "ui-larger": "var(--font-ui-large, var(--font-ui-larger, 20px))", // 20px
-        "ui-title": "var(--font-ui-large, var(--font-ui-larger, 20px))", // ~20px
+        text: "var(--font-text-size)",
+        smallest: "var(--font-smallest)",
+        smaller: "var(--font-smaller)",
+        small: "var(--font-small)",
+        "ui-smaller": "var(--font-ui-smaller)",
+        "ui-small": "var(--font-ui-small)",
+        "ui-medium": "var(--font-ui-medium)",
+        "ui-larger": "var(--font-ui-large, var(--font-ui-larger, 20px))",
+        "ui-title": "var(--font-ui-large, var(--font-ui-larger, 20px))",
       },
       strokeWidth: {
-        icon: "var(--icon-stroke)", // 1.75px
-        "icon-xs": "var(--icon-xs-stroke-width)", // 2px
-        "icon-s": "var(--icon-s-stroke-width)", // 2px
-        "icon-m": "var(--icon-m-stroke-width)", // 1.75px
-        "icon-l": "var(--icon-l-stroke-width)", // 1.75px
-        "icon-xl": "var(--icon-xl-stroke-width)", // 1.25px
+        icon: "var(--icon-stroke)",
+        "icon-xs": "var(--icon-xs-stroke-width)",
+        "icon-s": "var(--icon-s-stroke-width)",
+        "icon-m": "var(--icon-m-stroke-width)",
+        "icon-l": "var(--icon-l-stroke-width)",
+        "icon-xl": "var(--icon-xl-stroke-width)",
       },
       lineHeight: {
-        normal: "var(--line-height-normal)", // 1.5
-        tight: "var(--line-height-tight)", // 1.3
+        normal: "var(--line-height-normal)",
+        tight: "var(--line-height-tight)",
       },
       size: {
-        icon: "var(--icon-size)", // 18px
-        "icon-xs": "var(--icon-xs)", // 14px
-        "icon-s": "var(--icon-s)", // 16px
-        "icon-m": "var(--icon-m)", // 18px
-        "icon-l": "var(--icon-l)", // 18px
-        "icon-xl": "var(--icon-xl)", // 32px
-        checkbox: "var(--checkbox-size)", //
+        icon: "var(--icon-size)",
+        "icon-xs": "var(--icon-xs)",
+        "icon-s": "var(--icon-s)",
+        "icon-m": "var(--icon-m)",
+        "icon-l": "var(--icon-l)",
+        "icon-xl": "var(--icon-xl)",
+        checkbox: "var(--checkbox-size)",
       },
       opacity: {
-        icon: "var(--icon-opacity)", // 0.85
-        "icon-hover": "var(--icon-opacity-hover)", // 1
-        "icon-active": "var(--icon-opacity-active)", // 1
+        icon: "var(--icon-opacity)",
+        "icon-hover": "var(--icon-opacity-hover)",
+        "icon-active": "var(--icon-opacity-active)",
       },
     },
   },

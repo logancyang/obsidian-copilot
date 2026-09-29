@@ -19,7 +19,6 @@ jest.mock("@/settings/model", () => ({
   },
 }));
 
-/** Publish a settings change the way the provider sync's write does. */
 function emitSettings(next: CopilotSettings): void {
   const prev = mockGetSettings();
   mockGetSettings.mockReturnValue(next);
@@ -84,21 +83,12 @@ import { Notice } from "obsidian";
 
 const FUTURE_EXP_SECONDS = 9_999_999_999;
 const PAST_EXP_SECONDS = 1_000_000_000;
-/**
- * The license key these fixtures treat as stored. The verify helpers and
- * {@link tokenBackedSettings} share it so the in-memory proof belongs to the key
- * settings hold — the pairing {@link hasLiveEntitlement} now requires.
- */
 const STORED_LICENSE_KEY = "key";
 
 function buildSettings(overrides: Partial<CopilotSettings>): CopilotSettings {
   return { ...DEFAULT_SETTINGS, ...overrides };
 }
 
-/**
- * Drive the module's in-memory verified-feature set the way the real startup
- * path does: re-verify a persisted token whose claims grant `features`.
- */
 async function verifySessionFeatures(
   features: string[],
   expSeconds: number = FUTURE_EXP_SECONDS
@@ -121,11 +111,6 @@ async function verifySessionFeatures(
   await verifyCachedEntitlement();
 }
 
-/**
- * Settings of a user holding an unexpired, token-derived entitlement. The token
- * and license key match what the verify helpers verified, so the in-memory
- * proof belongs to both the token and the key settings currently hold.
- */
 function tokenBackedSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
   return buildSettings({
     userId: "user-123",
@@ -136,10 +121,6 @@ function tokenBackedSettings(overrides: Partial<CopilotSettings> = {}): CopilotS
   });
 }
 
-/**
- * Drive the module's verified proof from a token whose claims are given, the
- * way the real startup path does.
- */
 async function verifySessionClaims(
   claims: Partial<{ plan: string; tier: string; features: string[]; exp: number }>
 ): Promise<void> {
@@ -163,7 +144,6 @@ async function verifySessionClaims(
 }
 
 describe("plusUtils", () => {
-  // Every gate reads the in-memory proof, so reset it to the fail-closed state.
   beforeEach(async () => {
     mockSetSettings.mockClear();
     mockUpdateSetting.mockClear();
@@ -181,7 +161,6 @@ describe("plusUtils", () => {
   describe("applyLicenseSettings()", () => {
     const FLASH_CONFIGURED_ID = "cm-flash";
 
-    /** Settings in the state the provider sync leaves behind: Plus provider registered, flash configured. */
     function settingsWithFlashConfigured(): CopilotSettings {
       return buildSettings({
         providers: {
@@ -245,7 +224,6 @@ describe("plusUtils", () => {
       mockGetSettings.mockReturnValue(buildSettings({}));
 
       const applied = applyLicenseSettings();
-      // Mid-flight: the click landed before enrollment, so nothing is written yet.
       expect(mockSetSettings).not.toHaveBeenCalled();
 
       emitSettings(settingsWithFlashConfigured());
@@ -371,9 +349,6 @@ describe("plusUtils", () => {
     });
 
     it("is true for an agent still defaulted to a Copilot model after chat moved off it", () => {
-      // The case the expiry warning exists for: chat is on the user's own model,
-      // so only the agent's sessions are about to break. The Copilot provider is
-      // already unregistered here, as expiry leaves it.
       const settings = buildSettings({
         defaultModelKey: "cm-byok",
         agentMode: {
@@ -450,8 +425,6 @@ describe("plusUtils", () => {
     });
 
     it("is false when no token was verified this session (edited data.json)", () => {
-      // Persisted flags and a future expiry can be forged; the ES256 signature
-      // cannot, and nothing re-proved it this process.
       mockGetSettings.mockReturnValue(
         tokenBackedSettings({ enableSelfHostMode: true, isPlusUser: true })
       );
@@ -459,9 +432,6 @@ describe("plusUtils", () => {
       expect(isSelfHostModeValid()).toBe(false);
     });
 
-    // Expiry comes from the signed claims, never from the persisted setting:
-    // data.json is editable and the ES256 signature is not. Both directions are
-    // asserted so the setting is proven inert rather than merely unused.
     it("is false once the signed exp has passed, even with the persisted expiry edited forward", async () => {
       await verifySessionFeatures(["multi_agent", "self_host"], PAST_EXP_SECONDS);
       mockGetSettings.mockReturnValue(
@@ -492,9 +462,6 @@ describe("plusUtils", () => {
       expect(isSelfHostModeValid()).toBe(true);
 
       clear();
-      // These paths also zero `entitlementExpiresAt`, so the expiry check alone
-      // would not close the gate — the proof lapses because it is tagged with a
-      // token settings no longer hold.
       mockGetSettings.mockReturnValue(
         buildSettings({ enableSelfHostMode: true, entitlementToken: "", entitlementExpiresAt: 0 })
       );
@@ -557,8 +524,6 @@ describe("plusUtils", () => {
     });
 
     it("is not granted by self-host mode alone", async () => {
-      // Self-host plans reach Plus through their own token's multi_agent
-      // feature, so the toggle must not act as a bypass.
       await verifySessionFeatures(["self_host"]);
       mockGetSettings.mockReturnValue(
         tokenBackedSettings({ enableSelfHostMode: true, isPlusUser: false })
@@ -570,8 +535,6 @@ describe("plusUtils", () => {
 
   describe("applyEntitlement()", () => {
     beforeEach(() => {
-      // A key is always stored by the time this runs: it is the /license answer
-      // for that key that carries the token.
       mockGetSettings.mockReturnValue(
         buildSettings({ userId: "user-123", plusLicenseKey: STORED_LICENSE_KEY })
       );
@@ -608,8 +571,6 @@ describe("plusUtils", () => {
         exp: FUTURE_EXP_SECONDS,
       });
 
-      // Returns true (verified + applied); the tier shows in the flags, not the
-      // return value.
       expect(await applyEntitlement("token")).toBe(true);
       expect(mockSetSettings).toHaveBeenCalledWith({
         entitlementToken: "token",
@@ -643,8 +604,6 @@ describe("plusUtils", () => {
     });
 
     it("does not tag the proof with a key swapped in while verification was in flight (https://github.com/Brevilabs/obsidian-copilot-private/issues/307)", async () => {
-      // validateLicenseKey's key-changed guard runs before this call, so only
-      // reading the key up front keeps the old key's claims off the new key.
       mockVerifyEntitlement.mockImplementation(async () => {
         mockGetSettings.mockReturnValue(
           buildSettings({ userId: "user-123", plusLicenseKey: "a-different-key" })
@@ -668,9 +627,6 @@ describe("plusUtils", () => {
     });
 
     it("does NOT change settings when the token cannot be verified", async () => {
-      // An unverifiable token (bad signature, expired, unknown kid, or empty key
-      // set during rollout) is not an authoritative negative, so flags are left
-      // untouched for the caller to decide the fallback. Only turnOffPaid clears.
       mockVerifyEntitlement.mockResolvedValue(null);
 
       expect(await applyEntitlement("bad")).toBe(false);
@@ -688,10 +644,6 @@ describe("plusUtils", () => {
     });
 
     it("does not clobber a fresher token applied while its verification was in flight", async () => {
-      // main.ts runs this concurrently with the online /license check. The
-      // startup re-check reads the OLD token, and /license installs a new one
-      // before that verification resolves; the stale write must be dropped or
-      // the proof ends up tagged with a token settings no longer hold.
       const believerClaims = {
         user_id: "user-123",
         plan: "believer",
@@ -709,8 +661,6 @@ describe("plusUtils", () => {
       );
       mockVerifyEntitlement.mockImplementation(async (token: string) => {
         if (token === "old-token") {
-          // The concurrent /license round-trip resolves first and installs a
-          // fresher token, exactly as applyEntitlement would at startup.
           await applyEntitlement("new-token");
           mockGetSettings.mockReturnValue(
             tokenBackedSettings({ entitlementToken: "new-token", enableSelfHostMode: true })
@@ -721,14 +671,11 @@ describe("plusUtils", () => {
 
       await verifyCachedEntitlement();
 
-      // The fresher grant survives: a paying user is not locked out for the session.
       expect(isSelfHostModeValid()).toBe(true);
       expect(canUseMultiAgent()).toBe(true);
     });
 
     it("closes every gate when the same cached token stops verifying", async () => {
-      // Kid rotation or tampering: settings still hold the token an earlier
-      // check granted, so re-tagging it with no features is what revokes.
       await verifySessionFeatures(["multi_agent", "self_host"]);
 
       mockVerifyEntitlement.mockResolvedValue(null);
@@ -759,9 +706,6 @@ describe("plusUtils", () => {
     });
 
     it("keeps an unexpired entitlement working when the license server is unreachable", async () => {
-      // requestUrl rejects offline, and every caller reads a rejection as "no
-      // license" — which would deny the offline window the signed token exists
-      // to provide. The call still runs, since it is what renews the token.
       await verifySessionFeatures(["multi_agent", "self_host"]);
       mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
       mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
@@ -779,9 +723,6 @@ describe("plusUtils", () => {
     });
 
     it("stops a turn whose entitlement expired while renewal was failing", async () => {
-      // The persisted isPaidUser is still true here. Answering from it would let
-      // the turn proceed with isSelfHostModeValid() already closed, rerouting a
-      // self-host user's searches to the cloud on a failed renewal.
       await verifySessionFeatures(["multi_agent", "self_host"], PAST_EXP_SECONDS);
       mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
       mockValidateLicenseKey.mockResolvedValue({ isValid: undefined });
@@ -790,8 +731,6 @@ describe("plusUtils", () => {
     });
 
     it("refuses the offline fallback to an unexpired free-tier token", async () => {
-      // The backend downgrades a lapsed paid key to the free policy instead of
-      // refusing it a token, so an unexpired proof is not by itself paid access.
       await verifySessionClaims({ plan: "none", tier: "free" });
       mockGetSettings.mockReturnValue(tokenBackedSettings());
       mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
@@ -800,10 +739,6 @@ describe("plusUtils", () => {
     });
 
     it("refuses the previous key's entitlement to a newly entered key the server cannot rule on (https://github.com/Brevilabs/obsidian-copilot-private/issues/307)", async () => {
-      // Swapping the key leaves the old key's token persisted and its proof
-      // live. Without the proof naming the key that earned it, this fallback
-      // answered `true` for a key the server never accepted, keeping the old
-      // plan's badge and every Plus gate open until that token's exp passed.
       await verifySessionFeatures(["multi_agent", "self_host"]);
       mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "a-different-key" }));
       mockValidateLicenseKey.mockResolvedValue({ isValid: undefined });
@@ -821,11 +756,6 @@ describe("plusUtils", () => {
     });
 
     it("leaves the retained paid state untouched when validation is unreachable after reset (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", async () => {
-      // The post-reset shape: reset kept isPaidUser and the license key but
-      // dropped the entitlement token. An unreachable server means "unknown",
-      // not "unentitled" — writing the paid flag here would read as sign-out
-      // to the settings subscriber (`plusSyncNeeded`) and tear down the
-      // preserved Plus provider and its keychain entry.
       mockGetSettings.mockReturnValue(
         buildSettings({
           plusLicenseKey: "key",
@@ -866,9 +796,6 @@ describe("plusUtils", () => {
     });
 
     it("reports inactive for a lapsed key the server downgraded to the free tier", async () => {
-      // The server keeps answering is_valid for a lapsed key but issues a
-      // free-tier entitlement that still names the plan, so the tier — not the
-      // plan name — is what says this user has nothing.
       await verifySessionClaims({ plan: "plus", tier: "free" });
       mockGetSettings.mockReturnValue(
         tokenBackedSettings({ plusLicenseKey: "key", isPaidUser: false })
@@ -880,8 +807,6 @@ describe("plusUtils", () => {
     });
 
     it("reports inactive once the signed expiry has passed", async () => {
-      // Shares the gates' liveness bound, so a section left open across `exp`
-      // stops naming a plan whose entitlement has already closed.
       await verifySessionClaims({ plan: "plus", tier: "plus", exp: PAST_EXP_SECONDS });
       mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
 
@@ -891,10 +816,6 @@ describe("plusUtils", () => {
     });
 
     it("reports inactive once the retained post-reset expiry has passed (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
-      // The post-reset shape: reset kept isPaidUser and the original expiry
-      // but dropped the token, so no signed claims exist. The retained expiry
-      // is what keeps this display time-bounded — without it a reset user
-      // offline would read Active forever.
       mockGetSettings.mockReturnValue(
         buildSettings({
           plusLicenseKey: "key",
@@ -911,8 +832,6 @@ describe("plusUtils", () => {
     });
 
     it("reports inactive for a stored key the server rejected outright", async () => {
-      // turnOffPaid clears the token and the expiry, so nothing but the key and
-      // the downgraded flag survive an invalid or revoked key.
       mockGetSettings.mockReturnValue(
         buildSettings({ userId: "user-123", plusLicenseKey: "key", isPaidUser: false })
       );
@@ -933,8 +852,6 @@ describe("plusUtils", () => {
     });
 
     it("stops naming the previous key's plan once a different key is stored (https://github.com/Brevilabs/obsidian-copilot-private/issues/307)", async () => {
-      // The badge reads the same proof the gates do, so a proof that outlived
-      // its key showed a replaced key the plan it never bought.
       await verifySessionClaims({ plan: "believer", tier: "plus" });
       mockGetSettings.mockReturnValue(
         tokenBackedSettings({ plusLicenseKey: "a-different-key", isPaidUser: false })
@@ -990,10 +907,6 @@ describe("plusUtils", () => {
     });
 
     it("keeps the preference when the token cannot be verified", async () => {
-      // Unverifiable is "unknown", not "not entitled": a kid that has not
-      // shipped, unavailable WebCrypto, or an expiry crossed just before the
-      // online refresh. Clearing here would burn a preference that the next
-      // successful refresh cannot restore, silently leaving the user on cloud.
       mockVerifyEntitlement.mockResolvedValue(null);
       mockGetSettings.mockReturnValue(tokenBackedSettings({ enableSelfHostMode: true }));
 

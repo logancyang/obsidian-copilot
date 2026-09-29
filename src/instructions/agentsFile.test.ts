@@ -11,7 +11,6 @@ import {
 } from "@/instructions/agentsFile";
 import { App, Platform, TFile, TFolder } from "obsidian";
 
-/** The mock defaults to the case-sensitive branch; folding tests opt in explicitly. */
 function setCaseInsensitiveFilesystem(value: boolean) {
   (Platform as { isMacOS: boolean }).isMacOS = value;
 }
@@ -30,8 +29,6 @@ function makeApp(initialFiles: Record<string, string> = {}, folders: string[] = 
   const toFolder = (path: string) =>
     new (TFolder as unknown as new (path: string) => TFolder)(path);
   const openFile = jest.fn().mockResolvedValue(undefined);
-  /** A folder carrying its immediate file children, which is how the resolver finds a
-   *  differently-cased sibling. Dot-folders are never indexed, so they list nothing. */
   const folderWithChildren = (path: string) => {
     const folder = toFolder(path);
     const children = path.split("/").some((segment) => segment.startsWith("."))
@@ -42,7 +39,6 @@ function makeApp(initialFiles: Record<string, string> = {}, folders: string[] = 
     (folder as unknown as { children: unknown[] }).children = children;
     return folder;
   };
-  /** The key `path` actually names on disk, honouring the platform's case rules. */
   const diskPath = (path: string): string | undefined => {
     if (state.files.has(path)) return path;
     if (!Platform.isMacOS) return undefined;
@@ -51,8 +47,6 @@ function makeApp(initialFiles: Record<string, string> = {}, folders: string[] = 
   };
   const app = {
     vault: {
-      // Obsidian never indexes dot-folders, so those paths resolve only through the adapter —
-      // the same split `vaultAdapterUtils` exists to bridge.
       getAbstractFileByPath: jest.fn((path: string) => {
         if (path.split("/").some((segment) => segment.startsWith("."))) return null;
         if (state.files.has(path)) return toFile(path);
@@ -69,9 +63,6 @@ function makeApp(initialFiles: Record<string, string> = {}, folders: string[] = 
         state.files.set(file.path, content);
       }),
       adapter: {
-        // The real adapter goes to the OS, so on a case-insensitive volume it answers for
-        // every spelling of a path — which is exactly what makes a cached `agents.md` look
-        // like an uncached `AGENTS.md` to the resolver.
         exists: jest.fn(async (path: string) => diskPath(path) !== undefined),
         read: jest.fn(async (path: string) => state.files.get(diskPath(path) ?? path) ?? ""),
         write: jest.fn(async (path: string, content: string) => {
@@ -138,9 +129,6 @@ describe("agentsFile", () => {
     });
 
     it("keeps a generated mirror's body when there is nothing to replace it with", async () => {
-      // Once the project's legacy body has been moved out, later ensures pass "". Replacing
-      // the mirror with that empties the only copy of the user's project instructions, and
-      // the backend then reads a blank AGENTS.md.
       const marker =
         "<!-- copilot:generated-agents-mirror v1 — Auto-generated; do not edit here. -->";
       const { app, state } = makeApp({
@@ -254,8 +242,6 @@ describe("agentsFile", () => {
 
   describe("captureInstructionFiles() / restoreInstructionFiles()", () => {
     it("removes files the edit created, rather than leaving them blank", async () => {
-      // Writing "" back would leave a markerless AGENTS.md that reads as user-owned, which
-      // blocks this project's legacy `project.md` move for good.
       const { app, state } = makeApp();
       const before = await captureInstructionFiles(app, "Projects/Research");
       await writeAgentsFile(app, "Projects/Research", "Half-finished rules");
@@ -280,7 +266,6 @@ describe("agentsFile", () => {
     });
 
     it("keeps a file the user had deliberately emptied empty", async () => {
-      // The case contents alone cannot express: absent and empty are different prior states.
       const { app, state } = makeApp({ "Projects/Research/AGENTS.md": "" });
       const before = await captureInstructionFiles(app, "Projects/Research");
       await writeAgentsFile(app, "Projects/Research", "New rules");
@@ -306,8 +291,6 @@ describe("agentsFile", () => {
     });
 
     it("keeps an import-only CLAUDE.md, which carries no marker to prove it is ours", async () => {
-      // `@AGENTS.md` alone is also how a user shares their own AGENTS rules with Claude, and
-      // a stale import holds no instructions — so deleting it can only ever destroy.
       const { app, state } = makeApp({
         "Projects/Research/AGENTS.md": `${marker}\n\nDead project's instructions`,
         "Projects/Research/CLAUDE.md": "@AGENTS.md\n",
@@ -347,9 +330,6 @@ describe("agentsFile", () => {
 
   describe("ensureAgentsFileForDiscovery()", () => {
     it("initializes an old project so the backend discovers it without a manual open", async () => {
-      // The regression this guards: a project whose instructions still live only in the
-      // project.md body would otherwise send NO instructions to any backend until the user
-      // happened to click the popover's AGENTS.md row.
       const { app, state } = makeApp({}, ["copilot/projects/Research"]);
 
       await ensureAgentsFileForDiscovery(app, "copilot/projects/Research", "Legacy project rules");
@@ -410,8 +390,6 @@ describe("agentsFile", () => {
     });
 
     it("reports the path instead of opening a file Obsidian cannot show", async () => {
-      // A dot-folder file is never in the vault cache, so the resolved TFile is synthetic and
-      // the editor would open an empty leaf.
       const { app, openFile } = makeApp({ ".copilot/projects/One/AGENTS.md": "rules" });
 
       await expect(openAgentsFile(app, ".copilot/projects/One", "", true)).rejects.toThrow(
@@ -421,8 +399,6 @@ describe("agentsFile", () => {
     });
 
     it("opens a note the vault stores under another casing", async () => {
-      // A case-insensitive volume lets `agents.md` answer for `AGENTS.md`. Matching the cache
-      // only exactly would call an ordinary note unreachable and refuse to open it.
       setCaseInsensitiveFilesystem(true);
       const { app, openFile } = makeApp({ "agents.md": "rules" });
 
@@ -450,15 +426,11 @@ describe("agentsFile", () => {
 
       expect(state.files.get("agents.md")).toBe("New rules");
       expect(state.files.has("AGENTS.md")).toBe(false);
-      // Through `vault.modify`, not the adapter: an adapter write bypasses Obsidian's own file
-      // state and strands an editor the user has open on that note.
       expect(app.vault.modify).toHaveBeenCalled();
       expect(app.vault.adapter.write).not.toHaveBeenCalled();
     });
 
     it("does not look for a variant when the folder simply has no instruction file", async () => {
-      // Session start asks this on every new session, and having no file yet is the common
-      // answer; the variant lookup is a repair for an existing file, not a lookup path.
       setCaseInsensitiveFilesystem(true);
       const { app } = makeApp();
 
@@ -468,8 +440,6 @@ describe("agentsFile", () => {
     });
 
     it("keeps them separate on a case-sensitive volume, where the backends read only the exact name", async () => {
-      // Adopting `agents.md` here would leave AGENTS.md uncreated and send the user's edits to
-      // a file codex/opencode never discover.
       const { app, state } = makeApp({ "agents.md": "Someone else's note" });
 
       await writeAgentsFile(app, "", "New rules");

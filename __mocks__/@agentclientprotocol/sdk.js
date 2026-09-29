@@ -1,10 +1,3 @@
-// Lightweight mock for @agentclientprotocol/sdk so unit tests can import
-// modules that reference its runtime values (RequestError, ClientSideConnection,
-// PROTOCOL_VERSION, ndJsonStream) without pulling the real ESM package
-// through ts-jest. Tests that need behavior beyond this mock should stub
-// their own.
- 
-
 class RequestError extends Error {
   constructor(code, message, data) {
     super(message);

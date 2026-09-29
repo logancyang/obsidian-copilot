@@ -8,10 +8,8 @@ describe("createPersistentHighlight", () => {
       const highlight1 = createPersistentHighlight("test-highlight-1");
       const highlight2 = createPersistentHighlight("test-highlight-2");
 
-      // Each instance should have its own effect type
       expect(highlight1.effect).not.toBe(highlight2.effect);
 
-      // Each instance should have its own field
       expect(highlight1.field).not.toBe(highlight2.field);
     });
 
@@ -35,7 +33,6 @@ describe("createPersistentHighlight", () => {
     beforeEach(() => {
       highlight = createPersistentHighlight("test-highlight");
 
-      // Create a real EditorView with the extension installed
       const state = EditorState.create({
         doc: "Hello World",
         extensions: [highlight.extension],
@@ -81,7 +78,6 @@ describe("createPersistentHighlight", () => {
       });
 
       it("clamps range to document bounds", () => {
-        // Document is "Hello World" (11 chars)
         highlight.show(view, -5, 100);
         const range = highlight.getRange(view);
         expect(range?.from).toBeGreaterThanOrEqual(0);
@@ -104,7 +100,6 @@ describe("createPersistentHighlight", () => {
       });
 
       it("is a no-op when no highlight exists", () => {
-        // Should not throw
         expect(() => highlight.hide(view)).not.toThrow();
         expect(highlight.getRange(view)).toBeNull();
       });
@@ -123,7 +118,6 @@ describe("createPersistentHighlight", () => {
       });
 
       it("returns empty array when hiding non-existent highlight", () => {
-        // Create a view without the extension
         const bareState = EditorState.create({ doc: "Test" });
         const bareView = new EditorView({
           state: bareState,
@@ -137,52 +131,43 @@ describe("createPersistentHighlight", () => {
       });
 
       it("treats empty range as hide and returns hide effect", () => {
-        // First show a highlight
         highlight.show(view, 0, 5);
 
-        // Empty range (from === to) should trigger hide
         const effects = highlight.buildEffects(view, { from: 5, to: 5 });
-        // Should return a hide effect since extension is installed
         expect(effects.length).toBe(1);
       });
     });
 
     describe("document changes", () => {
       it("maps range through insertions before the range", () => {
-        highlight.show(view, 6, 11); // "World"
+        highlight.show(view, 6, 11);
 
-        // Insert "Hey " at the beginning
         view.dispatch({
           changes: { from: 0, to: 0, insert: "Hey " },
         });
 
         const range = highlight.getRange(view);
-        // Range should shift by 4 (length of "Hey ")
         expect(range).toEqual({ from: 10, to: 15 });
       });
 
       it("maps range through deletions before the range", () => {
-        highlight.show(view, 6, 11); // "World"
+        highlight.show(view, 6, 11);
 
-        // Delete "Hello " (0-6)
         view.dispatch({
           changes: { from: 0, to: 6, insert: "" },
         });
 
         const range = highlight.getRange(view);
-        // Range should shift back by 6
         expect(range).toEqual({ from: 0, to: 5 });
       });
 
       it("clears range when completely deleted", () => {
-        highlight.show(view, 0, 5); // "Hello"
+        highlight.show(view, 0, 5);
 
-        // Delete everything
         view.dispatch({
           changes: { from: 0, to: 11, insert: "" },
         });
 
-        // Range should be null (empty after deletion)
         expect(highlight.getRange(view)).toBeNull();
       });
     });
@@ -195,7 +180,6 @@ describe("createPersistentHighlight", () => {
     beforeEach(() => {
       highlight = createPersistentHighlight("test-highlight");
 
-      // Create view WITHOUT the extension
       const state = EditorState.create({
         doc: "Hello World",
       });
@@ -225,7 +209,6 @@ describe("createPersistentHighlight", () => {
 
     it("buildEffects includes appendConfig effect", () => {
       const effects = highlight.buildEffects(view, { from: 0, to: 5 });
-      // Should include both appendConfig and setEffect
       expect(effects.length).toBe(2);
     });
   });

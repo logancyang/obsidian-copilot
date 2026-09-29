@@ -1,8 +1,3 @@
-/**
- * useRafResizable - Shared RAF-throttled resize handle logic.
- * Designed for floating panels/modals that need document-level mouse listeners.
- */
-
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -18,9 +13,6 @@ export interface ResizeConstraints {
 export interface ResizeUpdate {
   width: number;
   height: number;
-  /**
-   * Optional new top-left (client coordinates) for left-edge resizing.
-   */
   x?: number;
   y?: number;
 }
@@ -38,18 +30,8 @@ interface ResizeStartState {
 
 export interface UseRafResizableOptions {
   enabled?: boolean;
-  /**
-   * Returns the element's current DOMRect. Used to capture the resize baseline on mouse down.
-   */
   getRect: () => DOMRect | null;
-  /**
-   * Returns min/max constraints for the resize interaction.
-   * Called on every mousemove so it can depend on the current viewport/host.
-   */
   getConstraints?: () => ResizeConstraints;
-  /**
-   * Called at most once per animation frame with the latest computed dimensions.
-   */
   onResize: (next: ResizeUpdate) => void;
 }
 
@@ -58,12 +40,6 @@ export interface UseRafResizableResult {
   handleResizeStart: (direction: ResizeDirection) => (e: React.MouseEvent) => void;
 }
 
-/**
- * Shared resize-handle logic for floating panels/modals.
- * - Uses document-level mouse listeners
- * - Throttles updates with requestAnimationFrame
- * - Temporarily disables text selection and sets an appropriate cursor
- */
 export function useRafResizable(options: UseRafResizableOptions): UseRafResizableResult {
   const { enabled = true, getRect, getConstraints, onResize } = options;
 
@@ -93,7 +69,6 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
         const rect = getRect();
         if (!rect) return;
 
-        // Capture owner document/window from the event target
         const targetElement = e.currentTarget as HTMLElement | null;
         const ownerDoc = targetElement?.doc ?? activeDocument;
         ownerDocumentRef.current = ownerDoc;
@@ -136,8 +111,6 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
     const ownerDocument = ownerDocumentRef.current ?? activeDocument;
     const ownerWindow = ownerWindowRef.current ?? window;
     const body = ownerDocument.body;
-    // Direction-specific cursor is exposed via a CSS variable so the Tailwind
-    // arbitrary-value class can consume it without inline cursor styles.
     body.setCssProps({ "--copilot-resize-cursor": cursor });
     body.classList.add("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
 

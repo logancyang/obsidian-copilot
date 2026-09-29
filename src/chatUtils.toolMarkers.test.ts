@@ -18,7 +18,6 @@ class MockMemoryManager {
     return this.memory;
   }
   async saveContext(input: { input: string }, output: { output: string }) {
-    // Mock the MemoryManager.saveContext behavior (compaction is tested separately)
     await this.memory.saveContext(input, output);
   }
 }
@@ -36,7 +35,6 @@ describe("updateChatMemory with tool call markers", () => {
       {
         id: "2",
         sender: AI_SENDER,
-        // AI message that includes a tool call marker with encoded JSON result
         message:
           "<!--TOOL_CALL_START:localSearch-1:localSearch:Vault search:🔍::false--><!--TOOL_CALL_END:localSearch-1:ENC:%5B%7B%22title%22%3A%22Lesson%201%22%7D%5D-->\nHere are the results...",
         isVisible: true,

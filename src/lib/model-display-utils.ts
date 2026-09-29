@@ -32,12 +32,6 @@ export function getProviderLabel(provider: string, model?: CustomModel): string 
   return baseLabel + (model?.believerExclusive && baseLabel === "Copilot" ? "(Believer)" : "");
 }
 
-/**
- * Check whether a model has the credential its provider requires without reading plugin state.
- *
- * @param model - Model whose provider and optional per-model key determine credential requirements.
- * @param settings - Caller-owned settings snapshot used for provider credentials.
- */
 export function checkModelApiKey(
   model: CustomModel,
   settings: Readonly<ModelApiKeySettings>

@@ -2,7 +2,6 @@ import { ProjectConfig } from "@/aiParams";
 import { filterProjects, ProjectSearchOptions } from "@/utils/projectUtils";
 
 describe("projectUtils", () => {
-  // Test data
   const mockProjects: ProjectConfig[] = [
     {
       id: "1",
@@ -38,7 +37,7 @@ describe("projectUtils", () => {
     {
       id: "3",
       name: "API Service",
-      description: undefined, // Project without description
+      description: undefined,
       systemPrompt: "You are a helpful assistant.",
       projectModelKey: "gpt-3.5-turbo",
       modelConfigs: {},
@@ -90,12 +89,10 @@ describe("projectUtils", () => {
     test("should perform case-sensitive search when configured", () => {
       const options: ProjectSearchOptions = { caseSensitive: true };
 
-      // Correct case should find results
       const result1 = filterProjects(mockProjects, "React", options);
       expect(result1.length).toBe(1);
       expect(result1[0].name).toBe("React Project");
 
-      // Wrong case should find no results
       const result2 = filterProjects(mockProjects, "react", options);
       expect(result2.length).toBe(0);
     });
@@ -106,12 +103,10 @@ describe("projectUtils", () => {
         searchInDescription: false,
       };
 
-      // Can find in name
       const result1 = filterProjects(mockProjects, "Vue", options);
       expect(result1.length).toBe(1);
       expect(result1[0].name).toBe("Vue Dashboard");
 
-      // Cannot find content only in description
       const result2 = filterProjects(mockProjects, "application", options);
       expect(result2.length).toBe(0);
     });
@@ -122,12 +117,10 @@ describe("projectUtils", () => {
         searchInDescription: true,
       };
 
-      // Can find in description
       const result1 = filterProjects(mockProjects, "dashboard", options);
       expect(result1.length).toBe(1);
       expect(result1[0].name).toBe("Vue Dashboard");
 
-      // Cannot find content only in name
       const result2 = filterProjects(mockProjects, "API", options);
       expect(result2.length).toBe(0);
     });
@@ -144,7 +137,6 @@ describe("projectUtils", () => {
       expect(result[0].name).toBe("API Service");
     });
 
-    // Edge cases and error handling tests
     test("should handle empty project array", () => {
       const result = filterProjects([], "any query");
       expect(result).toEqual([]);
@@ -161,7 +153,7 @@ describe("projectUtils", () => {
 
     test("should handle multiple projects matching same query", () => {
       const result = filterProjects(mockProjects, "project");
-      expect(result.length).toBe(1); // Only "React Project" contains "project"
+      expect(result.length).toBe(1);
       expect(result[0].name).toBe("React Project");
     });
 

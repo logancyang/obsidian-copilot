@@ -31,12 +31,6 @@ interface HeadlessApp {
   };
 }
 
-/**
- * Create a minimal Obsidian app stub suitable for CLI usage.
- *
- * The autonomous agent only needs vault lookups and metadata cache reads, so this
- * provides no-op implementations that satisfy those expectations.
- */
 function createHeadlessApp(): HeadlessApp {
   return {
     vault: {
@@ -46,9 +40,7 @@ function createHeadlessApp(): HeadlessApp {
       getMarkdownFiles: () => [],
       getAllLoadedFiles: () => [],
       adapter: {
-        mkdir: async () => {
-          /* no-op */
-        },
+        mkdir: async () => {},
       },
     },
     metadataCache: {
@@ -58,20 +50,12 @@ function createHeadlessApp(): HeadlessApp {
     workspace: {
       getActiveFile: () => null,
       getLeaf: () => ({
-        openFile: async () => {
-          /* no-op */
-        },
+        openFile: async () => {},
       }),
     },
   };
 }
 
-/**
- * Format a plain user message into the ChatMessage shape used by the agent.
- *
- * @param message - Raw user text to analyse.
- * @returns Minimal chat message.
- */
 function buildChatMessage(message: string): ChatMessage {
   return {
     message,
@@ -82,11 +66,6 @@ function buildChatMessage(message: string): ChatMessage {
   };
 }
 
-/**
- * Generate the annotated prompt debug report for a given user input.
- *
- * @param args - CLI arguments (expects the user prompt as the concatenated string).
- */
 export async function run(args: string[]): Promise<void> {
   const userInput = args.join(" ").trim();
 
@@ -107,7 +86,6 @@ export async function run(args: string[]): Promise<void> {
   const enabledToolIds = new Set(settings.autonomousAgentEnabledToolIds || []);
   const availableTools = registry.getEnabledTools(enabledToolIds, false);
 
-  // Generate simple tool descriptions (native tool calling handles schema via bindTools)
   const toolDescriptions = availableTools
     .map((tool) => `${tool.name}: ${tool.description}`)
     .join("\n");

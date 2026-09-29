@@ -65,8 +65,6 @@ describe("useAgentsFileDraft", () => {
     });
 
     it("discards a read that lands after the folder moved on", async () => {
-      // Without the cancellation guard the slower first read wins and one project's
-      // instructions appear under another project's name.
       let resolveFirst: (value: string) => void = () => {};
       mockReadAgentsFile.mockReturnValueOnce(
         new Promise<string>((resolve) => {

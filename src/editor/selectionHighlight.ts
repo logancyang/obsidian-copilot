@@ -1,13 +1,3 @@
-/**
- * SelectionHighlight - Persistent selection highlight using CM6 Decoration.
- *
- * Provides a way to keep selection visible even when editor loses focus.
- * Automatically tracks document changes using mapPos.
- *
- * This module is a thin wrapper around the generic `createPersistentHighlight`
- * factory, preserving the original public API for backwards compatibility.
- */
-
 import { StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { logError } from "@/logger";
@@ -16,17 +6,10 @@ import {
   type PersistentHighlightRange,
 } from "@/editor/persistentHighlight";
 
-// ============================================================================
-// Instance (isolated from Chat highlight)
-// ============================================================================
-
 const selectionHighlight = createPersistentHighlight("copilot-selection-highlight");
 
 type SelectionHighlightRange = PersistentHighlightRange;
 
-/**
- * Dispatch helper with error isolation (e.g. view destroyed).
- */
 function safeDispatch(view: EditorView, spec: Parameters<EditorView["dispatch"]>[0]): void {
   try {
     view.dispatch(spec);
@@ -64,14 +47,6 @@ function getSelectionHighlightRange(view: EditorView): SelectionHighlightRange |
   return selectionHighlight.getRange(view);
 }
 
-/**
- * Convenience object API:
- * - `SelectionHighlight.show(view, from, to)`
- * - `SelectionHighlight.update(view, from, to)`
- * - `SelectionHighlight.hide(view)`
- * - `SelectionHighlight.getRange(view)`
- * - `SelectionHighlight.buildEffects(view, range)` - Build effects without dispatching
- */
 export const SelectionHighlight = {
   show: showSelectionHighlight,
   update: updateSelectionHighlight,

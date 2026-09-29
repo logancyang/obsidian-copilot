@@ -1,7 +1,3 @@
-/**
- * Returned by {@link debounce}. Calling it schedules the underlying function,
- * with `cancel` and `flush` controls modeled after `lodash.debounce`.
- */
 type AnyFunction = (...args: never[]) => unknown;
 
 export interface DebouncedFunction<T extends AnyFunction> {
@@ -15,11 +11,6 @@ export interface DebounceOptions {
   trailing?: boolean;
 }
 
-/**
- * Delay-invoking `func` until `wait` ms have elapsed since the last call.
- * Supports the `leading` / `trailing` options and `cancel` / `flush` methods
- * used by the `lodash.debounce` API the codebase relied on previously.
- */
 export function debounce<T extends AnyFunction>(
   func: T,
   wait: number,

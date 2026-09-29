@@ -1,10 +1,6 @@
 import { logError } from "@/logger";
 import { useState } from "react";
 
-/**
- * Copy-to-clipboard with a transient "copied" flag that auto-resets after 2s.
- * Copies the string verbatim — callers clean/format the text before passing it.
- */
 export function useCopyToClipboard(): { isCopied: boolean; copy: (text: string) => void } {
   const [isCopied, setIsCopied] = useState(false);
 

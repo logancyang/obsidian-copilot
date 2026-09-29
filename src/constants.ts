@@ -4,8 +4,6 @@ import { v4 as uuidv4 } from "uuid";
 import { ChainType } from "./chainType";
 import { PromptSortStrategy } from "./types";
 
-// Copilot website usage dashboard (view usage, purchase credits). Used as the
-// fallback link when a usage-cap error doesn't carry its own dashboard_url.
 export const USAGE_DASHBOARD_URL = "https://www.obsidiancopilot.com/en/dashboard/token-usage";
 
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
@@ -15,34 +13,18 @@ export const CHAT_AGENT_VIEWTYPE = "copilot-agent-chat-view";
 export const AGENT_CHAT_MODE = "agent";
 export const RELEVANT_NOTES_VIEWTYPE = "copilot-relevant-notes-view";
 
-// Custom Obsidian icon for Agent Mode surfaces (view tab, ribbon, commands).
-// The v4 monochrome brand mark, normalized from its source viewBox "4 4 152 127"
-// into Obsidian's 0 0 100 100 icon space; currentColor lets it track the theme
-// and the active/hover tab state instead of a fixed fill. Register via addIcon().
 export const COPILOT_AGENT_ICON_ID = "copilot-agent";
 
-// The brand glyph as raw vector data — the single source of truth shared by the
-// native `addIcon` registration (string) and the `CopilotBrandIcon` React
-// component (JSX). Both derive from these primitives, so they cannot drift.
-// The 0 0 100 100 viewBox is intentionally NOT shared here: `addIcon` always
-// wraps its content in Obsidian's own `<svg viewBox="0 0 100 100">`, so that box
-// is fixed by the Obsidian API, not chosen by us — `CopilotBrandIcon` simply
-// matches it. If a future review flags the hardcoded viewBox, point them here.
 export const COPILOT_AGENT_ICON_TRANSFORM = "translate(0 8.2) scale(0.6579) translate(-4 -4)";
 export const COPILOT_AGENT_ICON_PATH =
   "M75.9 6.9c-6.8 1.4-12.5 6-35.5 29.3-33.5 33.8-33.5 33.9-34.2 62.2-0.3 12.4 0 20.2 0.7 22.7 2.4 7.8 10.8 11.2 17.6 7.1 1.7-1.1 14.9-14.1 29.5-29.1 14.5-14.9 26.7-27 27-26.9 0.3 0.2 12.4 12.4 27 27.3 14.6 14.8 27.6 27.8 29 28.7 5.1 3.6 13.6 1.4 16.5-4.2 1.2-2.3 1.5-6.9 1.5-22.3 0-22.9-1.2-28.6-8.3-37.9-7.6-10.2-50-52.3-54.9-54.6-5.1-2.4-10.9-3.2-15.9-2.3z";
 
-// Inner SVG markup string consumed by Obsidian's `addIcon` (which wraps it in an
-// `<svg viewBox="0 0 100 100">`). Built from the shared primitives above.
 export const COPILOT_AGENT_ICON_SVG = `<g transform="${COPILOT_AGENT_ICON_TRANSFORM}"><path fill="currentColor" d="${COPILOT_AGENT_ICON_PATH}"/></g>`;
 
 export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
 
-// Default folder names
 export const COPILOT_FOLDER_ROOT = "copilot";
-// Configurable root all Copilot sub-folders derive from (PR-乙). Defaults to
-// the historical hardcoded root so existing vaults keep their layout.
 export const DEFAULT_COPILOT_FOLDER = COPILOT_FOLDER_ROOT;
 const DEFAULT_CHAT_HISTORY_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-conversations`;
 const DEFAULT_CUSTOM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-custom-prompts`;
@@ -51,19 +33,6 @@ const DEFAULT_SYSTEM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/system-prompts`;
 const DEFAULT_PROJECTS_FOLDER = `${COPILOT_FOLDER_ROOT}/projects`;
 export const DEFAULT_SKILLS_FOLDER = `${COPILOT_FOLDER_ROOT}/skills`;
 const DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER = "";
-// Built-in tag written into every saved conversation's frontmatter. Frozen as a
-// constant: no code reads the tag to identify conversations — they are keyed by
-// folder + epoch — so built-in history is unaffected by the freeze.
-//
-// DESIGN NOTE (accepted compatibility break): a vault that had customized the
-// old `defaultConversationTag` keeps that value in data.json, but it is no
-// longer read, and existing notes are never rewritten. Such a vault therefore
-// ends up with two markers, and the user's own tag-based queries, searches and
-// automations see only the older half. That cost was accepted deliberately to
-// converge on one built-in marker; grandfathering the persisted value was
-// rejected because a hidden setting would then steer output forever. Batch
-// remediation is tracked in obsidian-copilot-preview#224.
-// If a future review flags this again, point them at this note.
 export const COPILOT_CONVERSATION_TAG = "copilot-conversation";
 export const DEFAULT_QA_EXCLUSIONS_SETTING = COPILOT_FOLDER_ROOT;
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
@@ -159,14 +128,13 @@ export const DATAVIEW_BLOCK_TAG = "dataview_block";
 export const WEB_TAB_CONTEXT_TAG = "web_tab_context";
 export const ACTIVE_WEB_TAB_CONTEXT_TAG = "active_web_tab";
 export const YOUTUBE_VIDEO_CONTEXT_TAG = "youtube_video_context";
-/** Marker text used as placeholder for active web tab in serialized content */
 export const ACTIVE_WEB_TAB_MARKER = "{activeWebTab}";
 export const CHUNK_SIZE = 6000;
 export const TEXT_WEIGHT = 0.4;
 export const MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT = 448000;
-export const LLM_TIMEOUT_MS = 30000; // 30 seconds timeout for LLM operations
-const DEFAULT_MAX_SOURCE_CHUNKS = 30; // Default max chunks for search results (with diverse top-K)
-export const AGENT_LOOP_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes timeout for agent loop
+export const LLM_TIMEOUT_MS = 30000;
+const DEFAULT_MAX_SOURCE_CHUNKS = 30;
+export const AGENT_LOOP_TIMEOUT_MS = 5 * 60 * 1000;
 export const LOADING_MESSAGES = {
   DEFAULT: "",
   READING_FILES: "Reading files",
@@ -175,9 +143,6 @@ export const LOADING_MESSAGES = {
   COMPACTING: "Compacting",
 };
 
-/**
- * Reasoning effort levels for OpenAI reasoning models
- */
 export enum ReasoningEffort {
   MINIMAL = "minimal",
   LOW = "low",
@@ -186,9 +151,6 @@ export enum ReasoningEffort {
   XHIGH = "xhigh",
 }
 
-/**
- * Output verbosity levels for GPT-5 models
- */
 export enum Verbosity {
   LOW = "low",
   MEDIUM = "medium",
@@ -196,25 +158,11 @@ export enum Verbosity {
 }
 
 /**
- * Output length to request from Anthropic, the one provider that will not
- * accept "no limit".
+ * Output length to request from Anthropic, the one provider that will not accept "no limit".
  *
- * Every other provider lets the parameter be left out and then writes whatever
- * fits the context window, which is the better answer. Anthropic's client
- * substitutes its own per-model default instead, and for a model id it does not
- * recognize that default is 4,096.
- *
- * 20,000 tokens is about 15,000 words, longer than a chat answer runs. Two
- * ceilings rule out a larger number.
- *
- * The Anthropic SDK rejects a non-streaming request it estimates will take over
- * ten minutes, and it throws before sending anything. Its estimate is
- * `60min * maxTokens / 128_000`, which puts the limit at 21,333 tokens.
- *
- * A provider also rejects a request whose prompt and requested output together
- * exceed the context window, so this value has to leave room for a long
- * conversation.
- *
+ * The Anthropic SDK rejects a non-streaming request it estimates will take over ten minutes
+ * (`60min * maxTokens / 128_000`, so 21,333 tokens), and a provider rejects a request whose
+ * prompt plus requested output exceeds the context window.
  * https://github.com/logancyang/obsidian-copilot-preview/issues/312
  */
 export const DEFAULT_MAX_OUTPUT_TOKENS = 20_000;
@@ -225,14 +173,10 @@ export const DEFAULT_MODEL_SETTING = {
   VERBOSITY: Verbosity.MEDIUM,
 } as const;
 
-// Reason: Ollama defaults to a small context window (2048). We override to 131072
-// for backward compatibility (PR #2147), configurable via UI (#2275).
 export const DEFAULT_OLLAMA_NUM_CTX = 131072;
 
 export enum ChatModels {
-  // The rest of the Copilot Plus lineup is not named here: the models service
-  // publishes it and `settings.copilotPlusCatalog` caches it. Only the default
-  // model keeps a constant, because a fresh install has to name one before any
+  // Only the default Plus model keeps a constant: a fresh install has to name one before any
   // catalog has been read.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
@@ -265,7 +209,6 @@ export enum ChatModels {
   SILICONFLOW_DEEPSEEK_R1 = "deepseek-ai/DeepSeek-R1",
 }
 
-// Model Providers
 export enum ChatModelProviders {
   OPENROUTERAI = "openrouterai",
   OPENAI = "openai",
@@ -296,7 +239,6 @@ export const MODEL_CAPABILITIES: Record<ModelCapability, string> = {
 };
 
 export const BUILTIN_CHAT_MODELS: CustomModel[] = [
-  // Enabled models first
   {
     name: ChatModels.COPILOT_PLUS_FLASH,
     provider: ChatModelProviders.COPILOT_PLUS,
@@ -365,7 +307,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: true,
     capabilities: [ModelCapability.VISION],
   },
-  // Disabled models
   {
     name: ChatModels.OPENROUTER_GEMINI_3_PRO_PREVIEW,
     provider: ChatModelProviders.OPENROUTERAI,
@@ -494,21 +435,14 @@ export type SettingKeyProviders = Exclude<
   ChatModelProviders.OPENAI_FORMAT | ChatModelProviders.LM_STUDIO | ChatModelProviders.OLLAMA
 >;
 
-// Provider metadata interface
 export interface ProviderMetadata {
   label: string;
   host: string;
-  /**
-   * Base URL used when generating example curl commands (and UI placeholders).
-   * This must be deterministic and must NOT include endpoint suffixes like `/chat/completions`.
-   * It intentionally does not affect runtime SDK configuration.
-   */
   curlBaseURL: string;
   keyManagementURL: string;
   testModel?: ChatModels;
 }
 
-// Unified provider information
 export const ProviderInfo: Record<Provider, ProviderMetadata> = {
   [ChatModelProviders.OPENROUTERAI]: {
     label: "OpenRouter",
@@ -606,7 +540,6 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
   },
 };
 
-// Map provider to its settings key for API key
 export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSettings> = {
   anthropic: "anthropicApiKey",
   openai: "openAIApiKey",
@@ -637,8 +570,7 @@ export const COMMAND_IDS = {
   COUNT_WORD_AND_TOKENS_SELECTION: "count-word-and-tokens-selection",
   COUNT_TOTAL_VAULT_TOKENS: "count-total-vault-tokens",
   DEBUG_WORD_COMPLETION: "debug-word-completion",
-  // Obsidian persists command ids in hotkey bindings and external integrations.
-  // The Miyo replacement keeps the legacy refresh id so upgrades retain them.
+  // Keeps the legacy refresh id so hotkey bindings survive the upgrade.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/282
   REFRESH_MIYO_INDEX: "index-vault-to-copilot-index",
   LOAD_COPILOT_CHAT_CONVERSATION: "load-copilot-chat-conversation",
@@ -656,7 +588,6 @@ export const COMMAND_IDS = {
   OPEN_LOG_FILE: "open-log-file",
   CLEAR_LOG_FILE: "clear-log-file",
   DOWNLOAD_YOUTUBE_SCRIPT: "download-youtube-script",
-  // The wire id is persisted by Obsidian in hotkeys and command integrations.
   PUBLISH_FILE_TO_OPENARTIFACTS: "publish-file-to-symposium",
   TRIGGER_QUICK_ASK: "trigger-quick-ask",
 } as const;
@@ -689,10 +620,6 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
 
-/**
- * Icons for commands displayed in the mobile toolbar.
- * Uses Lucide icon names supported by Obsidian.
- */
 export const COMMAND_ICONS: Partial<Record<CommandId, string>> = {
   [COMMAND_IDS.NEW_CHAT]: "message-square-plus",
   [COMMAND_IDS.NEW_AGENT_CHAT]: COPILOT_AGENT_ICON_ID,
@@ -718,18 +645,8 @@ export const COMMAND_ICONS: Partial<Record<CommandId, string>> = {
   [COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS]: "share-2",
 };
 
-/**
- * Text-readable file extensions that all chains can process without Plus mode.
- * These files can be read directly via `vault.read()` and don't require special parsers.
- * Add new text-based extensions here to enable them everywhere (active note, context, chain).
- */
 export const TEXT_READABLE_EXTENSIONS = ["md", "canvas", "base"];
 
-/**
- * Valid file extensions for note context.
- * Includes text-readable files plus Plus-only formats like PDF.
- * This does NOT include images - images are handled separately in the UI.
- */
 export const ALLOWED_NOTE_CONTEXT_EXTENSIONS = [...TEXT_READABLE_EXTENSIONS, "pdf"];
 
 export const RESTRICTION_MESSAGES = {
@@ -766,12 +683,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIProxyBaseUrl: "",
   stream: true,
   copilotFolder: DEFAULT_COPILOT_FOLDER,
-  // Every folder ever activated as the Copilot root (seeded with the legacy
-  // root in the v8 migration). Kept append-only so each historical root stays
-  // permanently excluded from QA indexing even after the root is changed.
   copilotRootHistory: [],
-  // True only when a legacy (v1-v7) vault was migrated to v8; WS-D reads it to
-  // decide whether to show the one-time folder-relocation prompt, then clears it.
   upgradedToV8FromLegacy: false,
   defaultSaveFolder: DEFAULT_CHAT_HISTORY_FOLDER,
   defaultConversationTag: "copilot-conversation",
@@ -789,13 +701,12 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableInlineCitations: true,
   groqApiKey: "",
   activeModels: BUILTIN_CHAT_MODELS,
-  lexicalSearchRamLimit: 100, // Default 100 MB
+  lexicalSearchRamLimit: 100,
   promptUsageTimestamps: {},
   promptSortStrategy: PromptSortStrategy.TIMESTAMP,
   chatHistorySortStrategy: "recent",
   projectsFolder: DEFAULT_PROJECTS_FOLDER,
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
-  /** @deprecated */
   inlineEditCommands: [],
   projectList: [],
   lastDismissedVersion: null,
@@ -846,21 +757,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     byok: {},
     activeBackend: "opencode",
     backends: {},
-    // On by default so the diagnostic frame log is already capturing when a
-    // user hits a bug and clicks "Report an issue" (it can't capture
-    // retroactively). The migration in src/settings/model.ts preserves an
-    // explicit prior choice, so anyone who turned it off stays off. The privacy
-    // disclosure lives in the Report-issue modal, shown only when the user
-    // chooses to share the log.
     debugFullFrames: true,
-    // On by default: an agent turn can run for minutes, and the chime is the
-    // only thing that reaches a user who has looked away. Turned off in
-    // Basic → Agents.
     notificationSound: true,
-    // Named rather than imported from the sound catalog: `@/logger` pulls in
-    // `@/settings/model`, so importing the catalog here would make this module
-    // load before its own DEFAULT_SETTINGS exists. The literal is still
-    // checked, since the field is typed to the catalog's ids.
     notificationSoundId: "piano",
     welcomeDismissed: false,
     skills: {

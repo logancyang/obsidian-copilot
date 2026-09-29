@@ -128,12 +128,6 @@ function identityChangedFailure(action: OpenArtifactsAction): OpenArtifactsFailu
   };
 }
 
-/**
- * Coordinates one note's confirmed OpenArtifacts action, remote request, and local identity update.
- *
- * The publisher owns per-file concurrency and partial-success recovery. It does not decide
- * OpenArtifacts entitlement or retain decrypted credentials beyond an individual request.
- */
 export class OpenArtifactsPublisher {
   private readonly client: OpenArtifactsClientPort;
   private readonly loadLicenseKey: () => Promise<string>;
@@ -167,11 +161,6 @@ export class OpenArtifactsPublisher {
       ((entry) => appendOpenArtifactsLedgerEntry(this.app.vault, entry));
   }
 
-  /**
-   * Opens the state-aware confirmation flow for the exact file supplied by the caller.
-   *
-   * @param file The Markdown note selected by the invoking command or menu.
-   */
   async open(file: TFile): Promise<void> {
     if (this.disposed) {
       return;
@@ -215,9 +204,6 @@ export class OpenArtifactsPublisher {
     }
   }
 
-  /**
-   * Disables stale modal callbacks and closes this publisher's UI during plugin teardown.
-   */
   dispose(): void {
     this.disposed = true;
     for (const modal of [...this.modals]) {
@@ -320,12 +306,9 @@ export class OpenArtifactsPublisher {
           return await this.savePublishedIdentity(file, receipt);
         }
 
-        // A valid identity remains in this PUT-only branch. Any update failure
-        // propagates to the failure result without a path back to POST.
         const receipt = await this.client.update(docId, document, licenseKey);
         await this.recordPublishedReceipt(file, document, receipt);
-        // Saving is idempotent for a current identity and moves a legacy `symposium` key to
-        // `openartifacts`, so every successful update completes the migration.
+        // A successful update moves a legacy `symposium` key to `openartifacts`.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/395
         let saved = false;
         let currentDocId: string | null | undefined;

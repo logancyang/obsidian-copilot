@@ -19,25 +19,12 @@ import React from "react";
 
 export const DEFAULT_COPILOT_PLUS_CHAT_MODEL = ChatModels.COPILOT_PLUS_FLASH;
 
-/**
- * How often a running session re-validates its license. Well inside the token's
- * ~14-day `exp` so an online user never reaches the expiry cliff, and far apart
- * enough that a long-lived window costs one request a day.
- */
 export const ENTITLEMENT_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-/**
- * Runtime gate for self-host mode: the user turned it on AND the server-signed
- * entitlement grants `self_host`. The toggle alone is not enough — it is a user
- * preference persisted in `data.json`, so gating on the verified entitlement is
- * what makes a lapsed plan lose self-host once its token expires. The server
- * owns the plan → capability policy; the client never maps plan names.
- */
 export function isSelfHostModeValid(): boolean {
   return getSettings().enableSelfHostMode === true && hasVerifiedFeature("self_host");
 }
 
-/** Check if the model key is a Copilot Plus model. */
 export function isPlusModel(modelKey: string): boolean {
   const settings = getSettings();
   const configuredModel = settings.configuredModels.find(
@@ -49,17 +36,6 @@ export function isPlusModel(modelKey: string): boolean {
   return modelKey.split("|")[1] === String(ChatModelProviders.COPILOT_PLUS);
 }
 
-/**
- * Every wire form a Copilot chat model can take in a backend's stored default:
- * bare, and prefixed with the Copilot provider as opencode records it. Matching
- * these exactly, rather than searching for the model id inside the stored value,
- * is what keeps a BYOK model of a similar name (`openrouter/copilot-plus-flash`,
- * `copilot-plus-flash-v2`) from being mistaken for the licensed one.
- *
- * The prefix is `ChatModelProviders.COPILOT_PLUS` rather than opencode's own
- * copy of it, which lives behind the desktop-only Agent Mode barrel; a test in
- * `opencodeModelResolve.test.ts` pins the two together.
- */
 const LICENSED_DEFAULT_WIRE_IDS: ReadonlySet<string> = Object.freeze(
   new Set([
     DEFAULT_COPILOT_PLUS_CHAT_MODEL as string,
@@ -67,16 +43,6 @@ const LICENSED_DEFAULT_WIRE_IDS: ReadonlySet<string> = Object.freeze(
   ])
 );
 
-/**
- * Whether any default a license installed still points at a Copilot model — the
- * chat default, or an agent's stored default from {@link applyLicenseSettings}.
- * Both matter on expiry: a user can move chat onto their own model and leave an
- * agent on the Copilot one, and those sessions are the ones about to break.
- *
- * The agent side reads the stored wire ids rather than resolving them through
- * the configured set, because expiry unregisters the provider and takes those
- * rows with it — often before this is read.
- */
 export function isUsingLicensedModels(settings: CopilotSettings): boolean {
   if (isPlusModel(settings.defaultModelKey)) return true;
   return Object.values(settings.agentMode?.backends ?? {}).some((backend) => {
@@ -85,67 +51,28 @@ export function isUsingLicensedModels(settings: CopilotSettings): boolean {
   });
 }
 
-/**
- * Synchronous check for paid (any valid license, incl. Lite) feature access. Use
- * this for the broad Plus-feature gates (model validation, UI state) that should
- * remain available to every paying user.
- */
 export function isPaidEnabled(): boolean {
   return getSettings().isPaidUser === true;
 }
 
-/**
- * True once the persisted signed-entitlement expiry has passed. Zero means no
- * token-derived expiry is stored. Because this reads editable state, it only
- * tightens the reactive `useIsPlusUser` render gate — the strict gates take
- * expiry from the signed claims in {@link VerifiedEntitlement}, which an edited
- * `data.json` can't move.
- */
 function isEntitlementExpired(settings: CopilotSettings): boolean {
   return settings.entitlementExpiresAt > 0 && Date.now() >= settings.entitlementExpiresAt;
 }
 
-/**
- * Proof of what a signed entitlement granted, as read from claims verified in
- * THIS process — written by {@link applyEntitlement} (server response) and
- * {@link verifyCachedEntitlement} (cached token re-checked at startup).
- *
- * Every field comes from the same verified claims, so the whole proof is
- * signature-backed: `data.json` can flip persisted booleans and the expiry, but
- * it cannot forge an ES256 signature, and nothing here is read back from it.
- * Taking the expiry from settings instead would leave the gate half-editable —
- * an edited `entitlementExpiresAt` would hold it open past the token's real
- * `exp` for as long as the session lived.
- *
- * `token` and `licenseKey` are what settings must still hold for the proof to
- * apply. That is how the paths that drop the token (turnOffPaid and
- * markPaidPendingEntitlement) revoke these capabilities without touching this
- * state: no stored token can match `""` while carrying features.
- */
 interface VerifiedEntitlement {
   token: string;
   /**
-   * The license key this entitlement was issued for. Without it the proof
-   * belongs to no key in particular, so swapping in a different key and getting
-   * anything short of an authoritative refusal (offline, 5xx, gateway error)
-   * would let the new key inherit the old one's plan.
+   * The license key this entitlement was issued for. Without it, a different key that gets
+   * anything short of an authoritative refusal (offline, 5xx) would inherit the old plan.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/307
    */
   licenseKey: string;
   features: ReadonlySet<EntitlementFeature>;
-  /** The claims' plan name, for display only — never gated on. */
   plan: string;
-  /** The claims' `exp`, in epoch ms. */
   expiresAt: number;
-  /**
-   * Whether the signed tier is above free. The server downgrades a lapsed paid
-   * key to the free policy rather than refusing it a token, so liveness alone
-   * does not mean paid — this is the claim that does.
-   */
   paid: boolean;
 }
 
-/** Frozen "nothing verified" proof — referential stability for the empty state. */
 const NO_VERIFIED_ENTITLEMENT: VerifiedEntitlement = Object.freeze({
   token: "",
   licenseKey: "",
@@ -157,12 +84,6 @@ const NO_VERIFIED_ENTITLEMENT: VerifiedEntitlement = Object.freeze({
 
 let verified: VerifiedEntitlement = NO_VERIFIED_ENTITLEMENT;
 
-/**
- * Whether the entitlement verified this session still stands: the proof must
- * belong to the token AND the license key settings currently hold, and the
- * signed `exp` must not have passed. This is the offline window — signature-backed,
- * so unlike the persisted `isPaidUser` an edited `data.json` cannot widen it.
- */
 function hasLiveEntitlement(): boolean {
   const settings = getSettings();
   return (
@@ -172,43 +93,22 @@ function hasLiveEntitlement(): boolean {
   );
 }
 
-/**
- * Whether the entitlement verified this session still grants `feature` — a
- * session running past the signed expiry loses the capability.
- *
- * @param feature - Capability to check for.
- */
 function hasVerifiedFeature(feature: EntitlementFeature): boolean {
   return hasLiveEntitlement() && verified.features.has(feature);
 }
 
-/**
- * Synchronous check for tier >= Plus (excludes Lite) — the gate for
- * Plus-and-above features such as multi-agent fan-out.
- */
 export function isPlusEnabled(): boolean {
   const settings = getSettings();
-  // Token-derived Plus carries an expiry. Trust it only when the signed token
-  // was cryptographically verified this session (not merely a persisted
-  // `isPlusUser` boolean) and the `exp` has not passed — so editing data.json
-  // cannot unlock the strict gate, even offline.
   if (settings.entitlementExpiresAt > 0) {
     return hasVerifiedFeature("multi_agent");
   }
-  // Preserve an existing tokenless state until an authoritative validation
-  // replaces it. Current tokenless successes persist this flag as false.
   return settings.isPlusUser === true;
 }
 
-/** Hook for paid status (any valid license, incl. Lite). */
 export function useIsPaidUser(): boolean | undefined {
   return useSettingsValue().isPaidUser;
 }
 
-/**
- * Hook for tier >= Plus (excludes Lite) — the reactive gate for Plus-and-above
- * features.
- */
 export function useIsPlusUser(): boolean | undefined {
   const settings = useSettingsValue();
   if (isEntitlementExpired(settings)) {
@@ -217,41 +117,20 @@ export function useIsPlusUser(): boolean | undefined {
   return settings.isPlusUser;
 }
 
-/**
- * Synchronous entitlement check for the multi-agent fan-out feature. Gated on
- * tier >= Plus (not merely "paid"), so Lite users are excluded.
- */
 export function canUseMultiAgent(): boolean {
   return isPlusEnabled();
 }
 
-/**
- * Authoritative send-boundary entitlement check for the fan-out feature — the
- * single source of truth the non-React session calls before dispatching, so a UI
- * bypass can't evade the paywall.
- *
- * Fast path: a Plus-tier user (cached `isPlusEnabled()`) is allowed with no
- * network call. Slow path: re-verify against `/license` so a stale-false cache
- * still gets through; we then re-read the freshly-applied entitlement (never the
- * broad `isValid`) so Lite stays blocked. Anything not confirmed >= Plus is a
- * HARD block (no single-agent fallback).
- */
 export async function ensureMultiAgentEntitlement(app?: App): Promise<boolean> {
   if (isPlusEnabled()) {
     return true;
   }
-  // Re-verify so a stale-false cache for a real Plus user still gets through;
-  // `validateLicenseKey` applies the signed entitlement or paid-pending state.
   await BrevilabsClient.getInstance().validateLicenseKey(app, {
     trigger: "multi_agent_per_turn",
   });
   return isPlusEnabled();
 }
 
-/**
- * Surface the multi-agent-is-Plus upgrade prompt, reusing the shared Plus CTA
- * (`navigateToPlusPage`) so callers and tests share one copy + action.
- */
 export function showMultiAgentUpgradePrompt(): void {
   new Notice(
     "Multi-agent QA (@-mentioning more than one agent in a turn) is a Copilot Plus feature. Opening the upgrade page…",
@@ -260,30 +139,10 @@ export function showMultiAgentUpgradePrompt(): void {
   navigateToPlusPage("multi_agent");
 }
 
-/**
- * Reactive form of {@link canUseMultiAgent} for React render gates; subscribes to
- * settings so the gate flips live. Mirrors `useIsPlusUser` (not `isPlusEnabled`),
- * so it can differ from the sync form for a self-host user with the toggle on but
- * no license receipt yet. `undefined` (still resolving) reads as not entitled.
- */
 export function useCanUseMultiAgent(): boolean {
   return useIsPlusUser() === true;
 }
 
-/**
- * Check if the user has a valid paid license (any tier, incl. Lite).
- *
- * An unreachable server means "unknown", not "unentitled". `requestUrl` rejects
- * when offline, and callers read both a rejection and `undefined` as no license
- * — which would cut off the very offline window the signed token exists to
- * provide. So the call still happens (it is what renews the token), but an
- * unknown answer defers to the signed entitlement.
- *
- * That fallback is the token, never the persisted `isPaidUser`: the flag knows
- * nothing about expiry, so a renewal failing past `exp` would keep answering
- * true and let a self-host user's turn proceed with the runtime gate already
- * closed — quietly rerouting their searches to the cloud.
- */
 export async function checkIsPaidUser(
   app: App | undefined,
   context: LicenseCheckContext
@@ -300,49 +159,19 @@ export async function checkIsPaidUser(
   return result.isValid ?? (hasLiveEntitlement() && verified.paid);
 }
 
-/**
- * What the license section should report about the stored license key.
- * `none` means there is nothing to say — no key, or the first check has not
- * answered yet. Everything a stored key can be other than working is `inactive`:
- * lapsed, revoked, mistyped, or past the offline window all leave the user in
- * the same place, with the same thing to do about it.
- */
 export type LicenseStatus = "none" | "active" | "inactive";
 
-/** Stored license as the settings UI should present it. */
 export interface LicenseState {
   status: LicenseStatus;
-  /**
-   * Plan the entitlement names, lowercased by the server (e.g. `"believer"`).
-   * Absent when no token verifies, which is why callers need a generic label.
-   */
   plan?: string;
 }
 
 const NO_LICENSE: LicenseState = Object.freeze({ status: "none" });
 const INACTIVE_LICENSE: LicenseState = Object.freeze({ status: "inactive" });
-/** Paid, but with no verifiable token to name the plan (legacy tokenless keys). */
 const UNNAMED_ACTIVE_LICENSE: LicenseState = Object.freeze({ status: "active" });
 
-/**
- * The stored license as the settings section should show it, read from the same
- * session-verified proof the runtime gates use. Sharing that state is what keeps
- * the badge from ever disagreeing with what the user can actually do, and it
- * carries the two properties this would otherwise have to rebuild: the proof is
- * tagged with the token settings must still hold, and {@link hasLiveEntitlement}
- * treats the signed `exp` as its liveness bound.
- *
- * The paid tier decides, never the plan name: the server answers `is_valid` for
- * a lapsed key and downgrades its entitlement to the free policy while the name
- * still says what lapsed, so reading the name would call a former subscriber a
- * Plus user.
- */
 export function useLicenseState(): LicenseState {
   const settings = useSettingsValue();
-  // The fixed states are frozen constants; a named plan is the one result that
-  // has to be built, so it is kept until the name itself changes. Keying on the
-  // returned value rather than on `settings` is what stops the cache from
-  // outliving a proof that changed without one.
   const namedActive = React.useRef<LicenseState | null>(null);
   if (!settings.plusLicenseKey) {
     return NO_LICENSE;
@@ -356,32 +185,11 @@ export function useLicenseState(): LicenseState {
     }
     return namedActive.current;
   }
-  // Nothing verified this session. The server can confirm a paid license
-  // without signing one (an unshipped `kid`, no WebCrypto), so keep those users
-  // active but unnamed — unless a stored expiry has already passed, which no
-  // later success has replaced.
   return settings.isPaidUser === true && !isEntitlementExpired(settings)
     ? UNNAMED_ACTIVE_LICENSE
     : INACTIVE_LICENSE;
 }
 
-/**
- * Whether the entitlement grants self-host, for the Self-Host settings tab —
- * the entitlement half of {@link isSelfHostModeValid}, without the toggle.
- * Re-verifies the persisted token rather than reading the module-level verified
- * set, because that set is populated asynchronously at startup and React needs a
- * value that settles on its own. Verification is offline (WebCrypto against the
- * embedded public key), so this costs no network call. `undefined` means the
- * check is still in flight.
- *
- * Also forces `enableSelfHostMode` off when a token verifies and its plan does
- * NOT grant self-host, so a downgraded plan's stale toggle doesn't keep reading
- * as on. A token that fails to verify is not that signal — it means "unknown"
- * (kid not shipped yet, WebCrypto unavailable, expired just before the online
- * refresh), and clearing on it would destroy a preference no later success
- * restores, silently leaving searches on Brevilabs cloud. Unknown closes the
- * runtime gate via {@link isSelfHostModeValid} and leaves the preference alone.
- */
 export function useIsSelfHostEligible(): boolean | undefined {
   const settings = useSettingsValue();
   const [isEligible, setIsEligible] = React.useState<boolean | undefined>(undefined);
@@ -408,15 +216,8 @@ export function useIsSelfHostEligible(): boolean | undefined {
   return isEligible;
 }
 
-/**
- * How long to wait for provider sync to enroll the Copilot models. Generous on
- * purpose: the wait costs nothing when the models are already there, and the
- * only thing a short deadline could buy is failing while the work that would
- * have succeeded is still running.
- */
 const CONFIGURED_MODEL_WAIT_MS = 15_000;
 
-/** The configured Copilot chat model in `settings`, or `undefined` if the provider sync has not enrolled it. */
 function findLicensedChatModelId(settings: CopilotSettings): string | undefined {
   const plusProviderIds = new Set(
     Object.values(settings.providers)
@@ -430,16 +231,6 @@ function findLicensedChatModelId(settings: CopilotSettings): string | undefined 
   )?.configuredModelId;
 }
 
-/**
- * The configured Copilot chat model, waiting for provider sync to enroll it if
- * it is not there yet. Resolves `undefined` only if it never arrives.
- *
- * Validating a license and enrolling its models are two independent async
- * chains with no shared handle: `checkIsPaidUser` returning is what opens the
- * welcome modal, while enrollment starts later, from the settings subscriber
- * that persists the same change. Reading the configured set once would let a
- * user who clicks Apply Now inside that window apply nothing at all.
- */
 function waitForLicensedChatModelId(): Promise<string | undefined> {
   const present = findLicensedChatModelId(getSettings());
   if (present) return Promise.resolve(present);
@@ -457,26 +248,11 @@ function waitForLicensedChatModelId(): Promise<string | undefined> {
       if (id) settle(id);
     });
     const timer = window.setTimeout(() => settle(undefined), CONFIGURED_MODEL_WAIT_MS);
-    // Enrollment can land between the check above and this subscription, which
-    // would otherwise leave nothing left to notify us.
     const raced = findLicensedChatModelId(getSettings());
     if (raced) settle(raced);
   });
 }
 
-/**
- * Install the licensed default model — Copilot Plus Flash — everywhere the
- * user will meet a model picker: chat, and every agent that can route it.
- *
- * License activation already registers the Copilot provider and enrolls its
- * models; this is the opinionated half, choosing which of them a licensed user
- * should land on. Nothing here touches a surface the license doesn't pay for,
- * so a user who declines loses only the convenience.
- *
- * Applies nothing if the model never arrives, rather than storing a key no
- * picker can resolve — and says so, since by then the modal has closed and
- * silence would look like success.
- */
 export async function applyLicenseSettings(): Promise<void> {
   const configuredModelId = await waitForLicensedChatModelId();
   if (!configuredModelId) {
@@ -492,9 +268,6 @@ export async function applyLicenseSettings(): Promise<void> {
   setModelKey(configuredModelId);
   setSettings({ defaultModelKey: configuredModelId });
 
-  // Agent Mode is desktop-only, and its barrel pulls in Node-backed modules
-  // that crash the plugin when loaded on mobile — hence the guarded dynamic
-  // import (same gate as the agent view's registration in `main.ts`).
   if (!isDesktopRuntime()) return;
   try {
     const { applyCopilotDefaultModel } = await import("@/agentMode");
@@ -509,11 +282,6 @@ export function navigateToPlusPage(medium: ProductUtmMedium): void {
   window.open(createProductUrl(PRODUCT_URLS.COPILOT, medium), "_blank");
 }
 
-/**
- * Paid license confirmed by the server, but no entitlement token was supplied
- * or the supplied token could not be verified. Keep broad paid access while
- * withholding strict features until a signed entitlement verifies.
- */
 export function markPaidPendingEntitlement(): void {
   setSettings({
     isPaidUser: true,
@@ -523,10 +291,6 @@ export function markPaidPendingEntitlement(): void {
   });
 }
 
-/**
- * Clear all entitlement state silently (no modal). Only invoked on an
- * authoritative negative (invalid license / no license key) via turnOffPaid.
- */
 function clearEntitlement(): void {
   setSettings({
     isPaidUser: false,
@@ -536,40 +300,15 @@ function clearEntitlement(): void {
   });
 }
 
-/**
- * Turn off paid status.
- * IMPORTANT: This is called on every plugin start for users without a license key (see checkIsPaidUser).
- * DO NOT reset model settings here - it will cause free users to lose their model selections on every app restart.
- * Only update the entitlement flags.
- */
 export function turnOffPaid(app?: App): void {
   const previousIsPaidUser = getSettings().isPaidUser;
   clearEntitlement();
-  // The expiry modal needs `app`; interactive callers (load, settings, chat)
-  // pass it. Rare background paths flip the flag without a modal — they surface
-  // their own Notice instead.
   if (previousIsPaidUser && app) {
     new CopilotPlusExpiredModal(app).open();
   }
 }
 
-/**
- * Verify a signed entitlement token and, when valid, apply its claims to
- * settings: `isPaidUser` = tier is not free, `isPlusUser` = the `multi_agent`
- * capability is granted (tier >= Plus). The full granted feature set is also
- * recorded in-memory, which is what the `self_host` gate reads.
- *
- * Returns true when the token verified and was applied, false when it could NOT
- * be verified (bad signature, expired, unknown `kid`, or — during rollout — an
- * empty public-key set). An unverifiable token is NOT an authoritative "not
- * entitled" signal, so this never clears flags; the caller decides the fallback
- * (e.g. a license the server already confirmed valid stays paid). Only an
- * authoritative negative (invalid license / no key) downgrades, via turnOffPaid.
- */
 export async function applyEntitlement(token: string): Promise<boolean> {
-  // Read before the await: a key swapped while verification is in flight would
-  // otherwise tag this proof with the new key while it carries the old key's
-  // claims, which is the inheritance this binding exists to prevent.
   const { userId, plusLicenseKey } = getSettings();
   const claims = await verifyEntitlement(token, { expectedUserId: userId });
   if (!claims) {
@@ -592,30 +331,14 @@ export async function applyEntitlement(token: string): Promise<boolean> {
   return true;
 }
 
-/**
- * Re-verify the persisted entitlement token at startup so the strict gates work
- * offline WITHOUT trusting persisted booleans. ES256 verification is offline
- * (WebCrypto against the embedded public key), so a genuine token re-proves
- * itself with no network, while an edited data.json (flipped booleans, future
- * expiry, but no valid signature) leaves the in-memory feature set empty and
- * every strict gate closed. The online `/license` re-validation still runs
- * separately and overrides this with the server's fresh token.
- */
 export async function verifyCachedEntitlement(): Promise<void> {
   const { entitlementToken, userId, plusLicenseKey } = getSettings();
   const claims = entitlementToken
     ? await verifyEntitlement(entitlementToken, { expectedUserId: userId })
     : null;
-  // main.ts starts this alongside the online /license check, so that check may
-  // have installed a fresher token while this verification was in flight. Its
-  // result is authoritative; writing this pre-await snapshot over it would tag
-  // the proof with a token settings no longer hold, locking a legitimately
-  // entitled user out for the rest of the session.
   if (getSettings().entitlementToken !== entitlementToken) {
     return;
   }
-  // Otherwise re-tag even on failure: a token that stops verifying (kid
-  // rotation, tampering) must drop the capabilities an earlier check granted it.
   verified = {
     token: entitlementToken,
     licenseKey: plusLicenseKey,

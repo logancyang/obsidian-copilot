@@ -129,7 +129,6 @@ function GalleryHarness({
   );
 }
 
-/** Walks the tree the way a user does: unfold each nested ancestor, then pick the story. */
 function selectStoryInTree(gallery: RenderResult, storyId: string): void {
   const segments = storyId.split("/");
   segments.pop();
@@ -299,9 +298,6 @@ describe("Gallery", () => {
     });
 
     it("rejects story-declared canvas widths at compile time", () => {
-      // Canvas width is view state owned by the width toolbar, not story metadata:
-      // a declared width would apply to the first render and be silently ignored
-      // afterwards, making two stories that differ only by width indistinguishable.
       const parameters: GalleryParameters = {
         gallery: {
           // @ts-expect-error Stories cannot pin the canvas width; use the width toolbar.

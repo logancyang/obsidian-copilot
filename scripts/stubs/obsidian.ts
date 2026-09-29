@@ -43,9 +43,7 @@ export class Vault {
   }
 
   adapter = {
-    mkdir: async () => {
-      /* no-op */
-    },
+    mkdir: async () => {},
   };
 }
 
@@ -71,21 +69,15 @@ export class MarkdownView {}
 export class TAbstractFile {}
 
 export class WorkspaceLeaf {
-  async openFile(): Promise<void> {
-    /* no-op */
-  }
+  async openFile(): Promise<void> {}
 }
 
 export class ItemView {}
 
 export class Modal {
-  open(): void {
-    /* no-op */
-  }
+  open(): void {}
 
-  close(): void {
-    /* no-op */
-  }
+  close(): void {}
 }
 
 export function parseYaml(_: string): unknown {

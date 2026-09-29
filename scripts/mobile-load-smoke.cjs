@@ -13,8 +13,8 @@ const loadCriticalFiles = [
   "src/settings/SettingsPage.tsx",
   "src/settings/v2/SettingsMainV2.tsx",
   "src/settings/v2/components/AdvancedSettings.tsx",
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/373:
-  // Quick Chat settings must not load desktop agents when opened on mobile.
+  // Quick Chat settings must not load desktop agents on mobile.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/373
   "src/settings/v2/components/BasicSettings.tsx",
   "src/settings/v2/components/QuickChatPanel.tsx",
   "src/settings/v2/components/ChatModelEnableList.tsx",
@@ -108,10 +108,6 @@ function checkAgentModeImportBoundaries() {
       }
     }
 
-    // Every dynamic Agent Mode import must be gated by `isDesktopRuntime()`,
-    // NOT a bare `Platform.isDesktopApp`: the latter stays `true` under
-    // `app.emulateMobile(true)` (which stubs Node to null), so it does not keep the
-    // `@/agentMode` barrel off the emulated-mobile load path and the plugin crashes.
     const dynamicImports = Array.from(source.matchAll(dynamicAgentModeImport));
     if (dynamicImports.length > 0 && !source.includes("isDesktopRuntime")) {
       fail(

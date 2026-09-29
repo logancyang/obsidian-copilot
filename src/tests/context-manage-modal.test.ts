@@ -6,10 +6,8 @@ import {
   PatternCategory,
 } from "@/search/searchUtils";
 
-// shouldIndexFile is mocked, so the app is only threaded through and never inspected.
 const mockApp = {} as unknown as App;
 
-// Mock dependencies
 jest.mock("obsidian", () => ({
   TFile: class TFile {
     path: string;
@@ -35,7 +33,6 @@ jest.mock("@/search/searchUtils", () => ({
   getDecodedPatterns: jest.fn(),
 }));
 
-// Mock types and interfaces
 interface GroupItem {
   id: string;
   name: string;
@@ -53,7 +50,6 @@ interface IgnoreItems {
   files: Set<TFile>;
 }
 
-// Test helper functions
 const createTestFile = (path: string): TFile => {
   const file = new TFile();
   file.path = path;
@@ -72,7 +68,6 @@ const createMockPatternCategory = (overrides: Partial<PatternCategory> = {}): Pa
   ...overrides,
 });
 
-// Implementation of the functions to test
 const createAndPopulateGroupList = (
   appFiles: TFile[],
   inclusionPatterns: PatternCategory | null,
@@ -82,7 +77,6 @@ const createAndPopulateGroupList = (
     shouldIndexFile(mockApp, file, inclusionPatterns, exclusionPatterns, true)
   );
 
-  // Initialize groups
   const tags: Record<string, Array<GroupItem>> = {};
   const folders: Record<string, Array<GroupItem>> = {};
   const extensions: Record<string, Array<GroupItem>> = {};
@@ -98,17 +92,14 @@ const createAndPopulateGroupList = (
     extensions[extension] = [];
   });
 
-  // Populate with matching files
   projectAllFiles.forEach((file) => {
     const groupItem: GroupItem = {
       id: file.path,
       name: file.basename,
     };
 
-    // Add to notes array
     notes.push(groupItem);
 
-    // Add to appropriate groups based on patterns
     (inclusionPatterns?.tagPatterns ?? []).forEach((tag) => {
       if (tags[tag]) {
         tags[tag].push(groupItem);
@@ -161,7 +152,6 @@ describe("Context Manage Modal Functions", () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Setup default mocks
     (shouldIndexFile as jest.Mock).mockReturnValue(true);
     (getFilePattern as jest.Mock).mockImplementation((file: TFile) => `[[${file.basename}]]`);
     (createPatternSettingsValue as jest.Mock).mockImplementation(
@@ -388,7 +378,6 @@ describe("Context Manage Modal Functions", () => {
     });
   });
 
-  // Boundary conditions and error handling tests
   describe("Boundary Condition Tests", () => {
     describe("createAndPopulateGroupList", () => {
       it("Should handle null inclusion patterns", () => {
@@ -423,7 +412,6 @@ describe("Context Manage Modal Functions", () => {
         const folders: Record<string, Array<GroupItem>> = {};
         const extensions: Record<string, Array<GroupItem>> = {};
 
-        // Create many patterns
         for (let i = 0; i < 100; i++) {
           tags[`#tag${i}`] = [];
           folders[`folder${i}`] = [];
@@ -500,10 +488,8 @@ describe("Context Manage Modal Functions", () => {
     });
   });
 
-  // Integration tests
   describe("Integration Tests", () => {
     it("Should correctly handle the complete workflow", () => {
-      // 1. Create initial file list
       const appFiles = [
         createTestFile("docs/readme.md"),
         createTestFile("src/main.ts"),
@@ -511,25 +497,20 @@ describe("Context Manage Modal Functions", () => {
         createTestFile("config.json"),
       ];
 
-      // 2. Set inclusion patterns
       const inclusionPatterns = createMockPatternCategory({
         folderPatterns: ["docs", "src"],
         extensionPatterns: ["*.md", "*.ts"],
       });
 
-      // 3. Create GroupList
       const groupList = createAndPopulateGroupList(appFiles, inclusionPatterns, null);
 
-      // 4. Convert to inclusions
       const inclusions = convertGroupListToInclusions(groupList, appFiles);
 
-      // 5. Create ignore items and convert to exclusions
       const ignoreItems: IgnoreItems = {
         files: new Set([createTestFile("config.json")]),
       };
       const exclusions = convertDeletedItemsToExclusions(ignoreItems);
 
-      // Verify results
       expect(groupList.folders).toHaveProperty("docs");
       expect(groupList.folders).toHaveProperty("src");
       expect(Object.prototype.hasOwnProperty.call(groupList.extensions, "*.md")).toBe(true);
@@ -546,8 +527,6 @@ describe("Context Manage Modal Functions", () => {
         notePatterns: ["[[config]]"],
       });
 
-      // Verify inclusions and exclusions variables
-      // Since createPatternSettingsValue is mocked to return all patterns as comma-separated list
       expect(inclusions).toContain("docs");
       expect(inclusions).toContain("src");
       expect(inclusions).toContain("*.md");

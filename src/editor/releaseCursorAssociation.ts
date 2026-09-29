@@ -1,7 +1,6 @@
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
-/** Releases the note editor's wrapped-line caret preference when focus leaves it. */
 export const releaseCursorAssociation = EditorView.domEventHandlers({
   blur(_event, view) {
     const selection = view.state.selection;

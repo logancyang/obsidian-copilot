@@ -3,14 +3,10 @@ import type { OpenArtifactsReceipt } from "@/openArtifacts/types";
 import { App, parseYaml, TFile } from "obsidian";
 
 const OPENARTIFACTS_PROPERTY = "openartifacts";
-// Notes published before the rename hold their identity here. It is read as a fallback and
-// replaced by `openartifacts` on the next successful publish, so nothing is stranded.
+// Notes published before the rename hold their identity here; read as a fallback.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/395
 const LEGACY_PROPERTY = "symposium";
 
-/**
- * Signals that a note already uses the reserved OpenArtifacts property for unrelated metadata.
- */
 export class OpenArtifactsPropertyConflictError extends Error {
   constructor() {
     super(
@@ -21,9 +17,6 @@ export class OpenArtifactsPropertyConflictError extends Error {
   }
 }
 
-/**
- * Signals that a note's frontmatter cannot be parsed safely enough to inspect its identity.
- */
 export class OpenArtifactsFrontmatterParseError extends Error {
   constructor() {
     super(
@@ -34,19 +27,12 @@ export class OpenArtifactsFrontmatterParseError extends Error {
   }
 }
 
-/**
- * Returns the document id from a valid OpenArtifacts public link.
- * Throws when the reserved property is occupied by unrelated metadata so callers cannot overwrite it.
- *
- * @param value The raw frontmatter property value.
- */
 export function parseOpenArtifactsDocId(value: unknown): string | null {
   if (typeof value !== "string") return null;
   try {
     const url = new URL(value);
     const docId = url.pathname.match(/^\/d\/([^/]+)\/?$/)?.[1];
-    // Only the document id is sent to the API, so any https host that ever issued a
-    // receipt (the retired symposium.site included) stays a valid identity.
+    // Only the document id is sent to the API, so the retired symposium.site host stays valid.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/337
     return url.protocol === "https:" && docId && OPENARTIFACTS_DOC_ID_PATTERN.test(docId)
       ? docId
@@ -63,11 +49,6 @@ function isFrontmatterProperties(value: unknown): value is Record<string, unknow
 const hasProperty = (frontmatter: Record<string, unknown>, key: string): boolean =>
   Object.hasOwn(frontmatter, key);
 
-/**
- * The identity a property map holds, honouring the current key first and the legacy key as a
- * fallback. Two keys naming different documents, or either key holding anything but a link,
- * is a conflict the caller must not resolve silently.
- */
 function identityFrom(frontmatter: Record<string, unknown>): string | null {
   const keys = [OPENARTIFACTS_PROPERTY, LEGACY_PROPERTY].filter((key) =>
     hasProperty(frontmatter, key)
@@ -81,12 +62,6 @@ function identityFrom(frontmatter: Record<string, unknown>): string | null {
   return first;
 }
 
-/**
- * Reads the current valid OpenArtifacts identity from the note itself.
- *
- * @param app The Obsidian application that owns the note.
- * @param file The note whose publication identity should be read.
- */
 export async function getOpenArtifactsDocId(app: App, file: TFile): Promise<string | null> {
   const markdown = (await app.vault.read(file)).replace(/^\uFEFF/, "");
   const yaml = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
@@ -108,14 +83,6 @@ export async function getOpenArtifactsDocId(app: App, file: TFile): Promise<stri
   return identityFrom(frontmatter);
 }
 
-/**
- * Saves a server-issued OpenArtifacts link without replacing unrelated frontmatter. A legacy
- * `symposium` key naming the same document is dropped, which completes its migration.
- *
- * @param app The Obsidian application that owns the note.
- * @param file The note whose publication identity should be saved.
- * @param receipt The validated publication receipt returned by OpenArtifacts.
- */
 export async function saveOpenArtifactsLink(
   app: App,
   file: TFile,
@@ -144,13 +111,6 @@ export async function saveOpenArtifactsLink(
   return saved;
 }
 
-/**
- * Removes the local OpenArtifacts identity without changing other frontmatter.
- *
- * @param app The Obsidian application that owns the note.
- * @param file The note that should return to an unpublished state.
- * @param expectedDocId The identity whose remote document was deleted.
- */
 export async function removeOpenArtifactsDocId(
   app: App,
   file: TFile,

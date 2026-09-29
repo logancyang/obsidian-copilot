@@ -21,9 +21,6 @@ function rewriteExactZodImports(source, filePath = "source.js") {
     const statement = sourceFile.statements[index];
     if (!ts.isImportDeclaration(statement)) continue;
 
-    // Only a z-only named import has the namespace-equivalent shape that caused the locale
-    // retention; every other import remains untouched.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/94
     const specifier = ts.isStringLiteral(statement.moduleSpecifier)
       ? statement.moduleSpecifier.text
       : "";
@@ -45,8 +42,8 @@ function rewriteExactZodImports(source, filePath = "source.js") {
     const importedName = element.propertyName?.text ?? element.name.text;
     if (element.isTypeOnly || importedName !== "z") continue;
 
-    // A dependency may carry a required notice inside the declaration, so issue #94's size
-    // optimization must leave commented imports byte-for-byte intact.
+    // A dependency may carry a required notice inside the declaration, so commented imports
+    // stay byte-for-byte intact.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/94
     const statementSource = source.slice(statement.getStart(sourceFile), statement.end);
     if (/\/[/*]/.test(statementSource)) continue;
@@ -96,8 +93,8 @@ function dedupeEsbuildLegalComments(source) {
     cursor = entryPattern.lastIndex;
   }
 
-  // A partially parsed license block could silently discard a notice, so issue #94 requires
-  // the build to fail closed: https://github.com/Brevilabs/obsidian-copilot-private/issues/94
+  // A partially parsed license block could silently discard a notice, so fail closed.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/94
   if (cursor !== entriesSource.length || groupedEntries.size === 0) {
     legalError("incomplete esbuild legal-comment parse");
   }
@@ -113,8 +110,8 @@ function dedupeEsbuildLegalComments(source) {
 }
 
 function assertBundleSize(source, maxBytes = MAX_BUNDLE_BYTES) {
-  // The ceiling is decimal 5 MB and rejects equality, so the release artifact must
-  // stay strictly below it. https://github.com/Brevilabs/obsidian-copilot-private/issues/94
+  // The ceiling is decimal 5 MB and rejects equality.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/94
   const bytes = Buffer.byteLength(source, "utf8");
   if (bytes >= maxBytes) {
     throw new Error(
@@ -136,9 +133,6 @@ function createBundleSizeGuard({ production }) {
         return { contents, loader, resolveDir: path.dirname(args.path) };
       });
 
-      // The Sync limit applies to the production artifact; watch builds keep their original
-      // notice block and skip release-only enforcement for issue #94.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/94
       if (!production) return;
       build.onEnd((result) => {
         if (result.errors.length > 0) return;

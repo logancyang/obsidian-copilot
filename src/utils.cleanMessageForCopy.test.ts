@@ -75,7 +75,6 @@ More content here.`;
   it("should handle nested think blocks", () => {
     const input =
       "Before\n<think>Outer thought <think>Inner thought</think> back to outer</think>\nAfter";
-    // Since we're not handling nested blocks, the outer block will be removed but inner content remains
     const expected = "Before\n back to outer</think>\nAfter";
     expect(cleanMessageForCopy(input)).toBe(expected);
   });

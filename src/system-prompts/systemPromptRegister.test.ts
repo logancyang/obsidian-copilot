@@ -4,7 +4,6 @@ import * as state from "@/system-prompts/state";
 import * as systemPromptUtils from "@/system-prompts/systemPromptUtils";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
-// Mock obsidian
 jest.mock("obsidian", () => ({
   Notice: jest.fn(),
   Plugin: jest.fn(),
@@ -13,13 +12,11 @@ jest.mock("obsidian", () => ({
   normalizePath: (path: string) => path,
 }));
 
-// Mock logger
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logError: jest.fn(),
 }));
 
-// Mock state module
 jest.mock("@/system-prompts/state", () => ({
   isPendingFileWrite: jest.fn().mockReturnValue(false),
   upsertCachedSystemPrompt: jest.fn(),
@@ -29,7 +26,6 @@ jest.mock("@/system-prompts/state", () => ({
   setSelectedPromptTitle: jest.fn(),
 }));
 
-// Mock systemPromptUtils
 jest.mock("@/system-prompts/systemPromptUtils", () => ({
   isSystemPromptFile: jest.fn().mockReturnValue(true),
   getSystemPromptsFolder: jest.fn().mockReturnValue("SystemPrompts"),
@@ -46,7 +42,6 @@ jest.mock("@/system-prompts/systemPromptUtils", () => ({
   loadAllSystemPrompts: jest.fn().mockResolvedValue([]),
 }));
 
-// Mock settings
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn().mockReturnValue({
     defaultSystemPromptTitle: "",
@@ -67,7 +62,6 @@ describe("SystemPromptRegister", () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Capture vault event handlers
     vaultEventHandlers = {};
 
     mockPlugin = {} as Plugin;
@@ -103,13 +97,10 @@ describe("SystemPromptRegister", () => {
         extension: "md",
       });
 
-      // Set up: current selection points to the file being deleted
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("MyPrompt");
 
-      // Trigger the delete handler
       await vaultEventHandlers["delete"](mockFile);
 
-      // Verify selectedPromptTitle was cleared
       expect(state.setSelectedPromptTitle).toHaveBeenCalledWith("");
       expect(Notice).toHaveBeenCalledWith(expect.stringContaining("MyPrompt"));
     });
@@ -121,13 +112,10 @@ describe("SystemPromptRegister", () => {
         extension: "md",
       });
 
-      // Set up: current selection points to a different prompt
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("MyPrompt");
 
-      // Trigger the delete handler
       await vaultEventHandlers["delete"](mockFile);
 
-      // Verify selectedPromptTitle was NOT changed
       expect(state.setSelectedPromptTitle).not.toHaveBeenCalled();
       expect(Notice).not.toHaveBeenCalled();
     });
@@ -139,13 +127,10 @@ describe("SystemPromptRegister", () => {
         extension: "md",
       });
 
-      // Set up: no prompt is currently selected
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("");
 
-      // Trigger the delete handler
       await vaultEventHandlers["delete"](mockFile);
 
-      // Verify selectedPromptTitle was NOT changed
       expect(state.setSelectedPromptTitle).not.toHaveBeenCalled();
       expect(Notice).not.toHaveBeenCalled();
     });
@@ -160,14 +145,11 @@ describe("SystemPromptRegister", () => {
       });
       const oldPath = "SystemPrompts/OldName.md";
 
-      // Set up: current selection points to the old name
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("OldName");
       (systemPromptUtils.isSystemPromptFile as unknown as jest.Mock).mockReturnValue(true);
 
-      // Trigger the rename handler
       await vaultEventHandlers["rename"](mockFile, oldPath);
 
-      // Verify selectedPromptTitle was updated to new name
       expect(state.setSelectedPromptTitle).toHaveBeenCalledWith("NewName");
       expect(Notice).toHaveBeenCalledWith(expect.stringContaining("renamed"));
     });
@@ -180,15 +162,11 @@ describe("SystemPromptRegister", () => {
       });
       const oldPath = "SystemPrompts/MyPrompt.md";
 
-      // Set up: current selection points to the moved file
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("MyPrompt");
-      // File is no longer a valid system prompt file (moved out)
       (systemPromptUtils.isSystemPromptFile as unknown as jest.Mock).mockReturnValue(false);
 
-      // Trigger the rename handler
       await vaultEventHandlers["rename"](mockFile, oldPath);
 
-      // Verify selectedPromptTitle was cleared
       expect(state.setSelectedPromptTitle).toHaveBeenCalledWith("");
       expect(Notice).toHaveBeenCalledWith(expect.stringContaining("moved out"));
     });
@@ -201,14 +179,11 @@ describe("SystemPromptRegister", () => {
       });
       const oldPath = "SystemPrompts/OldName.md";
 
-      // Set up: current selection points to a different prompt
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("OtherPrompt");
       (systemPromptUtils.isSystemPromptFile as unknown as jest.Mock).mockReturnValue(true);
 
-      // Trigger the rename handler
       await vaultEventHandlers["rename"](mockFile, oldPath);
 
-      // Verify selectedPromptTitle was NOT changed
       expect(state.setSelectedPromptTitle).not.toHaveBeenCalled();
       expect(Notice).not.toHaveBeenCalled();
     });
@@ -221,14 +196,11 @@ describe("SystemPromptRegister", () => {
       });
       const oldPath = "SystemPrompts/OldName.md";
 
-      // Set up: no prompt is currently selected
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("");
       (systemPromptUtils.isSystemPromptFile as unknown as jest.Mock).mockReturnValue(true);
 
-      // Trigger the rename handler
       await vaultEventHandlers["rename"](mockFile, oldPath);
 
-      // Verify selectedPromptTitle was NOT changed
       expect(state.setSelectedPromptTitle).not.toHaveBeenCalled();
       expect(Notice).not.toHaveBeenCalled();
     });
@@ -241,7 +213,6 @@ describe("SystemPromptRegister", () => {
     beforeEach(() => {
       jest.useFakeTimers();
 
-      // Capture the settings change handler
       const { subscribeToSettingsChange } = jest.requireMock<{
         subscribeToSettingsChange: jest.Mock;
       }>("@/settings/model");
@@ -256,26 +227,20 @@ describe("SystemPromptRegister", () => {
     });
 
     it("clears selectedPromptTitle when prompt not found in new folder", async () => {
-      // Set up: current selection points to a prompt that won't exist in new folder
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("OldPrompt");
 
-      // Mock the fetch to return prompts that don't include "OldPrompt"
       mockFetchAllSystemPrompts.mockResolvedValueOnce([
         { title: "NewPrompt1", content: "", createdMs: 0, modifiedMs: 0, lastUsedMs: 0 },
         { title: "NewPrompt2", content: "", createdMs: 0, modifiedMs: 0, lastUsedMs: 0 },
       ]);
 
-      // Trigger folder change
       settingsChangeHandler({ copilotFolder: "OldFolder" }, { copilotFolder: "NewFolder" });
 
-      // Fast-forward debounce timer
       jest.advanceTimersByTime(300);
 
-      // Wait for async operations
       await Promise.resolve();
       await Promise.resolve();
 
-      // Verify selectedPromptTitle was cleared
       expect(state.setSelectedPromptTitle).toHaveBeenCalledWith("");
       expect(Notice).toHaveBeenCalledWith(expect.stringContaining("OldPrompt"));
     });
@@ -286,29 +251,23 @@ describe("SystemPromptRegister", () => {
         updateSetting: jest.Mock;
       }>("@/settings/model");
 
-      // Set up: default prompt points to a prompt that won't exist in new folder
       getSettings.mockReturnValue({
         defaultSystemPromptTitle: "OldDefault",
         userSystemPromptsFolder: "NewFolder",
       });
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("");
 
-      // Mock the fetch to return prompts that don't include "OldDefault"
       mockFetchAllSystemPrompts.mockResolvedValueOnce([
         { title: "NewPrompt1", content: "", createdMs: 0, modifiedMs: 0, lastUsedMs: 0 },
       ]);
 
-      // Trigger folder change
       settingsChangeHandler({ copilotFolder: "OldFolder" }, { copilotFolder: "NewFolder" });
 
-      // Fast-forward debounce timer
       jest.advanceTimersByTime(300);
 
-      // Wait for async operations
       await Promise.resolve();
       await Promise.resolve();
 
-      // Verify defaultSystemPromptTitle was cleared
       expect(updateSetting).toHaveBeenCalledWith("defaultSystemPromptTitle", "");
       expect(Notice).toHaveBeenCalledWith(expect.stringContaining("OldDefault"));
     });
@@ -319,29 +278,23 @@ describe("SystemPromptRegister", () => {
         updateSetting: jest.Mock;
       }>("@/settings/model");
 
-      // Set up: prompts exist in new folder
       getSettings.mockReturnValue({
         defaultSystemPromptTitle: "ExistingPrompt",
         userSystemPromptsFolder: "NewFolder",
       });
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("ExistingPrompt");
 
-      // Mock the fetch to return prompts that include "ExistingPrompt"
       mockFetchAllSystemPrompts.mockResolvedValueOnce([
         { title: "ExistingPrompt", content: "", createdMs: 0, modifiedMs: 0, lastUsedMs: 0 },
       ]);
 
-      // Trigger folder change
       settingsChangeHandler({ copilotFolder: "OldFolder" }, { copilotFolder: "NewFolder" });
 
-      // Fast-forward debounce timer
       jest.advanceTimersByTime(300);
 
-      // Wait for async operations
       await Promise.resolve();
       await Promise.resolve();
 
-      // Verify nothing was cleared
       expect(state.setSelectedPromptTitle).not.toHaveBeenCalled();
       expect(updateSetting).not.toHaveBeenCalledWith("defaultSystemPromptTitle", "");
       expect(Notice).not.toHaveBeenCalled();
@@ -357,7 +310,6 @@ describe("SystemPromptRegister", () => {
         copilotFolder: "team/ai",
       });
 
-      // Root changes copilot -> team/ai AND the default title changes in the same tick.
       settingsChangeHandler(
         { copilotFolder: "copilot", defaultSystemPromptTitle: "OldDefault" },
         { copilotFolder: "team/ai", defaultSystemPromptTitle: "NewDefault" }
@@ -366,8 +318,6 @@ describe("SystemPromptRegister", () => {
       await Promise.resolve();
       await Promise.resolve();
 
-      // Old flag cleared using the OLD derived folder (copilot/system-prompts),
-      // new flag set in the current (new) folder.
       expect(updatePromptDefaultFlag).toHaveBeenCalledWith(
         expect.anything(),
         "OldDefault",
@@ -378,49 +328,32 @@ describe("SystemPromptRegister", () => {
     });
 
     it("debounces rapid folder changes", async () => {
-      // Trigger multiple rapid folder changes
       settingsChangeHandler({ copilotFolder: "Folder1" }, { copilotFolder: "Folder2" });
       settingsChangeHandler({ copilotFolder: "Folder2" }, { copilotFolder: "Folder3" });
       settingsChangeHandler({ copilotFolder: "Folder3" }, { copilotFolder: "Folder4" });
 
-      // Fast-forward debounce timer
       jest.advanceTimersByTime(300);
 
-      // Wait for async operations
       await Promise.resolve();
       await Promise.resolve();
 
-      // Should only fetch once (debounced)
       expect(mockFetchAllSystemPrompts).toHaveBeenCalledTimes(1);
     });
 
     it("preserves old cache on reload failure (success-then-replace)", async () => {
-      // Mock the fetch to fail
       mockFetchAllSystemPrompts.mockRejectedValueOnce(new Error("Network error"));
 
-      // Trigger folder change
       settingsChangeHandler({ copilotFolder: "OldFolder" }, { copilotFolder: "NewFolder" });
 
-      // Fast-forward debounce timer
       jest.advanceTimersByTime(300);
 
-      // Wait for async operations
       await Promise.resolve();
       await Promise.resolve();
 
-      // Cache should NOT be cleared (updateCachedSystemPrompts not called with new prompts)
-      // The old cache is preserved on failure
       expect(state.updateCachedSystemPrompts).not.toHaveBeenCalled();
     });
 
     it("discards stale request results when newer request completes first (latest-wins)", async () => {
-      // This test simulates the race condition scenario:
-      // 1. Request A starts (folder change to FolderA)
-      // 2. Request B starts (folder change to FolderB) - before A completes
-      // 3. Request B completes first with promptsB
-      // 4. Request A completes later with promptsA
-      // Expected: Only promptsB should be applied, promptsA should be discarded
-
       const promptsA = [
         { title: "PromptA", content: "", createdMs: 0, modifiedMs: 0, lastUsedMs: 0 },
       ];
@@ -428,7 +361,6 @@ describe("SystemPromptRegister", () => {
         { title: "PromptB", content: "", createdMs: 0, modifiedMs: 0, lastUsedMs: 0 },
       ];
 
-      // Create deferred promises to control completion order
       let resolveA: (value: typeof promptsA) => void;
       let resolveB: (value: typeof promptsB) => void;
       const promiseA = new Promise<typeof promptsA>((r) => {
@@ -438,35 +370,27 @@ describe("SystemPromptRegister", () => {
         resolveB = r;
       });
 
-      mockFetchAllSystemPrompts
-        .mockReturnValueOnce(promiseA) // First call (request A)
-        .mockReturnValueOnce(promiseB); // Second call (request B)
+      mockFetchAllSystemPrompts.mockReturnValueOnce(promiseA).mockReturnValueOnce(promiseB);
 
-      // Trigger first folder change (request A)
       settingsChangeHandler({ copilotFolder: "Original" }, { copilotFolder: "FolderA" });
       jest.advanceTimersByTime(300);
       await Promise.resolve();
 
-      // Trigger second folder change (request B) before A completes
       settingsChangeHandler({ copilotFolder: "FolderA" }, { copilotFolder: "FolderB" });
       jest.advanceTimersByTime(300);
       await Promise.resolve();
 
-      // Request B completes first
       resolveB!(promptsB);
       await Promise.resolve();
       await Promise.resolve();
 
-      // Verify promptsB was applied
       expect(state.updateCachedSystemPrompts).toHaveBeenCalledWith(promptsB);
       (state.updateCachedSystemPrompts as jest.Mock).mockClear();
 
-      // Request A completes later (stale)
       resolveA!(promptsA);
       await Promise.resolve();
       await Promise.resolve();
 
-      // Verify promptsA was NOT applied (discarded as stale)
       expect(state.updateCachedSystemPrompts).not.toHaveBeenCalled();
     });
   });

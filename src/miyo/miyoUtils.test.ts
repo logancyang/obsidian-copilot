@@ -1,6 +1,3 @@
-// miyoUtils imports isMiyoAvailableForCapability (used by resolveDocProcessorBackend,
-// which is covered end-to-end in FileParserManager.test.ts). Stub the status store
-// so importing the module here doesn't pull in the real store.
 jest.mock("@/miyo/miyoStatusStore", () => ({
   isMiyoAvailableForCapability: jest.fn(),
   getMiyoStatusSnapshot: jest.fn(),
@@ -19,7 +16,6 @@ import {
   seedDocProcessorBackend,
 } from "@/miyo/miyoUtils";
 
-/** Minimal settings stub; the accessors only read the fields set per-test. */
 const capSettings = (over: Partial<CopilotSettings>): CopilotSettings =>
   ({ enableMiyo: false, miyoServerUrl: "", ...over }) as CopilotSettings;
 
@@ -92,8 +88,6 @@ describe("isCurrentVaultMiyoPath", () => {
   });
 
   it("disowns a raw path prefixed with another folder's name, even one matching a system root", () => {
-    // "copilot" is the default Copilot root NAME — but as a raw prefix it is
-    // another Miyo folder's namespace, not this vault's content.
     expect(isCurrentVaultMiyoPath(buildApp("MyVault"), "copilot/notes/foo.md")).toBe(false);
   });
 
@@ -133,11 +127,7 @@ describe("getMiyoFilePath", () => {
   });
 });
 
-// getSearchBackend stays behavior-neutral: it derives from the live shouldUseMiyo
-// predicate (there is no persisted search-engine field).
 describe("getSearchBackend", () => {
-  // Miyo is free (Layer C): the search backend keys off enableMiyo only, plus the
-  // mobile guard (local discovery is desktop-only, so mobile needs a server URL).
   afterEach(() => {
     (Platform as { isMobile: boolean }).isMobile = false;
   });
@@ -163,9 +153,6 @@ describe("getSearchBackend", () => {
   });
 });
 
-// seedDocProcessorBackend is the pure migration seed: a deterministic function of
-// the passed snapshot's fields (enableSelfHostMode + enableMiyo), independent of
-// live status or global settings.
 describe("seedDocProcessorBackend", () => {
   it("returns 'miyo' when self-host mode is valid and Miyo is enabled", () => {
     expect(
@@ -206,8 +193,6 @@ describe("isLocalMiyoUrl", () => {
   });
 
   it("treats an unparseable URL as remote (safe default)", () => {
-    // A scheme-less "localhost:8742" doesn't parse as a normal http URL; falling
-    // back to the manual add flow is safer than POSTing a local path to it.
     expect(isLocalMiyoUrl("not a url")).toBe(false);
   });
 });

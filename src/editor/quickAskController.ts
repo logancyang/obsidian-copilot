@@ -1,8 +1,3 @@
-/**
- * Controller for the Quick Ask feature.
- * Manages the lifecycle of Quick Ask panels and integrates with CM6.
- */
-
 import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { MarkdownView } from "obsidian";
@@ -19,9 +14,6 @@ interface QuickAskWidgetState {
   close: (restoreFocus?: boolean) => void;
 }
 
-/**
- * Controller that manages Quick Ask panel instances.
- */
 export class QuickAskController {
   private plugin: CopilotPlugin;
   private quickAskWidgetState: QuickAskWidgetState | null = null;
@@ -30,10 +22,6 @@ export class QuickAskController {
     this.plugin = plugin;
   }
 
-  /**
-   * Closes the current Quick Ask panel.
-   * @param restoreFocus - Whether to restore focus to the editor
-   */
   close(restoreFocus = true): void {
     const state = this.quickAskWidgetState;
     if (!state) {
@@ -43,29 +31,23 @@ export class QuickAskController {
     if (!restoreFocus) {
       this.quickAskWidgetState = null;
       try {
-        // Combine widget close and highlight hide in one dispatch
         const effects = [
           quickAskWidgetEffect.of(null),
           ...SelectionHighlight.buildEffects(state.view, null),
         ];
         state.view.dispatch({ effects });
       } catch (error) {
-        // View may have been destroyed - clear state and continue
         logWarn("Failed to dispatch close effect:", error);
       }
       return;
     }
 
-    // Clear state to prevent duplicate close
     this.quickAskWidgetState = null;
 
-    // Try to trigger close animation
     const hasAnimation = QuickAskOverlay.closeCurrentWithAnimation();
 
     if (!hasAnimation) {
-      // If no animation instance, dispatch close effect directly
       try {
-        // Combine widget close and highlight hide in one dispatch
         const effects = [
           quickAskWidgetEffect.of(null),
           ...SelectionHighlight.buildEffects(state.view, null),
@@ -73,32 +55,23 @@ export class QuickAskController {
         state.view.dispatch({ effects });
         state.view.focus();
       } catch (error) {
-        // View may have been destroyed - already cleared state above
         logWarn("Failed to dispatch close effect or focus:", error);
       }
     }
   }
 
-  /**
-   * Shows the Quick Ask panel for the given editor.
-   * @param markdownView - The MarkdownView instance (for leaf binding)
-   * @param view - The CodeMirror EditorView
-   */
   show(markdownView: MarkdownView, view: EditorView): void {
     const selection = view.state.selection.main;
     const editor = markdownView.editor;
     const leaf = markdownView.leaf;
     const filePath = markdownView.file?.path ?? null;
 
-    // Get selected text from doc.sliceString (not editor.getSelection() to avoid CRLF issues)
     const selectedTextSnapshot = view.state.doc.sliceString(selection.from, selection.to);
     const selectionFrom = selection.from;
     const selectionTo = selection.to;
 
-    // Close any existing Quick Ask panel
     this.close(false);
 
-    // Create ReplaceGuard
     const replaceGuard = createMapPosReplaceGuard({
       editorView: view,
       leafSnapshot: leaf,
@@ -106,7 +79,6 @@ export class QuickAskController {
       selectedTextSnapshot,
       initialRange: { from: selectionFrom, to: selectionTo },
       getLeafState: () => {
-        // Get current leaf state
         const currentView = leaf.view;
         if (!(currentView instanceof MarkdownView)) {
           return { leaf: null, editorView: null, filePath: null };
@@ -126,7 +98,6 @@ export class QuickAskController {
         this.quickAskWidgetState = null;
       }
       try {
-        // Combine widget close and highlight hide in one dispatch
         const effects = [
           quickAskWidgetEffect.of(null),
           ...SelectionHighlight.buildEffects(view, null),
@@ -137,7 +108,6 @@ export class QuickAskController {
           view.focus();
         }
       } catch (error) {
-        // View may have been destroyed
         logWarn("Failed to dispatch close effect or focus:", error);
       }
     };
@@ -147,10 +117,8 @@ export class QuickAskController {
 
       view.dispatch({
         effects: [
-          // First clear any existing widget and highlight
           quickAskWidgetEffect.of(null),
           ...SelectionHighlight.buildEffects(view, null),
-          // Then create the new widget with highlight
           quickAskWidgetEffect.of({
             bottomAnchorPos: anchors.bottomPos,
             topAnchorPos: anchors.topPos,
@@ -172,23 +140,15 @@ export class QuickAskController {
 
       this.quickAskWidgetState = { view, close };
     } catch (error) {
-      // View may have been destroyed
       logWarn("Failed to show Quick Ask panel:", error);
       this.quickAskWidgetState = null;
     }
   }
 
-  /**
-   * Checks if Quick Ask is currently open.
-   */
   isOpen(): boolean {
     return this.quickAskWidgetState !== null;
   }
 
-  /**
-   * Creates the CM6 extension for Quick Ask.
-   * This should be registered with the editor.
-   */
   createExtension(): Extension {
     return [quickAskOverlayPlugin];
   }

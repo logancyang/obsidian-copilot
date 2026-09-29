@@ -12,13 +12,8 @@ const meta = {
 } satisfies Meta<ProjectInstructionsFieldProps>;
 export default meta;
 
-/**
- * A project whose AGENTS.md is empty, or which has none yet. The field is only rendered once the
- * draft has been read, so this empty box means "no instructions", never "still loading".
- */
 export const EmptyDraft: StoryObj<ProjectInstructionsFieldProps> = {};
 
-/** A project that already has instructions, including ones moved out of the legacy `project.md`. */
 export const LoadedDraft: StoryObj<ProjectInstructionsFieldProps> = {
   args: {
     value:
@@ -26,7 +21,6 @@ export const LoadedDraft: StoryObj<ProjectInstructionsFieldProps> = {
   },
 };
 
-/** A long body scrolls inside the field rather than stretching the dialog past its scroll area. */
 export const OverflowingDraft: StoryObj<ProjectInstructionsFieldProps> = {
   args: {
     value: Array.from(

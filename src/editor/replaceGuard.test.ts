@@ -6,7 +6,6 @@ import {
 import type { EditorView } from "@codemirror/view";
 import type { WorkspaceLeaf } from "obsidian";
 
-// Mock dependencies
 jest.mock("./selectionHighlight", () => ({
   SelectionHighlight: {
     getRange: jest.fn(),
@@ -282,15 +281,11 @@ describe("createMapPosReplaceGuard", () => {
         },
       });
 
-      // First call
       guard.validate();
       const firstCallCount = callCount;
 
-      // Second call should use cache
       guard.validate();
 
-      // getLeafState is called each time to check for changes
-      // but validation logic should be cached
       expect(callCount).toBe(firstCallCount + 1);
     });
   });
@@ -313,7 +308,6 @@ describe("createMapPosReplaceGuard", () => {
         }),
       });
 
-      // Simulate insertion at start (shifts range by 3)
       const mockChanges = {
         mapPos: (pos: number, assoc: number) => pos + 3,
       };

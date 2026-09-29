@@ -588,10 +588,6 @@ describe("MiyoClient", () => {
 
   describe("constructor", () => {
     it("authenticates with the snapshot it was given, not whatever settings hold later", async () => {
-      // A queued Miyo mutation can outlive the vault that started it. Reading
-      // the key per request would then send the newly-opened vault's credential
-      // to the outgoing vault's endpoint, so callers whose work spans that
-      // boundary capture the key up front.
       mockedRequestUrl.mockResolvedValue({
         status: 201,
         json: { path: "/Users/me/vault" },
@@ -599,7 +595,6 @@ describe("MiyoClient", () => {
       } as RequestUrlResponse);
       const client = new MiyoClient({ plusLicenseKey: "key-of-the-vault-that-asked" });
 
-      // The vault switches while the mutation is queued.
       mockedGetSettings.mockReturnValue({
         plusLicenseKey: "key-of-a-different-vault",
         debug: false,
@@ -822,9 +817,6 @@ describe("MiyoClient", () => {
     });
 
     it("refuses addFolder after the URL and credentials resolve, so nothing is sent (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
-      // The caller's own check runs before this method; URL resolution is
-      // asynchronous, so only a hook here can stop a request whose caller went
-      // stale in between.
       mockedRequestUrl.mockResolvedValue({
         status: 201,
         json: { path: "/Users/me/vault" },
@@ -865,16 +857,11 @@ describe("MiyoClient", () => {
     it("resolves null once the probe timeout elapses when the request never responds", async () => {
       jest.useFakeTimers();
       try {
-        // A connection that opens but never sends a response: requestUrl (which
-        // ignores abort) stays pending forever, so only the timeout can settle it.
         mockedRequestUrl.mockReturnValue(new Promise<never>(() => {}) as never);
 
         const client = new MiyoClient();
         const resultPromise = client.fetchHealth("http://127.0.0.1:8742");
 
-        // Advance past the 8s health bound; the timeout must resolve the probe to
-        // null instead of leaving it pending (which would wedge the status store's
-        // single-flight refresh forever).
         await jest.advanceTimersByTimeAsync(8001);
 
         await expect(resultPromise).resolves.toBeNull();

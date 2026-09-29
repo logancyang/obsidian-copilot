@@ -10,10 +10,7 @@ interface UseLatestVersionResult {
 
 let latestReleaseRequest: Promise<LatestRelease | null> | null = null;
 
-/** Shares the latest release request between startup and mounted update surfaces. */
 export function requestLatestRelease(): Promise<LatestRelease | null> {
-  // Release surfaces share one request until a new agent tab invalidates it.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/317
   latestReleaseRequest ??= checkLatestVersion().then((result) => result.release);
   return latestReleaseRequest;
 }
@@ -32,7 +29,6 @@ function getReleaseRevision(): number {
   return releaseRevision;
 }
 
-/** Invalidates the shared release check and refreshes mounted release surfaces. */
 export function refreshLatestVersion(): void {
   latestReleaseRequest = null;
   releaseRevision += 1;
@@ -47,8 +43,6 @@ export function useLatestVersion(currentVersion: string): UseLatestVersionResult
     let active = true;
     const checkVersion = async () => {
       const release = await requestLatestRelease();
-      // A previous tab's slower check must not replace a newer release result.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/317
       if (active && release) {
         setLatestRelease(release);
       }

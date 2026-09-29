@@ -4,28 +4,18 @@ export class CustomError extends Error {
   constructor(message: string, code?: string) {
     super(message);
     this.code = code;
-    // This is needed in TypeScript when extending built-in classes
     Object.setPrototypeOf(this, CustomError.prototype);
   }
 }
 
-/**
- * TimeoutError class for consistent timeout error handling
- */
 export class TimeoutError extends Error {
   constructor(operation: string, timeoutMs: number) {
     super(`${operation} timed out after ${timeoutMs}ms`);
     this.name = "TimeoutError";
-    // This is needed in TypeScript when extending built-in classes
     Object.setPrototypeOf(this, TimeoutError.prototype);
   }
 }
 
-/**
- * LLM onboarding and configuration errors.
- * These typed errors are used to surface missing credentials or model
- * configuration issues as in-chat messages instead of popup notices.
- */
 export class MissingApiKeyError extends Error {
   constructor(message: string = "API key is not configured.") {
     super(message);

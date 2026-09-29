@@ -37,8 +37,6 @@ function fakeApp(existing: boolean): { app: App; vault: FakeVault } {
 }
 
 describe("logFileManager", () => {
-  // The manager is a module-level singleton, so each test starts from a wiped
-  // buffer rather than inheriting the previous one's entries.
   beforeEach(async () => {
     logFileManager.setApp(fakeApp(false).app);
     await logFileManager.clear();
@@ -130,7 +128,6 @@ describe("logFileManager", () => {
         const content = vault.create.mock.calls[0][1];
         expect(content).toContain("hello");
         expect(content).toContain("## Settings");
-        // Sensitive keys are stripped from the dump it appends.
         expect(content).not.toContain("sk-should-never-be-exported");
       });
 

@@ -1,6 +1,5 @@
 import type { BuiltinSkill } from "./builtinSkills";
 
-/** Pinned source revision for the adapted Obsidian skills. */
 export const OBSIDIAN_SKILLS_UPSTREAM_REVISION = "a1dc48e68138490d522c04cbf5822214c6eb1202";
 
 const ENABLED_AGENTS = ["claude", "codex", "opencode"] as const;
@@ -850,7 +849,6 @@ const OBSIDIAN_CLI: BuiltinSkill = {
   files: [LICENSE_FILE],
 };
 
-/** Obsidian-native skills seeded for every supported Agent Mode backend. */
 export const OBSIDIAN_SKILLS: readonly BuiltinSkill[] = [
   OBSIDIAN_MARKDOWN,
   OBSIDIAN_BASES,

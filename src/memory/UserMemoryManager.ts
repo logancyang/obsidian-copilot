@@ -7,11 +7,6 @@ import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
-/**
- * User Memory Management Class
- *
- * Simple memory manager that creates conversation summaries for recent chat history.
- */
 export class UserMemoryManager {
   private app: App;
   private recentConversationsContent: string = "";
@@ -22,16 +17,9 @@ export class UserMemoryManager {
     this.app = app;
   }
 
-  /**
-   * Load memory data from files into class fields
-   */
   private async loadMemory(): Promise<void> {
     try {
-      // One folder for both reads: resolving twice could pair a recent-history
-      // file from one root with saved memories from another if the root moves
-      // between them.
       const memoryFolder = getEffectiveMemoryFolder();
-      // Load recent conversations
       const recentConversationsFile = this.app.vault.getAbstractFileByPath(
         this.getRecentConversationFilePath(memoryFolder)
       );
@@ -42,7 +30,6 @@ export class UserMemoryManager {
         logInfo("[UserMemoryManager] Recent Conversations file not found, skipping memory load");
       }
 
-      // Load saved memories
       const savedMemoriesFile = this.app.vault.getAbstractFileByPath(
         this.getSavedMemoriesFilePath(memoryFolder)
       );
@@ -59,13 +46,9 @@ export class UserMemoryManager {
     }
   }
 
-  /**
-   * Adds a recent conversation to user memory storage in the background without blocking execution
-   */
   addRecentConversation(messages: ChatMessage[], chatModel?: BaseChatModel): void {
     const settings = getSettings();
 
-    // Only proceed if memory is enabled
     if (!settings.enableRecentConversations) {
       logWarn("[UserMemoryManager] Recent history referencing is disabled, skipping analysis");
       return;
@@ -76,22 +59,17 @@ export class UserMemoryManager {
       return;
     }
 
-    // Fire and forget - run in background
     this.updateMemory(messages, chatModel).catch((error) => {
       logError("[UserMemoryManager] Background user memory operation failed:", error);
     });
   }
 
-  /**
-   * Adds a saved memory that the user explicitly asked to remember
-   */
   async updateSavedMemory(
     query: string,
     chatModel: BaseChatModel
   ): Promise<{ content?: string; error?: string; filePath?: string }> {
     const settings = getSettings();
 
-    // Only proceed if saved memory is enabled
     if (!settings.enableSavedMemory) {
       return { error: "Saved memory is disabled, skipping save" };
     }
@@ -105,18 +83,10 @@ export class UserMemoryManager {
     }
 
     try {
-      // Captured BEFORE the model call, unlike the recent-conversation path:
-      // this is a read-modify-write whose model output is derived from THIS
-      // file's existing content, so redirecting the write to a root that
-      // changed meanwhile would overwrite that file with a foreign snapshot.
       const memoryFolder = getEffectiveMemoryFolder();
       await this.ensureMemoryFolderExists(memoryFolder);
-      // Add to saved memories file
       const filePath = this.getSavedMemoriesFilePath(memoryFolder);
       const result = await this.updateSavedMemoryFile(filePath, query, chatModel);
-      // Report the path actually written, not a re-resolved one: the root can
-      // move during the model call, and a caller resolving it afterwards would
-      // name a file this write never touched.
       return { ...result, filePath };
     } catch (error) {
       return {
@@ -125,9 +95,6 @@ export class UserMemoryManager {
     }
   }
 
-  /**
-   * Get user memory prompt
-   */
   async getUserMemoryPrompt(): Promise<string | null> {
     await this.loadMemory();
 
@@ -135,7 +102,6 @@ export class UserMemoryManager {
       const settings = getSettings();
       let memoryPrompt = "";
 
-      // Add recent conversations if enabled
       if (settings.enableRecentConversations && this.recentConversationsContent) {
         memoryPrompt += `<recent_conversations>
         ${this.recentConversationsContent}
@@ -147,7 +113,6 @@ export class UserMemoryManager {
         Only use the recent conversations if they are relevant to the current conversation.`;
       }
 
-      // Add saved memories if enabled
       if (settings.enableSavedMemory && this.savedMemoriesContent) {
         memoryPrompt += `<saved_memories>
         ${this.savedMemoriesContent}
@@ -175,9 +140,6 @@ export class UserMemoryManager {
     return `${year}-${month}-${day} ${hours}:${minutes}`;
   }
 
-  /**
-   * Create a conversation section from messages and return it in Markdown format
-   */
   private async createConversationSection(
     messages: ChatMessage[],
     chatModel: BaseChatModel
@@ -192,11 +154,7 @@ export class UserMemoryManager {
     return section;
   }
 
-  /**
-   * Analyze chat messages and store useful information in user memory files
-   */
   private async updateMemory(messages: ChatMessage[], chatModel?: BaseChatModel): Promise<void> {
-    // Prevent race conditions by ensuring only one memory update operation runs at a time
     if (this.isUpdatingMemory) {
       logInfo("[UserMemoryManager] Memory update already in progress, skipping.");
       return;
@@ -214,12 +172,7 @@ export class UserMemoryManager {
         return;
       }
 
-      // Extract and save conversation summary to recent conversations
       const conversationSection = await this.createConversationSection(messages, chatModel);
-      // Resolve the folder AFTER the model call, not before: a Copilot root
-      // change during it moves the memory folder, and the summary does not
-      // depend on the old location — so the current root is where the user
-      // expects it, and ensuring the same value we write guarantees it exists.
       const memoryFolder = getEffectiveMemoryFolder();
       await this.ensureMemoryFolderExists(memoryFolder);
       await this.addToRecentConversationsFile(
@@ -233,16 +186,6 @@ export class UserMemoryManager {
     }
   }
 
-  /**
-   * Ensure the memory folder an operation has committed to exists.
-   *
-   * Takes the folder rather than resolving it so an operation cannot ensure one
-   * directory and then write into another: the memory folder derives from the
-   * Copilot root, which the user can move mid-operation. Mirrors the snapshot
-   * discipline the chat-save paths already use.
-   *
-   * @param memoryFolder - Folder this operation resolved once and will write to.
-   */
   private async ensureMemoryFolderExists(memoryFolder: string): Promise<void> {
     await ensureFolderExists(this.app.vault, memoryFolder);
   }
@@ -255,9 +198,6 @@ export class UserMemoryManager {
     return `${memoryFolder}/Saved Memories.md`;
   }
 
-  /**
-   * Update content to saved memory file with ChatModel
-   */
   private async updateSavedMemoryFile(
     filePath: string,
     query: string,
@@ -265,16 +205,13 @@ export class UserMemoryManager {
   ): Promise<{ content?: string; error?: string }> {
     const existingFile = this.app.vault.getAbstractFileByPath(filePath);
 
-    // Load existing saved memories (may be empty)
     const existingContent =
       existingFile instanceof TFile ? await this.app.vault.read(existingFile) : "";
 
-    // Fast path: if no model available for some reason, append a bullet safely
     if (!chatModel) {
       return { error: "No chat model available, skipping memory update" };
     }
 
-    // Ask the model to produce a deduplicated/merged/conflict-free full list
     const systemPrompt = `You maintain a user's long-term personal memory list as concise bullet points.
 
     You task is to update the user's memory list with the new statement.
@@ -330,10 +267,6 @@ ${query.trim()}
     return { content: updatedContent };
   }
 
-  /**
-   * Save content to the user memory file by appending new conversation section
-   * Maintains a rolling buffer of conversations by removing the oldest when limit is exceeded
-   */
   private async addToRecentConversationsFile(
     filePath: string,
     newConversationSection: string
@@ -341,42 +274,33 @@ ${query.trim()}
     const existingFile = this.app.vault.getAbstractFileByPath(filePath);
 
     if (existingFile instanceof TFile) {
-      // Read existing content and parse conversations
       const fileContent = await this.app.vault.read(existingFile);
 
       let updatedContent: string;
 
       if (fileContent.trim() === "") {
-        // Create new file with a single trailing newline
         updatedContent = `${newConversationSection.trim()}\n`;
       } else {
-        // Parse existing conversations and add new one
         const conversations = this.parseExistingConversations(fileContent);
         conversations.push(newConversationSection);
 
-        // Keep only the most recent conversations
         const settings = getSettings();
         const maxConversations = settings.maxRecentConversations;
         if (conversations.length > maxConversations) {
           conversations.splice(0, conversations.length - maxConversations);
         }
 
-        // Normalize sections to avoid extra blank lines, then separate with exactly one blank line
         const normalized = conversations.map((s) => s.trim());
         updatedContent = `${normalized.join("\n\n")}\n`;
       }
 
       await this.app.vault.modify(existingFile, updatedContent);
     } else {
-      // Create new file
       const initialContent = `${newConversationSection.trim()}\n`;
       await this.app.vault.create(filePath, initialContent);
     }
   }
 
-  /**
-   * Parse existing conversations from file content
-   */
   private parseExistingConversations(content: string): string[] {
     const lines = content.split("\n");
     const conversations: string[] = [];
@@ -384,20 +308,15 @@ ${query.trim()}
 
     for (const line of lines) {
       if (line.trim().startsWith("## ")) {
-        // Start of a new conversation - save the previous one if it exists
         if (currentConversation.length > 0) {
           conversations.push(currentConversation.join("\n").trim());
         }
-        // Start new conversation with this header
         currentConversation = [line];
       } else if (currentConversation.length > 0) {
-        // Add line to current conversation if we're inside one
         currentConversation.push(line);
       }
-      // Ignore lines before the first ## header
     }
 
-    // Add the last conversation if it exists
     if (currentConversation.length > 0) {
       conversations.push(currentConversation.join("\n").trim());
     }
@@ -405,29 +324,20 @@ ${query.trim()}
     return conversations;
   }
 
-  /**
-   * Extract JSON content from LLM response, handling cases where JSON is wrapped in code blocks
-   */
   private extractJsonFromResponse(content: string): string {
-    // First, try to extract JSON from markdown code blocks
     const codeBlockMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
     if (codeBlockMatch) {
       return codeBlockMatch[1].trim();
     }
 
-    // If no code block found, look for JSON object pattern
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       return jsonMatch[0];
     }
 
-    // Return original content if no patterns match
     return content;
   }
 
-  /**
-   * Extract conversation title and summary using a single LLM call
-   */
   private async extractTitleAndSummary(
     messages: ChatMessage[],
     chatModel: BaseChatModel
@@ -458,10 +368,8 @@ Generate a title and summary for this conversation:`;
       const response = await chatModel.invoke(messages_llm);
       const content = response.text;
 
-      // Extract JSON from content, handling code blocks
       const jsonContent = this.extractJsonFromResponse(content);
 
-      // Try to parse JSON response
       try {
         const parsed = JSON.parse(jsonContent) as { title?: string; summary?: string };
         return {

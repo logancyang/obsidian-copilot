@@ -391,10 +391,6 @@ class GalleryView extends ItemView {
   }
 }
 
-/**
- * Manages only the development component gallery view and its open command.
- * It does not load or alter the production Copilot runtime.
- */
 export default class GalleryPlugin extends Plugin {
   private catalog: GalleryCatalog = createGalleryCatalog([], 0);
   private externalOperationQueue: Promise<void> = Promise.resolve();
