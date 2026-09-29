@@ -5,7 +5,7 @@ import type { PairedDevice, PairedDeviceStore } from "@/remote/host/PairedDevice
 import type { PairingWindow } from "@/remote/host/PairingWindow";
 import { RemoteServer, type RemoteConnection } from "@/remote/host/RemoteServer";
 
-export const ADDRESS_RETRY_MS = 15_000;
+export const RECHECK_INTERVAL_MS = 15_000;
 
 export interface RemoteHostServiceDeps {
   store: PairedDeviceStore;
@@ -40,7 +40,7 @@ export class RemoteHostService {
   private lastPlus: boolean;
   private queue: Promise<void> = Promise.resolve();
   private disposed = false;
-  private addressRetryTimer: number | undefined;
+  private recheckTimer: number | undefined;
   private state: RemoteHostViewState;
 
   constructor(private readonly deps: RemoteHostServiceDeps) {
@@ -49,7 +49,7 @@ export class RemoteHostService {
       consumePairingSecret: (secret) => deps.isPlus() && deps.pairing.consume(secret),
       devices: {
         authenticate: (token) => (deps.isPlus() ? deps.store.authenticate(token) : null),
-        create: (name) => deps.store.create(name),
+        create: (name, clientId) => deps.store.create(name, clientId),
         markSeen: (id) => deps.store.markSeen(id),
       },
     });
@@ -114,7 +114,7 @@ export class RemoteHostService {
     this.disposed = true;
     for (const cleanup of this.cleanups.splice(0)) cleanup();
     this.deps.pairing.dispose();
-    window.clearTimeout(this.addressRetryTimer);
+    window.clearTimeout(this.recheckTimer);
     await this.queue;
     await this.server.close();
     this.listening = null;
@@ -131,11 +131,9 @@ export class RemoteHostService {
     try {
       this.tailscaleAddress = this.deps.findTailscaleAddress();
       const address = this.tailscaleAddress;
-      const wanted =
-        this.deps.isPlus() &&
-        (this.deps.store.list().length > 0 || this.deps.pairing.getActive() !== null);
-      const shouldListen = wanted && address !== null;
-      this.scheduleAddressRetry(wanted && address === null);
+      const demanded = this.deps.store.list().length > 0 || this.deps.pairing.getActive() !== null;
+      const shouldListen = this.deps.isPlus() && demanded && address !== null;
+      this.scheduleRecheck(demanded);
 
       if (!shouldListen) {
         await this.stopListening();
@@ -155,19 +153,21 @@ export class RemoteHostService {
     this.publish();
   }
 
-  // Obsidian can start before Tailscale has an address, and a paired phone then finds nothing
-  // listening until the next reconcile. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
-  private scheduleAddressRetry(needed: boolean): void {
+  // Nothing announces a change of Tailscale's address, of the entitlement (which also expires by
+  // the clock and finishes verifying after startup) or of a port that was busy at startup, so
+  // while a phone is paired or a pairing is open the listener is reconciled on a timer. The port must
+  // not outlive the Tailscale interface it was bound to. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+  private scheduleRecheck(needed: boolean): void {
     if (!needed) {
-      window.clearTimeout(this.addressRetryTimer);
-      this.addressRetryTimer = undefined;
+      window.clearTimeout(this.recheckTimer);
+      this.recheckTimer = undefined;
       return;
     }
-    if (this.addressRetryTimer !== undefined) return;
-    this.addressRetryTimer = window.setTimeout(() => {
-      this.addressRetryTimer = undefined;
+    if (this.recheckTimer !== undefined) return;
+    this.recheckTimer = window.setTimeout(() => {
+      this.recheckTimer = undefined;
       void this.reconcile();
-    }, ADDRESS_RETRY_MS);
+    }, RECHECK_INTERVAL_MS);
   }
 
   private async startListening(host: string): Promise<void> {
@@ -212,6 +212,7 @@ export class RemoteHostService {
                 vaultName: vault.name,
                 vaultId: vault.id,
                 secret: activePairing.secret,
+                desktopName: this.deps.desktopName,
               }),
             }
           : null,

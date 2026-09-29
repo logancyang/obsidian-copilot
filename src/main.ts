@@ -587,6 +587,9 @@ export default class CopilotPlugin extends Plugin {
   }
 
   private async teardown(): Promise<void> {
+    // The listener's port is remembered for paired phones, so a successor plugin that starts while
+    // this one still holds it would find the port busy. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+    const remoteStopped = this.remoteHost?.dispose();
     await flushPersistence();
 
     this.clearAllPersistentSelectionHighlights();
@@ -596,7 +599,7 @@ export default class CopilotPlugin extends Plugin {
     this.agentModelDiscoveryUnsubscriber?.();
     this.agentSessionClient?.dispose();
     this.agentSessionHost?.dispose();
-    await this.remoteHost?.dispose();
+    await remoteStopped;
     await this.agentSessionManager?.shutdown();
 
     const vaultDataManager = VaultDataManager.getInstance();

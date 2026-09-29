@@ -4,7 +4,7 @@ import { parseReply, rawText, sleep } from "@/remote/host/serverTestKit";
 import { PairedDeviceStore } from "@/remote/host/PairedDeviceStore";
 import { PAIRING_TTL_MS, PairingWindow } from "@/remote/host/PairingWindow";
 import {
-  ADDRESS_RETRY_MS,
+  RECHECK_INTERVAL_MS,
   RemoteHostService,
   type RemoteHostServiceDeps,
 } from "@/remote/host/RemoteHostService";
@@ -143,7 +143,7 @@ describe("RemoteHostService", () => {
         await rig.service.start();
 
         rig.control.address = TAILSCALE;
-        await jest.advanceTimersByTimeAsync(ADDRESS_RETRY_MS);
+        await jest.advanceTimersByTimeAsync(RECHECK_INTERVAL_MS);
 
         expect(listen).toHaveBeenCalledWith(TAILSCALE, expect.any(Number));
         expect(rig.service.getState().listening).toBe(true);
@@ -418,6 +418,97 @@ describe("RemoteHostService", () => {
       });
     });
 
+    describe("periodic recheck", () => {
+      it(`moves the listener to Tailscale's new address within one interval, without any settings change (${ISSUE})`, async () => {
+        jest.useFakeTimers();
+        rig = makeRig();
+        rig.store.create("iPhone");
+        await rig.service.start();
+
+        rig.control.address = "100.90.1.2";
+        await jest.advanceTimersByTimeAsync(RECHECK_INTERVAL_MS);
+
+        expect(listen).toHaveBeenLastCalledWith("100.90.1.2", 45123);
+        expect(close).toHaveBeenCalledTimes(1);
+      });
+
+      it(`stops listening within one interval once Tailscale loses its address, so the port never outlives the interface (${ISSUE})`, async () => {
+        jest.useFakeTimers();
+        rig = makeRig();
+        rig.store.create("iPhone");
+        await rig.service.start();
+
+        rig.control.address = null;
+        await jest.advanceTimersByTimeAsync(RECHECK_INTERVAL_MS);
+
+        expect(rig.service.getState()).toMatchObject({ listening: false, tailscaleAddress: null });
+        expect(close).toHaveBeenCalled();
+      });
+
+      it(`stops listening within one interval when Plus lapses without a settings change, as an expiring entitlement does (${ISSUE})`, async () => {
+        jest.useFakeTimers();
+        rig = makeRig();
+        rig.store.create("iPhone");
+        await rig.service.start();
+
+        rig.control.plus = false;
+        await jest.advanceTimersByTimeAsync(RECHECK_INTERVAL_MS);
+
+        expect(rig.service.getState()).toMatchObject({ plus: false, listening: false });
+      });
+
+      it(`starts listening within one interval when the cached entitlement finishes verifying after startup (${ISSUE})`, async () => {
+        jest.useFakeTimers();
+        rig = makeRig();
+        rig.control.plus = false;
+        rig.store.create("iPhone");
+        await rig.service.start();
+
+        rig.control.plus = true;
+        await jest.advanceTimersByTimeAsync(RECHECK_INTERVAL_MS);
+
+        expect(rig.service.getState()).toMatchObject({ plus: true, listening: true });
+      });
+
+      it(`retries a busy remembered port instead of staying stopped until the user reopens settings (${ISSUE})`, async () => {
+        jest.useFakeTimers();
+        rig = makeRig();
+        rig.control.savedPort = 51234;
+        listen.mockRejectedValue(Object.assign(new Error("in use"), { code: "EADDRINUSE" }));
+        rig.store.create("iPhone");
+        await rig.service.start();
+        expect(rig.service.getState().listening).toBe(false);
+        listen.mockImplementation((_host: string, port: number) => Promise.resolve(port));
+
+        await jest.advanceTimersByTimeAsync(RECHECK_INTERVAL_MS);
+
+        expect(rig.service.getState()).toMatchObject({ listening: true, error: null });
+      });
+
+      it("keeps the listener untouched when nothing changed between checks", async () => {
+        jest.useFakeTimers();
+        rig = makeRig();
+        rig.store.create("iPhone");
+        await rig.service.start();
+        listen.mockClear();
+        close.mockClear();
+
+        await jest.advanceTimersByTimeAsync(RECHECK_INTERVAL_MS * 3);
+
+        expect(listen).not.toHaveBeenCalled();
+        expect(close).not.toHaveBeenCalled();
+      });
+
+      it("schedules no timer while no phone is paired and no pairing is open", async () => {
+        jest.useFakeTimers();
+        rig = makeRig();
+
+        await rig.service.start();
+
+        expect(jest.getTimerCount()).toBe(0);
+      });
+    });
+
     describe("getState() and subscribe()", () => {
       it("returns the same state object until something changes", async () => {
         rig = makeRig();
@@ -508,13 +599,13 @@ describe("RemoteHostService", () => {
       return rig;
     }
 
-    async function pairOver(link: string, deviceName: string) {
+    async function pairOver(link: string, deviceName: string, clientId?: string) {
       const parsed = linkParts(link);
       const client = new WebSocket(`ws://${parsed.host}:${parsed.port}`);
       const messages: string[] = [];
       client.on("message", (data) => messages.push(rawText(data)));
       await once(client, "open");
-      client.send(JSON.stringify({ type: "pair", secret: parsed.secret, deviceName }));
+      client.send(JSON.stringify({ type: "pair", secret: parsed.secret, deviceName, clientId }));
       const deadline = Date.now() + 2000;
       while (messages.length === 0 && Date.now() < deadline) await sleep(5);
       return { client, reply: parseReply(messages[0] ?? "null") };
@@ -536,6 +627,30 @@ describe("RemoteHostService", () => {
         ["Zero's iPhone", true],
       ]);
       first.client.terminate();
+      second.client.terminate();
+    });
+
+    it(`replaces a phone's entry when it pairs again, closes its old connection and rejects its old token (${ISSUE})`, async () => {
+      const rig = realRig("3f9a1c2e");
+      await rig.service.startPairing();
+      const first = await pairOver(rig.service.getState().pairing?.link ?? "", "iPhone", "phone-1");
+      const firstClosed = new Promise<number>((resolve) =>
+        first.client.once("close", (code) => resolve(code))
+      );
+      await rig.service.startPairing();
+
+      const second = await pairOver(
+        rig.service.getState().pairing?.link ?? "",
+        "iPhone",
+        "phone-1"
+      );
+
+      expect(await firstClosed).toBe(4403);
+      expect(rig.service.getState().devices.map((device) => device.id)).toEqual([
+        second.reply.deviceId,
+      ]);
+      expect(rig.store.authenticate(first.reply.token)).toBeNull();
+      expect(rig.store.authenticate(second.reply.token)?.id).toBe(second.reply.deviceId);
       second.client.terminate();
     });
 
