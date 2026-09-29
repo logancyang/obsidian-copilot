@@ -16,6 +16,7 @@ import type { AgentSession, AgentSessionStatus } from "@/agentMode/session/Agent
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor } from "@/agentMode/session/types";
 import { Loader2, MoreHorizontal, Plus, X } from "lucide-react";
+import { Notice } from "obsidian";
 import React from "react";
 
 interface Props {
@@ -213,7 +214,10 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
             onClose={() => handleClose(session.internalId)}
             onStartRename={() => setRenamingId(session.internalId)}
             onSubmitRename={(label) => {
-              manager.renameSession(session.internalId, label);
+              void manager.renameSession(session.internalId, label).catch((error) => {
+                logError("[AgentMode] Failed to rename session", error);
+                new Notice("Failed to rename session.");
+              });
               setRenamingId(null);
             }}
             onCancelRename={() => setRenamingId(null)}

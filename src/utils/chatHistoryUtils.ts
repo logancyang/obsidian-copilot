@@ -104,10 +104,17 @@ export async function filterChatHistoryFiles(app: App, files: TFile[]): Promise<
  * Extract chat title from a file.
  * First checks frontmatter.topic, then extracts from filename by removing
  * project ID prefix, date/time patterns, and normalizing separators.
+ * @param app Vault app used to read cached frontmatter when no override is supplied.
+ * @param file Chat note whose title is being resolved.
+ * @param frontmatterOverride Fresh frontmatter to use when Obsidian's cache may lag a rename.
  */
-export function extractChatTitle(app: App, file: TFile): string {
+export function extractChatTitle(
+  app: App,
+  file: TFile,
+  frontmatterOverride?: Record<string, unknown>
+): string {
   // Read the file's front matter
-  const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
+  const frontmatter = frontmatterOverride ?? app.metadataCache.getFileCache(file)?.frontmatter;
 
   // First check if there's a custom topic in frontmatter
   if (frontmatter?.topic && typeof frontmatter.topic === "string" && frontmatter.topic.trim()) {

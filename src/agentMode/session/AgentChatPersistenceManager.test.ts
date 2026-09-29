@@ -1,6 +1,6 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
+import { patchFrontmatter } from "@/utils/vaultAdapterUtils";
 import { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage } from "./types";
@@ -13,6 +13,7 @@ jest.mock("obsidian", () => ({
   normalizePath: (path: string) => path,
   Notice: jest.fn(),
   TFile: jest.fn(),
+  parseYaml: (content: string) => jest.requireActual("yaml").parse(content),
 }));
 jest.mock("@/logger");
 jest.mock("@/settings/model", () => ({
@@ -42,7 +43,7 @@ jest.mock("@/utils", () => ({
 jest.mock("@/utils/vaultAdapterUtils", () => ({
   isInVaultCache: jest.fn(() => false),
   listMarkdownFiles: jest.fn().mockResolvedValue([]),
-  readFrontmatterViaAdapter: jest.fn().mockResolvedValue(null),
+  patchFrontmatter: jest.fn(),
 }));
 
 interface FakeFile {
@@ -130,7 +131,124 @@ describe("AgentChatPersistenceManager", () => {
     manager = new AgentChatPersistenceManager(app as unknown as App);
   });
 
+  describe("loadFile()", () => {
+    it.each([
+      ["a folded title", ""],
+      ["a BOM-prefixed folded title", "\uFEFF"],
+    ])(
+      "reopens %s with its original transcript https://github.com/logancyang/obsidian-copilot/issues/3378",
+      async (_case, prefix) => {
+        const saved = await manager.saveSession(
+          [makeMessage(USER_SENDER, "Original prompt")],
+          "opencode",
+          { label: "Useful workflow" }
+        );
+        const file = app.files.get(saved!.path)!;
+        file.contents =
+          prefix + file.contents!.replace("---\n", "---\ntopic: >-\n  Useful\n  workflow\n");
+
+        const loaded = await manager.loadFile(file as unknown as TFile);
+
+        expect(loaded.topic).toBe("Useful workflow");
+        expect(loaded.label).toBe("Useful workflow");
+        expect(loaded.messages.map((message) => message.message)).toEqual(["Original prompt"]);
+      }
+    );
+  });
+
   describe("saveSession()", () => {
+    it("preserves a BOM-prefixed note's title and recency during autosave https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+      const messages = [makeMessage(USER_SENDER, "Original prompt")];
+      const saved = await manager.saveSession(messages, "opencode");
+      const file = app.files.get(saved!.path)!;
+      Object.setPrototypeOf(file, TFile.prototype);
+      file.contents =
+        "\uFEFF" +
+        file.contents!.replace("---\n", '---\ntopic: "Useful workflow"\nlastAccessedAt: 123456\n');
+      app.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { topic: "Useful workflow", lastAccessedAt: 123456 },
+      } as never);
+
+      await manager.saveSession(messages, "opencode", { existingPath: saved!.path });
+
+      expect(file.contents).toContain('topic: "Useful workflow"');
+      expect(file.contents).toContain("lastAccessedAt: 123456");
+    });
+
+    it("preserves a valid folded YAML title during autosave https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+      const messages = [makeMessage(USER_SENDER, "Original prompt")];
+      const saved = await manager.saveSession(messages, "opencode");
+      const file = app.files.get(saved!.path)!;
+      Object.setPrototypeOf(file, TFile.prototype);
+      file.contents = file.contents!.replace("---\n", "---\ntopic: >-\n  Useful\n  workflow\n");
+      app.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { topic: "Useful workflow" },
+      } as never);
+
+      await manager.saveSession(messages, "opencode", { existingPath: saved!.path });
+
+      expect(file.contents).toContain('topic: "Useful workflow"');
+    });
+
+    it("keeps a renamed title when metadata cache lags the next save https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+      const messages = [makeMessage(USER_SENDER, "Original prompt")];
+      const saved = await manager.saveSession(messages, "opencode", { label: "Old label" });
+      const file = app.files.get(saved!.path)!;
+      Object.setPrototypeOf(file, TFile.prototype);
+      file.contents = file.contents!.replace("---\n", '---\ntopic: "Current title"\n');
+      app.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { topic: "Old title", agentLabel: "Old label" },
+      } as never);
+
+      await manager.saveSession(messages, "opencode", {
+        existingPath: saved!.path,
+        label: "Current title",
+      });
+
+      expect(file.contents).toContain('topic: "Current title"');
+      expect(file.contents).toContain('agentLabel: "Current title"');
+    });
+
+    it("keeps the latest tab rename after an in-flight autosave and reload https://github.com/logancyang/obsidian-copilot/issues/3378", async () => {
+      const messages = [makeMessage(USER_SENDER, "Original prompt")];
+      const saved = await manager.saveSession(messages, "opencode", { label: "Alpha" });
+      const file = app.files.get(saved!.path)!;
+      Object.setPrototypeOf(file, TFile.prototype);
+      file.contents = file.contents!.replace("---\n", '---\ntopic: "Alpha"\n');
+      let finishRead!: (content: string) => void;
+      let readStarted!: () => void;
+      const started = new Promise<void>((resolve) => (readStarted = resolve));
+      app.vault.adapter.read.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRead = resolve;
+            readStarted();
+          })
+      );
+      (patchFrontmatter as jest.Mock).mockImplementationOnce(async (_app, path, updates) => {
+        const target = app.files.get(path)!;
+        target.contents = target.contents!.replace(/^topic:.*$/m, `topic: "${updates.topic}"`);
+      });
+
+      const saving = manager.saveSession(messages, "opencode", {
+        existingPath: saved!.path,
+        label: "Alpha",
+      });
+      await started;
+      const renaming = manager.updateTopic(saved!.path, "Beta");
+      expect(patchFrontmatter).not.toHaveBeenCalled();
+      finishRead(file.contents);
+      await saving;
+      await renaming;
+      await manager.saveSession(messages, "opencode", {
+        existingPath: saved!.path,
+        label: "Beta",
+      });
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.topic).toBe("Beta");
+      expect(loaded.label).toBe("Beta");
+    });
     it("preserves organizer links after native rehydration, reopening and later deletion (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
       const message = {
         ...makeMessage(USER_SENDER, "image"),
@@ -433,12 +551,6 @@ describe("AgentChatPersistenceManager", () => {
   });
 
   describe("usage frontmatter", () => {
-    afterEach(() => {
-      // Restore the default no-metadata behavior for the adapter helper so a
-      // per-test override (round-trip-on-omit) doesn't leak into other suites.
-      (readFrontmatterViaAdapter as jest.Mock).mockResolvedValue(null);
-    });
-
     it("round-trips a SessionUsage snapshot through save/load", async () => {
       const messages = [makeMessage(USER_SENDER, "hi")];
       const usage = {
@@ -466,21 +578,6 @@ describe("AgentChatPersistenceManager", () => {
       // the mocked prototype so the resave takes the existing-file path (where
       // usage round-trips) instead of treating it as a brand-new write.
       Object.setPrototypeOf(app.files.get(first!.path)!, TFile.prototype);
-      // Mirror production: `readExistingMeta` reads the prior file's frontmatter
-      // to round-trip fields the caller didn't re-supply. The default mock
-      // returns null (no metadata), so parse the stored file here — quote-strip
-      // matches the real adapter helper so the JSON value comes back intact.
-      (readFrontmatterViaAdapter as jest.Mock).mockImplementation(async (_app, path: string) => {
-        const raw = app.files.get(path)?.contents ?? "";
-        const yaml = raw.match(/^---\n([\s\S]*?)\n---/)?.[1];
-        if (!yaml) return null;
-        const fm: Record<string, string> = {};
-        for (const line of yaml.split("\n")) {
-          const m = line.match(/^([\w-]+):\s*(.+)/);
-          if (m) fm[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
-        }
-        return fm;
-      });
       // A save with no usage option must not drop the stored snapshot.
       const second = await manager.saveSession(messages, "claude", {
         existingPath: first!.path,
