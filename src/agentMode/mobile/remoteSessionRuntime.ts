@@ -66,9 +66,12 @@ export function createRemoteSessionRuntime(deps: RemoteSessionRuntimeDeps): Remo
   let opened = false;
   const stopClient = client.subscribe(() => {
     const host = client.getHost();
+    // A restarted desktop empties the replica until its snapshot arrives, and the drafts of tabs it
+    // restores must survive that gap.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
     if (host !== lastHost) {
       lastHost = host;
-      drafts.prune();
+      if (host) drafts.prune();
     }
     // The phone has no home screen to fall back to, so a view left without a tab (the desktop
     // restarted, or closed every tab) shows the next tab that appears instead of offering to start

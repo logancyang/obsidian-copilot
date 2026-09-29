@@ -1,5 +1,5 @@
 import { DesktopPicker } from "@/agentMode/mobile/ui/DesktopPicker";
-import { RemoteSession } from "@/agentMode/mobile/RemoteSession";
+import { RemoteSession } from "@/agentMode/mobile/ui/RemoteSession";
 import {
   createRemoteSessionRuntime,
   documentVisibility,

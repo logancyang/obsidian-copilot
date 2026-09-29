@@ -13,7 +13,9 @@ import {
 import { ClientView } from "@/agentMode/protocol/ClientView";
 import { buildBackendSummary, buildHostState, buildTab } from "@/agentMode/protocol/testBuilders";
 import type { AgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
+import { AgentInputDraftStore } from "@/agentMode/session/AgentInputDraftStore";
 import type { SessionId } from "@/agentMode/session/types";
+import type { App } from "obsidian";
 
 // A client over a scripted single-session host, for the message pane's stories and tests. Frames
 // are delivered synchronously so the pane renders its first frame with the replica in place.
@@ -145,4 +147,10 @@ export function createFixtureView(fixture: FixtureClient, activeId: SessionId): 
   view.reconcile(fixture.client.getHost());
   view.activate({ id: activeId, projectId: "__global__" });
   return view;
+}
+
+// A draft store whose every composer is live, for stories of a pane that owns its drafts.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+export function createFixtureDraftStore(app: App): AgentInputDraftStore {
+  return new AgentInputDraftStore(app, () => true);
 }

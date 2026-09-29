@@ -104,6 +104,24 @@ describe("remoteSessionRuntime", () => {
       runtime.dispose();
     });
 
+    it(`keeps the draft of a tab that is still there when the desktop restarts and drops the replica before the new snapshot arrives (${ISSUE})`, async () => {
+      const { runtime } = await openRuntime(rig);
+      const kept = runtime.client.getHost()!.tabs.find((tab) => tab.id === "s1")!;
+      runtime.drafts.update(kept.chatInputId, (draft) => ({ ...draft, input: "unsent" }));
+      const before = runtime.client.getHost();
+
+      rig.replaceHost({ newHostId: () => "restarted-host" });
+      await waitUntil(
+        () =>
+          runtime.client.getConnection() === "live" &&
+          runtime.client.getHost() !== null &&
+          runtime.client.getHost() !== before
+      );
+
+      expect(runtime.drafts.get(kept.chatInputId)?.input).toBe("unsent");
+      runtime.dispose();
+    });
+
     it(`records one remote_session_opened event no matter how often the link reconnects (${ISSUE})`, async () => {
       const events: RemoteEvent[] = [];
       const restore = setRemoteEventSink((event) => events.push(event));
