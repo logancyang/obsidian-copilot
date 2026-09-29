@@ -38,6 +38,7 @@ import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "./AgentSession";
 import { InterruptedTurnJournal } from "./InterruptedTurnJournal";
+import { OpenChatRecordStore, type OpenChatEntry } from "./OpenChatRecordStore";
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
@@ -256,7 +257,11 @@ export class AgentSessionManager {
   private readonly defaultApplyChains = new Map<string, Promise<void>>();
   private readonly fanoutOrchestrator: FanoutOrchestrator;
   private readonly settingsUnsub: () => void;
+  private readonly openChats: OpenChatRecordStore;
   private readonly turnJournal: InterruptedTurnJournal;
+  private restoreState: "pending" | "done";
+  private restorePromise: Promise<void> | null = null;
+  private readonly wakingSessionIds = new Set<string>();
 
   private getSessionState(internalId: string) {
     let entry = this.sessionState.get(internalId);
@@ -276,7 +281,9 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager is desktop only");
     }
     this.preloader = opts.modelPreloader;
+    this.openChats = new OpenChatRecordStore(app);
     this.turnJournal = new InterruptedTurnJournal(app);
+    this.restoreState = this.openChats.load().length > 0 ? "pending" : "done";
     this.drafts = new AgentInputDraftStore(app, (chatInputId) =>
       this.getLiveChatInputIds().includes(chatInputId)
     );
@@ -299,7 +306,7 @@ export class AgentSessionManager {
       | Record<string, { defaultModel?: ModelSelection | null } | undefined>
       | undefined;
     for (const session of this.sessions.values()) {
-      if (session.getStatus() === "closed") continue;
+      if (session.getStatus() === "closed" || !session.hasAgent()) continue;
       const backendId = session.backendId;
       const before = prevBackends?.[backendId]?.defaultModel ?? null;
       const after = nextBackends?.[backendId]?.defaultModel ?? null;
@@ -802,6 +809,7 @@ export class AgentSessionManager {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
+    await this.restorePromise;
     const active = this.getActiveSession();
     if (active && active.projectId === this.activeProjectId && active.getStatus() !== "closed") {
       return active;
@@ -1772,6 +1780,7 @@ export class AgentSessionManager {
     this.lastActiveByScope.set(session.projectId, id);
     session.clearNeedsAttention();
     this.notify();
+    void this.wakeRestoredSession(session);
   }
 
   async replaceSessionInPlace(
@@ -1910,6 +1919,7 @@ export class AgentSessionManager {
 
   private notify(): void {
     this.drafts.prune();
+    this.syncOpenChatRecord();
     for (const l of this.listeners) {
       try {
         l();
@@ -1921,6 +1931,170 @@ export class AgentSessionManager {
 
   async cancel(): Promise<void> {
     await this.getActiveSession()?.cancel();
+  }
+
+  isRestoringOpenChats(): boolean {
+    return this.restoreState === "pending";
+  }
+
+  restoreOpenChats(): Promise<void> {
+    if (this.restoreState !== "pending") return Promise.resolve();
+    this.restorePromise ??= this.runRestoreOpenChats().finally(() => {
+      this.restoreState = "done";
+      this.restorePromise = null;
+      this.notify();
+    });
+    return this.restorePromise;
+  }
+
+  private async runRestoreOpenChats(): Promise<void> {
+    const restoredKeys = new Set<string>();
+    let active: AgentSession | null = null;
+    let last: AgentSession | null = null;
+    for (const tab of this.openChats.load()) {
+      if (this.disposed) return;
+      const shell = await this.buildRestoredSession(tab);
+      if (!shell) continue;
+      restoredKeys.add(buildNativeChatId(tab.backendId, tab.sessionId));
+      if (tab.active) active = shell;
+      last = shell;
+    }
+    if (this.disposed) return;
+    this.turnJournal.retainOnly(restoredKeys);
+    const shown = active ?? last;
+    if (!shown) return;
+    this.activeSessionId = shown.internalId;
+    this.lastActiveByScope.set(GLOBAL_SCOPE, shown.internalId);
+    void this.wakeRestoredSession(shown);
+  }
+
+  private async buildRestoredSession(tab: OpenChatEntry): Promise<AgentSession | null> {
+    if (!this.opts.resolveDescriptor(tab.backendId)) return null;
+    const shell = AgentSession.restored({
+      restoredBackendSessionId: tab.sessionId,
+      internalId: uuidv4(),
+      backendId: tab.backendId,
+      getDescriptor: () => this.opts.resolveDescriptor(tab.backendId),
+      getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
+    });
+    const file = tab.sourcePath ? this.app.vault.getAbstractFileByPath(tab.sourcePath) : null;
+    if (file instanceof TFile && this.opts.persistenceManager) {
+      try {
+        const saved = await this.opts.persistenceManager.loadFile(file);
+        if (saved.sessionId === tab.sessionId) {
+          shell.loadDisplayMessages(saved.messages);
+          shell.seedSessionUsage(saved.usage);
+          if (saved.label) shell.setLabel(saved.label);
+          this.getSessionState(shell.internalId).source = file;
+        }
+      } catch (e) {
+        logWarn(`[AgentMode] could not reload the saved chat for ${tab.sessionId}`, e);
+      }
+    }
+    if (!shell.getLabel()) {
+      const entry = await this.opts.sessionIndex?.getEntry(tab.backendId, tab.sessionId);
+      if (entry?.title) {
+        shell.restoreLabel(entry.title, entry.titleSource === "user" ? "user" : "agent");
+      }
+    }
+    const interrupted = this.turnJournal.read(buildNativeChatId(tab.backendId, tab.sessionId));
+    if (interrupted) shell.setInterruptedTurn(interrupted);
+    this.sessions.set(shell.internalId, shell);
+    this.chatUIStates.set(shell.internalId, new AgentChatUIState(shell));
+    return shell;
+  }
+
+  private async wakeRestoredSession(shell: AgentSession): Promise<void> {
+    const shellId = shell.internalId;
+    if (this.disposed || !shell.isDormant() || this.wakingSessionIds.has(shellId)) return;
+    this.wakingSessionIds.add(shellId);
+    try {
+      const resumed = await this.resumeRestoredSession(shell);
+      if (!resumed) {
+        const name = this.resolveDescriptor(shell.backendId).displayName;
+        shell.markReadOnly(
+          `This ${name} session could not be resumed on this device, so the chat is read-only. Start a new chat to continue.`
+        );
+        this.notify();
+        return;
+      }
+      if (this.disposed || this.sessions.get(shellId) !== shell) {
+        await this.closeSession(resumed.internalId);
+        return;
+      }
+      await this.swapRestoredSession(shell, resumed);
+    } finally {
+      this.wakingSessionIds.delete(shellId);
+    }
+  }
+
+  private async resumeRestoredSession(shell: AgentSession): Promise<AgentSession | null> {
+    const sessionId = shell.getBackendSessionId();
+    if (!sessionId) return null;
+    try {
+      const proc = await this.ensureBackend(
+        shell.backendId,
+        this.resolveDescriptor(shell.backendId)
+      );
+      // Claude accepts a resume for a session its store no longer holds and only fails at the
+      // first prompt, so the store is checked up front.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/607
+      const stored = await proc
+        .sessionExistsLocally?.({ sessionId, cwd: this.resolveSessionCwd(GLOBAL_SCOPE) })
+        .catch(() => true);
+      if (stored === false) return null;
+      return await this.resumeSessionFromHistory(
+        shell.backendId,
+        sessionId,
+        GLOBAL_SCOPE,
+        shell.chatInputId
+      );
+    } catch (e) {
+      logWarn(`[AgentMode] could not resume restored ${shell.backendId} chat ${sessionId}`, e);
+      return null;
+    }
+  }
+
+  private async swapRestoredSession(shell: AgentSession, resumed: AgentSession): Promise<void> {
+    const shellId = shell.internalId;
+    const sessionId = resumed.getBackendSessionId()!;
+    const savedMessages = shell.store.getDisplayMessages();
+    if (savedMessages.length > 0) resumed.loadDisplayMessages(savedMessages);
+    else await this.hydrateResumedTranscript(resumed, shell.backendId, sessionId);
+    resumed.seedSessionUsage(shell.getSessionUsage() ?? undefined);
+    const label = shell.getLabel();
+    if (label) resumed.restoreLabel(label, shell.getLabelSource() ?? "agent");
+    const source = this.sessionState.get(shellId)?.source;
+    if (source) this.getSessionState(resumed.internalId).source = source;
+
+    const position = Array.from(this.sessions.keys()).indexOf(shellId);
+    this.moveMapEntry(this.sessions, resumed.internalId, position);
+    this.moveMapEntry(this.chatUIStates, resumed.internalId, position);
+    if (this.activeSessionId === shellId) this.activeSessionId = resumed.internalId;
+    if (this.lastActiveByScope.get(GLOBAL_SCOPE) === shellId) {
+      this.lastActiveByScope.set(GLOBAL_SCOPE, resumed.internalId);
+    }
+    if (this.detachedFromTabIds.has(shellId)) this.detachedFromTabIds.add(resumed.internalId);
+    await this.closeSession(shellId);
+    void this.opts.sessionIndex?.touch(shell.backendId, sessionId);
+  }
+
+  private syncOpenChatRecord(): void {
+    if (this.disposed || this.restoreState === "pending") return;
+    const entries: OpenChatEntry[] = [];
+    for (const [internalId, session] of this.sessions) {
+      if (session.projectId !== GLOBAL_SCOPE || this.detachedFromTabIds.has(internalId)) continue;
+      const sessionId = session.getBackendSessionId();
+      if (!sessionId || session.getStatus() === "closed") continue;
+      if (session.hasAgent() && !session.hasUserVisibleMessages()) continue;
+      entries.push({
+        backendId: session.backendId,
+        sessionId,
+        sourcePath: this.sessionState.get(internalId)?.source?.path,
+        active: internalId === this.activeSessionId,
+      });
+    }
+    this.openChats.save(entries);
   }
 
   async shutdown(): Promise<void> {
@@ -2709,7 +2883,9 @@ export class AgentSessionManager {
     logInfo(`[AgentMode] restarting ${backendId} backend: ${reason}`);
     const retainedChatInputIds: string[] = [];
     try {
-      const affected = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
+      const affected = Array.from(this.sessions.values()).filter(
+        (s) => s.backendId === backendId && s.hasAgent()
+      );
       const activeSessionId = this.activeSessionId;
       const activeProjectId = this.activeProjectId;
       // Every affected composer must stay owned across the gap, including tabs

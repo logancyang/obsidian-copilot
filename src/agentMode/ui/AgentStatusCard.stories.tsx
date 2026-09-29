@@ -119,3 +119,11 @@ export const ConfigChangedReloading: StoryObj<AgentStatusCardProps> = {
     action: { label: "Reloading…", onClick: () => undefined, disabled: true },
   },
 };
+
+export const ReadOnlyChat: StoryObj<AgentStatusCardProps> = {
+  args: {
+    tone: "warning",
+    message:
+      "This Claude Code session could not be resumed on this device, so the chat is read-only. Start a new chat to continue.",
+  },
+};

@@ -19,6 +19,7 @@ export interface AgentChatRuntimeState {
   pendingAskUserQuestions: AskUserQuestionPrompt[];
   hasInterruptedTurn: boolean;
   canResumeInterruptedTurn: boolean;
+  readOnlyReason: string | null;
 }
 
 interface BackendRuntimeSnapshot {
@@ -40,6 +41,7 @@ function readBackendRuntimeSnapshot(backend: AgentChatBackend): BackendRuntimeSn
       pendingAskUserQuestions: backend.getPendingAskUserQuestions(),
       hasInterruptedTurn: backend.getInterruptedTurn() !== null,
       canResumeInterruptedTurn: backend.canResumeInterruptedTurn(),
+      readOnlyReason: backend.getReadOnlyReason(),
     },
   };
 }

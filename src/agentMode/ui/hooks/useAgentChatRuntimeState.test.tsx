@@ -20,6 +20,7 @@ interface FakeBackendState {
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
   interruptedTurn: { text: string } | null;
+  readOnlyReason: string | null;
 }
 
 function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
@@ -33,6 +34,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     pendingToolPermissions: initial.pendingToolPermissions ?? [],
     pendingAskUserQuestions: initial.pendingAskUserQuestions ?? [],
     interruptedTurn: initial.interruptedTurn ?? null,
+    readOnlyReason: initial.readOnlyReason ?? null,
   };
   const listeners = new Set<() => void>();
 
@@ -51,6 +53,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     getPendingAskUserQuestions: () => state.pendingAskUserQuestions,
     getInterruptedTurn: () => state.interruptedTurn,
     canResumeInterruptedTurn: () => state.interruptedTurn !== null,
+    getReadOnlyReason: () => state.readOnlyReason,
   } as unknown as AgentChatBackend;
 
   return {
@@ -76,18 +79,21 @@ describe("useAgentChatRuntimeState", () => {
     expect(result.current.pendingToolPermissions).toEqual([]);
   });
 
-  it("exposes whether the chat has an interrupted turn", () => {
+  it("exposes whether the chat has an interrupted turn and why it is read-only", () => {
     const fake = makeFakeBackend({ interruptedTurn: { text: "cut off" } });
     const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
     expect(result.current.hasInterruptedTurn).toBe(true);
     expect(result.current.canResumeInterruptedTurn).toBe(true);
+    expect(result.current.readOnlyReason).toBeNull();
 
     act(() => {
       fake.state.interruptedTurn = null;
+      fake.state.readOnlyReason = "Not available on this device";
       fake.emit();
     });
 
     expect(result.current.hasInterruptedTurn).toBe(false);
+    expect(result.current.readOnlyReason).toBe("Not available on this device");
   });
 
   it("shows an externally started plan implementation as running until the turn finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", () => {

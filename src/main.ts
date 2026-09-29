@@ -401,6 +401,9 @@ export default class CopilotPlugin extends Plugin {
     this.projectRegister = new ProjectRegister(this.app);
 
     this.app.workspace.onLayoutReady(() => {
+      void this.agentSessionManager?.restoreOpenChats().catch((error) => {
+        logError("Failed to restore open agent chats", error);
+      });
       void this.runStartupMigrations(isLegacyUpgrade).catch((error) => {
         logError("Failed to finish startup migrations", error);
         new Notice("Copilot could not finish startup migration. Reload Obsidian to retry.");

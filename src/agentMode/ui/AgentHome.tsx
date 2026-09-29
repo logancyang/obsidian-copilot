@@ -1,5 +1,6 @@
 import { useChatRelevantNotesContext } from "@/agentMode/ui/hooks/useChatRelevantNotesContext";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
+import { AgentStatusCard } from "@/agentMode/ui/AgentStatusCard";
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import AgentContextMeter from "@/agentMode/ui/AgentContextMeter";
@@ -105,6 +106,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     pendingAskUserQuestions,
     hasInterruptedTurn,
     canResumeInterruptedTurn,
+    readOnlyReason,
   } = useAgentChatRuntimeState(backend);
   const isLoading = draft.loading || isTurnInFlight;
 
@@ -547,25 +549,32 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     ) : undefined;
 
   const composerNode = (
-    <AgentChatInput
-      backend={backend}
-      plugin={plugin}
-      chatInputId={chatInputId}
-      draft={draft}
-      app={app}
-      mainAgentId={mainAgentId}
-      updateUserMessageHistory={updateUserMessageHistory}
-      isStarting={isStarting}
-      isLoading={isLoading}
-      hasPendingPlanPermission={hasPendingPlanPermission}
-      modelPickerOverride={modelPickerOverride ?? undefined}
-      modePickerOverride={modePickerOverride ?? undefined}
-      onCycleMode={handleCycleMode}
-      activeProjectId={activeProjectId}
-      contextLoadBlocking={contextLoadBlocking}
-      disabled={isOrphanedProject}
-      contextStatusIndicator={contextStatusIndicator}
-    />
+    <>
+      {readOnlyReason ? (
+        <div className="tw-px-2 tw-pb-2">
+          <AgentStatusCard tone="warning" message={readOnlyReason} />
+        </div>
+      ) : null}
+      <AgentChatInput
+        backend={backend}
+        plugin={plugin}
+        chatInputId={chatInputId}
+        draft={draft}
+        app={app}
+        mainAgentId={mainAgentId}
+        updateUserMessageHistory={updateUserMessageHistory}
+        isStarting={isStarting}
+        isLoading={isLoading}
+        hasPendingPlanPermission={hasPendingPlanPermission}
+        modelPickerOverride={modelPickerOverride ?? undefined}
+        modePickerOverride={modePickerOverride ?? undefined}
+        onCycleMode={handleCycleMode}
+        activeProjectId={activeProjectId}
+        contextLoadBlocking={contextLoadBlocking}
+        disabled={isOrphanedProject || readOnlyReason !== null}
+        contextStatusIndicator={contextStatusIndicator}
+      />
+    </>
   );
 
   const showProjectHero = isProjectLanding && !isOrphanedProject;

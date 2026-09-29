@@ -159,6 +159,19 @@ describe("InterruptedTurnJournal", () => {
     });
   });
 
+  describe("retainOnly()", () => {
+    it("forgets prompts of chats that are no longer open", () => {
+      const journal = new InterruptedTurnJournal(makeApp().app);
+      journal.record(KEY, { text: "first" });
+      journal.record(OTHER_KEY, { text: "second" });
+
+      journal.retainOnly(new Set([KEY]));
+
+      expect(journal.read(KEY)?.text).toBe("first");
+      expect(journal.read(OTHER_KEY)).toBeNull();
+    });
+  });
+
   describe("seal()", () => {
     it(`keeps in-flight prompts when shutdown cancels their turns (${ISSUE})`, () => {
       const journal = new InterruptedTurnJournal(makeApp().app);
@@ -167,6 +180,7 @@ describe("InterruptedTurnJournal", () => {
       journal.seal();
       journal.clear(KEY);
       journal.record(OTHER_KEY, { text: "late" });
+      journal.retainOnly(new Set());
 
       expect(journal.read(KEY)?.text).toBe("in flight");
       expect(journal.read(OTHER_KEY)).toBeNull();

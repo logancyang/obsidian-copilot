@@ -163,6 +163,7 @@ function makeMockSession(overrides: {
   projectId?: string;
   ready?: Promise<void>;
   label?: string;
+  dormant?: boolean;
 }): AgentSession {
   const sessionId = overrides.backendSessionId ?? `backend-${nextBackendSessionId++}`;
   let label: string | null = overrides.label ?? null;
@@ -171,6 +172,9 @@ function makeMockSession(overrides: {
   let needsAttention = false;
   let displayMessages: { message: string }[] = [];
   let hasUserVisibleMessages = false;
+  let dormant = overrides.dormant ?? false;
+  let readOnlyReason: string | null = null;
+  let interruptedTurn: unknown = null;
   const listeners = new Set<{
     onMessagesChanged?: () => void;
     onStatusChanged?: (s: typeof status) => void;
@@ -183,6 +187,17 @@ function makeMockSession(overrides: {
     projectId: overrides.projectId ?? GLOBAL_SCOPE,
     ready: overrides.ready ?? Promise.resolve(),
     getBackendSessionId: () => sessionId,
+    hasAgent: () => !dormant && readOnlyReason === null,
+    isDormant: () => dormant,
+    getReadOnlyReason: () => readOnlyReason,
+    markReadOnly: (reason: string) => {
+      dormant = false;
+      readOnlyReason = reason;
+    },
+    getInterruptedTurn: () => interruptedTurn,
+    setInterruptedTurn: (prompt: unknown) => {
+      interruptedTurn = prompt;
+    },
     getStatus: () => status,
     store: { getDisplayMessages: () => displayMessages },
     cancel: mockSessionCancel,
@@ -4818,5 +4833,343 @@ describe("AgentSessionManager context-source dirty tracking", () => {
     expect(m.getProjectContextUpdates(session.internalId, PID)?.block).toContain(
       "<project_context_updates>"
     );
+  });
+});
+
+describe("AgentSessionManager open-chat restore", () => {
+  const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/607";
+  const RECORD_KEY = "copilot:agent-open-chats:v1";
+  const JOURNAL_KEY = "copilot:agent-turn-journal:v1";
+
+  interface SavedChat {
+    sessionId: string;
+    messages: { id: string; sender: string; message: string; isVisible: boolean }[];
+    label?: string;
+  }
+
+  function savedMessages(text: string) {
+    return [
+      { id: `${text}-user`, sender: "user", message: text, isVisible: true },
+      { id: `${text}-ai`, sender: "AI", message: `re: ${text}`, isVisible: true },
+    ];
+  }
+
+  function buildRestoreHarness(opts: {
+    tabs?: { sessionId: string; sourcePath?: string; active?: boolean; backendId?: string }[];
+    saved?: Record<string, SavedChat>;
+    journal?: Record<string, unknown>;
+    loadSession?: jest.Mock;
+    sessionExistsLocally?: jest.Mock;
+  }) {
+    const storage = new Map<string, unknown>();
+    if (opts.tabs) {
+      storage.set(
+        RECORD_KEY,
+        JSON.stringify(
+          opts.tabs.map((tab) => ({
+            backendId: tab.backendId ?? "opencode",
+            sessionId: tab.sessionId,
+            sourcePath: tab.sourcePath,
+            active: tab.active ?? false,
+          }))
+        )
+      );
+    }
+    if (opts.journal) storage.set(JOURNAL_KEY, JSON.stringify(opts.journal));
+    const files = new Map(
+      Object.keys(opts.saved ?? {}).map((path) => [path, mockTFile({ path })] as const)
+    );
+    const app = buildApp() as unknown as {
+      vault: { getAbstractFileByPath: jest.Mock };
+      loadLocalStorage: jest.Mock;
+      saveLocalStorage: jest.Mock;
+    };
+    app.vault.getAbstractFileByPath = jest.fn((path: string) => files.get(path) ?? null);
+    app.loadLocalStorage = jest.fn((key: string) => storage.get(key) ?? null);
+    app.saveLocalStorage = jest.fn((key: string, value: unknown) => {
+      if (value === null) storage.delete(key);
+      else storage.set(key, value);
+    });
+    const loadSession =
+      opts.loadSession ??
+      jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+        sessionId,
+        state: { model: null, mode: null },
+      }));
+    const backend = {
+      ...makeMockBackendProcess(),
+      loadSession,
+      resumeSession: jest.fn(async () => {
+        throw new MethodUnsupportedError("session/resume");
+      }),
+      sessionExistsLocally: opts.sessionExistsLocally,
+    };
+    const descriptor = {
+      ...buildDescriptor(),
+      createBackendProcess: jest.fn(() => backend),
+    } as unknown as BackendDescriptor;
+    const persistence = {
+      loadFile: jest.fn(async (file: { path: string }) => {
+        const saved = opts.saved![file.path];
+        return {
+          messages: saved.messages,
+          backendId: "opencode",
+          sessionId: saved.sessionId,
+          projectId: GLOBAL_SCOPE,
+          label: saved.label,
+          usage: undefined,
+        };
+      }),
+    };
+    const manager = new AgentSessionManager(
+      app as unknown as App,
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        persistenceManager: persistence as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["persistenceManager"],
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: {
+          getCachedModelCatalog: jest.fn(() => null),
+          getEffortCatalog: jest.fn(() => null),
+          preload: jest.fn(async () => undefined),
+          refresh: jest.fn(() => null),
+          subscribe: jest.fn(() => () => {}),
+          shutdown: jest.fn(),
+          clearCached: jest.fn(),
+          takeWarm: jest.fn(() => null),
+          getWarmProcs: jest.fn(() => []),
+        } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["modelPreloader"],
+      }
+    );
+    const savedRecord = () => JSON.parse((storage.get(RECORD_KEY) as string) ?? "[]");
+    return { manager, storage, loadSession, backend, descriptor, savedRecord };
+  }
+
+  const TWO_TABS = {
+    tabs: [
+      { sessionId: "chat-a", sourcePath: "chats/a.md" },
+      { sessionId: "chat-b", sourcePath: "chats/b.md", active: true },
+    ],
+    saved: {
+      "chats/a.md": { sessionId: "chat-a", messages: savedMessages("alpha"), label: "Alpha" },
+      "chats/b.md": { sessionId: "chat-b", messages: savedMessages("beta"), label: "Beta" },
+    },
+  };
+
+  describe("restoreOpenChats()", () => {
+    it("reopens the chats that were open, in their original tab order, with their saved transcripts and titles", async () => {
+      const { manager } = buildRestoreHarness(TWO_TABS);
+
+      await manager.restoreOpenChats();
+
+      const tabs = manager.getSessionsForScope(GLOBAL_SCOPE);
+      expect(tabs.map((tab) => tab.getLabel())).toEqual(["Alpha", "Beta"]);
+      expect(tabs.map((tab) => tab.getBackendSessionId())).toEqual(["chat-a", "chat-b"]);
+      expect(tabs[0].store.getDisplayMessages().map((m) => m.message)).toEqual([
+        "alpha",
+        "re: alpha",
+      ]);
+    });
+
+    it("selects the tab that was active and resumes only that tab's agent session", async () => {
+      const { manager, loadSession } = buildRestoreHarness(TWO_TABS);
+
+      await manager.restoreOpenChats();
+      await waitFor(() => expect(manager.getActiveSession()?.isDormant()).toBe(false));
+
+      expect(manager.getActiveSession()?.getBackendSessionId()).toBe("chat-b");
+      expect(loadSession).toHaveBeenCalledTimes(1);
+      expect(loadSession).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "chat-b" }));
+      const other = manager.getSessionsForScope(GLOBAL_SCOPE)[0];
+      expect(other.isDormant()).toBe(true);
+    });
+
+    it("resumes another tab's agent session the first time that tab is shown, keeping its position and transcript", async () => {
+      const { manager, loadSession } = buildRestoreHarness(TWO_TABS);
+      await manager.restoreOpenChats();
+      await waitFor(() => expect(manager.getActiveSession()?.isDormant()).toBe(false));
+      const dormant = manager.getSessionsForScope(GLOBAL_SCOPE)[0];
+
+      manager.setActiveSession(dormant.internalId);
+      await waitFor(() => expect(manager.getActiveSession()?.isDormant()).toBe(false));
+
+      expect(loadSession).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "chat-a" }));
+      const tabs = manager.getSessionsForScope(GLOBAL_SCOPE);
+      expect(tabs.map((tab) => tab.getBackendSessionId())).toEqual(["chat-a", "chat-b"]);
+      expect(manager.getActiveSession()).toBe(tabs[0]);
+      expect(tabs[0].hasAgent()).toBe(true);
+      expect(tabs[0].getLabel()).toBe("Alpha");
+      expect(tabs[0].store.getDisplayMessages().map((m) => m.message)).toEqual([
+        "alpha",
+        "re: alpha",
+      ]);
+    });
+
+    it("does not create a blank chat while the open chats are still being restored", async () => {
+      const { manager } = buildRestoreHarness(TWO_TABS);
+      expect(manager.isRestoringOpenChats()).toBe(true);
+
+      const restoring = manager.restoreOpenChats();
+      const active = manager.getOrCreateActiveSession();
+      await restoring;
+
+      expect((await active).getBackendSessionId()).toBe("chat-b");
+      expect(manager.isRestoringOpenChats()).toBe(false);
+      expect(manager.getSessions()).toHaveLength(2);
+    });
+
+    it("has nothing to restore when no chat was open", async () => {
+      const { manager } = buildRestoreHarness({});
+
+      expect(manager.isRestoringOpenChats()).toBe(false);
+      await manager.restoreOpenChats();
+      expect(manager.getSessions()).toHaveLength(0);
+    });
+
+    it("reopens a chat whose note is gone with an empty transcript and its native session id", async () => {
+      const { manager } = buildRestoreHarness({
+        tabs: [{ sessionId: "chat-a", sourcePath: "chats/missing.md", active: true }],
+      });
+
+      await manager.restoreOpenChats();
+
+      const [tab] = manager.getSessionsForScope(GLOBAL_SCOPE);
+      expect(tab.getBackendSessionId()).toBe("chat-a");
+      expect(tab.store.getDisplayMessages()).toEqual([]);
+    });
+
+    it(`marks a chat interrupted when its turn was still recorded at shutdown, keeping the recorded prompt (${ISSUE})`, async () => {
+      const key = buildNativeChatId("opencode", "chat-b");
+      const { manager } = buildRestoreHarness({
+        ...TWO_TABS,
+        journal: { [key]: { text: "Refactor the parser" } },
+      });
+
+      await manager.restoreOpenChats();
+      await waitFor(() => expect(manager.getActiveSession()?.isDormant()).toBe(false));
+
+      expect(manager.getActiveSession()?.getInterruptedTurn()).toMatchObject({
+        text: "Refactor the parser",
+      });
+      expect(manager.getSessionsForScope(GLOBAL_SCOPE)[0].getInterruptedTurn()).toBeNull();
+    });
+
+    it(`carries the interrupted mark onto a background tab's session when it is first shown (${ISSUE})`, async () => {
+      const key = buildNativeChatId("opencode", "chat-a");
+      const { manager } = buildRestoreHarness({
+        ...TWO_TABS,
+        journal: { [key]: { text: "Summarize the notes" } },
+      });
+      await manager.restoreOpenChats();
+      await waitFor(() => expect(manager.getActiveSession()?.isDormant()).toBe(false));
+
+      manager.setActiveSession(manager.getSessionsForScope(GLOBAL_SCOPE)[0].internalId);
+      await waitFor(() => expect(manager.getActiveSession()?.isDormant()).toBe(false));
+
+      expect(manager.getActiveSession()?.getInterruptedTurn()).toMatchObject({
+        text: "Summarize the notes",
+      });
+    });
+
+    it(`forgets recorded prompts of chats that are not among the restored tabs (${ISSUE})`, async () => {
+      const { manager, storage } = buildRestoreHarness({
+        ...TWO_TABS,
+        journal: {
+          [buildNativeChatId("opencode", "chat-b")]: { text: "kept" },
+          [buildNativeChatId("opencode", "closed-chat")]: { text: "stale" },
+        },
+      });
+
+      await manager.restoreOpenChats();
+
+      expect(Object.keys(JSON.parse(storage.get(JOURNAL_KEY) as string))).toEqual([
+        buildNativeChatId("opencode", "chat-b"),
+      ]);
+    });
+
+    it(`reopens read-only with an explanation when the agent cannot resume the session (${ISSUE})`, async () => {
+      const loadSession = jest.fn(async () => {
+        throw new Error("Session not found");
+      });
+      const { manager } = buildRestoreHarness({ ...TWO_TABS, loadSession });
+
+      await manager.restoreOpenChats();
+      await waitFor(() => expect(manager.getActiveSession()?.getReadOnlyReason()).not.toBeNull());
+
+      const active = manager.getActiveSession()!;
+      expect(active.getReadOnlyReason()).toContain("could not be resumed on this device");
+      expect(active.getBackendSessionId()).toBe("chat-b");
+      expect(active.store.getDisplayMessages()).toHaveLength(2);
+      expect(() => active.sendPrompt("hello")).toThrow("read-only");
+    });
+
+    it(`reopens read-only without resuming when the agent's own store no longer holds the session (${ISSUE})`, async () => {
+      const sessionExistsLocally = jest.fn(async () => false);
+      const { manager, loadSession } = buildRestoreHarness({ ...TWO_TABS, sessionExistsLocally });
+
+      await manager.restoreOpenChats();
+      await waitFor(() => expect(manager.getActiveSession()?.getReadOnlyReason()).not.toBeNull());
+
+      expect(loadSession).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("open-chat record", () => {
+    it("records each open chat and marks the active one, whenever the tabs change", async () => {
+      const { manager, savedRecord } = buildRestoreHarness({});
+      const first = await manager.createSession();
+      const second = await manager.createSession();
+      for (const session of [first, second]) {
+        getSessionTestHandle(session).setHasUserVisibleMessages(true);
+      }
+
+      manager.setActiveSession(first.internalId);
+
+      expect(savedRecord()).toEqual([
+        expect.objectContaining({ sessionId: first.getBackendSessionId(), active: true }),
+        expect.objectContaining({ sessionId: second.getBackendSessionId(), active: false }),
+      ]);
+    });
+
+    it("leaves out a new tab that has no conversation yet", async () => {
+      const { manager, savedRecord } = buildRestoreHarness({});
+      const blank = await manager.createSession();
+
+      manager.setActiveSession(blank.internalId);
+
+      expect(savedRecord()).toEqual([]);
+    });
+
+    it("drops a tab from the record once the user closes it", async () => {
+      const { manager, savedRecord } = buildRestoreHarness({});
+      const kept = await manager.createSession();
+      const closed = await manager.createSession();
+      for (const session of [kept, closed]) {
+        getSessionTestHandle(session).setHasUserVisibleMessages(true);
+      }
+      manager.setActiveSession(kept.internalId);
+
+      manager.detachSessionFromTab(closed.internalId);
+
+      expect(savedRecord().map((tab: { sessionId: string }) => tab.sessionId)).toEqual([
+        kept.getBackendSessionId(),
+      ]);
+    });
+
+    it(`keeps the record intact when shutdown tears the sessions down (${ISSUE})`, async () => {
+      const { manager, savedRecord } = buildRestoreHarness({
+        ...TWO_TABS,
+      });
+      await manager.restoreOpenChats();
+      await waitFor(() => expect(manager.getActiveSession()?.isDormant()).toBe(false));
+      const before = savedRecord();
+
+      await manager.shutdown();
+
+      expect(savedRecord()).toEqual(before);
+      expect(before).toHaveLength(2);
+    });
   });
 });
