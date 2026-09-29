@@ -58,7 +58,7 @@ const noDirectNodeImportsRule = {
   },
 };
 
-const GITHUB_ISSUE_URL = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+/;
+const GITHUB_ISSUE_URL = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+(?![\w-])/;
 const TOOL_DIRECTIVE =
   /^(eslint-disable|eslint-enable|@ts-|prettier-ignore|(istanbul|c8|v8) ignore|webpack[A-Z]|@vite-ignore|#(end)?region\b|[@#]__PURE__|[@#]__NO_SIDE_EFFECTS__|@jsx|@license|@preserve|@(jest|vitest)-environment|@type\s|@satisfies|@typedef|<reference|<amd-)/;
 const BLOCK_ONLY_DIRECTIVE = /^(eslint-env|eslint|globals?|exported)\s/;
@@ -83,16 +83,21 @@ const issueLinkedCommentsRule = {
     },
   },
   create(context) {
+    const { sourceCode } = context;
+    const isStandaloneLine = (comment) =>
+      comment.type === "Line" &&
+      sourceCode.lines[comment.loc.start.line - 1].slice(0, comment.loc.start.column).trim() === "";
     return {
       Program() {
         const groups = [];
-        for (const comment of context.sourceCode.getAllComments()) {
+        for (const comment of sourceCode.getAllComments()) {
           if (comment.type === "Shebang") continue;
           const group = groups.at(-1);
           const previous = group?.at(-1);
           if (
-            previous?.type === "Line" &&
-            comment.type === "Line" &&
+            previous &&
+            isStandaloneLine(previous) &&
+            isStandaloneLine(comment) &&
             comment.loc.start.line === previous.loc.end.line + 1
           ) {
             group.push(comment);
