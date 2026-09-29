@@ -24,14 +24,14 @@ export const DesktopPicker: React.FC<DesktopPickerProps> = ({ desktops, onSelect
     );
   }
   return (
-    <div className="tw-flex tw-size-full tw-flex-col tw-gap-3 tw-p-4">
+    <div className="tw-flex tw-size-full tw-min-h-0 tw-flex-col tw-gap-3 tw-p-4">
       <div className="tw-flex tw-flex-col tw-gap-1">
         <h2 className="tw-m-0 tw-text-base tw-font-medium tw-text-normal">Choose a desktop</h2>
         <p className="tw-m-0 tw-text-sm tw-text-muted">
           This vault is paired with more than one desktop.
         </p>
       </div>
-      <ul className="tw-m-0 tw-flex tw-list-none tw-flex-col tw-gap-2 tw-p-0">
+      <ul className="tw-m-0 tw-flex tw-min-h-0 tw-flex-1 tw-list-none tw-flex-col tw-gap-2 tw-overflow-y-auto tw-p-0">
         {desktops.map((desktop) => (
           <li key={desktop.id}>
             <button

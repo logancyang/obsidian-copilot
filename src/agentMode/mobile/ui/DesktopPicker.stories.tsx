@@ -24,3 +24,16 @@ export const SeveralDesktops: StoryObj<DesktopPickerProps> = {
 };
 
 export const NoDesktops: StoryObj<DesktopPickerProps> = { args: { desktops: [] } };
+
+// More desktops than a phone's height holds: the list scrolls instead of clipping the last ones.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+export const ManyDesktops: StoryObj<DesktopPickerProps> = {
+  args: {
+    desktops: Array.from({ length: 14 }, (_, index) => ({
+      id: `desktop-${index}`,
+      desktopName: `Desktop ${index + 1}`,
+      vaultName: "Work notes",
+      address: `100.64.0.${index + 10}:52341`,
+    })),
+  },
+};
