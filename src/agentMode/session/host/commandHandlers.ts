@@ -44,6 +44,7 @@ export interface CommandContext {
   manager: SessionHostManager;
   resolveNote(path: string): TFile | null;
   isKnownBackend(backendId: string): boolean;
+  isKnownProject(projectId: string): boolean;
 }
 
 type Failure = Extract<CommandResult, { ok: false }>;
@@ -194,6 +195,9 @@ function resolvePlanCommand(
   if (command.feedbackText !== undefined && command.decision !== "feedback") {
     return failure("invalid", "Feedback text only applies to a feedback decision");
   }
+  if (command.feedbackText !== undefined && typeof command.feedbackText !== "string") {
+    return failure("invalid", "Feedback text must be text");
+  }
   const plan = findDecidablePlan(session, command.proposalId);
   if (!plan) return failure("stale", "That plan is no longer awaiting a decision");
   // The next-turn feedback path waits for the running turn to settle, which can outlast the
@@ -237,6 +241,12 @@ async function createSessionCommand(
   if (invalid) return invalid;
   if (command.projectId !== undefined && typeof command.projectId !== "string") {
     return failure("invalid", "A project scope must be a string");
+  }
+  // A phone names the project scope it is showing by id; an id the desktop does not know would
+  // start a session in a scope nothing else can display.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+  if (command.projectId !== undefined && !ctx.isKnownProject(command.projectId)) {
+    return failure("invalid", `Unknown project ${command.projectId}`);
   }
   const session = await ctx.manager.createSession(
     command.backendId,
@@ -342,8 +352,11 @@ async function applyModeCommand(
 ): Promise<CommandResult<void>> {
   const session = findSession(ctx, command.sessionId);
   if (isFailure(session)) return session;
-  const mode = session.getState()?.mode;
-  if (!mode?.apply[command.mode]) {
+  // A phone names the mode as text, so an inherited property such as `constructor` must not pass
+  // for one the agent reported.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+  const apply = session.getState()?.mode?.apply;
+  if (!apply || !Object.hasOwn(apply, command.mode) || !apply[command.mode]) {
     return failure("invalid", `The session has no ${String(command.mode)} mode`);
   }
   await ctx.manager.applyModeTo(session.internalId, command.mode);

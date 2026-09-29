@@ -1,4 +1,5 @@
 export interface OpLogOptions<Op> {
+  epoch: string;
   maxOps: number;
   maxBytes: number;
   sizeOf: (op: Op) => number;
@@ -13,6 +14,10 @@ export class OpLog<Op> {
   private evicted = 0;
 
   constructor(private readonly options: OpLogOptions<Op>) {}
+
+  getEpoch(): string {
+    return this.options.epoch;
+  }
 
   getHead(): number {
     return this.evicted + this.entries.length - this.start;

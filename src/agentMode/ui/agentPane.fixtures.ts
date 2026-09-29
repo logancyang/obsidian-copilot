@@ -64,14 +64,14 @@ export function createFixtureClient(options: FixtureClientOptions): FixtureClien
       for (const op of ops) session = applySessionOp(session, op);
       sessionSeq += ops.length;
       if (subscribed.has(sessionScope(sessionId))) {
-        deliver({ type: "ops", scope: sessionScope(sessionId), from, ops });
+        deliver({ type: "ops", epoch: "e1", scope: sessionScope(sessionId), from, ops });
       }
     },
     emitHost(...ops) {
       const from = hostSeq + 1;
       for (const op of ops) host = applyHostOp(host, op);
       hostSeq += ops.length;
-      if (subscribed.has("host")) deliver({ type: "ops", scope: "host", from, ops });
+      if (subscribed.has("host")) deliver({ type: "ops", epoch: "e1", scope: "host", from, ops });
     },
   };
 
@@ -84,8 +84,8 @@ export function createFixtureClient(options: FixtureClientOptions): FixtureClien
         subscribed.add(frame.scope);
         deliver(
           frame.scope === "host"
-            ? { type: "snapshot", scope: "host", seq: hostSeq, state: host }
-            : { type: "snapshot", scope: frame.scope, seq: sessionSeq, state: session }
+            ? { type: "snapshot", epoch: "e1", scope: "host", seq: hostSeq, state: host }
+            : { type: "snapshot", epoch: "e1", scope: frame.scope, seq: sessionSeq, state: session }
         );
         return;
       case "unsubscribe":

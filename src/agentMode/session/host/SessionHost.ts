@@ -43,6 +43,7 @@ export interface SessionHostOptions extends Omit<CommandContext, "manager"> {
   catalog: CatalogSource;
   appVersion: string;
   newHostId?: () => string;
+  newLogEpoch?: () => string;
   opLogLimits?: { maxOps: number; maxBytes: number };
 }
 
@@ -96,7 +97,11 @@ export class SessionHost {
       maxOps: OP_LOG_MAX_OPS,
       maxBytes: OP_LOG_MAX_BYTES,
     };
-    return new OpLog<Op>({ ...limits, sizeOf: estimateOpBytes });
+    return new OpLog<Op>({
+      ...limits,
+      epoch: (this.options.newLogEpoch ?? uuidv4)(),
+      sizeOf: estimateOpBytes,
+    });
   }
 
   getHostId(): string {
@@ -271,7 +276,13 @@ export class SessionHost {
       return;
     }
     connection.sent.set(scope, head);
-    connection.send({ type: "ops", scope, from: sent + 1, ops: log.since(sent) });
+    connection.send({
+      type: "ops",
+      scope,
+      epoch: log.getEpoch(),
+      from: sent + 1,
+      ops: log.since(sent),
+    });
   }
 
   private announceScope(scope: Scope): void {
@@ -283,8 +294,9 @@ export class SessionHost {
   private sendSnapshot(connection: Connection, scope: Scope): void {
     const log = this.logFor(scope);
     const state = this.snapshotOf(scope);
-    connection.sent.set(scope, log?.getHead() ?? 0);
-    connection.send({ type: "snapshot", scope, seq: log?.getHead() ?? 0, state });
+    const seq = log?.getHead() ?? 0;
+    connection.sent.set(scope, seq);
+    connection.send({ type: "snapshot", scope, epoch: log?.getEpoch() ?? "", seq, state });
   }
 
   private receive(connection: Connection, frame: ClientFrame): void {
@@ -304,7 +316,7 @@ export class SessionHost {
     if (!connection.greeted) return;
     switch (frame.type) {
       case "subscribe":
-        this.subscribe(connection, frame.scope, frame.fromSeq);
+        this.subscribe(connection, frame.scope, frame.fromSeq, frame.epoch);
         return;
       case "unsubscribe":
         connection.sent.delete(frame.scope);
@@ -324,11 +336,24 @@ export class SessionHost {
     if (sessionId !== null) this.options.manager.getSession(sessionId)?.clearNeedsAttention();
   }
 
-  private subscribe(connection: Connection, scope: Scope, fromSeq: number | undefined): void {
+  private subscribe(
+    connection: Connection,
+    scope: Scope,
+    fromSeq: number | undefined,
+    epoch: string | undefined
+  ): void {
     const log = this.logFor(scope);
-    if (log && fromSeq !== undefined && log.covers(fromSeq)) {
+    // Resuming is only sound within the log the cursor was taken from.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+    if (log && fromSeq !== undefined && epoch === log.getEpoch() && log.covers(fromSeq)) {
       connection.sent.set(scope, log.getHead());
-      connection.send({ type: "ops", scope, from: fromSeq + 1, ops: log.since(fromSeq) });
+      connection.send({
+        type: "ops",
+        scope,
+        epoch: log.getEpoch(),
+        from: fromSeq + 1,
+        ops: log.since(fromSeq),
+      });
       return;
     }
     this.sendSnapshot(connection, scope);
@@ -340,6 +365,7 @@ export class SessionHost {
         manager: this.options.manager,
         resolveNote: this.options.resolveNote,
         isKnownBackend: this.options.isKnownBackend,
+        isKnownProject: this.options.isKnownProject,
       },
       command
     );

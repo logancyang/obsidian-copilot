@@ -1,7 +1,7 @@
 import { OpLog } from "@/agentMode/session/host/OpLog";
 
 const build = (maxOps = 100, maxBytes = 1_000_000) =>
-  new OpLog<string>({ maxOps, maxBytes, sizeOf: (op) => op.length });
+  new OpLog<string>({ epoch: "log-1", maxOps, maxBytes, sizeOf: (op) => op.length });
 
 describe("OpLog", () => {
   describe("append()", () => {
@@ -63,6 +63,12 @@ describe("OpLog", () => {
       for (const op of ["a", "b", "c"]) log.append(op);
       expect(log.since(1)).toEqual(["b", "c"]);
       expect(log.since(3)).toEqual([]);
+    });
+  });
+
+  describe("getEpoch()", () => {
+    it("returns the id the log was created with so cursors can name it", () => {
+      expect(build(10, 100).getEpoch()).toBe("log-1");
     });
   });
 });

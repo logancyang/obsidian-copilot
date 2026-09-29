@@ -70,6 +70,8 @@ function setup() {
   return { manager, one, host, client, run };
 }
 
+const ISSUE_613 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/613";
+
 describe("commandHandlers", () => {
   afterEach(() => {
     jest.useRealTimers();
@@ -331,6 +333,26 @@ describe("commandHandlers", () => {
       expect(t.client.getSession("s1")!.plan?.decision).toBe("pending");
     });
 
+    it(`resolvePlan answers invalid for feedback text that is not a string and leaves the plan pending (${ISSUE_613})`, async () => {
+      const t = setup();
+      t.one.backend.holdPrompt();
+      await t.run({ name: "send", sessionId: "s1", text: "plan it" });
+      void t.one.session.handlePlanProposalPermission(PLAN_REQUEST);
+      await settle();
+      const planId = t.client.getSession("s1")!.plan!.id;
+
+      const { result } = await t.run({
+        name: "resolvePlan",
+        sessionId: "s1",
+        proposalId: planId,
+        decision: "feedback",
+        feedbackText: { text: "x" } as never,
+      });
+
+      expect(result).toMatchObject({ ok: false, code: "invalid" });
+      expect(t.client.getSession("s1")!.plan?.decision).toBe("pending");
+    });
+
     it("createSession creates a global session on the requested agent, seeded with the pick, and returns its id", async () => {
       const t = setup();
       const { result } = await t.run({
@@ -349,10 +371,10 @@ describe("commandHandlers", () => {
 
     it("createSession forwards an explicit project scope", async () => {
       const t = setup();
-      await t.run({ name: "createSession", projectId: "proj-1" });
+      await t.run({ name: "createSession", projectId: "known-project" });
       expect(t.manager.calls.at(-1)).toEqual({
         method: "createSession",
-        args: [undefined, "proj-1", undefined],
+        args: [undefined, "known-project", undefined],
       });
     });
 
@@ -364,6 +386,10 @@ describe("commandHandlers", () => {
         { name: "createSession", seedSelection: { baseModelId: "m", effort: 3 } },
       ],
       ["a non-string project scope", { name: "createSession", projectId: 7 }],
+      [
+        "a project id the desktop does not know https://github.com/Brevilabs/obsidian-copilot-private/issues/613",
+        { name: "createSession", projectId: "deleted-project" },
+      ],
     ])("createSession answers invalid for %s and creates nothing", async (_label, command) => {
       const t = setup();
       const { result } = await t.run(command as unknown as Command);
@@ -591,10 +617,39 @@ describe("commandHandlers", () => {
       }
     );
 
+    it.each(["__proto__", "constructor", "toString"])(
+      `applyMode answers invalid for %s, a name only the object prototype defines (${ISSUE_613})`,
+      async (mode) => {
+        const t = setup();
+        jest.spyOn(t.one.session, "getState").mockReturnValue({
+          model: null,
+          mode: {
+            current: "default",
+            options: [{ value: "plan", label: "Plan" }],
+            apply: { plan: { kind: "setMode", nativeId: "plan" } },
+          },
+        });
+
+        const { result } = await t.run({
+          name: "applyMode",
+          sessionId: "s1",
+          mode: mode as "plan",
+        });
+
+        expect(result).toMatchObject({ ok: false, code: "invalid" });
+        expect(t.manager.calls).toEqual([]);
+      }
+    );
+
     it("answers invalid for an unknown command name", async () => {
       const t = setup();
       const result = await runCommand(
-        { manager: t.manager, resolveNote: () => null, isKnownBackend: () => true },
+        {
+          manager: t.manager,
+          resolveNote: () => null,
+          isKnownBackend: () => true,
+          isKnownProject: () => true,
+        },
         { name: "explode" } as unknown as Command
       );
       expect(result).toMatchObject({ ok: false, code: "invalid" });

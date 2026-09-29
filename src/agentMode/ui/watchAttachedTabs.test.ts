@@ -10,6 +10,7 @@ function liveClient(tabIds: string[]) {
   transport.deliver({ type: "hello", v: PROTOCOL_VERSION, app: "h", hostId: "h1", ok: true });
   transport.deliver({
     type: "snapshot",
+    epoch: "e1",
     scope: "host",
     seq: 0,
     state: buildHostState({ tabs: tabIds.map((id) => buildTab({ id })) }),
@@ -36,6 +37,7 @@ describe("watchAttachedTabs", () => {
 
       transport.deliver({
         type: "ops",
+        epoch: "e1",
         scope: "host",
         from: 1,
         ops: [{ t: "tab.add", index: 1, tab: buildTab({ id: "s2" }) }],
@@ -44,6 +46,7 @@ describe("watchAttachedTabs", () => {
 
       transport.deliver({
         type: "ops",
+        epoch: "e1",
         scope: "host",
         from: 2,
         ops: [{ t: "tab.remove", id: "s1" }],

@@ -25,6 +25,7 @@ import type {
   SessionEvent,
   SessionUpdateHandler,
 } from "@/agentMode/session/types";
+import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { TFile } from "obsidian";
 
 export interface MockBackend {
@@ -252,6 +253,7 @@ export function buildHost(
     catalog: new FakeCatalog(),
     resolveNote: (path) => (path.startsWith("missing/") ? null : fakeNote(path)),
     isKnownBackend: (id) => ["claude", "codex", "opencode"].includes(id),
+    isKnownProject: (id) => id === GLOBAL_SCOPE || id === "known-project",
     appVersion: "test-1.0.0",
     newHostId: () => "host-under-test",
     ...overrides,

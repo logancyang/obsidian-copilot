@@ -94,6 +94,7 @@ import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { createRemoteClient, type RemoteClient } from "@/remote/client";
 import { handlePairingLinkAction } from "@/remote/client/pairingAction";
 import { PAIRING_ACTION } from "@/remote/pairingLink";
+import { trackRemoteEvent } from "@/remote/remoteEvents";
 import type { RemoteHostService } from "@/remote/host";
 import { disposeNotificationSound } from "@/utils/notificationSound";
 import { installRendererEventsShim } from "@/utils/rendererEventsShim";
@@ -290,6 +291,7 @@ export default class CopilotPlugin extends Plugin {
         createAgentSessionHost,
         createAgentSessionManager,
         createAgentSessionView,
+        serveRemoteConnection,
         setFrameSinkVaultBasePath,
         SkillManager,
       } = await import("@/agentMode");
@@ -322,6 +324,16 @@ export default class CopilotPlugin extends Plugin {
       try {
         const { createRemoteHost } = await import("@/remote/host");
         this.remoteHost = createRemoteHost(this.app);
+        // An authenticated phone becomes one more client of the session host.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+        const stopServing = this.remoteHost.onConnection((connection) => {
+          serveRemoteConnection(this.agentSessionHost!, connection, {
+            onSessionStart: () =>
+              trackRemoteEvent({ name: "remote_session_opened", role: "desktop" }),
+            onCommand: (command) => trackRemoteEvent({ name: "remote_command", command }),
+          });
+        });
+        this.register(stopServing);
         void this.remoteHost.start();
       } catch (error) {
         logError("Remote access could not be initialised.", error);

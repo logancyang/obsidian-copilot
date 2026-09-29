@@ -23,7 +23,7 @@ function connect(hostId = "host-1") {
 }
 
 function seedHost(t: FakeTransport, seq = 0) {
-  t.deliver({ type: "snapshot", scope: "host", seq, state: HOST_STATE });
+  t.deliver({ type: "snapshot", epoch: "e1", scope: "host", seq, state: HOST_STATE });
 }
 
 describe("SessionClient", () => {
@@ -43,7 +43,7 @@ describe("SessionClient", () => {
       transport.setOpen(true);
       transport.deliver({ type: "hello", v: 2, app: "9.9.9", hostId: "h", ok: false });
       expect(client.getConnection()).toBe("version_mismatch");
-      expect(client.getHostApp()).toBe("9.9.9");
+      expect(client.getHostVersion()).toEqual({ v: 2, app: "9.9.9" });
       expect(transport.sentOfType("subscribe")).toEqual([]);
     });
 
@@ -64,6 +64,7 @@ describe("SessionClient", () => {
       client.watchSession("s1");
       transport.deliver({
         type: "snapshot",
+        epoch: "e1",
         scope: "session:s1",
         seq: 9,
         state: INITIAL_SESSION_STATE,
@@ -81,8 +82,8 @@ describe("SessionClient", () => {
       });
 
       expect(transport.sentOfType("subscribe")).toEqual([
-        { type: "subscribe", scope: "host", fromSeq: 4 },
-        { type: "subscribe", scope: "session:s1", fromSeq: 9 },
+        { type: "subscribe", scope: "host", fromSeq: 4, epoch: "e1" },
+        { type: "subscribe", scope: "session:s1", fromSeq: 9, epoch: "e1" },
       ]);
     });
 
@@ -120,6 +121,7 @@ describe("SessionClient", () => {
       seedHost(transport, 0);
       transport.deliver({
         type: "ops",
+        epoch: "e1",
         scope: "host",
         from: 1,
         ops: [
@@ -136,12 +138,14 @@ describe("SessionClient", () => {
       seedHost(transport, 0);
       transport.deliver({
         type: "ops",
+        epoch: "e1",
         scope: "host",
         from: 1,
         ops: [{ t: "tab.patch", id: "s1", patch: { status: "running" } }],
       });
       transport.deliver({
         type: "ops",
+        epoch: "e1",
         scope: "host",
         from: 1,
         ops: [
@@ -160,6 +164,7 @@ describe("SessionClient", () => {
 
       transport.deliver({
         type: "ops",
+        epoch: "e1",
         scope: "host",
         from: 3,
         ops: [{ t: "tab.patch", id: "s1", patch: { status: "error" } }],
@@ -171,6 +176,7 @@ describe("SessionClient", () => {
 
       transport.deliver({
         type: "ops",
+        epoch: "e1",
         scope: "host",
         from: 1,
         ops: [{ t: "tab.patch", id: "s1", patch: { status: "error" } }],
@@ -178,12 +184,13 @@ describe("SessionClient", () => {
       expect(client.getHost()?.tabs[0].status).toBe("idle");
 
       const fresh: HostState = buildHostState({ tabs: [buildTab({ id: "s1", status: "error" })] });
-      transport.deliver({ type: "snapshot", scope: "host", seq: 5, state: fresh });
+      transport.deliver({ type: "snapshot", epoch: "e1", scope: "host", seq: 5, state: fresh });
       expect(client.getHost()).toBe(fresh);
       expect(client.getCursor("host")).toBe(5);
 
       transport.deliver({
         type: "ops",
+        epoch: "e1",
         scope: "host",
         from: 6,
         ops: [{ t: "tab.patch", id: "s1", patch: { status: "idle" } }],
@@ -191,9 +198,74 @@ describe("SessionClient", () => {
       expect(client.getHost()?.tabs[0].status).toBe("idle");
     });
 
+    it("treats ops from a different log as a gap and resnapshots instead of applying them https://github.com/Brevilabs/obsidian-copilot-private/issues/613", () => {
+      const { transport, client, diagnostics } = connect();
+      seedHost(transport, 4);
+      transport.sent.length = 0;
+
+      transport.deliver({
+        type: "ops",
+        epoch: "e2",
+        scope: "host",
+        from: 5,
+        ops: [{ t: "tab.patch", id: "s1", patch: { status: "running" } }],
+      });
+
+      expect(client.getHost()).toBe(HOST_STATE);
+      expect(diagnostics.map((d) => d.kind)).toEqual(["epoch"]);
+      expect(transport.sentOfType("subscribe")).toEqual([{ type: "subscribe", scope: "host" }]);
+
+      transport.deliver({
+        type: "snapshot",
+        epoch: "e2",
+        scope: "host",
+        seq: 7,
+        state: buildHostState({ tabs: [] }),
+      });
+      expect(client.getCursor("host")).toBe(7);
+      expect(client.getCursorEpoch("host")).toBe("e2");
+    });
+
+    it("resumes from the cursor of the new log after a snapshot replaces a swapped session https://github.com/Brevilabs/obsidian-copilot-private/issues/613", () => {
+      const { transport, client } = connect();
+      seedHost(transport, 0);
+      client.watchSession("s1");
+      transport.deliver({
+        type: "snapshot",
+        epoch: "log-a",
+        scope: "session:s1",
+        seq: 30,
+        state: INITIAL_SESSION_STATE,
+      });
+      transport.deliver({
+        type: "snapshot",
+        epoch: "log-b",
+        scope: "session:s1",
+        seq: 2,
+        state: INITIAL_SESSION_STATE,
+      });
+      transport.setOpen(false);
+      transport.sent.length = 0;
+      transport.setOpen(true);
+      transport.deliver({
+        type: "hello",
+        v: PROTOCOL_VERSION,
+        app: "host-app",
+        hostId: "host-1",
+        ok: true,
+      });
+
+      expect(transport.sentOfType("subscribe")).toContainEqual({
+        type: "subscribe",
+        scope: "session:s1",
+        fromSeq: 2,
+        epoch: "log-b",
+      });
+    });
+
     it("reports ops that arrive before any snapshot without applying them", () => {
       const { transport, diagnostics } = connect();
-      transport.deliver({ type: "ops", scope: "host", from: 1, ops: [] });
+      transport.deliver({ type: "ops", epoch: "e1", scope: "host", from: 1, ops: [] });
       expect(diagnostics[0]).toMatchObject({ kind: "unexpected_frame", scope: "host" });
     });
   });
@@ -205,6 +277,7 @@ describe("SessionClient", () => {
       expect(client.getSession("s1")).toBeNull();
       transport.deliver({
         type: "snapshot",
+        epoch: "e1",
         scope: "session:s1",
         seq: 0,
         state: INITIAL_SESSION_STATE,
@@ -217,12 +290,14 @@ describe("SessionClient", () => {
       client.watchSession("s1");
       transport.deliver({
         type: "snapshot",
+        epoch: "e1",
         scope: "session:s1",
         seq: 0,
         state: INITIAL_SESSION_STATE,
       });
       transport.deliver({
         type: "ops",
+        epoch: "e1",
         scope: "session:s1",
         from: 1,
         ops: [
@@ -238,11 +313,18 @@ describe("SessionClient", () => {
       client.watchSession("s1");
       transport.deliver({
         type: "snapshot",
+        epoch: "e1",
         scope: "session:s1",
         seq: 0,
         state: INITIAL_SESSION_STATE,
       });
-      transport.deliver({ type: "snapshot", scope: "session:s1", seq: 0, state: null });
+      transport.deliver({
+        type: "snapshot",
+        epoch: "e1",
+        scope: "session:s1",
+        seq: 0,
+        state: null,
+      });
       expect(client.getSession("s1")).toBeNull();
     });
 
@@ -250,6 +332,7 @@ describe("SessionClient", () => {
       const { transport, client } = connect();
       transport.deliver({
         type: "snapshot",
+        epoch: "e1",
         scope: "session:s9",
         seq: 0,
         state: INITIAL_SESSION_STATE,
@@ -291,6 +374,7 @@ describe("SessionClient", () => {
       const stop = client.watchSession("s1");
       transport.deliver({
         type: "snapshot",
+        epoch: "e1",
         scope: "session:s1",
         seq: 0,
         state: INITIAL_SESSION_STATE,
@@ -403,10 +487,11 @@ describe("SessionClient", () => {
       client.subscribe(listener);
       seedHost(transport, 0);
       expect(listener).toHaveBeenCalledTimes(1);
-      transport.deliver({ type: "ops", scope: "host", from: 1, ops: [] });
+      transport.deliver({ type: "ops", epoch: "e1", scope: "host", from: 1, ops: [] });
       expect(listener).toHaveBeenCalledTimes(1);
       transport.deliver({
         type: "ops",
+        epoch: "e1",
         scope: "host",
         from: 1,
         ops: [

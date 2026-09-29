@@ -8,6 +8,7 @@ import { PairingWindow } from "@/remote/host/PairingWindow";
 import { RemoteServer, type RemoteConnection } from "@/remote/host/RemoteServer";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/610";
+const ISSUE_613 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/613";
 
 const RAW_MASK = [1, 2, 3, 4];
 
@@ -91,6 +92,7 @@ async function startHarness(
     authTimeoutMs?: number;
     maxPendingConnections?: number;
     maxUnauthenticatedPerAddress?: number;
+    maxWriteBacklogBytes?: number;
     pairingTtlMs?: number;
     devices?: ConstructorParameters<typeof RemoteServer>[0]["devices"];
   } = {}
@@ -105,6 +107,7 @@ async function startHarness(
     authTimeoutMs: options.authTimeoutMs,
     maxPendingConnections: options.maxPendingConnections,
     maxUnauthenticatedPerAddress: options.maxUnauthenticatedPerAddress,
+    maxWriteBacklogBytes: options.maxWriteBacklogBytes,
   });
   const connections: RemoteConnection[] = [];
   server.onConnection((connection) => connections.push(connection));
@@ -596,6 +599,17 @@ describe("RemoteServer", () => {
         expect(received[0]).toHaveLength(1_000_000);
       });
 
+      it(`accepts a command message as large as a phone's biggest image send, 12 MiB (${ISSUE_613})`, async () => {
+        const { connection, client } = await connectPaired();
+        const received: string[] = [];
+        connection.onMessage((text) => received.push(text));
+
+        client.send("x".repeat(12 * 1024 * 1024));
+        await waitFor(() => received.length === 1, 5000);
+
+        expect(received[0]).toHaveLength(12 * 1024 * 1024);
+      });
+
       it("answers a ping with a pong", async () => {
         const { client } = await connectPaired();
         const pong = once(client, "pong");
@@ -625,6 +639,25 @@ describe("RemoteServer", () => {
         // 40 rounds x 2000 pings x 127-byte pongs is about 10 MB if every ping were answered. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
         expect(raw.bytesReceived()).toBeLessThan(8_000_000);
         raw.socket.destroy();
+      });
+
+      it(`drops a peer that stopped reading once the desktop's unsent backlog for it passes the limit, so a phone that vanished cannot grow the desktop's memory (${ISSUE_613})`, async () => {
+        harness = await startHarness({ maxWriteBacklogBytes: 1_000_000 });
+        const { client } = await pairDevice(harness);
+        await waitFor(() => harness.connections.length === 1);
+        const connection = harness.connections[0];
+        const closes: number[] = [];
+        connection.onClose((event) => closes.push(event.code));
+        (client as unknown as { _socket: net.Socket })._socket.pause();
+
+        const chunk = "x".repeat(500_000);
+        for (let sent = 0; sent < 400 && closes.length === 0; sent++) {
+          connection.send(chunk);
+          await sleep(1);
+        }
+        await waitFor(() => closes.length === 1);
+
+        expect(closes).toEqual([1006]);
       });
 
       it("stops delivering to a handler that unsubscribed", async () => {

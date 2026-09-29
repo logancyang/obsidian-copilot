@@ -26,7 +26,7 @@ export type ConnectionState =
   | "version_mismatch";
 
 export interface Diagnostic {
-  kind: "gap" | "unexpected_frame";
+  kind: "gap" | "epoch" | "unexpected_frame";
   scope?: Scope;
   detail: string;
 }
@@ -36,15 +36,25 @@ export interface SessionClientOptions {
   onDiagnostic?: (diagnostic: Diagnostic) => void;
 }
 
+interface Cursor {
+  epoch: string;
+  seq: number;
+}
+
+export interface HostVersion {
+  v: number;
+  app: string;
+}
+
 const DISCONNECTED: CommandResult<never> = { ok: false, code: "failed", message: "disconnected" };
 
 export class SessionClient {
   private connection: ConnectionState = "connecting";
   private hostId: string | null = null;
-  private hostApp: string | null = null;
+  private hostVersion: HostVersion | null = null;
   private host: HostState | null = null;
   private readonly sessions = new Map<SessionId, SessionState>();
-  private readonly cursors = new Map<Scope, number>();
+  private readonly cursors = new Map<Scope, Cursor>();
   private readonly awaitingSnapshot = new Set<Scope>();
   private readonly watchCounts = new Map<SessionId, number>();
   private readonly pending = new Map<string, (result: CommandResult<unknown>) => void>();
@@ -67,8 +77,8 @@ export class SessionClient {
     return this.connection;
   }
 
-  getHostApp(): string | null {
-    return this.hostApp;
+  getHostVersion(): HostVersion | null {
+    return this.hostVersion;
   }
 
   getHost(): HostState | null {
@@ -80,7 +90,11 @@ export class SessionClient {
   }
 
   getCursor(scope: Scope): number | null {
-    return this.cursors.get(scope) ?? null;
+    return this.cursors.get(scope)?.seq ?? null;
+  }
+
+  getCursorEpoch(scope: Scope): string | null {
+    return this.cursors.get(scope)?.epoch ?? null;
   }
 
   subscribe(listener: () => void): () => void {
@@ -167,10 +181,10 @@ export class SessionClient {
         this.handleHello(frame);
         return;
       case "snapshot":
-        this.handleSnapshot(frame.scope, frame.seq, frame.state);
+        this.handleSnapshot(frame.scope, frame.epoch, frame.seq, frame.state);
         return;
       case "ops":
-        this.handleOps(frame.scope, frame.from, frame.ops);
+        this.handleOps(frame.scope, frame.epoch, frame.from, frame.ops);
         return;
       case "result": {
         const resolve = this.pending.get(frame.id);
@@ -183,7 +197,7 @@ export class SessionClient {
   }
 
   private handleHello(frame: Extract<ServerFrame, { type: "hello" }>): void {
-    this.hostApp = frame.app;
+    this.hostVersion = { v: frame.v, app: frame.app };
     if (!frame.ok) {
       this.connection = "version_mismatch";
       this.notify();
@@ -210,7 +224,7 @@ export class SessionClient {
     this.send(
       cursor === undefined
         ? { type: "subscribe", scope }
-        : { type: "subscribe", scope, fromSeq: cursor }
+        : { type: "subscribe", scope, fromSeq: cursor.seq, epoch: cursor.epoch }
     );
   }
 
@@ -228,7 +242,12 @@ export class SessionClient {
     if (this.sessions.delete(id)) this.notify();
   }
 
-  private handleSnapshot(scope: Scope, seq: number, state: HostState | SessionState | null): void {
+  private handleSnapshot(
+    scope: Scope,
+    epoch: string,
+    seq: number,
+    state: HostState | SessionState | null
+  ): void {
     const sessionId = sessionIdOfScope(scope);
     if (sessionId !== null && !this.watchCounts.has(sessionId)) return;
     this.awaitingSnapshot.delete(scope);
@@ -237,14 +256,19 @@ export class SessionClient {
       if (sessionId === null) this.host = null;
       else this.sessions.delete(sessionId);
     } else {
-      this.cursors.set(scope, seq);
+      this.cursors.set(scope, { epoch, seq });
       if (sessionId === null) this.host = state as HostState;
       else this.sessions.set(sessionId, state as SessionState);
     }
     this.notify();
   }
 
-  private handleOps(scope: Scope, from: number, ops: readonly (HostOp | SessionOp)[]): void {
+  private handleOps(
+    scope: Scope,
+    epoch: string,
+    from: number,
+    ops: readonly (HostOp | SessionOp)[]
+  ): void {
     const sessionId = sessionIdOfScope(scope);
     if (sessionId !== null && !this.watchCounts.has(sessionId)) return;
     if (this.awaitingSnapshot.has(scope)) return;
@@ -257,17 +281,27 @@ export class SessionClient {
       });
       return;
     }
-    if (from > cursor + 1) {
+    if (epoch !== cursor.epoch) {
       this.opts.onDiagnostic?.({
-        kind: "gap",
+        kind: "epoch",
         scope,
-        detail: `expected ${cursor + 1}, received ${from}`,
+        detail: `expected log ${cursor.epoch}, received ${epoch}`,
       });
       this.awaitingSnapshot.add(scope);
       this.subscribeScope(scope, false);
       return;
     }
-    const fresh = from <= cursor ? ops.slice(cursor - from + 1) : ops;
+    if (from > cursor.seq + 1) {
+      this.opts.onDiagnostic?.({
+        kind: "gap",
+        scope,
+        detail: `expected ${cursor.seq + 1}, received ${from}`,
+      });
+      this.awaitingSnapshot.add(scope);
+      this.subscribeScope(scope, false);
+      return;
+    }
+    const fresh = from <= cursor.seq ? ops.slice(cursor.seq - from + 1) : ops;
     if (fresh.length === 0) return;
     if (sessionId === null) {
       let next = this.host;
@@ -280,7 +314,7 @@ export class SessionClient {
       for (const op of fresh) next = applySessionOp(next, op as SessionOp);
       this.sessions.set(sessionId, next);
     }
-    this.cursors.set(scope, cursor + fresh.length);
+    this.cursors.set(scope, { epoch, seq: cursor.seq + fresh.length });
     this.notify();
   }
 }

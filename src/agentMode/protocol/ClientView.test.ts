@@ -177,7 +177,7 @@ describe("ClientView", () => {
       const client = new SessionClient(transport, { app: "1.0.0" });
       transport.setOpen(true);
       transport.deliver({ type: "hello", v: PROTOCOL_VERSION, app: "h", hostId: "h1", ok: true });
-      transport.deliver({ type: "snapshot", scope: "host", seq: 0, state: host });
+      transport.deliver({ type: "snapshot", epoch: "e1", scope: "host", seq: 0, state: host });
       return { transport, client };
     }
 
@@ -195,6 +195,7 @@ describe("ClientView", () => {
       view.attach(client);
       transport.deliver({
         type: "ops",
+        epoch: "e1",
         scope: "host",
         from: 1,
         ops: [{ t: "tab.remove", id: "b" }],

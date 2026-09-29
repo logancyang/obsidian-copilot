@@ -251,6 +251,52 @@ describe("SessionHost", () => {
       expectReplicaEqualsHost(r);
     });
 
+    it("sends a snapshot instead of resuming when the manager swapped the session behind an id while the client was away https://github.com/Brevilabs/obsidian-copilot-private/issues/613", async () => {
+      const r = await rig();
+      r.one.session.sendPrompt("old");
+      await settle();
+      r.transport.disconnect();
+      const replacement = makeTestSession("s1");
+      replacement.session.sendPrompt("a new chat behind the same id");
+      r.manager.replace(replacement.session);
+      await settle();
+      r.frames.length = 0;
+
+      r.transport.reconnect();
+      await settle();
+
+      expect(
+        r.frames.filter((f) => f.type === "snapshot" && f.scope === "session:s1")
+      ).toHaveLength(1);
+      expect(opsFrames(r.frames, "session:s1")).toEqual([]);
+      expectReplicaEqualsHost(r);
+    });
+
+    it("sends a snapshot when a cursor names another log or no log even though its position is in range https://github.com/Brevilabs/obsidian-copilot-private/issues/613", async () => {
+      const manager = new FakeManager();
+      manager.add(makeTestSession("s1").session);
+      const host = buildHost(manager);
+      const frames: ServerFrame[] = [];
+      const connection = host.connect((frame) => frames.push(frame));
+      connection.receive({ type: "hello", v: PROTOCOL_VERSION, app: "phone" });
+      connection.receive({ type: "subscribe", scope: "host" });
+      const hostSnapshot = frames.find((f) => f.type === "snapshot");
+      if (hostSnapshot?.type !== "snapshot") throw new Error("expected a host snapshot");
+      frames.length = 0;
+
+      connection.receive({ type: "subscribe", scope: "host", fromSeq: 0, epoch: "another-log" });
+      connection.receive({ type: "subscribe", scope: "host", fromSeq: 0 });
+      connection.receive({
+        type: "subscribe",
+        scope: "host",
+        fromSeq: hostSnapshot.seq,
+        epoch: hostSnapshot.epoch,
+      });
+
+      expect(frames.map((f) => f.type)).toEqual(["snapshot", "snapshot", "ops"]);
+      expect(frames[0]).toMatchObject({ epoch: hostSnapshot.epoch });
+    });
+
     it("sends a snapshot when more ops than the log keeps arrive between two flushes (https://github.com/Brevilabs/obsidian-copilot-private/issues/609)", async () => {
       const r = await rig({ opLogLimits: { maxOps: 3, maxBytes: 1_000_000 } });
       r.one.backend.holdPrompt();
