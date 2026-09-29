@@ -6,8 +6,11 @@ import { logInfo } from "@/logger";
 export type PairFailureReason =
   | "invalid-link"
   | "wrong-vault"
+  | "cancelled"
   | "unreachable"
   | "expired-or-used"
+  | "desktop-failed"
+  | "storage-failed"
   | "protocol";
 
 export type RemoteEvent =

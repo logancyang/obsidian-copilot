@@ -518,6 +518,7 @@ export default [
         { type: "ui", pattern: "src/agentMode/ui" },
         { type: "skills", pattern: "src/agentMode/skills" },
         { type: "protocol", pattern: "src/agentMode/protocol" },
+        { type: "mobile", pattern: "src/agentMode/mobile" },
         { type: "modelmgmt", pattern: "src/modelManagement" },
         { type: "host", pattern: "src/**" },
       ],
@@ -575,10 +576,14 @@ export default [
                 },
               },
             },
+            {
+              from: { type: "mobile" },
+              allow: { to: { type: ["mobile", "protocol", "ui", "session", "host"] } },
+            },
             { from: { type: "modelmgmt" }, allow: { to: { type: ["modelmgmt", "host"] } } },
             {
               from: { type: "host" },
-              allow: { to: { type: ["host", "barrel", "modelmgmt"] } },
+              allow: { to: { type: ["host", "barrel", "modelmgmt", "mobile"] } },
             },
           ],
         },
