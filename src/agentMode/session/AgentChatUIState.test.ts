@@ -73,7 +73,6 @@ describe("AgentChatUIState", () => {
         { optionId: "revise_plan", name: "Revise", kind: "reject_once" },
       ],
     };
-    // Codex publishes the plan card from its tool call before the permission request.
     emitUpdate!({
       sessionId: "codex-session",
       update: { sessionUpdate: "tool_call", ...request.toolCall },

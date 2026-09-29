@@ -17,13 +17,10 @@ describe("promptEnvelope", () => {
     });
 
     it("returns an unwrapped prompt unchanged", () => {
-      // Prompts sent without attached context never get the envelope.
       expect(stripUserMessageWrapper("just a question")).toBe("just a question");
     });
 
     it("ignores a wrapper tag that an attached note excerpt happens to contain", () => {
-      // Excerpts are inlined verbatim, so any note mentioning the tag would
-      // otherwise be mistaken for the envelope.
       const wrapped =
         "<copilot-context>\nSelected excerpts:\n  the <user-message> tag wraps the prompt\n" +
         "</copilot-context>\n\n<user-message>\nhi\n</user-message>";
@@ -50,8 +47,6 @@ describe("promptEnvelope", () => {
     });
 
     it("unwraps a prompt that has text stored after the envelope", () => {
-      // The Claude adapter replaces an image it cannot send with a note, and
-      // the transcript hands that back joined onto the wrapped prompt.
       const stored =
         "<user-message>\ndescribe this\n</user-message>\n\n" +
         "[Unsupported image attachment omitted: image/heic]";

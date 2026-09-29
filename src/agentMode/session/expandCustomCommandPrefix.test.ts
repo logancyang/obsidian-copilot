@@ -34,8 +34,6 @@ describe("expandCustomCommandPrefix", () => {
   });
 
   it("returns input unchanged when an empty commands list is given (skill collision case)", async () => {
-    // Mirrors composeSlashMenuItems: if a skill shadows the command title,
-    // the command never reaches this expander, so an empty list = pass-through.
     const result = await expandCustomCommandPrefix("/foo", [], "", null);
     expect(result).toEqual({ text: "/foo" });
   });

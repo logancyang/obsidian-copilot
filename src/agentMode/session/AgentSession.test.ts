@@ -34,10 +34,6 @@ jest.mock("@/logger", () => ({
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn().mockReturnValue({ agentMode: {} }),
 }));
-// The authoritative send-boundary paywall (Phase 4) lives in plusUtils; mock it
-// so fan-out tests don't reach the real `isPlusEnabled()`/BrevilabsClient. The
-// helper defaults to "entitled" so existing fan-out tests keep passing; the
-// paywall tests below flip it per-case.
 jest.mock("@/plusUtils", () => ({
   ensureMultiAgentEntitlement: jest.fn(async () => true),
   showMultiAgentUpgradePrompt: jest.fn(),
@@ -112,12 +108,10 @@ function makeMockBackend(): MockBackend {
   };
 }
 
-/** Descriptor stub for a backend that summarizes its own titles (opencode). */
 function summarizingDescriptor(): BackendDescriptor {
   return { summarizesSessionTitle: true } as unknown as BackendDescriptor;
 }
 
-/** Descriptor stub for a backend that does NOT summarize (codex, Claude Code). */
 function nonSummarizingDescriptor(): BackendDescriptor {
   return { summarizesSessionTitle: false } as unknown as BackendDescriptor;
 }
@@ -260,7 +254,6 @@ describe("buildPromptBlocks", () => {
     expect(text).toContain("<active_web_tab>");
     expect(text).toContain("<url>https://x.dev</url>");
     expect(text).toContain("<user-message>\nread it\n</user-message>");
-    // Context (web-tab content) precedes the user message.
     expect(text.indexOf("<active_web_tab>")).toBeLessThan(text.indexOf("<user-message>"));
   });
 
@@ -307,7 +300,6 @@ describe("buildPromptBlocks", () => {
     const text = (blocks[0] as { type: "text"; text: string }).text;
     expect(text).toContain("<project_context>");
     expect(text).toContain("`/vault/Papers`");
-    // Project context leads, then the per-message attached context, then the message.
     expect(text.indexOf("<project_context>")).toBeLessThan(text.indexOf("<copilot-context>"));
     expect(text.indexOf("<copilot-context>")).toBeLessThan(text.indexOf("<user-message>"));
   });
@@ -368,8 +360,6 @@ describe("AgentSession.loadDisplayMessages", () => {
       { id: "m1", sender: AI_SENDER, message: "earlier reply", isVisible: true, timestamp: null },
     ]);
 
-    // The missing notification here was the bug: store.loadMessages alone left
-    // a freshly-activated tab blank until a tab switch forced a re-read.
     expect(onMessagesChanged).toHaveBeenCalledTimes(1);
     expect(session.hasUserVisibleMessages()).toBe(true);
     expect(session.store.getDisplayMessages().map((m) => m.message)).toEqual([
@@ -496,7 +486,6 @@ describe("AgentSession session usage", () => {
   it("handles usage without a placeholder (session-scoped, no active turn)", () => {
     const mock = makeMockBackend();
     const session = makeSession(mock);
-    // No sendPrompt → no placeholder. A session-scoped usage must still land.
     mock.emit({
       sessionId: "acp-1",
       update: {
@@ -559,10 +548,6 @@ describe("AgentSession session usage", () => {
         usage: { usedTokens: 5000, contextWindow: 200_000, updatedAt: 1 },
       },
     });
-    // A later used-only snapshot (no contextWindow) is an ACP prompt-result
-    // fallback carrying cumulative lifetime totals, not occupancy. It must not
-    // override the occupancy snapshot — pairing its tokens with the window would
-    // show a bogus ring. A later live occupancy update would supersede it.
     mock.emit({
       sessionId: "acp-1",
       update: {
@@ -578,8 +563,6 @@ describe("AgentSession session usage", () => {
   });
 
   it("fills a seeded snapshot's missing window from the backend catalog (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
-    // A reopened chat's persisted usage can predate the window being known — hosted
-    // models never carry one on the wire — and its ring must not wait for a turn.
     const mock = makeMockBackend();
     const readContextWindow = jest.fn(async () => 1_048_576);
     (mock.asBackend as { readContextWindow?: unknown }).readContextWindow = readContextWindow;
@@ -611,9 +594,6 @@ describe("AgentSession session usage", () => {
   });
 
   it("fills the window for a chat seeded into a still-starting session (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
-    // A chat with no resumable backend session is seeded into a freshly created one
-    // before newSession resolves, when the model is not yet known. The lookup must
-    // wait for readiness instead of silently skipping.
     const mock = makeMockBackend();
     const readContextWindow = jest.fn(async () => 1_048_576);
     (mock.asBackend as { readContextWindow?: unknown }).readContextWindow = readContextWindow;
@@ -635,7 +615,6 @@ describe("AgentSession session usage", () => {
       backendId: "opencode",
     });
 
-    // Seeded immediately, the way AgentSessionManager does — before `ready` settles.
     session.seedSessionUsage({ usedTokens: 27_514, updatedAt: 1 });
     await session.ready;
     await new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -669,10 +648,8 @@ describe("AgentSession session usage", () => {
       },
     });
     session.seedSessionUsage({ usedTokens: 27_514, updatedAt: 1 });
-    // Let the readiness await settle so the catalog read is actually in flight.
     await new Promise((resolve) => window.setTimeout(resolve, 0));
 
-    // A live update lands while the catalog answer is still in flight.
     mock.emit({
       sessionId: "acp-1",
       update: {
@@ -691,9 +668,6 @@ describe("AgentSession session usage", () => {
   });
 
   it("drops the held context window when the model changes, so the next snapshot applies (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", () => {
-    // The window belongs to the model that reported it. Kept across a switch to a
-    // model that reports none, it would pair the old window with new counts forever —
-    // the windowless-snapshot guard above would reject every later update.
     const stateOn = (baseModelId: string): BackendState => ({
       model: {
         current: { baseModelId, effort: null },
@@ -723,7 +697,6 @@ describe("AgentSession session usage", () => {
 
     expect(session.getSessionUsage()).toEqual({ usedTokens: 5000, updatedAt: 1 });
 
-    // And the new model's windowless snapshots are no longer rejected.
     mock.emit({
       sessionId: "acp-1",
       update: { sessionUpdate: "usage_update", usage: { usedTokens: 800, updatedAt: 2 } },
@@ -765,7 +738,6 @@ describe("AgentSession session usage", () => {
     });
     expect(onMessagesChanged).toHaveBeenCalled();
 
-    // A live full snapshot supersedes the seed.
     mock.emit({
       sessionId: "acp-1",
       update: {
@@ -888,9 +860,6 @@ describe("AgentSession.sendPrompt", () => {
     ]).turn;
     const messages = session.store.getDisplayMessages();
     expect(messages[0].message).toBe("describe");
-    // The posted user bubble carries the prompt text plus the image as a
-    // renderable data-URL entry, while the backend still receives the original
-    // base64 image block.
     expect(messages[0].content).toEqual([
       { type: "text", text: "describe" },
       { type: "image_url", image_url: { url: "data:image/png;base64,aGVsbG8=" } },
@@ -1019,8 +988,6 @@ describe("AgentSession.sendPrompt", () => {
 
   it("surfaces a provider error stringified inside data.message (codex-acp)", async () => {
     const mock = makeMockBackend();
-    // codex-acp reports JSON-RPC -32603 "Internal error" with the real provider
-    // error nested as a JSON *string* in data.message.
     const error = new Error("Internal error");
     (error as { data?: unknown }).data = {
       message: JSON.stringify({
@@ -1121,7 +1088,6 @@ describe("AgentSession.sendPrompt", () => {
       });
       const { turn } = session.sendPrompt("hi");
 
-      // Chunk delivered before the result.
       mock.emit({
         sessionId: "acp-1",
         update: {
@@ -1130,7 +1096,6 @@ describe("AgentSession.sendPrompt", () => {
           content: { type: "text", text: "Hello" },
         },
       });
-      // The backend flushes the result while the last chunk is still in flight.
       jest.setSystemTime(20_000);
       resolvePrompt!({ stopReason: "end_turn" });
       await turn;
@@ -1139,7 +1104,6 @@ describe("AgentSession.sendPrompt", () => {
           ?.turnDurationMs
       ).toBe(10_000);
 
-      // Trailing chunk for the same message arrives after the turn settled.
       jest.setSystemTime(25_000);
       mock.emit({
         sessionId: "acp-1",
@@ -1171,7 +1135,6 @@ describe("AgentSession.sendPrompt", () => {
       backendId: "opencode",
     });
 
-    // Turn A streams under messageId msg-a, then the result is flushed early.
     const { turn: turnA } = session.sendPrompt("first");
     mock.emit({
       sessionId: "acp-1",
@@ -1184,7 +1147,6 @@ describe("AgentSession.sendPrompt", () => {
     resolvePrompt!({ stopReason: "end_turn" });
     await turnA;
 
-    // Turn B begins before A's trailing chunk lands.
     const { turn: turnB } = session.sendPrompt("second");
     mock.emit({
       sessionId: "acp-1",
@@ -1194,7 +1156,6 @@ describe("AgentSession.sendPrompt", () => {
         content: { type: "text", text: "B-text" },
       },
     });
-    // A's late chunk must follow msg-a to A's message, not append to B.
     mock.emit({
       sessionId: "acp-1",
       update: {
@@ -1299,14 +1260,12 @@ describe("AgentSession.sendPrompt", () => {
     });
 
     const ai = session.store.getDisplayMessages().filter((m) => m.sender === AI_SENDER);
-    // The first turn's launch card settles in place…
     expect(ai[0]?.parts?.[0]).toMatchObject({
       kind: "tool_call",
       id: "tc-agent",
       status: "completed",
       output: [{ type: "text", text: "agent report" }],
     });
-    // …and no duplicate card appears on the new turn's placeholder.
     expect(ai[1]?.parts ?? []).toHaveLength(0);
 
     resolvePrompt!({ stopReason: "end_turn" });
@@ -1445,7 +1404,6 @@ describe("AgentSession.sendPrompt", () => {
     await turn;
   });
 
-  // Emit one completed tool call with `text` output and return the stored output.
   const storedToolOutput = async (text: string): Promise<AgentToolCallOutput | undefined> => {
     const mock = makeMockBackend();
     let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
@@ -1477,7 +1435,6 @@ describe("AgentSession.sendPrompt", () => {
 
   it("stores a large (but under-cap) text tool output in full", async () => {
     const text = "x".repeat(100_000);
-    // 100k is far below the 256k runaway backstop, so it's preserved verbatim.
     expect(await storedToolOutput(text)).toEqual({ type: "text", text });
   });
 
@@ -1720,17 +1677,11 @@ describe("AgentSession fan-out branching", () => {
     expect(stopReason).toBe("end_turn");
     expect(runFanoutTurn).toHaveBeenCalledTimes(1);
     expect(mock.prompt).not.toHaveBeenCalled();
-    // Every agent received the identical prompt blocks, led by the read-only
-    // QA preamble (the universal "answer only, no writes" instruction).
     expect(runFanoutTurn.mock.calls[0][0].agents).toEqual(["opencode", "claude"]);
-    // Multi-answer turns use the session's own main agent as the summarizer (here
-    // it is also an answerer because it was explicitly `@`-mentioned).
     expect(runFanoutTurn.mock.calls[0][0].mainAgent).toBe("opencode");
     const fanoutPrompt = runFanoutTurn.mock.calls[0][0].prompt[0] as { type: "text"; text: string };
     expect(fanoutPrompt.text).toContain("read-only");
     expect(fanoutPrompt.text).toContain("review");
-    // Live per-agent answers ride on the assistant message itself (message.fanout),
-    // surfaced through the display view for the UI dropdown.
     const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
     expect(placeholder?.fanout?.answers.claude.text).toBe("claude answer");
   });
@@ -1759,14 +1710,10 @@ describe("AgentSession fan-out branching", () => {
     await session.sendPrompt("review", undefined, undefined, ["opencode", "claude"]).turn;
 
     const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
-    // Phase 2: the persisted body is the FULL composite so the dropdown is
-    // reconstructable on reload — summary AND per-agent answers AND the invisible
-    // section markers all ride in the message body.
     expect(placeholder?.message).toContain("<!--copilot:multi-agent v=1-->");
     expect(placeholder?.message).toContain("the narrative summary");
     expect(placeholder?.message).toContain("OPENCODE_ANSWER");
     expect(placeholder?.message).toContain("CLAUDE_ANSWER");
-    // The live turn rides on the message itself for the UI.
     expect(placeholder?.fanout?.summary.text).toBe("the narrative summary");
   });
 
@@ -1790,19 +1737,14 @@ describe("AgentSession fan-out branching", () => {
       backendId: "opencode",
       runFanoutTurn,
     });
-    // Stand in for the block the initializer captures for the first prompt.
     (session as unknown as { projectContextBlock: string | null }).projectContextBlock =
       "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>";
 
-    // Turn 1 is a fan-out: only the ephemeral sub-sessions receive the block,
-    // and the visible backend is never prompted.
     await session.sendPrompt("review", undefined, undefined, ["opencode", "claude"]).turn;
     const fanoutPrompt = runFanoutTurn.mock.calls[0][0].prompt[0] as { type: "text"; text: string };
     expect(fanoutPrompt.text).toContain("<project_context>");
     expect(mock.prompt).not.toHaveBeenCalled();
 
-    // Turn 2 is a normal turn: the visible backend must finally receive the
-    // first-turn project context (regression — a fan-out turn used to burn it).
     await session.sendPrompt("now you").turn;
     expect(mock.prompt).toHaveBeenCalledTimes(1);
     const req = mock.prompt.mock.calls[0][0] as { prompt: Array<{ type: string; text?: string }> };
@@ -1833,7 +1775,6 @@ describe("AgentSession fan-out paywall (send-boundary entitlement)", () => {
     });
 
   beforeEach(() => {
-    // Default state: entitled. Individual tests override as needed.
     mockedEnsure.mockReset();
     mockedEnsure.mockResolvedValue(true);
     mockedPrompt.mockReset();
@@ -1879,14 +1820,9 @@ describe("AgentSession fan-out paywall (send-boundary entitlement)", () => {
     ]).turn;
 
     expect(mockedEnsure).toHaveBeenCalledTimes(1);
-    // Hard stop: the fan-out runner never ran, and there was NO silent
-    // single-agent fallback to backend.prompt.
     expect(runFanoutTurn).not.toHaveBeenCalled();
     expect(mock.prompt).not.toHaveBeenCalled();
-    // The upgrade prompt surfaced.
     expect(mockedPrompt).toHaveBeenCalledTimes(1);
-    // The turn settled as a refusal and the session is usable again (idle), with
-    // no dangling streaming placeholder.
     expect(stopReason).toBe("refusal");
     expect(session.getStatus()).toBe("idle");
 
@@ -1907,9 +1843,7 @@ describe("AgentSession fan-out paywall (send-boundary entitlement)", () => {
       runFanoutTurn,
     });
 
-    // No mentioned agents -> single-agent path; the paywall must never run.
     await session.sendPrompt("hi").turn;
-    // Only the main agent @-ed -> collapses to single-agent; also no gate.
     await session.sendPrompt("hi again", undefined, undefined, ["opencode"]).turn;
 
     expect(mockedEnsure).not.toHaveBeenCalled();
@@ -1920,12 +1854,7 @@ describe("AgentSession fan-out paywall (send-boundary entitlement)", () => {
 });
 
 describe("ensureMultiAgentEntitlement (paywall helper)", () => {
-  // These exercise the REAL helper against mocked isPlusEnabled/BrevilabsClient,
-  // verifying the fast path takes no network call and the slow path re-verifies.
   const validateLicenseKey = jest.fn();
-  // Mutable so the validateLicenseKey mock can simulate the real side effect of
-  // applying the entitlement (flipping the cached flags) that the slow path then
-  // re-reads via isPlusEnabled().
   let settings: Record<string, unknown>;
 
   beforeEach(() => {
@@ -1961,7 +1890,6 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
   });
 
   it("slow path: a stale-false cache the backend confirms as Plus is allowed", async () => {
-    // The real validateLicenseKey applies the entitlement; simulate that.
     validateLicenseKey.mockImplementation(async () => {
       settings.isPaidUser = true;
       settings.isPlusUser = true;
@@ -1976,8 +1904,6 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
   });
 
   it("slow path: a Lite user (paid but below Plus) is blocked", async () => {
-    // Backend confirms a paid license, but the entitlement is below Plus — the
-    // gate keys on Plus tier, not on isValid.
     validateLicenseKey.mockImplementation(async () => {
       settings.isPaidUser = true;
       settings.isPlusUser = false;
@@ -1995,7 +1921,6 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
 });
 
 describe("AgentSession fan-out conversation history", () => {
-  /** A fan-out runner returning the given summary; captures its input prompt. */
   const fanoutWithSummary = (summary: string) =>
     jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
       const turn: FanoutTurn = {
@@ -2014,7 +1939,6 @@ describe("AgentSession fan-out conversation history", () => {
 
   it("includes the prior transcript as a conversation_history block on a fan-out follow-up", async () => {
     const mock = makeMockBackend();
-    // First a single-agent turn so a prior transcript exists.
     const runFanoutTurn = fanoutWithSummary("summary");
     const session = new AgentSession({
       backend: mock.asBackend,
@@ -2025,7 +1949,6 @@ describe("AgentSession fan-out conversation history", () => {
     });
 
     await session.sendPrompt("what is the master plan").turn;
-    // Simulate the assistant's prior reply landing in the transcript.
     session.store.appendAgentText(
       session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER)!.id,
       "the master plan is X"
@@ -2038,15 +1961,12 @@ describe("AgentSession fan-out conversation history", () => {
     expect(text).toContain("<conversation_history>");
     expect(text).toContain("what is the master plan");
     expect(text).toContain("the master plan is X");
-    // The current question follows the history, inside the user-message block.
     expect(text).toContain("<user-message>\nexpand on that plan\n</user-message>");
-    // The current in-flight user message is NOT duplicated inside history.
     expect((text.match(/expand on that plan/g) ?? []).length).toBe(1);
   });
 });
 
 describe("AgentSession fan-out follow-up continuity", () => {
-  /** A fan-out runner that returns a turn with the given summary text. */
   const fanoutWithSummary = (summary: string) =>
     jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
       const turn: FanoutTurn = {
@@ -2060,11 +1980,6 @@ describe("AgentSession fan-out follow-up continuity", () => {
       return turn;
     });
 
-  /**
-   * A fan-out runner whose agents answered successfully but whose summary never
-   * produced text (summary generation threw / ended empty). The persisted body
-   * must fall back to a note, never a blank bubble.
-   */
   const fanoutAnswersNoSummary = () =>
     jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
       const turn: FanoutTurn = {
@@ -2106,7 +2021,6 @@ describe("AgentSession fan-out follow-up continuity", () => {
     expect(text).toContain("the fan-out summary");
     expect(text).toContain("<user-message>\nnow expand on that\n</user-message>");
 
-    // Buffer cleared: a second single-agent turn carries no prior-turn block.
     await session.sendPrompt("and again").turn;
     expect(lastPromptText(mock)).not.toContain("<prior_turns>");
   });
@@ -2125,9 +2039,6 @@ describe("AgentSession fan-out follow-up continuity", () => {
     await session.sendPrompt("multi question", undefined, undefined, ["opencode", "claude"]).turn;
     await session.sendPrompt("follow-up").turn;
 
-    // No summary was generated, but agents answered — so the follow-up replays
-    // the readable answers themselves (not a generic 'unavailable' note), so a
-    // question like "what did they say?" still has the content the user saw.
     const text = lastPromptText(mock);
     expect(text).toContain("<prior_turns>");
     expect(text).toContain("multi question");
@@ -2260,14 +2171,12 @@ describe("AgentSession.create (via start)", () => {
     expect(promptText(0)).toContain("<project_context>");
     expect(promptText(0)).toContain("`/vault/Papers`");
     expect(promptText(0)).toContain("<user-message>\nfirst\n</user-message>");
-    // The block rides the first message only; the second turn is clean.
     expect(promptText(1)).not.toContain("<project_context>");
   });
 
   it("re-injects the <project_context> block on retry when the first prompt fails", async () => {
     const mock = makeMockBackend();
     mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: emptyState() });
-    // First delivery fails hard (transport) before the backend accepts the turn.
     mock.prompt.mockRejectedValueOnce(new Error("transport down"));
     const session = AgentSession.start({
       backend: mock.asBackend,
@@ -2292,8 +2201,6 @@ describe("AgentSession.create (via start)", () => {
       };
       return input.prompt.map((b) => b.text ?? "").join("\n");
     };
-    // The failed attempt carried it; since the backend never accepted the turn,
-    // the retry carries it again rather than dropping the context permanently.
     expect(promptText(0)).toContain("<project_context>");
     expect(promptText(1)).toContain("<project_context>");
   });
@@ -2328,7 +2235,6 @@ describe("AgentSession.create (via start)", () => {
       projectId: "proj-7",
       contextReady,
     });
-    // Session exists immediately; newSession is gated on contextReady.
     await Promise.resolve();
     expect(mock.newSession).not.toHaveBeenCalled();
     expect(session.getStatus()).toBe("starting");
@@ -2444,8 +2350,6 @@ describe("AgentSession.create (via start)", () => {
       mode: null,
     };
     mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: stateWithSonnet });
-    // Block setSessionModel so the seed must survive on its own — without
-    // the optimistic seed the picker would see "anthropic/sonnet" first.
     let resolveSetModel: ((s: BackendState) => void) | null = null;
     mock.setSessionModel.mockImplementationOnce(
       () => new Promise<BackendState>((resolve) => (resolveSetModel = resolve))
@@ -2545,10 +2449,6 @@ describe("AgentSession.create (via start)", () => {
   });
 
   it("applies a seeded effort via setConfigOption without a redundant setModel", async () => {
-    // A cross-backend seed carrying a drafted effort must be applied through
-    // the descriptor's channel. For descriptor-style backends where effort
-    // lives outside the wire id, the base is unchanged so no setModel fires,
-    // but the drafted effort still reaches the backend via setConfigOption.
     const mock = makeMockBackend();
     const backendState: BackendState = {
       model: {
@@ -2582,13 +2482,10 @@ describe("AgentSession.create (via start)", () => {
       internalId: "internal-1",
       backendId: "claude",
       defaultModelSelection: { baseModelId: "anthropic/sonnet", effort: "high" },
-      // Descriptor whose wire encoding ignores effort (Claude-style).
       getDescriptor: () => makeDescriptorWireWithoutEffort(),
     });
     await session.ready;
-    // baseModelId matches → no setModel call needed.
     expect(mock.setSessionModel).not.toHaveBeenCalled();
-    // The drafted effort is dispatched through the config-option channel.
     expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
       sessionId: "acp-1",
       configId: "effort",
@@ -2627,19 +2524,11 @@ describe("AgentSession.create (via start)", () => {
     });
     await session.ready;
     expect(session.getStatus()).toBe("idle");
-    // Seed reverted to whatever the backend actually reported.
     expect(session.getState()?.model?.current.baseModelId).toBe("anthropic/sonnet");
   });
 
   it("seeds config-option opencode effort via the effort option, not the model id", async () => {
-    // Regression: a cross-backend pick to config-option opencode (≥1.15.13)
-    // must set the bare model on the model config option and the effort on the
-    // separate effort option. Packing `base/effort` into the model option (the
-    // old applyModelWireId path) would start the session at the model default
-    // effort or fail, and opencode has no applyInitialSessionConfig to fix it.
     const mock = makeMockBackend();
-    // The fresh session reports a different model than the drafted pick, so the
-    // bare-model switch is exercised before the effort write.
     const gpt5Entry = {
       baseModelId: "openai/gpt-5",
       name: "GPT-5",
@@ -2674,8 +2563,6 @@ describe("AgentSession.create (via start)", () => {
       mode: null,
     };
     mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reportedState });
-    // First config write switches the bare model (refreshing the effort
-    // option), the second lands the effort on `thought_level`.
     let resolveModelSwitch!: (state: BackendState) => void;
     mock.setSessionConfigOption
       .mockImplementationOnce(
@@ -2703,15 +2590,12 @@ describe("AgentSession.create (via start)", () => {
     resolveModelSwitch(switchedState);
     await session.ready;
 
-    // Never the model channel.
     expect(mock.setSessionModel).not.toHaveBeenCalled();
-    // The bare model id is set on the model option (no effort suffix)…
     expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
       sessionId: "acp-1",
       configId: "model",
       value: "openai/gpt-5",
     });
-    // …and the drafted effort is set on the effort option.
     expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
       sessionId: "acp-1",
       configId: "thought_level",
@@ -2749,7 +2633,6 @@ describe("AgentSession.create (via start)", () => {
       cwd: "/vault",
       internalId: "internal-1",
       backendId: "opencode",
-      // Legacy unset effort must resolve to a concrete supported level.
       defaultModelSelection: { baseModelId: "openai/gpt-5", effort: null },
       getDescriptor: () => OpencodeBackendDescriptor,
     });
@@ -2764,7 +2647,6 @@ describe("AgentSession.create (via start)", () => {
   });
 });
 
-/** Minimal wire-only descriptor for tests that exercise seed/setModel. */
 function makeWireOnlyDescriptor(): BackendDescriptor {
   const wire = {
     encode: (selection: { baseModelId: string; effort: string | null }) =>
@@ -2776,8 +2658,6 @@ function makeWireOnlyDescriptor(): BackendDescriptor {
   };
   return {
     wire,
-    // Suffix-style backend: effort rides in the wire id, so applying the
-    // encoded selection through the model channel is sufficient.
     applySelection: (
       session: AgentSession,
       selection: { baseModelId: string; effort: string | null }
@@ -2785,11 +2665,6 @@ function makeWireOnlyDescriptor(): BackendDescriptor {
   } as unknown as BackendDescriptor;
 }
 
-/**
- * Descriptor mirroring config-option opencode (≥1.15.13): the model lives on a
- * `model` config option and effort on a sibling `thought_level` option, applied
- * after the bare model. Effort is never packed into the model wire id.
- */
 function makeConfigOptionDescriptor(): BackendDescriptor {
   const wire = {
     encode: (selection: { baseModelId: string; effort: string | null }) =>
@@ -2855,7 +2730,6 @@ describe("AgentSession warm-adoption ready gating", () => {
       },
       mode: null,
     };
-    // Block setSessionModel so we can observe `ready` remaining pending.
     let resolveSetModel!: (s: BackendState) => void;
     mock.setSessionModel.mockImplementationOnce(
       () => new Promise<BackendState>((resolve) => (resolveSetModel = resolve))
@@ -2929,11 +2803,6 @@ describe("AgentSession warm-adoption ready gating", () => {
   });
 });
 
-/**
- * Descriptor whose wire encoding ignores effort (Claude SDK-style). Used
- * to exercise the "effort lives out-of-band" branch where `setModel`
- * would be a no-op and effort is applied via `applyInitialSessionConfig`.
- */
 function makeDescriptorWireWithoutEffort(): BackendDescriptor {
   const wire = {
     encode: (selection: { baseModelId: string; effort: string | null }) => selection.baseModelId,
@@ -2945,8 +2814,6 @@ function makeDescriptorWireWithoutEffort(): BackendDescriptor {
   };
   return {
     wire,
-    // Claude-style: effort lives outside the wire id, so the model channel
-    // carries only the base id and effort goes through setConfigOption.
     applySelection: async (
       session: AgentSession,
       selection: { baseModelId: string; effort: string | null },
@@ -3327,7 +3194,6 @@ describe("AgentSession intent capabilities", () => {
 
   it("canSwitch* return false while the session status is starting", async () => {
     const mock = makeMockBackend();
-    // Keep newSession pending so status stays "starting".
     let resolveNew: ((value: { sessionId: string; state: BackendState }) => void) | null = null;
     mock.newSession.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -3349,7 +3215,6 @@ describe("AgentSession intent capabilities", () => {
     expect(session.canSwitchEffort()).toBe(false);
     expect(session.canSwitchMode()).toBe(false);
 
-    // After ready, the gate lifts and the underlying probes drive the answer.
     resolveNew!({
       sessionId: "acp-1",
       state: {
@@ -3419,7 +3284,6 @@ describe("AgentSession needsAttention flag", () => {
     expect(onNeedsAttentionChanged).toHaveBeenCalledTimes(1);
     expect(onNeedsAttentionChanged).toHaveBeenLastCalledWith(true);
 
-    // No-op: already true.
     session.markNeedsAttention();
     expect(onNeedsAttentionChanged).toHaveBeenCalledTimes(1);
 
@@ -3428,7 +3292,6 @@ describe("AgentSession needsAttention flag", () => {
     expect(onNeedsAttentionChanged).toHaveBeenCalledTimes(2);
     expect(onNeedsAttentionChanged).toHaveBeenLastCalledWith(false);
 
-    // No-op: already false.
     session.clearNeedsAttention();
     expect(onNeedsAttentionChanged).toHaveBeenCalledTimes(2);
   });
@@ -3788,9 +3651,6 @@ describe("AgentSession plan proposal lifecycle", () => {
   });
 
   it("propagates a body-identical setCurrentPlan when the gating state changes", async () => {
-    // Regression: body-identical plan publications still need to propagate
-    // control metadata such as pendingToolCallId. Otherwise a repeated
-    // ExitPlanMode call can leave the UI resolving the wrong permission.
     const mock = makeMockBackend();
     let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
     mock.prompt.mockImplementation(
@@ -3839,9 +3699,6 @@ describe("AgentSession plan proposal lifecycle", () => {
     const second = session.getCurrentPlan();
     expect(second?.pendingToolCallId).toBe("tc-plan-B");
     expect(second?.permissionGated).toBe(true);
-    // Body is byte-identical, so revision must NOT bump — the per-tab
-    // `decided` reset effect in PlanPreviewView keys on revision and would
-    // misfire if we treated this as an in-place content revision.
     expect(second?.revision).toBe(1);
 
     resolvePrompt!({ stopReason: "end_turn" });
@@ -4075,7 +3932,6 @@ describe("AgentSession plan proposal lifecycle", () => {
       backendId: "claude",
     });
     expect(session.getPendingAskUserQuestions()).toHaveLength(0);
-    // Stable reference across idle ticks so React subscribers don't re-render.
     expect(session.getPendingAskUserQuestions()).toBe(session.getPendingAskUserQuestions());
   });
 
@@ -4126,8 +3982,6 @@ describe("AgentSession plan proposal lifecycle", () => {
     expect(session.getStatus()).toBe("awaiting_permission");
 
     const cancelPromise = session.cancel();
-    // Cancellation resolves the card's resolver with `{}` (the cancel signal)
-    // so the SDK turn unblocks instead of dangling.
     await expect(answersPromise).resolves.toEqual({});
     expect(session.getPendingAskUserQuestions()).toHaveLength(0);
     await cancelPromise;
@@ -4233,7 +4087,6 @@ describe("AgentSession status derivation", () => {
     await expect(session.sendPrompt("hi").turn).rejects.toThrow("boom");
     expect(session.getStatus()).toBe("error");
 
-    // A fresh prompt should clear the prior turn error and report running.
     const { turn } = session.sendPrompt("retry");
     expect(session.getStatus()).toBe("running");
     await turn;
@@ -4278,7 +4131,6 @@ describe("AgentSession status derivation", () => {
     resolvePrompt!({ stopReason: "end_turn" });
     await turn;
 
-    // running → awaiting_permission → running → idle, each fired once.
     expect(statusChanges).toEqual(["running", "awaiting_permission", "running", "idle"]);
   });
 });
@@ -4344,10 +4196,6 @@ describe("tryReadExitPlanModeCall", () => {
 });
 
 describe("AgentSession streamed-token notification coalescing", () => {
-  // Controllable rAF: streaming notifications are rAF-batched, so we drive the
-  // frame boundary manually to assert how many `onMessagesChanged` fires the
-  // UI actually sees. Without this they'd coalesce on jsdom's timer and the
-  // assertions would be timing-dependent.
   let rafQueue: FrameRequestCallback[];
   let originalRaf: typeof window.requestAnimationFrame;
   let originalCancelRaf: typeof window.cancelAnimationFrame;
@@ -4364,7 +4212,7 @@ describe("AgentSession streamed-token notification coalescing", () => {
     originalCancelRaf = window.cancelAnimationFrame;
     window.requestAnimationFrame = (cb: FrameRequestCallback): number => {
       rafQueue.push(cb);
-      return rafQueue.length; // 1-based handle
+      return rafQueue.length;
     };
     window.cancelAnimationFrame = (handle: number): void => {
       const idx = handle - 1;
@@ -4400,24 +4248,18 @@ describe("AgentSession streamed-token notification coalescing", () => {
     session.subscribe({ onMessagesChanged, onStatusChanged: () => {} });
 
     const { turn } = session.sendPrompt("hi");
-    // The synchronous user-message + placeholder append notifies immediately so
-    // the user's message paints within one frame — NOT rAF-deferred.
     expect(onMessagesChanged).toHaveBeenCalledTimes(1);
 
-    // A fast token burst within one frame schedules a single rAF.
     onMessagesChanged.mockClear();
     streamChunk(mock, "Hel");
     streamChunk(mock, "lo");
     streamChunk(mock, ", world");
-    // No notification yet — they were coalesced behind the frame.
     expect(onMessagesChanged).not.toHaveBeenCalled();
-    // Store is updated synchronously regardless of the deferred notification.
     expect(session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER)?.message).toBe(
       "Hello, world"
     );
 
     flushFrame();
-    // The whole burst collapsed into exactly one re-render.
     expect(onMessagesChanged).toHaveBeenCalledTimes(1);
 
     resolvePrompt!({ stopReason: "end_turn" });
@@ -4444,21 +4286,14 @@ describe("AgentSession streamed-token notification coalescing", () => {
     const { turn } = session.sendPrompt("hi");
     onMessagesChanged.mockClear();
 
-    // A chunk arrives and schedules a rAF that has NOT fired yet.
     streamChunk(mock, "partial");
     expect(rafQueue).toHaveLength(1);
     expect(onMessagesChanged).not.toHaveBeenCalled();
 
-    // The turn completes before the scheduled frame runs. The turn-complete
-    // notification must fire immediately (trailing edge) and cancel the stale
-    // pending rAF so the message settles to its complete final state — even if
-    // the browser never grants another animation frame.
     resolvePrompt!({ stopReason: "end_turn" });
     await turn;
 
     expect(onMessagesChanged).toHaveBeenCalled();
-    // The pending streaming frame was cancelled by the immediate flush, so a
-    // later frame can't fire a duplicate/stale notification.
     expect(rafQueue).toHaveLength(0);
 
     const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
@@ -4519,7 +4354,6 @@ describe("AgentSession.getCurrentTodoList", () => {
     const snapshot = session.getCurrentTodoList();
     mock.emit(planUpdate([{ content: "same", status: "pending", priority: "low" }]));
     expect(notified).toBe(1);
-    // Held reference stays stable across the deduped update.
     expect(session.getCurrentTodoList()).toBe(snapshot);
   });
 

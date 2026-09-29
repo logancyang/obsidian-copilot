@@ -51,11 +51,6 @@ interface FakeFile {
   contents?: string;
 }
 
-/**
- * Build a minimal in-memory `app` mock that records files written via
- * `vault.create` / `vault.adapter.write` so a round-trip save/load test can
- * read what the previous step wrote without wiring real disk I/O.
- */
 function makeApp() {
   const files = new Map<string, FakeFile>();
   return {
@@ -245,14 +240,6 @@ describe("AgentChatPersistenceManager", () => {
   });
 
   it("writes under the folder captured at entry, not one a mid-save root change swaps in", async () => {
-    // Captured once at entry and threaded through ensure, filename generation,
-    // and the fallback path. Simulate a Copilot-root change landing after the
-    // save starts: the entry read returns the old folder, every later read the
-    // new one. The written path must stay under the old folder so ensure/create
-    // can't straddle two directories.
-    // Only override the entry read; later reads fall back to the default mock
-    // ("test-folder"). The written path must stay under the entry-captured
-    // "old-folder" so ensure/create can't straddle two directories.
     const folderMock = jest.mocked(getEffectiveConversationsFolder);
     folderMock.mockReturnValueOnce("old-folder");
 
@@ -264,7 +251,6 @@ describe("AgentChatPersistenceManager", () => {
   });
 
   it("writes the built-in conversation tag independent of the persisted setting", async () => {
-    // Freeze check: a custom/stale defaultConversationTag must not reach new notes.
     (getSettings as jest.Mock).mockReturnValueOnce({
       defaultSaveFolder: "test-folder",
       defaultConversationTag: "user-custom-tag",
@@ -277,9 +263,6 @@ describe("AgentChatPersistenceManager", () => {
   });
 
   it("serializes a mid-stream fan-out turn so an interrupted autosave isn't blank", async () => {
-    // A long fan-out turn whose composite body has NOT been written to `message`
-    // yet (still streaming), saved mid-turn (reload/close/crash). The live fanout
-    // must be serialized so the streamed per-agent text survives, not a blank bubble.
     const fanoutMsg: AgentChatMessage = {
       id: "msg-2",
       sender: AI_SENDER,
@@ -318,7 +301,6 @@ describe("AgentChatPersistenceManager", () => {
       label: "first\nsecond\rthird",
     });
     const raw = app.files.get(saved!.path)!.contents!;
-    // The label line must remain a single key:value entry.
     const labelLines = raw.split("\n").filter((l) => l.startsWith("agentLabel:"));
     expect(labelLines).toHaveLength(1);
     const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
@@ -346,7 +328,6 @@ describe("AgentChatPersistenceManager", () => {
 
     const loadedA = await manager.loadFile(file as unknown as TFile);
     const loadedB = await manager.loadFile(file as unknown as TFile);
-    // The key contract: same file + same content → same ids across reloads.
     expect(loadedA.messages.map((m) => m.id)).toEqual(loadedB.messages.map((m) => m.id));
     expect(loadedA.messages[0].id.startsWith("loaded-0-")).toBe(true);
   });
@@ -425,8 +406,6 @@ describe("AgentChatPersistenceManager", () => {
           "**user**: hi",
         ].join("\n")
       );
-      // Reason: the stored file carries `contents`, so loadFile's vault.read
-      // path returns the frontmatter (a bare {path} fixture would read empty).
       const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
       expect(loaded.projectId).toBe(GLOBAL_SCOPE);
     });
@@ -434,8 +413,6 @@ describe("AgentChatPersistenceManager", () => {
 
   describe("usage frontmatter", () => {
     afterEach(() => {
-      // Restore the default no-metadata behavior for the adapter helper so a
-      // per-test override (round-trip-on-omit) doesn't leak into other suites.
       (readFrontmatterViaAdapter as jest.Mock).mockResolvedValue(null);
     });
 
@@ -462,14 +439,7 @@ describe("AgentChatPersistenceManager", () => {
       const messages = [makeMessage(USER_SENDER, "hi")];
       const usage = { usedTokens: 5000, contextWindow: 200_000, updatedAt: 1 };
       const first = await manager.saveSession(messages, "claude", { usage });
-      // `resolveExistingFile` gates on `instanceof TFile`; give the stored fake
-      // the mocked prototype so the resave takes the existing-file path (where
-      // usage round-trips) instead of treating it as a brand-new write.
       Object.setPrototypeOf(app.files.get(first!.path)!, TFile.prototype);
-      // Mirror production: `readExistingMeta` reads the prior file's frontmatter
-      // to round-trip fields the caller didn't re-supply. The default mock
-      // returns null (no metadata), so parse the stored file here — quote-strip
-      // matches the real adapter helper so the JSON value comes back intact.
       (readFrontmatterViaAdapter as jest.Mock).mockImplementation(async (_app, path: string) => {
         const raw = app.files.get(path)?.contents ?? "";
         const yaml = raw.match(/^---\n([\s\S]*?)\n---/)?.[1];
@@ -481,7 +451,6 @@ describe("AgentChatPersistenceManager", () => {
         }
         return fm;
       });
-      // A save with no usage option must not drop the stored snapshot.
       const second = await manager.saveSession(messages, "claude", {
         existingPath: first!.path,
       });

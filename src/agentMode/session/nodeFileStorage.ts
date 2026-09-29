@@ -1,15 +1,6 @@
 import type { AgentSessionIndexStorage } from "./AgentSessionIndex";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
-/**
- * `AgentSessionIndexStorage` backed by Node's filesystem, for storing the
- * agent session index OUTSIDE the vault (under `~/.obsidian-copilot/`). The
- * index mirrors device-local backend stores (`~/.claude/projects`, opencode's
- * own session dirs) and references session ids that only resolve on the
- * machine that created them, so it must not ride vault sync — keeping it in
- * the OS app-data dir, beside the runtimes it tracks, avoids ghost entries and
- * sync conflicts on other devices. Desktop-only, matching Agent Mode.
- */
 export function createNodeFileStorage(): AgentSessionIndexStorage {
   const { mkdir, readFile, stat, writeFile } =
     requireNodeModule<typeof import("node:fs/promises")>("fs/promises");

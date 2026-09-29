@@ -25,16 +25,6 @@ export function installStateSignature(state: InstallState): string {
   }
 }
 
-/**
- * Same contract as `useBackendInstallState`, widened to every registered
- * backend at once, for surfaces that list all agents side by side. One store
- * subscription fans out to every descriptor and the snapshot is the joined
- * signature, so a descriptor that allocates a fresh state object per read still
- * cannot force a rerender — and the returned record keeps its identity until a
- * backend's readiness actually changes.
- * @param plugin - The plugin instance used to subscribe to backend-specific readiness changes.
- * @param descriptors - The registered backends to observe.
- */
 export function useBackendInstallStates(
   plugin: CopilotPlugin,
   descriptors: readonly BackendDescriptor[]

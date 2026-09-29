@@ -29,7 +29,6 @@ interface FakeRuntime extends NodeRuntime {
   removedPaths: string[];
 }
 
-/** Create an in-memory runtime for exercising the frame sink without disk IO. */
 function makeRuntime(tmpDir = "/tmp", tempRootMode = 0o1755): FakeRuntime {
   const files = new Map<string, string>();
   const directories = new Set<string>();
@@ -68,12 +67,7 @@ function makeRuntime(tmpDir = "/tmp", tempRootMode = 0o1755): FakeRuntime {
       files.delete(oldPath);
     }),
     chmod: jest.fn(async () => undefined),
-    // Known files are plain files, mkdir-ed paths plain directories, anything
-    // else ENOENT — all owned by uid 1000, so path validation passes and the
-    // queueing tests stay focused. Squatting scenarios live in the real-fs
-    // groups below.
     lstat: jest.fn(async (path: string) => {
-      // Root directory: always owned by root (uid 0), mode 0755.
       if (path === "/") {
         return { uid: 0, mode: 0o755, isDirectory: true, isSymbolicLink: false };
       }
@@ -93,7 +87,6 @@ function makeRuntime(tmpDir = "/tmp", tempRootMode = 0o1755): FakeRuntime {
   };
 }
 
-/** Real-fs NodeRuntime mirroring production `getNodeRuntime`, pinned to a temp base. */
 function makeRealRuntime(tmpBase: string): NodeRuntime {
   return {
     tmpdir: () => tmpBase,
@@ -168,8 +161,6 @@ describe("debugSink", () => {
         expect(log).toContain("toolCallId=call-1");
       });
 
-      // POSIX-only: on win32 the sink skips ownership and mode validation
-      // entirely, so none of these refusals apply.
       describePosix("temp root validation", () => {
         it.each([
           {
@@ -195,9 +186,6 @@ describe("debugSink", () => {
             const paths = getFrameLogPaths("/vault", runtime);
             const lstat = runtime.lstat as jest.MockedFunction<NodeRuntime["lstat"]>;
             const safeLstat = lstat.getMockImplementation()!;
-            // Only the temp root is unsafe; every level below it stays valid, so
-            // a frame that still gets written proves the temp-root check is what
-            // stopped it.
             lstat.mockImplementation(async (path: string) =>
               path === runtime.tmpdir() ? entry : safeLstat(path)
             );
@@ -211,8 +199,6 @@ describe("debugSink", () => {
             expect(runtime.appendFile).not.toHaveBeenCalled();
             expect(runtime.files.size).toBe(0);
 
-            // A refusal is never cached, so a temp root that becomes safe starts
-            // logging again without restarting the plugin.
             lstat.mockImplementation(safeLstat);
             sink.append(makeFrame({ id: "third" }));
             await sink.flush();
@@ -225,10 +211,6 @@ describe("debugSink", () => {
           const paths = getFrameLogPaths("/vault", runtime);
           const lstat = runtime.lstat as jest.MockedFunction<NodeRuntime["lstat"]>;
           const safeLstat = lstat.getMockImplementation()!;
-          // Linux ships /tmp as uid 0, mode 1777: owned by neither us nor any
-          // attacker, and world-writable but sticky. Both allowances are load
-          // bearing — tightening either one stops every Linux install from
-          // logging, which no refusal case can catch.
           lstat.mockImplementation(async (target: string) =>
             target === runtime.tmpdir()
               ? { uid: 0, mode: 0o1777, isDirectory: true, isSymbolicLink: false }
@@ -248,8 +230,6 @@ describe("debugSink", () => {
         const paths = getFrameLogPaths("/vault", runtime);
         const lstat = runtime.lstat as jest.MockedFunction<NodeRuntime["lstat"]>;
         const safeLstat = lstat.getMockImplementation()!;
-        // mkdir reports success, but re-inspecting the level finds a symlink —
-        // the race a squatter wins between the two calls.
         lstat.mockImplementation(async (target: string) =>
           target === paths.dirPath && runtime.directories.has(target)
             ? { uid: 1000, mode: 0o700, isDirectory: false, isSymbolicLink: true }
@@ -279,8 +259,6 @@ describe("debugSink", () => {
         sink.append(makeFrame());
         await sink.flush();
 
-        // Unlike a symlink, a directory may hold content its owner needs, so it
-        // is refused rather than removed.
         expect(runtime.appendFile).not.toHaveBeenCalled();
         expect(runtime.rm).not.toHaveBeenCalled();
       });
@@ -288,8 +266,6 @@ describe("debugSink", () => {
       it("drops the frame instead of writing when path validation fails, then recovers (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
         const runtime = makeRuntime();
         const lstat = runtime.lstat as jest.MockedFunction<NodeRuntime["lstat"]>;
-        // First ensure pass dies on an unreadable path — e.g. a directory the
-        // sink may not traverse. Nothing may be written in response.
         lstat.mockRejectedValueOnce(errno("EACCES"));
         const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
         const paths = getFrameLogPaths("/vault", runtime);
@@ -299,8 +275,6 @@ describe("debugSink", () => {
         expect(runtime.appendFile).not.toHaveBeenCalled();
         expect(runtime.writeFile).not.toHaveBeenCalled();
 
-        // The failed ensure was not cached: the next frame re-validates and
-        // lands normally.
         sink.append(makeFrame({ id: "second" }));
         await sink.flush();
         expect(runtime.files.get(paths.logPath)).toContain('"id":"second"');
@@ -325,8 +299,6 @@ describe("debugSink", () => {
       });
 
       it("returns null rather than throwing when the temp root cannot be trusted (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
-        // World-writable with no sticky bit, which `validateTempRoot` refuses.
-        // A caller assembling a report needs an answer, not an exception.
         const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
         Object.defineProperty(process, "platform", { value: "linux" });
         try {
@@ -342,8 +314,6 @@ describe("debugSink", () => {
       it("resolves only once frames queued before the call have landed in the log", async () => {
         const runtime = makeRuntime();
         const paths = getFrameLogPaths("/vault", runtime);
-        // Hold the queued write open so the ordering is decided by the sink's
-        // chaining rather than by which promise happens to settle first.
         let releaseWrite!: () => void;
         const held = new Promise<void>((resolve) => {
           releaseWrite = resolve;
@@ -361,7 +331,6 @@ describe("debugSink", () => {
           resolvedEarly = false;
           return value;
         });
-        // A macrotask drains every microtask the sink could settle on its own.
         await new Promise((resolve) => window.setTimeout(resolve, 0));
         expect(resolvedEarly).toBe(true);
 
@@ -412,16 +381,9 @@ describe("debugSink", () => {
       });
     });
 
-    // The groups below re-exercise append()/open()/clear() against the REAL
-    // filesystem, proving the frame log's owner-only permission boundary:
-    // mode bits under several umasks, narrowing of paths left permissive by
-    // older builds, and squatted-path containment — none of which the
-    // in-memory runtime can prove.
+    // Real-filesystem groups: the in-memory runtime cannot prove the owner-only permission
+    // boundary. They need a per-test mkdtemp sandbox, umask save/restore and a POSIX-only skip.
     // https://github.com/logancyang/obsidian-copilot-preview/issues/250
-    // They stay separate same-callable groups (as AGENTS.md's lifecycle
-    // exception allows) because they carry a material lifecycle of their own:
-    // a per-test mkdtemp sandbox, process-umask save/restore, and a
-    // POSIX-only skip (win32 has no POSIX mode bits).
     describePosix("on the real filesystem (POSIX)", () => {
       let tmpBase: string;
       let prevUmask: number;
@@ -449,7 +411,6 @@ describe("debugSink", () => {
             await sink.flush();
 
             expect(exists(paths.logPath)).toBe(true);
-            // Every level of the predictable chain is owner-only, not just the leaf.
             expect(modeOf(paths.dirPath)).toBe(0o700);
             expect(modeOf(path.dirname(paths.dirPath))).toBe(0o700);
             expect(modeOf(path.dirname(path.dirname(paths.dirPath)))).toBe(0o700);
@@ -473,7 +434,6 @@ describe("debugSink", () => {
           expect(modeOf(paths.dirPath)).toBe(0o700);
           expect(modeOf(paths.logPath)).toBe(0o600);
           expect(modeOf(paths.rotatedPath)).toBe(0o600);
-          // The pre-existing content survived — narrowing must not truncate.
           const content = await fs.readFile(paths.logPath, "utf8");
           expect(content).toContain("old-active");
           expect(content).toContain('"session/update"');
@@ -491,9 +451,7 @@ describe("debugSink", () => {
           sink.append(makeFrame());
           await sink.flush();
 
-          // The victim directory never received the log file.
           expect(exists(path.join(victim, "acp-frames.ndjson"))).toBe(false);
-          // The squatting link was replaced by a real owner-only directory.
           const leaf = await fs.lstat(paths.dirPath);
           expect(leaf.isSymbolicLink()).toBe(false);
           expect(leaf.isDirectory()).toBe(true);
@@ -505,8 +463,6 @@ describe("debugSink", () => {
           const runtime = makeRealRuntime(tmpBase);
           const paths = getFrameLogPaths("/vault", runtime);
           await fs.mkdir(path.dirname(paths.dirPath), { recursive: true });
-          // A plain file may be content someone owns — unlike a symlink it is
-          // never removed; the sink fails closed instead.
           await fs.writeFile(paths.dirPath, "someone's data", { mode: 0o644 });
 
           const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
@@ -516,8 +472,6 @@ describe("debugSink", () => {
           const leaf = await fs.lstat(paths.dirPath);
           expect(leaf.isFile()).toBe(true);
           expect(await fs.readFile(paths.dirPath, "utf8")).toBe("someone's data");
-          // Refusing means leaving it exactly as found: a sink that walked past
-          // this and narrowed the squatter would rewrite another user's mode.
           expect(modeOf(paths.dirPath)).toBe(0o644);
           expect(exists(paths.logPath)).toBe(false);
         });
@@ -551,10 +505,8 @@ describe("debugSink", () => {
           sink.append(makeFrame());
           await sink.flush();
 
-          // The victim was neither chmodded nor appended to.
           expect(await fs.readFile(victimFile, "utf8")).toBe("victim-content");
           expect(modeOf(victimFile)).toBe(0o644);
-          // The log landed in a fresh private regular file.
           const log = await fs.lstat(paths.logPath);
           expect(log.isSymbolicLink()).toBe(false);
           expect(modeOf(paths.logPath)).toBe(0o600);
@@ -564,10 +516,6 @@ describe("debugSink", () => {
           const runtime = makeRealRuntime(tmpBase);
           const paths = getFrameLogPaths("/vault", runtime);
           await fs.mkdir(paths.dirPath, { recursive: true });
-          // The on-disk uid can't differ without root, so report a foreign owner
-          // for the leaf directory alone. Shifting the runtime's whole idea of
-          // the current uid would make the temp root look foreign too, and the
-          // refusal under test would never be reached.
           const realLstat = runtime.lstat;
           runtime.lstat = async (target: string) => {
             const entry = await realLstat(target);
@@ -578,7 +526,6 @@ describe("debugSink", () => {
           sink.append(makeFrame());
           await sink.flush();
 
-          // No write landed anywhere — in particular no fallback recreate.
           expect(exists(paths.logPath)).toBe(false);
           expect(exists(paths.rotatedPath)).toBe(false);
         });
@@ -598,8 +545,6 @@ describe("debugSink", () => {
           sink.append(makeFrame());
           await sink.flush();
 
-          // Narrowing a file we do not own would rewrite its owner's mode, and
-          // appending would mix our frames into their file.
           expect(await fs.readFile(paths.logPath, "utf8")).toBe("someone else's frames\n");
           expect(modeOf(paths.logPath)).toBe(0o644);
         });
@@ -608,13 +553,10 @@ describe("debugSink", () => {
           const runtime = makeRealRuntime(tmpBase);
           const paths = getFrameLogPaths("/vault", runtime);
           await fs.mkdir(paths.dirPath, { recursive: true });
-          // A sparse active file already past the rotation threshold.
           await fs.writeFile(paths.logPath, "", { mode: 0o644 });
           await fs.truncate(paths.logPath, 51 * 1024 * 1024);
 
           const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
-          // ROTATE_CHECK_EVERY (25) writes trigger the stat check and rename;
-          // one more lands in the freshly created active file.
           for (let i = 0; i < 26; i++) sink.append(makeFrame({ id: String(i) }));
           await sink.flush();
 
@@ -626,11 +568,6 @@ describe("debugSink", () => {
 
       describe("getValidatedPath()", () => {
         it("unlinks a same-name symlink planted at the log path instead of vouching for its target (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
-          // The redirect the string checks cannot catch: the link sits at the
-          // log path, and its target is called the log too and lives under the
-          // same temp root, so basename and containment both hold of the
-          // resolved path. Only the owner-and-mode pass reaches the fact that
-          // the entry is a link at all.
           const runtime = makeRealRuntime(tmpBase);
           const paths = getFrameLogPaths("/vault", runtime);
           const decoyDir = path.join(tmpBase, "decoy");
@@ -648,8 +585,6 @@ describe("debugSink", () => {
           expect(resolved).toBe(paths.logPath);
           expect(fsSync.lstatSync(decoy).isFile()).toBe(true);
           expect(await fs.readFile(decoy, "utf8")).toBe("planted\n");
-          // The link is gone, so the caller's own read finds nothing recorded
-          // rather than the planted file's contents.
           expect(exists(paths.logPath)).toBe(false);
         });
 
@@ -658,8 +593,6 @@ describe("debugSink", () => {
           const paths = getFrameLogPaths("/vault", runtime);
           await fs.mkdir(paths.dirPath, { recursive: true, mode: 0o700 });
           await fs.writeFile(paths.logPath, "someone else's\n", { mode: 0o600 });
-          // Ownership is the one property a test cannot fabricate on disk
-          // without root, so it is asked of the runtime instead.
           const foreign: NodeRuntime = {
             ...runtime,
             lstat: async (p) =>
@@ -703,7 +636,6 @@ describe("debugSink", () => {
 
           expect(modeOf(paths.logPath)).toBe(0o600);
           expect(modeOf(paths.rotatedPath)).toBe(0o600);
-          // Narrowing must not cost the diagnostic history it is protecting.
           expect(await fs.readFile(paths.logPath, "utf8")).toBe("old prompts\n");
         });
 
@@ -713,8 +645,6 @@ describe("debugSink", () => {
 
           await new FrameSink({ vaultBasePath: "/vault", runtime }).narrowLegacyLogs();
 
-          // This runs on every desktop startup, so someone who never enables
-          // frame logging must not find a temp directory made on their behalf.
           expect(exists(paths.dirPath)).toBe(false);
           expect(exists(paths.logPath)).toBe(false);
         });
@@ -749,8 +679,6 @@ describe("debugSink", () => {
 
           await new FrameSink({ vaultBasePath: "/vault", runtime }).narrowLegacyLogs();
 
-          // Each generation stands alone: an entry this sink must refuse says
-          // nothing about the other, which is still the user's own plaintext.
           expect(modeOf(paths.logPath)).toBe(0o644);
           expect(modeOf(paths.rotatedPath)).toBe(0o600);
         });

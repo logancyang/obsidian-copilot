@@ -35,11 +35,6 @@ import type { AgentChatMessage, BackendId, SessionUsage } from "./types";
 const SAFE_FILENAME_BYTE_LIMIT = 100;
 export const AGENT_FILENAME_PREFIX = "agent__";
 
-/**
- * Parse the frontmatter `usage` field (a JSON string) back into a
- * {@link SessionUsage}. Returns `undefined` for absent, non-string, malformed,
- * or wrong-shaped values so a corrupt frontmatter never rejects the whole load.
- */
 function parseUsageJson(raw: unknown): SessionUsage | undefined {
   if (typeof raw !== "string" || raw.trim().length === 0) return undefined;
   try {
@@ -58,35 +53,13 @@ function parseUsageJson(raw: unknown): SessionUsage | undefined {
   return undefined;
 }
 
-/**
- * Result of `loadFile` — restores display-only Agent Mode messages plus
- * routing info needed to spawn the right backend session.
- */
 export interface LoadedAgentChat {
   messages: AgentChatMessage[];
   backendId: BackendId;
   topic?: string;
   label?: string;
-  /**
-   * Backend-side session id captured at save time. When present, the loader
-   * can ask the backend to resume/load that session so the agent regains
-   * conversation context on the next turn. Absent for chats saved before
-   * resume was wired up — those fall back to a fresh session.
-   */
   sessionId?: string;
-  /**
-   * Scope this chat belongs to: a real project id, or {@link GLOBAL_SCOPE}.
-   * HARD CONTRACT: a chat with no `projectId` frontmatter (every legacy
-   * `agent__` chat) resolves to `GLOBAL_SCOPE`, so it keeps appearing in the
-   * global history. Never inferred from the filename — frontmatter is the only
-   * authority.
-   */
   projectId: string;
-  /**
-   * Latest token-usage snapshot captured at save time, or `undefined` for chats
-   * saved before usage was wired up (or with malformed usage frontmatter). Lets
-   * a resumed session show its last-known usage before the next turn.
-   */
   usage?: SessionUsage;
 }
 
@@ -99,20 +72,6 @@ interface ExistingMeta {
   usage?: SessionUsage;
 }
 
-/**
- * Backend-agnostic on-disk persistence for Agent Mode sessions. Mirrors the
- * legacy `ChatPersistenceManager` shape so a single `ChatHistoryPopover` can
- * render both lists, but with three differences:
- *
- *   1. Files are prefixed with `agent__` so they never collide with legacy
- *      project-prefixed (`{projectId}__`) or unprefixed chats.
- *   2. Frontmatter records `mode: agent` and `backendId: <id>` so the loader
- *      can route a history click to the right backend.
- *   3. No project / AI-topic generation — Agent Mode has no project concept
- *      and no chain manager to generate titles with.
- *
- * Sessions with zero visible messages are never written.
- */
 export class AgentChatPersistenceManager {
   private readonly loadedTranscripts = new Map<TAbstractFile | string, string>();
 
@@ -129,15 +88,6 @@ export class AgentChatPersistenceManager {
     this.loadedTranscripts.set(key, baseline);
   }
 
-  /**
-   * Save the supplied messages to disk. Returns the resulting file (or the
-   * existing path on hidden-directory writes), or `null` when the session has
-   * nothing user-visible to persist.
-   *
-   * `existingPath` lets the caller pin updates to a previously-saved file so
-   * they're applied even if the messages list shrinks below the original
-   * `firstMessageEpoch`. When omitted, the file is matched by epoch.
-   */
   async saveSession(
     messages: AgentChatMessage[],
     backendId: BackendId,
@@ -146,14 +96,7 @@ export class AgentChatPersistenceManager {
       modelKey?: string;
       existingPath?: string;
       sessionId?: string | null;
-      /**
-       * Scope to record in frontmatter. Pass a real project id to bind the
-       * chat to that project; omit (or pass `GLOBAL_SCOPE`) for a global chat,
-       * which writes no `projectId` so it stays indistinguishable from legacy
-       * global chats.
-       */
       projectId?: string;
-      /** Latest token-usage snapshot to persist for resume. */
       usage?: SessionUsage;
     }
   ): Promise<{ path: string } | null> {
@@ -162,9 +105,6 @@ export class AgentChatPersistenceManager {
     try {
       const firstMessageEpoch = messages[0].timestamp?.epoch ?? Date.now();
 
-      // Capture the conversations folder once so a concurrent Copilot-root
-      // change can't make this save ensure one directory and then write a path
-      // under another. The fallback path below reads the same snapshot.
       const conversationsFolder = getEffectiveConversationsFolder();
 
       await ensureFolderExists(this.app.vault, conversationsFolder);
@@ -203,13 +143,7 @@ export class AgentChatPersistenceManager {
         modelKey: options?.modelKey,
         lastAccessedAt: existingMeta.lastAccessedAt,
         sessionId: options?.sessionId ?? existingMeta.sessionId,
-        // Reason: round-trip an existing chat's scope when the caller doesn't
-        // re-supply it (e.g. autosave updates), so a project chat never silently
-        // demotes itself to global on a later save. Coerce first so a blank
-        // option falls through to the existing scope instead of clobbering it.
         projectId: coerceProjectId(options?.projectId) ?? existingMeta.projectId,
-        // Round-trip the persisted usage when the caller doesn't re-supply it,
-        // so a save that isn't triggered by a usage change keeps the snapshot.
         usage: options?.usage ?? existingMeta.usage,
       });
 
@@ -256,11 +190,6 @@ export class AgentChatPersistenceManager {
     }
   }
 
-  /**
-   * Parse a saved agent chat file back into `AgentChatMessage`s and routing
-   * info. Tool/plan/thought parts are not restored — the markdown format only
-   * preserves sender + text (display-only history, mirroring legacy mode).
-   */
   async loadFile(file: TFile): Promise<LoadedAgentChat> {
     let content: string;
     try {
@@ -279,8 +208,6 @@ export class AgentChatPersistenceManager {
     const topic = frontmatter.topic?.trim() || undefined;
     const label = frontmatter.agentLabel?.trim() || undefined;
     const sessionId = frontmatter.sessionId?.trim() || undefined;
-    // HARD CONTRACT: absent/blank projectId → GLOBAL_SCOPE, so legacy `agent__`
-    // chats stay in the global history. Never inferred from the filename.
     const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
     const usage = parseUsageJson(frontmatter.usage);
     const messages = this.parseChatBody(body);
@@ -291,17 +218,11 @@ export class AgentChatPersistenceManager {
     return { messages, backendId, topic, label, sessionId, projectId, usage };
   }
 
-  /**
-   * List every persisted Agent Mode chat file (across all backends). Filters
-   * by the `agent__` filename prefix so the result is backend-agnostic and
-   * never collides with legacy or project chats.
-   */
   async getAgentChatHistoryFiles(): Promise<TFile[]> {
     const files = await listMarkdownFiles(this.app, getEffectiveConversationsFolder());
     return files.filter((file) => file.basename.startsWith(AGENT_FILENAME_PREFIX));
   }
 
-  /** Update the user-visible topic in frontmatter. */
   async updateTopic(fileId: string, newTopic: string): Promise<void> {
     await patchFrontmatter(this.app, fileId, { topic: newTopic.trim() });
   }
@@ -360,12 +281,6 @@ export class AgentChatPersistenceManager {
     return messages
       .map((m) => {
         const ts = m.timestamp ? m.timestamp.display : "Unknown time";
-        // A fan-out turn streams into `m.fanout`; its composite body is written
-        // to `m.message` only at completion. If autosave fires mid-turn (a long
-        // turn outliving the debounce, then reload/close/crash), serialize the
-        // LIVE fanout so the saved chat keeps the streamed per-agent text instead
-        // of a blank assistant bubble. Backend ids label the sections here; the
-        // completed turn later overwrites `m.message` with display-name labels.
         const body =
           m.message.length === 0 && m.fanout
             ? serializeFanoutComposite(m.fanout, (id) => id)
@@ -410,9 +325,6 @@ export class AgentChatPersistenceManager {
         }
       }
 
-      // Deterministic id: stable across reloads so React keeps message
-      // identity when the UI re-renders the same loaded chat. Uses the
-      // message's own epoch when present, falling back to the index.
       const id = timestamp
         ? `loaded-${messages.length}-${timestamp.epoch}`
         : `loaded-${messages.length}`;
@@ -438,8 +350,6 @@ export class AgentChatPersistenceManager {
       const m = line.match(/^(\w+):\s*(.+)/);
       if (!m) continue;
       const raw = m[2].trim();
-      // Unquote and unescape: only double-quoted values were escaped on save,
-      // so single-quoted / unquoted values are returned verbatim.
       let value: string;
       if (raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2) {
         value = unescapeYamlString(raw.slice(1, -1));
@@ -540,9 +450,6 @@ export class AgentChatPersistenceManager {
       `mode: ${AGENT_CHAT_MODE}`,
       `backendId: ${args.backendId}`,
     ];
-    // Reason: global chats write no projectId, staying byte-identical to legacy
-    // `agent__` chats (which loadFile maps back to GLOBAL_SCOPE). Coerce so a
-    // blank/whitespace id never leaks a stray frontmatter line.
     const projectId = coerceProjectId(args.projectId);
     if (projectId && projectId !== GLOBAL_SCOPE) {
       lines.push(`projectId: "${escapeYamlString(projectId)}"`);
@@ -552,9 +459,6 @@ export class AgentChatPersistenceManager {
     if (args.label) lines.push(`agentLabel: "${escapeYamlString(args.label)}"`);
     if (args.modelKey) lines.push(`modelKey: "${escapeYamlString(args.modelKey)}"`);
     if (args.lastAccessedAt) lines.push(`lastAccessedAt: ${args.lastAccessedAt}`);
-    // Serialized as a single-quoted JSON string: JSON.stringify emits no single
-    // quotes or raw control chars, so the value round-trips through the YAML
-    // parser (and our hand-rolled splitFrontmatter) verbatim.
     if (args.usage) lines.push(`usage: '${JSON.stringify(args.usage)}'`);
     lines.push("tags:");
     lines.push(`  - ${COPILOT_CONVERSATION_TAG}`);
