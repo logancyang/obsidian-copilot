@@ -53,7 +53,6 @@ describe("AgentMessageStore", () => {
         const parts = msg?.parts ?? [];
         expect(parts).toHaveLength(1);
         expect(parts[0]).toEqual({ kind: "text", text: "Hello, world." });
-        // Flat body stays in sync for persistence / search / error append.
         expect(msg?.message).toBe("Hello, world.");
       });
 
@@ -410,9 +409,6 @@ describe("AgentMessageStore", () => {
 
     describe("loadMessages()", () => {
       it("keeps a message that has no send time undated instead of stamping the load time", () => {
-        // A replayed ACP transcript carries no times, and a saved chat can hold
-        // "Unknown time". Stamping now would date every restored message to the
-        // reopen, and autosave would write that back over the original.
         const store = new AgentMessageStore();
 
         store.loadMessages([
@@ -437,7 +433,6 @@ describe("AgentMessageStore", () => {
         const store = new AgentMessageStore();
         const body = serializeFanoutComposite(liveTurn("loaded summary"), (x) => x.toUpperCase());
         store.loadMessages([
-          // A user message carrying the same body must NOT be read as a composite.
           { id: "u1", sender: USER_SENDER, message: body, timestamp: null, isVisible: true },
           { id: "a1", sender: AI_SENDER, message: body, timestamp: null, isVisible: true },
           {
@@ -450,11 +445,9 @@ describe("AgentMessageStore", () => {
         ]);
         const display = store.getDisplayMessages();
         const assistant = display.find((m) => m.id === "a1");
-        // The body is kept as-is (composite + markers) AND the dropdown is rebuilt.
         expect(assistant?.message).toBe(body);
         expect(assistant?.fanout?.summary.text).toBe("loaded summary");
         expect(Object.keys(assistant?.fanout?.answers ?? {})).toEqual(["opencode", "codex"]);
-        // A plain assistant reply and the user message stay without a fanout.
         expect(display.find((m) => m.id === "a2")?.fanout).toBeUndefined();
         expect(display.find((m) => m.id === "u1")?.fanout).toBeUndefined();
       });
@@ -504,8 +497,6 @@ describe("AgentMessageStore", () => {
         store.addMessage(placeholder());
         const first = store.getDisplayMessages();
         const second = store.getDisplayMessages();
-        // An idle subscription tick (no mutation) must hand back the exact same
-        // array so the top-level `messages` memo bails out without diffing.
         expect(second).toBe(first);
       });
 
@@ -523,19 +514,14 @@ describe("AgentMessageStore", () => {
         const stableBefore = before.find((m) => m.id === stable);
         const streamingBefore = before.find((m) => m.id === streaming);
 
-        // Stream a token into only the second message.
         store.appendAgentText(streaming, "Hello");
 
         const after = store.getDisplayMessages();
         const stableAfter = after.find((m) => m.id === stable);
         const streamingAfter = after.find((m) => m.id === streaming);
 
-        // The array is rebuilt (something changed)...
         expect(after).not.toBe(before);
-        // ...but the untouched message keeps its identity so its memoized React
-        // component skips re-rendering...
         expect(stableAfter).toBe(stableBefore);
-        // ...while the streamed message gets a fresh object reflecting the new text.
         expect(streamingAfter).not.toBe(streamingBefore);
         expect(streamingAfter?.message).toBe("Hello");
       });
@@ -571,8 +557,6 @@ describe("AgentMessageStore", () => {
         };
         store.upsertAgentPart(id, part);
         const before = store.getDisplayMessages()[0];
-        // Re-applying an identical snapshot is a no-op, so the cached view must
-        // survive — no spurious identity churn for the React tree.
         expect(store.upsertAgentPart(id, { ...part })).toBe(false);
         const after = store.getDisplayMessages()[0];
         expect(after).toBe(before);
@@ -604,11 +588,9 @@ describe("AgentMessageStore", () => {
         expect(store.setFanout(id, turn)).toBe(true);
         const after = store.getDisplayMessages().find((m) => m.id === id)?.fanout;
         expect(after?.summary.text).toBe("the summary");
-        // A snapshot, not the same reference.
         expect(after).not.toBe(turn);
         expect(after?.answers).not.toBe(turn.answers);
 
-        // Re-setting (mutated live turn) yields a fresh reference, not a frozen one.
         store.setFanout(id, liveTurn("updated summary"));
         const second = store.getDisplayMessages().find((m) => m.id === id)?.fanout;
         expect(second).not.toBe(after);

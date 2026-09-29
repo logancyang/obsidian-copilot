@@ -127,7 +127,6 @@ describe("AgentSessionIndex", () => {
       titleSource: "user",
     });
 
-    // Without a user rename the agent store's fresher title wins.
     await index.recordSession(
       entry({ sessionId: "s2", title: "Agent title", titleSource: "agent" })
     );
@@ -137,8 +136,6 @@ describe("AgentSessionIndex", () => {
 
   it("a user-sourced live label survives discovered-session merges via recordSession", async () => {
     const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
-    // A tab rename on a live session reaches the index through the
-    // write-through path (recordSession), not setTitle.
     await index.recordSession(entry({ title: "Tab rename", titleSource: "user" }));
     await index.mergeDiscoveredSessions([entry({ title: "Agent original" })]);
     expect((await index.getEntry("opencode", "s1"))?.title).toBe("Tab rename");
@@ -156,17 +153,11 @@ describe("AgentSessionIndex", () => {
   });
 
   it("scopes entries to a project; sweeps fill a missing scope but never strip a known one", async () => {
-    // Reason: project views filter native entries by the recorded projectId.
-    // Write-through (live sessions) is authoritative; a `listSessions` sweep
-    // re-discovering the same session arrives without (or with weaker)
-    // attribution and must not detach the chat from its project.
     const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
     await index.recordSession(entry({ projectId: "proj-1" }));
     await index.mergeDiscoveredSessions([entry({ title: "Sweep title", lastAccessedAtMs: 9_000 })]);
     expect((await index.getEntry("opencode", "s1"))?.projectId).toBe("proj-1");
 
-    // A sweep CAN attribute a session the index never saw live (CLI-created
-    // inside a project folder).
     await index.mergeDiscoveredSessions([
       entry({ sessionId: "s2", projectId: "proj-2", lastAccessedAtMs: 9_000 }),
     ]);
@@ -181,7 +172,6 @@ describe("AgentSessionIndex", () => {
     await first.flush();
     const second = new AgentSessionIndex(storage, INDEX_PATH);
     expect((await second.getEntry("opencode", "s1"))?.projectId).toBe("proj-1");
-    // Absent scope (a pre-projectId or global entry) stays absent ≙ global.
     expect((await second.getEntry("opencode", "global-chat"))?.projectId).toBeUndefined();
   });
 

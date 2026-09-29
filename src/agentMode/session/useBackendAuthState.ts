@@ -75,42 +75,17 @@ const publishAuthProbeStatus = (
 };
 
 export interface BackendAuthUiState {
-  /** True until this surface has refreshed its cached authentication status. */
   checking: boolean;
-  /**
-   * Latest sign-in state, or `null` while the initial probe is in flight or
-   * when the backend has no `auth` capability. Consumers should render the
-   * Sign-in CTA only when `status?.signedIn === false`.
-   */
   status: BackendAuthStatus | null;
-  /** True while an interactive sign-in is running. */
   signingIn: boolean;
-  /** True while the configured profile is being signed out. */
   signingOut: boolean;
-  /** OAuth fallback URL to surface as a clickable link while signing in. */
   url: string | null;
-  /** Start the interactive sign-in flow (no-op if already running). */
   signIn: () => void;
   cancelSignIn: () => void;
-  /** Sign out when supported (no-op while another authentication operation runs). */
   signOut: () => void;
   failed: boolean;
 }
 
-/**
- * Probe and drive a backend's sign-in state. Checks once on mount (proactive —
- * a signed-out backend shows the CTA before the user types) and again after a
- * sign-in completes; reports start/result via `Notice`. Backends without an
- * `auth` capability always report `status: null`.
- *
- * Lives in `session/` because it is written purely against the
- * `descriptor.auth` contract and is consumed from both `ui/` surfaces and
- * backend-owned Configure dialogs — the contract layer is the only home both
- * may import.
- *
- * @param descriptor - Backend whose authentication capability should be observed and driven.
- * @param callerProbeKey - Fallback identity when the backend does not define its authentication inputs.
- */
 export function useBackendAuthState(
   descriptor: BackendDescriptor,
   callerProbeKey?: unknown
@@ -119,7 +94,6 @@ export function useBackendAuthState(
   // All surfaces must invalidate the same profile; installation paths may change without changing accounts.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   const probeKey = descriptor.auth?.getProbeKey?.(settings) ?? callerProbeKey;
-  // Latest settings without making the mount probe re-fire on unrelated edits.
   const settingsRef = React.useRef(settings);
   settingsRef.current = settings;
 

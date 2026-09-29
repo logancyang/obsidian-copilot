@@ -1,16 +1,7 @@
 import type { BackendId } from "@/agentMode/session/types";
 
-/** Frozen empty answerer list — referential stability for the "no qualifying mentions" case. */
 export const EMPTY_ANSWERERS: ReadonlyArray<BackendId> = Object.freeze([]);
 
-/**
- * Resolve the agents that should ANSWER a turn from the user's `@`-mentions: the
- * deduped, installed mentions ONLY. The main agent is NOT auto-included — it
- * summarizes multiple answerers and answers only when itself mentioned. Order
- * is stable (the pill sync plugin reports them sorted by backend id). Pure and
- * UI-free so the composer and session layer share one source of truth — see
- * {@link isFanout}.
- */
 export function resolveAnswerers(args: {
   mentionedAgentIds: ReadonlyArray<BackendId>;
   installedAgentIds: ReadonlySet<BackendId>;
@@ -27,12 +18,6 @@ export function resolveAnswerers(args: {
   return answerers.length > 0 ? answerers : EMPTY_ANSWERERS;
 }
 
-/**
- * Whether a resolved answerer set actually fans out. True for any non-empty set
- * EXCEPT the degenerate `[main]` (only the user's own agent), which collapses to
- * the normal single-agent path so the main agent isn't routed through an
- * ephemeral sub-session. Callers gate the `mentionedAgents` emission on this.
- */
 export function isFanout(answerers: ReadonlyArray<BackendId>, mainAgentId: BackendId): boolean {
   if (answerers.length === 0) return false;
   if (answerers.length === 1 && answerers[0] === mainAgentId) return false;

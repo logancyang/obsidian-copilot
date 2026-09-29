@@ -13,49 +13,17 @@ import type {
   SessionId,
 } from "./types";
 
-/**
- * Warm result of a successful preload. The manager takes ownership of the
- * already-started process but starts a fresh session for the user's chat.
- */
 export interface WarmBackend {
   proc: BackendProcess;
 }
 
-/**
- * Plugin-lifetime owner of per-backend model discovery and the running probe
- * subprocess that produced it. Backends expose model catalogs only as a
- * side-effect of session creation / resume / load, so without this preload
- * the picker would show no entries for non-active backends.
- *
- * Probes once per backend at startup: prefer resume of a persisted probe
- * sessionId, fall back to load, then to new (and persist the new id so the
- * next reload can reuse it — keeps the agent-side session store at one stale
- * entry per machine instead of growing with each reload).
- *
- * The probe subprocess is **kept warm** until the manager consumes it via
- * `takeWarm(backendId)`. That removes the warm subprocess spawn from the
- * critical path of the first chat-open: instead of preload booting a
- * subprocess just to read its catalog and immediately shutting it down,
- * the same subprocess becomes the manager's backend process on first use.
- */
 export class AgentModelPreloader {
   private readonly warm = new Map<BackendId, WarmBackend>();
-  // Probe-owned discovery data. Live sessions never write this map.
   private readonly modelCatalogCache = new Map<BackendId, BackendModelCatalog>();
-  // Per-backend effort options keyed by baseModelId, discovered by probing each
-  // enabled model once after the catalog loads (opencode only advertises effort
-  // for the active model, so the catalog itself carries none). Read by the
-  // picker via `AgentSessionManager.getEffortCatalog`.
   private readonly effortCatalog = new Map<BackendId, Record<string, EffortOption[]>>();
   private readonly inflight = new Map<BackendId, Promise<void>>();
-  // Backends whose in-flight probe baked stale spawn config and must re-probe
-  // once it settles. Set by `refresh`, drained by the probe chain. Coalesces
-  // the burst of config writes one BYOK save produces into a single re-probe.
   private readonly pendingRefresh = new Set<BackendId>();
   private readonly listeners = new Set<() => void>();
-  // Per-warm-entry exit-listener teardowns. Wired when the warm entry is
-  // recorded so we can clear it if the probe subprocess dies before the
-  // manager takes ownership.
   private readonly warmExitUnsubs = new Map<BackendId, () => void>();
   private disposed = false;
 
@@ -66,24 +34,14 @@ export class AgentModelPreloader {
     private readonly beforeBackendStart?: (id: BackendId) => Promise<void>
   ) {}
 
-  /**
-   * Latest model catalog discovered by this backend's probe, or null before discovery.
-   * @param backendId - Backend whose shared discovery result should be read.
-   */
   getCachedModelCatalog(backendId: BackendId): BackendModelCatalog | null {
     return this.modelCatalogCache.get(backendId) ?? null;
   }
 
-  /** Per-model effort options discovered by the post-catalog prefetch, or null. */
   getEffortCatalog(backendId: BackendId): Record<string, EffortOption[]> | null {
     return this.effortCatalog.get(backendId) ?? null;
   }
 
-  /**
-   * Remove all cached discovery for `backendId` after its backend is restarted.
-   * Drops the warm subprocess if it hasn't been taken yet so a fresh probe
-   * runs on the next `preload(backendId)` call.
-   */
   clearCached(backendId: BackendId): void {
     if (this.disposed) return;
     let changed = false;
@@ -94,7 +52,6 @@ export class AgentModelPreloader {
       this.warm.delete(backendId);
       this.warmExitUnsubs.get(backendId)?.();
       this.warmExitUnsubs.delete(backendId);
-      // Best-effort shutdown of the abandoned warm proc.
       warm.proc.shutdown().catch((e) => {
         logWarn(`[AgentMode] preload clearCached: shutdown of warm ${backendId} failed`, e);
       });
@@ -103,11 +60,6 @@ export class AgentModelPreloader {
     if (changed) this.notify();
   }
 
-  /**
-   * Hand the warm backend process to the manager. Single-shot: removes the
-   * entry so subsequent callers see `null` and the manager owns lifetime of
-   * the process from here on.
-   */
   takeWarm(backendId: BackendId): WarmBackend | null {
     const entry = this.warm.get(backendId);
     if (!entry) return null;
@@ -117,12 +69,6 @@ export class AgentModelPreloader {
     return entry;
   }
 
-  /**
-   * Snapshot of the still-warm probe processes, for read-only RPC sweeps
-   * (the history surface's `listSessions`). Unlike {@link takeWarm} this
-   * does NOT consume the entries — the preloader keeps ownership, and the
-   * manager can still adopt the proc later.
-   */
   getWarmProcs(): Array<{ backendId: BackendId; proc: BackendProcess }> {
     return Array.from(this.warm.entries(), ([backendId, entry]) => ({
       backendId,
@@ -130,7 +76,6 @@ export class AgentModelPreloader {
     }));
   }
 
-  /** Best-effort probe; failures are logged and swallowed. Dedupes per backend. */
   preload(backendId: BackendId): Promise<void> {
     if (this.disposed) return Promise.resolve();
     const existing = this.inflight.get(backendId);
@@ -138,25 +83,6 @@ export class AgentModelPreloader {
     return this.startProbeChain(backendId);
   }
 
-  /**
-   * Re-probe `backendId` against current settings after a spawn-config change
-   * (a new API key, an enabled-models edit, …). Unlike {@link preload} — whose
-   * dedupe is right for "ensure a warm proc exists" — a config change may land
-   * *after* an in-flight probe baked its spawn config, so that probe would
-   * cache a stale catalog and the picker would flag the freshly-enabled model
-   * "not offered by agent" until a reload.
-   *
-   * A single BYOK save lands several writes (provider row → key → enabled
-   * models) in a burst, each calling here. The first drops the warm entry and
-   * starts a fresh probe; the rest just flag a trailing re-run, so exactly one
-   * more probe runs once the in-flight one finishes — observing the settled
-   * settings. This coalesces the burst into a single final re-probe without a
-   * debounce timer.
-   *
-   * Returns the probe-chain promise (for preload-status wiring), or `null` when
-   * nothing is warm or in flight — a config change for a never-probed backend
-   * must not spin one up.
-   */
   refresh(backendId: BackendId): Promise<void> | null {
     if (this.disposed) return null;
     const existing = this.inflight.get(backendId);
@@ -169,11 +95,6 @@ export class AgentModelPreloader {
     return this.startProbeChain(backendId);
   }
 
-  /**
-   * Track a probe as one in-flight promise so concurrent callers dedupe against
-   * the whole chain, including any trailing re-runs requested via
-   * {@link refresh}.
-   */
   private startProbeChain(backendId: BackendId): Promise<void> {
     const promise = this.runProbeChain(backendId).finally(() => {
       this.inflight.delete(backendId);
@@ -187,8 +108,6 @@ export class AgentModelPreloader {
     let round = 0;
     do {
       this.pendingRefresh.delete(backendId);
-      // Later rounds replace a warm entry the prior probe set; drop it first so
-      // the abandoned subprocess is shut down rather than leaked.
       if (round > 0) this.clearCached(backendId);
       round += 1;
       await this.runProbe(backendId);
@@ -269,11 +188,6 @@ export class AgentModelPreloader {
       return;
     }
 
-    // Discover each enabled model's effort options before exposing the warm
-    // entry. The probe loop switches the probe session's model and restores it,
-    // so doing it now (rather than after the manager adopts the session) keeps
-    // the adopted session on the original model. Cheap (~ms per switch) and
-    // best-effort — failures leave the picker without prefetched effort.
     await this.runEffortPrefetch(backendId, descriptor, proc, probe.sessionId, probe.state);
 
     // Prefetch awaits RPCs before the exit listener is installed; never cache a
@@ -288,17 +202,11 @@ export class AgentModelPreloader {
       return;
     }
 
-    // Probe succeeded — retain the running subprocess as a warm entry so
-    // the first chat-open can adopt it instead of paying another spawn +
-    // initialize round-trip.
     const warm: WarmBackend = {
       proc,
     };
     const exitUnsub = proc.onExit(() => {
       if (this.disposed) return;
-      // Subprocess died before the manager claimed it. Drop the warm
-      // entry; next createSession will spawn a fresh one through the
-      // descriptor.
       if (this.warm.get(backendId) === warm) {
         this.warm.delete(backendId);
         this.modelCatalogCache.delete(backendId);
@@ -316,12 +224,6 @@ export class AgentModelPreloader {
     this.notify();
   }
 
-  /**
-   * Probe each enabled model's effort options on the just-created probe session
-   * via the descriptor's optional `prefetchEffortCatalog`, caching the result so
-   * the picker can show effort steppers for every model before one is selected.
-   * Best-effort: no hook, no model state, or any error leaves the catalog empty.
-   */
   private async runEffortPrefetch(
     backendId: BackendId,
     descriptor: BackendDescriptor,
@@ -375,10 +277,6 @@ export class AgentModelPreloader {
 
     for (const { label, sessionId, run } of strategies) {
       try {
-        // Register a no-op handler before the call so updates emitted
-        // during the call are demuxed against this sessionId rather than
-        // buffered indefinitely. The manager overrides this with the real
-        // handler when it adopts the session.
         proc.registerSessionHandler(sessionId, () => {});
         const resp = await run();
         logInfo(`[AgentMode] preload ${backendId}: ${label}`);

@@ -36,14 +36,6 @@ interface MockProc {
   promptCount: () => number;
 }
 
-/**
- * Mock backend process whose `prompt` stays pending until the test resolves it,
- * so streamed events can land before the turn settles. `sessionId` is fixed per
- * backend so the orchestrator's per-session handler routing is exercised. Each
- * `prompt` call pushes its own resolver, so the answer turn and the later
- * summary turn (a second sub-session on the main backend) resolve independently;
- * `resolvePrompt`/`rejectPrompt` settle the oldest still-pending prompt.
- */
 function makeMockProc(sessionId: string): MockProc {
   let handler: SessionUpdateHandler | null = null;
   const emptyState = (): BackendState => ({ model: null, mode: null });
@@ -105,8 +97,6 @@ function descriptorFor(id: BackendId, readOnlyModeId?: string): BackendDescripto
     getModeMapping: readOnlyModeId
       ? () => ({
           kind: "setMode" as const,
-          // `plan` deliberately diverges from `readOnlyModeId` so the test
-          // proves the orchestrator applies the read-only sandbox id, NOT plan.
           canonical: { plan: "plan", default: "auto" },
           readOnlyModeId,
         })
@@ -162,22 +152,9 @@ function makeHost(
 
 const flush = () => new Promise((r) => window.setTimeout(r, 0));
 
-/**
- * Real-timer flush that also clears the post-resolve trailing-chunk grace a
- * normally-completed sub-session now waits before it unregisters its handler.
- * Use after resolving an answer prompt when the test then asserts on the
- * downstream summary dispatch / slot text (which only lands once that grace
- * elapses). Padded past the grace so the deferred teardown has fired.
- */
 const flushPastGrace = () =>
   new Promise((r) => window.setTimeout(r, FANOUT_TRAILING_CHUNK_GRACE_MS + 20));
 
-/**
- * Build a `run` input with sensible defaults: `mainAgent` (the multi-answer
- * summarizer) defaults to the first agent for the common case where the main
- * agent is also an answerer, but it is decoupled from `agents` — tests override
- * it to a backend that is NOT an answerer. `originalPromptText` is fixed.
- */
 function runInput(
   agents: BackendId[],
   overrides: Partial<Parameters<FanoutOrchestrator["run"]>[0]> = {}
@@ -470,7 +447,6 @@ describe("FanoutOrchestrator", () => {
         const modelId = "claude-sonnet-4-5";
         host.ensureBackendForFanout = async () => ({ proc, descriptor: ClaudeBackendDescriptor });
         host.getDefaultSelection = () => ({ baseModelId: modelId, effort: "high" });
-        // The real descriptor uses its SDK catalog's effort option.
         const effortOption = ClaudeBackendDescriptor.wire.effortConfigFor?.(modelId);
         expect(effortOption).toBeTruthy();
         jest.mocked(proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
@@ -508,8 +484,6 @@ describe("FanoutOrchestrator", () => {
         procs.get("codex")!.emit(textChunk("s-codex", "Codex says hi"));
         procs.get("claude")!.resolvePrompt();
         procs.get("codex")!.resolvePrompt();
-        // Answers settled; the main agent (claude) now opens a summary sub-session
-        // once the post-resolve trailing-chunk grace on both answers elapses.
         await flushPastGrace();
         procs.get("claude")!.emit(textChunk("s-claude", "summary"));
         procs.get("claude")!.resolvePrompt();
@@ -527,12 +501,8 @@ describe("FanoutOrchestrator", () => {
         });
         expect(turn.summary.status).toBe("done");
         expect(turn.summary.text).toBe("summary");
-        // Three sub-sessions registered read-only: two answers + the summary (a
-        // second session on the main backend), all unregistered on teardown.
         expect(readOnlyRegistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
         expect(readOnlyUnregistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
-        // Every sub-session (incl. the summary's) is tombstoned so it never leaks
-        // into Recent Chats as a phantom native session.
         expect(excludedFromHistory.map((e) => e.sessionId).sort()).toEqual([
           "s-claude",
           "s-claude",
@@ -557,8 +527,6 @@ describe("FanoutOrchestrator", () => {
         procs.get("claude")!.emit(textChunk("s-claude", "ok"));
         procs.get("claude")!.resolvePrompt();
         procs.get("codex")!.rejectPrompt(new Error("backend boom"));
-        // The main agent (claude) summarizes over the one survivor once claude's
-        // post-resolve trailing-chunk grace elapses.
         await flushPastGrace();
         procs.get("claude")!.resolvePrompt();
 
@@ -566,8 +534,6 @@ describe("FanoutOrchestrator", () => {
         expect(turn.answers.claude.status).toBe("done");
         expect(turn.answers.codex.status).toBe("error");
         expect(turn.answers.codex.error).toContain("backend boom");
-        // The failed agent is never fed as an answer AND never named to the
-        // summarizer, so the summary can't mention or speculate about it.
         const summaryCall = (procs.get("claude")!.proc.prompt as jest.Mock).mock.calls[1][0];
         const text = summaryCall.prompt[0].text as string;
         expect(text).toContain("the original question");
@@ -577,10 +543,7 @@ describe("FanoutOrchestrator", () => {
 
       it("applies the read-only sandbox id (never plan) only for backends that advertise one", async () => {
         const { host, procs } = makeHost({
-          // Codex's "read-only" id is its approval preset; Plan uses a separate config option.
           codex: { sessionId: "s-codex", readOnlyModeId: "read-only" },
-          // opencode has no readOnlyModeId → no mode switch (relies on prompt +
-          // permission layers). Stands in for any backend lacking a sandbox.
           opencode: { sessionId: "s-opencode" },
         });
         const orchestrator = new FanoutOrchestrator(host);
@@ -592,13 +555,10 @@ describe("FanoutOrchestrator", () => {
         await flush();
         procs.get("codex")!.resolvePrompt();
         procs.get("opencode")!.resolvePrompt();
-        // Main agent (codex) summary turn.
         await flushPastGrace();
         procs.get("codex")!.resolvePrompt();
         await runPromise;
 
-        // Applies the read-only sandbox id, NOT canonical.plan ("plan") — a backend
-        // (Claude) whose plan mode writes plan files must never be put into it here.
         expect(procs.get("codex")!.setSessionMode).toHaveBeenCalledWith({
           sessionId: "s-codex",
           modeId: "read-only",
@@ -607,7 +567,6 @@ describe("FanoutOrchestrator", () => {
           sessionId: "s-codex",
           modeId: "plan",
         });
-        // No readOnlyModeId → setSessionMode is never called for that backend.
         expect(procs.get("opencode")!.setSessionMode).not.toHaveBeenCalled();
       });
 
@@ -623,20 +582,15 @@ describe("FanoutOrchestrator", () => {
         );
 
         await flush();
-        // Both sub-sessions are mid-prompt; the user cancels the turn.
         controller.abort();
-        // Backends honor the cancel and resolve their pending prompts.
         procs.get("claude")!.resolvePrompt();
         procs.get("codex")!.resolvePrompt();
         const turn = await runPromise;
 
-        // Every in-flight sub-session got cancel called (abort listener path).
         expect(procs.get("claude")!.cancel).toHaveBeenCalledWith({ sessionId: "s-claude" });
         expect(procs.get("codex")!.cancel).toHaveBeenCalledWith({ sessionId: "s-codex" });
-        // No slot is left running; an abort mid-prompt is terminal-cancelled, not done.
         expect(turn.answers.claude.status).toBe("cancelled");
         expect(turn.answers.codex.status).toBe("cancelled");
-        // No summary sub-session ran after cancel (only the two answer prompts).
         expect(procs.get("claude")!.promptCount()).toBe(1);
         expect(turn.summary.status).toBe("pending");
       });
@@ -659,7 +613,6 @@ describe("FanoutOrchestrator", () => {
 
         expect(turn.summary.status).toBe("done");
         expect(turn.summary.text).toBe(FANOUT_ALL_FAILED_SUMMARY);
-        // No summary sub-session was dispatched — nothing to reconcile.
         expect(procs.get("claude")!.promptCount()).toBe(1);
         expect(procs.get("codex")!.promptCount()).toBe(1);
       });

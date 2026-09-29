@@ -1,9 +1,3 @@
-/**
- * Tests the warm-reuse contract added so the first chat-open per backend
- * doesn't pay a second subprocess spawn + initialize handshake. The probe
- * subprocess survives `runProbe` and is handed to the manager via
- * `takeWarm`; failures and shutdowns must dispose the still-warm proc.
- */
 import { App, FileSystemAdapter } from "obsidian";
 import { waitFor } from "@testing-library/react";
 import type CopilotPlugin from "@/main";
@@ -261,7 +255,6 @@ describe("AgentModelPreloader", () => {
 
     await preloader.preload("claude-sdk");
 
-    // Probe started but was NOT shut down — that's the whole point.
     expect(procHandle.start).toHaveBeenCalledTimes(1);
     expect(procHandle.shutdown).not.toHaveBeenCalled();
 
@@ -269,17 +262,13 @@ describe("AgentModelPreloader", () => {
       "claude-sonnet"
     );
 
-    // First takeWarm yields only the running process.
     const warm = preloader.takeWarm("claude-sdk");
     expect(warm).not.toBeNull();
     expect(warm?.proc).toBe(procHandle.proc);
     expect(warm).not.toHaveProperty("state");
 
-    // Single-shot — second call returns null so the manager can never
-    // hand out the same warm proc to two sessions.
     expect(preloader.takeWarm("claude-sdk")).toBeNull();
 
-    // Probe-owned discovery survives process handoff.
     expect(preloader.getCachedModelCatalog("claude-sdk")?.availableModels?.[0].baseModelId).toBe(
       "claude-sonnet"
     );
@@ -315,7 +304,6 @@ describe("AgentModelPreloader", () => {
 
     await preloader.preload("claude-sdk");
     expect(preloader.takeWarm("claude-sdk")).not.toBeNull();
-    // Re-prime — populate a second warm entry to exercise the onExit path.
     await preloader.preload("claude-sdk");
     expect(preloader.getEffortCatalog("claude-sdk")).not.toBeNull();
     procHandle.emitExit();
@@ -333,8 +321,6 @@ describe("AgentModelPreloader", () => {
 
     await preloader.preload("claude-sdk");
 
-    // No usable catalog → preloader discards the proc so we don't keep a
-    // useless subprocess around.
     expect(procHandle.shutdown).toHaveBeenCalledTimes(1);
     expect(preloader.takeWarm("claude-sdk")).toBeNull();
   });
@@ -361,8 +347,6 @@ describe("AgentModelPreloader", () => {
     await preloader.preload("claude-sdk");
     expect(create).toHaveBeenCalledTimes(1);
 
-    // A config change after the warm probe settled: refresh drops the warm
-    // entry and runs a fresh probe.
     await preloader.refresh("claude-sdk");
     expect(create).toHaveBeenCalledTimes(2);
   });
@@ -371,29 +355,23 @@ describe("AgentModelPreloader", () => {
     const { descriptor } = buildDescriptor(() => makeMockProc());
     const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
 
-    // Never preloaded → a config change must not spin a probe up from nothing.
     expect(preloader.refresh("claude-sdk")).toBeNull();
   });
 
   it("coalesces a burst of refreshes into a single trailing re-probe", async () => {
-    // Models a BYOK save: several config writes call refresh in one synchronous
-    // burst. The 2nd/3rd land while the 1st's probe is still in flight (runProbe
-    // awaits proc.start before reading the catalog), so they fold into exactly
-    // one trailing re-probe against the settled settings — not one per write.
     const { descriptor } = buildDescriptor(() => makeMockProc());
     const create = descriptor.createBackendProcess as jest.Mock;
     const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
 
-    await preloader.preload("claude-sdk"); // probe #1 → something warm
+    await preloader.preload("claude-sdk");
     expect(create).toHaveBeenCalledTimes(1);
 
-    const chain = preloader.refresh("claude-sdk"); // drops warm, starts probe #2
+    const chain = preloader.refresh("claude-sdk");
     expect(chain).not.toBeNull();
-    void preloader.refresh("claude-sdk"); // in-flight → trailing-rerun flag
-    void preloader.refresh("claude-sdk"); // in-flight → already flagged
+    void preloader.refresh("claude-sdk");
+    void preloader.refresh("claude-sdk");
     await chain;
 
-    // probe #2 (in-flight) + exactly one trailing probe #3 = 3 total.
     expect(create).toHaveBeenCalledTimes(3);
   });
 

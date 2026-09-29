@@ -49,7 +49,6 @@ describe("resolveActiveNoteToken", () => {
     );
   });
 
-  // split/join (not String.prototype.replace) avoids `$&`/`$1` interpretation in the basename.
   it("preserves `$` characters in the basename (no regex-replacement surprises)", () => {
     expect(resolveActiveNoteToken("ref {activeNote} here", mockFile("Q1 $revenue"))).toBe(
       "ref [[Q1 $revenue]] here"

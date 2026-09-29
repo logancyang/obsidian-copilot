@@ -1,57 +1,22 @@
 import { logWarn } from "@/logger";
 import type { BackendId } from "./types";
 
-/**
- * One resumable agent session known to the plugin, independent of whether a
- * markdown note was saved for it. Recorded write-through as sessions are used
- * (and opportunistically from a backend's native `listSessions`), so the
- * recent-chats list works with `autosaveChat` off and without spawning a
- * backend just to enumerate history.
- */
 export interface AgentSessionIndexEntry {
   backendId: BackendId;
   sessionId: string;
-  /** Last known user-visible title (agent label or user rename), or null. */
   title: string | null;
-  /**
-   * Who set `title`. `"user"` titles win over anything a native
-   * `listSessions` sweep discovers — the agent store keeps its original
-   * title (we never mutate it), so without this marker a plugin-side rename
-   * would be clobbered on the next sweep. Mirrors `AgentSession`'s
-   * `labelSource` semantics. Absent ≙ agent-sourced / unknown.
-   */
   titleSource?: "user" | "agent";
   createdAtMs: number;
   lastAccessedAtMs: number;
-  /**
-   * Owning Agent Projects scope. Absent ≙ the global workspace — including
-   * every entry written before this field existed, so old index files keep
-   * working without a version bump. The project id (not the folder path) is
-   * stored because ids survive a project folder rename; live write-through is
-   * the authoritative source (each `AgentSession` is scope-immutable), with
-   * native sweeps falling back to cwd→project-folder attribution.
-   */
   projectId?: string;
 }
 
 interface AgentSessionIndexFile {
   version: 1;
   entries: AgentSessionIndexEntry[];
-  /**
-   * Keys of sessions the user deleted from recent chats, mapped to deletion
-   * time. Deleting never touches the backend's own session store (it is
-   * shared with the CLI outside Obsidian), so a tombstone is what keeps the
-   * entry from resurrecting on the next native `listSessions` merge.
-   */
   tombstones: Record<string, number>;
 }
 
-/**
- * Minimal file-IO surface the index needs. Production passes a Node-fs
- * implementation rooted at the OS app-data dir (`~/.obsidian-copilot/`), so
- * the index stays device-local and off vault sync; tests pass an in-memory
- * fake. Paths are absolute for the Node-fs backing.
- */
 export interface AgentSessionIndexStorage {
   exists(path: string): Promise<boolean>;
   read(path: string): Promise<string>;
@@ -59,7 +24,6 @@ export interface AgentSessionIndexStorage {
 }
 
 const SAVE_DEBOUNCE_MS = 500;
-/** Keep the on-disk file bounded; prune least-recently-accessed beyond this. */
 const MAX_ENTRIES = 500;
 const MAX_TOMBSTONES = 500;
 
@@ -89,21 +53,11 @@ function sanitizeEntry(raw: unknown): AgentSessionIndexEntry | null {
   };
 }
 
-/**
- * Plugin-local, per-vault store of resumable Agent Mode sessions plus
- * tombstones for user-deleted ones. This is the source of truth that lets
- * recent chats list a session without a markdown note and without a live
- * backend; native `listSessions` results are merged in as enrichment.
- *
- * All mutators lazily load the file on first use and persist with a short
- * debounce; `flush()` forces a pending write (call it on plugin unload).
- */
 export class AgentSessionIndex {
   private entries = new Map<string, AgentSessionIndexEntry>();
   private tombstones = new Map<string, number>();
   private loadPromise: Promise<void> | null = null;
   private saveTimer: number | null = null;
-  // Serializes writes so a slow disk can't interleave two snapshots.
   private writeChain: Promise<void> = Promise.resolve();
 
   constructor(
@@ -111,7 +65,6 @@ export class AgentSessionIndex {
     private readonly filePath: string
   ) {}
 
-  /** All known entries, unsorted. Tombstoned sessions are never present. */
   async getEntries(): Promise<AgentSessionIndexEntry[]> {
     await this.ensureLoaded();
     return Array.from(this.entries.values());
@@ -122,12 +75,6 @@ export class AgentSessionIndex {
     return this.entries.get(entryKey(backendId, sessionId)) ?? null;
   }
 
-  /**
-   * Write-through upsert from live session activity. Clears any tombstone for
-   * the key — the user is actively chatting on this session, so a previous
-   * delete no longer reflects intent. Keeps the earliest `createdAtMs` and the
-   * latest `lastAccessedAtMs`; a null `title` never clobbers a known one.
-   */
   async recordSession(entry: AgentSessionIndexEntry): Promise<void> {
     await this.ensureLoaded();
     const key = entryKey(entry.backendId, entry.sessionId);
@@ -144,21 +91,11 @@ export class AgentSessionIndex {
         entry.lastAccessedAtMs,
         existing?.lastAccessedAtMs ?? entry.lastAccessedAtMs
       ),
-      // A session's scope is immutable, so live and recorded values can only
-      // agree — keep whichever side knows it (an absent incoming value must
-      // not strip a previously recorded scope).
       projectId: entry.projectId ?? existing?.projectId,
     });
     this.scheduleSave();
   }
 
-  /**
-   * Merge sessions discovered via a backend's native `listSessions`. Unlike
-   * {@link recordSession} this respects tombstones (a deleted chat must not
-   * resurrect just because the backend still stores it), never moves
-   * `lastAccessedAtMs` backwards, and never overwrites a user-renamed title
-   * — discovered titles are agent-store originals.
-   */
   async mergeDiscoveredSessions(entries: AgentSessionIndexEntry[]): Promise<void> {
     await this.ensureLoaded();
     let changed = false;
@@ -177,8 +114,6 @@ export class AgentSessionIndex {
           entry.lastAccessedAtMs,
           existing?.lastAccessedAtMs ?? entry.lastAccessedAtMs
         ),
-        // Write-through knows the scope authoritatively; a sweep's cwd-derived
-        // attribution only fills gaps, never overrides.
         projectId: existing?.projectId ?? entry.projectId,
       };
       if (
@@ -195,10 +130,6 @@ export class AgentSessionIndex {
     if (changed) this.scheduleSave();
   }
 
-  /**
-   * Rename support for native-only entries (no frontmatter to patch). Marks
-   * the title user-sourced so discovered-session merges can't clobber it.
-   */
   async setTitle(backendId: BackendId, sessionId: string, title: string): Promise<void> {
     await this.ensureLoaded();
     const key = entryKey(backendId, sessionId);
@@ -213,7 +144,6 @@ export class AgentSessionIndex {
     this.scheduleSave();
   }
 
-  /** Bump `lastAccessedAtMs` (e.g. when the chat is reopened from history). */
   async touch(backendId: BackendId, sessionId: string): Promise<void> {
     await this.ensureLoaded();
     const key = entryKey(backendId, sessionId);
@@ -223,12 +153,6 @@ export class AgentSessionIndex {
     this.scheduleSave();
   }
 
-  /**
-   * Remove the entry and tombstone the key so native merges don't bring it
-   * back. The backend's own session store is deliberately left untouched.
-   * Safe to call for keys that were never indexed (e.g. deleting a markdown
-   * chat whose native twin should stay suppressed).
-   */
   async deleteSession(backendId: BackendId, sessionId: string): Promise<void> {
     await this.ensureLoaded();
     const key = entryKey(backendId, sessionId);
@@ -242,7 +166,6 @@ export class AgentSessionIndex {
     return this.tombstones.has(entryKey(backendId, sessionId));
   }
 
-  /** Force any pending debounced write to disk. */
   async flush(): Promise<void> {
     if (this.saveTimer !== null) {
       window.clearTimeout(this.saveTimer);
@@ -276,8 +199,6 @@ export class AgentSessionIndex {
         }
       }
     } catch (e) {
-      // A corrupt index degrades to "no native history" rather than failing
-      // the whole recent-chats surface; the next save rewrites a clean file.
       logWarn(`[AgentMode] failed to load agent session index at ${this.filePath}`, e);
     }
   }

@@ -1,7 +1,6 @@
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { ModeApplySpec } from "@/agentMode/session/types";
 
-/** Apply all backend settings represented by one picker choice, in order. */
 export async function applyModeSpec(
   session: Pick<AgentSession, "setMode" | "setConfigOption">,
   spec: ModeApplySpec

@@ -17,22 +17,11 @@ import type {
 } from "@/agentMode/session/types";
 import type { MessageContext } from "@/types/message";
 
-/**
- * `AgentChatBackend` implementation backed by an `AgentSession`. The Agent
- * Mode UI tree consumes this exclusively — it knows nothing about the legacy
- * `ChatUIState` / `ChatManager` stack.
- *
- * Edit, regenerate, and persistence operations are intentionally absent —
- * they don't have ACP semantics and Agent Mode chat persistence is deferred.
- */
 export class AgentChatUIState implements AgentChatBackend {
   private listeners = new Set<() => void>();
   private currentTurn: Promise<unknown> | null = null;
 
   constructor(private readonly session: AgentSession) {
-    // Forward message, status, and model changes. The chat UI gates the
-    // send button on `isStarting()`, so it needs to re-render when status
-    // transitions out of `"starting"`.
     this.session.subscribe({
       onMessagesChanged: () => this.notifyListeners(),
       onStatusChanged: () => this.notifyListeners(),
@@ -57,11 +46,6 @@ export class AgentChatUIState implements AgentChatBackend {
     }
   }
 
-  /**
-   * Append a user message and kick off the ACP turn. Returns the new user
-   * message id synchronously plus a `turn` promise the caller can await for
-   * loading-state lifecycle (Stop button, input lock).
-   */
   sendMessage(
     text: string,
     context?: MessageContext,
@@ -90,9 +74,6 @@ export class AgentChatUIState implements AgentChatBackend {
   }
 
   async deleteMessage(id: string): Promise<boolean> {
-    // Refuse delete during an in-flight turn: the placeholder assistant
-    // message is what streaming notifications target, and removing it would
-    // leave the session writing into a vanished id.
     const status = this.session.getStatus();
     if (status === "running" || status === "awaiting_permission") {
       logWarn("[AgentChatUIState] delete refused while turn is in flight");

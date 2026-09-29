@@ -64,62 +64,17 @@ import {
 } from "@/agentMode/session/fanout/fanoutTypes";
 import { v4 as uuidv4 } from "uuid";
 
-/**
- * Seam the session calls to dispatch a multi-agent read-only QA turn. Supplied
- * by `AgentSessionManager`; omitted in tests and on the single-agent path.
- */
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
-/**
- * Prefix opencode uses for placeholder titles before its title-summarizer
- * agent runs. Treating these as "no title" prevents the tab from briefly
- * showing "New session - 2026-…" before the LLM-generated label arrives.
- * Exported so the manager's `listSessions` history sweep applies the same
- * "placeholder is not a real title" rule.
- */
 export const DEFAULT_TITLE_PREFIX = "New session";
-/**
- * Memory backstop for tool output kept in long-lived React state — NOT a
- * display cap. At ~256KB it sits far above any realistic command/search/file
- * result (the chat renders output collapsed in a scrollable box, so normal and
- * large outputs show in full), and only a runaway multi-hundred-KB blob is
- * trimmed to stop the message store from holding it for the whole session. The
- * agent's own context always receives the full output regardless.
- */
 const MAX_TOOL_OUTPUT_TEXT_CHARS = 256_000;
-// ACP prompt results can arrive before the last session/update frames. Require
-// a quiet interval after a cancelled backing prompt settles before dispatching
-// a follow-up on the same session.
 const CANCELLED_TURN_QUIET_MS = 1_000;
-// Shared sentinel so `getPendingToolPermissions()` returns a stable reference
-// when nothing is pending — preserves React `useState` setter bail-out
-// behavior on idle subscription ticks.
 const EMPTY_PERMISSIONS: PermissionPrompt[] = [];
-// Same idea for `getPendingAskUserQuestions()`.
 const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
-// Canonical "no answers" map. Resolving an in-flight question with this on
-// cancel/dispose makes the bridge treat it as a user cancellation.
 const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
-// Canonical "no fan-out" selection — referential stability on the single-agent path.
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
-// Shared "no extra roots" array so a session created without project context
-// keeps a stable reference (no fresh `[]` allocation per construction).
 const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as string[];
 
-/**
- * Optimistically swap `state.model.current.baseModelId` for the persisted
- * user selection so the picker's first paint matches what the user picked.
- *
- * Only `baseModelId` is seeded — `effort` is left as the backend reported.
- * For descriptor-style backends (Claude) effort lives out-of-band and is
- * applied via `applyInitialSessionConfig` → `setConfigOption`; seeding it
- * here would make that step see a matching value and silently skip the
- * real config write. For wire-effort backends (opencode-style) the
- * subsequent `setModel` call carries the user's effort through the
- * encoded id, and the backend's response replaces this seed entirely.
- *
- * Returns the input reference unchanged when no seed is possible.
- */
 function seedSelectionIntoState(
   state: BackendState | null,
   selection: ModelSelection | undefined
@@ -145,12 +100,6 @@ export type AgentSessionStatus =
   | "error"
   | "closed";
 
-/**
- * Statuses that demand the user's eye when reached from `running` on a
- * backgrounded tab. The manager uses this to decide when to flag
- * `needsAttention`. Co-located with the union so adding a new status forces
- * a deliberate decision about whether it belongs here.
- */
 export const ATTENTION_TRIGGER_STATUSES: ReadonlySet<AgentSessionStatus> = new Set([
   "idle",
   "error",
@@ -160,64 +109,20 @@ export const ATTENTION_TRIGGER_STATUSES: ReadonlySet<AgentSessionStatus> = new S
 export interface AgentSessionListener {
   onMessagesChanged(): void;
   onStatusChanged(status: AgentSessionStatus): void;
-  /**
-   * Optional: fired when model, configOption, or mode state changes. The
-   * picker treats all three as one notification channel — they all cause it
-   * to rebuild and there's no value in fanning out separate callbacks.
-   */
   onModelChanged?(): void;
-  /** Optional: fired when the user-visible label changes. */
   onLabelChanged?(): void;
-  /**
-   * Optional: fired when the singleton `currentPlan` changes (created,
-   * revised in place, or cleared). The floating plan card / preview tab
-   * subscribe to this channel.
-   */
   onCurrentPlanChanged?(): void;
-  /**
-   * Optional: fired when the live execution todo list changes (a backend
-   * `plan` update with different content arrived, or the session reset).
-   * The project-info Progress section subscribes to this channel.
-   */
   onCurrentTodoListChanged?(): void;
-  /**
-   * Optional: fired when the "needs attention" flag flips. The tab strip
-   * subscribes to render an accent dot on the brand icon for backgrounded
-   * sessions that finished, errored, or paused for permission while the
-   * user was looking at a different tab.
-   */
   onNeedsAttentionChanged?(needsAttention: boolean): void;
 }
 
-/**
- * A pending project-context-updates note for a session: the coarse "sources may
- * have changed" nudge (`block`) plus the content `epoch` it covers. The epoch is
- * echoed back via {@link ProjectContextUpdatesHooks.markProjectContextUpdatesDelivered}
- * once the turn is accepted, so the manager can advance the session's cursor.
- */
 export interface ProjectContextUpdates {
   epoch: number;
   block: string;
 }
 
-/**
- * Optional per-turn freshness hooks the manager wires into a PROJECT session (a
- * conditional spread leaves them absent for GLOBAL / context-free sessions, so
- * their turn path stays byte-identical to before this feature).
- */
 export interface ProjectContextUpdatesHooks {
-  /**
-   * Sync accessor for a pending updates note for THIS session, or null when the
-   * session has already seen the latest content epoch. Called each turn just
-   * before the prompt is assembled (the manager flushes pending vault events
-   * inside it, so a change made moments before send is seen).
-   */
   getProjectContextUpdates?: () => ProjectContextUpdates | null;
-  /**
-   * Acknowledge that the note for `epoch` rode an ACCEPTED turn so it isn't
-   * re-injected next turn. Called only after the backend accepts the prompt
-   * (mirrors `firstPromptSent`); the fan-out path never calls it.
-   */
   markProjectContextUpdatesDelivered?: (epoch: number) => void;
 }
 
@@ -225,79 +130,25 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   backend: BackendProcess;
   cwd: string;
   internalId: string;
-  /** Logical AgentChatInput identity; a fresh identity is minted when absent. */
   chatInputId?: string;
   backendId: BackendId;
-  /**
-   * Scope this session belongs to. Immutable like `backendId`; defaults to
-   * {@link GLOBAL_SCOPE} (the implicit global workspace).
-   */
   projectId?: ProjectScopeId;
-  /**
-   * Persisted user preference to apply after the backend's initial session
-   * state. The session seeds it optimistically so the first picker paint
-   * shows the user's pick, then confirms with the backend via setModel
-   * (and, for descriptor-style backends, setConfigOption — handled by the
-   * manager's `applyInitialSessionConfig` hook).
-   */
   defaultModelSelection?: ModelSelection;
-  /**
-   * Optional descriptor accessor. The session uses it to resolve mode mappings
-   * without coupling to specific backends. Manager-supplied; tests omit it.
-   */
   getDescriptor?: () => BackendDescriptor | undefined;
-  /**
-   * Optional fan-out dispatcher. When supplied, a turn with more than one agent
-   * runs the multi-agent read-only QA path instead of `backend.prompt()`.
-   * Manager-supplied; tests and the single-agent path omit it.
-   */
   runFanoutTurn?: RunFanoutTurn;
-  /**
-   * Resolve any `BackendId` to its display name for the persisted composite
-   * headings. Manager-supplied; without it the serializer falls back to the id.
-   */
   getDisplayName?: (backendId: BackendId) => string;
-  /**
-   * Resolve the Obsidian `App` for send-boundary side effects (the entitlement
-   * re-check passes it to `validateLicenseKey`). Threaded via DI so the session
-   * never reaches for the global `app`. Manager-supplied; tests omit it.
-   */
   getApp?: () => App;
-  /**
-   * Resolves to the project's context-materialization result. Supplied by the
-   * manager and awaited in `initialize` right BEFORE `newSession`, so the
-   * session appears immediately (send-gated by the loading card) while prefetch
-   * runs in the background and the backend still gets the roots once they're
-   * ready. Absent for GLOBAL / context-free sessions — `initialize` then opens
-   * without delay.
-   *
-   * Carries both the extra searchable roots (forwarded to `newSession`) and the
-   * optional inline `<project_context>` block, captured for injection into this
-   * session's first user prompt.
-   */
   contextReady?: Promise<ContextMaterializationResult>;
 }
 
-/**
- * Pre-resolved state used by tests and by `loadSessionFromHistory` to
- * construct a session that bypasses the async backend startup.
- */
 export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   backend: BackendProcess;
   backendSessionId: SessionId;
   internalId: string;
-  /** Logical AgentChatInput identity; a fresh identity is minted when absent. */
   chatInputId?: string;
   backendId: BackendId;
-  /** Scope this session belongs to. See {@link AgentSessionStartOptions.projectId}. */
   projectId?: ProjectScopeId;
   initialState?: BackendState | null;
-  /**
-   * Optional persisted user preference applied to the warm/adopted session.
-   * Same role as `AgentSessionStartOptions.defaultModelSelection` — seeded
-   * optimistically on construction; setModel runs async and reverts the
-   * seed on failure.
-   */
   defaultModelSelection?: ModelSelection;
   cwd?: string | null;
   getDescriptor?: () => BackendDescriptor | undefined;
@@ -306,116 +157,50 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   getApp?: () => App;
 }
 
-/**
- * Per-chat Agent Mode session. Owns its `AgentMessageStore`, the lifecycle
- * of one backend session id, and the `AbortController` that cancels in-flight
- * turns.
- *
- * Construction is split: `AgentSession.start()` returns synchronously with
- * status `"starting"` so the UI can swap to the new (empty) chat immediately.
- * The backend `newSession` runs in the background; once it resolves the
- * session transitions to `"idle"` and `sendPrompt` becomes usable. While
- * starting, `sendPrompt` throws — the chat UI gates the send button on
- * `getStatus() === "starting"`.
- */
 export class AgentSession {
   readonly store = new AgentMessageStore();
   readonly internalId: string;
   readonly chatInputId: string;
   readonly backendId: BackendId;
   readonly planFeedbackDelivery: "permission" | "next_turn";
-  /** Immutable scope binding ({@link GLOBAL_SCOPE} or a project id). */
   readonly projectId: ProjectScopeId;
-  /** Resolves when startup and any initial model selection have settled. */
   readonly ready: Promise<void>;
   private backendSessionId: SessionId | null = null;
   private readonly backend: BackendProcess;
   private readonly cwd: string | null;
-  // Resolves to the project's context-materialization result; awaited before
-  // `newSession` (null for context-free / resumed sessions, which open without
-  // delay).
   private readonly contextReady: Promise<ContextMaterializationResult> | null;
-  // The project's `<project_context>` block, captured from `contextReady` in
-  // `initialize`. Inlined into the FIRST user prompt only (see `runTurn` /
-  // `buildPromptBlocks`); null for GLOBAL / context-free / resumed sessions.
   private projectContextBlock: string | null = null;
-  // Flips true once the first user prompt has been built, so the project-context
-  // block is injected exactly once at the head of the conversation.
   private firstPromptSent = false;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
   private readonly runFanoutTurn: RunFanoutTurn | null;
   private readonly getDisplayName: ((backendId: BackendId) => string) | null;
   private readonly getApp: (() => App) | null;
-  // Per-turn project-context freshness hooks (see `ProjectContextUpdatesHooks`).
-  // Null for GLOBAL / context-free sessions, so their turn path is unchanged.
   private readonly getProjectContextUpdatesFn: (() => ProjectContextUpdates | null) | null;
   private readonly markProjectContextUpdatesDeliveredFn: ((epoch: number) => void) | null;
-  // `status` is derived from the primitives below — see `getStatus()`.
-  // `cachedStatus` is a memo of the last value we fired through
-  // `onStatusChanged`, used purely for change detection. It is not the
-  // source of truth; never read it from anywhere except
-  // `recomputeStatusIfChanged()`.
   private cachedStatus: AgentSessionStatus = "starting";
-  // Set in `initialize`'s catch when the backend's `newSession` rejects.
-  // Combined with `backendSessionId === null` this yields the startup
-  // `"error"` status.
   private startupFailed = false;
-  // Remains false until the backend has accepted or rejected the persisted
-  // model selection, preventing a prompt from racing that startup write.
   private startupSettled = false;
-  // Set in `runTurn`'s catch; cleared at the top of `sendPrompt` once
-  // preconditions pass. Yields the per-turn `"error"` status while the
-  // session sits idle between a failed turn and the next prompt.
   private lastTurnError = false;
-  // The resolved answerer selection for the most recent turn (deduped
-  // `@`-mentioned installed agents). Empty on the single-agent path.
   private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
-  // Fan-out turns the visible backend never processed. The next single-agent turn
-  // injects them in order as a labeled prior-turn block, then clears, so follow-ups
-  // keep the QA context. LIVE-ONLY — never persisted.
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private placeholderId: string | null = null;
-  // A task update routed to an earlier turn still counts as activity consumed
-  // by the current backend prompt, even though it adds nothing to this turn's
-  // placeholder.
   private currentTurnHadRoutedToolActivity = false;
-  // ACP `messageId`s seen on this turn's content chunks. Used to re-route
-  // trailing chunks that a backend flushes *after* the `session/prompt` result
-  // (observed with opencode + fast DeepSeek models) to the right message.
   private currentMessageIds = new Set<string>();
-  // The most-recently-completed turn's placeholder plus the `messageId`s it
-  // owned. A grace window: late content chunks naming one of these still land
-  // on the finished message instead of being dropped — or, worse, appended to
-  // a newer turn's placeholder. Replaced on the next completion, cleared on
-  // cancel/dispose.
   private settledStream: {
     placeholderId: string;
     messageIds: Set<string>;
     turnStartedAtMs: number;
   } | null = null;
-  // A locally-cancelled prompt whose backend promise has not settled yet. A
-  // follow-up may be composed immediately, but its backend prompt waits on this
-  // barrier so output from the cancelled generation cannot target the new turn.
   private cancelledPromptDrain: Promise<void> | null = null;
   private cancelledTurnActivity = 0;
   private cancelledMessageIds = new Set<string>();
   private abortController: AbortController | null = null;
   private listeners = new Set<AgentSessionListener>();
   private unregisterSessionHandler: (() => void) | null = null;
-  /**
-   * Cached normalized state — produced by the backend at session start /
-   * resume / load and refreshed via `state_changed` events or per-dimension
-   * `setSession*` responses.
-   */
   private currentState: BackendState | null = null;
   private label: string | null = null;
-  // Tracks who set the current label so an agent-pushed `session_info_update`
-  // can't clobber a label the user explicitly chose via Rename.
   private labelSource: "user" | "agent" | null = null;
   private disposed = false;
-  // Pending permission resolvers keyed by toolCallId. Populated when an
-  // ExitPlanMode permission request arrives (via the wrapped prompter); the
-  // chat card resolves them through `resolvePlanProposalPermission`.
   private pendingPlanResolvers = new Map<
     string,
     {
@@ -423,10 +208,6 @@ export class AgentSession {
       resolve: (resp: PermissionDecision) => void;
     }
   >();
-  // Pending permission resolvers for general (non-plan) tool calls. Populated
-  // by `handleToolPermission` when the wrapped prompter routes a request to
-  // this session; the inline `ToolPermissionCard` resolves them through
-  // `resolveToolPermission`.
   private pendingToolResolvers = new Map<
     string,
     {
@@ -434,10 +215,6 @@ export class AgentSession {
       resolve: (resp: PermissionDecision) => void;
     }
   >();
-  // Pending AskUserQuestion resolvers keyed by requestId. Populated by
-  // `handleAskUserQuestion` when the wrapped ask-question prompter routes a
-  // request to this session; the inline `AskUserQuestionCard` resolves them
-  // through `resolveAskUserQuestion`.
   private pendingQuestionResolvers = new Map<
     string,
     {
@@ -445,49 +222,18 @@ export class AgentSession {
       resolve: (answers: AgentQuestionAnswers) => void;
     }
   >();
-  // Singleton "current plan" for the floating card. At most one per session
-  // while in canonical plan mode and a plan has been proposed; cleared on a
-  // terminal user decision or when the canonical mode flips out of plan.
   private currentPlan: CurrentPlan | null = null;
-  // Live execution todo list — the latest `plan` update's entries, normalized
-  // for consumers (the trail's PlanPill reads the message part instead; this
-  // snapshot feeds surfaces outside the message flow). LIVE-ONLY by design:
-  // chat persistence drops plan parts, so a resumed/reloaded session starts
-  // at null and repopulates on the agent's next todo update.
   private currentTodoList: AgentTodoListEntry[] | null = null;
-  // Signature of the last applied list — multiple equal plan updates (e.g.
-  // opencode's synthesized + occasional real plan channel) must not re-notify.
   private currentTodoListSignature: string | null = null;
-  // Latest backend-agnostic token-usage snapshot, or null until the first
-  // `usage_update` (or a persisted snapshot seeded on resume). Session-scoped:
-  // not tied to any turn placeholder.
   private currentUsage: SessionUsage | null = null;
 
-  /**
-   * Latest account-level plan-cap snapshot. Unlike {@link currentUsage} this is not a
-   * property of the session — the caps keep counting elsewhere — so it is live-only and
-   * never persisted: a stale percentage read off disk would be worse than none.
-   */
   private currentPlanUsage: PlanUsage | null = null;
-  // Monotonic counter for `currentPlan.id` so the React tree can detect a
-  // *new* plan-mode review (vs. an in-place revision that bumps `revision`).
   private planSeq = 0;
-  // Tool-call ids the user has already finalized a decision on.
   private decidedPlanToolCallIds = new Set<string>();
-  // True when something happened (turn ended, error, permission prompt) while
-  // this session was not the active tab. The manager owns the policy for
-  // setting this; the session just exposes the flag and notification channel.
   private needsAttention = false;
-  // Streaming backends emit `agent_message_chunk`/`agent_thought_chunk` and
-  // (for codex) `tool_call_update` at up to ~160 fps. We update the store
-  // immediately but coalesce the React-facing `onMessagesChanged` callback
-  // to one fire per animation frame so the trail doesn't rerender 200×/sec.
-  // Non-streaming callers use `notifyMessages()` directly for immediate
-  // flush on turn end / error / permission prompts.
   private notifyScheduled = false;
   private notifyHandle: ReturnType<typeof setTimeout> | number | null = null;
 
-  /** Prefer `AgentSession.start(...)` in production so backend startup runs async. */
   constructor(opts: AgentSessionStateOptions | AgentSessionStartOptions) {
     this.backend = opts.backend;
     this.internalId = opts.internalId;
@@ -502,8 +248,6 @@ export class AgentSession {
     this.getApp = opts.getApp ?? null;
     this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
-    // Only the start path (newSession) awaits context roots; adopted/resumed
-    // sessions had theirs forwarded by the manager's resume/load call already.
     this.contextReady = "contextReady" in opts ? (opts.contextReady ?? null) : null;
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
@@ -513,9 +257,6 @@ export class AgentSession {
         opts.backendSessionId,
         (event) => this.handleSessionEvent(event)
       );
-      // Gate `ready` on the model confirmation round-trip so `sendPrompt`
-      // can't fire on the probe's model before the user's persisted
-      // selection is applied to the backend.
       const selection = opts.defaultModelSelection ?? originalState?.model?.current;
       if (selection && originalState) {
         this.ready = this.confirmSeededSelection(selection, originalState).finally(() => {
@@ -526,8 +267,6 @@ export class AgentSession {
         this.startupSettled = true;
         this.ready = Promise.resolve();
       }
-      // Sync the status cache so the first recomputeStatusIfChanged doesn't
-      // fire a spurious transition that no listener observed.
       this.cachedStatus = this.getStatus();
     } else {
       this.currentState = null;
@@ -535,17 +274,10 @@ export class AgentSession {
     }
   }
 
-  /**
-   * Construct an `AgentSession` synchronously and kick off backend
-   * initialization in the background. The returned session is immediately
-   * registerable with the manager and renderable in the UI; `sendPrompt`
-   * is gated until `ready` resolves.
-   */
   static start(opts: AgentSessionStartOptions): AgentSession {
     return new AgentSession(opts);
   }
 
-  /** The backend session id, or null while still starting. */
   getBackendSessionId(): SessionId | null {
     return this.backendSessionId;
   }
@@ -553,25 +285,14 @@ export class AgentSession {
   private async initialize(opts: AgentSessionStartOptions): Promise<void> {
     const { backend, cwd, defaultModelSelection } = opts;
     try {
-      // Await the project's context roots (if any) BEFORE opening the session.
-      // The session is already visible and send-gated by the loading card; this
-      // delay only postpones the backend round-trip until prefetch settles. The
-      // promise never rejects (degrades to empty), so it can't strand startup.
       const contextResult = this.contextReady ? await this.contextReady : null;
       const additionalDirectories =
         contextResult?.additionalDirectories ?? EMPTY_ADDITIONAL_DIRECTORIES;
-      // Capture the inline `<project_context>` block for this session's first
-      // prompt. The roots go to `newSession` below; the block rides the first
-      // user message (see `runTurn`).
       this.projectContextBlock = contextResult?.projectContextBlock ?? null;
       if (this.disposed) return;
       const resp = await backend.newSession({
         cwd,
-        // Capture the owning scope alongside cwd so the backend can resolve
-        // this project's instructions; GLOBAL_SCOPE for the global workspace.
         projectId: this.projectId,
-        // Extra searchable roots from the project's materialized context. The
-        // backend honors them only when it advertises the capability.
         additionalDirectories,
       });
       if (this.disposed) return;
@@ -586,7 +307,6 @@ export class AgentSession {
       this.unregisterSessionHandler = this.backend.registerSessionHandler(resp.sessionId, (event) =>
         this.handleSessionEvent(event)
       );
-      // dispose() may have run between newSession resolving and now.
       if (this.disposed) {
         this.unregisterSessionHandler();
         this.unregisterSessionHandler = null;
@@ -608,24 +328,10 @@ export class AgentSession {
     }
   }
 
-  /**
-   * Return the session's local in-memory state snapshot without contacting the
-   * backend. `null` while the session is still starting and neither a cached
-   * nor backend-reported state is available.
-   */
   getState(): BackendState | null {
     return this.currentState;
   }
 
-  /**
-   * Switch the active model on this session. On success, replaces the
-   * cached `BackendState` with the freshly-translated one returned by the
-   * backend and notifies `onModelChanged` listeners.
-   *
-   * Throws `MethodUnsupportedError` if the backend does not support model
-   * switching. Callers should treat that as "model switching is not
-   * available" and degrade the UI accordingly.
-   */
   async setModel(modelId: string): Promise<void> {
     if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
@@ -638,13 +344,6 @@ export class AgentSession {
     this.notifyModelChanged();
   }
 
-  /**
-   * Apply an encoded model wire id through whichever channel the current model
-   * state declares. Backends whose catalog comes from a `category:"model"`
-   * config option (opencode ≥ 1.15.13) switch via `session/set_config_option`;
-   * everyone else via `session/set_model`. Falls back to `setModel` before any
-   * model state is known. The encoded wire id is identical for both channels.
-   */
   async applyModelWireId(wireId: string): Promise<void> {
     const apply = this.currentState?.model?.apply;
     if (apply?.kind === "setConfigOption") {
@@ -654,25 +353,6 @@ export class AgentSession {
     await this.setModel(wireId);
   }
 
-  /**
-   * Apply the persisted user selection to the backend via `setModel`.
-   * Runs whenever `defaultModelSelection` is supplied — `setModel` is
-   * idempotent, and the wire-encoding short-circuit below makes it a
-   * pure no-op when the selection already matches the backend's report.
-   *
-   * On success the backend's response replaces `currentState`. On
-   * failure any optimistic baseModelId seed is reverted to `originalState`
-   * so the picker drops back to whatever the backend actually has.
-   *
-   * Skips the round-trip when the encoded form matches. Dispatches through
-   * `descriptor.applySelection` rather than a raw `applyModelWireId`, so a
-   * cross-backend seed carrying a drafted effort is applied through the
-   * backend's own channel — notably config-option opencode (≥1.15.13), where
-   * effort is a separate `thought_level` option that must be sent after the
-   * bare model, not packed into the model wire id. opencode has no
-   * `applyInitialSessionConfig` to split it post-startup, so the seed must be
-   * correct here.
-   */
   private async confirmSeededSelection(
     selection: ModelSelection,
     originalState: BackendState
@@ -693,11 +373,6 @@ export class AgentSession {
     }
   }
 
-  /**
-   * Set a session configuration option (e.g. effort). Reuses
-   * `notifyModelChanged` because the picker treats model and configOption
-   * changes as one channel.
-   */
   async setConfigOption(configId: string, value: string): Promise<void> {
     if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
@@ -706,21 +381,12 @@ export class AgentSession {
       configId,
       value,
     });
-    // A config option can be the model itself (opencode ≥ 1.15.13).
     this.dropUsageWindowOnModelChange(next);
     this.currentState = next;
     this.notifyModelChanged();
     this.clearCurrentPlanIfModeLeft();
   }
 
-  /**
-   * Switch the active session mode (claude permission mode, codex
-   * sandbox preset, etc.). On success, replaces the cached state and
-   * notifies `onModelChanged` listeners.
-   *
-   * Throws `MethodUnsupportedError` when the backend doesn't support mode
-   * switching.
-   */
   async setMode(modeId: string): Promise<void> {
     if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
@@ -733,11 +399,6 @@ export class AgentSession {
     this.clearCurrentPlanIfModeLeft();
   }
 
-  /**
-   * Whether the user can swap the active model on this session. Config-option-
-   * backed catalogs (opencode ≥ 1.15.13) switch via `setConfigOption`; everyone
-   * else via `setModel`.
-   */
   canSwitchModel(): boolean | null {
     if (this.getStatus() === "starting") return false;
     return this.currentState?.model?.apply.kind === "setConfigOption"
@@ -745,13 +406,6 @@ export class AgentSession {
       : this.backend.isSetSessionModelSupported();
   }
 
-  /**
-   * Whether the user can swap effort. Descriptor-style backends (claude) and
-   * config-option-backed models (opencode ≥ 1.15.13) route effort via
-   * `setConfigOption`; suffix-style models that pack effort into the wire id
-   * (codex, older opencode) via `setModel`. The wire routing is encapsulated
-   * here — UI consumers ask intent only.
-   */
   canSwitchEffort(): boolean | null {
     if (this.getStatus() === "starting") return false;
     const descriptor = this.getDescriptor?.();
@@ -762,11 +416,6 @@ export class AgentSession {
       : this.backend.isSetSessionModelSupported();
   }
 
-  /**
-   * Whether the user can swap modes. Each mode option carries its own
-   * apply spec (`setMode` or `setConfigOption`); within a single backend
-   * the dispatch path is consistent, so we sample the first option.
-   */
   canSwitchMode(): boolean | null {
     if (this.getStatus() === "starting") return false;
     const mode = this.currentState?.mode;
@@ -788,14 +437,6 @@ export class AgentSession {
     return true;
   }
 
-  /**
-   * The status is derived from underlying primitives so it cannot drift
-   * from reality: any combination of `disposed`, `backendSessionId`,
-   * `startupSettled`, resolver-map sizes, `abortController`, `startupFailed`, and
-   * `lastTurnError` maps to exactly one status. Mutating any of those
-   * primitives implicitly transitions the status; consumers observe the
-   * change via `onStatusChanged` after `recomputeStatusIfChanged()` runs.
-   */
   getStatus(): AgentSessionStatus {
     if (this.disposed) return "closed";
     if (this.startupFailed) return "error";
@@ -839,43 +480,19 @@ export class AgentSession {
     }
   }
 
-  /**
-   * Whether this session has at least one user-visible message. The model
-   * picker uses this to decide whether non-active backend entries should be
-   * hidden (mid-conversation) or shown (empty new tab).
-   */
   hasUserVisibleMessages(): boolean {
     return this.store.getDisplayMessages().length > 0;
   }
 
-  /**
-   * Replace the display transcript from persisted history (a markdown note or
-   * a backend's on-disk session store) and notify subscribers so an already-
-   * open chat view re-renders immediately. `store.loadMessages` alone mutates
-   * state without firing `onMessagesChanged`, so a freshly-activated tab would
-   * otherwise render blank until the next backend-identity change (e.g. the
-   * user switching tabs and back).
-   */
   loadDisplayMessages(messages: AgentChatMessage[]): void {
     this.store.loadMessages(messages);
     this.notifyMessages();
   }
 
-  /**
-   * User-supplied label for this session (shown in the tab strip). `null`
-   * means "no label" — the UI falls back to a positional default like
-   * "Session N".
-   */
   getLabel(): string | null {
     return this.label;
   }
 
-  /**
-   * Who set the current label: `"user"` (Rename), `"agent"`
-   * (`session_info_update` / title poll), or `null` when unlabeled. The
-   * session index records this so a user rename survives native
-   * `listSessions` sweeps the same way it survives agent retitles here.
-   */
   getLabelSource(): "user" | "agent" | null {
     return this.labelSource;
   }
@@ -888,30 +505,11 @@ export class AgentSession {
     this.notifyLabelChanged();
   }
 
-  /**
-   * Apply a label pushed by the backend agent (via `session_info_update`).
-   * No-op when the user has already renamed this session — Rename wins so
-   * later agent-side title revisions don't blow away the user's choice.
-   */
-  /**
-   * Apply a label restored from persisted history with its original source.
-   * A user-renamed title is reapplied as a sticky user rename; an agent or
-   * derived title is applied agent-sourced, so a resumed opencode/codex
-   * session can still refresh its title from later `session_info_update` /
-   * title-poll updates instead of being frozen as if the user had renamed it.
-   */
   restoreLabel(label: string, source: "user" | "agent"): void {
     if (source === "user") this.setLabel(label);
     else this.applyAgentLabel(label);
   }
 
-  /**
-   * Whether this backend produces its own clean session titles (opencode). When
-   * false (codex, Claude Code) the session derives the tab label client-side and
-   * ignores any backend-provided title. Defaults to `true` when no descriptor is
-   * wired (legacy/test construction), preserving the prior trust-the-backend
-   * behavior.
-   */
   private backendSummarizesTitle(): boolean {
     return this.getDescriptor?.()?.summarizesSessionTitle ?? true;
   }
@@ -940,14 +538,6 @@ export class AgentSession {
     return () => this.listeners.delete(listener);
   }
 
-  /**
-   * Submit a user prompt. Synchronously appends the user message + an empty
-   * assistant placeholder to the store and kicks off the backend prompt.
-   * Streaming session events mutate the placeholder in place. Returns:
-   *   - `userMessageId`: id of the appended user message.
-   *   - `turn`: promise that resolves with `StopReason` when the turn
-   *     completes, or rejects on transport errors.
-   */
   sendPrompt(
     displayText: string,
     context?: MessageContext,
@@ -971,8 +561,6 @@ export class AgentSession {
       timestamp: formatDateTime(new Date()),
       isVisible: true,
       context,
-      // Surface attached images in the posted bubble. The backend consumes the
-      // original `promptContent` image blocks; this is a display-only projection.
       content: buildUserDisplayContent(displayText, promptContent),
     };
     const userMessageId = this.store.addMessage(userMessage);
@@ -990,21 +578,14 @@ export class AgentSession {
     this.currentTurnHadRoutedToolActivity = false;
     this.notifyMessages();
 
-    // Backends without a title summarizer (codex, Claude Code) have no usable
-    // backend-provided title, so derive the tab label from the first user
-    // message. Recorded agent-sourced (not "user"), so a later Rename still wins.
     if (this.label === null && !this.backendSummarizesTitle()) {
       this.applyAgentLabel(deriveChatTitleFromMessages(this.store.getDisplayMessages()));
     }
 
-    // Record the fan-out selection for this turn (empty = single-agent path).
     this.lastMentionedAgents =
       mentionedAgents && mentionedAgents.length > 0 ? mentionedAgents : EMPTY_BACKEND_IDS;
 
     this.abortController = new AbortController();
-    // Clear any prior terminal error before the new turn starts so the
-    // derived status reflects the fresh `"running"` state. Both flips
-    // are recomputed together so listeners see one transition.
     this.lastTurnError = false;
     this.recomputeStatusIfChanged();
 
@@ -1012,7 +593,6 @@ export class AgentSession {
     return { userMessageId, turn };
   }
 
-  /** The resolved answerer selection for the most recent `sendPrompt`; empty on the single-agent path. */
   getLastMentionedAgents(): ReadonlyArray<BackendId> {
     return this.lastMentionedAgents;
   }
@@ -1038,45 +618,22 @@ export class AgentSession {
         ]);
       }
 
-      // Extract live Web Viewer content (reader-mode markdown, YouTube
-      // transcripts) just before the prompt is built so it reflects the page
-      // at send/flush time, not at compose time. Only take the async hop when
-      // there are web tabs — otherwise `backend.prompt` must be invoked
-      // synchronously within this turn (callers rely on that timing).
       const hasWebTabs = (context?.webTabs?.length ?? 0) > 0;
       const webTabBlock = hasWebTabs ? await serializeWebTabContext(context) : "";
-      // The project-context block rides the FIRST user prompt only; capture it
-      // up front so both the fan-out and single-agent paths can inject it.
       const isFirstTurn = !this.firstPromptSent;
       const projectContextBlock = isFirstTurn ? this.projectContextBlock : null;
-      // The coarse "sources may have changed" note for an ongoing/resumed project
-      // session. Read once here (the manager flushes pending vault events inside
-      // the getter) so both paths inject the same value; acked only after the
-      // single-agent backend accepts the turn. Null for GLOBAL / current sessions.
       const projectContextUpdates = this.getProjectContextUpdatesFn?.() ?? null;
       const projectContextUpdatesBlock = projectContextUpdates?.block ?? null;
 
-      // Fan-out path: the `@`-mentioned answerers dispatch the identical prompt in
-      // parallel ephemeral read-only sub-sessions. Multi-answer turns are summarized.
-      // It never talks to the visible backend, so it doesn't inject/flush the
-      // pending fan-out buffer (only appends on completion). `isFanout` collapses
-      // the degenerate `[main]` case so the main agent never both answers and
-      // summarizes — shared with the composer's `mentionedAgents` gate.
       if (
         this.runFanoutTurn &&
         isFanout(this.lastMentionedAgents, this.backendId) &&
         placeholderId
       ) {
-        // Authoritative paywall: a fan-out turn is Plus-only, and the typeahead UI
-        // gate can be bypassed (pasting a pill), so re-check entitlement here at
-        // the session boundary. Paying users short-circuit; everyone else is hard-blocked.
         if (!(await this.ensureMultiAgentEntitlement())) {
           return this.blockFanoutForEntitlement(placeholderId, turnStartedAtMs);
         }
 
-        // Give every fan-out agent the PRIOR visible transcript as a read-only
-        // `<conversation_history>` block so follow-ups ("the answer above") work.
-        // "Prior" excludes this turn's own user message + placeholder. Null → unchanged prompt.
         const historyBlock = buildConversationHistoryBlock(
           this.priorDisplayMessages(userMessageId, placeholderId),
           FANOUT_HISTORY_MAX_CHARS
@@ -1090,19 +647,9 @@ export class AgentSession {
           historyBlock,
           projectContextUpdatesBlock
         );
-        // Deliberately do NOT mark `firstPromptSent` here. Fan-out delivers the
-        // first-turn project-context block only to the ephemeral sub-sessions; the
-        // visible backend never receives this prompt. Consuming the flag would make
-        // the next normal turn skip the block, permanently stripping the project
-        // manifest from the main chat. Leaving it unset lets that turn deliver it
-        // (and each ephemeral fan-out, being memoryless, re-receives it meanwhile).
         return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAtMs);
       }
 
-      // Single-agent path: prepend any buffered fan-out turns as one labeled
-      // prior-turn block so the backend regains continuity. Empty buffer → `null`
-      // → unchanged prompt. Cleared only after `backend.prompt()` resolves below,
-      // so a thrown prompt preserves the buffer for the next turn.
       const leadingContextBlock = buildPriorFanoutContextBlock(this.pendingFanoutContext);
       const promptBlocks = buildPromptBlocks(
         displayText,
@@ -1151,23 +698,10 @@ export class AgentSession {
           resp = { stopReason: "cancelled" };
         }
       }
-      // Flush the buffer only on a non-cancelled completion — only then has the
-      // backend durably ingested the `<prior_turns>` block. A cancelled prompt may
-      // have stopped before ingesting it, so keep and re-inject (a duplicate is
-      // harmless; losing the multi-agent context is the bug).
       if (leadingContextBlock !== null && resp.stopReason !== "cancelled") {
         this.pendingFanoutContext = [];
       }
-      // Mark the project-context block delivered only once the backend has accepted
-      // the turn, so a hard `prompt()` failure (transport/auth) leaves the flag
-      // unset and the user's retry re-delivers the context (a user cancel still
-      // resolves here, and the prompt did reach the backend, so it counts as delivered).
       if (isFirstTurn && promptStarted) this.firstPromptSent = true;
-      // Same delivery contract as `firstPromptSent`: the note reached the backend
-      // in this accepted (possibly cancelled) prompt, so advance the session's
-      // cursor. A hard `prompt()` failure throws before here, leaving the cursor
-      // unmoved so the retry re-delivers the note. Fan-out returns earlier and
-      // never reaches this ack.
       if (projectContextUpdates && promptStarted) {
         this.markProjectContextUpdatesDeliveredFn?.(projectContextUpdates.epoch);
       }
@@ -1189,10 +723,6 @@ export class AgentSession {
       ) {
         this.notifyMessages();
       }
-      // Some backends flush the prompt result before the turn's last content
-      // chunks (opencode + fast DeepSeek). Keep this placeholder reachable by
-      // `messageId` so those trailing chunks still land — except on an explicit
-      // cancel, where further output should stay suppressed.
       if (placeholderId && resp.stopReason !== "cancelled") {
         this.settledStream = {
           placeholderId,
@@ -1221,29 +751,15 @@ export class AgentSession {
       if (this.placeholderId === placeholderId) this.placeholderId = null;
       throw err;
     } finally {
-      // Clearing `abortController` flips the derived status off `"running"`
-      // (to `"error"` if `lastTurnError`, else `"idle"`). Recompute after
-      // both the success path (no error) and the catch path (error set) so
-      // listeners see the single transition out of the in-flight state.
       this.abortController = null;
       this.recomputeStatusIfChanged();
     }
   }
 
-  /**
-   * Authoritative entitlement gate for the fan-out path, at the session send
-   * boundary so a UI bypass can't evade it. Delegates to the shared helper:
-   * paying users allow sync with no network call; otherwise it re-verifies
-   * against `/license`.
-   */
   private ensureMultiAgentEntitlement(): Promise<boolean> {
     return ensureMultiAgentEntitlement(this.getApp?.());
   }
 
-  /**
-   * Clean up a paywall-blocked fan-out turn: surface the upgrade prompt and
-   * finalize the placeholder as an error so no dangling bubble remains.
-   */
   private blockFanoutForEntitlement(placeholderId: string, turnStartedAtMs: number): StopReason {
     showMultiAgentUpgradePrompt();
     this.store.markMessageError(
@@ -1257,13 +773,6 @@ export class AgentSession {
     return "refusal";
   }
 
-  /**
-   * Dispatch a fan-out turn. Every ANSWERER runs the identical `promptBlocks` in
-   * a parallel ephemeral read-only sub-session, answers stream into per-agent
-   * slots of one live {@link FanoutTurn}. Once they settle, the main agent fills
-   * the summary only when there are multiple answers. Returns a `StopReason` so
-   * the surrounding `runTurn` lifecycle matches the single-agent path.
-   */
   private async runFanoutPath(
     placeholderId: string,
     originalPromptText: string,
@@ -1273,16 +782,11 @@ export class AgentSession {
     const signal = this.abortController?.signal ?? new AbortController().signal;
     const input: FanoutRunInput = {
       agents: this.lastMentionedAgents,
-      // Multi-answer turns use the session's main agent as the summarizer.
       mainAgent: this.backendId,
       prompt: withReadOnlyPreamble(promptBlocks),
-      // The raw question fed to the summary. Distinct from `prompt`, which carries
-      // the read-only preamble + context.
       originalPromptText,
       signal,
       onChange: (turn) => {
-        // Live state rides on the placeholder's `message.fanout`; `setFanout` bumps
-        // the message version so the dropdown re-renders per streamed slot.
         this.store.setFanout(placeholderId, turn);
         this.scheduleNotifyMessages();
       },
@@ -1303,10 +807,6 @@ export class AgentSession {
     if (hasContent) {
       const composite = serializeFanoutComposite(turn, (id) => this.displayNameFor(id));
       this.store.appendAgentText(placeholderId, composite);
-      // Buffer this turn so the next single-agent prompt can replay it (the visible
-      // backend never saw it). Prefer the summary ONLY when it generated
-      // successfully; an incomplete (cancelled/errored) summary falls back to
-      // replaying the agents' answers so a follow-up keeps the content the user saw.
       const summaryText = turn.summary.text.trim();
       const replay =
         turn.summary.complete && summaryText.length > 0
@@ -1325,12 +825,6 @@ export class AgentSession {
     return stopReason;
   }
 
-  /**
-   * The visible transcript EXCLUDING the current turn's user message and
-   * placeholder, by exact id. Used to render the fan-out conversation-history
-   * block from PRIOR conversation only. Excluding by identity (not position)
-   * stays correct if anything is inserted between or after those messages.
-   */
   private priorDisplayMessages(
     userMessageId: string,
     placeholderId: string
@@ -1340,24 +834,10 @@ export class AgentSession {
       .filter((m) => m.id !== userMessageId && m.id !== placeholderId);
   }
 
-  /**
-   * Resolve a `BackendId` to its display name via the injected resolver (id
-   * fallback). Mirrors the `fanoutDropdown` resolver so heading and tab agree.
-   */
   private displayNameFor(backendId: BackendId): string {
     return this.getDisplayName?.(backendId) ?? backendId;
   }
 
-  /**
-   * Cancel any in-flight turn. Local cancellation settles the prompt even if
-   * the backend ignores ACP `session/cancel`; the backend notification still
-   * runs so a compliant agent can stop work and keep its session reusable.
-   *
-   * Flushes any pending tool-permission and AskUserQuestion resolvers (rejects
-   * / empty answers respectively) so the inline cards disappear immediately
-   * (and the SDK sees a deny rather than a dangling promise) instead of waiting
-   * for the user to click them.
-   */
   async cancel(): Promise<void> {
     const status = this.getStatus();
     if (status !== "running" && status !== "awaiting_permission") return;
@@ -1381,7 +861,6 @@ export class AgentSession {
     }
   }
 
-  /** Release the allocated backend session. */
   async releaseBackendSession(): Promise<void> {
     const backendSessionId = this.backendSessionId;
     if (!backendSessionId || !this.backend.closeSession) {
@@ -1397,7 +876,6 @@ export class AgentSession {
     }
   }
 
-  /** Detach from the backend. Does not cancel — call `cancel()` first. */
   async dispose(): Promise<void> {
     this.disposed = true;
     this.unregisterSessionHandler?.();
@@ -1413,19 +891,11 @@ export class AgentSession {
     this.cancelledPromptDrain = null;
     this.cancelledMessageIds.clear();
     this.currentMessageIds = new Set();
-    // Fire the `"closed"` transition before clearing listeners so
-    // subscribers still observe it. `disposed = true` above guarantees
-    // `getStatus()` returns `"closed"` regardless of the other primitives.
     this.recomputeStatusIfChanged();
     this.cancelScheduledNotify();
     this.listeners.clear();
   }
 
-  /**
-   * Called by the wrapped permission prompter when an ExitPlanMode permission
-   * request arrives. Returns a promise the backend will await for the
-   * outcome; resolved by the chat card via `resolvePlanProposalPermission`.
-   */
   handlePlanProposalPermission(request: PermissionPrompt): Promise<PermissionDecision> {
     const toolCallId = request.toolCall.toolCallId;
     const exitPlan = tryReadExitPlanModeCall({
@@ -1443,15 +913,6 @@ export class AgentSession {
     });
   }
 
-  /**
-   * Resolve a pending ExitPlanMode permission. `allow: true` selects the
-   * first allow_once option; `false` selects the first reject option (or
-   * cancels when no reject option is offered). When denying, an optional
-   * `denyMessage` is forwarded as the agent-visible deny reason — used by
-   * the plan card to ride user feedback through the same `canUseTool` deny
-   * instead of as a separate follow-up turn. No-op when no permission is
-   * pending for the given id (e.g. non-gated OpenCode proposals).
-   */
   resolvePlanProposalPermission(toolCallId: string, allow: boolean, denyMessage?: string): void {
     const entry = this.pendingPlanResolvers.get(toolCallId);
     if (!entry) return;
@@ -1466,36 +927,22 @@ export class AgentSession {
     this.notifyMessages();
   }
 
-  /** Snapshot of the singleton plan, or `null` if there's nothing to review. */
   getCurrentPlan(): CurrentPlan | null {
     return this.currentPlan;
   }
 
-  /**
-   * The live execution todo list, or `null` when the session has none (no
-   * update yet, the agent cleared it, or the session was resumed — the
-   * snapshot is live-only; persistence never stores it). Returns the held
-   * array reference so React subscribers don't tear on unrelated ticks.
-   */
   getCurrentTodoList(): AgentTodoListEntry[] | null {
     return this.currentTodoList;
   }
 
-  /** Latest token-usage snapshot, or `null` when the session has none yet. */
   getSessionUsage(): SessionUsage | null {
     return this.currentUsage;
   }
 
-  /** Latest plan-cap snapshot, or `null` when the backend has reported none. */
   getPlanUsage(): PlanUsage | null {
     return this.currentPlanUsage;
   }
 
-  /**
-   * Seed the usage snapshot from persisted frontmatter on resume, so a reopened
-   * chat shows its last-known usage immediately instead of blank-until-next-turn.
-   * A live `usage_update` later supersedes it via {@link applyUsageUpdate}.
-   */
   seedSessionUsage(usage: SessionUsage | undefined): void {
     if (!usage) return;
     this.currentUsage = usage;
@@ -1507,12 +954,6 @@ export class AgentSession {
     if (usage.contextWindow === undefined) void this.fillSeededContextWindow(usage);
   }
 
-  /**
-   * Ask the backend's catalog for the seeded snapshot's missing window and fill it in
-   * place. Quietly does nothing when the backend has no catalog, does not know the
-   * model, or the snapshot was superseded while the answer was in flight — a live
-   * update or a model switch is fresher than the seed by definition.
-   */
   private async fillSeededContextWindow(seeded: SessionUsage): Promise<void> {
     if (!this.backend.readContextWindow) return;
     // A chat with no resumable backend session is seeded into a freshly created one,
@@ -1540,14 +981,6 @@ export class AgentSession {
     this.notifyMessages();
   }
 
-  /**
-   * Apply an incoming usage snapshot. A snapshot without a `contextWindow` is a
-   * cumulative/count-only fallback (e.g. ACP's prompt-result totals, which count
-   * lifetime tokens across the session), not current-context occupancy. Once we
-   * already hold an occupancy snapshot (one that carries a window), ignore the
-   * windowless one rather than pair its lifetime tokens with that window and
-   * render a bogus percentage ring. A later live occupancy update supersedes it.
-   */
   private applyUsageUpdate(usage: SessionUsage): void {
     // Some backends use zero as an empty terminal snapshot after cancellation.
     // It does not measure consumed context, so wait for a positive reading.
@@ -1561,14 +994,9 @@ export class AgentSession {
   }
 
   /**
-   * Drop the held context window when the session's model changes, keeping the count.
-   *
-   * The window belongs to the model that reported it. Without this, switching to a
-   * model that reports no window would leave the old model's window in place forever:
-   * {@link applyUsageUpdate} ignores windowless snapshots while a windowed one is held,
-   * so no later update could correct the meter. With the window dropped, the next
-   * snapshot applies, and the ring re-forms once the new model's window is learned
-   * (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
+   * Drop the held context window when the model changes, keeping the count. `applyUsageUpdate`
+   * ignores windowless snapshots while a windowed one is held, so a stale window would stick.
+   * https://github.com/logancyang/obsidian-copilot-preview/issues/193
    */
   private dropUsageWindowOnModelChange(next: BackendState | null): void {
     const before = this.currentState?.model?.current.baseModelId;
@@ -1579,14 +1007,6 @@ export class AgentSession {
     this.notifyMessages();
   }
 
-  /**
-   * Drop the current plan once the user has decided. The UI gates the card
-   * render on `decision === "pending"`, so a terminal state is never visible
-   * to the user — clearing synchronously is fine.
-   * @param proposalId - The plan card being resolved.
-   * @param decision - The action submitted by the user, when known.
-   * @param feedbackText - The user's requested changes for a feedback action.
-   */
   finalizePlanDecision(
     proposalId: string,
     decision?: PlanDecisionAction,
@@ -1624,13 +1044,6 @@ export class AgentSession {
       this.notifyCurrentPlanChanged();
       return;
     }
-    // Bump revision only when the body actually changed. Gating /
-    // pendingToolCallId / sourceFilePath flips are control-flow signals,
-    // not "the plan was revised in place" — they must propagate without
-    // resetting the per-tab `decided` state in `PlanPreviewView`, which
-    // keys on revision. MarkdownRenderer perf for body-identical
-    // republishes is already handled by React's primitive equality on
-    // the `planMarkdown` string in the consumer's effect deps.
     const prev = this.currentPlan;
     const bodyChanged = prev.body !== next.body;
     const changed =
@@ -1650,7 +1063,6 @@ export class AgentSession {
     this.notifyCurrentPlanChanged();
   }
 
-  /** Public — used by mode-picker plumbing to clear the card on mode switch. */
   clearCurrentPlanIfModeLeft(): void {
     if (!this.currentPlan) return;
     const descriptor = this.getDescriptor?.();
@@ -1666,20 +1078,10 @@ export class AgentSession {
     this.notifyCurrentPlanChanged();
   }
 
-  /**
-   * Whether this session has any pending ExitPlanMode permission. The chat
-   * input disables itself while one is outstanding so the user is funneled
-   * toward the proposal card's actions.
-   */
   hasPendingPlanPermission(): boolean {
     return this.pendingPlanResolvers.size > 0;
   }
 
-  /**
-   * Called by the wrapped permission prompter for any non-plan tool call. The
-   * returned promise is resolved when the inline `ToolPermissionCard` calls
-   * `resolveToolPermission` with the user's chosen option.
-   */
   handleToolPermission(request: PermissionPrompt): Promise<PermissionDecision> {
     const toolCallId = request.toolCall.toolCallId;
     return new Promise<PermissionDecision>((resolve) => {
@@ -1689,10 +1091,6 @@ export class AgentSession {
     });
   }
 
-  /**
-   * Resolve a pending tool permission with the option the user selected.
-   * No-op when no permission is pending for the given id (stale clicks).
-   */
   resolveToolPermission(toolCallId: string, optionId: string): void {
     const entry = this.pendingToolResolvers.get(toolCallId);
     if (!entry) return;
@@ -1702,24 +1100,11 @@ export class AgentSession {
     this.notifyMessages();
   }
 
-  /**
-   * Snapshot of every pending tool-permission request, in arrival order so
-   * the UI renders cards stably (oldest at the top). Returns a shared empty
-   * array when nothing is pending so React subscribers don't re-render on
-   * unrelated ticks (a fresh `Array.from` would always change identity).
-   */
   getPendingToolPermissions(): PermissionPrompt[] {
     if (this.pendingToolResolvers.size === 0) return EMPTY_PERMISSIONS;
     return Array.from(this.pendingToolResolvers.values(), (e) => e.request);
   }
 
-  /**
-   * Called by the wrapped ask-question prompter when the backend invokes its
-   * inline-question surface (Claude SDK's `AskUserQuestion`). The returned
-   * promise resolves when the inline `AskUserQuestionCard` calls
-   * `resolveAskUserQuestion` with the user's answers — or with `EMPTY_ANSWERS`
-   * if the turn is cancelled/disposed, which the bridge maps to a deny.
-   */
   handleAskUserQuestion(request: AskUserQuestionPrompt): Promise<AgentQuestionAnswers> {
     const requestId = request.requestId;
     if (request.signal?.aborted) return Promise.resolve(EMPTY_ANSWERS);
@@ -1737,11 +1122,6 @@ export class AgentSession {
     });
   }
 
-  /**
-   * Resolve a pending AskUserQuestion with the user's answers. An empty map
-   * signals cancellation (the bridge turns it into the "User cancelled the
-   * question" deny). No-op when no question is pending for the given id.
-   */
   resolveAskUserQuestion(requestId: string, answers: AgentQuestionAnswers): void {
     const entry = this.pendingQuestionResolvers.get(requestId);
     if (!entry) return;
@@ -1779,22 +1159,11 @@ export class AgentSession {
     if (this.store.upsertAgentPart(messageId, part)) this.notifyMessages();
   }
 
-  /**
-   * Snapshot of every pending AskUserQuestion request, in arrival order so the
-   * UI renders cards stably. Returns a shared empty array when nothing is
-   * pending so React subscribers don't re-render on unrelated ticks.
-   */
   getPendingAskUserQuestions(): AskUserQuestionPrompt[] {
     if (this.pendingQuestionResolvers.size === 0) return EMPTY_QUESTIONS;
     return Array.from(this.pendingQuestionResolvers.values(), (e) => e.request);
   }
 
-  /**
-   * Reject every pending resolver in `map` with the canonical deny decision
-   * derived from the request's offered options, then clear the map. Used by
-   * `cancel()` and `dispose()` so the inline cards disappear and the SDK
-   * turn unblocks instead of leaving a dangling promise.
-   */
   private flushResolvers(
     map: Map<string, { request: PermissionPrompt; resolve: (resp: PermissionDecision) => void }>
   ): void {
@@ -1805,11 +1174,6 @@ export class AgentSession {
     this.recomputeStatusIfChanged();
   }
 
-  /**
-   * Resolve every pending AskUserQuestion with `EMPTY_ANSWERS` (the
-   * cancellation signal) and clear the map. The answer-shaped resolvers can't
-   * reuse `flushResolvers`, which deals in `PermissionDecision`.
-   */
   private flushQuestionResolvers(): void {
     for (const { resolve } of this.pendingQuestionResolvers.values()) {
       resolve(EMPTY_ANSWERS);
@@ -1827,10 +1191,6 @@ export class AgentSession {
     const toolOwnerStopReason = toolOwnerMessageId
       ? this.store.getMessage(toolOwnerMessageId)?.turnStopReason
       : undefined;
-    // A completed non-cancelled message belongs to an earlier turn. Its
-    // background task may settle while a later prompt is being cancelled, so
-    // preserve that update while continuing to suppress the cancelled turn's
-    // own tool activity.
     const isPriorToolUpdate =
       toolOwnerMessageId !== undefined &&
       toolOwnerStopReason !== undefined &&
@@ -1863,16 +1223,11 @@ export class AgentSession {
       }
     }
 
-    // Refresh the live todo snapshot before any placeholder gating — the
-    // snapshot is session-scoped state, not part of the message trail.
     if (update.sessionUpdate === "plan" && this.applyCurrentTodoList(update.entries)) {
       this.notifyCurrentTodoListChanged();
     }
 
-    // Session-scoped updates aren't tied to a turn placeholder.
     if (update.sessionUpdate === "session_info_update") {
-      // Only trust a pushed title from a backend that actually summarizes
-      // (opencode). codex would push its raw-prompt-derived title here.
       if (this.backendSummarizesTitle()) this.applyAgentLabel(update.title);
       return;
     }
@@ -1884,12 +1239,9 @@ export class AgentSession {
       return;
     }
     if (update.sessionUpdate === "current_mode_update") {
-      // The backend will follow this with a `state_changed` event carrying
-      // the recomputed BackendState; nothing to do here.
       return;
     }
     if (update.sessionUpdate === "config_option_update") {
-      // Same — the `state_changed` follow-up carries the recomputed state.
       return;
     }
     if (update.sessionUpdate === "usage_update") {
@@ -1902,11 +1254,6 @@ export class AgentSession {
       return;
     }
 
-    // Content chunks can trail past the prompt result on some backends (the
-    // result is flushed before the turn's final chunks — opencode + fast
-    // DeepSeek). Route them by `messageId` so a late chunk still lands on its
-    // own message, even after the turn settled and `placeholderId` was cleared,
-    // and without leaking onto a newer turn's placeholder.
     if (
       update.sessionUpdate === "agent_message_chunk" ||
       update.sessionUpdate === "agent_thought_chunk"
@@ -1958,9 +1305,6 @@ export class AgentSession {
         return;
       }
       case "tool_call_update": {
-        // A background launch can settle during a later prompt; route the
-        // update to the message that owns the tool call so the original card
-        // settles instead of a duplicate appearing on the current turn.
         if (targetMessageId !== placeholderId) this.currentTurnHadRoutedToolActivity = true;
         const existing = this.findToolCallPart(targetMessageId, update.toolCallId);
         const merged = mergeToolCallUpdate(existing, update);
@@ -1993,15 +1337,6 @@ export class AgentSession {
     }
   }
 
-  /**
-   * Pick the message a content chunk should append to. A chunk whose
-   * `messageId` belongs to the just-settled turn routes there — this covers
-   * backends that flush the `session/prompt` result before the turn's final
-   * chunks, so the tail isn't dropped. Otherwise the chunk belongs to the
-   * in-flight turn's placeholder, and we record its `messageId` so the same
-   * message's later chunks stay routable once the turn settles. Returns null
-   * when there's no message to append to (a genuinely stray update).
-   */
   private resolveContentTarget(messageId: string | undefined): string | null {
     if (
       this.cancelledPromptDrain ||
@@ -2024,11 +1359,6 @@ export class AgentSession {
     return msg?.parts?.find((p) => p.kind === "tool_call" && p.id === toolCallId);
   }
 
-  /**
-   * Handle a fresh `ExitPlanMode` tool_call: open or revise the floating
-   * plan card with the new body and route the gated permission resolver
-   * id at it.
-   */
   private publishGatedPlan(
     toolCallId: string,
     info: { plan: string; planFilePath?: string }
@@ -2046,21 +1376,10 @@ export class AgentSession {
     });
   }
 
-  /** Whether the session is currently in canonical plan mode. */
   private isCurrentlyInPlanMode(): boolean {
     return this.currentState?.mode?.current === "plan";
   }
 
-  /**
-   * Recompute the derived status and fire `onStatusChanged` if it changed
-   * since the last time we fired. The cache (`cachedStatus`) exists purely
-   * for change detection — never read it as truth; always call
-   * `getStatus()`.
-   *
-   * Call this after mutating any primitive that participates in the
-   * derivation: `disposed`, `backendSessionId`, `startupFailed`, `startupSettled`,
-   * `abortController`, `lastTurnError`, or the resolver maps.
-   */
   private recomputeStatusIfChanged(): void {
     const next = this.getStatus();
     if (next === this.cachedStatus) return;
@@ -2085,12 +1404,6 @@ export class AgentSession {
     }
   }
 
-  /**
-   * Coalesced variant for streaming hot paths. Multiple calls within a
-   * single animation frame collapse to one `onMessagesChanged` fire. Store
-   * mutations have already happened synchronously, so subscribers see the
-   * latest state on their next render — they just see fewer renders.
-   */
   private scheduleNotifyMessages(): void {
     if (this.notifyScheduled) return;
     this.notifyScheduled = true;
@@ -2119,15 +1432,8 @@ export class AgentSession {
     }
   }
 
-  /**
-   * Pull the agent-generated title for this session via `listSessions` and
-   * apply it as the tab label. Best-effort: silently no-ops when the agent
-   * doesn't support listing or when the title is still the default.
-   */
   private async pollSessionTitle(): Promise<void> {
     if (this.labelSource === "user") return;
-    // Only backends that summarize return a clean title; for the rest the tab
-    // label is derived client-side from the first user message (see sendPrompt).
     if (!this.backendSummarizesTitle()) return;
     try {
       const resp = await this.backend.listSessions(this.cwd ? { cwd: this.cwd } : {});
@@ -2152,21 +1458,6 @@ export class AgentSession {
     }
   }
 
-  /**
-   * Apply a `plan` update's entries to the live todo snapshot. Returns true
-   * when the canonical content actually changed (signature compare) — equal
-   * lists from redundant updates (opencode's synthesized + real plan channel,
-   * Claude's multiple stream injection points) are dropped silently. An empty
-   * entries list clears the snapshot back to `null`.
-   *
-   * Layer 2 of 3 in the todo-plan dedup chain — the SNAPSHOT layer: suppresses
-   * no-op `onCurrentTodoListChanged` ticks for the Progress section. It is NOT
-   * redundant with the others: the emit layer (`claudeTodoPlan.emitIfChanged`)
-   * collapses one backend's repeated injections, and `planEntriesEqual`
-   * (AgentMessageStore) dedups the rendered plan message part — this layer is
-   * the only one guarding the live snapshot's listeners, and the only one that
-   * sees ALL backends' plan updates converged.
-   */
   private applyCurrentTodoList(entries: AgentPlanEntry[]): boolean {
     const next: AgentTodoListEntry[] = entries.map((e) => ({
       content: e.content,
@@ -2200,12 +1491,10 @@ export class AgentSession {
   }
 }
 
-/** Build the visible message for a completed turn that produced no UI activity. */
 function buildEmptyTurnMessage(backendId: BackendId, stopReason: StopReason): string {
   return `${backendId} finished the turn without returning any assistant text or tool activity (stop reason: ${stopReason}). Try again, or switch models if this repeats.`;
 }
 
-/** Format prompt failures with provider error details when available. */
 function formatPromptFailure(err: unknown): string {
   const base = err2String(err);
   const providerMessage = extractProviderErrorMessage(err);
@@ -2213,7 +1502,6 @@ function formatPromptFailure(err: unknown): string {
   return `${base}\n${providerMessage}`;
 }
 
-/** Extract concise model/provider errors nested inside AI SDK error objects. */
 function extractProviderErrorMessage(err: unknown): string | null {
   const found = findProviderErrorPayload(err, new Set<unknown>());
   if (!found) return null;
@@ -2223,7 +1511,6 @@ function extractProviderErrorMessage(err: unknown): string | null {
   return `${type}: ${message}`;
 }
 
-/** Recursively search common AI SDK error shapes for provider error payloads. */
 function findProviderErrorPayload(
   value: unknown,
   seen: Set<unknown>
@@ -2239,9 +1526,6 @@ function findProviderErrorPayload(
       return { type: errorRecord.type, message: errorRecord.message };
     }
   }
-  // Some agents (e.g. codex-acp) stringify the upstream provider error as JSON
-  // inside a `message` field. Parse and recurse so the real reason surfaces
-  // instead of a bare "Internal error".
   if (typeof record.message === "string") {
     const parsed = tryParseJsonObject(record.message);
     if (parsed) {
@@ -2264,10 +1548,9 @@ function findProviderErrorPayload(
   return null;
 }
 
-/** Parse a string into a plain object, or null if it isn't JSON-object-shaped. */
 function tryParseJsonObject(s: string): Record<string, unknown> | null {
   const t = s.trim();
-  if (!t.startsWith("{")) return null; // cheap guard; don't parse plain text
+  if (!t.startsWith("{")) return null;
   try {
     const v = JSON.parse(t);
     return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
@@ -2280,19 +1563,6 @@ type DisplayContentItem =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
 
-/**
- * Project a user prompt's text + outgoing image blocks into the display
- * `content` shape the chat renderer understands: `ChatSingleMessage` renders a
- * `content` array of `text` and `image_url` entries (text first, then images,
- * mirroring the legacy chat composer). The backend still consumes the original
- * `PromptContent` image blocks (base64); this is a display-only projection so
- * attached images show in the posted user bubble.
- *
- * Returns undefined when there are no images — text-only messages render via the
- * renderer's plain `message` fallback and don't need a `content` array. When
- * images are present, the text entry is included only if there is prompt text,
- * so an image-only message doesn't render an empty text line.
- */
 export function buildUserDisplayContent(
   displayText: string,
   promptContent?: PromptContent[]
@@ -2321,13 +1591,6 @@ export function buildPromptBlocks(
   leadingContextBlock?: string | null,
   projectContextUpdatesBlock?: string | null
 ): PromptContent[] {
-  // Context sections precede the user message: the project-context block (first
-  // user prompt only — the project's folders/notes/URLs), then the coarse
-  // "sources may have changed" updates note (ongoing/resumed turns), then an
-  // optional prior-turn block (buffered fan-out turns the backend never saw), the
-  // vault envelope (attached notes + note excerpts), web-selection excerpts, then
-  // live web-tab content. Web tab/selection blocks reuse the legacy `<web_*>` tags
-  // so the model reads the same shapes it does in the non-agent chat.
   const sections = [
     projectContextBlock?.trim() || null,
     projectContextUpdatesBlock?.trim() || null,
@@ -2345,11 +1608,6 @@ export function buildPromptBlocks(
   return [{ type: "text", text: headText }, ...extras];
 }
 
-/**
- * Prepend the read-only QA instruction to the shared prompt blocks for a fan-out
- * turn. Leads the first text block (or a new one) so every agent reads the same
- * read-only framing before the context. Identical for every agent.
- */
 export function withReadOnlyPreamble(blocks: PromptContent[]): PromptContent[] {
   const i = blocks.findIndex((b) => b.type === "text");
   if (i === -1) return [{ type: "text", text: FANOUT_READONLY_PREAMBLE }, ...blocks];
@@ -2359,22 +1617,12 @@ export function withReadOnlyPreamble(blocks: PromptContent[]): PromptContent[] {
   return out;
 }
 
-/**
- * Extract live Web Viewer content for the attached web tabs, reusing the
- * non-agent chat's processor (reader-mode markdown, YouTube transcripts,
- * timeouts, dedup, availability handling). Returns "" when there are no tabs.
- */
 async function serializeWebTabContext(context: MessageContext | undefined): Promise<string> {
   const webTabs = context?.webTabs;
   if (!webTabs || webTabs.length === 0) return "";
   return (await ContextProcessor.getInstance().processContextWebTabs(webTabs)).trim();
 }
 
-/**
- * Serialize web-page text selections as `<web_selected_text>` blocks. The
- * content is already captured at selection time, so this is synchronous (no
- * webview round-trip). Note excerpts are handled by {@link buildContextEnvelope}.
- */
 function buildWebSelectionBlocks(context: MessageContext | undefined): string | null {
   const selections = (context?.selectedTextContexts ?? []).filter(isWebSelectedTextContext);
   if (selections.length === 0) return null;
@@ -2391,12 +1639,6 @@ function buildWebSelectionBlocks(context: MessageContext | undefined): string | 
     .join("\n\n");
 }
 
-/**
- * Build the `<copilot-context>` envelope listing the vault items attached to
- * THIS message (`@notes` + selected excerpts) and inlining note excerpts.
- * Returns `null` when there's nothing to attach. Distinct from the project-wide
- * `<project_context>` block, which lists the project's configured sources.
- */
 function buildContextEnvelope(context: MessageContext | undefined): string | null {
   if (!context) return null;
   const notePaths = (context.notes ?? []).map((n) => n.path).filter(Boolean);
@@ -2447,11 +1689,6 @@ function toolCallToPart(
   };
 }
 
-/**
- * Detect whether a tool_call / tool_call_update represents the agent's
- * plan-finalization signal. Returns the parsed payload (`plan`, optional
- * `planFilePath`) when so, or `null` otherwise.
- */
 export function tryReadExitPlanModeCall(args: {
   kind?: string;
   rawInput: unknown;
@@ -2529,12 +1766,6 @@ function extractToolCallOutputs(
   return outputs.length > 0 ? outputs : undefined;
 }
 
-/**
- * Pass tool-output text through untouched unless it exceeds the runaway
- * backstop ({@link MAX_TOOL_OUTPUT_TEXT_CHARS}). The marker is explicit that
- * only the *display* copy is trimmed and the agent still got everything, so a
- * user never reads it as lost data.
- */
 function capToolOutputText(text: string): AgentToolCallOutput {
   if (text.length <= MAX_TOOL_OUTPUT_TEXT_CHARS) return { type: "text", text };
   const omitted = text.length - MAX_TOOL_OUTPUT_TEXT_CHARS;
@@ -2546,11 +1777,6 @@ function capToolOutputText(text: string): AgentToolCallOutput {
   };
 }
 
-/**
- * Pick the first option matching one of the given kinds (in order) and return
- * a `selected` decision. Falls back to `cancelled` (spec-safe no-decision)
- * when the agent offers no matching option.
- */
 function decisionFor(
   req: PermissionPrompt,
   kinds: ReadonlyArray<PermissionOptionKind>

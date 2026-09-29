@@ -15,7 +15,6 @@ import type {
   ModelWireCodec,
 } from "./types";
 
-/** Default codec: no provider, no effort. Treats wire id as the bare baseModelId. */
 const passthroughWire: ModelWireCodec = {
   encode: (sel) => sel.baseModelId,
   decode: (id) => ({ selection: { baseModelId: id, effort: null }, provider: null }),
@@ -35,7 +34,6 @@ function descriptor(opts: Partial<BackendDescriptor> = {}): BackendDescriptor {
   } as unknown as BackendDescriptor;
 }
 
-/** Suffix-style codec: `<provider>/<base>[/<effort>]`. */
 const suffixWire: ModelWireCodec = {
   encode: (sel) => (sel.effort ? `${sel.baseModelId}/${sel.effort}` : sel.baseModelId),
   decode: (id) => {
@@ -91,8 +89,6 @@ describe("translateBackendState", () => {
 
     describe("model catalog from config option (opencode ≥ 1.15.13)", () => {
       it("builds the catalog from a category:'model' select when models is null", () => {
-        // opencode 1.15.13 drops the `models` state and reports the catalog as a
-        // generic select with category "model".
         const modelOpt = selectOption(
           "model",
           [
@@ -110,7 +106,6 @@ describe("translateBackendState", () => {
           "omlx/gemma-4-e4b-it-8bit",
           "omlx/Qwen3.6-35B-A3B-UD-MLX-4bit",
         ]);
-        // Friendly names come from the option, not the raw wire id.
         expect(state.model?.availableModels[0]?.name).toBe("oMLX/gemma-4-e4b-it-8bit");
         expect(state.model?.current.baseModelId).toBe("omlx/Qwen3.6-35B-A3B-UD-MLX-4bit");
         expect(state.model?.apply).toEqual({ kind: "setConfigOption", configId: "model" });
@@ -131,7 +126,6 @@ describe("translateBackendState", () => {
           { models, modes: null, configOptions: [modelOpt] },
           suffixDescriptor()
         );
-        // `models` wins → setModel channel, catalog from `models` not the option.
         expect(state.model?.current.baseModelId).toBe("omlx/gemma-4-e4b-it-8bit");
         expect(state.model?.apply).toEqual({ kind: "setModel" });
       });
@@ -375,8 +369,6 @@ describe("translateBackendState", () => {
       });
 
       it("prefers the base-model blurb from a model config option over a per-effort one (https://github.com/Brevilabs/obsidian-copilot-private/issues/219)", () => {
-        // codex publishes both channels: `models` carries a per-effort blurb on
-        // every variant, the config option carries the base model's own.
         const models: RawModelState = {
           currentModelId: "oai/sol/low",
           availableModels: [
@@ -761,7 +753,6 @@ describe("translateBackendState", () => {
       });
 
       it("EffortOption shape from suffix grouping ≡ shape from effortConfigFor (case 15)", () => {
-        // Suffix path: gpt-5 with low/medium/high
         const suffixModels: RawModelState = {
           currentModelId: "openai/gpt-5/medium",
           availableModels: [
@@ -776,7 +767,6 @@ describe("translateBackendState", () => {
         );
         const suffixOpts = suffixState.model!.availableModels[0].effortOptions;
 
-        // Descriptor path: same effort levels via effortConfigFor
         const cfgOpt = selectOption("effort", [
           { value: "low" },
           { value: "medium" },
@@ -798,11 +788,8 @@ describe("translateBackendState", () => {
         );
         const descrOpts = descrState.model!.availableModels[0].effortOptions;
 
-        // Both produce {value, label} shape — labels differ (Default vs from
-        // configOption name) but value vocabulary aligns.
         expect(suffixOpts.every((o) => "value" in o && "label" in o)).toBe(true);
         expect(descrOpts.every((o) => "value" in o && "label" in o)).toBe(true);
-        // Values: suffix path adds null when bare exists, but here it doesn't.
         expect(suffixOpts.map((o) => o.value)).toEqual(["low", "medium", "high"]);
         expect(descrOpts.map((o) => o.value)).toEqual(["low", "medium", "high"]);
       });

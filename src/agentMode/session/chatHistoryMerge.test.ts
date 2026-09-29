@@ -153,7 +153,7 @@ describe("chatHistoryMerge", () => {
       const title = deriveChatTitleFromMessages([msg(USER_SENDER, long)]);
       expect(title).toContain("Look at Project Plan");
       expect(title!.endsWith("…")).toBe(true);
-      expect(title!.length).toBeLessThanOrEqual(61); // 60 chars + ellipsis
+      expect(title!.length).toBeLessThanOrEqual(61);
     });
 
     it("returns null when there is no usable user text", () => {

@@ -97,7 +97,6 @@ describe("replayPersistedMode", () => {
   });
 
   it("falls back to a no-op when the backend doesn't offer the persisted mode", async () => {
-    // Persisted "auto" but this backend only advertises an apply spec for "plan".
     const { session, setMode, setConfigOption } = makeSession({
       mode: modeState("default", {
         plan: { kind: "setConfigOption", configId: "approval", value: "plan" },
