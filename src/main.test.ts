@@ -561,6 +561,31 @@ describe("main", () => {
         await flushTeardown();
       });
 
+      it("starts closing the remote listener before persistence is flushed, so a reloaded plugin finds the port free (https://github.com/Brevilabs/obsidian-copilot-private/issues/610)", async () => {
+        const calls: string[] = [];
+        let releasePersistence: () => void = () => undefined;
+        (flushPersistence as jest.Mock).mockImplementation(() => {
+          calls.push("persistence");
+          return new Promise<void>((resolve) => {
+            releasePersistence = resolve;
+          });
+        });
+        const plugin = createPluginUnderTest(calls);
+        Object.assign(plugin, {
+          remoteHost: {
+            dispose: jest.fn(async () => {
+              calls.push("remoteListener");
+            }),
+          },
+        });
+
+        plugin.onunload();
+
+        expect(calls).toEqual(["remoteListener", "persistence"]);
+        releasePersistence();
+        await flushTeardown();
+      });
+
       it("tears down collaborators in order, flushing persistence before session shutdown and the log last", async () => {
         const calls: string[] = [];
         const plugin = createPluginUnderTest(calls);
