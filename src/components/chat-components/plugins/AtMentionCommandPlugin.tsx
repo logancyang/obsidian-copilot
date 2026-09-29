@@ -20,13 +20,8 @@ import { useAtMentionSearch } from "@/components/chat-components/hooks/useAtMent
 
 interface AtMentionCommandPluginProps {
   isCopilotPlus?: boolean;
-  /** Whether to surface Copilot built-in `@` tools (category + search hits). */
   showTools?: boolean;
   currentActiveFile?: TFile | null;
-  /**
-   * Installed coding agents mentionable in this composer. Non-empty only in
-   * Agent Mode; surfaces the "Agents" typeahead group and inserts agent pills.
-   */
   agentBrands?: ReadonlyArray<AgentMentionBrand>;
 }
 
@@ -45,19 +40,14 @@ export function AtMentionCommandPlugin({
     mode: "category",
   });
 
-  // State to track preview content for the currently highlighted note
   const [currentPreviewContent, setCurrentPreviewContent] = useState<string>("");
 
-  // Use the shared at-mention categories hook. Action categories (e.g. Images,
-  // which opens a file picker) are not supported inline because the editor has
-  // no pill representation for them — they only appear in the `+` popover.
   const allCategoryOptions = useAtMentionCategories(showTools, agentBrands.length > 0);
   const availableCategoryOptions = useMemo(
     () => allCategoryOptions.filter((c) => !c.isAction),
     [allCategoryOptions]
   );
 
-  // Load note content for preview using shared utilities
   const loadNoteContentForPreview = useCallback(
     async (file: TFile | null) => {
       if (!file) {
@@ -65,7 +55,6 @@ export function AtMentionCommandPlugin({
         return;
       }
       try {
-        // Handle PDF and canvas files - treat as empty content (no preview)
         if (file.extension === "pdf" || file.extension === "canvas") {
           setCurrentPreviewContent("");
           return;
@@ -88,10 +77,8 @@ export function AtMentionCommandPlugin({
     [app]
   );
 
-  // Temporary state for query to resolve circular dependency
   const [currentQuery, setCurrentQuery] = useState("");
 
-  // Get search results using the unified search hook
   const searchResults = useAtMentionSearch(
     currentQuery,
     extendedState.mode,
@@ -103,7 +90,6 @@ export function AtMentionCommandPlugin({
     agentBrands
   );
 
-  // Type guard functions
   const isAtMentionOption = useCallback(
     (option: CategoryOption | AtMentionOption): option is AtMentionOption => {
       return "data" in option;
@@ -118,11 +104,9 @@ export function AtMentionCommandPlugin({
     []
   );
 
-  // Selection handler
   const handleSelect = useCallback(
     (option: CategoryOption | AtMentionOption) => {
       if (extendedState.mode === "category" && isCategoryOption(option) && !currentQuery) {
-        // Category was selected - switch to search mode for that category
         setExtendedState((prev) => ({
           ...prev,
           mode: "search",
@@ -131,16 +115,12 @@ export function AtMentionCommandPlugin({
         return;
       }
 
-      // Item was selected - create appropriate pill using shared utility
       if (isAtMentionOption(option)) {
-        // Check if this is the "Active Note" option by its category
         if (option.category === "activeNote") {
-          // Create ActiveNotePillNode instead of regular NotePillNode
           editor.update(() => {
             $replaceTriggeredTextWithPill("@", { type: "active-note" });
           });
         } else if (!option.isAction) {
-          // isAction excludes action-only categories like "images"
           const pillData: PillData = {
             type: option.category as PillData["type"],
             title: option.title,
@@ -158,7 +138,6 @@ export function AtMentionCommandPlugin({
 
   const onStateChangeCallback = useCallback((newState: { query: string; isOpen: boolean }) => {
     setCurrentQuery(newState.query);
-    // Reset to category mode when menu closes
     if (!newState.isOpen) {
       setExtendedState({
         mode: "category",
@@ -167,7 +146,6 @@ export function AtMentionCommandPlugin({
     }
   }, []);
 
-  // Use the shared typeahead hook
   const { state, handleHighlight } = useTypeaheadPlugin({
     triggerConfig: {
       char: "@",
@@ -178,7 +156,6 @@ export function AtMentionCommandPlugin({
     onStateChange: onStateChangeCallback,
   });
 
-  // Compute the currently selected file for preview, or null if not a note
   const selectedFile = useMemo<TFile | null>(() => {
     const selectedOption = searchResults[state.selectedIndex];
     if (
@@ -192,14 +169,11 @@ export function AtMentionCommandPlugin({
     return null;
   }, [state.selectedIndex, searchResults, isAtMentionOption]);
 
-  // Load preview content when selected file changes
   useEffect(() => {
     void loadNoteContentForPreview(selectedFile);
   }, [selectedFile, loadNoteContentForPreview]);
 
-  // Create display options with preview content for the highlighted note
   const displayOptions = useMemo(() => {
-    // Add preview content to the currently highlighted option if it's a note
     return searchResults.map((option, index) => {
       if (
         index === state.selectedIndex &&

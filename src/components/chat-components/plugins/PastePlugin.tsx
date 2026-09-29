@@ -12,11 +12,6 @@ interface PastePluginProps {
   onImagePaste?: (files: File[]) => void;
 }
 
-/**
- * Lexical plugin that processes pasted text to convert [[note name]], @tool, #tag, {folder} patterns and URLs into pills.
- * Only converts patterns that resolve to actual notes in the vault, valid tools, valid tags, valid folders, and valid URLs -
- * invalid references are left as plain text.
- */
 export function PastePlugin({ enableURLPills = false, onImagePaste }: PastePluginProps): null {
   const app = useApp();
   const [editor] = useLexicalComposerContext();
@@ -30,7 +25,6 @@ export function PastePlugin({ enableURLPills = false, onImagePaste }: PastePlugi
           return false;
         }
 
-        // First, check for image data
         if (onImagePaste) {
           const items = clipboardData.items;
           if (items) {
@@ -41,7 +35,6 @@ export function PastePlugin({ enableURLPills = false, onImagePaste }: PastePlugi
             if (imageItems.length > 0) {
               event.preventDefault();
 
-              // getAsFile returns synchronously; no Promise needed.
               const files = imageItems.map((item) => item.getAsFile());
               const validFiles = files.filter((file): file is File => file !== null);
               if (validFiles.length > 0) {
@@ -61,11 +54,9 @@ export function PastePlugin({ enableURLPills = false, onImagePaste }: PastePlugi
         const hasFolders = plainText.includes("{") && plainText.includes("}");
 
         if (!plainText || (!hasNoteLinks && !hasURLs && !hasTools && !hasTags && !hasFolders)) {
-          // No note links, URLs, tools, tags, or folders detected, let default paste behavior handle it
           return false;
         }
 
-        // Parse the text for all pill types
         const segments = parseTextForPills(app, plainText, {
           includeNotes: true,
           includeURLs: enableURLPills,
@@ -73,7 +64,6 @@ export function PastePlugin({ enableURLPills = false, onImagePaste }: PastePlugi
           includeCustomTemplates: true,
         });
 
-        // Check if we found any valid pills
         const hasValidPills = segments.some(
           (segment) =>
             segment.type === "note-pill" ||
@@ -84,14 +74,11 @@ export function PastePlugin({ enableURLPills = false, onImagePaste }: PastePlugi
         );
 
         if (!hasValidPills) {
-          // No valid references found, let default paste behavior handle it
           return false;
         }
 
-        // Prevent default paste behavior
         event.preventDefault();
 
-        // Insert the processed content
         editor.update(() => {
           const selection = $getSelection();
           if (!$isRangeSelection(selection)) {

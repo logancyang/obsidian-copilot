@@ -18,12 +18,10 @@ interface AtMentionTypeaheadProps {
     data: TFile | string | TFolder | WebTabContext | null
   ) => void;
   isCopilotPlus?: boolean;
-  /** Whether to surface Copilot built-in `@` tools (category + search hits). */
   showTools?: boolean;
   currentActiveFile?: TFile | null;
 }
 
-// Type guard functions
 function isAtMentionOption(option: CategoryOption | AtMentionOption): option is AtMentionOption {
   return "data" in option;
 }
@@ -53,7 +51,6 @@ export function AtMentionTypeahead({
 
   const availableCategoryOptions = useAtMentionCategories(showTools);
 
-  // Get search results based on current state using unified search
   const searchResults = useAtMentionSearch(
     searchQuery,
     extendedState.mode,
@@ -64,21 +61,16 @@ export function AtMentionTypeahead({
     currentActiveFile
   );
 
-  // Handle selection
   const handleSelect = useCallback(
     (option: CategoryOption | AtMentionOption) => {
-      // Guard: never select disabled options (defensive check for click events)
       if ((option as { disabled?: boolean })?.disabled) return;
 
       if (extendedState.mode === "category" && isCategoryOption(option) && !searchQuery) {
-        // Action categories invoke the dispatcher directly instead of drilling
-        // into a search list (e.g. "Images" opens a file picker).
         if (option.isAction) {
           onSelect(option.category, null);
           onClose();
           return;
         }
-        // Category was selected - switch to search mode for that category
         setExtendedState((prev) => ({
           ...prev,
           mode: "search",
@@ -89,7 +81,6 @@ export function AtMentionTypeahead({
         return;
       }
 
-      // Item was selected - notify parent
       if (isAtMentionOption(option)) {
         onSelect(option.category, option.data);
         onClose();
@@ -113,11 +104,9 @@ export function AtMentionTypeahead({
         case "ArrowDown": {
           event.preventDefault();
           let nextIndex = selectedIndex + 1;
-          // Skip disabled options
           while (nextIndex < searchResults.length && searchResults[nextIndex]?.disabled) {
             nextIndex++;
           }
-          // If no valid option found, stay at current position
           if (nextIndex >= searchResults.length) {
             nextIndex = selectedIndex;
           }
@@ -128,11 +117,9 @@ export function AtMentionTypeahead({
         case "ArrowUp": {
           event.preventDefault();
           let prevIndex = selectedIndex - 1;
-          // Skip disabled options
           while (prevIndex >= 0 && searchResults[prevIndex]?.disabled) {
             prevIndex--;
           }
-          // If no valid option found, stay at current position
           if (prevIndex < 0) {
             prevIndex = selectedIndex;
           }
@@ -144,7 +131,6 @@ export function AtMentionTypeahead({
         case "Tab": {
           event.preventDefault();
           const currentOption = searchResults[selectedIndex];
-          // Don't select disabled options
           if (currentOption?.disabled) {
             break;
           }
@@ -161,7 +147,6 @@ export function AtMentionTypeahead({
         }
 
         case "Backspace": {
-          // Handle backspace in category mode to go back to categories
           if (extendedState.mode === "search" && !searchQuery) {
             event.preventDefault();
             setExtendedState({

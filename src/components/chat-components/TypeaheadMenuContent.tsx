@@ -9,12 +9,8 @@ export interface TypeaheadOption {
   content?: string;
   category?: string;
   icon?: React.ReactNode;
-  /** Trailing adornment rendered after the title (e.g. a warning icon). Kept as
-   *  an opaque node so the generic menu never depends on the caller's domain. */
   trailingContent?: React.ReactNode;
-  /** Whether this option is disabled and cannot be selected */
   disabled?: boolean;
-  /** Tooltip text explaining why this option is disabled */
   disabledReason?: string;
 }
 
@@ -62,7 +58,6 @@ export function TypeaheadMenuContent({
     setHoveredIndex(null);
   }
 
-  // Scroll the selected item into view when selection changes
   useEffect(() => {
     if (selectedItemRef.current) {
       selectedItemRef.current.scrollIntoView({
@@ -79,7 +74,6 @@ export function TypeaheadMenuContent({
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Handle keyboard navigation in search input
     if (
       e.key === "ArrowDown" ||
       e.key === "ArrowUp" ||
@@ -96,7 +90,6 @@ export function TypeaheadMenuContent({
 
   return (
     <div className={cn("tw-flex tw-flex-col", className)}>
-      {/* Preview */}
       {hasPreview && (
         <div
           className="tw-mb-2 tw-overflow-hidden tw-rounded-md tw-bg-primary tw-p-3 tw-text-sm tw-shadow-xl"
@@ -118,14 +111,12 @@ export function TypeaheadMenuContent({
         </div>
       )}
 
-      {/* Menu */}
       <div
         className="tw-overflow-hidden tw-rounded-lg tw-bg-primary"
         style={{
           ...(width && { width }),
         }}
       >
-        {/* Options List */}
         <div
           className="tw-overflow-y-auto"
           style={{
@@ -154,10 +145,8 @@ export function TypeaheadMenuContent({
                     shouldHighlight && "tw-bg-modifier-hover"
                   )}
                   title={isDisabled ? option.disabledReason : undefined}
-                  // Use onMouseDown instead of onClick to prevent triggering
-                  // onblur events of the typeahead menu
                   onMouseDown={(e) => {
-                    e.preventDefault(); // Always prevent default to avoid losing focus
+                    e.preventDefault();
                     if (isDisabled) return;
                     onSelect(option);
                   }}
@@ -204,7 +193,6 @@ export function TypeaheadMenuContent({
           </div>
         </div>
 
-        {/* Search Bar - integrated at bottom of menu */}
         {searchBarMode && (
           <div className="tw-border-t tw-border-solid tw-border-border tw-p-0.5">
             <input

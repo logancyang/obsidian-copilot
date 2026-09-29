@@ -4,17 +4,14 @@ import { mockTFolder } from "@/__tests__/mockObsidian";
 
 const MockTFile = TFile as unknown as jest.Mock;
 
-// Mock dependencies
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
 }));
 
-// Mock the AVAILABLE_TOOLS constant
 jest.mock("../constants/tools", () => ({
   AVAILABLE_TOOLS: ["@vault", "@websearch", "@composer"],
 }));
 
-// Create mock app object passed explicitly to each parseTextForPills call.
 const mockApp = {
   workspace: {
     getActiveFile: jest.fn(),
@@ -56,7 +53,6 @@ describe("parseTextForPills", () => {
 
   describe("with notes only", () => {
     beforeEach(() => {
-      // Mock note resolution
       mockApp.metadataCache.getFirstLinkpathDest.mockImplementation((noteName: string) => {
         if (noteName === "Valid Note" || noteName === "Valid Note.md") {
           return new TFile();
@@ -64,7 +60,6 @@ describe("parseTextForPills", () => {
         return null;
       });
 
-      // Mock TFile constructor to set properties
       MockTFile.mockImplementation(function (this: Record<string, unknown>) {
         this.basename = "Valid Note";
         this.path = "Valid Note.md";
@@ -212,15 +207,10 @@ describe("parseTextForPills", () => {
     });
   });
 
-  // Tags are no longer parsed as pills - they appear as raw text in the editor
-  // Tag parsing is handled by search v3 when processing messages
-
   describe("with folders only", () => {
     beforeEach(() => {
-      // Create a mock folder using mockTFolder helper
       const mockFolder = mockTFolder({ path: "Projects", name: "Projects" });
 
-      // Mock folder resolution
       mockApp.vault.getAllLoadedFiles.mockReturnValue([mockFolder]);
     });
 
@@ -268,7 +258,6 @@ describe("parseTextForPills", () => {
 
   describe("with mixed options (dynamic indexing test)", () => {
     beforeEach(() => {
-      // Set up mocks for all types
       mockApp.metadataCache.getFirstLinkpathDest.mockImplementation((noteName: string) => {
         if (noteName === "Test Note") return new TFile();
         return null;
@@ -323,13 +312,12 @@ describe("parseTextForPills", () => {
       const text = "Use @vault for #test content";
       const result = parseTextForPills(app, text, {
         includeTools: true,
-        // Tags are no longer parsed as pills
       });
 
       expect(result).toHaveLength(3);
       expect(result[0].content).toBe("Use ");
       expect(result[1].type).toBe("tool-pill");
-      expect(result[2].content).toBe(" for #test content"); // Tags appear as plain text
+      expect(result[2].content).toBe(" for #test content");
     });
 
     it("should correctly parse when all options are enabled (tags as text)", () => {
@@ -338,7 +326,6 @@ describe("parseTextForPills", () => {
         includeNotes: true,
         includeURLs: true,
         includeTools: true,
-        // Tags are no longer parsed as pills
         includeCustomTemplates: true,
       });
 
@@ -348,7 +335,7 @@ describe("parseTextForPills", () => {
       expect(result[2].type).toBe("url-pill");
       expect(result[3].content).toBe(" ");
       expect(result[4].type).toBe("tool-pill");
-      expect(result[5].content).toBe(" #test "); // Tags appear as plain text
+      expect(result[5].content).toBe(" #test ");
       expect(result[6].type).toBe("folder-pill");
     });
 
@@ -358,16 +345,13 @@ describe("parseTextForPills", () => {
       const result = parseTextForPills(app, text, {
         includeNotes: true,
         includeTools: true,
-        // Tags are no longer parsed as pills
         includeCustomTemplates: true,
       });
 
-      // Verify key segments: note-pill, invalid note text, tool-pill, invalid tool+tags text, folder-pill, invalid folder
       expect(result[0].type).toBe("note-pill");
       expect(result[2].type).toBe("text");
       expect(result[2].content).toBe("[[Invalid]]");
       expect(result[4].type).toBe("tool-pill");
-      // Tags now appear as plain text mixed with other text
       const hasInvalidToolAndTags = result.some(
         (r) => r.type === "text" && r.content?.includes("@invalid") && r.content?.includes("#test")
       );
@@ -404,9 +388,8 @@ describe("parseTextForPills", () => {
       const text = "[[Note with [brackets]]]";
       const result = parseTextForPills(app, text, { includeNotes: true });
 
-      // The regex matches [[Note with [brackets]] and leaves the final ]]
       expect(result).toHaveLength(2);
-      expect(result[0].type).toBe("text"); // Should be treated as text since it's not a valid note
+      expect(result[0].type).toBe("text");
       expect(result[0].content).toBe("[[Note with [brackets]]");
       expect(result[1].type).toBe("text");
       expect(result[1].content).toBe("]");
@@ -415,18 +398,14 @@ describe("parseTextForPills", () => {
     it("should handle special characters in patterns (tags as text)", () => {
       const text = "@tool-name #tag_with_underscores {folder with spaces}";
 
-      // Mock folder resolution for folder with spaces
       const mockFolder = mockTFolder({ path: "folder with spaces", name: "folder with spaces" });
       mockApp.vault.getAllLoadedFiles.mockReturnValue([mockFolder]);
 
       const result = parseTextForPills(app, text, {
         includeTools: true,
-        // Tags are no longer parsed as pills
         includeCustomTemplates: true,
       });
 
-      // @tool matches as invalid tool (not in AVAILABLE_TOOLS), tags appear as text, folders should match
-      // Verify that we have text and folder-pill
       expect(result.some((r) => r.type === "text" && r.content?.includes("@tool"))).toBe(true);
       expect(
         result.some((r) => r.type === "text" && r.content?.includes("#tag_with_underscores"))

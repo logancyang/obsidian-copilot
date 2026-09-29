@@ -1,55 +1,27 @@
 import { describe, it, expect } from "@jest/globals";
 
-/**
- * ChatInput Edit Mode Tests
- *
- * Verifies that ContextControl is hidden when editMode is true.
- * This is a design decision: editing only changes text, not context.
- */
 describe("ChatInput Edit Mode Behavior", () => {
   describe("ContextControl visibility", () => {
     it("should hide ContextControl when editMode is true (design verification)", () => {
-      // This test documents the expected behavior:
-      // When editMode=true, the ContextControl component should NOT be rendered.
-      //
-      // Implementation in ChatInput.tsx:
-      // {!editMode && (
-      //   <ContextControl ... />
-      // )}
-      //
-      // This is intentional because:
-      // 1. Edit mode only changes the message text, not the context
-      // 2. The original context is preserved from when the message was first sent
-      // 3. Users cannot add/remove context items during edit
-      //
-      // If this behavior needs to change (e.g., show read-only context badges),
-      // update both the implementation and this test.
-
-      const editModeHidesContextControl = true; // Current implementation
+      const editModeHidesContextControl = true;
       expect(editModeHidesContextControl).toBe(true);
     });
 
     it("should show ContextControl when editMode is false or undefined", () => {
-      // When not in edit mode, ContextControl should be visible
-      // This allows users to add/remove context items before sending
-
-      const normalModeShowsContextControl = true; // Current implementation
+      const normalModeShowsContextControl = true;
       expect(normalModeShowsContextControl).toBe(true);
     });
   });
 });
 
-// Helper function to simulate the slash detection and replacement logic
 function detectSlashCommand(
   inputValue: string,
   cursorPos: number
 ): { shouldShowModal: boolean; slashPosition?: number } {
-  // Check if we just typed a "/"
   if (cursorPos > 0 && inputValue[cursorPos - 1] === "/") {
-    // Check if it's at the beginning or after a space
     const isAtBeginning = cursorPos === 1;
     const isAfterSpace = cursorPos >= 2 && inputValue[cursorPos - 2] === " ";
-    const isAnywhere = true; // We want to support "/" anywhere
+    const isAnywhere = true;
 
     if (isAtBeginning || isAfterSpace || isAnywhere) {
       return { shouldShowModal: true, slashPosition: cursorPos - 1 };
@@ -59,13 +31,11 @@ function detectSlashCommand(
   return { shouldShowModal: false };
 }
 
-// Helper function to simulate text replacement
 function replaceSlashWithCommand(
   inputMessage: string,
   cursorPos: number,
   commandContent: string
 ): { newMessage: string; newCursorPos: number } {
-  // Find the slash position (should be cursorPos - 1 when we just typed it)
   const slashPos = cursorPos - 1;
 
   if (slashPos >= 0 && inputMessage[slashPos] === "/") {
@@ -77,7 +47,6 @@ function replaceSlashWithCommand(
     return { newMessage, newCursorPos };
   }
 
-  // Fallback
   return { newMessage: inputMessage, newCursorPos: cursorPos };
 }
 
@@ -102,7 +71,7 @@ describe("ChatInput Slash Command Detection", () => {
     });
 
     it('should not detect when cursor is not right after "/"', () => {
-      const result = detectSlashCommand("hello / world", 8); // cursor after space
+      const result = detectSlashCommand("hello / world", 8);
       expect(result.shouldShowModal).toBe(false);
     });
   });
@@ -163,7 +132,6 @@ describe("ChatInput Slash Command Detection", () => {
     });
 
     it("should handle multiple slash commands in one input", () => {
-      // First slash
       let input = "First /";
       let cursorPos = 7;
 
@@ -173,7 +141,6 @@ describe("ChatInput Slash Command Detection", () => {
       const replacement1 = replaceSlashWithCommand(input, cursorPos, "command1");
       expect(replacement1.newMessage).toBe("First command1");
 
-      // Second slash
       input = replacement1.newMessage + " and /";
       cursorPos = input.length;
 

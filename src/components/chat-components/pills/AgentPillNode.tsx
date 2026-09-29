@@ -16,15 +16,9 @@ import { PillBadge } from "./PillBadge";
 
 export interface SerializedAgentPillNode extends SerializedBasePillNode {
   type: "agent-pill";
-  /** Display label captured at insert time, so render needs no registry. */
   label: string;
 }
 
-/**
- * Agent pill node: a coding agent `@`-mentioned in the composer. Value is the
- * backend id, `label` the display name captured at insert time. Registry-agnostic
- * so the generic chat editor never depends on Agent Mode internals.
- */
 export class AgentPillNode extends BasePillNode {
   __label: string;
 
@@ -75,24 +69,15 @@ export class AgentPillNode extends BasePillNode {
     };
   }
 
-  /** The mentioned backend id. */
   getBackendId(): string {
     return this.getValue();
   }
 
-  /**
-   * Contribute nothing to the serialized text. The backend id is pure routing
-   * metadata (the mention feeds `mentionedAgents` structurally via the sync
-   * plugin); emitting it here would leak the raw id into the prompt. The visible
-   * pill comes from `decorate()`.
-   */
   getTextContent(): string {
     return "";
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    // Base writes data-attribute/value/textContent; layer on the label so it
-    // round-trips through DOM import.
     const out = super.exportDOM(editor);
     if (out.element instanceof HTMLElement) {
       out.element.setAttribute("data-pill-label", this.__label);
@@ -106,12 +91,6 @@ export class AgentPillNode extends BasePillNode {
   }
 }
 
-/**
- * Pill body. A component (not inline JSX) so it can read the live Self-Host
- * setting and the cloud-agent id set from context — a stale/pasted `@Claude`
- * pill then lights up its cloud-egress warning the moment Self-Host Mode is
- * toggled on, without the node needing any Agent Mode knowledge of its own.
- */
 export function AgentPillContent({ backendId, label }: { backendId: string; label: string }) {
   const { enableSelfHostMode } = useSettingsValue();
   const cloudAgentIds = useCloudAgentIds();

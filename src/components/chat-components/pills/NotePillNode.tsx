@@ -152,7 +152,6 @@ function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
   );
 }
 
-// Utility functions
 export function $createNotePillNode(noteTitle: string, notePath: string): NotePillNode {
   return new NotePillNode(noteTitle, notePath);
 }

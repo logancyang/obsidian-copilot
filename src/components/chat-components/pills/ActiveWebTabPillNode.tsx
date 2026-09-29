@@ -18,11 +18,6 @@ import { useActiveWebTabState } from "@/components/chat-components/hooks/useActi
 
 export type SerializedActiveWebTabPillNode = SerializedBasePillNode;
 
-/**
- * ActiveWebTabPillNode represents the "Current Web Tab" in context.
- * It automatically displays whatever web tab is currently active in Obsidian Web Viewer.
- * Desktop-only feature.
- */
 export class ActiveWebTabPillNode extends BasePillNode {
   static getType(): string {
     return "active-web-tab-pill";
@@ -92,18 +87,9 @@ function convertActiveWebTabPillElement(_domNode: HTMLElement): DOMConversionOut
   return { node };
 }
 
-/**
- * Component that renders the active web tab pill.
- * Uses activeWebTabForMentions to match the actual send behavior:
- * - Has value when web tab is active OR when switched directly to chat panel
- * - Null when switched to other views (e.g., note tab)
- * This ensures UI display matches what will actually be sent.
- */
 function ActiveWebTabPillComponent(): JSX.Element {
-  // Use activeWebTabForMentions to match send behavior (not activeOrLastWebTab)
   const { activeWebTabForMentions } = useActiveWebTabState();
 
-  // Not supported on mobile
   if (!isDesktopRuntime()) {
     return (
       <PillBadge>
@@ -120,7 +106,6 @@ function ActiveWebTabPillComponent(): JSX.Element {
     );
   }
 
-  // No active web tab (matches Active Note pill behavior when no active note)
   if (!activeWebTabForMentions) {
     return (
       <PillBadge>
@@ -141,7 +126,6 @@ function ActiveWebTabPillComponent(): JSX.Element {
     );
   }
 
-  // Active web tab exists
   return (
     <PillBadge>
       <div className="tw-flex tw-items-center tw-gap-1">
@@ -155,22 +139,16 @@ function ActiveWebTabPillComponent(): JSX.Element {
   );
 }
 
-/** Create an ActiveWebTabPillNode. */
 export function $createActiveWebTabPillNode(): ActiveWebTabPillNode {
   return new ActiveWebTabPillNode();
 }
 
-/** Check if a node is an ActiveWebTabPillNode. */
 export function $isActiveWebTabPillNode(
   node: LexicalNode | null | undefined
 ): node is ActiveWebTabPillNode {
   return node instanceof ActiveWebTabPillNode;
 }
 
-/**
- * Removes all active web tab pills from the editor.
- * @returns The number of pills removed
- */
 export function $removeActiveWebTabPills(): number {
   const root = $getRoot();
   let removedCount = 0;

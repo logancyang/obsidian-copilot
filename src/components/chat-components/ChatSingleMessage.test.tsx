@@ -48,8 +48,6 @@ jest.mock("@/LLMProviders/chainRunner/utils/citationUtils", () => ({
 }));
 
 jest.mock("obsidian", () => {
-  // Mirrors the modern `MarkdownRenderer.render(app, md, el, sourcePath, component)`
-  // signature — `md` is the second argument, not the first.
   const render = jest.fn().mockResolvedValue(undefined);
   return {
     MarkdownRenderer: {
@@ -71,12 +69,8 @@ jest.mock("obsidian", () => {
       isMobile: false,
     },
     Modal: class {
-      open() {
-        /* noop */
-      }
-      close() {
-        /* noop */
-      }
+      open() {}
+      close() {}
     },
     __renderMock: render,
   };
@@ -95,17 +89,7 @@ function render(ui: React.ReactElement) {
   return renderComponent(<AppContext.Provider value={testApp}>{ui}</AppContext.Provider>);
 }
 
-// ---------------------------------------------------------------------------
-// Verifies that the HTML string passed to MarkdownRenderer.renderMarkdown
-// never has </div> or </details> on the same line as a 4-space-indented
-// line. This was the root cause of the Gemma rendering bug: google/gemma-4-31b-it
-// thinking output ends with 4-space-indented bullet points, and without a
-// trailing \n the closing </div> was consumed by markdown's indented code
-// block rule and rendered as literal "&lt;/div&gt;" text.
-// ---------------------------------------------------------------------------
-
 describe("ChatSingleMessage", () => {
-  // Separate rendering groups keep markdown-capture instrumentation isolated from DOM assertions.
   describe("ChatSingleMessage() markdown rendering", () => {
     const createAppStub = (): App =>
       ({
@@ -134,12 +118,6 @@ describe("ChatSingleMessage", () => {
       (window as unknown as Record<string, unknown>).activeDocument = window.document;
     });
 
-    /**
-     * Asserts that no line in the rendered markdown matches:
-     *   <4+ spaces><any content></div>  or  <4+ spaces><any content></details>
-     * Such a pattern means the closing tag is inside a code block and will be
-     * escaped by the markdown renderer.
-     */
     function assertNoClosingTagOnIndentedLine(capturedMarkdown: string[]) {
       for (const md of capturedMarkdown) {
         for (const line of md.split("\n")) {
@@ -205,7 +183,6 @@ describe("ChatSingleMessage", () => {
     });
 
     it("does not place </div> on a 4-space-indented line (streaming, unclosed think block)", async () => {
-      // Simulates mid-stream: the </think> closing tag has not arrived yet.
       const messageText = "<think>Thinking:\n    *   Still streaming.";
 
       const capturedMarkdown: string[] = [];
@@ -685,7 +662,6 @@ describe("ChatSingleMessage", () => {
           true
         );
         expect(screen.getByRole("button", { name: /show more/i })).toBeTruthy();
-        // The body stays mounted so Copy and text selection still see it all.
         expect(screen.getByText("A very long pasted prompt")).toBeTruthy();
       } finally {
         restoreContentHeight();

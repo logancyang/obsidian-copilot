@@ -11,7 +11,6 @@ export interface ChatTranscriptViewportProps {
   scrollToEnd: () => void;
 }
 
-/** Keeps the transcript and its return control together, clear of other chat rails. */
 export function ChatTranscriptViewport({
   children,
   scrollContainerRef,
@@ -32,8 +31,6 @@ export function ChatTranscriptViewport({
           {children}
         </div>
       </div>
-      {/* Readers need a way back after pausing on an earlier turn.
-          https://github.com/Brevilabs/obsidian-copilot-private/issues/277 */}
       {isScrollPaused && (
         <Button
           type="button"

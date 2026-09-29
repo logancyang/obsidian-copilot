@@ -5,9 +5,6 @@ export interface SerializedToolPillNode extends SerializedBasePillNode {
   type: "tool-pill";
 }
 
-/**
- * Tool pill node for representing tools in the editor.
- */
 export class ToolPillNode extends BasePillNode {
   static getType(): string {
     return "tool-pill";
@@ -55,7 +52,6 @@ export class ToolPillNode extends BasePillNode {
     };
   }
 
-  // Convenience getter for backward compatibility
   getToolName(): string {
     return this.getValue();
   }
@@ -70,7 +66,6 @@ function convertToolPillElement(domNode: HTMLElement): DOMConversionOutput | nul
   return null;
 }
 
-// Utility functions
 export function $createToolPillNode(toolName: string): ToolPillNode {
   return new ToolPillNode(toolName);
 }

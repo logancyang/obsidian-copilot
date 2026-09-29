@@ -1,9 +1,3 @@
-/**
- * The agent pill's Self-Host cloud warning. It must light up for a cloud agent
- * only while Self-Host Mode is on — including a pill that was already in the
- * editor before the mode was toggled (the warning reads live settings + the
- * cloud-agent id set from context, never a value baked at insert time).
- */
 import { render } from "@testing-library/react";
 import React from "react";
 import { CloudAgentProvider } from "@/components/chat-components/context/CloudAgentContext";
@@ -59,9 +53,6 @@ describe("AgentPill Self-Host warning", () => {
   });
 
   it("lights up a stale pill when Self-Host Mode toggles on (same mounted node)", () => {
-    // Model the codex-flagged case: a @Claude pill already in the editor before
-    // the toggle. The body reads live settings, so a re-render after the flip
-    // must surface the warning without re-inserting the pill.
     const tree = (): React.ReactElement => (
       <CloudAgentProvider cloudAgentIds={CLOUD_IDS}>
         <AgentPillContent backendId="claude" label="Claude" />

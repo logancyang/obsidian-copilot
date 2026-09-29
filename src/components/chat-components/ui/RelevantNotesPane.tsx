@@ -70,22 +70,12 @@ function GuidancePanel({
   );
 }
 
-/**
- * Render Relevant Notes states without plugin or Obsidian runtime access.
- *
- * @param status - Current lifecycle or settled search status.
- * @param details - Optional Miyo error or exclusion details for the active note.
- * @param noteRows - Rendered note rows in result order.
- * @param actions - Runtime-owned destinations for pane actions.
- */
 export function RelevantNotesPane({
   status,
   details,
   noteRows,
   actions,
 }: RelevantNotesPaneProps): React.ReactElement {
-  // A pending request has not established an empty result or a setup failure.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
   if (status === "loading") {
     return (
       <div className="tw-flex tw-h-full tw-items-center tw-justify-center tw-gap-2 tw-text-sm tw-text-normal">
@@ -95,14 +85,10 @@ export function RelevantNotesPane({
     );
   }
 
-  // Only a successful Miyo match can produce result rows. Other states render
-  // their recovery guidance even if a stale caller supplies rows.
+  // Only a successful match renders rows, even if a stale caller supplies them.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
   let guidancePanel: React.ReactNode = null;
   switch (status) {
-    // Unusable chat context must explain the failure instead of showing
-    // results for an unrelated editor note.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
     case "no-usable-context":
       guidancePanel = (
         <GuidancePanel
@@ -153,9 +139,6 @@ export function RelevantNotesPane({
         </GuidancePanel>
       );
       break;
-    // A reachable service with no vault registration needs folder setup,
-    // rather than connection troubleshooting.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/401
     case "vault-not-registered": {
       const reviewInMiyo = actions.reviewIndexing.destination === "miyo";
       const vaultLabel = details?.folderName ? `“${details.folderName}”` : "This vault";
@@ -322,8 +305,6 @@ export function RelevantNotesPane({
       break;
   }
 
-  // Skipped sources remain visible even for an empty result.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
   const notices = !!details?.skippedAttachments && (
     <p role="status" className="tw-m-0 tw-p-2 tw-text-xs tw-text-muted">
       Skipped attachments: {details.skippedAttachments}. They aren't available for this request.

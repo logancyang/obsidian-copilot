@@ -27,11 +27,9 @@ export function NoteCommandPlugin({
   const [editor] = useLexicalComposerContext();
   const [currentQuery, setCurrentQuery] = useState("");
 
-  // Use shared preview cache
   const [previewCache] = useState(() => new NotePreviewCache(app));
   const [previewContent, setPreviewContent] = useState<Map<string, string>>(() => new Map());
 
-  // Function to load note content for preview using shared cache
   const loadNoteContent = useCallback(
     async (file: TFile): Promise<string> => {
       try {
@@ -55,26 +53,20 @@ export function NoteCommandPlugin({
     [previewCache]
   );
 
-  // Use unified note search hook with standard configuration
   const searchResults = useNoteSearch(currentQuery, isCopilotPlus, {}, currentActiveFile);
 
-  // Add preview content from cache to the results
   const filteredNotes = searchResults.map((note) => ({
     ...note,
     content: previewContent.get(note.file.path) || "",
   }));
 
-  // Shared selection handler
   const handleSelect = useCallback(
     (option: NoteSearchOption) => {
-      // Check if this is the "Active Note" option by its category
       if (option.category === "activeNote") {
-        // Create ActiveNotePillNode instead of regular NotePillNode
         editor.update(() => {
           $replaceTriggeredTextWithPill("[[", { type: "active-note" });
         });
       } else {
-        // Regular note pill
         const pillData: PillData = {
           type: "notes",
           title: option.title,
@@ -89,7 +81,6 @@ export function NoteCommandPlugin({
     [editor]
   );
 
-  // Use the shared typeahead hook
   const { state, handleHighlight } = useTypeaheadPlugin({
     triggerConfig: {
       char: "[[",
@@ -102,14 +93,12 @@ export function NoteCommandPlugin({
       setCurrentQuery(newState.query);
     },
     onHighlight: (_index: number, option: NoteSearchOption) => {
-      // Load content for the highlighted note if not already loaded
       if (option && !previewContent.has(option.file.path)) {
         void loadNoteContent(option.file);
       }
     },
   });
 
-  // Load content for the first note when filteredNotes change
   useEffect(() => {
     if (filteredNotes.length > 0 && !previewContent.has(filteredNotes[0].file.path)) {
       void loadNoteContent(filteredNotes[0].file);

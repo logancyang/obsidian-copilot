@@ -6,22 +6,13 @@ import { useActiveWebTabState } from "./hooks/useActiveWebTabState";
 import { appendUniqueFiles } from "@/utils/fileListUtils";
 
 interface InlineMessageEditorProps {
-  /** The initial message text to edit */
   initialValue: string;
-  /** The original message context (notes, URLs, tags, folders) */
   initialContext?: ChatMessage["context"];
-  /** Callback when the edit is saved */
   onSave: (newText: string, newContext: ChatMessage["context"]) => void;
-  /** Callback when the edit is cancelled */
   onCancel: () => void;
-  /** Obsidian app instance */
   app: App;
 }
 
-/**
- * InlineMessageEditor wraps ChatInput in edit mode to provide the full chat input experience
- * for editing messages inline, including all context controls, tool buttons, and UI elements.
- */
 export const InlineMessageEditor: React.FC<InlineMessageEditorProps> = ({
   initialValue,
   initialContext,
@@ -31,7 +22,6 @@ export const InlineMessageEditor: React.FC<InlineMessageEditorProps> = ({
 }) => {
   const [inputMessage, setInputMessage] = useState(initialValue);
 
-  // Convert initialContext to the format expected by ChatInput
   const [contextNotes, setContextNotes] = useState<TFile[]>(
     initialContext?.notes?.filter((note): note is TFile => note instanceof TFile) || []
   );
@@ -40,7 +30,6 @@ export const InlineMessageEditor: React.FC<InlineMessageEditorProps> = ({
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const { activeWebTabForMentions: currentActiveWebTab } = useActiveWebTabState();
 
-  // Handle saving the edited message
   const handleEditSave = useCallback(
     (
       text: string,
@@ -51,7 +40,6 @@ export const InlineMessageEditor: React.FC<InlineMessageEditorProps> = ({
         folders: string[];
       }
     ) => {
-      // Convert back to ChatMessage context format
       const newContext: ChatMessage["context"] = {
         notes: context.notes,
         urls: context.urls,
@@ -65,32 +53,20 @@ export const InlineMessageEditor: React.FC<InlineMessageEditorProps> = ({
     [onSave, initialContext?.selectedTextContexts]
   );
 
-  // Handle cancelling the edit
   const handleEditCancel = useCallback(() => {
     onCancel();
   }, [onCancel]);
 
-  // Dummy handlers for required ChatInput props
-  const handleSendMessage = useCallback(() => {
-    // This should never be called in edit mode, but required for interface
-  }, []);
+  const handleSendMessage = useCallback(() => {}, []);
 
-  const handleStopGenerating = useCallback(() => {
-    // Not used in edit mode
-  }, []);
+  const handleStopGenerating = useCallback(() => {}, []);
 
-  /**
-   * Add selected image files while preserving the original selection order.
-   */
   const handleAddImage = useCallback((files: File[]) => {
     setSelectedImages((prev) => appendUniqueFiles(prev, files));
   }, []);
 
-  const handleRemoveSelectedText = useCallback((id: string) => {
-    // Handle selected text removal if needed
-  }, []);
+  const handleRemoveSelectedText = useCallback((id: string) => {}, []);
 
-  // Prepare initial context for ChatInput
   const initialChatInputContext = {
     notes: contextNotes,
     urls: initialContext?.urls || [],

@@ -48,11 +48,6 @@ interface ContextActiveNoteBadgeProps extends BaseContextBadgeProps {
   currentActiveFile: TFile | null;
 }
 
-/**
- * Shared favicon renderer component for web tab badges.
- * Shows favicon image if available, falls back to Globe icon.
- * Handles image load errors gracefully.
- */
 interface FaviconOrGlobeProps {
   faviconUrl?: string;
   isLoaded?: boolean;
@@ -186,11 +181,6 @@ export function ContextUrlBadge({ url, onRemove }: ContextUrlBadgeProps) {
   );
 }
 
-/**
- * Renders a context badge for a Web Viewer tab.
- * Shows favicon (if available) or Globe icon, with title or domain as display text.
- * Displays a special "unloaded" state for tabs that haven't loaded their content yet.
- */
 export function ContextWebTabBadge({ webTab, onRemove, onClick }: ContextWebTabBadgeProps) {
   const isLoaded = webTab.isLoaded !== false;
   const domain = getDomainFromUrl(webTab.url);
@@ -217,7 +207,6 @@ export function ContextWebTabBadge({ webTab, onRemove, onClick }: ContextWebTabB
 }
 
 export function ContextTagBadge({ tag, onRemove }: ContextTagBadgeProps) {
-  // Remove # symbol for clean display
   const displayTag = tag.startsWith("#") ? tag.slice(1) : tag;
 
   return (

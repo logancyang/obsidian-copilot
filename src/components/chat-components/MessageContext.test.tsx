@@ -4,7 +4,6 @@ import { ChatMessage } from "@/types/message";
 import { TFile } from "obsidian";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
-// Mock Tooltip components
 jest.mock("@radix-ui/react-tooltip", () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="tooltip">{children}</div>
@@ -17,12 +16,10 @@ jest.mock("@radix-ui/react-tooltip", () => ({
   ),
 }));
 
-// Mock Badge component
 jest.mock("@/components/ui/badge", () => ({
   Badge: ({ children }: { children: React.ReactNode }) => <div data-testid="badge">{children}</div>,
 }));
 
-// Extract MessageContext component inline for testing
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (!context || (!context.notes?.length && !context.urls?.length)) {
     return null;
@@ -51,7 +48,6 @@ describe("MessageContext", () => {
     mockTFile({
       path,
       basename,
-      // Add other required TFile properties as needed
     });
 
   describe("Duplicate Notes Bug Prevention", () => {
@@ -59,24 +55,18 @@ describe("MessageContext", () => {
       const context: ChatMessage["context"] = {
         notes: [
           createMockFile("Piano Lessons/Lesson 4.md", "Lesson 4"),
-          createMockFile("Piano Lessons/Lesson 4.md", "Lesson 4"), // Duplicate
+          createMockFile("Piano Lessons/Lesson 4.md", "Lesson 4"),
           createMockFile("Piano Lessons/Lesson 1.md", "Lesson 1"),
-          createMockFile("Piano Lessons/Lesson 1.md", "Lesson 1"), // Duplicate
+          createMockFile("Piano Lessons/Lesson 1.md", "Lesson 1"),
         ],
-        urls: [
-          "https://example.com",
-          "https://example.com", // Duplicate
-          "https://google.com",
-        ],
+        urls: ["https://example.com", "https://example.com", "https://google.com"],
         selectedTextContexts: [],
       };
 
-      // This should not throw React key warnings
       const { container } = render(<MessageContext context={context} />);
 
-      // Should render all notes (including duplicates)
-      expect(container.querySelectorAll('[data-testid="note-badge"]')).toHaveLength(4); // 4 notes
-      expect(container.querySelectorAll('[data-testid="url-badge"]')).toHaveLength(3); // 3 urls
+      expect(container.querySelectorAll('[data-testid="note-badge"]')).toHaveLength(4);
+      expect(container.querySelectorAll('[data-testid="url-badge"]')).toHaveLength(3);
     });
 
     it("should handle empty context gracefully", () => {
@@ -99,18 +89,16 @@ describe("MessageContext", () => {
       const context: ChatMessage["context"] = {
         notes: [
           createMockFile("Piano Lessons/Lesson 4.md", "Lesson 4"),
-          createMockFile("Piano Lessons/Lesson 4.md", "Lesson 4"), // Same path
+          createMockFile("Piano Lessons/Lesson 4.md", "Lesson 4"),
         ],
         urls: [],
         selectedTextContexts: [],
       };
 
-      // Mock console.error to catch React key warnings
       const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 
       render(<MessageContext context={context} />);
 
-      // Should not have React key warnings
       expect(consoleSpy).not.toHaveBeenCalledWith(
         expect.stringContaining("Warning: Encountered two children with the same key")
       );

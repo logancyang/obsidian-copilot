@@ -64,17 +64,12 @@ interface LexicalEditorProps {
   onActiveWebTabAdded?: () => void;
   onActiveWebTabRemoved?: () => void;
   onAgentsChange?: (backendIds: string[]) => void;
-  /** Installed coding agents mentionable in the composer (Agent Mode only). */
   agentBrands?: ReadonlyArray<AgentMentionBrand>;
-  /** Cloud (non-self-hostable) agent backend ids — the full registry set, not
-   *  just installed ones, so a stale/pasted pill still resolves. Drives the
-   *  Self-Host cloud-egress warning on agent pills. */
   cloudAgentIds?: ReadonlySet<string>;
   onEditorReady?: (editor: LexicalEditorType) => void;
   onImagePaste?: (files: File[]) => void;
   onTagSelected?: () => void;
   isCopilotPlus?: boolean;
-  /** Whether to surface Copilot built-in `@` tools in the typeahead. */
   showTools?: boolean;
   currentActiveFile?: TFile | null;
   currentChain?: ChainType;
@@ -121,12 +116,10 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   const chatInputContext = useChatInput();
   const settings = useSettingsValue();
 
-  // Wrapper to properly set function state (avoids React's updater function interpretation)
   const handleFocusRegistration = React.useCallback((fn: () => void) => {
     setFocusFn(() => fn);
   }, []);
 
-  // Register editor and focus handler with context
   useEffect(() => {
     if (editorInstance) {
       chatInputContext.registerEditor(editorInstance);
@@ -175,8 +168,6 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
     [onChange]
   );
 
-  // Obsidian pops its own tooltip for anything carrying `aria-label`, which is
-  // noise on an element the size of the composer — name it out of band instead.
   const editorLabelId = useId();
 
   const handleEditorReady = useCallback(
@@ -209,10 +200,8 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
               }
               ErrorBoundary={LexicalErrorBoundary}
             />
-            {/* ignoreSelectionChange: only text edits should push into `value`.
-                Selection/focus-only changes carry the same text, and firing
-                onChange for them lets stale editor text race a just-issued
-                external clear back into the controlled value (#211). */}
+            {/* Selection-only changes must not push stale text over an external clear.
+                https://github.com/logancyang/obsidian-copilot-preview/issues/211 */}
             <OnChangePlugin onChange={handleEditorChange} ignoreSelectionChange />
             <HistoryPlugin />
             <KeyboardPlugin

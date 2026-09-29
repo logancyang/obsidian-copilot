@@ -2,7 +2,6 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { ToolCallBanner } from "@/components/chat-components/ToolCallBanner";
 
-// Mock the Collapsible components from Radix UI
 jest.mock("@/components/ui/collapsible", () => ({
   Collapsible: ({ children, open }: { children: React.ReactNode; open: boolean }) => (
     <div data-testid="collapsible" data-open={open}>
@@ -17,14 +16,12 @@ jest.mock("@/components/ui/collapsible", () => ({
   ),
 }));
 
-// Mock lucide-react icons
 jest.mock("lucide-react", () => ({
   Check: () => <div data-testid="check-icon">Check</div>,
   X: () => <div data-testid="x-icon">X</div>,
   ChevronRight: () => <div data-testid="chevron-icon">ChevronRight</div>,
 }));
 
-// Mock the ToolResultFormatter
 jest.mock("@/tools/ToolResultFormatter", () => ({
   ToolResultFormatter: {
     format: jest.fn((_toolName: string, result: string) => result),
@@ -44,11 +41,9 @@ describe("ToolCallBanner", () => {
         <ToolCallBanner {...defaultProps} isExecuting={true} result={null} />
       );
 
-      // Check for shimmer animation container
       const shimmerOverlay = container.querySelector(".tw-absolute.tw-inset-0.tw-z-\\[1\\]");
       expect(shimmerOverlay).not.toBeNull();
 
-      // Check for "Calling" text
       expect(screen.getByText(/Calling Test Tool/)).toBeTruthy();
     });
 
@@ -57,11 +52,9 @@ describe("ToolCallBanner", () => {
         <ToolCallBanner {...defaultProps} isExecuting={false} result="Success" />
       );
 
-      // Shimmer animation should NOT be present
       const shimmerOverlay = container.querySelector(".tw-absolute.tw-inset-0.tw-z-\\[1\\]");
       expect(shimmerOverlay).toBeNull();
 
-      // Check for "Called" text (past tense)
       expect(screen.getByText(/Called Test Tool/)).toBeTruthy();
     });
 
@@ -70,12 +63,9 @@ describe("ToolCallBanner", () => {
         <ToolCallBanner {...defaultProps} isExecuting={true} result="Success" />
       );
 
-      // This is the key test: even though isExecuting=true, we have a result,
-      // so the animation should NOT run (actuallyExecuting = false)
       const shimmerOverlay = container.querySelector(".tw-absolute.tw-inset-0.tw-z-\\[1\\]");
       expect(shimmerOverlay).toBeNull();
 
-      // Should show "Called" since we have a result
       expect(screen.getByText(/Called Test Tool/)).toBeTruthy();
     });
 
@@ -84,11 +74,9 @@ describe("ToolCallBanner", () => {
         <ToolCallBanner {...defaultProps} isExecuting={false} result="" />
       );
 
-      // Shimmer animation should NOT be present
       const shimmerOverlay = container.querySelector(".tw-absolute.tw-inset-0.tw-z-\\[1\\]");
       expect(shimmerOverlay).toBeNull();
 
-      // Check for "Called" text
       expect(screen.getByText(/Called Test Tool/)).toBeTruthy();
     });
   });
@@ -105,7 +93,6 @@ describe("ToolCallBanner", () => {
       render(<ToolCallBanner {...defaultProps} isExecuting={false} result="Success" />);
 
       const collapsible = screen.getByTestId("collapsible");
-      // Initially closed, but can be opened
       expect(collapsible.getAttribute("data-open")).toBe("false");
     });
 
@@ -113,7 +100,6 @@ describe("ToolCallBanner", () => {
       render(<ToolCallBanner {...defaultProps} isExecuting={true} result="Success" />);
 
       const collapsible = screen.getByTestId("collapsible");
-      // Should be expandable since we have a result
       expect(collapsible.getAttribute("data-open")).toBe("false");
     });
   });
@@ -178,7 +164,7 @@ describe("ToolCallBanner", () => {
     });
 
     it("should handle very long results with truncation message", () => {
-      const longResult = "a".repeat(6000); // Exceeds MAX_DISPLAY_CHARS (5000)
+      const longResult = "a".repeat(6000);
       render(<ToolCallBanner {...defaultProps} isExecuting={false} result={longResult} />);
 
       const content = screen.getByTestId("collapsible-content");
@@ -208,7 +194,6 @@ describe("ToolCallBanner", () => {
         />
       );
 
-      // Buttons should not be visible during execution
       expect(screen.queryByTitle("Accept")).toBeNull();
       expect(screen.queryByTitle("Reject")).toBeNull();
     });
@@ -227,7 +212,6 @@ describe("ToolCallBanner", () => {
         />
       );
 
-      // Buttons should be visible when done
       expect(screen.getByTitle("Accept")).toBeTruthy();
       expect(screen.getByTitle("Reject")).toBeTruthy();
     });
@@ -246,7 +230,6 @@ describe("ToolCallBanner", () => {
         />
       );
 
-      // Buttons SHOULD be visible since actuallyExecuting=false
       expect(screen.getByTitle("Accept")).toBeTruthy();
       expect(screen.getByTitle("Reject")).toBeTruthy();
     });

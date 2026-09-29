@@ -26,7 +26,6 @@ class TestPillNode extends BasePillNode {
 
 const TEST_EDITOR_CONFIG: EditorConfig = { namespace: "base-pill-test", theme: {} };
 
-/** Builds an editor whose root element lives in the jsdom document. */
 function makeEditor(): LexicalEditor {
   const editor = createEditor({
     namespace: "base-pill-test",
@@ -49,8 +48,6 @@ describe("BasePillNode", () => {
 
           expect(element.tagName).toBe("SPAN");
           expect(element.className).toBe("test-pill-wrapper");
-          // Lexical owns placement; handing it an already-attached node would
-          // duplicate the pill in the composer.
           expect(element.parentNode).toBeNull();
         },
         { discrete: true }

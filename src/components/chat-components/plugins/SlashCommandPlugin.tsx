@@ -80,13 +80,6 @@ function useAgentSlashData(): AgentSlashData {
   return data;
 }
 
-/**
- * Resolve the active backend id for slash-menu filtering. Returns `null`
- * when Agent Mode is disabled, or when `activeBackend` is unset/unknown —
- * either case routes through the plain-LLM fallback (show every visible
- * skill) rather than silently filtering everything out, which is the
- * behaviour a typoed or stale setting would otherwise produce.
- */
 function useActiveSlashBackend(
   agentModeEnabled: boolean,
   backendIds: ReadonlySet<BackendId> | null
@@ -99,19 +92,6 @@ function useActiveSlashBackend(
   return activeBackend;
 }
 
-/**
- * Slash command plugin.
- *
- * Surfaces a unified slash menu containing managed skills (filtered to
- * those enabled for the active backend, or all visible skills when no
- * backend is configured) plus legacy custom commands. Managed skills win
- * on name collision.
- *
- * Selection rewrites the typed `/<query>` in the editor to a literal
- * `/<name> ` (trailing space) and leaves focus in the composer. The user
- * may then append args and press Enter to send. We deliberately do not
- * auto-submit so the user can review / adjust the invocation first.
- */
 export function SlashCommandPlugin(): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const commands = useCustomCommands();
@@ -119,8 +99,6 @@ export function SlashCommandPlugin(): JSX.Element {
   const activeBackend = useActiveSlashBackend(agentSlashData.enabled, agentSlashData.backendIds);
   const [currentQuery, setCurrentQuery] = useState("");
 
-  // Recency / strategy sort happens before composition so the slash plugin
-  // sees commands in the order the settings request.
   const sortedCommands = useMemo(() => sortSlashCommands(commands), [commands]);
 
   const allOptions = useMemo<SlashCommandOption[]>(() => {
@@ -129,8 +107,6 @@ export function SlashCommandPlugin(): JSX.Element {
       key: item.key,
       title: item.name,
       subtitle: item.description || undefined,
-      // Body is what would actually run in the fallback path; surfacing it
-      // here keeps the preview pane informative.
       content: item.body,
       item,
     }));
@@ -152,20 +128,6 @@ export function SlashCommandPlugin(): JSX.Element {
     return contentResults.map((result) => result.obj);
   }, [allOptions, currentQuery]);
 
-  /**
-   * Rewrite the `/<query>` trigger in the editor to a literal `/<name> `
-   * (trailing space) and move the caret to the end of the inserted text.
-   * The chat composer keeps focus so the user can append args and press
-   * Enter to send. Picking does not auto-submit.
-   *
-   * **Constraint:** assumes the slash and the query live in a single
-   * `TextNode`. The typeahead trigger config rejects whitespace inside the
-   * query (`allowWhitespace: false` below), and Lexical doesn't split a
-   * contiguous typed run across nodes, so that invariant holds for every
-   * code path that reaches us today. If it ever breaks (e.g. paste
-   * mid-query), the early returns make this a silent no-op rather than a
-   * crash — the user can re-trigger by typing `/` again.
-   */
   const replaceSlashWithName = useCallback(
     (name: string) => {
       editor.update(() => {
@@ -199,12 +161,6 @@ export function SlashCommandPlugin(): JSX.Element {
     [replaceSlashWithName]
   );
 
-  // Use the shared typeahead hook. `allowWhitespace: false` makes any space
-  // after the `/` close the menu — which is exactly what we want once a
-  // selection inserts `/<name> ` (trailing space). It also matches the
-  // insert-only behaviour: args are typed after the trailing space, by
-  // which point the typeahead is dismissed and the user is in plain
-  // editing mode.
   const { state, handleHighlight } = useTypeaheadPlugin({
     triggerConfig: {
       char: "/",

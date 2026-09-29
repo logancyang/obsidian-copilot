@@ -3,8 +3,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
-// Mock factory names must match the real `use*` exports, so the no-hook `use`
-// prefix is expected on the mocked hooks below.
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/aiParams", () => ({
   useChainType: () => ["llm_chain", jest.fn()],

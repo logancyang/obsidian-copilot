@@ -8,17 +8,10 @@ import {
 } from "lexical";
 import { SEND_SHORTCUT } from "@/constants";
 
-/**
- * Props for the KeyboardPlugin component
- */
 interface KeyboardPluginProps {
-  /** Callback triggered when configured shortcut is pressed */
   onSubmit: () => void;
-  /** Send shortcut configuration */
   sendShortcut: SEND_SHORTCUT;
-  /** Optional callback fired when ESC is pressed outside IME composition. */
   onEscape?: () => void;
-  /** Optional callback fired when Shift+Tab is pressed; when set, swallows the event. */
   onShiftTab?: () => void;
 }
 
@@ -36,10 +29,6 @@ function registerEscapeContainment(rootElement: HTMLElement): () => void {
   return () => rootElement.removeEventListener("keydown", handleKeyDown);
 }
 
-/**
- * Lexical plugin that handles keyboard shortcuts for the chat input.
- * Supports configurable send shortcuts: Enter, Shift+Enter
- */
 export function KeyboardPlugin({
   onSubmit,
   sendShortcut,
@@ -52,12 +41,10 @@ export function KeyboardPlugin({
     return editor.registerCommand(
       KEY_ENTER_COMMAND,
       (event: KeyboardEvent | null) => {
-        // Handle null event (Lexical internal use)
         if (!event) {
           return false;
         }
 
-        // Ignore Enter key during IME composition (e.g., Chinese, Japanese, Korean input).
         if (isImeCompositionEvent(event)) {
           event.preventDefault();
           return true;
@@ -126,23 +113,12 @@ export function KeyboardPlugin({
   return null;
 }
 
-/**
- * Prevents IME candidate confirmation or dismissal from triggering chat shortcuts.
- * https://github.com/logancyang/obsidian-copilot-preview/issues/302
- * @param event - The keyboard event to check
- * @returns True if the event is part of an IME composition session
- */
+// isComposing/"Process" replace the deprecated keyCode 229 IME guard.
+// https://github.com/logancyang/obsidian-copilot-preview/issues/302
 export function isImeCompositionEvent(event: KeyboardEvent): boolean {
   return event.isComposing || event.key === "Process";
 }
 
-/**
- * Checks if a keyboard event matches the configured send shortcut.
- * Exported for testing purposes.
- * @param event - The keyboard event to check
- * @param shortcut - The configured send shortcut
- * @returns True if the event matches the shortcut, false otherwise
- */
 export function checkShortcutMatch(event: KeyboardEvent, shortcut: SEND_SHORTCUT): boolean {
   switch (shortcut) {
     case SEND_SHORTCUT.ENTER:
