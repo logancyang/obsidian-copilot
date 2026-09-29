@@ -132,13 +132,19 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     await plugin.newChat();
   });
 
+  // A phone offers the agent chat only while a desktop is paired, so the command is checked each
+  // time the palette opens. https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+  addCheckCommand(plugin, COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW, (checking) => {
+    if (!plugin.canOpenAgentChat()) return false;
+    if (!checking) void plugin.activateAgentView();
+    return true;
+  });
+  addCheckCommand(plugin, COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW, (checking) => {
+    if (!plugin.canOpenAgentChat()) return false;
+    if (!checking) plugin.toggleAgentView();
+    return true;
+  });
   if (isDesktopRuntime()) {
-    addCommand(plugin, COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW, () => {
-      void plugin.activateAgentView();
-    });
-    addCommand(plugin, COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW, () => {
-      void plugin.toggleAgentView();
-    });
     addCommand(plugin, COMMAND_IDS.NEW_AGENT_CHAT, () => {
       void plugin.newAgentChat();
     });

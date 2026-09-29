@@ -32,10 +32,11 @@ Nine element types, strict imports. Enforced by `eslint-plugin-boundaries`
    client and selectors must not read a clock or random source. Contract:
    [`designdocs/AGENT_SESSION_HOST.md`](../../designdocs/AGENT_SESSION_HOST.md).
 
-9. **`mobile/`** — the phone's agent entry: a client of a paired desktop that reaches it through a
-   reconnecting transport. It may import `protocol/`, `ui/`, `session/` and the plugin, and its static
-   closure must never reach `acp/`, `sdk/`, `backends/`, `skills/` or the host. Contract:
-   [`designdocs/AGENT_SESSION_HOST.md`](../../designdocs/AGENT_SESSION_HOST.md) section 5.2.1.
+9. **`mobile/`** — the phone's agent entry: a view that is a client of a paired desktop, its
+   reconnecting transport, connection screens and the runtime that assembles them. It may import
+   `protocol/`, `ui/`, `session/` and the plugin, and its static closure must never reach `acp/`,
+   `sdk/`, `backends/`, `skills/` or the host; `scripts/mobile-load-smoke.cjs` enforces that on the
+   bundle. Contract: [`designdocs/AGENT_SESSION_HOST.md`](../../designdocs/AGENT_SESSION_HOST.md) section 9.5.
 
 ## Why two adapters under one session
 

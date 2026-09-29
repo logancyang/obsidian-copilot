@@ -30,6 +30,8 @@ const contextCacheConsumerFiles = [
 ];
 
 const protocolEntry = "src/agentMode/protocol/index.ts";
+const mobileEntry = "src/agentMode/mobile/index.ts";
+const legacyMobileChatEntry = "src/components/CopilotView.tsx";
 
 const nodeModuleIds = new Set([
   "async_hooks",
@@ -424,15 +426,7 @@ class SmokeEventTarget {
   }
 }
 
-function runBundleEvaluationSmoke() {
-  const bundlePath = path.join(repoRoot, "main.js");
-  if (!fs.existsSync(bundlePath)) {
-    fail("main.js is missing. Run npm run build before the mobile-load smoke test.");
-    return;
-  }
-
-  const source = fs.readFileSync(bundlePath, "utf8");
-  const module = { exports: {} };
+function bundleContext(module) {
   const context = {
     AbortController,
     clearInterval,
@@ -480,35 +474,175 @@ function runBundleEvaluationSmoke() {
   context.globalThis = context;
   context.self = context;
   context.window = context;
+  return context;
+}
 
+// Evaluates a browser bundle the way the mobile WebView does: Node built-ins and electron throw on
+// first use and obsidian is a stub. Returns the bundle's exports, or null after recording a failure.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+function evaluateBundle(source, filename) {
+  const module = { exports: {} };
   try {
-    vm.runInNewContext(source, context, {
-      filename: "main.js",
-      timeout: 5000,
-    });
+    vm.runInNewContext(source, bundleContext(module), { filename, timeout: 5000 });
   } catch (error) {
-    fail(`main.js failed mobile bundle evaluation: ${formatError(error)}`);
+    fail(`${filename} failed mobile bundle evaluation: ${formatError(error)}`);
+    return null;
+  }
+  return module.exports;
+}
+
+function runBundleEvaluationSmoke() {
+  const bundlePath = path.join(repoRoot, "main.js");
+  if (!fs.existsSync(bundlePath)) {
+    fail("main.js is missing. Run npm run build before the mobile-load smoke test.");
     return;
   }
 
-  const pluginExport = module.exports.default ?? module.exports;
+  const exports = evaluateBundle(fs.readFileSync(bundlePath, "utf8"), "main.js");
+  if (!exports) return;
+  const pluginExport = exports.default ?? exports;
   if (typeof pluginExport !== "function") {
     fail("main.js did not export the plugin class.");
   }
 }
 
-checkAgentModeImportBoundaries();
-checkContextCacheImportBoundaries();
-checkRemoteImportBoundaries();
-checkProtocolBundle();
-runBundleEvaluationSmoke();
+const desktopOnlyAgentInputs = new RegExp(
+  "^src/agentMode/(?:acp|sdk|backends|skills)/|^src/agentMode/index\\.ts$|" +
+    "^src/agentMode/session/(?:AgentSession|AgentSessionManager|AgentMessageStore|" +
+    "AgentChatPersistenceManager|AgentModelPreloader|AgentSessionIndex|nodeFileStorage|debugSink)\\.ts$|" +
+    "^src/agentMode/session/host/|^src/remote/host/"
+);
 
-if (failures.length > 0) {
-  console.error("Mobile load smoke test failed:");
-  for (const failure of failures) {
-    console.error(`- ${failure}`);
-  }
-  process.exit(1);
+async function bundleForMobile(entry) {
+  const { build } = require("esbuild");
+  const { default: nodeModuleShim, nodeBuiltinExternals } = require("../nodeModuleShim.mjs");
+  const { default: svgrPlugin } = require("../svgrPlugin.mjs");
+  return build({
+    entryPoints: [path.join(repoRoot, entry)],
+    bundle: true,
+    write: false,
+    metafile: true,
+    platform: "browser",
+    format: "cjs",
+    target: "es2020",
+    charset: "utf8",
+    logLevel: "silent",
+    tsconfig: path.join(repoRoot, "tsconfig.json"),
+    loader: { ".md": "text" },
+    external: ["obsidian", "electron", "@codemirror/*", "@lezer/*", ...nodeBuiltinExternals],
+    plugins: [nodeModuleShim, svgrPlugin],
+    define: {
+      global: "window",
+      "process.env.NODE_ENV": '"production"',
+      "import.meta.url": "import_meta.url",
+    },
+  });
 }
 
-console.log("Mobile load smoke test passed.");
+function entryInput(metafile) {
+  return Object.values(metafile.outputs)[0].entryPoint;
+}
+
+// The files an entry loads at module evaluation: static imports only, since a dynamic import is
+// wrapped and runs later.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+function staticClosure(metafile, entry) {
+  const seen = new Set([entry]);
+  const queue = [entry];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    for (const edge of metafile.inputs[current]?.imports ?? []) {
+      if (edge.external || edge.kind === "dynamic-import" || seen.has(edge.path)) continue;
+      seen.add(edge.path);
+      queue.push(edge.path);
+    }
+  }
+  return seen;
+}
+
+function nodeImporters(metafile, closure) {
+  const importers = new Set();
+  for (const file of closure) {
+    for (const edge of metafile.inputs[file]?.imports ?? []) {
+      if (edge.external && edge.kind !== "dynamic-import" && nodeModuleIds.has(edge.path)) {
+        importers.add(file);
+      }
+    }
+  }
+  return importers;
+}
+
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+async function checkMobileEntryBundle() {
+  let phone;
+  let legacy;
+  try {
+    [phone, legacy] = await Promise.all([
+      bundleForMobile(mobileEntry),
+      bundleForMobile(legacyMobileChatEntry),
+    ]);
+  } catch (error) {
+    fail(`${mobileEntry} does not bundle for a browser platform: ${formatError(error)}`);
+    return;
+  }
+
+  const files = staticClosure(phone.metafile, entryInput(phone.metafile));
+  if (process.env.SMOKE_DEBUG)
+    console.log("phone closure", files.size, "bytes", phone.outputFiles[0].text.length);
+
+  const desktopOnly = [...files].filter((file) => desktopOnlyAgentInputs.test(file));
+  if (desktopOnly.length > 0) {
+    fail(`${mobileEntry} loads desktop-only modules: ${desktopOnly.join(", ")}`);
+  }
+  const sdkPackages = [...files].filter((file) =>
+    /^node_modules\/(?:@anthropic-ai\/claude-agent-sdk|@agentclientprotocol)\//.test(file)
+  );
+  if (sdkPackages.length > 0) {
+    fail(`${mobileEntry} loads agent SDK packages: ${sdkPackages.join(", ")}`);
+  }
+
+  // What the legacy chat already loads on a phone today is known to work there; the agent entry
+  // may not add a Node or electron import to it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+  const alreadyOnPhone = nodeImporters(
+    legacy.metafile,
+    staticClosure(legacy.metafile, entryInput(legacy.metafile))
+  );
+  const added = [...nodeImporters(phone.metafile, files)].filter(
+    (file) => !alreadyOnPhone.has(file)
+  );
+  if (added.length > 0) {
+    fail(
+      `${mobileEntry} adds Node or electron imports the phone does not load today: ${added.join(", ")}`
+    );
+  }
+
+  const exports = evaluateBundle(phone.outputFiles[0].text, "agentMode/mobile/index.ts");
+  if (exports && typeof exports.RemoteAgentView !== "function") {
+    fail(`${mobileEntry} does not export RemoteAgentView.`);
+  }
+}
+
+async function main() {
+  checkAgentModeImportBoundaries();
+  checkContextCacheImportBoundaries();
+  checkRemoteImportBoundaries();
+  checkProtocolBundle();
+  await checkMobileEntryBundle();
+  runBundleEvaluationSmoke();
+
+  if (failures.length > 0) {
+    console.error("Mobile load smoke test failed:");
+    for (const failure of failures) {
+      console.error(`- ${failure}`);
+    }
+    process.exit(1);
+  }
+
+  console.log("Mobile load smoke test passed.");
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
