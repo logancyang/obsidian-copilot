@@ -1,3 +1,7 @@
+import type { ClientView } from "@/agentMode/protocol/ClientView";
+import { useClientView } from "@/agentMode/protocol/react";
+import type { SessionClient } from "@/agentMode/protocol/SessionClient";
+import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { AgentStatusCard } from "@/agentMode/ui/AgentStatusCard";
 import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
@@ -20,13 +24,30 @@ interface Props {
   updateUserMessageHistory: (newMessage: string) => void;
 }
 
-export const AgentModeChat: React.FC<Props> = ({
+export const AgentModeChat: React.FC<Props> = (props) => {
+  const {
+    agentSessionManager: manager,
+    agentSessionClient: client,
+    agentSessionView: view,
+  } = props.plugin;
+  if (!manager || !client || !view) return null;
+  return <AgentModeChatBody {...props} manager={manager} client={client} view={view} />;
+};
+
+interface BodyProps extends Props {
+  manager: AgentSessionManager;
+  client: SessionClient;
+  view: ClientView;
+}
+
+const AgentModeChatBody: React.FC<BodyProps> = ({
   plugin,
+  manager,
+  client,
+  view,
   onSaveChat,
   updateUserMessageHistory,
 }) => {
-  const manager = plugin.agentSessionManager;
-  const client = plugin.agentSessionClient;
   const descriptor = useSessionBackendDescriptor(manager);
   const installState = useBackendInstallState(descriptor, plugin);
   const auth = useBackendAuthState(descriptor);
@@ -35,21 +56,16 @@ export const AgentModeChat: React.FC<Props> = ({
   );
   const signedOut = Boolean(descriptor.auth && auth.status?.signedIn === false);
   const managedInstall = useManagedInstallActionState(descriptor, plugin);
-  const [tick, setTick] = React.useState(0);
+  const { host, activeTab, scopeTabs } = useClientView(client, view);
+  const isStarting = host?.host.startingBackendId != null;
+  const startFailed = host?.host.startFailed ?? false;
+  const preloadReady =
+    host?.backends.find((backend) => backend.id === descriptor.id)?.preload !== "pending";
+  const scopeTabCount = scopeTabs.length;
 
   React.useEffect(() => {
-    if (!manager) return;
-    return manager.subscribe(() => setTick((v) => v + 1));
-  }, [manager]);
-
-  const preloadReady = manager?.isPreloadReady(descriptor.id) ?? true;
-
-  React.useEffect(() => {
-    if (!manager) return;
     if (!preloadReady || managedInstall.kind === "running" || awaitingAuth || signedOut) return;
-    if (manager.getSessionsForScope(manager.getActiveProjectId()).length > 0) return;
-    if (manager.getIsStarting()) return;
-    if (manager.getLastError()) return;
+    if (scopeTabCount > 0 || isStarting || startFailed) return;
     if (installState.kind !== "ready") return;
     manager.getOrCreateActiveSession().catch((e) => {
       logError("[AgentMode] auto-start failed", e);
@@ -61,22 +77,22 @@ export const AgentModeChat: React.FC<Props> = ({
     managedInstall.kind,
     awaitingAuth,
     signedOut,
-    tick,
+    scopeTabCount,
+    isStarting,
+    startFailed,
   ]);
 
   const handleInstall = React.useCallback(() => {
     descriptor.openInstallUI(plugin);
   }, [descriptor, plugin]);
 
-  if (!manager) return null;
-
-  const activeSession = manager.getActiveSession();
-  if (activeSession && client) {
+  if (activeTab) {
     return (
       <AgentHome
         client={client}
-        sessionId={activeSession.internalId}
-        chatInputId={activeSession.chatInputId}
+        view={view}
+        sessionId={activeTab.id}
+        chatInputId={activeTab.chatInputId}
         manager={manager}
         plugin={plugin}
         onSaveChat={onSaveChat}

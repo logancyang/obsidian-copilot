@@ -50,6 +50,7 @@ export class SessionClient {
   private readonly pending = new Map<string, (result: CommandResult<unknown>) => void>();
   private readonly listeners = new Set<() => void>();
   private readonly detach: Array<() => void>;
+  private focus: SessionId | null = null;
   private commandSeq = 0;
 
   constructor(
@@ -99,6 +100,18 @@ export class SessionClient {
       released = true;
       this.unwatchSession(id);
     };
+  }
+
+  /**
+   * Tells the host which session this client is showing, or null when it shows none or is hidden.
+   * The host clears a focused session's attention mark and skips marking it. The value is kept
+   * and re-sent after a reconnect.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+   */
+  setFocus(id: SessionId | null): void {
+    if (id === this.focus) return;
+    this.focus = id;
+    if (this.connection === "live") this.send({ type: "focus", sessionId: id });
   }
 
   command<N extends CommandName>(
@@ -181,6 +194,7 @@ export class SessionClient {
     this.connection = "live";
     this.subscribeScope(HOST_SCOPE);
     for (const id of this.watchCounts.keys()) this.subscribeScope(sessionScope(id));
+    if (this.focus !== null) this.send({ type: "focus", sessionId: this.focus });
     this.notify();
   }
 

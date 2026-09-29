@@ -19,6 +19,7 @@ import {
   type SessionState,
 } from "@/agentMode/protocol/state";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
+import type { SessionId } from "@/agentMode/session/types";
 import {
   runCommand,
   type CommandContext,
@@ -62,6 +63,7 @@ interface Connection {
   onClose?: () => void;
   sent: Map<Scope, number>;
   greeted: boolean;
+  focus: SessionId | null;
 }
 
 export class SessionHost {
@@ -101,8 +103,15 @@ export class SessionHost {
     return this.hostId;
   }
 
+  isSessionFocused(id: SessionId): boolean {
+    for (const connection of this.connections) {
+      if (connection.focus === id) return true;
+    }
+    return false;
+  }
+
   connect(send: (frame: ServerFrame) => void, onClose?: () => void): HostConnection {
-    const connection: Connection = { send, onClose, sent: new Map(), greeted: false };
+    const connection: Connection = { send, onClose, sent: new Map(), greeted: false, focus: null };
     this.connections.add(connection);
     return {
       receive: (frame) => this.receive(connection, frame),
@@ -300,10 +309,19 @@ export class SessionHost {
       case "unsubscribe":
         connection.sent.delete(frame.scope);
         return;
+      case "focus":
+        this.focus(connection, frame.sessionId);
+        return;
       case "command":
         void this.execute(connection, frame.id, frame.command);
         return;
     }
+  }
+
+  private focus(connection: Connection, sessionId: SessionId | null): void {
+    if (sessionId !== null && typeof sessionId !== "string") return;
+    connection.focus = sessionId;
+    if (sessionId !== null) this.options.manager.getSession(sessionId)?.clearNeedsAttention();
   }
 
   private subscribe(connection: Connection, scope: Scope, fromSeq: number | undefined): void {

@@ -1,3 +1,4 @@
+import { backendRegistry } from "@/agentMode/backends/registry";
 import type { SessionClient } from "@/agentMode/protocol/SessionClient";
 import type { AgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
 import { closePlanPreview, openPlanPreview } from "@/agentMode/ui/PlanPreviewView";
@@ -8,7 +9,7 @@ import type { App } from "obsidian";
 
 // The desktop panel runs beside the vault it shows, so it can open files, write into the editor
 // and host a plan preview in a workspace leaf. This module is the only place the pane reaches
-// those desktop-only helpers.
+// those desktop-only helpers, and the backend registry.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/611
 export function createDesktopPaneCapabilities(
   app: App,
@@ -16,6 +17,7 @@ export function createDesktopPaneCapabilities(
 ): AgentPaneCapabilities {
   return {
     vaultBase: getVaultBase(app),
+    backendIcon: (backendId) => backendRegistry[backendId]?.Icon,
     openPath: (path, options) => openVaultPath(app, path, options),
     insertAtCursor: (text) => void insertAtCursor(app, text),
     openPlanPreview: (request) => openPlanPreview(app, { ...request, client }),

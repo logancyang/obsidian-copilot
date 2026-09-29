@@ -16,6 +16,9 @@ jest.mock("@/agentMode/ui/PlanPreviewView", () => ({
 
 const app = { name: "app" } as unknown as App;
 const client = { name: "client" } as unknown as SessionClient;
+jest.mock("@/agentMode/backends/registry", () => ({
+  backendRegistry: { claude: { Icon: () => null } },
+}));
 
 describe("desktopPaneCapabilities", () => {
   describe("createDesktopPaneCapabilities()", () => {
@@ -27,7 +30,9 @@ describe("desktopPaneCapabilities", () => {
     });
 
     it("opens a path through the vault opener with the options it was given", () => {
-      createDesktopPaneCapabilities(app, client).openPath?.("notes/a.md", { newLeaf: true });
+      createDesktopPaneCapabilities(app, client).openPath?.("notes/a.md", {
+        newLeaf: true,
+      });
       expect(openVaultPath).toHaveBeenCalledWith(app, "notes/a.md", { newLeaf: true });
     });
 
@@ -47,6 +52,12 @@ describe("desktopPaneCapabilities", () => {
       await createDesktopPaneCapabilities(app, client).openPlanPreview?.(request);
 
       expect(openPlanPreview).toHaveBeenCalledWith(app, { ...request, client });
+    });
+
+    it("supplies each registered agent's icon and none for an unknown agent https://github.com/Brevilabs/obsidian-copilot-private/issues/612", () => {
+      const { backendIcon } = createDesktopPaneCapabilities(app, client);
+      expect(backendIcon?.("claude")).toBeDefined();
+      expect(backendIcon?.("mystery")).toBeUndefined();
     });
 
     it("closes the preview of a proposal", () => {

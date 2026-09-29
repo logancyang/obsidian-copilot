@@ -657,6 +657,58 @@ describe("main", () => {
       });
     });
 
+    describe("newAgentChat()", () => {
+      beforeEach(() => {
+        jest.clearAllMocks();
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+      });
+
+      it("creates a session in the panel's project scope and shows it in the panel's view https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+        const plugin = createPluginUnderTest([]);
+        const activate = jest.fn();
+        const createSession = jest
+          .fn()
+          .mockResolvedValue({ internalId: "s-new", projectId: "proj-1", chatInputId: "in-new" });
+        Object.assign(plugin.agentSessionManager as object, { createSession });
+        plugin.agentSessionView = {
+          getProjectScope: () => "proj-1",
+          activate,
+        } as unknown as CopilotPlugin["agentSessionView"];
+        jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
+
+        await plugin.newAgentChat();
+
+        expect(createSession).toHaveBeenCalledWith(undefined, "proj-1");
+        expect(activate).toHaveBeenCalledWith({
+          id: "s-new",
+          projectId: "proj-1",
+          chatInputId: "in-new",
+        });
+      });
+
+      it("reports a failed creation without throwing and leaves the panel's view alone https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+        const plugin = createPluginUnderTest([]);
+        const activate = jest.fn();
+        const failure = new Error("create failed");
+        Object.assign(plugin.agentSessionManager as object, {
+          createSession: jest.fn().mockRejectedValue(failure),
+        });
+        plugin.agentSessionView = {
+          getProjectScope: () => "__global__",
+          activate,
+        } as unknown as CopilotPlugin["agentSessionView"];
+        jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
+
+        await expect(plugin.newAgentChat()).resolves.toBeUndefined();
+
+        expect(logWarn).toHaveBeenCalledWith(
+          "[CopilotPlugin] Failed to create agent session",
+          failure
+        );
+        expect(activate).not.toHaveBeenCalled();
+      });
+    });
+
     describe("newAgentChatWithDraft()", () => {
       beforeEach(() => {
         jest.clearAllMocks();

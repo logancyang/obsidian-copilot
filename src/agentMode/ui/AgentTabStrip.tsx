@@ -1,4 +1,9 @@
-import { backendRegistry } from "@/agentMode/backends/registry";
+import type { ClientView } from "@/agentMode/protocol/ClientView";
+import { useClientView } from "@/agentMode/protocol/react";
+import type { SessionClient } from "@/agentMode/protocol/SessionClient";
+import type { TabSummary } from "@/agentMode/protocol/state";
+import { useAgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
+import { useTabCommands } from "@/agentMode/ui/hooks/useTabCommands";
 import { TruncatedText } from "@/components/TruncatedText";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,17 +14,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { cn } from "@/lib/utils";
-import { logError } from "@/logger";
-import type { AgentSession, AgentSessionStatus } from "@/agentMode/session/AgentSession";
-import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import type { BackendDescriptor } from "@/agentMode/session/types";
 import { Loader2, MoreHorizontal, Plus, X } from "lucide-react";
 import React from "react";
 
 interface Props {
-  manager: AgentSessionManager;
+  client: SessionClient;
+  view: ClientView;
+  onCreated?: () => void;
 }
 
 const TAB_GAP_PX = 4;
@@ -43,7 +45,7 @@ export function computeVisibleCount(stripWidth: number, sessionCount: number): n
   return Math.max(1, fits(withOverflowBudget));
 }
 
-interface PartitionInput<T extends { internalId: string }> {
+interface PartitionInput<T extends { id: string }> {
   sessions: readonly T[];
   visibleCount: number;
   activeId: string | null;
@@ -54,7 +56,7 @@ interface Partition<T> {
   overflowSessions: T[];
 }
 
-export function partitionSessions<T extends { internalId: string }>({
+export function partitionSessions<T extends { id: string }>({
   sessions,
   visibleCount,
   activeId,
@@ -62,9 +64,9 @@ export function partitionSessions<T extends { internalId: string }>({
   if (sessions.length === 0) return { visibleSessions: [], overflowSessions: [] };
   const visible = sessions.slice(0, visibleCount);
   const overflow = sessions.slice(visibleCount);
-  if (activeId && overflow.some((s) => s.internalId === activeId)) {
-    const activeFromOverflow = overflow.find((s) => s.internalId === activeId)!;
-    const otherOverflow = overflow.filter((s) => s.internalId !== activeId);
+  if (activeId && overflow.some((s) => s.id === activeId)) {
+    const activeFromOverflow = overflow.find((s) => s.id === activeId)!;
+    const otherOverflow = overflow.filter((s) => s.id !== activeId);
     const displaced = visible[visible.length - 1];
     const swappedVisible = [...visible.slice(0, -1), activeFromOverflow];
     return {
@@ -75,37 +77,24 @@ export function partitionSessions<T extends { internalId: string }>({
   return { visibleSessions: visible, overflowSessions: overflow };
 }
 
-function useSessionDisplay(session: AgentSession) {
-  const [, setTick] = React.useState(0);
-  React.useEffect(
-    () =>
-      session.subscribe({
-        onMessagesChanged: () => {},
-        onStatusChanged: () => setTick((v) => v + 1),
-        onLabelChanged: () => setTick((v) => v + 1),
-        onNeedsAttentionChanged: () => setTick((v) => v + 1),
-      }),
-    [session]
-  );
-  const label = session.getLabel();
-  const descriptor = backendRegistry[session.backendId] as BackendDescriptor | undefined;
+function useTabDisplay(tab: TabSummary, backendNames: ReadonlyMap<string, string>) {
+  const Icon = useAgentPaneCapabilities().backendIcon?.(tab.backendId);
   return {
-    status: session.getStatus(),
-    label,
-    needsAttention: session.getNeedsAttention(),
-    descriptor,
-    displayLabel: label ?? descriptor?.displayName ?? "Session",
+    Icon,
+    displayLabel: tab.label ?? backendNames.get(tab.backendId) ?? "Session",
   };
 }
 
-export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
-  const [, setTick] = React.useState(0);
-  React.useEffect(() => manager.subscribe(() => setTick((v) => v + 1)), [manager]);
-
-  const sessions = manager.getSessionsForScope(manager.getActiveProjectId());
+export const AgentTabStrip: React.FC<Props> = ({ client, view, onCreated }) => {
+  const { host, scopeTabs: sessions, activeTab } = useClientView(client, view);
+  const commands = useTabCommands(client, view);
   const sessionCount = sessions.length;
-  const activeId = manager.getActiveSession()?.internalId ?? null;
-  const isCreating = manager.getIsStarting();
+  const activeId = activeTab?.id ?? null;
+  const isCreating = host?.host.startingBackendId != null;
+  const backendNames = React.useMemo(
+    () => new Map((host?.backends ?? []).map((backend) => [backend.id, backend.displayName])),
+    [host?.backends]
+  );
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
 
   const stripRef = React.useRef<HTMLDivElement | null>(null);
@@ -140,18 +129,17 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
   );
 
   const handleNew = React.useCallback(() => {
-    if (manager.getIsStarting()) return;
-    manager
-      .createSession()
-      .then(() => refreshLatestVersion())
-      .catch((e) => logError("[AgentMode] createSession failed", e));
-  }, [manager]);
+    if (isCreating) return;
+    void commands.createTab().then((result) => {
+      if (result.ok) onCreated?.();
+    });
+  }, [commands, isCreating, onCreated]);
 
   const handleClose = React.useCallback(
     (id: string) => {
-      manager.detachSessionFromTab(id);
+      void commands.closeTab(id);
     },
-    [manager]
+    [commands]
   );
 
   if (sessionCount === 0) return null;
@@ -162,17 +150,18 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
       className="tw-relative tw-flex tw-w-full tw-items-stretch tw-gap-1 tw-overflow-hidden tw-px-2"
     >
       <div role="tablist" className="tw-flex tw-min-w-0 tw-items-stretch tw-gap-1">
-        {visibleSessions.map((session) => (
+        {visibleSessions.map((tab) => (
           <SessionTab
-            key={session.internalId}
-            session={session}
-            isActive={session.internalId === activeId}
-            isRenaming={renamingId === session.internalId}
-            onActivate={() => manager.setActiveSession(session.internalId)}
-            onClose={() => handleClose(session.internalId)}
-            onStartRename={() => setRenamingId(session.internalId)}
+            key={tab.id}
+            tab={tab}
+            backendNames={backendNames}
+            isActive={tab.id === activeId}
+            isRenaming={renamingId === tab.id}
+            onActivate={() => commands.showTab(tab.id)}
+            onClose={() => handleClose(tab.id)}
+            onStartRename={() => setRenamingId(tab.id)}
             onSubmitRename={(label) => {
-              manager.renameSession(session.internalId, label);
+              void commands.renameTab(tab.id, label);
               setRenamingId(null);
             }}
             onCancelRename={() => setRenamingId(null)}
@@ -182,8 +171,9 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
       {overflowSessions.length > 0 && (
         <OverflowMenu
           sessions={overflowSessions}
+          backendNames={backendNames}
           activeId={activeId}
-          onActivate={(id) => manager.setActiveSession(id)}
+          onActivate={(id) => commands.showTab(id)}
           onClose={handleClose}
         />
       )}
@@ -207,7 +197,8 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
 };
 
 interface TabProps {
-  session: AgentSession;
+  tab: TabSummary;
+  backendNames: ReadonlyMap<string, string>;
   isActive: boolean;
   isRenaming: boolean;
   onActivate: () => void;
@@ -218,7 +209,8 @@ interface TabProps {
 }
 
 const SessionTab: React.FC<TabProps> = ({
-  session,
+  tab,
+  backendNames,
   isActive,
   isRenaming,
   onActivate,
@@ -227,15 +219,15 @@ const SessionTab: React.FC<TabProps> = ({
   onSubmitRename,
   onCancelRename,
 }) => {
-  const { status, label, needsAttention, descriptor, displayLabel } = useSessionDisplay(session);
+  const { Icon, displayLabel } = useTabDisplay(tab, backendNames);
 
   const [menuOpen, setMenuOpen] = React.useState(false);
 
   if (isRenaming) {
     return (
       <RenameInput
-        key={session.internalId}
-        initialValue={label ?? ""}
+        key={tab.id}
+        initialValue={tab.label ?? ""}
         onSubmit={onSubmitRename}
         onCancel={onCancelRename}
       />
@@ -273,9 +265,9 @@ const SessionTab: React.FC<TabProps> = ({
           )}
         >
           <BrandIcon
-            descriptor={descriptor}
-            status={status}
-            needsAttention={needsAttention}
+            Icon={Icon}
+            status={tab.status}
+            needsAttention={tab.needsAttention}
             onCloseOnHover={onClose}
           />
           <TruncatedText
@@ -328,19 +320,13 @@ const RenameInput: React.FC<RenameInputProps> = ({ initialValue, onSubmit, onCan
 };
 
 interface BrandIconProps {
-  descriptor: BackendDescriptor | undefined;
-  status: AgentSessionStatus;
+  Icon: React.ComponentType<{ className?: string }> | undefined;
+  status: TabSummary["status"];
   needsAttention?: boolean;
   onCloseOnHover?: () => void;
 }
 
-const BrandIcon: React.FC<BrandIconProps> = ({
-  descriptor,
-  status,
-  needsAttention,
-  onCloseOnHover,
-}) => {
-  const Icon = descriptor?.Icon;
+const BrandIcon: React.FC<BrandIconProps> = ({ Icon, status, needsAttention, onCloseOnHover }) => {
   const isInProgress = status === "running";
   const isError = status === "error";
   const showStatusDot = !isInProgress && (needsAttention || isError);
@@ -395,13 +381,20 @@ const BrandIcon: React.FC<BrandIconProps> = ({
 };
 
 interface OverflowMenuProps {
-  sessions: AgentSession[];
+  sessions: readonly TabSummary[];
+  backendNames: ReadonlyMap<string, string>;
   activeId: string | null;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
 }
 
-const OverflowMenu: React.FC<OverflowMenuProps> = ({ sessions, activeId, onActivate, onClose }) => {
+const OverflowMenu: React.FC<OverflowMenuProps> = ({
+  sessions,
+  backendNames,
+  activeId,
+  onActivate,
+  onClose,
+}) => {
   const [open, setOpen] = React.useState(false);
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -416,16 +409,17 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({ sessions, activeId, onActiv
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="tw-w-64">
-        {sessions.map((session) => (
+        {sessions.map((tab) => (
           <OverflowRow
-            key={session.internalId}
-            session={session}
-            isActive={session.internalId === activeId}
+            key={tab.id}
+            tab={tab}
+            backendNames={backendNames}
+            isActive={tab.id === activeId}
             onActivate={() => {
-              onActivate(session.internalId);
+              onActivate(tab.id);
               setOpen(false);
             }}
-            onClose={() => onClose(session.internalId)}
+            onClose={() => onClose(tab.id)}
           />
         ))}
       </DropdownMenuContent>
@@ -434,14 +428,21 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({ sessions, activeId, onActiv
 };
 
 interface OverflowRowProps {
-  session: AgentSession;
+  tab: TabSummary;
+  backendNames: ReadonlyMap<string, string>;
   isActive: boolean;
   onActivate: () => void;
   onClose: () => void;
 }
 
-const OverflowRow: React.FC<OverflowRowProps> = ({ session, isActive, onActivate, onClose }) => {
-  const { status, needsAttention, descriptor, displayLabel } = useSessionDisplay(session);
+const OverflowRow: React.FC<OverflowRowProps> = ({
+  tab,
+  backendNames,
+  isActive,
+  onActivate,
+  onClose,
+}) => {
+  const { Icon, displayLabel } = useTabDisplay(tab, backendNames);
 
   return (
     <div
@@ -453,7 +454,7 @@ const OverflowRow: React.FC<OverflowRowProps> = ({ session, isActive, onActivate
         isActive && "tw-bg-interactive-accent/10"
       )}
     >
-      <BrandIcon descriptor={descriptor} status={status} needsAttention={needsAttention} />
+      <BrandIcon Icon={Icon} status={tab.status} needsAttention={tab.needsAttention} />
       <TruncatedText
         className="tw-min-w-0 tw-flex-1 !tw-text-current"
         tooltipContent={displayLabel}

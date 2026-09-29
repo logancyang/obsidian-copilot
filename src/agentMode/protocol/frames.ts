@@ -1,6 +1,7 @@
 import type { Command, CommandResult } from "@/agentMode/protocol/commands";
 import type { HostOp, SessionOp } from "@/agentMode/protocol/ops";
 import type { HostState, Scope, SessionState } from "@/agentMode/protocol/state";
+import type { SessionId } from "@/agentMode/session/types";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -8,6 +9,7 @@ export type ClientFrame =
   | { type: "hello"; v: number; app: string }
   | { type: "subscribe"; scope: Scope; fromSeq?: number }
   | { type: "unsubscribe"; scope: Scope }
+  | { type: "focus"; sessionId: SessionId | null }
   | { type: "command"; id: string; command: Command };
 
 export type ServerFrame =

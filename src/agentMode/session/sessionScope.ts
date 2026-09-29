@@ -29,13 +29,3 @@ export function resolveProjectIdForCwd(vaultBasePath: string, cwd: string): stri
   }
   return undefined;
 }
-
-export function pickScopeNeighbor(
-  scopeIdsAfterClose: readonly string[],
-  closedIdx: number,
-  mruCandidate: string | undefined
-): string | null {
-  if (mruCandidate && scopeIdsAfterClose.includes(mruCandidate)) return mruCandidate;
-  if (scopeIdsAfterClose.length === 0) return null;
-  return scopeIdsAfterClose[Math.min(closedIdx, scopeIdsAfterClose.length - 1)];
-}
