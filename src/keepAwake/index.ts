@@ -46,7 +46,7 @@ export interface PairingSource {
 export function createKeepAwakeSources(
   turns: TurnSource,
   pairing: PairingSource | undefined
-): Omit<KeepAwakeServiceDeps, "power" | "modeSlot"> {
+): Omit<KeepAwakeServiceDeps, "power" | "modeSlot" | "subscribeWindowClose"> {
   return {
     isTurnRunning: () => turns.hasRunningTurn(),
     subscribeTurns: (listener) => turns.subscribe(listener),
@@ -69,6 +69,10 @@ export function createKeepAwake(
   return new KeepAwakeService({
     power,
     modeSlot: createModeSlot(app),
+    subscribeWindowClose: (listener) => {
+      window.addEventListener("pagehide", listener);
+      return () => window.removeEventListener("pagehide", listener);
+    },
     ...createKeepAwakeSources(turns, pairing),
   });
 }

@@ -17,6 +17,7 @@ interface Rig {
   setTurn: (running: boolean) => void;
   setPaired: (paired: boolean) => void;
   setBattery: (onBattery: boolean) => void;
+  closeWindow: () => void;
   power: { failStart: boolean; failStop: boolean };
   subscriptions: () => number;
 }
@@ -34,6 +35,7 @@ function makeRig(options: RigOptions = {}): Rig {
   const turnListeners = new Set<() => void>();
   const pairedListeners = new Set<() => void>();
   const powerListeners = new Set<() => void>();
+  const windowListeners = new Set<() => void>();
   const state = {
     turn: false,
     paired: options.paired ?? false,
@@ -64,7 +66,7 @@ function makeRig(options: RigOptions = {}): Rig {
   };
   if (options.probe) {
     options.probe.subscriptions = () =>
-      turnListeners.size + pairedListeners.size + powerListeners.size;
+      turnListeners.size + pairedListeners.size + powerListeners.size + windowListeners.size;
   }
   const service = new KeepAwakeService({
     power,
@@ -75,6 +77,10 @@ function makeRig(options: RigOptions = {}): Rig {
         if (options.failTurnUnsubscribe) throw new Error("unsubscribe failed");
         turnListeners.delete(listener);
       };
+    },
+    subscribeWindowClose: (listener) => {
+      windowListeners.add(listener);
+      return () => windowListeners.delete(listener);
     },
     hasPairedPhone: () => state.paired,
     subscribePairedPhones: (listener) => {
@@ -99,12 +105,14 @@ function makeRig(options: RigOptions = {}): Rig {
       state.paired = paired;
       pairedListeners.forEach((listener) => listener());
     },
+    closeWindow: () => windowListeners.forEach((listener) => listener()),
     setBattery: (onBattery) => {
       state.battery = onBattery;
       powerListeners.forEach((listener) => listener());
     },
     power: failures,
-    subscriptions: () => turnListeners.size + pairedListeners.size + powerListeners.size,
+    subscriptions: () =>
+      turnListeners.size + pairedListeners.size + powerListeners.size + windowListeners.size,
   };
 }
 
@@ -291,9 +299,19 @@ describe("keepAwake/KeepAwakeService", () => {
       it(`releases a held blocker and stops listening so unloading the plugin restores normal sleep (${ISSUE})`, () => {
         const rig = makeRig({ mode: "always", paired: true });
         rig.setTurn(true);
-        expect(rig.subscriptions()).toBe(3);
+        expect(rig.subscriptions()).toBe(4);
 
         rig.service.dispose();
+
+        expect(rig.held()).toEqual([]);
+        expect(rig.subscriptions()).toBe(0);
+      });
+
+      it(`releases the blocker when the window closes without the plugin being unloaded, because the blocker lives in Electron's main process and would outlive the window (${ISSUE})`, () => {
+        const rig = makeRig({ mode: "always", paired: true });
+        expect(rig.held()).toHaveLength(1);
+
+        rig.closeWindow();
 
         expect(rig.held()).toEqual([]);
         expect(rig.subscriptions()).toBe(0);

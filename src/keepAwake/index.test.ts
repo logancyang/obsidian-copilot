@@ -144,5 +144,42 @@ describe("keepAwake", () => {
       expect(stop).toHaveBeenCalledWith(3);
       service.dispose();
     });
+
+    it(`releases the blocker when the window is torn down without unloading the plugin (${ISSUE})`, () => {
+      const stop = jest.fn();
+      (createElectronPowerControl as jest.Mock).mockReturnValue({
+        startBlocker: () => 5,
+        stopBlocker: stop,
+        isOnBattery: () => false,
+        onPowerSourceChange: () => () => {},
+      });
+      const turns = makeListenable({ hasRunningTurn: () => true });
+
+      createKeepAwake(makeApp().app, turns, undefined);
+      window.dispatchEvent(new Event("pagehide"));
+
+      expect(stop).toHaveBeenCalledWith(5);
+      expect(turns.size()).toBe(0);
+    });
+
+    it(`stops listening for window teardown after the service is disposed (${ISSUE})`, () => {
+      const stop = jest.fn();
+      (createElectronPowerControl as jest.Mock).mockReturnValue({
+        startBlocker: () => 5,
+        stopBlocker: stop,
+        isOnBattery: () => false,
+        onPowerSourceChange: () => () => {},
+      });
+      const removeSpy = jest.spyOn(window, "removeEventListener");
+
+      createKeepAwake(
+        makeApp().app,
+        makeListenable({ hasRunningTurn: () => false }),
+        undefined
+      )!.dispose();
+
+      expect(removeSpy).toHaveBeenCalledWith("pagehide", expect.any(Function));
+      removeSpy.mockRestore();
+    });
   });
 });

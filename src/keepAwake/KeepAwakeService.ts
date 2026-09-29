@@ -15,6 +15,7 @@ export interface KeepAwakeServiceDeps {
   subscribeTurns: (listener: () => void) => () => void;
   hasPairedPhone: () => boolean;
   subscribePairedPhones: (listener: () => void) => () => void;
+  subscribeWindowClose: (listener: () => void) => () => void;
   modeSlot: { load: () => KeepAwakeMode; save: (mode: KeepAwakeMode) => void };
 }
 
@@ -40,6 +41,7 @@ export class KeepAwakeService {
       this.cleanups.push(deps.subscribeTurns(() => this.reconcile()));
       this.cleanups.push(deps.subscribePairedPhones(() => this.reconcile()));
       this.cleanups.push(deps.power.onPowerSourceChange(() => this.reconcile()));
+      this.cleanups.push(deps.subscribeWindowClose(() => this.dispose()));
     } catch (error) {
       this.dispose();
       throw error;
@@ -62,7 +64,12 @@ export class KeepAwakeService {
     for (const listener of [...this.listeners]) listener();
   }
 
-  /** Releases the blocker. Unloading the plugin must not leave the computer unable to sleep. https://github.com/Brevilabs/obsidian-copilot-private/issues/608 */
+  /**
+   * Releases the blocker. Unloading the plugin, or closing or reloading the window without
+   * unloading it, must not leave the computer unable to sleep: the blocker lives in Electron's
+   * main process and outlives the window that started it.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/608
+   */
   dispose(): void {
     this.disposed = true;
     for (const cleanup of this.cleanups.splice(0)) {
