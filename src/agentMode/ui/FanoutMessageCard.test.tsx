@@ -16,7 +16,7 @@ jest.mock("@/agentMode/ui/FanoutTurnView", () => ({
 
 jest.mock("@/agentMode/ui/fanoutDropdown", () => ({
   defaultFanoutOption: () => "summary",
-  fanoutDisplayName: (backendId: string) => backendId,
+  fanoutBrandLookup: () => (backendId: string) => ({ displayName: backendId }),
   FANOUT_SUMMARY_OPTION: "summary",
 }));
 

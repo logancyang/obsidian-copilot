@@ -1,7 +1,7 @@
 import { FanoutTurnView } from "@/agentMode/ui/FanoutTurnView";
 import {
   defaultFanoutOption,
-  fanoutDisplayName,
+  fanoutBrandLookup,
   FANOUT_SUMMARY_OPTION,
   type FanoutOptionValue,
 } from "@/agentMode/ui/fanoutDropdown";
@@ -31,15 +31,14 @@ export const FanoutMessageCard: React.FC<FanoutMessageCardProps> = memo(
         ? FANOUT_SUMMARY_OPTION
         : selected;
 
-    const currentText = useMemo(
-      () =>
-        activeValue === FANOUT_SUMMARY_OPTION
-          ? renderFanoutComposite(turn, fanoutDisplayName)
-          : (turn.answers[activeValue]?.text ?? ""),
-      [turn, activeValue]
-    );
+    const capabilities = useAgentPaneCapabilities();
+    const { insertAtCursor } = capabilities;
+    const currentText = useMemo(() => {
+      if (activeValue !== FANOUT_SUMMARY_OPTION) return turn.answers[activeValue]?.text ?? "";
+      const brandFor = fanoutBrandLookup(capabilities);
+      return renderFanoutComposite(turn, (id) => brandFor(id).displayName);
+    }, [turn, activeValue, capabilities]);
 
-    const { insertAtCursor } = useAgentPaneCapabilities();
     const handleInsert = useMemo(
       () => (insertAtCursor ? () => insertAtCursor(currentText) : undefined),
       [insertAtCursor, currentText]

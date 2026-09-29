@@ -1,27 +1,24 @@
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import type { AgentAnswer, AgentAnswerStatus } from "@/agentMode/session/fanout/fanoutTypes";
 
-jest.mock("@/agentMode/backends/registry", () => {
-  const Icon = () => null;
-  return {
-    backendRegistry: {
-      opencode: { id: "opencode", displayName: "opencode", Icon },
-      claude: { id: "claude", displayName: "Claude", Icon },
-      codex: { id: "codex", displayName: "Codex", Icon },
-    },
-  };
-});
-
 import type { FanoutSummaryStatus } from "@/agentMode/session/fanout/fanoutTypes";
 import {
   agentStateForAnswer,
   agentStateForStatus,
   buildFanoutOptions,
   defaultFanoutOption,
+  fanoutBrandLookup,
   FANOUT_SUMMARY_OPTION,
   selectedAnswer,
   summaryDisplayState,
 } from "@/agentMode/ui/fanoutDropdown";
+
+const Icon = () => null;
+const NAMES: Record<string, string> = { opencode: "opencode", claude: "Claude", codex: "Codex" };
+const brandFor = fanoutBrandLookup({
+  backendIcon: (id) => (id in NAMES ? Icon : undefined),
+  backendName: (id) => NAMES[id],
+});
 
 function answer(
   backendId: string,
@@ -64,14 +61,15 @@ describe("agentStateForAnswer", () => {
 
 describe("buildFanoutOptions", () => {
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 omits Summary when exactly one agent answered", () => {
-    const options = buildFanoutOptions(turn([answer("claude", "done", "Claude answer")]));
+    const options = buildFanoutOptions(turn([answer("claude", "done", "Claude answer")]), brandFor);
 
     expect(options.map((option) => option.value)).toEqual(["claude"]);
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 preserves Summary for a saved one-agent turn that already has one", () => {
     const options = buildFanoutOptions(
-      turn([answer("claude", "done", "Claude answer")], "Existing summary")
+      turn([answer("claude", "done", "Claude answer")], "Existing summary"),
+      brandFor
     );
 
     expect(options.map((option) => option.value)).toEqual([FANOUT_SUMMARY_OPTION, "claude"]);
@@ -83,7 +81,7 @@ describe("buildFanoutOptions", () => {
       answer("claude", "running"),
       answer("codex", "error", "", "boom"),
     ]);
-    const options = buildFanoutOptions(t);
+    const options = buildFanoutOptions(t, brandFor);
 
     expect(options.map((o) => o.value)).toEqual([
       FANOUT_SUMMARY_OPTION,
@@ -101,8 +99,8 @@ describe("buildFanoutOptions", () => {
     expect(options.find((o) => o.value === "codex")?.state).toBe("error");
   });
 
-  it("falls back to the backend id when the registry has no entry", () => {
-    const options = buildFanoutOptions(turn([answer("mystery", "done", "x")]));
+  it("falls back to the backend id when the environment has no entry for the agent", () => {
+    const options = buildFanoutOptions(turn([answer("mystery", "done", "x")]), brandFor);
     const entry = options.find((o) => o.value === "mystery");
     expect(entry?.label).toBe("mystery");
     expect(entry?.Icon).toBeUndefined();

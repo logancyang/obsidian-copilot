@@ -19,6 +19,7 @@ import { getCachedCustomCommands } from "@/commands/state";
 import ChatInput, { type ChatInputHandle } from "@/components/chat-components/ChatInput";
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useAgentBrands } from "@/agentMode/ui/hooks/useAgentBrands";
+import { useAgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
 import { useChatRuntime } from "@/agentMode/ui/hooks/useChatRuntime";
 import { useSessionCommands } from "@/agentMode/ui/hooks/useSessionCommands";
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
@@ -113,13 +114,14 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
   };
 };
 
-function queuedImageViolation(item: QueuedAgentMessage) {
+function queuedImageViolation(item: QueuedAgentMessage, budgetBytes?: number) {
   return checkImageLimits(
     (item.promptContent ?? []).flatMap((content) =>
       content.type === "image"
         ? [{ mimeType: content.mimeType, bytes: decodedBase64Bytes(content.data) }]
         : []
-    )
+    ),
+    budgetBytes
   );
 }
 
@@ -165,7 +167,9 @@ export const AgentChatInput = memo(function AgentChatInput({
 
   const previousChatInputIdRef = useRef(chatInputId);
 
-  const canUseMultiAgent = useCanUseMultiAgent();
+  const plusAllowsMultiAgent = useCanUseMultiAgent();
+  const { multiAgentAllowed, imageBytesBudget } = useAgentPaneCapabilities();
+  const canUseMultiAgent = multiAgentAllowed ?? plusAllowsMultiAgent;
 
   const commands = useSessionCommands(client, sessionId);
   const { isStarting, isTurnInFlight, hasPendingPlanPermission } =
@@ -230,15 +234,8 @@ export const AgentChatInput = memo(function AgentChatInput({
     mentionedAgentIdsRef.current = [];
   }, [chatInputId]);
 
-  const handleStopGenerating = useCallback(async () => {
-    // Restore before cancellation can finish the turn and flush the queue.
-    // Only runSend owns loading; a late cancel must not mark a newer turn idle.
-    // Selected text remains ephemeral and is deliberately not restored.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/365
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/485
-    setQueuedMessages([]);
-    if (queuedMessages.length > 0) {
-      const restored = combineQueuedMessages(queuedMessages);
+  const restoreToComposer = useCallback(
+    (restored: QueuedAgentMessage) => {
       chatInputRef.current?.prependContent(
         restored.text,
         restored.mentionedAgents ?? [],
@@ -252,13 +249,24 @@ export const AgentChatInput = memo(function AgentChatInput({
         .map(imageBlockToFile)
         .filter((file): file is File => file !== null);
       if (images.length > 0) setSelectedImages((previous) => [...images, ...previous]);
-    }
+    },
+    [setContextNotes, setSelectedImages]
+  );
+
+  const handleStopGenerating = useCallback(async () => {
+    // Restore before cancellation can finish the turn and flush the queue.
+    // Only runSend owns loading; a late cancel must not mark a newer turn idle.
+    // Selected text remains ephemeral and is deliberately not restored.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/365
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/485
+    setQueuedMessages([]);
+    if (queuedMessages.length > 0) restoreToComposer(combineQueuedMessages(queuedMessages));
     try {
       await commands.cancel();
     } catch (e) {
       logError("[AgentMode] cancel failed", e);
     }
-  }, [commands, queuedMessages, setContextNotes, setSelectedImages, setQueuedMessages]);
+  }, [commands, queuedMessages, restoreToComposer, setQueuedMessages]);
 
   const runSend = useCallback(
     async (item: QueuedAgentMessage) => {
@@ -274,12 +282,16 @@ export const AgentChatInput = memo(function AgentChatInput({
         await turn;
       } catch (error) {
         logError("Error sending agent message:", error);
+        // The composer was cleared before the send, so a message the host never received (a
+        // dropped connection is the common cause on a phone) returns to the composer.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+        restoreToComposer(item);
         new Notice("Failed to send message. Please try again.");
       } finally {
         setLoading(false);
       }
     },
-    [commands, setLoading, updateUserMessageHistory]
+    [commands, restoreToComposer, setLoading, updateUserMessageHistory]
   );
 
   const handleSendMessage = useCallback(
@@ -327,7 +339,8 @@ export const AgentChatInput = memo(function AgentChatInput({
       }
 
       const imageViolation = checkImageLimits(
-        selectedImages.map((file) => ({ mimeType: file.type || "image/png", bytes: file.size }))
+        selectedImages.map((file) => ({ mimeType: file.type || "image/png", bytes: file.size })),
+        imageBytesBudget
       );
       if (imageViolation) {
         new Notice(imageViolation.message);
@@ -390,6 +403,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       loading,
       isStarting,
       unsupportedImageModelLabel,
+      imageBytesBudget,
       holdForContext,
       disabled,
       resetCompose,
@@ -406,7 +420,7 @@ export const AgentChatInput = memo(function AgentChatInput({
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/611
     let batch = queuedMessages;
     let combined = combineQueuedMessages(batch);
-    if (batch.length > 1 && queuedImageViolation(combined)) {
+    if (batch.length > 1 && queuedImageViolation(combined, imageBytesBudget)) {
       batch = batch.slice(0, 1);
       combined = batch[0];
     }
@@ -419,7 +433,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       );
       return;
     }
-    const violation = queuedImageViolation(combined);
+    const violation = queuedImageViolation(combined, imageBytesBudget);
     if (violation) {
       new Notice(violation.message);
       return;
@@ -435,6 +449,7 @@ export const AgentChatInput = memo(function AgentChatInput({
     runSend,
     setQueuedMessages,
     unsupportedImageModelLabel,
+    imageBytesBudget,
   ]);
 
   const handleRemoveQueuedMessage = useCallback(

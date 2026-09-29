@@ -10,16 +10,10 @@ jest.mock("@/agentMode/ui/AgentMarkdownText", () => ({
   AgentMarkdownText: ({ text }: { text: string }) => <div data-testid="agent-md">{text}</div>,
 }));
 
-jest.mock("@/agentMode/backends/registry", () => {
-  const Icon = () => null;
-  return {
-    backendRegistry: {
-      opencode: { id: "opencode", displayName: "opencode", Icon },
-      claude: { id: "claude", displayName: "Claude", Icon },
-    },
-  };
-});
-
+import {
+  AgentPaneCapabilitiesProvider,
+  type AgentPaneCapabilities,
+} from "@/agentMode/ui/AgentPaneContext";
 import { FanoutTurnView } from "@/agentMode/ui/FanoutTurnView";
 import { defaultFanoutOption, type FanoutOptionValue } from "@/agentMode/ui/fanoutDropdown";
 
@@ -44,9 +38,20 @@ function turn(
 
 const app = { workspace: { getActiveFile: () => null } } as never;
 
+const NAMES: Record<string, string> = { opencode: "opencode", claude: "Claude" };
+const capabilities: AgentPaneCapabilities = {
+  vaultBase: null,
+  backendName: (id) => NAMES[id],
+  backendIcon: () => () => null,
+};
+
 const Harness: React.FC<{ t: FanoutTurn }> = ({ t }) => {
   const [value, setValue] = useState<FanoutOptionValue>(() => defaultFanoutOption(t));
-  return <FanoutTurnView turn={t} app={app} value={value} onSelect={setValue} />;
+  return (
+    <AgentPaneCapabilitiesProvider value={capabilities}>
+      <FanoutTurnView turn={t} app={app} value={value} onSelect={setValue} />
+    </AgentPaneCapabilitiesProvider>
+  );
 };
 
 const renderView = (t: FanoutTurn) => render(<Harness t={t} />);

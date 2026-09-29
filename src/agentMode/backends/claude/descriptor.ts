@@ -39,7 +39,7 @@ import type {
   ModelWireCodec,
 } from "@/agentMode/session/types";
 import { ClaudeInstallModal } from "./ClaudeInstallModal";
-import ClaudeLogo from "./logo.svg";
+import ClaudeLogo from "@/lib/agent-logos/claude.svg";
 import { ClaudeSettingsPanel } from "./ClaudeSettingsPanel";
 import {
   claudeCompatibilityStore,

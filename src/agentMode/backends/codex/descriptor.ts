@@ -13,7 +13,7 @@ import {
 } from "@/settings/model";
 import { CodexBackend } from "./CodexBackend";
 import { CodexInstallModal } from "./CodexInstallModal";
-import CodexLogo from "./logo.svg";
+import CodexLogo from "@/lib/agent-logos/codex.svg";
 import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";

@@ -3,6 +3,7 @@ import {
   decodedBase64Bytes,
   MAX_IMAGE_BYTES,
   MAX_IMAGE_BYTES_PER_COMMAND,
+  REMOTE_IMAGE_BYTES_PER_COMMAND,
 } from "@/agentMode/protocol/limits";
 
 describe("limits", () => {
@@ -35,6 +36,15 @@ describe("limits", () => {
       expect(checkImageLimits(Array.from({ length: 5 }, () => png(1)))).toEqual({
         code: "too_large",
         message: "At most 4 images per message",
+      });
+    });
+
+    it("rejects a total over the link's budget even when it is within the host limit https://github.com/Brevilabs/obsidian-copilot-private/issues/613", () => {
+      const fiveAndAHalfMb = png(Math.floor(5.5 * 1024 * 1024));
+      expect(checkImageLimits([fiveAndAHalfMb])).toBeNull();
+      expect(checkImageLimits([fiveAndAHalfMb], REMOTE_IMAGE_BYTES_PER_COMMAND)).toEqual({
+        code: "too_large",
+        message: "Images can total at most 5 MB from here",
       });
     });
 

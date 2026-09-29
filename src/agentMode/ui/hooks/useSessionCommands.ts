@@ -35,6 +35,24 @@ function toSendContext(context: MessageContext | undefined): SendContext | undef
   return { ...rest, notePaths: notes.map((note) => note.path) };
 }
 
+/**
+ * The notice for notes a message named that the host could not resolve in its own vault. The agent
+ * cannot read a note that exists only on this device, and saying so keeps its reply from being read
+ * as one that saw the note.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+ * @param paths - The vault paths the host dropped, as this device sent them.
+ */
+export function describeDroppedNotes(paths: readonly string[]): string {
+  const names = paths.map((path) => path.split("/").pop()?.replace(/\.md$/, "") ?? path);
+  const shown = names.slice(0, 3).join(", ");
+  const more = names.length > 3 ? ` and ${names.length - 3} more` : "";
+  const [subject, object] =
+    names.length === 1
+      ? ["A note you mentioned is", "it"]
+      : [`${names.length} notes you mentioned are`, "them"];
+  return `${subject} not in the desktop's vault, so the agent could not read ${object}: ${shown}${more}.`;
+}
+
 function turnEnded(client: SessionClient, sessionId: SessionId): Promise<void> {
   return new Promise((resolve) => {
     const settled = (): boolean => {
@@ -81,6 +99,9 @@ export function useSessionCommands(client: SessionClient, sessionId: SessionId):
             mentionedAgents && mentionedAgents.length > 0 ? [...mentionedAgents] : undefined,
         });
         if (!result.ok) throw new Error(result.message);
+        if (result.value.droppedNotePaths.length > 0) {
+          new Notice(describeDroppedNotes(result.value.droppedNotePaths));
+        }
         return { turn: turnEnded(client, sessionId) };
       },
       async cancel() {

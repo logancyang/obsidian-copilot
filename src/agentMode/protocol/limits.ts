@@ -21,8 +21,15 @@ export interface ImageLimitViolation {
 // The host and every composer share one reading of the limits, so a message the composer accepts
 // is a message the host's `send` accepts.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/611
+// A phone sends a whole command as one frame, and the desktop's listener refuses frames over 8 MiB
+// by closing the connection. Base64 inflates images by a third, so the images of one command may
+// total at most this many decoded bytes over that link.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+export const REMOTE_IMAGE_BYTES_PER_COMMAND = 5 * 1024 * 1024;
+
 export function checkImageLimits(
-  images: readonly { mimeType: string; bytes: number }[]
+  images: readonly { mimeType: string; bytes: number }[],
+  budgetBytes: number = MAX_IMAGE_BYTES_PER_COMMAND
 ): ImageLimitViolation | null {
   if (images.length > MAX_IMAGES_PER_COMMAND) {
     return { code: "too_large", message: `At most ${MAX_IMAGES_PER_COMMAND} images per message` };
@@ -35,6 +42,10 @@ export function checkImageLimits(
     totalBytes += image.bytes;
     if (image.bytes > MAX_IMAGE_BYTES || totalBytes > MAX_IMAGE_BYTES_PER_COMMAND) {
       return { code: "too_large", message: "Image data exceeds the size limit" };
+    }
+    if (totalBytes > budgetBytes) {
+      const megabytes = Math.floor(budgetBytes / (1024 * 1024));
+      return { code: "too_large", message: `Images can total at most ${megabytes} MB from here` };
     }
   }
   return null;

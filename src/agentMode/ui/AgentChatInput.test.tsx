@@ -1,6 +1,10 @@
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
+import {
+  AgentPaneCapabilitiesProvider,
+  type AgentPaneCapabilities,
+} from "@/agentMode/ui/AgentPaneContext";
 import type { SessionCommands } from "@/agentMode/ui/hooks/useSessionCommands";
 import { AgentInputDraftStore } from "@/agentMode/session/AgentInputDraftStore";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
@@ -445,6 +449,26 @@ describe("AgentChatInput", () => {
       expect(Notice).toHaveBeenCalledWith("At most 4 images per message");
     });
 
+    it("refuses images that exceed the link's budget before sending https://github.com/Brevilabs/obsidian-copilot-private/issues/613", async () => {
+      jest.mocked(Notice).mockClear();
+      const composer = { send: jest.fn(), cancel: jest.fn() } as unknown as ComposerMock;
+      const sixMb = { type: "image/png", size: 6 * 1024 * 1024 } as File;
+      const capabilities: AgentPaneCapabilities = {
+        vaultBase: null,
+        imageBytesBudget: 5 * 1024 * 1024,
+      };
+      render(
+        <AgentPaneCapabilitiesProvider value={capabilities}>
+          {inputNode(composer, makeDraft({ input: "", images: [sixMb] }))}
+        </AgentPaneCapabilitiesProvider>
+      );
+
+      await act(async () => fireEvent.click(screen.getByText("send")));
+
+      expect(composer.send).not.toHaveBeenCalled();
+      expect(Notice).toHaveBeenCalledWith("Images can total at most 5 MB from here");
+    });
+
     it("keeps an image-only draft when the selected model lacks vision https://github.com/logancyang/obsidian-copilot/issues/2850", async () => {
       const composer = { send: jest.fn(), cancel: jest.fn() } as unknown as ComposerMock;
       const draft = makeDraft({ input: "", images: [image] });
@@ -638,6 +662,31 @@ describe("AgentChatInput", () => {
       await act(async () => settleTurn());
       expect(getDraft().loading).toBe(false);
     });
+    it("returns the message to the composer when the host never received it https://github.com/Brevilabs/obsidian-copilot-private/issues/613", async () => {
+      jest.mocked(Notice).mockClear();
+      mockPrependContent.mockClear();
+      const composer = {
+        send: jest.fn(async () => {
+          throw new Error("disconnected");
+        }),
+        cancel: jest.fn(),
+      } as unknown as ComposerMock;
+      const note = makeFile("Trip.md");
+      const draft = makeDraft({ input: "Plan the trip", contextNotes: [note] });
+
+      renderInput(composer, draft);
+      fireEvent.click(screen.getByText("send"));
+
+      await waitFor(() =>
+        expect(Notice).toHaveBeenCalledWith("Failed to send message. Please try again.")
+      );
+      expect(mockPrependContent).toHaveBeenCalledWith("Plan the trip", [], []);
+      const restoreNotes = jest.mocked(draft.setContextNotes).mock.calls[0][0] as (
+        previous: TFile[]
+      ) => TFile[];
+      expect(restoreNotes([])).toEqual([note]);
+    });
+
     it("regression: clears draft.loading when the turn resolves after the composer unmounted", async () => {
       let resolveTurn!: () => void;
       const turn = new Promise<void>((resolve) => {
@@ -690,6 +739,16 @@ describe("AgentChatInput", () => {
       expect(clearSelectedTextContexts).not.toHaveBeenCalled();
       view.rerender(inputNode(composer, draft, { chatInputId: "input-2" }));
       expect(clearSelectedTextContexts).toHaveBeenCalledTimes(1);
+    });
+
+    it("offers agent mentions on a device whose own Plus check is off when the environment allows them https://github.com/Brevilabs/obsidian-copilot-private/issues/613", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(false);
+      render(
+        <AgentPaneCapabilitiesProvider value={{ vaultBase: null, multiAgentAllowed: true }}>
+          {inputNode({ send: jest.fn(), cancel: jest.fn() }, makeDraft())}
+        </AgentPaneCapabilitiesProvider>
+      );
+      expect(capturedAgentBrands).toBe(FAKE_BRANDS);
     });
 
     it("passes the frozen empty list (not a fresh []) when not entitled", () => {
