@@ -147,11 +147,18 @@ describe("SessionHost over the WebSocket transport", () => {
       expect(phone.client.getCursorEpoch("session:s1")).not.toBe(oldEpoch);
     });
 
-    it(`fails an in-flight command with disconnected and never sends it again after the socket drops (${ISSUE})`, async () => {
-      const { phone, session, backend } = await attach(rig, "s1");
-      backend.holdPrompt();
-      const sends = jest.spyOn(session, "sendPrompt");
+    it(`fails a command the host already ran with disconnected when the socket drops before its result arrives, and never sends it again (${ISSUE})`, async () => {
+      const session = makeTestSession("s1", "claude");
+      rig.manager.add(session.session);
+      const phone = rig.connectPhone({ dropResults: true });
+      phone.client.watchSession("s1");
+      await waitUntil(
+        () => phone.client.getConnection() === "live" && !!phone.client.getSession("s1")
+      );
+      session.backend.holdPrompt();
+      const sends = jest.spyOn(session.session, "sendPrompt");
       const pending = phone.client.command({ name: "send", sessionId: "s1", text: "hi" });
+      await waitUntil(() => sends.mock.calls.length === 1);
 
       phone.transport.reconnectNow();
       const result = await pending;
@@ -159,7 +166,7 @@ describe("SessionHost over the WebSocket transport", () => {
       await new Promise((resolve) => window.setTimeout(resolve, 100));
 
       expect(result).toEqual({ ok: false, code: "failed", message: "disconnected" });
-      expect(sends.mock.calls.length).toBeLessThanOrEqual(1);
+      expect(sends).toHaveBeenCalledTimes(1);
     });
   });
 });

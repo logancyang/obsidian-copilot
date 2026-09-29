@@ -6,7 +6,7 @@ import {
   RemoteSessionTransport,
   type VisibilitySource,
 } from "@/agentMode/mobile/RemoteSessionTransport";
-import { buildHost, FakeManager, type FakeCatalog } from "@/agentMode/session/host/hostTestHarness";
+import { buildHost, FakeManager } from "@/agentMode/session/host/hostTestHarness";
 import { serveRemoteConnection } from "@/agentMode/session/host/serveRemoteConnection";
 import type { SessionHost, SessionHostOptions } from "@/agentMode/session/host/SessionHost";
 import type { SocketLike } from "@/remote/channel";
@@ -51,7 +51,11 @@ export interface RemoteRig {
   desktop: PairedDesktop;
   host: () => SessionHost;
   replaceHost(overrides?: Partial<SessionHostOptions>): SessionHost;
-  connectPhone(options?: { connectTimeoutMs?: number; helloVersion?: number }): PhoneStack;
+  connectPhone(options?: {
+    connectTimeoutMs?: number;
+    helloVersion?: number;
+    dropResults?: boolean;
+  }): PhoneStack;
   stop(): Promise<void>;
 }
 
@@ -72,7 +76,7 @@ export async function waitUntil(condition: () => boolean, timeoutMs = 3000): Pro
 // address while the listener is on loopback, so the phone's socket rewrites the host.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
 export async function startRemoteRig(
-  options: { host?: Partial<SessionHostOptions>; catalog?: FakeCatalog } = {}
+  options: { host?: Partial<SessionHostOptions> } = {}
 ): Promise<RemoteRig> {
   const manager = new FakeManager();
   let currentHost = buildHost(manager, options.host);
@@ -142,14 +146,21 @@ export async function startRemoteRig(
         visibility,
         backoffMs: [20, 40, 80],
       });
-      const helloVersion = phoneOptions.helloVersion;
+      const { helloVersion, dropResults } = phoneOptions;
       const clientTransport: ClientTransport =
-        helloVersion === undefined
+        helloVersion === undefined && !dropResults
           ? transport
           : {
               send: (frame: ClientFrame) =>
-                transport.send(frame.type === "hello" ? { ...frame, v: helloVersion } : frame),
-              onFrame: (cb) => transport.onFrame(cb),
+                transport.send(
+                  frame.type === "hello" && helloVersion !== undefined
+                    ? { ...frame, v: helloVersion }
+                    : frame
+                ),
+              onFrame: (cb) =>
+                transport.onFrame((frame) => {
+                  if (!(dropResults && frame.type === "result")) cb(frame);
+                }),
               onOpenChange: (cb) => transport.onOpenChange(cb),
               close: () => transport.close(),
             };

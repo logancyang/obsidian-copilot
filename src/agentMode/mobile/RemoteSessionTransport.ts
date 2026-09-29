@@ -179,7 +179,11 @@ export class RemoteSessionTransport implements ClientTransport {
       window.clearTimeout(this.silenceTimer);
       for (const listener of [...this.frameListeners]) listener(frame);
     });
+    // A channel that closed before it was attached reports it here, at once, and `handleClosed`
+    // has already decided what the link does next.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
     channel.onClose(({ code }) => this.handleClosed(generation, code));
+    if (generation !== this.generation) return;
     this.setState({ ...this.state, phase: "open", failure: null });
     // A desktop that accepts the connection and drops it at once must not reset the backoff, or a
     // refusal loop would redial every second forever.
@@ -203,7 +207,7 @@ export class RemoteSessionTransport implements ClientTransport {
     this.generation += 1;
     window.clearTimeout(this.stableTimer);
     window.clearTimeout(this.silenceTimer);
-    this.setOpen(false);
+    if (this.state.phase === "open") this.setOpen(false);
     if (code === CLOSE_CODE.denied || code === CLOSE_CODE.revoked) {
       this.setState({ ...this.state, phase: "denied", failure: null });
       return;

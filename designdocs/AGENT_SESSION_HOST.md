@@ -449,6 +449,21 @@ A paired phone reaches the host over the authenticated channel of [`REMOTE_PAIRI
   URLs), and one still over the limit closes the connection with `1009`. Inbound messages are capped at
   16 MiB by the listener, and the listener destroys a connection whose unsent backlog passes 64 MiB, which
   is a phone that stopped reading while the desktop kept streaming.
+- **Phone.** `RemoteSessionTransport` (`mobile/RemoteSessionTransport.ts`) implements `ClientTransport`
+  over `RemoteClient.connect`. It replaces the channel every time the app returns to the foreground,
+  because iOS closes the socket about a second after backgrounding and keeps reporting it open until
+  the app returns. After a failed attempt or an unexpected close it redials with backoff (1, 2, 4, 8,
+  then 15 seconds), resetting the backoff once a connection has stayed open for 5 seconds. A refused
+  connection is `offline` (Obsidian closed on a machine that is up); an attempt that hits the 8 second
+  connect timeout is `unreachable` ("Can't reach your desktop. Is Tailscale on?"). A channel that
+  carries no protocol frame within 8 seconds of opening is dropped and reported as an unexpected reply
+  ("Update Copilot on both devices"), because a desktop on a Copilot without the session protocol
+  admits the phone and never answers hello. Close codes `4401` and `4403` end the retries because the
+  desktop rejected the phone.
+- **Commands are never re-sent.** The client fails an in-flight command with `disconnected`.
+
+The same recorded sessions run over this transport in `SessionHost.remote.parity.test.ts`, with the
+real listener on loopback and `ws` as the phone's WebSocket.
 
 ### 5.3 Client core
 
