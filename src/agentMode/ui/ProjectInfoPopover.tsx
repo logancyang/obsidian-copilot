@@ -47,7 +47,7 @@ function FileBadge({ ext }: { ext: string }) {
 }
 
 interface ProgressSectionProps {
-  todoList: AgentTodoListEntry[] | null;
+  todoList: readonly AgentTodoListEntry[] | null;
 }
 
 function ProgressSection({ todoList }: ProgressSectionProps) {
@@ -274,7 +274,7 @@ function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps
 interface ProjectInfoPopoverProps {
   app: App;
   project: ProjectConfig;
-  todoList: AgentTodoListEntry[] | null;
+  todoList: readonly AgentTodoListEntry[] | null;
   onEdited?: (project: ProjectConfig) => void;
   container?: HTMLElement | null;
   className?: string;

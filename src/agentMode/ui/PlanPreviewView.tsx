@@ -1,7 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { logWarn } from "@/logger";
-import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
-import type { CurrentPlan, PlanDecisionAction } from "@/agentMode/session/types";
+import { useSessionSelector } from "@/agentMode/protocol/react";
+import type { SessionClient } from "@/agentMode/protocol/SessionClient";
+import type { SessionState } from "@/agentMode/protocol/state";
+import type { CurrentPlan, PlanDecisionAction, SessionId } from "@/agentMode/session/types";
+import { useSessionCommands } from "@/agentMode/ui/hooks/useSessionCommands";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { Check, FileText, X as XIcon } from "lucide-react";
 import { renderMarkdown } from "@/utils/renderMarkdown";
@@ -15,7 +18,8 @@ export interface PlanPreviewViewState {
   proposalId: string;
   planMarkdown: string;
   title?: string;
-  chatBackend?: AgentChatBackend;
+  client: SessionClient;
+  sessionId: SessionId;
 }
 
 export class PlanPreviewView extends ItemView {
@@ -75,28 +79,28 @@ export class PlanPreviewView extends ItemView {
   }
 }
 
-interface PlanPreviewRootProps {
+export interface PlanPreviewRootProps {
   app: App;
   state: PlanPreviewViewState;
 }
 
-const PlanPreviewRoot: React.FC<PlanPreviewRootProps> = ({ app, state }) => {
+// A session's plan wrapped so "session not loaded yet" (null) differs from "no plan" (`plan: null`).
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/611
+interface PlanSelection {
+  plan: CurrentPlan | null;
+}
+const selectPlan = (session: SessionState): PlanSelection => ({ plan: session.plan });
+const samePlan = (a: PlanSelection, b: PlanSelection) => a.plan === b.plan;
+
+export const PlanPreviewRoot: React.FC<PlanPreviewRootProps> = ({ app, state }) => {
   const renderTargetRef = useRef<HTMLDivElement | null>(null);
   const [decided, setDecided] = useState(false);
+  const { client, sessionId } = state;
+  const commands = useSessionCommands(client, sessionId);
 
-  const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(
-    () => state.chatBackend?.getCurrentPlan() ?? null
-  );
-
-  useEffect(() => {
-    const backend = state.chatBackend;
-    if (!backend) return;
-    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- sync local snapshot with the new backend; backend exposes a getter, not a cached snapshot, so useSyncExternalStore would tear
-    setCurrentPlan(backend.getCurrentPlan());
-    return backend.subscribe(() => {
-      setCurrentPlan(backend.getCurrentPlan());
-    });
-  }, [state.chatBackend]);
+  useEffect(() => client.watchSession(sessionId), [client, sessionId]);
+  const selectedPlan = useSessionSelector(client, sessionId, selectPlan, samePlan);
+  const currentPlan = selectedPlan?.plan ?? null;
 
   const planMarkdown = currentPlan ? currentPlan.body : state.planMarkdown;
   const title = currentPlan?.title?.trim() || state.title?.trim() || "Plan proposal";
@@ -129,19 +133,19 @@ const PlanPreviewRoot: React.FC<PlanPreviewRootProps> = ({ app, state }) => {
   const decide = async (decision: PlanDecisionAction) => {
     if (decided) return;
     setDecided(true);
-    if (!state.chatBackend || !currentPlan) return;
+    if (!currentPlan) return;
     const proposalId = currentPlan.id;
-    try {
-      await state.chatBackend.resolvePlanProposal(proposalId, decision);
-      if (decision === "approve") closePlanPreview(app, proposalId);
-    } catch (e) {
-      logWarn("[PlanPreviewView] resolvePlanProposal failed", e);
+    const result = await commands.resolvePlan(proposalId, decision);
+    if (!result.ok) {
+      setDecided(false);
+      return;
     }
+    if (decision === "approve") closePlanPreview(app, proposalId);
   };
 
-  const canDecide = !decided && state.chatBackend && currentPlan && isPending;
+  const canDecide = !decided && currentPlan && isPending;
 
-  const showEmpty = state.chatBackend && !currentPlan;
+  const showEmpty = selectedPlan !== null && !currentPlan;
 
   return (
     <div className="tw-flex tw-h-full tw-flex-col">

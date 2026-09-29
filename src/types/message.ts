@@ -47,6 +47,13 @@ export interface WebTabContext {
   isActive?: boolean;
 }
 
+// Context chips render only these two fields, so a chip needs no `TFile`.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/611
+export interface NoteRef {
+  path: string;
+  basename: string;
+}
+
 export interface MessageContext {
   notes: TFile[];
   urls: string[];
@@ -54,6 +61,12 @@ export interface MessageContext {
   folders?: string[];
   selectedTextContexts?: SelectedTextContext[];
   webTabs?: WebTabContext[];
+}
+
+// A replica of the host's transcript carries note references, not files.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/611
+export interface MessageContextView extends Omit<MessageContext, "notes"> {
+  notes: readonly NoteRef[];
 }
 
 export interface TokenUsage {
@@ -103,6 +116,10 @@ export interface ChatMessage {
 
   responseMetadata?: ResponseMetadata;
 }
+
+// A message as a renderer reads it: every `ChatMessage` field, with note references.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/611
+export type ChatMessageView = Omit<ChatMessage, "context"> & { context?: MessageContextView };
 
 export type NewChatMessage = Omit<ChatMessage, "id"> & { id?: string };
 

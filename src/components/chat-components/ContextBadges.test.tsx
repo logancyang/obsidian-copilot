@@ -1,6 +1,9 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { ContextSelectedTextBadge } from "@/components/chat-components/ContextBadges";
+import {
+  ContextNoteBadge,
+  ContextSelectedTextBadge,
+} from "@/components/chat-components/ContextBadges";
 import type { SelectedTextContext } from "@/types/message";
 
 jest.mock("@/components/TruncatedText", () => ({
@@ -36,6 +39,26 @@ const web: SelectedTextContext = {
 };
 
 describe("ContextBadges", () => {
+  describe("ContextNoteBadge()", () => {
+    it("shows the basename and the vault path of a note reference", () => {
+      render(<ContextNoteBadge note={{ path: "Projects/Research.md", basename: "Research" }} />);
+
+      expect(screen.getByTestId("label").textContent).toBe("Research");
+      expect(screen.getByRole("tooltip").textContent).toBe("Projects/Research.md");
+      expect(screen.queryByText("pdf")).toBeNull();
+      expect(screen.queryByText("canvas")).toBeNull();
+    });
+
+    it.each([
+      ["Papers/Survey.pdf", "pdf"],
+      ["Boards/Plan.CANVAS", "canvas"],
+    ])("labels %s with its %s extension read from the path", (path, label) => {
+      render(<ContextNoteBadge note={{ path, basename: "Note" }} />);
+
+      expect(screen.getByText(label)).toBeTruthy();
+    });
+  });
+
   describe("ContextSelectedTextBadge()", () => {
     it.each([
       { source: note, content: "Interview findings", label: "Interview findings" },

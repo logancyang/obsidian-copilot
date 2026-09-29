@@ -16,6 +16,8 @@ import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { SessionHost } from "./session/host/SessionHost";
+import type { SessionClient } from "./protocol/SessionClient";
+import { watchAttachedTabs } from "./ui/watchAttachedTabs";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
 import { SkillManager } from "./skills";
 import {
@@ -47,6 +49,7 @@ export { useAgentModePicker } from "./ui/useAgentModePicker";
 export type { AgentModePickerOverride } from "./ui/useAgentModePicker";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
 export type { SessionHost } from "./session/host/SessionHost";
+export type { SessionClient } from "./protocol/SessionClient";
 export type {
   AgentBrand,
   BackendDescriptor,
@@ -395,6 +398,15 @@ export function createAgentSessionHost(
     isKnownBackend: isRegisteredBackend,
     appVersion: plugin.manifest.version,
   });
+}
+
+// The desktop panel is a client of the host through the in-process transport. It keeps every
+// attached tab's session subscribed so a tab switch finds its replica ready.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/611
+export function createAgentSessionClient(host: SessionHost): SessionClient {
+  const { client } = host.createClient();
+  watchAttachedTabs(client);
+  return client;
 }
 
 export { AgentBackendHeader } from "./backends/shared/ui/AgentBackendHeader";

@@ -25,7 +25,11 @@ import {
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
 import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel";
 import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpen";
-import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
+import { EMPTY_CHAT_RUNTIME } from "@/agentMode/protocol/selectors";
+import type { SessionClient } from "@/agentMode/protocol/SessionClient";
+import { AgentPaneCapabilitiesProvider } from "@/agentMode/ui/AgentPaneContext";
+import { createDesktopPaneCapabilities } from "@/agentMode/ui/desktopPaneCapabilities";
+import { useChatRuntime } from "@/agentMode/ui/hooks/useChatRuntime";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { buildNativeChatId } from "@/utils/nativeChatId";
@@ -62,6 +66,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface AgentHomeProps {
+  client: SessionClient;
   backend: AgentChatBackend;
   sessionId: string;
   chatInputId: string;
@@ -74,6 +79,7 @@ interface AgentHomeProps {
 const EMPTY_PROJECT_NAMES_BY_ID: Readonly<Record<string, string>> = Object.freeze({});
 
 const AgentHomeInternal: React.FC<AgentHomeProps> = ({
+  client,
   backend,
   sessionId,
   chatInputId,
@@ -94,16 +100,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   useChatInputAutoFocus();
 
-  const {
-    messages,
-    isStarting,
-    isTurnInFlight,
-    hasPendingPlanPermission,
-    currentPlan,
-    currentTodoList,
-    pendingToolPermissions,
-    pendingAskUserQuestions,
-  } = useAgentChatRuntimeState(backend);
+  const { messages, isStarting, isTurnInFlight, hasPendingPlanPermission, currentTodoList } =
+    useChatRuntime(client, sessionId) ?? EMPTY_CHAT_RUNTIME;
   const isLoading = draft.loading || isTurnInFlight;
 
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
@@ -693,12 +691,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     <AgentChatMessages
                       sourcePath={manager.getSessionSourcePath(sessionId)}
                       key={sessionId}
-                      messages={messages}
+                      client={client}
+                      sessionId={sessionId}
                       app={app}
-                      currentPlan={currentPlan}
-                      pendingToolPermissions={pendingToolPermissions}
-                      pendingAskUserQuestions={pendingAskUserQuestions}
-                      chatBackend={backend}
                       isLoading={isLoading}
                     />
                     <AgentChatControls
@@ -731,9 +726,16 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 };
 
 export const AgentHome: React.FC<AgentHomeProps> = (props) => {
+  const { client, plugin } = props;
+  const paneCapabilities = useMemo(
+    () => createDesktopPaneCapabilities(plugin.app, client),
+    [plugin.app, client]
+  );
   return (
     <ChatInputProvider>
-      <AgentHomeInternal {...props} />
+      <AgentPaneCapabilitiesProvider value={paneCapabilities}>
+        <AgentHomeInternal {...props} />
+      </AgentPaneCapabilitiesProvider>
     </ChatInputProvider>
   );
 };

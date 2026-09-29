@@ -14,7 +14,9 @@ import type {
   SessionUsage,
   StopReason,
 } from "@/agentMode/session/types";
-import type { FormattedDateTime, MessageContext } from "@/types/message";
+import type { FormattedDateTime, MessageContext, NoteRef } from "@/types/message";
+
+export type { NoteRef };
 
 export type Scope = "host" | `session:${string}`;
 
@@ -26,11 +28,6 @@ export function sessionScope(id: SessionId): Scope {
 
 export function sessionIdOfScope(scope: Scope): SessionId | null {
   return scope.startsWith("session:") ? scope.slice("session:".length) : null;
-}
-
-export interface NoteRef {
-  path: string;
-  basename: string;
 }
 
 export interface WireMessageContext extends Omit<MessageContext, "notes"> {

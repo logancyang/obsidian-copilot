@@ -26,6 +26,7 @@ export const AgentModeChat: React.FC<Props> = ({
   updateUserMessageHistory,
 }) => {
   const manager = plugin.agentSessionManager;
+  const client = plugin.agentSessionClient;
   const descriptor = useSessionBackendDescriptor(manager);
   const installState = useBackendInstallState(descriptor, plugin);
   const auth = useBackendAuthState(descriptor);
@@ -71,9 +72,10 @@ export const AgentModeChat: React.FC<Props> = ({
 
   const activeSession = manager.getActiveSession();
   const backend = manager.getActiveChatUIState();
-  if (activeSession && backend) {
+  if (activeSession && backend && client) {
     return (
       <AgentHome
+        client={client}
         backend={backend}
         sessionId={activeSession.internalId}
         chatInputId={activeSession.chatInputId}

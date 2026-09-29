@@ -1,4 +1,5 @@
 import {
+  EMPTY_CHAT_RUNTIME,
   selectChatRuntime,
   selectTab,
   selectVisibleMessages,
@@ -48,6 +49,14 @@ describe("selectors", () => {
     it("returns the same array for the same transcript reference", () => {
       const session: SessionState = { ...INITIAL_SESSION_STATE, transcript: [buildMessage()] };
       expect(selectVisibleMessages(session)).toBe(selectVisibleMessages({ ...session }));
+    });
+  });
+
+  describe("EMPTY_CHAT_RUNTIME", () => {
+    it("equals the runtime of a session that has no messages, no prompts and no tab", () => {
+      expect(selectChatRuntime({ tabs: [] }, INITIAL_SESSION_STATE, "s1")).toEqual(
+        EMPTY_CHAT_RUNTIME
+      );
     });
   });
 

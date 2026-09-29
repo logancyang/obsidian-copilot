@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { CommandResult } from "@/agentMode/protocol/commands";
 import type {
   AgentQuestion,
   AgentQuestionAnswers,
@@ -10,7 +11,11 @@ import React, { useState } from "react";
 
 interface AskUserQuestionCardProps {
   request: AskUserQuestionPrompt;
-  onResolve: (requestId: string, answers: AgentQuestionAnswers) => void;
+  /**
+   * A rejected command re-enables the card so the user can answer again.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/611
+   */
+  onResolve: (requestId: string, answers: AgentQuestionAnswers) => Promise<CommandResult> | void;
 }
 
 function isAnswered(
@@ -51,9 +56,14 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
   );
   const isFinalQuestion = activeIdx === questions.length - 1;
 
+  const resolve = async (answers: AgentQuestionAnswers): Promise<void> => {
+    setBusy(true);
+    const result = await onResolve(requestId, answers);
+    if (result && !result.ok) setBusy(false);
+  };
+
   const submit = (): void => {
     if (busy || !canSubmit) return;
-    setBusy(true);
     const answers: AgentQuestionAnswers = {};
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
@@ -68,7 +78,7 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
         answers[q.answerKey ?? q.question] = other ? text : typeof sel === "string" ? sel : "";
       }
     }
-    onResolve(requestId, answers);
+    void resolve(answers);
   };
 
   // Tabs may skip questions, so Next validates only the visible answer while
@@ -85,8 +95,7 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
 
   const cancel = (): void => {
     if (busy) return;
-    setBusy(true);
-    onResolve(requestId, {});
+    void resolve({});
   };
 
   const togglePreset = (label: string): void => {

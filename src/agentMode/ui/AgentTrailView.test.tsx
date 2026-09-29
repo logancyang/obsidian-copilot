@@ -3,6 +3,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppContext } from "@/context";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
+import {
+  AgentPaneCapabilitiesProvider,
+  NO_PANE_CAPABILITIES,
+  type AgentPaneCapabilities,
+} from "@/agentMode/ui/AgentPaneContext";
 import type { AgentMessagePart } from "@/agentMode/session/types";
 
 jest.mock("@/agentMode/ui/AgentMarkdownText", () => ({
@@ -11,7 +16,6 @@ jest.mock("@/agentMode/ui/AgentMarkdownText", () => ({
 
 jest.mock("@/utils", () => ({
   cleanMessageForCopy: (s: string) => s.trim(),
-  insertAtCursor: jest.fn(),
 }));
 
 jest.mock("obsidian", () => {
@@ -31,7 +35,8 @@ jest.mock("obsidian", () => {
   };
 });
 
-const { insertAtCursor } = jest.requireMock<{ insertAtCursor: jest.Mock }>("@/utils");
+const insertAtCursor = jest.fn();
+const editorCapabilities: AgentPaneCapabilities = { vaultBase: null, insertAtCursor };
 
 const text = (value: string): AgentMessagePart => ({ kind: "text", text: value });
 
@@ -42,29 +47,35 @@ function makeApp() {
 type TrailProps = Partial<React.ComponentProps<typeof AgentTrail>>;
 type TrailApp = React.ComponentProps<typeof AgentTrail>["app"];
 
-function trailElement(app: TrailApp, props: TrailProps) {
+function trailElement(
+  app: TrailApp,
+  props: TrailProps,
+  capabilities: AgentPaneCapabilities = editorCapabilities
+) {
   return (
     <AppContext.Provider value={app}>
-      <TooltipProvider>
-        <AgentTrail
-          parts={[text("The final answer.  ")]}
-          isStreaming={false}
-          turnStopReason="end_turn"
-          app={app}
-          {...props}
-        />
-      </TooltipProvider>
+      <AgentPaneCapabilitiesProvider value={capabilities}>
+        <TooltipProvider>
+          <AgentTrail
+            parts={[text("The final answer.  ")]}
+            isStreaming={false}
+            turnStopReason="end_turn"
+            app={app}
+            {...props}
+          />
+        </TooltipProvider>
+      </AgentPaneCapabilitiesProvider>
     </AppContext.Provider>
   );
 }
 
-function renderTrail(props: TrailProps = {}) {
+function renderTrail(props: TrailProps = {}, capabilities?: AgentPaneCapabilities) {
   const app = props.app ?? makeApp();
-  const result = render(trailElement(app, props));
+  const result = render(trailElement(app, props, capabilities));
   return {
     ...result,
     app,
-    rerenderTrail: (next: TrailProps) => result.rerender(trailElement(app, next)),
+    rerenderTrail: (next: TrailProps) => result.rerender(trailElement(app, next, capabilities)),
   };
 }
 
@@ -101,7 +112,7 @@ describe("AgentTrail", () => {
   });
 
   it("renders both buttons under a completed message and wires each to the cleaned final text", () => {
-    const { app } = renderTrail();
+    renderTrail();
 
     expect(screen.getByTitle("Copy")).toBeTruthy();
     expect(screen.getByTitle("Insert / Replace at cursor")).toBeTruthy();
@@ -110,7 +121,14 @@ describe("AgentTrail", () => {
     expect(writeText).toHaveBeenCalledWith("The final answer.");
 
     fireEvent.click(screen.getByTitle("Insert / Replace at cursor"));
-    expect(insertAtCursor).toHaveBeenCalledWith(app, "The final answer.");
+    expect(insertAtCursor).toHaveBeenCalledWith("The final answer.");
+  });
+
+  it("offers only Copy under a completed message when the environment has no editor", () => {
+    renderTrail({}, NO_PANE_CAPABILITIES);
+
+    expect(screen.getByTitle("Copy")).toBeTruthy();
+    expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
   });
 
   it("renders neither button while the message is still streaming", () => {

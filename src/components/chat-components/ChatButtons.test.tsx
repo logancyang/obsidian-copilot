@@ -60,6 +60,12 @@ describe("ChatButtons lifecycle-action gating", () => {
       expect(screen.getByTitle("Delete")).toBeTruthy();
     });
 
+    it("hides Insert while keeping Copy when no insert handler is provided (no editor to write into)", () => {
+      renderButtons({ message: message("AI") });
+      expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
+      expect(screen.getByTitle("Copy")).toBeTruthy();
+    });
+
     it("keeps Insert / Copy but hides Regenerate and Delete with no handlers (Agent Mode)", () => {
       renderButtons({ message: message("AI"), onInsertIntoEditor: () => {} });
       expect(screen.getByTitle("Insert / Replace at cursor")).toBeTruthy();

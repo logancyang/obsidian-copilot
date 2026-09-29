@@ -6,6 +6,7 @@ import type { BuiltinSkillRuntime } from "./skills/SkillManager";
 import { TFile } from "obsidian";
 import { backendRegistry } from "./backends/registry";
 import {
+  createAgentSessionClient,
   createAgentSessionHost,
   createAgentSessionManager,
   isRegisteredBackend,
@@ -514,6 +515,29 @@ describe("agentMode", () => {
       const sent: unknown[] = [];
       host.connect((frame) => sent.push(frame)).receive({ type: "hello", v: 1, app: "phone" });
       expect(sent[0]).toMatchObject({ type: "hello", app: "9.9.9", ok: true });
+    });
+  });
+
+  describe("createAgentSessionClient()", () => {
+    it("connects the desktop panel to the host and receives the tab set https://github.com/Brevilabs/obsidian-copilot-private/issues/611", async () => {
+      const manager = {
+        subscribe: jest.fn(() => () => {}),
+        getSessions: () => [],
+        getTabSessions: () => [],
+      } as unknown as AgentSessionManager;
+      const host = createAgentSessionHost(
+        {} as App,
+        { manifest: { version: "9.9.9" } } as CopilotPlugin,
+        manager
+      );
+      const client = createAgentSessionClient(host);
+
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+      expect(client.getConnection()).toBe("live");
+      expect(client.getHost()).toEqual({ tabs: [] });
+      client.dispose();
+      host.dispose();
     });
   });
 });

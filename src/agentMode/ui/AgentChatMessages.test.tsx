@@ -1,16 +1,11 @@
-import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
-import type {
-  AgentChatMessage,
-  AskUserQuestionPrompt,
-  CurrentPlan,
-  PermissionPrompt,
-} from "@/agentMode/session/types";
+import type { WireMessage, WireQuestionPrompt } from "@/agentMode/protocol/state";
+import type { CurrentPlan, PermissionPrompt, SessionId } from "@/agentMode/session/types";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
+import { AgentPaneCapabilitiesProvider } from "@/agentMode/ui/AgentPaneContext";
+import { createFixtureClient, inertPaneCapabilities } from "@/agentMode/ui/agentPane.fixtures";
 import { AI_SENDER } from "@/constants";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
-
-type AgentChatMessagesProps = React.ComponentProps<typeof AgentChatMessages>;
 
 const mockSingleMessageRender = jest.fn();
 const mockTrailRender = jest.fn();
@@ -58,17 +53,43 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
 }));
 
 jest.mock("@/agentMode/ui/ToolPermissionCard", () => ({
-  ToolPermissionCard: ({ request, toolName }: { request: PermissionPrompt; toolName?: string }) => (
+  ToolPermissionCard: ({
+    request,
+    toolName,
+    onResolve,
+  }: {
+    request: PermissionPrompt;
+    toolName?: string;
+    onResolve: (toolCallId: string, optionId: string) => void;
+  }) => (
     <div>
       Permission {request.toolCall.toolCallId}
       {toolName ? ` via ${toolName}` : ""}
+      <button
+        type="button"
+        aria-label="Allow"
+        onClick={() => onResolve(request.toolCall.toolCallId, "allow")}
+      />
     </div>
   ),
 }));
 
 jest.mock("@/agentMode/ui/AskUserQuestionCard", () => ({
-  AskUserQuestionCard: ({ request }: { request: AskUserQuestionPrompt }) => (
-    <div>Question {request.requestId}</div>
+  AskUserQuestionCard: ({
+    request,
+    onResolve,
+  }: {
+    request: WireQuestionPrompt;
+    onResolve: (requestId: string, answers: Record<string, string>) => void;
+  }) => (
+    <div>
+      Question {request.requestId}
+      <button
+        type="button"
+        aria-label="Answer"
+        onClick={() => onResolve(request.requestId, { [request.requestId]: "Yes" })}
+      />
+    </div>
   ),
 }));
 
@@ -79,8 +100,8 @@ jest.mock("@/agentMode/ui/PlanProposalCard", () => ({
 function assistantMessage(
   id: string,
   timestampMs: number,
-  overrides: Partial<AgentChatMessage> = {}
-): AgentChatMessage {
+  overrides: Partial<WireMessage> = {}
+): WireMessage {
   return {
     id,
     sender: AI_SENDER,
@@ -91,11 +112,6 @@ function assistantMessage(
   };
 }
 
-const chatBackend = {
-  resolveToolPermission: jest.fn(),
-  resolveAskUserQuestion: jest.fn(),
-} as unknown as AgentChatBackend;
-
 function permission(id: string): PermissionPrompt {
   return {
     sessionId: "session-1",
@@ -104,7 +120,7 @@ function permission(id: string): PermissionPrompt {
   };
 }
 
-function question(id: string): AskUserQuestionPrompt {
+function question(id: string): WireQuestionPrompt {
   return {
     sessionId: "session-1",
     requestId: id,
@@ -123,22 +139,41 @@ function plan(id: string): CurrentPlan {
   };
 }
 
-function renderMessages(
-  messages: AgentChatMessage[],
-  isLoading: boolean,
-  overrides: Partial<AgentChatMessagesProps> = {}
-) {
-  const props: AgentChatMessagesProps = {
-    messages,
-    app: {} as never,
-    currentPlan: null,
-    pendingToolPermissions: [],
-    pendingAskUserQuestions: [],
-    chatBackend,
-    isLoading,
-    ...overrides,
-  };
-  return { ...render(<AgentChatMessages {...props} />), props };
+const SESSION_ID = "session-1" as SessionId;
+
+interface RenderOptions {
+  sourcePath?: string;
+  pendingToolPermissions?: PermissionPrompt[];
+  pendingAskUserQuestions?: WireQuestionPrompt[];
+  currentPlan?: CurrentPlan | null;
+}
+
+function renderMessages(messages: WireMessage[], isLoading: boolean, options: RenderOptions = {}) {
+  const fixture = createFixtureClient({
+    sessionId: SESSION_ID,
+    session: {
+      transcript: messages,
+      plan: options.currentPlan ?? null,
+      pending: {
+        permissions: options.pendingToolPermissions ?? [],
+        questions: options.pendingAskUserQuestions ?? [],
+        planPermission: false,
+      },
+    },
+  });
+  const element = (loading: boolean) => (
+    <AgentPaneCapabilitiesProvider value={inertPaneCapabilities}>
+      <AgentChatMessages
+        client={fixture.client}
+        sessionId={SESSION_ID}
+        app={{} as never}
+        sourcePath={options.sourcePath}
+        isLoading={loading}
+      />
+    </AgentPaneCapabilitiesProvider>
+  );
+  const view = render(element(isLoading));
+  return { ...view, fixture, setLoading: (loading: boolean) => view.rerender(element(loading)) };
 }
 
 describe("AgentChatMessages", () => {
@@ -189,16 +224,16 @@ describe("AgentChatMessages", () => {
 
     it("retires the prior duration when the next turn starts", () => {
       const completed = assistantMessage("answer-1", 1_000, { turnDurationMs: 51_000 });
-      const { container, rerender, props } = renderMessages([completed], false);
+      const { container, fixture, setLoading } = renderMessages([completed], false);
       expect(screen.getByText("51s")).toBeTruthy();
 
-      rerender(
-        <AgentChatMessages
-          {...props}
-          messages={[completed, assistantMessage("answer-2", 198_000, { message: "", parts: [] })]}
-          isLoading
-        />
-      );
+      act(() => {
+        fixture.emitSession({
+          t: "msg.add",
+          message: assistantMessage("answer-2", 198_000, { message: "", parts: [] }),
+        });
+      });
+      setLoading(true);
 
       expect(screen.queryByText("51s")).toBeNull();
       expect(screen.getByText("2s")).toBeTruthy();
@@ -235,24 +270,18 @@ describe("AgentChatMessages", () => {
         message: "First point",
         parts: [{ kind: "text", text: "First point" }],
       });
-      const { rerender, props } = renderMessages([user, completed, live], true);
+      const { fixture } = renderMessages([user, completed, live], true);
       const originalUser = mockSingleMessageRender.mock.calls[0][0];
       const originalCompletedParts = mockTrailRender.mock.calls[0][0];
 
-      rerender(
-        <AgentChatMessages
-          {...props}
-          messages={[
-            user,
-            completed,
-            {
-              ...live,
-              message: "First point and second point",
-              parts: [{ kind: "text", text: "First point and second point" }],
-            },
-          ]}
-        />
-      );
+      act(() => {
+        fixture.emitSession({
+          t: "msg.appendText",
+          id: live.id,
+          text: " and second point",
+          atMs: 3_500,
+        });
+      });
 
       expect(mockSingleMessageRender).toHaveBeenCalledTimes(1);
       expect(mockSingleMessageRender.mock.calls[0][0]).toBe(originalUser);
@@ -262,7 +291,7 @@ describe("AgentChatMessages", () => {
     });
 
     it("shows questions before permissions and reveals a permission after questions clear for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
-      const { rerender, props } = renderMessages([assistantMessage("answer-1", 62_000)], false, {
+      const { fixture } = renderMessages([assistantMessage("answer-1", 62_000)], false, {
         pendingToolPermissions: [permission("permission-first"), permission("permission-second")],
         pendingAskUserQuestions: [question("question-first")],
       });
@@ -274,13 +303,17 @@ describe("AgentChatMessages", () => {
       );
       expect(screen.getByTestId("chat-messages").textContent).not.toContain("question-first");
 
-      rerender(
-        <AgentChatMessages
-          {...props}
-          pendingToolPermissions={[permission("permission-first"), permission("permission-second")]}
-          pendingAskUserQuestions={[]}
-        />
-      );
+      act(() => {
+        fixture.emitSession({
+          t: "slice",
+          key: "pending",
+          value: {
+            permissions: [permission("permission-first"), permission("permission-second")],
+            questions: [],
+            planPermission: false,
+          },
+        });
+      });
 
       expect(Array.from(rail.querySelectorAll("[data-action-id]"), (el) => el.textContent)).toEqual(
         ["Permission permission-first"]
@@ -292,7 +325,7 @@ describe("AgentChatMessages", () => {
       const toolTurn = assistantMessage("answer-1", 62_000, {
         parts: [
           { kind: "tool_call", id: "search-1", title: "websearch", status: "pending" },
-        ] as AgentChatMessage["parts"],
+        ] as WireMessage["parts"],
       });
 
       renderMessages([toolTurn], true, {
@@ -316,6 +349,42 @@ describe("AgentChatMessages", () => {
       expect(rail.className).toContain("tw-overflow-y-auto");
       expect(rail.className).not.toContain("tw-shrink-0");
       expect(rail.className).not.toContain("tw-border");
+    });
+
+    it("sends a resolvePermission command for the pending permission the user allows", async () => {
+      const { fixture } = renderMessages([assistantMessage("answer-1", 62_000)], true, {
+        pendingToolPermissions: [permission("permission-first")],
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Allow" }));
+      await act(async () => undefined);
+
+      expect(fixture.commands).toEqual([
+        {
+          name: "resolvePermission",
+          sessionId: SESSION_ID,
+          toolCallId: "permission-first",
+          optionId: "allow",
+        },
+      ]);
+    });
+
+    it("sends an answerQuestion command carrying the answers the user gives", async () => {
+      const { fixture } = renderMessages([assistantMessage("answer-1", 62_000)], true, {
+        pendingAskUserQuestions: [question("question-first")],
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Answer" }));
+      await act(async () => undefined);
+
+      expect(fixture.commands).toEqual([
+        {
+          name: "answerQuestion",
+          sessionId: SESSION_ID,
+          requestId: "question-first",
+          answers: { "question-first": "Yes" },
+        },
+      ]);
     });
 
     it("keeps a plan-only state in the transcript without creating an action rail", () => {

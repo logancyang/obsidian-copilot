@@ -1,6 +1,6 @@
 import type { PermissionOption, PermissionPrompt, SessionId } from "@/agentMode/session/types";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 const SESSION_ID = "session-1" as SessionId;
@@ -184,6 +184,42 @@ describe("ToolPermissionCard", () => {
       });
       expect(button.firstElementChild?.classList.contains("tw-min-w-0")).toBe(true);
       expect(button.firstElementChild?.classList.contains("tw-break-all")).toBe(true);
+    });
+
+    it("re-enables the actions when the command is rejected so the user can retry", async () => {
+      const onResolve = jest
+        .fn()
+        .mockResolvedValueOnce({ ok: false, code: "failed", message: "disconnected" })
+        .mockResolvedValueOnce({ ok: true, value: undefined });
+      render(
+        <ToolPermissionCard
+          request={makeRequest([{ optionId: "allow", name: "Allow", kind: "allow_once" }])}
+          onResolve={onResolve}
+        />
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Allow" }));
+      expect(screen.getByRole("button", { name: "Allow" })).toHaveProperty("disabled", true);
+      await act(async () => undefined);
+      expect(screen.getByRole("button", { name: "Allow" })).toHaveProperty("disabled", false);
+
+      fireEvent.click(screen.getByRole("button", { name: "Allow" }));
+      expect(onResolve).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps the actions disabled once the command is accepted", async () => {
+      const onResolve = jest.fn().mockResolvedValue({ ok: true, value: undefined });
+      render(
+        <ToolPermissionCard
+          request={makeRequest([{ optionId: "allow", name: "Allow", kind: "allow_once" }])}
+          onResolve={onResolve}
+        />
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Allow" }));
+      await act(async () => undefined);
+
+      expect(screen.getByRole("button", { name: "Allow" })).toHaveProperty("disabled", true);
     });
   });
 });

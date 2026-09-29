@@ -1,4 +1,6 @@
 import { AgentMessageActions } from "@/agentMode/ui/AgentMessageActions";
+import { AgentPaneCapabilitiesProvider } from "@/agentMode/ui/AgentPaneContext";
+import { inertPaneCapabilities } from "@/agentMode/ui/agentPane.fixtures";
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -31,17 +33,18 @@ const AlignedWithResponseDemo: React.FC = () => {
   const app = useApp();
   return (
     <TooltipProvider>
-      <div className="tw-group tw-flex tw-flex-col tw-gap-1">
-        <AgentMarkdownText
-          text="I excluded generated Copilot conversation logs and notes where AI was only mentioned incidentally."
-          app={app}
-        />
-        <AgentMessageActions
-          text="I excluded generated Copilot conversation logs and notes where AI was only mentioned incidentally."
-          app={app}
-          durationMs={24_000}
-        />
-      </div>
+      <AgentPaneCapabilitiesProvider value={inertPaneCapabilities}>
+        <div className="tw-group tw-flex tw-flex-col tw-gap-1">
+          <AgentMarkdownText
+            text="I excluded generated Copilot conversation logs and notes where AI was only mentioned incidentally."
+            app={app}
+          />
+          <AgentMessageActions
+            text="I excluded generated Copilot conversation logs and notes where AI was only mentioned incidentally."
+            durationMs={24_000}
+          />
+        </div>
+      </AgentPaneCapabilitiesProvider>
     </TooltipProvider>
   );
 };

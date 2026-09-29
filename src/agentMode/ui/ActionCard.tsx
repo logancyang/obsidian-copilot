@@ -4,9 +4,7 @@ import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolStatus } from "@/agentMode/session/types";
 import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
 import { renderDiff } from "@/agentMode/ui/diffRender";
-import { getVaultBase } from "@/utils/vaultPath";
-import { openVaultPath } from "@/utils/openVaultPath";
-import { useApp } from "@/context";
+import { useAgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
 import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
 
 interface ActionCardProps {
@@ -16,9 +14,9 @@ interface ActionCardProps {
 }
 
 export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) => {
-  const app = useApp();
+  const { vaultBase, openPath } = useAgentPaneCapabilities();
   const summary = lookupToolSummary(part);
-  const summaryCtx = useMemo(() => ({ vaultBase: getVaultBase(app) }), [app]);
+  const summaryCtx = useMemo(() => ({ vaultBase }), [vaultBase]);
   const Icon = summary.icon;
   const line = summary.collapsedLine(part, summaryCtx);
   const outcome = summary.outcome(part);
@@ -26,7 +24,9 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
   const details = summary.expandedDetails?.(part) ?? null;
   const expandable = outputs.length > 0 || details !== null;
   const targetPath =
-    part.status === "completed" ? (summary.targetPath?.(part, summaryCtx) ?? null) : null;
+    openPath && part.status === "completed"
+      ? (summary.targetPath?.(part, summaryCtx) ?? null)
+      : null;
 
   return (
     <AgentActivityCard
@@ -39,7 +39,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              openVaultPath(app, targetPath, { newLeaf: true });
+              openPath?.(targetPath, { newLeaf: true });
             }}
           >
             {line}
