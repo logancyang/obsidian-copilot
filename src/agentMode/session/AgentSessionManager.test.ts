@@ -1640,6 +1640,33 @@ describe("AgentSessionManager.setActiveSession", () => {
   });
 });
 
+describe("AgentSessionManager.openTab", () => {
+  it("puts a detached session back in the tab set without selecting it https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const b = await mgr.createSession();
+    mgr.detachSessionFromTab(a.internalId);
+    expect(mgr.getTabSessions()).toEqual([b]);
+
+    mgr.openTab(a.internalId);
+
+    expect(mgr.getTabSessions()).toEqual([a, b]);
+    expect(mgr.getActiveSession()).toBe(b);
+  });
+
+  it("does not notify for an id that is unknown or already in the tab set", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const listener = jest.fn();
+    mgr.subscribe(listener);
+
+    mgr.openTab("nope");
+    mgr.openTab(a.internalId);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+});
+
 describe("AgentSessionManager.restartBackend", () => {
   it("returns false when the backend has not been started", async () => {
     const mgr = buildManager();
@@ -2726,6 +2753,87 @@ describe("AgentSessionManager.applySelection", () => {
       effort: null,
     });
     expect(readPersistedDefault(mockedSetSettings as jest.Mock, "opencode")).toBeUndefined();
+  });
+});
+
+describe("AgentSessionManager.applySelectionTo", () => {
+  it("applies the selection to the addressed session even when another session is active https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+    const applySelectionMock = jest.fn(async () => {});
+    const descriptor = {
+      ...buildDescriptor(),
+      applySelection: applySelectionMock,
+    } as unknown as BackendDescriptor;
+    const mgr = new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: {
+          getCachedModelCatalog: jest.fn(() => null),
+          getEffortCatalog: jest.fn(() => null),
+          preload: jest.fn(async () => undefined),
+          subscribe: jest.fn(() => () => {}),
+          shutdown: jest.fn(),
+          clearCached: jest.fn(),
+          takeWarm: jest.fn(() => null),
+          getWarmProcs: jest.fn(() => []),
+        } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["modelPreloader"],
+      }
+    );
+    sessionCreateSpy.mockImplementationOnce((opts) => {
+      const s = makeMockSession({ internalId: opts.internalId, backendId: opts.backendId });
+      (s as unknown as { getState: () => unknown }).getState = () => ({
+        model: { current: { baseModelId: "sonnet", effort: null }, availableModels: [] },
+        mode: null,
+      });
+      return s;
+    });
+    const first = await mgr.createSession();
+    const second = await mgr.createSession();
+    expect(mgr.getActiveSession()).toBe(second);
+
+    await mgr.applySelectionTo(first.internalId, { effort: "high" });
+
+    expect(applySelectionMock).toHaveBeenCalledWith(first, {
+      baseModelId: "sonnet",
+      effort: "high",
+    });
+  });
+
+  it("resolves without applying anything for an unknown session id", async () => {
+    const mgr = buildManager();
+    await mgr.createSession();
+    await expect(mgr.applySelectionTo("nope", { effort: "high" })).resolves.toBeUndefined();
+  });
+});
+
+describe("AgentSessionManager.applyModeTo", () => {
+  it("applies the mode spec the session's backend reported and leaves the persisted default alone https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+    const mgr = buildManager();
+    const session = await mgr.createSession();
+    (session as unknown as { getState: () => unknown }).getState = () => ({
+      model: null,
+      mode: {
+        current: "default",
+        options: [{ value: "plan", label: "Plan" }],
+        apply: { plan: { kind: "setMode", nativeId: "plan-native" } },
+      },
+    });
+    (mockedSetSettings as jest.Mock).mockClear();
+
+    await mgr.applyModeTo(session.internalId, "plan");
+
+    expect(session.setMode).toHaveBeenCalledWith("plan-native");
+    expect(mockedSetSettings).not.toHaveBeenCalled();
+  });
+
+  it("resolves without applying anything when the session has no spec for the mode", async () => {
+    const mgr = buildManager();
+    const session = await mgr.createSession();
+    await expect(mgr.applyModeTo(session.internalId, "auto")).resolves.toBeUndefined();
+    await expect(mgr.applyModeTo("nope", "auto")).resolves.toBeUndefined();
+    expect(session.setMode).not.toHaveBeenCalled();
   });
 });
 

@@ -1468,13 +1468,17 @@ export class AgentSessionManager {
     });
   }
 
-  async applySelection(
-    patch: { baseModelId?: string; effort?: string | null },
-    opts?: { expectBackendId?: BackendId }
+  /**
+   * Applies a model or effort change to the session `id`. The session is addressed explicitly so
+   * a client other than the desktop panel can drive it; nothing here depends on which tab any
+   * client shows. https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+   */
+  async applySelectionTo(
+    id: string,
+    patch: { baseModelId?: string; effort?: string | null }
   ): Promise<void> {
-    const session = this.getActiveSession();
+    const session = this.sessions.get(id);
     if (!session) return;
-    if (opts?.expectBackendId && session.backendId !== opts.expectBackendId) return;
     const current = session.getState()?.model?.current;
     if (!current) return;
     const descriptor = this.resolveDescriptor(session.backendId);
@@ -1486,17 +1490,47 @@ export class AgentSessionManager {
     this.repairDefaultEffort(session.backendId, session.getState());
   }
 
+  async applySelection(
+    patch: { baseModelId?: string; effort?: string | null },
+    opts?: { expectBackendId?: BackendId }
+  ): Promise<void> {
+    const session = this.getActiveSession();
+    if (!session) return;
+    if (opts?.expectBackendId && session.backendId !== opts.expectBackendId) return;
+    await this.applySelectionTo(session.internalId, patch);
+  }
+
+  /**
+   * Applies `mode` to the session `id` using the apply spec that session's backend reported for
+   * it. Persisting the mode as the backend's default is a desktop-only choice made by the caller.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+   */
+  async applyModeTo(id: string, mode: CopilotMode): Promise<void> {
+    const session = this.sessions.get(id);
+    const spec = session?.getState()?.mode?.apply[mode];
+    if (!session || !spec) return;
+    await this.applyModeSpecTo(session, mode, spec);
+  }
+
   async applyMode(backendId: BackendId, mode: CopilotMode, spec: ModeApplySpec): Promise<void> {
     const session = this.getActiveSession();
     if (!session || session.backendId !== backendId) return;
-    const latestMapping = this.resolveDescriptor(backendId).getModeMapping?.(null, null);
+    await this.applyModeSpecTo(session, mode, spec);
+    await this.persistDefaultMode(backendId, mode);
+  }
+
+  private async applyModeSpecTo(
+    session: AgentSession,
+    mode: CopilotMode,
+    spec: ModeApplySpec
+  ): Promise<void> {
+    const latestMapping = this.resolveDescriptor(session.backendId).getModeMapping?.(null, null);
     const latestNativeId =
       latestMapping?.kind === "setMode" ? latestMapping.canonical[mode] : undefined;
     const resolvedSpec: ModeApplySpec = latestNativeId
       ? { kind: "setMode", nativeId: latestNativeId }
       : spec;
     await applyModeSpec(session, resolvedSpec);
-    await this.persistDefaultMode(backendId, mode);
   }
 
   getDefaultMode(backendId: BackendId): CopilotMode | null {
@@ -1737,6 +1771,16 @@ export class AgentSessionManager {
       this.activeSessionId = nextId;
       if (nextId) this.lastActiveByScope.set(closedScope, nextId);
     }
+    this.notify();
+  }
+
+  /**
+   * Puts a session back in the shared tab set. Which tab a client shows is that client's own
+   * state, so this never selects anything.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+   */
+  openTab(id: string): void {
+    if (!this.sessions.has(id) || !this.detachedFromTabIds.delete(id)) return;
     this.notify();
   }
 
