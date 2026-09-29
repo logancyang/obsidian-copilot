@@ -32,6 +32,19 @@ describe("selectors", () => {
       expect(selectVisibleMessages(session).map((m) => m.id)).toEqual(["a"]);
     });
 
+    it("returns one shared empty array while every message is hidden, whatever the transcript reference", () => {
+      const first: SessionState = {
+        ...INITIAL_SESSION_STATE,
+        transcript: [buildMessage({ id: "a", isVisible: false })],
+      };
+      const second: SessionState = {
+        ...INITIAL_SESSION_STATE,
+        transcript: [buildMessage({ id: "a", isVisible: false, message: "streamed" })],
+      };
+      expect(selectVisibleMessages(first)).toHaveLength(0);
+      expect(selectVisibleMessages(first)).toBe(selectVisibleMessages(second));
+    });
+
     it("returns the same array for the same transcript reference", () => {
       const session: SessionState = { ...INITIAL_SESSION_STATE, transcript: [buildMessage()] };
       expect(selectVisibleMessages(session)).toBe(selectVisibleMessages({ ...session }));

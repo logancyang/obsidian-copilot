@@ -1,9 +1,10 @@
-import type {
-  HostState,
-  SessionState,
-  TabSummary,
-  WireMessage,
-  WireQuestionPrompt,
+import {
+  EMPTY_TRANSCRIPT,
+  type HostState,
+  type SessionState,
+  type TabSummary,
+  type WireMessage,
+  type WireQuestionPrompt,
 } from "@/agentMode/protocol/state";
 import type {
   AgentTodoListEntry,
@@ -36,7 +37,8 @@ export function selectTab(host: HostState, id: SessionId): TabSummary | null {
 export function selectVisibleMessages(session: SessionState): readonly WireMessage[] {
   const cached = visibleByTranscript.get(session.transcript);
   if (cached) return cached;
-  const visible = session.transcript.filter((message) => message.isVisible);
+  const filtered = session.transcript.filter((message) => message.isVisible);
+  const visible = filtered.length === 0 ? EMPTY_TRANSCRIPT : filtered;
   visibleByTranscript.set(session.transcript, visible);
   return visible;
 }

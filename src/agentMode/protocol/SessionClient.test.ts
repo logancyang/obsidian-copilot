@@ -393,5 +393,16 @@ describe("SessionClient", () => {
       seedHost(transport);
       expect(client.getHost()).toBeNull();
     });
+
+    it("reports offline and fails later commands with disconnected once disposed", async () => {
+      const { transport, client } = connect();
+      client.dispose();
+      expect(client.getConnection()).toBe("offline");
+      await expect(client.command({ name: "cancel", sessionId: "s1" })).resolves.toMatchObject({
+        ok: false,
+        message: "disconnected",
+      });
+      expect(transport.sentOfType("command")).toEqual([]);
+    });
   });
 });

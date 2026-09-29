@@ -116,6 +116,7 @@ export class SessionClient {
 
   dispose(): void {
     for (const stop of this.detach) stop();
+    this.connection = "offline";
     this.rejectPending();
     this.transport.close();
     this.listeners.clear();
