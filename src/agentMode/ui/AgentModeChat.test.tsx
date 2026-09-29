@@ -70,6 +70,7 @@ function makeManager({
     getSessionsForScope: jest.fn(() => scopeSessions),
     getActiveProjectId: jest.fn(() => activeProjectId),
     getIsStarting: jest.fn(() => starting),
+    isRestoringOpenChats: jest.fn(() => false),
     getLastError: jest.fn(() => lastError),
     getActiveSession: jest.fn(() => null),
     getActiveChatUIState: jest.fn(() => null),
@@ -175,6 +176,20 @@ describe("AgentModeChat", () => {
       renderChat(manager);
 
       await waitFor(() => expect(getOrCreateActiveSession).toHaveBeenCalledTimes(1));
+    });
+
+    it("does not spawn a blank chat while the open chats from the last run are being restored (https://github.com/Brevilabs/obsidian-copilot-private/issues/607)", async () => {
+      const { manager, getOrCreateActiveSession } = makeManager({
+        activeProjectId: GLOBAL_SCOPE,
+        scopeSessions: [],
+        poolSessions: [],
+      });
+      (manager.isRestoringOpenChats as jest.Mock).mockReturnValue(true);
+
+      renderChat(manager);
+
+      await waitFor(() => expect(manager.getSessionsForScope).toHaveBeenCalled());
+      expect(getOrCreateActiveSession).not.toHaveBeenCalled();
     });
 
     it("does not spawn when the current scope already has a session (single-scope behavior unchanged)", async () => {

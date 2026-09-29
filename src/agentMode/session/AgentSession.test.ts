@@ -4446,6 +4446,67 @@ describe("AgentSession turn journal", () => {
   });
 });
 
+describe("AgentSession restored chat", () => {
+  const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/607";
+
+  function makeRestored() {
+    return AgentSession.restored({
+      restoredBackendSessionId: "native-1",
+      internalId: "internal-1",
+      backendId: "claude",
+    });
+  }
+
+  it("keeps the saved agent session id while holding no running agent", () => {
+    const session = makeRestored();
+
+    expect(session.getBackendSessionId()).toBe("native-1");
+    expect(session.hasAgent()).toBe(false);
+    expect(session.isDormant()).toBe(true);
+    expect(session.getStatus()).toBe("starting");
+  });
+
+  it("refuses to send while its agent session has not been resumed", () => {
+    expect(() => makeRestored().sendPrompt("hello")).toThrow("Session is still starting");
+  });
+
+  it(`becomes read-only with the reason shown to the user when it cannot be resumed (${ISSUE})`, () => {
+    const session = makeRestored();
+    const listener = { onMessagesChanged: jest.fn(), onStatusChanged: jest.fn() };
+    session.subscribe(listener);
+
+    session.markReadOnly("Not available on this device");
+
+    expect(session.getReadOnlyReason()).toBe("Not available on this device");
+    expect(session.isDormant()).toBe(false);
+    expect(session.getStatus()).toBe("idle");
+    expect(listener.onStatusChanged).toHaveBeenCalledWith("idle");
+    expect(() => session.sendPrompt("hello")).toThrow("Not available on this device");
+  });
+
+  it(`clears the interrupted marker when it becomes read-only, since nothing can be resumed (${ISSUE})`, () => {
+    const session = makeRestored();
+    session.setInterruptedTurn({ text: "cut off" });
+
+    session.markReadOnly("Not available on this device");
+
+    expect(session.getInterruptedTurn()).toBeNull();
+  });
+
+  it("reports that the model, effort and mode cannot be switched", () => {
+    const session = makeRestored();
+    session.markReadOnly("Not available on this device");
+
+    expect(session.canSwitchModel()).toBe(false);
+    expect(session.canSwitchEffort()).toBe(false);
+    expect(session.canSwitchMode()).toBe(false);
+  });
+
+  it(`closing the session from history is a no-op without a running agent (${ISSUE})`, async () => {
+    await expect(makeRestored().releaseBackendSession()).resolves.toBeUndefined();
+  });
+});
+
 describe("AgentSession interrupted turn", () => {
   it("notifies subscribers when a turn is marked interrupted and when the mark is cleared", () => {
     const mock = makeMockBackend();

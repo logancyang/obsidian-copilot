@@ -47,7 +47,7 @@ export const AgentModeChat: React.FC<Props> = ({
     if (!manager) return;
     if (!preloadReady || managedInstall.kind === "running" || awaitingAuth || signedOut) return;
     if (manager.getSessionsForScope(manager.getActiveProjectId()).length > 0) return;
-    if (manager.getIsStarting()) return;
+    if (manager.getIsStarting() || manager.isRestoringOpenChats()) return;
     if (manager.getLastError()) return;
     if (installState.kind !== "ready") return;
     manager.getOrCreateActiveSession().catch((e) => {

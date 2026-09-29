@@ -162,6 +162,15 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   getApp?: () => App;
 }
 
+export interface AgentSessionRestoredOptions {
+  restoredBackendSessionId: SessionId;
+  internalId: string;
+  chatInputId?: string;
+  backendId: BackendId;
+  getDescriptor?: () => BackendDescriptor | undefined;
+  getDisplayName?: (backendId: BackendId) => string;
+}
+
 export class AgentSession {
   readonly store = new AgentMessageStore();
   readonly internalId: string;
@@ -171,8 +180,10 @@ export class AgentSession {
   readonly projectId: ProjectScopeId;
   readonly ready: Promise<void>;
   private backendSessionId: SessionId | null = null;
-  private readonly backend: BackendProcess;
+  private readonly backend: BackendProcess | null;
   private readonly turnJournal: TurnJournalSink | null;
+  private dormant = false;
+  private readOnlyReason: string | null = null;
   private interruptedTurn: RecordedPrompt | null = null;
   private readonly cwd: string | null;
   private readonly contextReady: Promise<ContextMaterializationResult> | null;
@@ -241,18 +252,36 @@ export class AgentSession {
   private notifyScheduled = false;
   private notifyHandle: ReturnType<typeof setTimeout> | number | null = null;
 
-  constructor(opts: AgentSessionStateOptions | AgentSessionStartOptions) {
-    this.backend = opts.backend;
-    this.turnJournal = opts.turnJournal ?? null;
+  constructor(
+    opts: AgentSessionStateOptions | AgentSessionStartOptions | AgentSessionRestoredOptions
+  ) {
     this.internalId = opts.internalId;
     this.chatInputId = opts.chatInputId ?? uuidv4();
     this.backendId = opts.backendId;
     this.planFeedbackDelivery = opts.getDescriptor?.()?.planFeedbackDelivery ?? "permission";
+    this.getDescriptor = opts.getDescriptor ?? null;
+    this.getDisplayName = opts.getDisplayName ?? null;
+    if ("restoredBackendSessionId" in opts) {
+      this.backend = null;
+      this.turnJournal = null;
+      this.projectId = GLOBAL_SCOPE;
+      this.cwd = null;
+      this.runFanoutTurn = null;
+      this.getApp = null;
+      this.getProjectContextUpdatesFn = null;
+      this.markProjectContextUpdatesDeliveredFn = null;
+      this.contextReady = null;
+      this.backendSessionId = opts.restoredBackendSessionId;
+      this.dormant = true;
+      this.ready = Promise.resolve();
+      this.cachedStatus = this.getStatus();
+      return;
+    }
+    this.backend = opts.backend;
+    this.turnJournal = opts.turnJournal ?? null;
     this.projectId = opts.projectId ?? GLOBAL_SCOPE;
     this.cwd = opts.cwd ?? null;
-    this.getDescriptor = opts.getDescriptor ?? null;
     this.runFanoutTurn = opts.runFanoutTurn ?? null;
-    this.getDisplayName = opts.getDisplayName ?? null;
     this.getApp = opts.getApp ?? null;
     this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
@@ -261,7 +290,7 @@ export class AgentSession {
       this.backendSessionId = opts.backendSessionId;
       const originalState = opts.initialState ?? null;
       this.currentState = seedSelectionIntoState(originalState, opts.defaultModelSelection);
-      this.unregisterSessionHandler = this.backend.registerSessionHandler(
+      this.unregisterSessionHandler = opts.backend.registerSessionHandler(
         opts.backendSessionId,
         (event) => this.handleSessionEvent(event)
       );
@@ -290,6 +319,36 @@ export class AgentSession {
     return this.backendSessionId;
   }
 
+  /**
+   * Builds a dormant tab for a chat that was open before a restart: it shows the saved transcript
+   * and holds the agent session id, but starts no agent until the session manager resumes it.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/607
+   * @param opts Saved session id, backend and identity of the tab to recreate.
+   */
+  static restored(opts: AgentSessionRestoredOptions): AgentSession {
+    return new AgentSession(opts);
+  }
+
+  hasAgent(): boolean {
+    return this.backend !== null;
+  }
+
+  isDormant(): boolean {
+    return this.dormant;
+  }
+
+  getReadOnlyReason(): string | null {
+    return this.readOnlyReason;
+  }
+
+  markReadOnly(reason: string): void {
+    this.dormant = false;
+    this.readOnlyReason = reason;
+    this.startupSettled = true;
+    this.setInterruptedTurn(null);
+    this.recomputeStatusIfChanged();
+  }
+
   getInterruptedTurn(): RecordedPrompt | null {
     return this.interruptedTurn;
   }
@@ -304,6 +363,11 @@ export class AgentSession {
         logWarn(`[AgentMode] interrupted-turn listener threw`, e);
       }
     }
+  }
+
+  private requireBackend(): BackendProcess {
+    if (!this.backend) throw new Error("This chat has no running agent");
+    return this.backend;
   }
 
   private async initialize(opts: AgentSessionStartOptions): Promise<void> {
@@ -328,7 +392,7 @@ export class AgentSession {
       logInfo(`[AgentMode] session ${resp.sessionId} ${modelLog}`);
       this.backendSessionId = resp.sessionId;
       this.currentState = seedSelectionIntoState(resp.state, defaultModelSelection);
-      this.unregisterSessionHandler = this.backend.registerSessionHandler(resp.sessionId, (event) =>
+      this.unregisterSessionHandler = backend.registerSessionHandler(resp.sessionId, (event) =>
         this.handleSessionEvent(event)
       );
       if (this.disposed) {
@@ -359,7 +423,7 @@ export class AgentSession {
   async setModel(modelId: string): Promise<void> {
     if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
-    const next = await this.backend.setSessionModel({
+    const next = await this.requireBackend().setSessionModel({
       sessionId: this.backendSessionId,
       modelId,
     });
@@ -400,7 +464,7 @@ export class AgentSession {
   async setConfigOption(configId: string, value: string): Promise<void> {
     if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
-    const next = await this.backend.setSessionConfigOption({
+    const next = await this.requireBackend().setSessionConfigOption({
       sessionId: this.backendSessionId,
       configId,
       value,
@@ -414,7 +478,7 @@ export class AgentSession {
   async setMode(modeId: string): Promise<void> {
     if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
-    const next = await this.backend.setSessionMode({
+    const next = await this.requireBackend().setSessionMode({
       sessionId: this.backendSessionId,
       modeId,
     });
@@ -424,14 +488,14 @@ export class AgentSession {
   }
 
   canSwitchModel(): boolean | null {
-    if (this.getStatus() === "starting") return false;
+    if (this.getStatus() === "starting" || !this.backend) return false;
     return this.currentState?.model?.apply.kind === "setConfigOption"
       ? this.backend.isSetSessionConfigOptionSupported()
       : this.backend.isSetSessionModelSupported();
   }
 
   canSwitchEffort(): boolean | null {
-    if (this.getStatus() === "starting") return false;
+    if (this.getStatus() === "starting" || !this.backend) return false;
     const descriptor = this.getDescriptor?.();
     if (!descriptor) return null;
     if (descriptor.wire.effortConfigFor) return this.backend.isSetSessionConfigOptionSupported();
@@ -441,7 +505,8 @@ export class AgentSession {
   }
 
   canSwitchMode(): boolean | null {
-    if (this.getStatus() === "starting") return false;
+    const backend = this.backend;
+    if (this.getStatus() === "starting" || !backend) return false;
     const mode = this.currentState?.mode;
     if (!mode) return null;
     const sample = mode.options[0];
@@ -453,8 +518,8 @@ export class AgentSession {
     const steps = spec.kind === "sequence" ? spec.steps : [spec];
     const capabilities = steps.map((step) =>
       step.kind === "setConfigOption"
-        ? this.backend.isSetSessionConfigOptionSupported()
-        : this.backend.isSetSessionModeSupported()
+        ? backend.isSetSessionConfigOptionSupported()
+        : backend.isSetSessionModeSupported()
     );
     if (capabilities.includes(false)) return false;
     if (capabilities.includes(null)) return null;
@@ -568,6 +633,7 @@ export class AgentSession {
     promptContent?: PromptContent[],
     mentionedAgents?: ReadonlyArray<BackendId>
   ): { userMessageId: string; turn: Promise<StopReason> } {
+    if (this.readOnlyReason !== null) throw new Error(this.readOnlyReason);
     const status = this.getStatus();
     if (status === "starting") {
       throw new Error("Session is still starting");
@@ -699,7 +765,7 @@ export class AgentSession {
       const promptStarted = !signal.aborted;
       let resp: PromptOutput = { stopReason: "cancelled" };
       if (promptStarted) {
-        const backingPrompt = this.backend.prompt(req);
+        const backingPrompt = this.requireBackend().prompt(req);
         resp = await Promise.race([
           backingPrompt,
           new Promise<PromptOutput>((resolve) => {
@@ -887,19 +953,21 @@ export class AgentSession {
       this.notifyMessages();
     }
     try {
-      await this.backend.cancel({ sessionId: this.backendSessionId });
+      await this.requireBackend().cancel({ sessionId: this.backendSessionId });
     } catch (e) {
       logWarn(`[AgentMode] cancel notification failed`, e);
     }
   }
 
   async releaseBackendSession(): Promise<void> {
+    const backend = this.backend;
+    if (!backend) return;
     const backendSessionId = this.backendSessionId;
-    if (!backendSessionId || !this.backend.closeSession) {
+    if (!backendSessionId || !backend.closeSession) {
       throw new Error("This agent does not support closing individual sessions.");
     }
     try {
-      await this.backend.closeSession({ sessionId: backendSessionId });
+      await backend.closeSession({ sessionId: backendSessionId });
     } catch (error) {
       if (error instanceof MethodUnsupportedError) {
         throw new Error("This agent does not support closing individual sessions.");
@@ -987,7 +1055,8 @@ export class AgentSession {
   }
 
   private async fillSeededContextWindow(seeded: SessionUsage): Promise<void> {
-    if (!this.backend.readContextWindow) return;
+    const backend = this.backend;
+    if (!backend?.readContextWindow) return;
     // A chat with no resumable backend session is seeded into a freshly created one,
     // BEFORE its `newSession` has resolved — so at call time the model is not known
     // yet. Wait for startup to settle rather than silently skipping, or exactly those
@@ -1002,7 +1071,7 @@ export class AgentSession {
     if (!wireModelId) return;
     let contextWindow: number | null = null;
     try {
-      contextWindow = await this.backend.readContextWindow(wireModelId);
+      contextWindow = await backend.readContextWindow(wireModelId);
     } catch {
       return;
     }
@@ -1468,7 +1537,7 @@ export class AgentSession {
     if (this.labelSource === "user") return;
     if (!this.backendSummarizesTitle()) return;
     try {
-      const resp = await this.backend.listSessions(this.cwd ? { cwd: this.cwd } : {});
+      const resp = await this.requireBackend().listSessions(this.cwd ? { cwd: this.cwd } : {});
       const entry = resp.sessions.find((s) => s.sessionId === this.backendSessionId);
       const title = entry?.title?.trim();
       if (!title) return;

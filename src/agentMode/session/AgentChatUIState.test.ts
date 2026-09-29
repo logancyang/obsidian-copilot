@@ -335,4 +335,20 @@ describe("AgentChatUIState", () => {
       expect(promptMock).not.toHaveBeenCalled();
     });
   });
+
+  describe("getReadOnlyReason()", () => {
+    it("reports why a chat that could not be resumed is read-only", () => {
+      const session = AgentSession.restored({
+        restoredBackendSessionId: "native-1",
+        internalId: "restored",
+        backendId: "claude",
+      });
+      const chat = new AgentChatUIState(session);
+      expect(chat.getReadOnlyReason()).toBeNull();
+
+      session.markReadOnly("Not available on this device");
+
+      expect(chat.getReadOnlyReason()).toBe("Not available on this device");
+    });
+  });
 });

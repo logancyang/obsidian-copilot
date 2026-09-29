@@ -110,6 +110,10 @@ export class AgentChatUIState implements AgentChatBackend {
     return status === "running" || status === "awaiting_permission";
   }
 
+  getReadOnlyReason(): string | null {
+    return this.session.getReadOnlyReason();
+  }
+
   getInterruptedTurn(): RecordedPrompt | null {
     return this.session.getInterruptedTurn();
   }
