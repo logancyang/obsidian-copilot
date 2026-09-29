@@ -5,6 +5,8 @@ export function describePairOutcome(outcome: PairOutcome): string {
   switch (outcome.reason) {
     case "invalid-link":
       return "That is not a valid Copilot pairing link. Copy it again from the desktop's Remote settings.";
+    case "cancelled":
+      return "Pairing cancelled.";
     case "wrong-vault":
       return outcome.vaultName
         ? `This link is for the vault "${outcome.vaultName}". Open that vault on this phone, then scan again.`
@@ -13,6 +15,10 @@ export function describePairOutcome(outcome: PairOutcome): string {
       return "Can't reach your desktop. Check that Tailscale is on for both devices and that Obsidian is open on the desktop.";
     case "expired-or-used":
       return "This pairing code has expired or was already used. Create a new one on the desktop.";
+    case "desktop-failed":
+      return "The desktop could not save this pairing. Check Copilot's log on the desktop, then create a new code and try again.";
+    case "storage-failed":
+      return "Copilot could not save the pairing on this phone. Revoke this phone in the desktop's Remote settings, then pair again.";
     case "protocol":
       return "The desktop replied in a way this version of Copilot does not understand. Update Copilot on both devices.";
   }

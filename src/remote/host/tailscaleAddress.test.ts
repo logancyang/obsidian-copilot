@@ -111,9 +111,7 @@ describe("tailscaleAddress", () => {
     });
 
     it("returns null when this machine has no Tailscale interface", () => {
-      jest
-        .spyOn(os, "networkInterfaces")
-        .mockReturnValue({});
+      jest.spyOn(os, "networkInterfaces").mockReturnValue({});
 
       expect(readTailscaleAddress()).toBeNull();
     });

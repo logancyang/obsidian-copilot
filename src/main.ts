@@ -327,7 +327,7 @@ export default class CopilotPlugin extends Plugin {
         logError("Remote access could not be initialised.", error);
       }
     } else {
-      this.remoteClient = createRemoteClient();
+      this.remoteClient = createRemoteClient(this.app);
     }
 
     const vaultDataManager = VaultDataManager.getInstance();

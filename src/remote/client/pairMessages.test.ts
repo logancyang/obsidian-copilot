@@ -38,6 +38,9 @@ describe("pairMessages", () => {
       ["invalid-link", "not a valid Copilot pairing link"],
       ["unreachable", "Tailscale"],
       ["expired-or-used", "expired or was already used"],
+      ["cancelled", "Pairing cancelled"],
+      ["desktop-failed", "could not save this pairing"],
+      ["storage-failed", "Revoke this phone"],
       ["protocol", "Update Copilot on both devices"],
     ] as const)("explains a %s failure", (reason, phrase) => {
       expect(describePairOutcome({ ok: false, reason })).toContain(phrase);

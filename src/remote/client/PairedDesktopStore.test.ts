@@ -1,5 +1,19 @@
 import { PairedDesktopStore, type PairedDesktop } from "@/remote/client/PairedDesktopStore";
 
+const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/610";
+
+/** A store over storage that has desktops saved but fails to read them back. https://github.com/Brevilabs/obsidian-copilot-private/issues/610 */
+function makeUnreadableStore() {
+  const writes: string[] = [];
+  const store = new PairedDesktopStore({
+    read: () => {
+      throw new Error("keychain unavailable");
+    },
+    write: (value) => writes.push(value),
+  });
+  return { store, writes };
+}
+
 const desktop = (overrides: Partial<PairedDesktop> = {}): PairedDesktop => ({
   id: "d1",
   host: "100.118.223.39",
@@ -61,6 +75,13 @@ describe("PairedDesktopStore", () => {
       expect(store.list()).toHaveLength(2);
     });
 
+    it(`throws instead of overwriting the saved desktops when storage cannot be read (${ISSUE})`, () => {
+      const { store, writes } = makeUnreadableStore();
+
+      expect(() => store.add(desktop())).toThrow("keychain unavailable");
+      expect(writes).toEqual([]);
+    });
+
     it("notifies subscribers", () => {
       const { store } = makeStore();
       const listener = jest.fn();
@@ -81,6 +102,13 @@ describe("PairedDesktopStore", () => {
 
       expect(store.list()).toEqual([]);
       expect(raw()).not.toContain("device-token");
+    });
+
+    it(`throws instead of overwriting the saved desktops when storage cannot be read (${ISSUE})`, () => {
+      const { store, writes } = makeUnreadableStore();
+
+      expect(() => store.remove("d1")).toThrow("keychain unavailable");
+      expect(writes).toEqual([]);
     });
 
     it("leaves other desktops paired", () => {

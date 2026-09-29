@@ -1,6 +1,6 @@
 import WebSocket from "ws";
 import { PairedDesktopStore } from "@/remote/client/PairedDesktopStore";
-import { RemoteClient } from "@/remote/client/RemoteClient";
+import { RemoteClient, type PairingConfirmation } from "@/remote/client/RemoteClient";
 import { PairedDeviceStore } from "@/remote/host/PairedDeviceStore";
 import { PairingWindow } from "@/remote/host/PairingWindow";
 import { RemoteServer } from "@/remote/host/RemoteServer";
@@ -17,6 +17,7 @@ interface Rig {
   server: RemoteServer;
   port: number;
   linkFor: (overrides?: Record<string, string>) => string;
+  confirmPairing: jest.Mock<Promise<boolean>, [PairingConfirmation]>;
 }
 
 async function makeRig(clientVaultId = VAULT_ID): Promise<Rig> {
@@ -35,10 +36,14 @@ async function makeRig(clientVaultId = VAULT_ID): Promise<Rig> {
     write: (v) => (phoneRaw = v),
   });
   let counter = 0;
+  const confirmPairing = jest.fn<Promise<boolean>, [PairingConfirmation]>().mockResolvedValue(true);
   const client = new RemoteClient({
     store: desktopStore,
     vaultId: clientVaultId,
+    vaultName: "Work notes",
     deviceName: "iPhone",
+    clientId: "phone-1",
+    confirmPairing,
     now: () => 5_000,
     createId: () => `desktop-${++counter}`,
     channelOptions: {
@@ -57,11 +62,12 @@ async function makeRig(clientVaultId = VAULT_ID): Promise<Rig> {
       vault: "Work notes",
       vaultId: VAULT_ID,
       secret,
+      desktop: "Studio Mac",
       ...overrides,
     });
     return `obsidian://copilot-pair?${query.toString()}`;
   };
-  return { client, desktopStore, hostStore, pairing, server, port, linkFor };
+  return { client, desktopStore, hostStore, pairing, server, port, linkFor, confirmPairing };
 }
 
 async function waitUntil(condition: () => boolean, timeoutMs = 3000): Promise<void> {
@@ -105,6 +111,83 @@ describe("RemoteClient", () => {
       await rig.client.pairFromLink(rig.linkFor());
 
       expect(rig.hostStore.list().map((device) => device.name)).toEqual(["iPhone"]);
+    });
+
+    it(`asks the person to confirm the desktop's name, its address and the vault open on this phone before contacting the desktop (${ISSUE})`, async () => {
+      let spentBeforeAnswer = false;
+      rig.confirmPairing.mockImplementation(async () => {
+        spentBeforeAnswer = rig.pairing.getActive() === null || rig.hostStore.list().length > 0;
+        return true;
+      });
+
+      await rig.client.pairFromLink(rig.linkFor());
+
+      expect(rig.confirmPairing).toHaveBeenCalledWith({
+        desktopName: "Studio Mac",
+        address: `100.64.0.9:${rig.port}`,
+        linkVaultName: "Work notes",
+        openVaultName: "Work notes",
+      });
+      expect(spentBeforeAnswer).toBe(false);
+    });
+
+    it(`spends no secret and stores nothing when the person declines the confirmation (${ISSUE})`, async () => {
+      rig.confirmPairing.mockResolvedValue(false);
+      const link = rig.linkFor();
+
+      const outcome = await rig.client.pairFromLink(link);
+
+      expect(outcome).toEqual({ ok: false, reason: "cancelled" });
+      expect(rig.desktopStore.list()).toEqual([]);
+      expect(rig.hostStore.list()).toEqual([]);
+      expect(rig.pairing.getActive()).not.toBeNull();
+    });
+
+    it(`does not ask for confirmation about a link that is invalid or names another vault (${ISSUE})`, async () => {
+      await rig.client.pairFromLink("hello");
+      await rig.client.pairFromLink(rig.linkFor({ vaultId: "deadbeef" }));
+
+      expect(rig.confirmPairing).not.toHaveBeenCalled();
+    });
+
+    it(`pairs from a link that names no desktop and shows an empty name to confirm (${ISSUE})`, async () => {
+      const link = new URL(rig.linkFor());
+      link.searchParams.delete("desktop");
+
+      await rig.client.pairFromLink(link.toString());
+
+      expect(rig.confirmPairing).toHaveBeenCalledWith(expect.objectContaining({ desktopName: "" }));
+    });
+
+    it(`sends this phone's stable id so pairing again replaces the desktop's earlier entry and token (${ISSUE})`, async () => {
+      await rig.client.pairFromLink(rig.linkFor());
+      const firstToken = rig.desktopStore.list()[0].token;
+
+      await rig.client.pairFromLink(rig.linkFor());
+
+      expect(rig.hostStore.list()).toHaveLength(1);
+      expect(rig.hostStore.authenticate(firstToken)).toBeNull();
+      expect(rig.hostStore.authenticate(rig.desktopStore.list()[0].token)).not.toBeNull();
+    });
+
+    it(`reports that the token could not be saved on the phone instead of throwing (${ISSUE})`, async () => {
+      jest.spyOn(rig.desktopStore, "add").mockImplementation(() => {
+        throw new Error("keychain unavailable");
+      });
+
+      const outcome = await rig.client.pairFromLink(rig.linkFor());
+
+      expect(outcome).toEqual({ ok: false, reason: "storage-failed" });
+    });
+
+    it(`tells a desktop-side failure apart from an expired or used secret (${ISSUE})`, async () => {
+      jest.spyOn(rig.hostStore, "create").mockImplementation(() => {
+        throw new Error("keychain unavailable");
+      });
+
+      const outcome = await rig.client.pairFromLink(rig.linkFor());
+
+      expect(outcome).toEqual({ ok: false, reason: "desktop-failed" });
     });
 
     it("rejects text that is not a pairing link without contacting the desktop", async () => {

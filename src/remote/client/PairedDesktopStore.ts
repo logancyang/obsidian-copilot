@@ -42,34 +42,39 @@ export class PairedDesktopStore {
   constructor(private readonly slot: SecretSlot) {}
 
   list = (): readonly PairedDesktop[] => {
-    let raw: string | null;
     try {
-      raw = this.slot.read();
+      return this.readSaved();
     } catch {
       return EMPTY_DESKTOPS;
     }
-    if (raw === this.snapshotSource) return this.snapshot;
-    const desktops = this.parse(raw);
-    this.snapshot = desktops.length === 0 ? EMPTY_DESKTOPS : desktops;
-    this.snapshotSource = raw;
-    return this.snapshot;
   };
 
   add(desktop: PairedDesktop): void {
-    const others = this.list().filter(
+    const others = this.readSaved().filter(
       (existing) => existing.host !== desktop.host || existing.port !== desktop.port
     );
     this.write([...others, desktop]);
   }
 
   remove(id: string): void {
-    this.write(this.list().filter((desktop) => desktop.id !== id));
+    this.write(this.readSaved().filter((desktop) => desktop.id !== id));
   }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   };
+
+  // A read that fails is not an empty store: add() and remove() would overwrite every saved token
+  // with the result, so they use this and let the failure propagate. https://github.com/Brevilabs/obsidian-copilot-private/issues/610
+  private readSaved(): readonly PairedDesktop[] {
+    const raw = this.slot.read();
+    if (raw === this.snapshotSource) return this.snapshot;
+    const desktops = this.parse(raw);
+    this.snapshot = desktops.length === 0 ? EMPTY_DESKTOPS : desktops;
+    this.snapshotSource = raw;
+    return this.snapshot;
+  }
 
   private parse(raw: string | null): PairedDesktop[] {
     if (!raw) return [];
