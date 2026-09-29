@@ -413,7 +413,7 @@ describe("SessionHost", () => {
   });
 
   describe("dispose()", () => {
-    it("closes connected clients so they go offline and fail later commands with disconnected", async () => {
+    it("closes connected clients so they leave live and fail later commands with disconnected", async () => {
       const r = await rig();
       r.host.dispose();
       await settle();

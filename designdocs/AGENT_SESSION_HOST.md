@@ -365,7 +365,7 @@ export interface ClientTransport {
 
 The host side is `SessionHost.connect(send, onClose?): HostConnection` with
 `connection.receive(frame)` and `connection.close()`; `SessionHost.dispose()` calls every
-connection's `onClose`, so a transport reports closed and its client goes offline. A transport is a pair of pumps between the
+connection's `onClose`, so a transport reports closed and its client leaves `live`. A transport is a pair of pumps between the
 two; it adds no protocol logic.
 
 ### 5.2 In-process transport
