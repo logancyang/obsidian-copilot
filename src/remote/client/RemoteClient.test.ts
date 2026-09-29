@@ -64,6 +64,13 @@ async function makeRig(clientVaultId = VAULT_ID): Promise<Rig> {
   return { client, desktopStore, hostStore, pairing, server, port, linkFor };
 }
 
+async function waitUntil(condition: () => boolean, timeoutMs = 3000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition() && Date.now() < deadline) {
+    await new Promise((resolve) => window.setTimeout(resolve, 5));
+  }
+}
+
 describe("RemoteClient", () => {
   let rig: Rig;
 
@@ -167,7 +174,7 @@ describe("RemoteClient", () => {
       if (!outcome.ok) throw new Error("expected a connection");
       outcome.channel.onMessage((text) => received.push(text));
       outcome.channel.send("ping");
-      await new Promise((resolve) => window.setTimeout(resolve, 50));
+      await waitUntil(() => received.length > 0);
       outcome.channel.close();
 
       expect(received).toEqual(["echo:ping"]);
@@ -189,7 +196,7 @@ describe("RemoteClient", () => {
       outcome.channel.onClose((event) => closes.push(event.code));
 
       rig.server.disconnectDevice(outcome.deviceId);
-      await new Promise((resolve) => window.setTimeout(resolve, 100));
+      await waitUntil(() => closes.length > 0);
 
       expect(closes).toEqual([4403]);
     });
