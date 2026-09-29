@@ -5,8 +5,6 @@ import { cn } from "@/lib/utils";
 import { type PropsWithChildren, useRef, useState } from "react";
 
 const TOLERANCE = 2;
-// detects text-overflow ellipses being used
-// ref: https://stackoverflow.com/questions/7738117/html-text-overflow-ellipsis-detection
 function isEllipsesActive(
   textRef: React.MutableRefObject<HTMLDivElement | null>,
   lineClamp?: number
@@ -34,34 +32,13 @@ function getLineClampClass(lineClamp: number): string {
 type Props = {
   className?: string;
 
-  /**
-   * Clamp the text to a specific number of lines.
-   * When set to a number >1, the text will be truncated to the specified number
-   * of lines. Otherwise, the text will be truncated based on the width of the
-   * container.
-   */
   lineClamp?: number;
 
-  /**
-   * Content to show in tooltip when the text is truncated. If not provided,
-   * the children will be used.
-   */
   tooltipContent?: React.ReactNode;
 
-  /**
-   * Always show the tooltip on hover, regardless of whether the text is truncated.
-   */
   alwaysShowTooltip?: boolean;
 } & React.HTMLAttributes<HTMLDivElement>;
 
-/**
- * Displays the overflowed text in a popover when there is no enough size to
- * to display the full text. The tooltip will be shown on hover only when the
- * text is cut off.
- *
- * Note: If the size of TruncatedText is set to `w-full`, the parent container
- * must have a fixed width and set `overflow: hidden`.
- */
 export const TruncatedText = ({
   children,
   className,
@@ -75,7 +52,6 @@ export const TruncatedText = ({
   const [open, setOpen] = useState<boolean>(false);
 
   const onOpenChange = (isOpen: boolean): void => {
-    // only render the tooltip on hover if the text overflows or alwaysShowTooltip is true
     setOpen(isOpen && (alwaysShowTooltip || isEllipsesActive(textRef, lineClamp)));
   };
 

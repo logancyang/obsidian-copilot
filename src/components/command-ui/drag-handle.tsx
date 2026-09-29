@@ -6,11 +6,6 @@ interface DragHandleProps {
   className?: string;
 }
 
-/**
- * A visual drag handle indicator for the modal.
- * Shows a centered bar that users can drag to reposition the modal.
- * Styled to match QuickAskPanel's drag handle.
- */
 export function DragHandle({ onMouseDown, className }: DragHandleProps) {
   return (
     <div

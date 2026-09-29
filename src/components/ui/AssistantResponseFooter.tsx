@@ -1,17 +1,11 @@
 import React from "react";
 
 export interface AssistantResponseFooterProps {
-  /** Metadata anchored to the response's leading edge, such as whole-turn duration. */
   leading?: React.ReactNode;
-  /** Creation time shown only when leading metadata is absent. */
   timestamp?: React.ReactNode;
-  /** Response controls anchored to the trailing edge. */
   actions?: React.ReactNode;
 }
 
-/**
- * Keeps completed assistant metadata and controls in one responsive footer treatment.
- */
 export const AssistantResponseFooter: React.FC<AssistantResponseFooterProps> = ({
   leading,
   timestamp,

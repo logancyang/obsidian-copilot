@@ -3,18 +3,12 @@ import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CommandLabelProps {
-  /** Icon to display. Pass null to hide icon, undefined for default icon. */
   icon?: React.ReactNode | null;
   label: string;
   className?: string;
 }
 
-/**
- * Displays the command name/label with an optional icon.
- * Used as a header in MenuCommandModal.
- */
 export function CommandLabel({ icon, label, className }: CommandLabelProps) {
-  // P0 Fix: null means no icon, undefined means default icon
   const iconElement =
     icon === null ? null : icon !== undefined ? (
       icon

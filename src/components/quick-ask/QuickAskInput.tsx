@@ -1,8 +1,3 @@
-/**
- * QuickAskInput - Lexical-based input component for Quick Ask.
- * Simplified version of LexicalEditor with @ mention support.
- */
-
 import React, { useCallback, useEffect, useState } from "react";
 import { $getRoot, EditorState, LexicalEditor as LexicalEditorType } from "lexical";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
@@ -34,32 +29,20 @@ interface QuickAskInputProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
-  /** Send shortcut configuration */
   sendShortcut?: SEND_SHORTCUT;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
-  /** Callback when notes are added via @ mention */
   onNotesChange?: (notes: { path: string; basename: string }[]) => void;
-  /** Callback when notes are removed */
   onNotesRemoved?: (removedNotes: { path: string; basename: string }[]) => void;
-  /** Callback when folders are added via @ mention */
   onFoldersChange?: (folders: string[]) => void;
-  /** Callback when folders are removed */
   onFoldersRemoved?: (removedFolders: string[]) => void;
-  /** Callback when active note is added */
   onActiveNoteAdded?: () => void;
-  /** Callback when active note is removed */
   onActiveNoteRemoved?: () => void;
-  /** Callback when editor is ready */
   onEditorReady?: (editor: LexicalEditorType) => void;
-  /** Current active file for @ mention context */
   currentActiveFile?: TFile | null;
 }
 
-/**
- * QuickAskInput - Lexical editor for Quick Ask panel.
- */
 export const QuickAskInput = React.memo(function QuickAskInput({
   value,
   onChange,
@@ -79,12 +62,10 @@ export const QuickAskInput = React.memo(function QuickAskInput({
 }: QuickAskInputProps) {
   const [focusFn, setFocusFn] = useState<(() => void) | null>(null);
 
-  // Wrapper to properly set function state
   const handleFocusRegistration = useCallback((fn: () => void) => {
     setFocusFn(() => fn);
   }, []);
 
-  // Auto-focus on mount
   useEffect(() => {
     if (focusFn) {
       const timer = window.setTimeout(() => {

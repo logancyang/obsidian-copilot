@@ -5,18 +5,9 @@ export interface TabItem {
   icon: React.ReactNode;
   label: string;
   id: string;
-  /** Accessible explanation for the warning dot shown in the tab's top-right corner. */
   warningLabel?: string;
 }
 
-/**
- * Which level of the settings pane a strip belongs to. The design gives the two
- * levels different shapes on purpose: `page` tabs sit on the pane's edge, so
- * they are rounded at the top only and their panel paints the grey content
- * backdrop; `inline` tabs are chips nested inside a tab's content, uniformly
- * rounded, and their panel adds no backdrop of its own (the enclosing page
- * panel already supplies one — a second layer would just flatten the cards).
- */
 export type TabVariant = "page" | "inline";
 
 interface TabItemProps {
@@ -45,10 +36,6 @@ export const TabItem: React.FC<TabItemProps> = ({
       aria-label={tab.warningLabel ? `${tab.label}: ${tab.warningLabel}` : tab.label}
       tabIndex={0}
       onClick={onClick}
-      // Reason: a `role="tab"` div is not focusable or keyboard-operable on its
-      // own. We add tabIndex + Enter/Space activation for a11y, but deliberately
-      // skip arrow-key roving — mirrors the locked decision in AgentHomeShelf.tsx
-      // (don't reimplement roving tablist navigation here).
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -77,9 +64,6 @@ export const TabItem: React.FC<TabItemProps> = ({
           "tw-transition-all tw-duration-300 tw-ease-in-out",
           "tw-delay-100",
         ],
-        // Inline chips only. A page tab keeps its neutral border when selected:
-        // it sits against the pane edge, where an accent outline would read as a
-        // second boundary rather than as selection.
         isSelected && variant === "inline" && "!tw-border-interactive-accent",
         "lg:tw-max-w-32",
         "md:tw-max-w-32"
@@ -108,9 +92,7 @@ export const TabItem: React.FC<TabItemProps> = ({
       >
         {tab.label}
       </span>
-      {/* https://github.com/Brevilabs/obsidian-copilot-private/issues/166
-          A tab-level marker keeps rejected skills visible while the inactive
-          Skills panel is unmounted. */}
+      {/* https://github.com/Brevilabs/obsidian-copilot-private/issues/166 The Skills panel is unmounted while inactive, so the tab carries the marker. */}
       {tab.warningLabel && (
         <span
           aria-hidden="true"
@@ -143,9 +125,6 @@ export const TabContent: React.FC<TabContentProps> = ({
       id={`tabpanel-${id}`}
       aria-labelledby={`tab-${id}`}
       className={cn(
-        // Grey backdrop so the white section cards visually separate (design:
-        // grey content area + white cards). Without it the cards blend into the
-        // modal background and only their borders show, reading as boxed rows.
         variant === "page" ? "tw-mt-4 tw-rounded-lg tw-bg-secondary tw-p-4" : "tw-mt-3",
         "tw-transition-all tw-duration-200 tw-ease-in-out",
         isSelected ? "tw-translate-y-0 tw-opacity-100" : "tw-translate-y-2 tw-opacity-0"

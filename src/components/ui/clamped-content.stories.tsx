@@ -25,7 +25,6 @@ const MessageBubble: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   </div>
 );
 
-/** A pasted prompt collapses to its first lines until the reader opens it. */
 export const Collapsed: StoryObj<ClampedContentProps> = {
   render: () => (
     <MessageBubble>
@@ -34,7 +33,6 @@ export const Collapsed: StoryObj<ClampedContentProps> = {
   ),
 };
 
-/** A short message stays exactly as written, with no control added. */
 export const FitsWithoutControl: StoryObj<ClampedContentProps> = {
   render: () => (
     <MessageBubble>
@@ -45,7 +43,6 @@ export const FitsWithoutControl: StoryObj<ClampedContentProps> = {
   ),
 };
 
-/** A tight budget shows how little content the clamp can leave visible. */
 export const ThreeLineClamp: StoryObj<ClampedContentProps> = {
   render: () => (
     <MessageBubble>

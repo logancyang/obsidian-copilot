@@ -51,7 +51,6 @@ export class ConfirmModal extends Modal {
     private onCancel?: () => void | Promise<void>
   ) {
     super(app);
-    // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
     this.setTitle(title);
   }

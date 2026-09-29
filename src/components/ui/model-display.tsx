@@ -17,24 +17,11 @@ interface ModelCapabilityIconsProps {
 
 const NO_VISION_LABEL = "This model does not support image inputs.";
 
-/**
- * Whether {@link ModelCapabilityIcons} would render the eye-off. Drives the
- * surrounding wrapper so it never renders empty (a vision-capable model shows no
- * icon) and never hides the eye-off for a model known to lack vision (`[]`).
- */
 export function hasCapabilityIcons(capabilities: ModelCapability[] | undefined): boolean {
   if (capabilities === undefined) return false;
   return !capabilities.includes(ModelCapability.VISION);
 }
 
-/**
- * We badge only the exception, not the norm. `undefined` means "unknown" (no
- * modality snapshot — e.g. an agent-provided model) and renders nothing; we never
- * assert a missing capability we don't actually know about. A defined array is
- * "known": flag the absence of vision with a muted eye-off. Vision and reasoning
- * themselves render nothing — they're ubiquitous on modern models, so the only
- * signal we surface is the warning that a model can't take images.
- */
 export const ModelCapabilityIcons: React.FC<ModelCapabilityIconsProps> = ({
   capabilities,
   iconSize = 16,

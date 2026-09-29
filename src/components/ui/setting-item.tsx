@@ -8,7 +8,6 @@ import { ChevronDown } from "lucide-react";
 import { SettingSlider } from "@/components/ui/setting-slider";
 import { debounce } from "@/lib/debounce";
 
-// 定义输入控件的类型
 type InputType =
   | "text"
   | "password"
@@ -19,13 +18,11 @@ type InputType =
   | "custom"
   | "slider";
 
-// Select选项的类型
 interface SelectOption {
   label: string;
   value: string | number;
 }
 
-// 基础Props
 interface BaseSettingItemProps {
   type: InputType;
   title: string;
@@ -34,7 +31,6 @@ interface BaseSettingItemProps {
   disabled?: boolean;
 }
 
-// 不同类型输入控件的Props
 interface TextSettingItemProps extends BaseSettingItemProps {
   type: "text" | "password" | "number";
   value?: string | number;
@@ -69,7 +65,6 @@ interface CustomSettingItemProps extends BaseSettingItemProps {
   children: React.ReactNode;
 }
 
-// 添加 Slider 类型的 Props
 interface SliderSettingItemProps extends BaseSettingItemProps {
   type: "slider";
   value?: number;
@@ -80,7 +75,6 @@ interface SliderSettingItemProps extends BaseSettingItemProps {
   suffix?: string;
 }
 
-// 联合类型
 type SettingItemProps =
   | TextSettingItemProps
   | TextareaSettingItemProps
@@ -164,11 +158,6 @@ export function SettingItem(props: SettingItemProps) {
               className={cn(
                 "tw-w-full tw-appearance-none",
                 "tw-flex tw-h-9 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-dropdown tw-px-3 tw-py-1 tw-pr-8",
-                // `tw-text-left` overrides Obsidian's macOS settings default
-                // (`--dropdown-text-align: end` applied to bare `select`), which
-                // strands the label against the right edge of our fixed-width
-                // control. A plain class wins on specificity — neither rule is
-                // `!important`, and a class outranks an element selector.
                 "tw-text-left tw-text-sm !tw-shadow tw-transition-colors",
                 "focus:tw-outline-none focus:tw-ring-1 focus:tw-ring-ring",
                 "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",

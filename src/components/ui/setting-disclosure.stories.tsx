@@ -8,9 +8,6 @@ const meta = {
   title: "UI/Setting Disclosure",
   component: SettingDisclosure,
   args: { open: false },
-  // `settings-tab` because the row's `!` resets exist to beat Obsidian's
-  // settings-pane button styling — under any other host it would look correct
-  // for the wrong reason.
   parameters: { gallery: { host: "settings-tab", layout: "padded" } },
 } satisfies Meta<SettingDisclosureProps>;
 export default meta;

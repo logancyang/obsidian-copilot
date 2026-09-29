@@ -15,8 +15,6 @@ export function ChatSendButton({ inputMessage, imageCount, onSend }: ChatSendBut
       className="tw-rounded-full tw-bg-interactive-accent tw-text-on-accent hover:tw-bg-interactive-accent-hover"
       aria-label="Send"
       onClick={onSend}
-      // Images can supply the entire next turn.
-      // https://github.com/logancyang/obsidian-copilot/issues/2850
       disabled={!inputMessage.trim() && imageCount === 0}
     >
       <ArrowUp className="tw-size-4" />

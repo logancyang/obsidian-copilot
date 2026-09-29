@@ -18,28 +18,10 @@ interface ContentAreaProps {
   placeholder?: string;
   className?: string;
   minHeight?: string;
-  /**
-   * When true, uses a native <textarea> (no auto-grow) so the surrounding panel can control height.
-   * This avoids changing the shared Textarea component behavior.
-   */
   disableAutoGrow?: boolean;
-  /**
-   * Optional callback to render markdown content into a DOM element.
-   * When provided, completed (non-streaming) content shows a rendered
-   * preview instead of a plain textarea. The user can toggle to edit mode.
-   *
-   * Reason: ContentArea stays Obsidian-agnostic; the parent provides
-   * the rendering logic (e.g., MarkdownRenderer + preprocessAIResponse).
-   */
   renderMarkdown?: (content: string, el: HTMLElement) => Promise<void>;
 }
 
-/**
- * Content area for AI responses.
- * Supports two display modes for completed results:
- * - Textarea (default, always used when renderMarkdown is not provided)
- * - Markdown preview (when renderMarkdown is provided and not in edit mode)
- */
 export function ContentArea({
   state,
   editable = false,
@@ -54,13 +36,9 @@ export function ContentArea({
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const [isEditMode, setIsEditMode] = React.useState(false);
 
-  // Determine if we should show the markdown preview
   const isCompletedResult = state.type === "result" && !state.isStreaming;
   const showPreview = !!renderMarkdown && isCompletedResult && !isEditMode;
 
-  // Reason: Reset to preview mode whenever a new generation starts.
-  // This covers both type transitions (idle→loading) and same-type transitions
-  // (result→result with isStreaming flipping true for follow-up generation).
   const isGenerating = state.type === "loading" || (state.type === "result" && state.isStreaming);
   const [prevIsGenerating, setPrevIsGenerating] = React.useState(isGenerating);
   if (isGenerating && !prevIsGenerating) {
@@ -70,14 +48,12 @@ export function ContentArea({
     setPrevIsGenerating(false);
   }
 
-  // Auto-scroll to bottom when streaming
   React.useEffect(() => {
     if (state.type === "result" && state.isStreaming && textareaRef.current) {
       textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
     }
   }, [state]);
 
-  // Determine display value and disabled state based on content state
   let displayValue = "";
   let isDisabled = true;
 
@@ -92,7 +68,6 @@ export function ContentArea({
     isDisabled = state.isStreaming || !editable;
   }
 
-  // Markdown preview mode
   if (showPreview && renderMarkdown) {
     const previewContent =
       editable && value !== undefined ? value : (state as { text: string }).text;
@@ -120,11 +95,8 @@ export function ContentArea({
     );
   }
 
-  // Reason: Show "Preview" button only when user is in edit mode and
-  // renderMarkdown is available, allowing them to switch back to preview.
   const canSwitchToPreview = !!renderMarkdown && isCompletedResult && isEditMode;
 
-  // When disableAutoGrow is true, use native textarea with flex-1 to fill available space
   if (disableAutoGrow) {
     return (
       <div className={cn("tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-px-4 tw-py-2", className)}>

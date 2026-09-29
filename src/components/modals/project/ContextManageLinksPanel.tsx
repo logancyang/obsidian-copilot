@@ -14,7 +14,6 @@ import { ArrowUpRight, Globe, Link, PlusCircle, SquarePlay, X } from "lucide-rea
 import { App } from "obsidian";
 import React from "react";
 
-/** The three Links-related selections in the Manage sidebar. */
 export type LinksSection = "links" | "web" | "youtube";
 
 interface LinksSidebarSectionProps {
@@ -22,21 +21,11 @@ interface LinksSidebarSectionProps {
   webCount: number;
   youtubeCount: number;
   onSelect: (section: LinksSection) => void;
-  /** Saved URLs so the +URL popover dedups re-adds. */
   existingUrls: string[];
-  /** Parsed, deduped URLs from the +URL popover → merge into the draft. */
   onAddUrls: (urls: UrlItem[]) => void;
-  /** Portal target for the +URL popover (the Manage modal's contentEl). */
   popoverContainer?: HTMLElement | null;
 }
 
-/**
- * Left-sidebar "Links" group (design M): a cyan parent "Links" + Web / YouTube
- * children with counts. Clicking the parent lists both groups on the right;
- * clicking a child filters to that one. Mirrors the existing file sections'
- * look (hover + active highlight) without reaching into the modal's private
- * SectionHeader.
- */
 export function LinksSidebarSection({
   activeSection,
   webCount,
@@ -124,23 +113,10 @@ interface LinksContentPanelProps {
   app: App;
   urlItems: UrlItem[];
   filter: LinksSection;
-  /** Agent conversion status by {@link processingSourceKey}, supplied by the
-   * modal (one shared lookup across Links + File Context). */
   agentProcessingByKey: ReadonlyMap<string, ProcessingItem>;
   onRemove: (id: string) => void;
 }
 
-/**
- * Right-pane Links viewer: the saved URLs grouped under Web / YouTube labels.
- * Each row shows its conversion status badge + a preview arrow (converted
- * snapshot) + a hover delete. Adding is handled solely by the sidebar's "+"
- * popover, matching every other context type (Tags / Folders / Files), whose
- * right pane is a pure list with no inline add affordance.
- *
- * Status reflects the SAVED config — a freshly added (unsaved) URL has no status
- * yet. The status lookup is passed in (not derived here) so the URL rows and the
- * File Context list share ONE {@link ProcessingStatusIcon} judgment.
- */
 export function LinksContentPanel({
   app,
   urlItems,
@@ -149,8 +125,6 @@ export function LinksContentPanel({
   onRemove,
 }: LinksContentPanelProps) {
   const handlePreview = (item: ProcessingItem) => {
-    // Snapshots are off-vault and keyed by source identity, so the preview no
-    // longer needs the project folder — just the item's kind + id.
     void openAgentCachedItemPreview(app, item);
   };
 

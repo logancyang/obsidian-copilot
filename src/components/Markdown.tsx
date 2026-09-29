@@ -12,10 +12,6 @@ export interface MarkdownProps {
   text: string;
 }
 
-/**
- * Renders Markdown through Obsidian while owning the renderer's resource lifecycle.
- * @param props - Markdown content, link-resolution source, presentation classes, and optional post-render handling.
- */
 export function Markdown({
   className,
   onRendered,
@@ -36,14 +32,9 @@ export function Markdown({
     target.replaceChildren();
     void renderMarkdown(app, text, target, sourcePath, component)
       .then(() => {
-        // An obsolete render must not mutate the newer DOM through a post-render handler.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/317
         if (!cancelled) onRendered?.(target);
       })
       .catch((error: unknown) => {
-        // Markdown content must remain readable when Obsidian's renderer fails.
-        // Ignore an obsolete render so it cannot replace newer content.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/317
         if (cancelled) return;
         logWarn("[Markdown] render failed", error);
         target.textContent = text;

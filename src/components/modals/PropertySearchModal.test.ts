@@ -6,10 +6,6 @@ interface FakeNote {
   frontmatter?: Record<string, unknown>;
 }
 
-/** Build a minimal App exposing only the vault + metadataCache surface the two
- * property modals read: markdown files and each file's frontmatter cache. The
- * modals treat a file as an opaque handle (they only read `.path`), so plain
- * path stubs stand in for real TFile instances. */
 function makeApp(notes: FakeNote[]): App {
   const files = notes.map((n) => ({ path: n.path }));
   const frontmatterByPath = new Map(notes.map((n) => [n.path, n.frontmatter]));
@@ -33,7 +29,7 @@ describe("PropertySearchModal", () => {
         const app = makeApp([
           { path: "a.md", frontmatter: { Topics: "Physics", Subject: "Einstein" } },
           { path: "b.md", frontmatter: { Topics: "Chemistry" } },
-          { path: "c.md" }, // no frontmatter — contributes nothing
+          { path: "c.md" },
         ]);
         const modal = new PropertySearchModal(app, jest.fn());
 
@@ -41,8 +37,6 @@ describe("PropertySearchModal", () => {
       });
 
       it("excludes Obsidian's injected `position` frontmatter key", () => {
-        // Obsidian's metadata cache adds a `position` key to every frontmatter
-        // object; it must not appear as a selectable property.
         const app = makeApp([
           { path: "a.md", frontmatter: { position: { start: 0 }, Topics: "Physics" } },
         ]);
@@ -51,8 +45,6 @@ describe("PropertySearchModal", () => {
       });
 
       it("omits keys the [key:value] grammar cannot represent (colon/brackets)", () => {
-        // A frontmatter key containing ":" would be misparsed by the pattern
-        // grammar, so it must not be offered for selection.
         const app = makeApp([
           { path: "a.md", frontmatter: { "a:b": "x", Topics: "Physics", "c[d]": "y" } },
         ]);
@@ -61,26 +53,18 @@ describe("PropertySearchModal", () => {
       });
 
       it("omits keys with leading or trailing whitespace", () => {
-        // parsePropertyPattern trims the key, so " Topics " would be stored as
-        // "Topics" and never match; such keys must not be offered.
         const app = makeApp([{ path: "a.md", frontmatter: { " Topics ": "x", Subject: "y" } }]);
         const modal = new PropertySearchModal(app, jest.fn());
         expect(modal.getItems()).toEqual(["Subject"]);
       });
 
       it("omits an empty-string key", () => {
-        // `"": Physics` is valid YAML, but `[:Physics]` has no key segment and
-        // would be reclassified as a folder pattern, so it must not be offered.
         const app = makeApp([{ path: "a.md", frontmatter: { "": "Physics", Subject: "y" } }]);
         const modal = new PropertySearchModal(app, jest.fn());
         expect(modal.getItems()).toEqual(["Subject"]);
       });
 
       it("omits keys that only exist under a system Copilot root", () => {
-        // Saved chats live in the Copilot root and carry their own frontmatter, but
-        // `shouldIndexFile` drops them, so a key sourced only from there would be
-        // selectable while matching no note. Both picker steps enumerate the same
-        // candidate set as the materializer.
         const app = makeApp([
           { path: "Notes/a.md", frontmatter: { Topics: "Physics" } },
           { path: "copilot/copilot-conversations/chat.md", frontmatter: { mode: "agent" } },
@@ -110,8 +94,6 @@ describe("PropertySearchModal", () => {
 
         modal.onChooseItem("Topics");
 
-        // Choosing a key opens the value picker; the pattern is only built once a
-        // value (or "any value") is chosen there.
         expect(onChoose).not.toHaveBeenCalled();
       });
     });
@@ -122,7 +104,7 @@ describe("PropertySearchModal", () => {
       it("leads with the any-value choice, then the key's distinct sorted values", () => {
         const app = makeApp([
           { path: "a.md", frontmatter: { Topics: "Physics" } },
-          { path: "b.md", frontmatter: { Topics: ["Chemistry", "Physics"] } }, // list expands, dedupes
+          { path: "b.md", frontmatter: { Topics: ["Chemistry", "Physics"] } },
         ]);
         const modal = new PropertyValueModal(app, "Topics", jest.fn());
 
@@ -132,10 +114,10 @@ describe("PropertySearchModal", () => {
       it("omits values that cannot round-trip through the [key:value] grammar", () => {
         const app = makeApp([
           { path: "a.md", frontmatter: { Topics: "Physics" } },
-          { path: "empty.md", frontmatter: { Topics: "" } }, // trims to "" → would flip to key-only [Topics:]
-          { path: "blank.md", frontmatter: { Topics: "   " } }, // whitespace-only, trims to ""
-          { path: "multi.md", frontmatter: { Topics: "line one\nline two" } }, // internal newline → folder fallthrough
-          { path: "ls.md", frontmatter: { Topics: "a\u2028b" } }, // U+2028 line separator, also unmatched by regex `.`
+          { path: "empty.md", frontmatter: { Topics: "" } },
+          { path: "blank.md", frontmatter: { Topics: "   " } },
+          { path: "multi.md", frontmatter: { Topics: "line one\nline two" } },
+          { path: "ls.md", frontmatter: { Topics: "a\u2028b" } },
         ]);
         const modal = new PropertyValueModal(app, "Topics", jest.fn());
 
@@ -143,11 +125,8 @@ describe("PropertySearchModal", () => {
       });
 
       it("trims surrounding whitespace so a padded value round-trips as its matcher form", () => {
-        // The matcher trims both sides, so a block scalar's trailing newline (or
-        // any surrounding whitespace) must not hide an otherwise-selectable value;
-        // it is normalized and deduped against the same value elsewhere.
         const app = makeApp([
-          { path: "a.md", frontmatter: { Topics: "Physics\n" } }, // YAML block scalar trailing newline
+          { path: "a.md", frontmatter: { Topics: "Physics\n" } },
           { path: "b.md", frontmatter: { Topics: "  Physics  " } },
           { path: "c.md", frontmatter: { Topics: "Chemistry" } },
         ]);
@@ -156,9 +135,6 @@ describe("PropertySearchModal", () => {
         expect(modal.getItems()).toEqual([null, "Chemistry", "Physics"]);
       });
       it("omits values that only exist under a system Copilot root", () => {
-        // The value step must use the same candidate set as the key step and the
-        // materializer; otherwise a chat-only value would be offered and then match
-        // nothing once the materializer filters that note out.
         const app = makeApp([
           { path: "Notes/a.md", frontmatter: { Topics: "Physics" } },
           { path: "copilot/copilot-conversations/chat.md", frontmatter: { Topics: "ChatOnly" } },
@@ -177,8 +153,6 @@ describe("PropertySearchModal", () => {
       });
 
       it("keeps the any-value label distinct from a note whose value is literally that text", () => {
-        // Both entries are offered together, and they build very different patterns
-        // ([Topics:] vs [Topics:(any value)]), so their labels must never coincide.
         const app = makeApp([{ path: "Notes/a.md", frontmatter: { Topics: "(any value)" } }]);
         const modal = new PropertyValueModal(app, "Topics", jest.fn());
 

@@ -66,7 +66,6 @@ export class ExtensionInputModal extends Modal {
     private onConfirm: (extension: string) => void
   ) {
     super(app);
-    // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
     this.setTitle("Add Extension");
   }

@@ -2,10 +2,6 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 import { ModelSelector } from "./ModelSelector";
 import type { ModelSelectorEntry } from "./ModelSelector";
-// Stub the warning icon to a testid — the real one wraps a Radix tooltip whose
-// text only renders on hover, so we assert presence, not the tooltip copy. Also
-// capture props to confirm the trigger passes stopPropagation=false (otherwise
-// the icon becomes a dead zone over the button).
 const cloudWarningProps: Array<{ stopPropagation?: boolean }> = [];
 jest.mock("@/components/ui/SelfHostCloudWarningIcon", () => ({
   SelfHostCloudWarningIcon: (props: { stopPropagation?: boolean }) => {
@@ -104,7 +100,6 @@ describe("ModelSelector", () => {
       fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
 
       expect(await screen.findByText("Copilot license required")).toBeTruthy();
-      // The lock carries the reason; a per-row label would repeat it down the group.
       expect(screen.getAllByText("Copilot license required")).toHaveLength(1);
     });
 

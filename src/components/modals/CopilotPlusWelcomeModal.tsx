@@ -12,7 +12,6 @@ export interface CopilotPlusWelcomeModalContentProps {
   onCancel: () => void;
 }
 
-/** Body of {@link CopilotPlusWelcomeModal}, exported prop-driven so the gallery can render it. */
 export function CopilotPlusWelcomeModalContent({
   onConfirm,
   onCancel,
@@ -49,7 +48,6 @@ export class CopilotPlusWelcomeModal extends Modal {
 
   constructor(app: App) {
     super(app);
-    // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
     this.setTitle("Welcome to Copilot 🚀");
   }

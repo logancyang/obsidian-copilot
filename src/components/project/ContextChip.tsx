@@ -4,26 +4,14 @@ import { X } from "lucide-react";
 import React from "react";
 
 interface ContextChipProps {
-  /** Pre-sized lucide icon (e.g. `<Folder className="tw-size-3.5" />`). */
   icon: React.ReactNode;
-  /** Theme color class for the icon, e.g. `tw-text-context-manager-yellow`. */
   colorClass: string;
   label: string;
-  /** Tooltip shown on the (truncated) label; defaults to the label text. */
   tooltip?: string;
-  /** When provided, a hover-revealed X removes the chip. */
   onRemove?: () => void;
-  /** Dim the chip (design's collapsed-overflow hint). */
   dim?: boolean;
 }
 
-/**
- * One context source rendered as the design's square 8px-radius bordered chip
- * (NOT the pill `Badge` the CAG `ProjectContextBadgeList` uses — that component
- * is shared with the legacy CAG modal and must keep its look). Folder / tag /
- * file / web / youtube all share this atom, differing only by `icon`+`colorClass`,
- * so the agent landing's mixed file+URL row reads as one consistent set.
- */
 export function ContextChip({ icon, colorClass, label, tooltip, onRemove, dim }: ContextChipProps) {
   return (
     <span

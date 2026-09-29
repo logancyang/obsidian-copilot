@@ -36,19 +36,15 @@ export default class CopilotView extends ItemView {
     return CHAT_VIEWTYPE;
   }
 
-  // Return an icon for this view
   getIcon(): string {
     return "message-square";
   }
 
-  // Return a title for this view
   getTitle(): string {
     return "Copilot Chat";
   }
 
   getDisplayText(): string {
-    // Names the surface, not the plugin: with an Agent leaf reporting "Copilot
-    // Agent" alongside it, a bare "Copilot" does not say which chat this is.
     return "Copilot (Quick Chat)";
   }
 
@@ -58,11 +54,6 @@ export default class CopilotView extends ItemView {
 
     registerActiveLeafChangeBridge(this, this.eventTarget);
 
-    // Reason: The view can move between containers (e.g. editor tab → drawer)
-    // without onOpen firing again. Re-bind the drawer observer on layout changes
-    // so it always watches the correct drawer element.
-    // Deferred to next frame so the current observer can catch in-flight class mutations
-    // before we disconnect and rebind.
     this.registerEvent(
       this.app.workspace.on("layout-change", () => {
         window.requestAnimationFrame(() => this.setupDrawerHideObserver());
@@ -70,15 +61,6 @@ export default class CopilotView extends ItemView {
     );
   }
 
-  /**
-   * Close any open Radix popovers when the mobile drawer hides.
-   *
-   * Reason: Radix popovers are portaled to document.body. When the user presses
-   * the mobile back button, Obsidian hides the drawer (adds `is-hidden` class)
-   * but the popover stays open and jumps to (0,0) because its anchor disappears.
-   * Dispatching Escape on the container lets Radix's dismissable-layer close
-   * popovers whose triggers live inside this view, without affecting unrelated UI.
-   */
   private setupDrawerHideObserver(): void {
     if (!Platform.isMobile) return;
 
@@ -92,8 +74,6 @@ export default class CopilotView extends ItemView {
     this.drawerHideObserver = new MutationObserver(() => {
       const isHidden = drawer.classList.contains("is-hidden");
       if (isHidden && !wasHidden) {
-        // Reason: Radix's dismissable-layer listens for Escape in capture phase on
-        // document, so this will close the topmost open Radix layer.
         this.containerEl.dispatchEvent(
           new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
         );
@@ -139,8 +119,6 @@ export default class CopilotView extends ItemView {
   }
 
   updateView(): void {
-    // The new architecture loads messages through ChatManager when the Chat
-    // component initializes; this just re-renders the existing tree.
     this.viewRoot?.rerender();
   }
 

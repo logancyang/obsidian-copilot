@@ -50,7 +50,6 @@ const CompletedResponseVariantsDemo: React.FC = () => (
   </div>
 );
 
-/** Every footer shows either the duration or its timestamp, never both. */
 export const CompletedResponseVariants: StoryObj<AssistantResponseFooterProps> = {
   render: CompletedResponseVariantsDemo,
 };

@@ -31,7 +31,6 @@ export class AddContextNoteModal extends BaseNoteModal<TFile> {
 
   getItems(): TFile[] {
     if (this.titleOnly) {
-      // Deduplicate notes by basename
       const uniqueNotes = new Map<string, TFile>();
       this.availableNotes.forEach((note) => {
         uniqueNotes.set(note.basename, note);
@@ -47,7 +46,6 @@ export class AddContextNoteModal extends BaseNoteModal<TFile> {
   }
 
   onChooseItem(note: TFile, evt: MouseEvent | KeyboardEvent) {
-    // Check if the file is allowed for the current chain type
     if (!isAllowedFileForChainContext(note, this.chainType)) {
       new Notice(RESTRICTION_MESSAGES.NON_MARKDOWN_FILES_RESTRICTED);
       return;

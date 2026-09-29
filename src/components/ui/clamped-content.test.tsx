@@ -63,7 +63,6 @@ describe("clamped-content", () => {
       expect(screen.getByRole("button", { name: /show more/i }).getAttribute("aria-expanded")).toBe(
         "false"
       );
-      // Clipping is visual only, so copy and text selection still see it all.
       expect(screen.queryByText("Very long message")).not.toBeNull();
     });
 

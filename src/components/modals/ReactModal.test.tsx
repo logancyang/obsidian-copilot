@@ -53,8 +53,6 @@ describe("ReactModal", () => {
       it("applies the shared frame class before the modal is opened", () => {
         const modal = new TestFullBleedModal(new App());
 
-        // Obsidian attaches containerEl to the document before onOpen runs, so
-        // styling the frame any later can expose an unstyled first paint.
         expect(modal.containerEl.isConnected).toBe(false);
         expect(modal.modalEl.className).toBe(`modal ${FULL_BLEED_MODAL_CLASS}`);
       });

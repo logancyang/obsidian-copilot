@@ -1,8 +1,3 @@
-/**
- * useQuickAskSession - Custom hook for managing Quick Ask chat session.
- * Handles conversation state and delegates streaming to shared hook.
- */
-
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Notice } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
@@ -23,7 +18,6 @@ import type { QuickAskMessage } from "./types";
 
 interface UseQuickAskSessionParams {
   selectedText: string;
-  /** Selected model — a `configuredModelId` in the chat backend. */
   selectedModelKey: string;
   includeNoteContext: boolean;
 }
@@ -36,19 +30,12 @@ interface QuickAskSessionApi {
   clear: () => void;
 }
 
-/**
- * Hook for managing Quick Ask session state and streaming.
- */
 export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSessionApi {
   const app = useApp();
   const { selectedText, selectedModelKey, includeNoteContext } = params;
 
-  // Message history (completed messages only)
   const [messages, setMessages] = useState<QuickAskMessage[]>([]);
 
-  // Reason: Prevents setState calls after the component unmounts.
-  // Without this guard, async operations (runTurn) that resolve after panel close
-  // would trigger React warnings and potential state corruption.
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -58,10 +45,8 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
     };
   }, []);
 
-  // Resolve the selected chat-backend model (preferred id → first enabled → null).
   const resolvedModel = useResolvedChatBackendModel(app, selectedModelKey);
 
-  // Use shared streaming hook
   const {
     isStreaming,
     streamingText,
@@ -86,9 +71,6 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
     async (input: string) => {
       if (!input.trim()) return;
 
-      // Add user message immediately for responsive UI
-      // Reason: selectedText context is handled by the prompt processing pipeline,
-      // so displayContent does not embed <selected_text> XML tags.
       const userMessage: QuickAskMessage = {
         id: uuidv4(),
         role: "user",
@@ -97,18 +79,14 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
       };
       setMessages((prev) => [...prev, userMessage]);
 
-      // Run the streaming turn
       const result = await runTurn(async (ctx: StreamingChatTurnContext) => {
-        // Apply first-turn transforms
         let processedInput = input;
         if (ctx.isFirstTurn) {
           processedInput = appendIncludeNoteContextPlaceholders(input, includeNoteContext);
         }
 
-        // Check abort before async operation
         if (ctx.signal.aborted) return "";
 
-        // Process prompt (follow-up messages skip appending selected text)
         const prompt = await processCommandPrompt(
           app,
           processedInput,
@@ -119,14 +97,11 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
         return prompt;
       });
 
-      // Reason: If the panel was closed/unmounted during the async runTurn,
-      // skip all state updates to avoid orphan setState calls.
       if (!isMountedRef.current) {
         return;
       }
 
       if (result) {
-        // Add assistant message on success
         const assistantMessage: QuickAskMessage = {
           id: uuidv4(),
           role: "assistant",
@@ -135,13 +110,6 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
         };
         setMessages((prev) => [...prev, assistantMessage]);
       } else {
-        // Reason: If runTurn returns null, rollback the optimistically added
-        // user message to avoid orphan messages. This covers:
-        // - busy / re-entrancy (another turn in progress)
-        // - no model configured
-        // - empty prompt
-        // - abort before streaming started
-        // - reset() called (stale turn)
         setMessages((prev) => {
           const last = prev[prev.length - 1];
           if (last?.id === userMessage.id) {
@@ -163,7 +131,6 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
     reset();
   }, [reset]);
 
-  // Compute display messages (include streaming content)
   const displayMessages = useMemo(() => {
     if (!isStreaming || !streamingText) return messages;
     return [

@@ -13,16 +13,10 @@ interface FollowUpInputProps {
   className?: string;
   showClear?: boolean;
   disabled?: boolean;
-  /** Hint text shown on the right side of the input (e.g., "Generating...") */
   hint?: string;
-  /** Auto-focus the input on mount */
   autoFocus?: boolean;
 }
 
-/**
- * Text input for follow-up instructions or questions.
- * Supports Enter to submit and shows a clear button when content exists.
- */
 export function FollowUpInput({
   value,
   onChange,
@@ -36,8 +30,6 @@ export function FollowUpInput({
   autoFocus = false,
 }: FollowUpInputProps) {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Avoid submitting when Enter is used to confirm IME composition (e.g., Chinese/Japanese/Korean).
-    // key "Process" is the standard indicator for IME processing.
     const nativeEvent = e.nativeEvent as KeyboardEvent & {
       isComposing?: boolean;
     };
@@ -46,7 +38,6 @@ export function FollowUpInput({
     }
 
     if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      // Only prevent default and submit if onSubmit is provided
       if (!onSubmit) return;
       e.preventDefault();
       onSubmit();
@@ -64,7 +55,6 @@ export function FollowUpInput({
         autoFocus={autoFocus}
         className="tw-min-h-[36px] tw-resize-none tw-py-2 tw-pr-8"
       />
-      {/* Hint text (e.g., "Generating...") - pointer-events-none to not block textarea clicks */}
       {hint && (
         <span className="tw-pointer-events-none tw-absolute tw-bottom-4 tw-right-6 tw-text-xs tw-text-muted">
           {hint}

@@ -1,8 +1,3 @@
-/**
- * QuickAskMessage - Renders individual messages in Quick Ask panel.
- * Handles markdown rendering for assistant messages.
- */
-
 import React, { useEffect, useRef } from "react";
 import { MarkdownRenderer } from "obsidian";
 import { Copy, ClipboardPaste, Replace } from "lucide-react";
@@ -23,17 +18,11 @@ interface QuickAskMessageProps {
   hasSelection: boolean;
   isReplaceValid: boolean;
   replaceInvalidReason: ReplaceInvalidReason | null;
-  /** Whether Replace is disabled because streaming is in progress */
   isDisabledDueToStreaming?: boolean;
-  /** File path captured when panel opened; used for stable Markdown link resolution */
   filePathSnapshot: string | null;
   plugin: CopilotPlugin;
 }
 
-/**
- * Component for rendering a single Quick Ask message.
- * Renders markdown for completed assistant messages.
- */
 export const QuickAskMessageComponent = React.memo(function QuickAskMessageComponent({
   message,
   isStreaming,
@@ -50,15 +39,11 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
 }: QuickAskMessageProps) {
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Render markdown for completed assistant messages
   useEffect(() => {
     if (message.role !== "assistant" || isStreaming) return;
 
     let cancelled = false;
 
-    /**
-     * Renders markdown directly into the target element if still mounted.
-     */
     const renderMarkdown = async (): Promise<void> => {
       const targetEl = contentRef.current;
       if (!targetEl) return;
@@ -74,7 +59,6 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
 
         if (cancelled) return;
 
-        // Fallback to plain text if markdown rendering fails
         targetEl.empty();
         targetEl.textContent = message.content;
       }
@@ -91,7 +75,6 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
     };
   }, [message.content, message.role, isStreaming, filePathSnapshot, plugin]);
 
-  // User message - right aligned with accent background (like YOLO)
   if (message.role === "user") {
     return (
       <div className="tw-max-w-[85%] tw-self-end tw-rounded-lg tw-rounded-br-sm tw-bg-interactive-accent tw-px-3 tw-py-2 tw-text-on-accent">
@@ -102,7 +85,6 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
     );
   }
 
-  // Assistant message - streaming (left aligned)
   if (isStreaming) {
     return (
       <div className="tw-max-w-[95%] tw-self-start tw-rounded-lg tw-rounded-bl-sm tw-bg-secondary tw-px-3 tw-py-2">
@@ -117,8 +99,6 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
     );
   }
 
-  // Assistant message - completed with markdown + action buttons (left aligned)
-  // Last assistant message shows action buttons by default, others show on hover
   const actionBarVisibility = isLastAssistantMessage
     ? "tw-opacity-100"
     : "tw-opacity-0 group-hover/message:tw-opacity-100";

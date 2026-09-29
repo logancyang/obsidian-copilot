@@ -6,36 +6,25 @@ import { requestUrl } from "obsidian";
 const GITHUB_REFERENCE_URL =
   /^https:\/\/github\.com\/logancyang\/obsidian-copilot\/(?:pull|issues)\/(\d+)$/;
 
-// A release's demo video is a thumbnail linked to the video, whose alt text starts
-// with this keyword: `[![Demo video: <title>](<thumbnail>)](<video>)`. The keyword
-// singles it out from screenshots so the update banner can preview it.
+// Demo video shape: `[![Demo video: <title>](<thumbnail>)](<video>)`. The alt-text
+// keyword distinguishes it from screenshots.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/603
 const DEMO_VIDEO = /\[!\[Demo video:\s*([^\]]*)\]\(([^)\s]+)\)\]\(([^)\s]+)\)/;
 
-/** A release's demo video, as its notes link it from a thumbnail. */
 export interface ReleaseVideo {
   thumbnailUrl: string;
   title: string;
   url: string;
 }
 
-/**
- * Finds the demo video a release body leads with, so the update banner can show its thumbnail.
- * @param markdown - Release body as published on GitHub.
- */
 export function findReleaseVideo(markdown: string): ReleaseVideo | null {
   const match = DEMO_VIDEO.exec(markdown);
   return match ? { title: match[1], thumbnailUrl: match[2], url: match[3] } : null;
 }
 
-/**
- * Compacts URL-only GitHub links after Obsidian has safely parsed the Markdown.
- * @param container - Rendered release-note content whose link labels may be shortened.
- */
 export function formatReleaseNotesForObsidian(container: HTMLElement): void {
   for (const link of container.querySelectorAll<HTMLAnchorElement>("a[href]")) {
-    // Operate only on URL labels produced by Obsidian's linkifier; authored
-    // labels, code, images, and HTML attributes remain untouched.
+    // Only rewrite labels Obsidian's linkifier produced, never authored ones.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/317
     if (link.closest("code, pre")) continue;
 
@@ -49,7 +38,6 @@ export function formatReleaseNotesForObsidian(container: HTMLElement): void {
   }
 }
 
-// Canary prereleases share this list, so page past them to reach the stable releases.
 const RELEASES_PAGE_SIZE = 30;
 const RELEASES_API_URL = `https://api.github.com/repos/logancyang/obsidian-copilot/releases?per_page=${RELEASES_PAGE_SIZE}`;
 const MAX_RELEASE_NOTES = 10;
@@ -62,29 +50,20 @@ interface GitHubReleaseListItem {
   tag_name?: unknown;
 }
 
-/**
- * Collects the notes for every stable release a user skipped, newest first, so
- * someone several versions behind sees each change rather than only the latest.
- * @param currentVersion - Installed plugin version; it and older releases are left out.
- * @param latest - Release found by the update check; it leads the list and is the
- *   only entry when GitHub's release list cannot be read.
- */
 export async function requestReleaseNotesSince(
   currentVersion: string,
   latest: LatestRelease
 ): Promise<LatestRelease[]> {
   try {
     const skipped: LatestRelease[] = [];
-    // Accumulated prereleases can fill whole pages, so keep reading until the notes are
-    // full, an installed-or-older release appears, or the list ends.
+    // Prereleases can fill whole pages, so keep paging until enough stable notes are found.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/600
     for (let page = 1; skipped.length < MAX_RELEASE_NOTES - 1; page++) {
       const response = await requestUrl({ url: `${RELEASES_API_URL}&page=${page}`, method: "GET" });
       const items: GitHubReleaseListItem[] = Array.isArray(response.json) ? response.json : [];
       let reachedInstalled = false;
       for (const item of items) {
-        // Only stable releases the user skipped belong here. The latest already leads the
-        // list and is matched by URL, since its tag can differ from its manifest version.
+        // Match the latest by URL: its tag can differ from its manifest version.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/600
         if (item.draft || item.prerelease || typeof item.tag_name !== "string") continue;
         if (item.html_url === latest.htmlUrl) continue;
@@ -105,8 +84,6 @@ export async function requestReleaseNotesSince(
     skipped.sort((a, b) => compareSemver(b.version, a.version));
     return [latest, ...skipped].slice(0, MAX_RELEASE_NOTES);
   } catch (error) {
-    // A rate-limited or offline list must not hide the notes the dialog already has.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/600
     logWarn("Copilot release history request failed", error);
     return [latest];
   }

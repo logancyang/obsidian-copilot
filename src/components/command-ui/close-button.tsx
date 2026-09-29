@@ -8,10 +8,6 @@ interface CloseButtonProps {
   className?: string;
 }
 
-/**
- * Close button positioned in the top-right corner of the modal.
- * Styled to match QuickAskPanel's close button using Button ghost2 variant.
- */
 export function CloseButton({ onClose, className }: CloseButtonProps) {
   return (
     <Button

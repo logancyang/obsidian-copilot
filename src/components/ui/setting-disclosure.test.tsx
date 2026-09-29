@@ -34,8 +34,6 @@ describe("setting-disclosure", () => {
       expect(onClick).toHaveBeenCalledTimes(1);
     });
 
-    // The row doubles as a Radix `CollapsibleTrigger asChild` target, which only
-    // works if the component forwards its ref and the injected props.
     it("drives a Collapsible when used as its trigger", () => {
       render(
         <Collapsible>

@@ -8,15 +8,6 @@ import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
 import { Root } from "react-dom/client";
 
-/**
- * Standalone pane for the Relevant Notes panel, isolated from the chat views.
- *
- * `RelevantNotes` reads the active file via `useActiveFile`, which seeds from
- * the current active file on mount and then updates on the `ACTIVE_LEAF_CHANGE`
- * event on this view's own `eventTarget`. This view bridges that event itself
- * via `registerActiveLeafChangeBridge` since no other component feeds its
- * `eventTarget`.
- */
 export default class RelevantNotesView extends ItemView {
   private root: Root | null = null;
   eventTarget: EventTarget;

@@ -49,10 +49,6 @@ interface ActionButtonsProps {
   className?: string;
 }
 
-/**
- * Action buttons for the modal footer.
- * Shows different buttons based on state: Stop during loading, Insert/Replace on result.
- */
 export function ActionButtons({
   state,
   onStop,
@@ -67,14 +63,12 @@ export function ActionButtons({
 }: ActionButtonsProps) {
   return (
     <div className={cn("tw-flex tw-items-center tw-gap-2", className)}>
-      {/* Stop button during loading */}
       {state === "loading" && (
         <Button variant="secondary" size="sm" onClick={onStop}>
           Stop
         </Button>
       )}
 
-      {/* Copy/Insert/Replace buttons on result */}
       {state === "result" && showInsertReplace && (
         <>
           {onCopy && (
@@ -102,7 +96,6 @@ export function ActionButtons({
         </>
       )}
 
-      {/* Submit/Cancel buttons (alternative mode) */}
       {showSubmitCancel && state !== "loading" && (
         <>
           <Button variant="secondary" size="sm" onClick={onCancel}>

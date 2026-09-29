@@ -19,13 +19,6 @@ export interface ModelEffortPickerOverride {
   models: ModelSelectorEntry[];
   value: string;
   disabled?: boolean;
-  /**
-   * The active model's effort options + current value. `undefined` when the
-   * currently selected model has no effort dimension (e.g. Haiku) — the
-   * picker still surfaces, the trigger pill drops its effort suffix, and
-   * the sticky footer reads "not applicable" for that row. Highlighted
-   * rows that *do* have effort still expose their stepper normally.
-   */
   effort?: {
     options: { label: string; value: string | null }[];
     value: string | null;
@@ -46,11 +39,6 @@ interface EffortOpt {
   value: string | null;
 }
 
-/**
- * Defers commit until popover dismisses. Without this the cross-backend pick
- * path swaps the active session mid-interaction, which would collapse the
- * popover before the user could pick an effort.
- */
 export function ModelEffortPicker({ override, className }: ModelEffortPickerProps) {
   const { models, value, effort, effortOptionsByModelKey, commitSelection, disabled } = override;
 
@@ -63,9 +51,6 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
     effort: null,
   });
 
-  // Agent Mode entries are synthesized and never gated by BYOK API-key checks
-  // (the backend manages its own credentials). `_disabledReason` is the only
-  // opt-out.
   const enabledKeys = useMemo(() => {
     return models
       .filter((m) => (m.enabled ?? true) && !m._disabledReason)
@@ -76,10 +61,6 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
   const currentEffortLabel = effort?.options.find((o) => o.value === effort.value)?.label ?? null;
   const activeEffortValue = effort?.value ?? null;
 
-  // Initialize the draft + highlight on open. Re-running on `value`
-  // changes is fine: while the popover is open the parent shouldn't
-  // change `value` (commits are deferred), so this effectively only fires
-  // on open.
   useEffect(() => {
     if (open) {
       /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- seed the editable draft from props when the popover opens; drafts are committed on close, so this can't be pure derived state */
@@ -113,10 +94,6 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
     [enabledKeys, highlightKey]
   );
 
-  // Pick a row into the draft. Keep the current draftEffort when the new
-  // row exposes it; otherwise fall back to the row's first option (or to
-  // the active model's persisted effort if you just clicked back onto the
-  // active row).
   const pickDraft = useCallback(
     (key: string) => {
       setDraftModelKey(key);
@@ -212,9 +189,6 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
                 <span className="tw-text-xs tw-text-muted">{currentEffortLabel}</span>
               </>
             )}
-            {/* Persist the cloud-egress warning on the closed trigger too, so a
-                selected cloud model under Self-Host Mode is flagged without opening
-                the picker. stopPropagation=false so a click still opens it. */}
             {currentModel?._needsSelfHostWarning && (
               <SelfHostCloudWarningIcon stopPropagation={false} />
             )}
@@ -235,8 +209,6 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
             const key = getModelKeyFromModel(entry);
             const disabledReason = entry._disabledReason;
             const itemDisabled = Boolean(disabledReason);
-            // A locked Copilot row says why through its lock icon, so the
-            // right-side label would only print that sentence twice.
             const rightLabel = entry._needsLicense ? null : (disabledReason ?? null);
             const isHighlight = key === highlightKey;
             const isActive = key === draftModelKey;
@@ -268,8 +240,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
                     entry._needsLicense &&
                       "tw-text-normal tw-no-underline hover:tw-bg-interactive-hover hover:tw-text-normal hover:tw-no-underline focus-visible:tw-bg-interactive-hover"
                   )}
-                  // Native Enter must follow the link, not draft the highlighted model;
-                  // other keys must reach Radix's focus loop and dismissal handlers.
+                  // Enter must follow the pricing link, not draft the highlighted model.
                   // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
                   onKeyDown={
                     entry._needsLicense
@@ -279,13 +250,11 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
                       : undefined
                   }
                   onAuxClick={(event) => {
-                    // Middle-click follows the pricing link without firing onClick; discard its draft too.
+                    // Middle-click follows the link without firing onClick.
                     // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
                     if (entry._needsLicense && event.button === 1) setOpen(false);
                   }}
                   onClick={() => {
-                    // Visiting pricing must discard pending model/effort edits, not commit on dismiss.
-                    // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
                     if (entry._needsLicense) {
                       setOpen(false);
                       return;
@@ -324,7 +293,6 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
             );
           })}
         </div>
-        {/* Effort stepper for the drafted model — commit fires on popover close. */}
         <div className="tw-border-0 tw-border-t tw-border-solid tw-border-border tw-bg-secondary tw-px-3 tw-py-2">
           <EffortFooter options={draftOptions} value={draftEffort} onChange={setDraftEffort} />
         </div>
@@ -380,13 +348,6 @@ interface EffortStepperProps {
   onChange: (value: string | null) => void;
 }
 
-/**
- * Discrete slider styled to match the HD "track + dots" variant: a 2px muted
- * base, ink-colored fill up to the current step, 6px step dots that flip from
- * hollow to filled as the range passes them, and a 24px white thumb with a
- * centered accent dot. Built on Radix `SliderPrimitive` so drag, click-snap,
- * and Arrow / Home / End keyboard support come for free.
- */
 function EffortStepper({ options, value, onChange }: EffortStepperProps) {
   const idx = Math.max(
     0,
@@ -410,9 +371,6 @@ function EffortStepper({ options, value, onChange }: EffortStepperProps) {
       <SliderPrimitive.Track className="tw-relative tw-mx-1.5 tw-h-0.5 tw-w-full tw-grow tw-rounded-full tw-bg-[var(--background-modifier-border)]">
         <SliderPrimitive.Range className="tw-absolute tw-h-full tw-rounded-full tw-bg-interactive-accent" />
       </SliderPrimitive.Track>
-      {/* Step dots overlaid on the track. The 6px inset on each side matches
-          the Track mx-1.5 so the dot for index 0 sits exactly at the track's
-          left edge and index N-1 at the right edge. */}
       <div className="tw-pointer-events-none tw-absolute tw-inset-x-1.5 tw-top-1/2 -tw-translate-y-1/2">
         {options.map((opt, i) => {
           const left = options.length === 1 ? 50 : (i / (options.length - 1)) * 100;

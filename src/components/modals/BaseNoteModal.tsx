@@ -14,7 +14,6 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
   }
 
   protected getOrderedNotes(excludeNotePaths: string[] = []): TFile[] {
-    // Get recently opened files first
     const recentFiles = this.app.workspace
       .getLastOpenFiles()
       .map((filePath) => this.app.vault.getAbstractFileByPath(filePath))
@@ -26,7 +25,6 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
           file.path !== this.activeNote?.path
       );
 
-    // Get all other files that weren't recently opened
     const allFiles = this.app.vault
       .getFiles()
       .filter((file) => isAllowedFileForChainContext(file, this.chainType));
@@ -38,7 +36,6 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
         file.path !== this.activeNote?.path
     );
 
-    // Combine active note (if exists and is allowed type) with recent files and other files
     const activeNoteArray =
       this.activeNote && isAllowedFileForChainContext(this.activeNote, this.chainType)
         ? [this.activeNote]
