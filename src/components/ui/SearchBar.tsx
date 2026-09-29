@@ -8,11 +8,6 @@ interface SearchBarProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
-  /**
-   * Extra classes for the inner Input — e.g. a height override (`!tw-h-7`) for
-   * compact list contexts. The Input's base height is `!`-important, so an
-   * override must be `!`-important too (cn/tailwind-merge resolves the conflict).
-   */
   inputClassName?: string;
 }
 
@@ -29,7 +24,6 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        // tw-pr-10 prevents text overlap with the trailing icons
         className={cn("tw-pr-10", inputClassName)}
       />
       {value && (

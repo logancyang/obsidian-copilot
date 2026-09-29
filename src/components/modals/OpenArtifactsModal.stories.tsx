@@ -23,15 +23,12 @@ const meta = {
 } satisfies Meta<OpenArtifactsModalContentProps>;
 export default meta;
 
-/** Confirmation shown when a note has no existing public identity. */
 export const Publish: StoryObj<OpenArtifactsModalContentProps> = {};
 
-/** Management state for a note that already has an OpenArtifacts page. */
 export const Manage: StoryObj<OpenArtifactsModalContentProps> = {
   args: { docId: "9f2k4mvq7t0xbz3n" },
 };
 
-/** Completion state that confirms the remote OpenArtifacts copy was withdrawn. */
 export const Removed: StoryObj<OpenArtifactsModalContentProps> = {
   args: {
     docId: "9f2k4mvq7t0xbz3n",

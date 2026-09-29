@@ -104,7 +104,6 @@ export function MobileCard<T extends object>({
     >
       <CardHeader className="tw-p-3">
         <div className="tw-flex tw-items-center tw-justify-between">
-          {/* Drag handle */}
           {isDraggable && (
             <div
               className="tw-mr-2 tw-cursor-grab tw-touch-none active:tw-cursor-grabbing"
@@ -115,14 +114,12 @@ export function MobileCard<T extends object>({
             </div>
           )}
 
-          {/* Main content area */}
           <div
             className="tw-flex-1 tw-touch-auto"
             onClick={isExpandable ? handleExpandToggle : undefined}
             style={{ cursor: isExpandable ? "pointer" : "default" }}
           >
             <div className="tw-flex tw-items-center tw-gap-2">
-              {/* Expand/collapse icon */}
               {isExpandable && (
                 <div className="tw-flex tw-size-3 tw-items-center tw-justify-center">
                   {isExpanded ? (
@@ -133,10 +130,8 @@ export function MobileCard<T extends object>({
                 </div>
               )}
 
-              {/* Custom icon */}
               {icon && <div className="tw-flex tw-items-center tw-justify-center">{icon}</div>}
 
-              {/* Title and subtitle area */}
               <div className="tw-min-w-0 tw-flex-1">
                 <div className="tw-break-words tw-font-medium tw-leading-relaxed">
                   {title}
@@ -151,7 +146,6 @@ export function MobileCard<T extends object>({
             </div>
           </div>
 
-          {/* Action buttons */}
           <div className="tw-flex tw-items-center tw-gap-2">
             {primaryAction && (
               <Button
@@ -197,7 +191,6 @@ export function MobileCard<T extends object>({
         </div>
       </CardHeader>
 
-      {/* Expandable content */}
       {isExpandable && (
         <div
           className={cn(

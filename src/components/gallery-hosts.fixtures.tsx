@@ -7,12 +7,6 @@ interface GalleryProvidersProps {
   children: React.ReactNode;
 }
 
-/**
- * Supplies the runtime contexts that composite gallery stories opt into.
- *
- * @param props - Story content that needs gallery-owned providers.
- * @returns Provider-wrapped story content.
- */
 export function GalleryProviders({ children }: GalleryProvidersProps): React.ReactElement {
   const app = useApp();
   const eventTarget = React.useMemo(() => new EventTarget(), []);
@@ -42,9 +36,6 @@ export const galleryHostFixtures = Object.freeze({
   }),
 });
 
-/** Supplies the editor registration context for interactive composer stories.
- * @param props Story content containing a chat composer.
- */
 export function GalleryChatInputProvider({ children }: GalleryProvidersProps): React.ReactElement {
   return (
     <GalleryProviders>

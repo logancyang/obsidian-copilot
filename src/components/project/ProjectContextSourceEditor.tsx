@@ -17,28 +17,13 @@ type ContextSource = NonNullable<ProjectConfig["contextSource"]>;
 
 interface ProjectContextSourceEditorProps {
   contextSource: ProjectConfig["contextSource"] | undefined;
-  /** Apply a partial context-source patch (a chip delete / URL add). The caller
-   * decides persistence: the home section persists immediately, the Edit modal
-   * folds it into its draft. */
   onChange: (patch: Partial<ContextSource>) => void;
-  /** Open the full Manage modal. */
   onManage: () => void;
-  /** Portal target for the footer +URL popover. Pass the host modal's `contentEl`
-   * (Edit project) so it stacks above the modal; omit on the home shelf (body). */
   popoverContainer?: HTMLElement | null;
-  /** Drag is hovering this editor's drop zone (owned by the caller). */
   isDragging?: boolean;
-  /** Whether this placement accepts drag-and-drop (the home shelf does; the Edit
-   * modal can't). When false the drag hints are hidden — only +URL / Manage show. */
   droppable?: boolean;
-  /** Render Manage as the solid CTA button (Edit Project) rather than the home
-   * shelf's plain text link. Both open the same Manage modal. */
   solidManageButton?: boolean;
-  /** Extra classes for the outer box (e.g. `tw-grow` to fill the home shelf floor). */
   className?: string;
-  /** Render the two-line helper description above the box. On (Edit project) so
-   * the modal keeps the old sub-cards' guidance; off on the compact home tab,
-   * whose height is tuned to match its sibling tabs and shouldn't grow. */
   showHelperText?: boolean;
 }
 
@@ -50,20 +35,6 @@ const FILE_CHIP_CONFIG = {
   property: { Icon: SlidersHorizontal, colorClass: "tw-text-context-manager-purple" },
 } as const;
 
-/**
- * The shared, controlled mixed file+URL context editor (design H / E). Renders
- * inclusions (folder/tag/file/extension/property via {@link buildBadgeItems}) and URLs
- * (via {@link parseProjectUrls}) as one wrapped {@link ContextChip} flow that
- * fills the box and scrolls internally when it overflows, then a footer pinned at
- * the box floor (drag hint · +URL · Manage). Pure / controlled: deletes and the
- * +URL action go out through `onChange` as
- * context-source patches, so the home placement can persist immediately while
- * the Edit modal keeps them in a draft.
- *
- * Reuses the pattern pure-functions from ProjectContextBadgeList but NOT its
- * pill rendering — the design's chips are square bordered tiles, and that
- * component is shared with the legacy CAG modal whose look must not change.
- */
 export function ProjectContextSourceEditor({
   contextSource,
   onChange,
@@ -110,12 +81,7 @@ export function ProjectContextSourceEditor({
     onChange({ webUrls, youtubeUrls });
   };
 
-  // The chip flow fills the box and scrolls internally when it overflows; the box's
-  // own min/max-height (see the wrapper below) bounds it so the footer stays pinned
-  // at the box floor and a long context never grows the surrounding tab.
   const [overflowing, setOverflowing] = useState(false);
-  // Whether the scroll container is at its bottom — drives the fade so "there's more
-  // below" stays signalled until you've scrolled to the end.
   const [scrollAtBottom, setScrollAtBottom] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -152,8 +118,6 @@ export function ProjectContextSourceEditor({
       {urlItems.map((item) => (
         <ContextChip
           key={item.id}
-          // UrlTypeIcon owns both glyph and color (the single source of truth for
-          // web=cyan / youtube=red), so the chip wrapper carries no colorClass.
           icon={<UrlTypeIcon type={item.type} className="tw-size-3.5" />}
           colorClass=""
           label={item.url.replace(/^https?:\/\//, "")}
@@ -164,8 +128,6 @@ export function ProjectContextSourceEditor({
     </>
   );
 
-  // Excluded patterns render dim, after a dashed separator + "Excluded:" label —
-  // mirroring the legacy ProjectContextBadgeList so the two read consistently.
   const exclusionChips = exclusionItems.map((item) => {
     const { Icon, colorClass } = FILE_CHIP_CONFIG[item.type];
     return (
@@ -183,10 +145,6 @@ export function ProjectContextSourceEditor({
   const editorBox = (
     <div
       className={cn(
-        // min/max keep the box about one compact shelf section tall, so the Context
-        // tab matches its siblings instead of growing with the chip count;
-        // a long context scrolls inside the box. The caller's `tw-grow` fills up to
-        // this cap.
         "tw-flex tw-max-h-60 tw-min-h-[200px] tw-flex-col tw-rounded-xl tw-border tw-p-3 tw-transition-colors",
         isDragging
           ? "tw-border-solid tw-border-interactive-accent"
@@ -194,9 +152,6 @@ export function ProjectContextSourceEditor({
         className
       )}
     >
-      {/* Content region — flex-1 pushes the footer to the box floor in every state
-          (empty / sparse / full). The box's height bound comes from the caller.
-          tw-relative anchors the drag scrim below. */}
       <div className="tw-relative tw-flex tw-min-h-0 tw-flex-1 tw-flex-col">
         {isEmpty ? (
           <div className="tw-flex tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-gap-1 tw-py-8 tw-text-center">
@@ -251,12 +206,6 @@ export function ProjectContextSourceEditor({
             )}
           </div>
         )}
-        {/* Drag scrim: dims the populated chips in place (no layout jump) and
-            floats the drop prompt over them. As the content region's LAST
-            positioned child it paints above the chips with no z-index (matching
-            the legacy dropzone). pointer-events-none so the drag keeps hitting
-            the droppable box underneath; the empty state has its OWN "Drop"
-            affordance, so the scrim only covers a non-empty chip flow. */}
         {droppable && !isEmpty && (
           <div
             aria-hidden={!isDragging}
@@ -265,8 +214,6 @@ export function ProjectContextSourceEditor({
               isDragging ? "tw-opacity-100" : "tw-opacity-0"
             )}
           >
-            {/* Two stacked fills: a translucent primary layer dims the chips, an
-                interactive-accent tint signals "active target". */}
             <div className="tw-absolute tw-inset-0 tw-rounded-md tw-bg-primary tw-opacity-80" />
             <div className="tw-absolute tw-inset-0 tw-rounded-md tw-bg-interactive-accent/10" />
             <Inbox className="tw-relative tw-size-5 tw-text-accent" />
@@ -278,8 +225,6 @@ export function ProjectContextSourceEditor({
         )}
       </div>
 
-      {/* Footer (design `.ctxfoot`): left = drag hint + URL, right = Manage. Same
-          shape in every state so the box reads consistently empty or full. */}
       <div className="tw-mt-3 tw-flex tw-flex-wrap tw-items-center tw-gap-3 tw-text-xs tw-text-faint">
         <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-3">
           {droppable ? (
@@ -326,7 +271,6 @@ export function ProjectContextSourceEditor({
   );
 
   if (!showHelperText) return editorBox;
-  // Edit project: restore the old split sub-cards' guidance above the unified box.
   return (
     <div className="tw-flex tw-flex-col tw-gap-2">
       <div className="tw-text-sm tw-text-muted">

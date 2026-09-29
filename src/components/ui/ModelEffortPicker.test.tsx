@@ -83,7 +83,6 @@ describe("ModelEffortPicker", () => {
           act(() => link.focus());
           const tab = createEvent.keyDown(link, { key: "Tab", shiftKey: action === "Shift+Tab" });
           fireEvent(link, tab);
-          // The drafted model has no effort slider, so this link is both focus-loop boundaries.
           expect(tab.defaultPrevented).toBe(true);
           expect(document.activeElement).toBe(link);
           expect(screen.getByRole("dialog")).toBe(dialog);

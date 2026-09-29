@@ -12,7 +12,6 @@ export class ApplyCustomCommandModal extends FuzzySuggestModal<CustomCommand> {
     super(app);
     this.setPlaceholder("Select a custom command to apply...");
 
-    // Get all custom commands and sort them by the user's selected ordering method
     const allCommands = getCachedCustomCommands();
     this.commands = sortSlashCommands(allCommands);
   }
@@ -20,7 +19,6 @@ export class ApplyCustomCommandModal extends FuzzySuggestModal<CustomCommand> {
   onOpen() {
     super.onOpen();
 
-    // Check if there are no commands available
     if (this.commands.length === 0) {
       this.setInstructions([
         {
@@ -43,7 +41,6 @@ export class ApplyCustomCommandModal extends FuzzySuggestModal<CustomCommand> {
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 
     if (!activeView || !activeView.editor) {
-      // If no active editor, use empty string as selected text
       this.openCommandModal(command, "");
       return;
     }
@@ -53,10 +50,8 @@ export class ApplyCustomCommandModal extends FuzzySuggestModal<CustomCommand> {
   }
 
   private openCommandModal(command: CustomCommand, selectedText: string) {
-    // Record usage of the command
     void CustomCommandManager.getInstance().recordUsage(command);
 
-    // Open the CustomCommandChatModal with the selected command
     const modal = new CustomCommandChatModal(this.app, {
       selectedText,
       command,

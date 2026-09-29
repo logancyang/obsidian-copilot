@@ -24,7 +24,6 @@ export type ReleaseNotesDialogState =
   | { status: "loading" }
   | { status: "error" }
   | {
-      /** Newest first; the first entry is the release the user can update to. */
       releases: ReleaseNotes[];
       status: "ready";
     };
@@ -34,16 +33,10 @@ export interface ReleaseNotesDialogContentProps {
   state: ReleaseNotesDialogState;
 }
 
-/**
- * Presents release content and update actions inside an Obsidian-hosted modal.
- * Network loading and modal lifecycle stay outside this prop-driven boundary.
- */
 export function ReleaseNotesDialogContent({
   onClose,
   state,
 }: ReleaseNotesDialogContentProps): React.ReactElement {
-  // The shell and update action remain usable while notes load, so a slow
-  // image or API response cannot trap the user. https://github.com/Brevilabs/obsidian-copilot-private/issues/317
   const releaseUrl = state.status === "ready" ? state.releases[0].htmlUrl : GITHUB_RELEASES_URL;
 
   return (
@@ -57,8 +50,6 @@ export function ReleaseNotesDialogContent({
 
       <div className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-overscroll-contain tw-px-5 tw-py-4">
         {state.status === "ready" ? (
-          // Divide consecutive releases so a user several versions behind can
-          // tell where each one's notes begin. https://github.com/Brevilabs/obsidian-copilot-private/issues/600
           state.releases.map((release, index) => (
             <Markdown
               className={cn(index > 0 && "copilot-divider-t tw-mt-6 tw-pt-2")}
@@ -123,7 +114,6 @@ interface SkippedReleaseNotesProps {
   onClose: () => void;
 }
 
-/** Shows the latest release at once, then appends older releases the user skipped. */
 function SkippedReleaseNotes({
   currentVersion,
   latest,
@@ -138,16 +128,10 @@ function SkippedReleaseNotes({
   return <ReleaseNotesDialogContent onClose={onClose} state={{ status: "ready", releases }} />;
 }
 
-/** Owns the Obsidian modal lifecycle for the releases between the installed and latest Copilot. */
 export class ReleaseNotesModal extends FullBleedReactModal {
   private readonly currentVersion: string;
   private readonly latest: ReleaseNotes;
 
-  /**
-   * @param app - Obsidian app that owns the modal window.
-   * @param latest - Already-loaded latest release, rendered while older notes load.
-   * @param currentVersion - Installed plugin version that bounds which older releases appear.
-   */
   constructor(app: App, latest: ReleaseNotes, currentVersion: string) {
     super(app);
     this.latest = latest;

@@ -8,41 +8,17 @@ import { Link, Plus, X } from "lucide-react";
 import React, { useMemo, useState } from "react";
 
 interface AddUrlPopoverProps {
-  /** Existing URLs (raw or normalized) so already-added entries flag as duplicates. */
   existingUrls: string[];
-  /** The deduped, non-duplicate URLs the user confirmed. The caller merges them. */
   onAdd: (urls: UrlItem[]) => void;
-  /** Portal target. Pass the host modal's `contentEl` so the popover stacks
-   * above it: the popover layer (30) sits below the modal layer (50), so a
-   * body-portaled popover would render behind the Edit-project modal. */
   container?: HTMLElement | null;
-  /** Custom trigger (e.g. the Manage sidebar's PlusCircle). Defaults to the
-   * footer's cyan "+ URL" link. */
   trigger?: React.ReactNode;
 }
 
-/** A URL staged for adding, tagged with whether it already lives in the project's
- * context (a duplicate is shown but not committed). */
 interface PendingUrl {
   item: UrlItem;
   duplicate: boolean;
 }
 
-/**
- * The "+ URL" control (design ⑤): a trigger opening a small popover that stages
- * URLs in a **pending list** before committing. The input's right-side button is
- * one control with two states — empty → paste from clipboard, non-empty → add
- * the typed value (Enter does the same) — and a paste anywhere routes straight
- * into the list. Each staged URL is auto-classified web/YouTube and deduped:
- * within the list it collapses, against the project's existing URLs it flags as
- * "Exists" and is excluded from the commit. "Add N" sends the valid items out
- * through `onAdd`; the caller merges them into its context source.
- *
- * A Popover, NOT a Modal, so it never stacks a second modal over the Edit-project
- * modal (see the agent layer rules' modal/dialog note). Parsing reuses the shared
- * {@link resolveInputUrls} (scheme-anchored extraction + single-token fallback),
- * so a pasted document can't smuggle bare-host prose tokens into the list.
- */
 export function AddUrlPopover({ existingUrls, onAdd, container, trigger }: AddUrlPopoverProps) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<PendingUrl[]>([]);
@@ -52,9 +28,6 @@ export function AddUrlPopover({ existingUrls, onAdd, container, trigger }: AddUr
   const validCount = pending.reduce((n, p) => (p.duplicate ? n : n + 1), 0);
   const dupCount = pending.length - validCount;
 
-  // Stage every URL parsed from `text`, skipping ones already staged and tagging
-  // ones already in the project. The single source of truth for all three input
-  // paths (Add button, Enter, paste).
   const stageFromText = (text: string) => {
     const parsed = resolveInputUrls(text);
     if (parsed.length === 0) return;
@@ -121,10 +94,6 @@ export function AddUrlPopover({ existingUrls, onAdd, container, trigger }: AddUr
         <div className="tw-flex tw-flex-col tw-gap-2 tw-px-3.5 tw-py-3">
           <UrlInputRow autoFocus onSubmit={stageFromText} placeholder="Enter a URL…" />
 
-          {/* Fixed height (not max-height): the popover's total height stays
-              constant as items are staged, so Radix never re-flips it to dodge a
-              growing box — which read as a jarring jump when opened from the
-              Manage sidebar's tight top corner. */}
           <div className="tw-flex tw-h-28 tw-flex-col tw-gap-1.5 tw-overflow-y-auto">
             {pending.length === 0 ? (
               <div className="tw-flex tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-gap-1 tw-text-center tw-text-xs tw-text-faint">
@@ -150,9 +119,6 @@ export function AddUrlPopover({ existingUrls, onAdd, container, trigger }: AddUr
                   >
                     {item.url.replace(/^https?:\/\//, "")}
                   </span>
-                  {/* The leading icon already conveys web/YouTube, so only the
-                      duplicate case needs a label — "Exists" explains why it's
-                      excluded from the commit. */}
                   {duplicate && (
                     <span className="tw-shrink-0 tw-rounded tw-border tw-border-solid tw-border-error tw-px-1 tw-font-mono tw-text-ui-smaller tw-text-error">
                       Exists

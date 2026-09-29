@@ -1,11 +1,3 @@
-/**
- * QuickAskOverlay - Manages the DOM overlay for Quick Ask panel.
- * Handles positioning, scroll tracking, drag/resize state, and React root lifecycle.
- *
- * This is the single source of truth for panel position and size.
- * QuickAskPanel fills its container and delegates resize events here.
- */
-
 import { EditorView } from "@codemirror/view";
 import type { Editor } from "obsidian";
 import React from "react";
@@ -17,11 +9,10 @@ import type CopilotPlugin from "@/main";
 import type { ReplaceGuard } from "@/editor/replaceGuard";
 import type { ResizeDirection } from "@/hooks/use-resizable";
 
-// Layout constants for Quick Ask panel positioning
 const PANEL_MARGIN = 12;
 const PANEL_OFFSET_Y = 6;
-const PANEL_DEFAULT_WIDTH_RATIO = 0.83; // 83% of viewport
-const PANEL_MAX_WIDTH_RATIO = 0.9; // 90% of viewport
+const PANEL_DEFAULT_WIDTH_RATIO = 0.83;
+const PANEL_MAX_WIDTH_RATIO = 0.9;
 const PANEL_DEFAULT_WIDTH_MAX = 420;
 const PANEL_MAX_WIDTH_MAX = 560;
 const PANEL_MIN_WIDTH = 300;
@@ -45,10 +36,6 @@ interface QuickAskOverlayOptions {
   onClose: () => void;
 }
 
-/**
- * Overlay class that manages the Quick Ask panel DOM and positioning.
- * Single source of truth for position and size.
- */
 export class QuickAskOverlay {
   private static overlayRoot: HTMLElement | null = null;
   private static currentInstance: QuickAskOverlay | null = null;
@@ -65,37 +52,22 @@ export class QuickAskOverlay {
   private isClosing = false;
   private closeAnimationTimeout: number | null = null;
 
-  // Drag state
   private dragPosition: { x: number; y: number } | null = null;
-  // Resize state (single source of truth; height is optional — only set when user resizes vertically)
   private resizeSize: { width: number; height?: number } | null = null;
-  // Reason: Track whether the user has intentionally resized the height
-  // (vs width-only resize which shouldn't remove the chat area max-height).
   private hasUserResizedHeight = false;
-  // Anchor positions (dual-anchor model for flip logic)
   private bottomAnchorPos: number | null = null;
   private topAnchorPos: number | null = null;
-  /** Focus anchor — selection.head for horizontal placement in reverse selections */
   private focusAnchorPos: number | null = null;
-  // Reason: Side lock prevents flipping between above/below during streaming output.
-  // Only reset on scroll, resize, or anchor visibility changes — not on content height changes.
   private placementSide: "below" | "above" | null = null;
 
-  // Resize interaction state
   private isResizing = false;
   private resizeDirection: ResizeDirection | null = null;
   private resizeStartRect: DOMRect | null = null;
   private resizeStartMouse: { x: number; y: number } | null = null;
   private resizeRafId: number | null = null;
-  // Save original body styles to restore after resize
 
   constructor(private readonly options: QuickAskOverlayOptions) {}
 
-  /**
-   * Mounts the overlay at the specified anchor positions.
-   * @param bottomAnchorPos - Bottom anchor (normalized selection.to) for "place below"
-   * @param topAnchorPos - Top anchor (selection.from) for "place above" flip target
-   */
   mount(
     bottomAnchorPos: number,
     topAnchorPos?: number | null,
@@ -111,11 +83,7 @@ export class QuickAskOverlay {
     this.schedulePositionUpdate();
   }
 
-  /**
-   * Destroys the overlay and cleans up resources.
-   */
   destroy(): void {
-    // Clear current instance reference
     if (QuickAskOverlay.currentInstance === this) {
       QuickAskOverlay.currentInstance = null;
     }
@@ -127,10 +95,8 @@ export class QuickAskOverlay {
       this.closeAnimationTimeout = null;
     }
 
-    // Clean up resize state
     this.cleanupResize();
 
-    // Run cleanup callbacks
     for (const cleanup of this.cleanupCallbacks) {
       try {
         cleanup();
@@ -179,10 +145,6 @@ export class QuickAskOverlay {
     this.ownerWindow = null;
   }
 
-  /**
-   * Updates the anchor positions and recalculates panel placement.
-   * Called by quickAskExtension on document changes (positions remapped via mapPos).
-   */
   updatePosition(
     bottomAnchorPos?: number,
     topAnchorPos?: number | null,
@@ -201,23 +163,14 @@ export class QuickAskOverlay {
     } else if (focusAnchorPos === null) {
       this.focusAnchorPos = null;
     }
-    // Reason: Doc changes may shift anchor visibility, so reset side lock
-    // to allow re-evaluation of above/below placement.
     this.placementSide = null;
     this.schedulePositionUpdate();
   }
 
-  /**
-   * Gets the ReplaceGuard instance (for quickAskExtension to call onDocChanged).
-   */
   getReplaceGuard() {
     return this.options.replaceGuard;
   }
 
-  /**
-   * Schedules a React re-render of the QuickAskPanel (coalesced per animation frame).
-   * Called when document changes to update Replace button disabled state.
-   */
   schedulePanelRerender(): void {
     if (this.panelRerenderRafId !== null) {
       return;
@@ -230,10 +183,6 @@ export class QuickAskOverlay {
     });
   }
 
-  /**
-   * Re-renders the QuickAskPanel with current props.
-   * React preserves component state across renders.
-   */
   private renderPanel(): void {
     if (!this.root) {
       return;
@@ -254,9 +203,6 @@ export class QuickAskOverlay {
     );
   }
 
-  /**
-   * Triggers close animation from outside.
-   */
   static closeCurrentWithAnimation(): boolean {
     if (QuickAskOverlay.currentInstance) {
       QuickAskOverlay.currentInstance.closeWithAnimation();
@@ -269,12 +215,9 @@ export class QuickAskOverlay {
     if (this.isClosing) return;
     this.isClosing = true;
 
-    // Add closing animation class
     if (this.overlayContainer) {
       this.overlayContainer.classList.add("closing");
 
-      // Listen for animation end instead of hardcoded timeout
-      // Filter by target and animation name to avoid child element animations triggering close
       const handleAnimationEnd = (event: AnimationEvent) => {
         if (
           event.target !== this.overlayContainer ||
@@ -292,13 +235,12 @@ export class QuickAskOverlay {
 
       this.overlayContainer.addEventListener("animationend", handleAnimationEnd);
 
-      // Fallback timeout in case animationend doesn't fire (e.g., reduced motion)
       const win = this.ownerWindow ?? window;
       this.closeAnimationTimeout = win.setTimeout(() => {
         this.overlayContainer?.removeEventListener("animationend", handleAnimationEnd);
         this.closeAnimationTimeout = null;
         this.options.onClose();
-      }, 300); // Slightly longer than animation as fallback
+      }, 300);
     } else {
       this.options.onClose();
     }
@@ -320,11 +262,9 @@ export class QuickAskOverlay {
   }
 
   private mountOverlay(): void {
-    // Mount overlay inside editor DOM for proper layering
     const overlayHost = this.options.view.dom ?? activeDocument.body;
     this.overlayHost = overlayHost;
 
-    // Capture owner document/window for popout window compatibility
     const doc = overlayHost.doc;
     const win = doc.defaultView ?? window;
     this.ownerDocument = doc;
@@ -337,9 +277,6 @@ export class QuickAskOverlay {
     this.root = createPluginRoot(overlayContainer, this.options.plugin.app);
     this.renderPanel();
 
-    // Reason: Reset side lock on scroll/resize so placement is re-evaluated
-    // when anchor visibility may have changed. Without this, the panel could
-    // stay locked to "above" even after scrolling makes "below" viable.
     const handleScroll = () => {
       this.placementSide = null;
       this.schedulePositionUpdate();
@@ -360,10 +297,6 @@ export class QuickAskOverlay {
       this.cleanupCallbacks.push(() => scrollDom.removeEventListener("scroll", handleScroll));
     }
 
-    // Setup resize observer with availability check
-    // Reason: Only observe scrollDom (editor viewport changes). Do NOT observe
-    // overlayContainer — its height changes during AI streaming would trigger
-    // position recalculation and cause the panel to jump up/down.
     if (typeof ResizeObserver !== "undefined") {
       this.resizeObserver = new ResizeObserver(() => {
         this.placementSide = null;
@@ -382,7 +315,6 @@ export class QuickAskOverlay {
       const activeEl = doc.activeElement;
       const isFocusInsidePanel = !!(activeEl && this.overlayContainer?.contains(activeEl));
 
-      // If focus is inside the panel, let QuickAskPanel / Lexical consume Escape first.
       if (isFocusInsidePanel) return;
 
       event.preventDefault();
@@ -390,7 +322,6 @@ export class QuickAskOverlay {
       this.closeWithAnimation();
     };
 
-    // Bubble-phase so inner handlers (Lexical menus, etc.) can run first.
     const win = this.ownerWindow ?? window;
     win.addEventListener("keydown", handleKeyDown);
     this.cleanupCallbacks.push(() => win.removeEventListener("keydown", handleKeyDown));
@@ -405,10 +336,6 @@ export class QuickAskOverlay {
     });
   }
 
-  /**
-   * Returns true if the anchor rect intersects the visible editor viewport.
-   * Mirrors CustomCommandChatModal's visibility check.
-   */
   private isAnchorRectVisible(coords: AnchorRect, visibleRect: DOMRect): boolean {
     return (
       coords.bottom >= visibleRect.top &&
@@ -418,11 +345,6 @@ export class QuickAskOverlay {
     );
   }
 
-  /**
-   * Resolves visibility of both anchor positions independently.
-   * Returns separate rects for bottom and top anchors so the caller can
-   * decide placement based on available space at each end of the selection.
-   */
   private resolveVisibleAnchors(
     hostRect: DOMRect,
     scrollRect: DOMRect | undefined
@@ -443,10 +365,6 @@ export class QuickAskOverlay {
     };
   }
 
-  /**
-   * Determines vertical placement (below or above) using dual-anchor flip logic.
-   * Implements side lock to prevent flipping during streaming output.
-   */
   private computeVerticalPlacement(
     bottomRect: AnchorRect | null,
     topRect: AnchorRect | null,
@@ -459,9 +377,6 @@ export class QuickAskOverlay {
   ): number {
     let top: number;
 
-    // Reason: Side lock — if a previous placement was chosen and the relevant anchor
-    // is still visible, reuse that side. This prevents flipping during streaming output
-    // when the panel grows taller. The lock is reset on scroll, resize, or doc changes.
     if (this.placementSide === "below" && bottomRect) {
       top = bottomRect.bottom - hostRect.top + PANEL_OFFSET_Y;
     } else if (this.placementSide === "above" && topRect) {
@@ -481,19 +396,14 @@ export class QuickAskOverlay {
           top = aboveY;
           this.placementSide = "above";
         } else {
-          // Neither side has enough space: center in visible area
-          // Reason: Consistent with other fallback branches and Quick Command behavior.
           top = visibleTop + (visibleHeight - heightForClamp) / 2;
           this.placementSide = null;
         }
       } else {
-        // Only bottom visible, not enough space below: center in visible area
-        // Reason: Flipping above would place panel inside the invisible selection.
         top = visibleTop + (visibleHeight - heightForClamp) / 2;
         this.placementSide = null;
       }
     } else if (topRect) {
-      // Bottom anchor not visible (selection extends below viewport): place above topRect
       const aboveY = topRect.top - hostRect.top - PANEL_OFFSET_Y - heightForClamp;
       const spaceAbove = topRect.top - hostRect.top - PANEL_OFFSET_Y - visibleTop;
 
@@ -501,17 +411,14 @@ export class QuickAskOverlay {
         top = aboveY;
         this.placementSide = "above";
       } else {
-        // Not enough space above either: center in visible area
         top = visibleTop + (visibleHeight - heightForClamp) / 2;
         this.placementSide = null;
       }
     } else {
-      // Neither anchor visible: center in viewport
       top = visibleTop + (visibleHeight - heightForClamp) / 2;
       this.placementSide = null;
     }
 
-    // Clamp top to keep panel within visible viewport
     const maxTop = visibleBottom - PANEL_MARGIN - heightForClamp;
     const effectiveMaxTop = Math.max(minTop, maxTop);
     return Math.max(minTop, Math.min(top, effectiveMaxTop));
@@ -520,7 +427,6 @@ export class QuickAskOverlay {
   private updateOverlayPosition(): void {
     if (!this.overlayContainer || this.bottomAnchorPos === null) return;
 
-    // If panel has been dragged, use drag position
     if (this.dragPosition) {
       this.updateDragPosition();
       return;
@@ -536,18 +442,14 @@ export class QuickAskOverlay {
     const sizer = scrollDom?.querySelector(".cm-sizer");
     const sizerRect = sizer?.getBoundingClientRect();
 
-    // Resolve both anchor rects independently
     const { bottomRect, topRect, focusRect } = this.resolveVisibleAnchors(hostRect, scrollRect);
 
-    // Calculate panel dimensions using constants
     const defaultWidth = Math.min(
       PANEL_DEFAULT_WIDTH_MAX,
       viewportWidth * PANEL_DEFAULT_WIDTH_RATIO
     );
     const maxWidth = Math.min(PANEL_MAX_WIDTH_MAX, viewportWidth * PANEL_MAX_WIDTH_RATIO);
-    // Minimum width adapts to viewport to prevent overflow in narrow panes
     const minWidth = Math.min(PANEL_MIN_WIDTH, viewportWidth - PANEL_MARGIN * 2);
-    // Respect resizeSize even when not dragged
     const panelWidth =
       this.resizeSize?.width ?? Math.max(minWidth, Math.min(defaultWidth, maxWidth));
     const panelHeight = this.resizeSize?.height;
@@ -558,9 +460,6 @@ export class QuickAskOverlay {
       sizerRect?.width ?? scrollRect?.width ?? viewportWidth - PANEL_MARGIN * 2;
     const contentRight = contentLeft + editorContentWidth;
 
-    // --- Visual multi-line detection ---
-    // Reason: Multiline selections center on the editor to avoid edge-snapping on
-    // reverse selections and soft-wrapped content, matching CustomCommandChatModal behavior.
     const isCursor =
       this.topAnchorPos !== null &&
       this.bottomAnchorPos !== null &&
@@ -583,7 +482,6 @@ export class QuickAskOverlay {
       !!bottomCoords &&
       Math.abs(topCoords.top - bottomCoords.top) > Math.max(caretHeight / 2, 2);
 
-    // Horizontal placement: center multiline on editor, otherwise anchor at focus end
     const horizontalAnchor = focusRect ?? bottomRect ?? topRect;
     let left = isVisualMultiLine
       ? contentLeft + (editorContentWidth - panelWidth) / 2
@@ -595,27 +493,23 @@ export class QuickAskOverlay {
     left = Math.min(left, viewportWidth - PANEL_MARGIN - panelWidth);
     left = Math.max(left, PANEL_MARGIN);
 
-    // Calculate visible area bounds for top positioning
     const visibleTop = (scrollRect?.top ?? hostRect.top) - hostRect.top;
     const visibleBottom = (scrollRect?.bottom ?? hostRect.bottom) - hostRect.top;
     const visibleHeight = visibleBottom - visibleTop;
     const minTop = visibleTop + PANEL_MARGIN;
 
-    // First pass: apply width/left so we can measure actual height
     updateDynamicStyleClass(this.overlayContainer, "copilot-quick-ask-overlay-pos", {
       width: panelWidth,
       ...(typeof panelHeight === "number" ? { height: panelHeight } : {}),
       left: Math.round(left),
-      top: Math.round(minTop), // Temporary top for measurement
+      top: Math.round(minTop),
     });
 
-    // Measure height for placement decision and clamping
     const heightForClamp =
       typeof panelHeight === "number"
         ? panelHeight
         : this.overlayContainer.getBoundingClientRect().height || PANEL_MIN_HEIGHT;
 
-    // Calculate vertical position with dual-anchor flip logic
     const clampedTop = this.computeVerticalPlacement(
       bottomRect,
       topRect,
@@ -627,7 +521,6 @@ export class QuickAskOverlay {
       minTop
     );
 
-    // Final pass: apply the correct top position
     updateDynamicStyleClass(this.overlayContainer, "copilot-quick-ask-overlay-pos", {
       width: panelWidth,
       ...(typeof panelHeight === "number" ? { height: panelHeight } : {}),
@@ -641,10 +534,6 @@ export class QuickAskOverlay {
     this.updateDragPosition();
   };
 
-  /**
-   * Called by Panel when user starts resizing.
-   * Overlay takes over and handles the entire resize interaction.
-   */
   private handleResizeStart = (
     direction: ResizeDirection,
     start: { x: number; y: number }
@@ -662,9 +551,6 @@ export class QuickAskOverlay {
     const doc = this.ownerDocument ?? activeDocument;
     const body = doc.body;
 
-    // Disable selection and set a direction-specific cursor on the body for
-    // the duration of the resize. Cursor is exposed via a CSS variable that the
-    // Tailwind arbitrary-value class consumes — no inline cursor styles needed.
     const cursorMap: Record<ResizeDirection, string> = {
       right: "ew-resize",
       bottom: "ns-resize",
@@ -674,7 +560,6 @@ export class QuickAskOverlay {
     body.setCssProps({ "--copilot-resize-cursor": cursorMap[direction] ?? "default" });
     body.classList.add("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
 
-    // Bind document-level listeners (use capture for consistency with useRafResizable/useDraggable)
     doc.addEventListener("mousemove", this.handleResizeMove, true);
     doc.addEventListener("mouseup", this.handleResizeEnd, true);
   };
@@ -684,7 +569,6 @@ export class QuickAskOverlay {
 
     const win = this.ownerWindow ?? window;
 
-    // Cancel any pending RAF
     if (this.resizeRafId !== null) {
       win.cancelAnimationFrame(this.resizeRafId);
     }
@@ -697,7 +581,6 @@ export class QuickAskOverlay {
 
   private handleResizeEnd = (): void => {
     this.cleanupResize();
-    // Re-render panel to update hasCustomHeight
     this.renderPanel();
   };
 
@@ -709,8 +592,6 @@ export class QuickAskOverlay {
       this.resizeRafId = null;
     }
 
-    // Only restore body styles if we actually started resizing
-    // This prevents polluting body styles when destroy() is called without resize
     if (this.isResizing) {
       const doc = this.ownerDocument ?? activeDocument;
       const body = doc.body;
@@ -738,12 +619,10 @@ export class QuickAskOverlay {
     const startRect = this.resizeStartRect;
     const direction = this.resizeDirection;
 
-    // Calculate constraints
     const viewportWidth = hostRect.width;
     const minWidth = Math.min(PANEL_MIN_WIDTH, viewportWidth - PANEL_MARGIN * 2);
     const minHeight = PANEL_MIN_HEIGHT;
 
-    // Calculate max bounds based on direction
     const boundLeft = hostRect.left + PANEL_MARGIN;
     const boundRight = hostRect.right - PANEL_MARGIN;
     const boundBottom = hostRect.bottom - PANEL_MARGIN;
@@ -753,8 +632,6 @@ export class QuickAskOverlay {
     let nextX: number | undefined;
     let nextY: number | undefined;
 
-    // Handle different resize directions
-    // For width-only resize (right), we don't touch height at all
     const involvesHeight = direction !== "right";
 
     switch (direction) {
@@ -772,26 +649,20 @@ export class QuickAskOverlay {
         break;
 
       case "bottom-left":
-        // Width grows to the left, so we need to adjust position
         nextWidth = startRect.width - deltaX;
         nextHeight = startRect.height + deltaY;
-        // Calculate new left position
         nextX = startRect.left + deltaX;
         nextY = startRect.top;
         break;
     }
 
-    // Apply constraints
     const maxWidthRight = boundRight - startRect.left;
     const maxWidthLeft = startRect.right - boundLeft;
     const maxHeight = boundBottom - startRect.top;
 
     if (direction === "bottom-left") {
-      // For bottom-left, constrain width based on how far left we can go
       nextWidth = Math.max(minWidth, Math.min(nextWidth, maxWidthLeft));
-      // Recalculate X based on constrained width
       nextX = startRect.right - nextWidth;
-      // Ensure X doesn't go past left bound
       if (nextX < boundLeft) {
         nextX = boundLeft;
         nextWidth = startRect.right - boundLeft;
@@ -800,14 +671,10 @@ export class QuickAskOverlay {
       nextWidth = Math.max(minWidth, Math.min(nextWidth, maxWidthRight));
     }
 
-    // Only apply height constraints when the direction involves vertical resizing
     if (involvesHeight) {
       nextHeight = Math.max(minHeight, Math.min(nextHeight, maxHeight));
     }
 
-    // Reason: Only set explicit height when the resize direction involves vertical movement.
-    // Width-only resize preserves any previous user-set height (or keeps it undefined
-    // so the panel auto-sizes based on content).
     const prevHeight = this.resizeSize?.height;
     const nextSize: { width: number; height?: number } = { width: nextWidth };
     if (involvesHeight) {
@@ -817,27 +684,21 @@ export class QuickAskOverlay {
     }
     this.resizeSize = nextSize;
 
-    // Only mark as "user resized height" when the direction involves vertical resizing
-    // and re-render panel immediately so hasCustomHeight takes effect during drag
     const prevHasUserResizedHeight = this.hasUserResizedHeight;
     if (involvesHeight) {
       this.hasUserResizedHeight = true;
     }
 
-    // If hasUserResizedHeight changed, re-render panel to update max-height immediately
     if (this.hasUserResizedHeight !== prevHasUserResizedHeight) {
       this.renderPanel();
     }
 
-    // If bottom-left, also update drag position to switch to drag mode
     if (direction === "bottom-left" && nextX !== undefined) {
       this.dragPosition = { x: nextX, y: nextY ?? startRect.top };
       this.updateDragPosition();
     } else if (this.dragPosition) {
-      // Already in drag mode, just update position
       this.updateDragPosition();
     } else {
-      // Not in drag mode, update anchor-based position
       this.schedulePositionUpdate();
     }
   }
@@ -850,16 +711,13 @@ export class QuickAskOverlay {
 
     const viewportWidth = hostRect.width;
 
-    // Calculate panel dimensions using constants
     const defaultWidth = Math.min(
       PANEL_DEFAULT_WIDTH_MAX,
       viewportWidth * PANEL_DEFAULT_WIDTH_RATIO
     );
     const maxWidth = Math.min(PANEL_MAX_WIDTH_MAX, viewportWidth * PANEL_MAX_WIDTH_RATIO);
-    // Minimum width adapts to viewport to prevent overflow in narrow panes
     const minWidth = Math.min(PANEL_MIN_WIDTH, viewportWidth - PANEL_MARGIN * 2);
 
-    // Use resized width if available, otherwise use default
     const panelWidth =
       this.resizeSize?.width ?? Math.max(minWidth, Math.min(defaultWidth, maxWidth));
     const panelHeight = this.resizeSize?.height;

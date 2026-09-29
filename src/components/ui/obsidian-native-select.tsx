@@ -26,9 +26,6 @@ export function ObsidianNativeSelect({
         className={cn(
           "tw-w-full tw-appearance-none",
           "tw-flex tw-h-9 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-dropdown tw-px-3 tw-py-1 tw-pr-8",
-          // See the matching note in `setting-item.tsx`: Obsidian's macOS
-          // settings pane right-aligns bare `select` text, which reads as a
-          // stray gap inside our fixed-width control.
           "tw-text-left tw-text-sm tw-shadow tw-transition-colors",
           "focus:tw-outline-none focus:tw-ring-1 focus:tw-ring-ring",
           "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",

@@ -5,7 +5,6 @@ import * as React from "react";
 
 type ModelEnableListProps = React.ComponentProps<typeof ModelEnableList>;
 
-/** Enough rows to exceed the `max-h-80` cap, so the internal scroll is the thing on screen. */
 const LONG_GROUP: ModelEnableGroup = {
   key: "byok",
   label: "OpenAI",
@@ -28,8 +27,6 @@ const PLUS_GROUP: ModelEnableGroup = {
       id: "plus/flash",
       label: "copilot-plus-flash",
       enabled: true,
-      // Cast rather than importing the enum: the gallery fence bars runtime
-      // values from `@/constants`, and a story only needs the wire string.
       capabilities: ["vision" as ModelCapability],
     },
     { id: "plus/deepseek", label: "copilot-plus-deepseek-v4-pro", enabled: true, capabilities: [] },
@@ -37,11 +34,6 @@ const PLUS_GROUP: ModelEnableGroup = {
   ],
 };
 
-/**
- * `isFree` belongs here rather than on a Plus row: it marks a zero-cost model
- * routed through a third party, which is what earns the privacy warning. A paid
- * Plus model carrying that flag is a combination production never produces.
- */
 const FREE_GROUP: ModelEnableGroup = {
   key: "agent",
   label: "OpenCode",
@@ -49,7 +41,6 @@ const FREE_GROUP: ModelEnableGroup = {
   rows: [{ id: "opencode/grok-code", label: "grok-code-fast-1", enabled: true, isFree: true }],
 };
 
-/** Search is controlled, so a story has to own the query for the field to behave. */
 const Controlled: React.FC<{ groups: ModelEnableGroup[] }> = ({ groups }) => {
   const [query, setQuery] = React.useState("");
   return (
@@ -75,7 +66,6 @@ const meta = {
 } satisfies Meta<ModelEnableListProps>;
 export default meta;
 
-/** The state the height cap exists for: a catalog longer than the card. */
 export const OverflowingCatalog: StoryObj<ModelEnableListProps> = {
   render: () => <Controlled groups={[PLUS_GROUP, FREE_GROUP, LONG_GROUP]} />,
 };
@@ -88,13 +78,6 @@ export const Empty: StoryObj<ModelEnableListProps> = {
   render: () => <Controlled groups={[]} />,
 };
 
-/**
- * No license: the Copilot group is synthesized rather than absent, in the same
- * highlighted first position a licensed user's group occupies. Every row carries
- * a lock and an inert toggle indicator. Click anywhere on a row, including the
- * lock or toggle area, or Tab to it and press Enter to open pricing with
- * model-settings-lock attribution. No model becomes enabled.
- */
 export const LockedCopilotCatalog: StoryObj<ModelEnableListProps> = {
   args: {
     groups: [

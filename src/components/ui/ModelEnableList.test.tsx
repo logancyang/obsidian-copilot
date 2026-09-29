@@ -4,7 +4,6 @@ import { ModelEnableList, type ModelEnableGroup } from "@/components/ui/ModelEna
 import { createEvent, fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 
-// Two provider groups, one row each, so we can assert per-group open/closed.
 const GROUPS: ModelEnableGroup[] = [
   {
     key: "provider-a",
@@ -18,11 +17,6 @@ const GROUPS: ModelEnableGroup[] = [
   },
 ];
 
-/**
- * Radix Collapsible keeps collapsed content mounted but marks the trigger/root
- * with `data-state="closed"`. Read the group's open state off its heading's
- * nearest `[data-state]` ancestor rather than DOM presence.
- */
 function groupState(label: string): string | null | undefined {
   const heading = screen.getByText(label);
   return heading.closest("[data-state]")?.getAttribute("data-state");
@@ -96,7 +90,6 @@ describe("ModelEnableList", () => {
     );
     it("renders the locked gallery catalog with all required controlled props (https://github.com/Brevilabs/obsidian-copilot-private/issues/427)", () => {
       type Props = React.ComponentProps<typeof ModelEnableList>;
-      // Match the gallery's meta + story merge so omitted required args cannot hide behind renderList defaults.
       const args = {
         ...(modelEnableStories as Meta<Props>).args,
         ...LockedCopilotCatalog.args,
@@ -132,9 +125,7 @@ describe("ModelEnableList", () => {
 
     it("re-applies the collapsed default once the search query clears", () => {
       const { rerender } = renderList({ defaultOpenGroupKey: "provider-a", query: "Model" });
-      // Searching → both open.
       expect(groupState("Provider B")).toBe("open");
-      // Query cleared → the untouched non-default group collapses again.
       rerender(
         <ModelEnableList
           groups={GROUPS}
@@ -150,11 +141,8 @@ describe("ModelEnableList", () => {
 
     it("remembers a user's explicit expand of a non-default group across props updates", () => {
       const { rerender } = renderList({ defaultOpenGroupKey: "provider-a" });
-      // User expands the collapsed second group.
       fireEvent.click(screen.getByText("Provider B"));
       expect(groupState("Provider B")).toBe("open");
-      // A later props update (e.g. model discovery re-derives groups) must not
-      // clobber the user's intent.
       rerender(
         <ModelEnableList
           groups={GROUPS}
@@ -168,8 +156,6 @@ describe("ModelEnableList", () => {
     });
 
     it("applies the collapsed default to groups that appear after an empty first render", () => {
-      // Groups can arrive asynchronously (backend model discovery): first render
-      // empty, then populated. Late-arriving groups must still honor the default.
       const { rerender } = render(
         <ModelEnableList
           groups={[]}

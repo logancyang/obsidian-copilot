@@ -15,10 +15,8 @@ const meta = {
 } satisfies Meta<CopilotPlusExpiredModalContentProps>;
 export default meta;
 
-/** The lapsed user is on their own model: renewing is a choice, so no warning. */
 export const NoWarning: StoryObj<CopilotPlusExpiredModalContentProps> = {};
 
-/** The lapsed user's default chat model is a Copilot one, so it is about to stop answering. */
 export const ModelsWillStopWorking: StoryObj<CopilotPlusExpiredModalContentProps> = {
   args: { isUsingPlusModels: true },
 };

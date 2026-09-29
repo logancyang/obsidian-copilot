@@ -276,9 +276,6 @@ export function OpenArtifactsModalContent({
   );
 }
 
-/**
- * Hosts the complete state-aware OpenArtifacts confirmation and result flow for one note.
- */
 export class OpenArtifactsModal extends Modal {
   private root: Root | null = null;
 

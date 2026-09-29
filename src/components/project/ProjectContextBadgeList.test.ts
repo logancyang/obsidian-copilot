@@ -8,7 +8,6 @@ describe("ProjectContextBadgeList", () => {
     });
 
     it("categorizes patterns by type", () => {
-      // Encoded: folder, #tag, [[note]], *.pdf, [Topics:Physics], [Topics:]
       const value =
         "my-folder,%23tag,%5B%5Bnote%5D%5D,*.pdf,%5BTopics%3APhysics%5D,%5BTopics%3A%5D";
       const items = buildBadgeItems(value);
@@ -60,7 +59,6 @@ describe("ProjectContextBadgeList", () => {
 
       expect(result).toContain("%23tag2");
       expect(result).toContain("my-folder");
-      // Verify #tag1 is gone — check decoded result doesn't include it
       const remaining = decodeURIComponent(result);
       expect(remaining).not.toContain("#tag1");
     });
@@ -119,7 +117,6 @@ describe("ProjectContextBadgeList", () => {
     });
 
     it("falls back to the raw pattern when a property pattern cannot be parsed", () => {
-      // A malformed pattern that slipped through as `property`: no crash, show it verbatim.
       expect(getBadgeLabel({ pattern: "not-a-property", type: "property" })).toBe("not-a-property");
     });
   });

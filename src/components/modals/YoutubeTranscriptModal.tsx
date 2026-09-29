@@ -72,7 +72,6 @@ function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
         );
       }
 
-      // Store transcript data
       const newTranscriptData: TranscriptData = {
         videoId: validation.videoId!,
         transcript: response.response.transcript,
@@ -135,7 +134,6 @@ function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
   if (currentView === "display" && transcriptData) {
     return (
       <div className="tw-flex tw-flex-col tw-gap-4">
-        {/* Video info section */}
         <div className="tw-rounded tw-bg-secondary tw-p-3">
           <a
             href={transcriptData.url}
@@ -147,14 +145,12 @@ function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
           </a>
         </div>
 
-        {/* Transcript content */}
         <div className="tw-max-h-96 tw-overflow-y-auto tw-rounded tw-border tw-border-border tw-bg-primary tw-p-4">
           <div className="tw-whitespace-pre-wrap tw-text-sm tw-leading-relaxed">
             {transcriptData.transcript}
           </div>
         </div>
 
-        {/* Buttons */}
         <div className="tw-flex tw-justify-end tw-gap-2">
           <Button variant="ghost" onClick={handleDownloadAnother}>
             Download Another
@@ -175,7 +171,6 @@ function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
-      {/* URL input section */}
       <div className="tw-flex tw-flex-col tw-gap-2">
         <div className="tw-text-sm tw-text-muted">Enter a valid YouTube video URL</div>
         <Input
@@ -188,7 +183,6 @@ function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
         {error && <div className="tw-text-sm tw-text-error">{error}</div>}
       </div>
 
-      {/* Buttons */}
       <div className="tw-flex tw-justify-end tw-gap-2">
         <Button variant="secondary" onClick={onClose} disabled={isLoading}>
           Cancel
@@ -210,7 +204,6 @@ export class YoutubeTranscriptModal extends Modal {
 
   constructor(app: App) {
     super(app);
-    // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
     this.setTitle("Download YouTube Script (plus)");
   }

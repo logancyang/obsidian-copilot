@@ -14,89 +14,36 @@ import React from "react";
 
 const SETTINGS_PRICING_URL = createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "model_settings_lock");
 
-/** A single toggleable model row. */
 export interface ModelEnableRow {
-  /** Stable identity used for the toggle callback (a `configuredModelId`). */
   id: string;
-  /** Primary label shown to the user. */
   label: string;
-  /** Optional secondary line — the model's capability blurb. */
   description?: string;
-  /** Wire id, matched by search but never rendered (it duplicates the label). */
   wireId?: string;
-  /** Whether the model is currently enabled. */
   enabled: boolean;
-  /** Modality icons (vision/websearch) shown beside the label; reasoning is not rendered. */
   capabilities?: ModelCapability[];
-  /**
-   * `true` for a free model (zero catalog cost) routed through a third party.
-   * Renders a privacy-warning icon + tooltip beside the label, since such
-   * providers may retain or train on prompts. Self-hosted / local models
-   * (Ollama, LM Studio) are excluded.
-   */
   isFree?: boolean;
-  /**
-   * `true` for a Copilot model the user has no license to run, listed so the
-   * lineup is discoverable before they buy. Renders a lock icon beside the label
-   * and an inert toggle indicator. The row links to pricing, not model enablement.
-   */
   locked?: boolean;
 }
 
-/** A provider-display-name-grouped section of model rows. */
 export interface ModelEnableGroup {
-  /** Stable key used for React keys. */
   key: string;
-  /** Group heading — a provider display name (no glyphs/avatars). */
   label: string;
-  /**
-   * Short badge shown after the label. For most origins it's an origin tag
-   * (e.g. "BYOK", "Agent Provided") set only when the list spans multiple
-   * origins, so it actually disambiguates. Copilot Plus instead carries a
-   * "privacy" badge.
-   */
   badge?: string;
-  /**
-   * Optional hover hint rendered as a small icon after the badge (e.g.
-   * "Copilot license required" for the Copilot Plus group).
-   */
   tooltip?: string;
-  /**
-   * Visually emphasize the group header (accent color). Set for Copilot Plus,
-   * which the caller also floats to the top of the list.
-   */
   highlight?: boolean;
   rows: ModelEnableRow[];
 }
 
 interface ModelEnableListProps {
-  /** Provider-grouped rows to render. Already filtered/derived by the caller. */
   groups: ModelEnableGroup[];
-  /** Toggle handler — `enabled` is the next desired state. */
   onToggle: (id: string, enabled: boolean) => void;
-  /** Search query (controlled). */
   query: string;
   onQueryChange: (next: string) => void;
-  /** Placeholder for the search box. */
   searchPlaceholder?: string;
-  /** Rendered when there are no groups/rows to show (after filtering). */
   emptyState?: React.ReactNode;
-  /**
-   * When set, only the group with this key starts expanded; all others start
-   * collapsed. A user's explicit expand/collapse still wins (tracked per key),
-   * and search still forces every group open. Omit (default) to start every
-   * group open. Pass a stable scalar (e.g. `groups[0]?.key`), never a fresh
-   * array/object, so this doesn't churn the collapse state.
-   */
   defaultOpenGroupKey?: string;
 }
 
-/**
- * Presentational toggle list for agent model curation: provider-grouped rows, a
- * search box, and a switch per row. Owns no registry/atom access — the container
- * passes grouped data and `onToggle`. Group headings show the provider display
- * name only (no glyphs/avatars).
- */
 export const ModelEnableList: React.FC<ModelEnableListProps> = ({
   groups,
   onToggle,
@@ -108,14 +55,6 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
 }) => {
   const searching = query.trim().length > 0;
 
-  // Track only the groups the user explicitly toggled (key → user's open/closed
-  // intent); untouched groups fall back to the default. While searching, force
-  // every group open so matches are never hidden; the remembered intent
-  // re-applies once the query clears.
-  //
-  // Default when a key hasn't been touched:
-  //   - `defaultOpenGroupKey` set → only that group is open (first-group-open);
-  //   - otherwise → every group is open (legacy behavior, e.g. Quick Chat).
   const [userOpen, setUserOpen] = React.useState<Record<string, boolean>>({});
   const isOpen = (key: string) => {
     if (searching) return true;
@@ -128,7 +67,7 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
   const renderRows = (rows: ModelEnableRow[]): React.ReactNode => (
     <div className="tw-space-y-1">
       {rows.map((row) => {
-        // Locked models link to plans without exposing an enable control inside the link.
+        // A locked row is a link, so it must not contain an enable control.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
         const Row = row.locked ? "a" : "div";
         return (
@@ -186,9 +125,6 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
     <div className="tw-flex tw-flex-col tw-gap-2">
       <SearchBar value={query} onChange={onQueryChange} placeholder={searchPlaceholder} />
 
-      {/* Caps the list at roughly ten rows (a row is ~32px: 20px of text, 8px of
-          padding, 4px of gap) so a long catalog scrolls inside the card instead
-          of pushing everything below it off the settings pane. */}
       <div className="tw-max-h-80 tw-overflow-y-auto tw-pr-1">
         {!hasRows ? (
           <div className="tw-py-6 tw-text-center tw-text-sm tw-text-muted">
@@ -226,9 +162,6 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
                         </Badge>
                       )}
                       {group.tooltip && (
-                        // Stop pointer/click from bubbling to the CollapsibleTrigger so
-                        // tapping the hint (which opens the tooltip on mobile) doesn't
-                        // also collapse/expand the group.
                         <span
                           className="tw-flex tw-shrink-0 tw-items-center"
                           onClick={(e) => e.stopPropagation()}

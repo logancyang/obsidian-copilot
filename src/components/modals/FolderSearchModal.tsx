@@ -13,10 +13,8 @@ export class FolderSearchModal extends FuzzySuggestModal<string> {
     const folderSet = new Set<string>();
     const ignoredFolders = extractAppIgnoreSettings(this.app);
 
-    // Get all files in vault
     this.app.vault.getAllLoadedFiles().forEach((file) => {
       if (file.parent?.path && file.parent.path !== "/") {
-        // Check if the folder or any of its parent folders are ignored
         const shouldInclude = !ignoredFolders.some(
           (ignored) => file.parent!.path === ignored || file.parent!.path.startsWith(ignored + "/")
         );

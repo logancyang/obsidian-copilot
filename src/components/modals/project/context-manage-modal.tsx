@@ -92,8 +92,6 @@ interface SectionHeaderProps {
   iconColorClassName: string;
   onAddClick: () => void;
   tooltip?: string;
-  /** When provided, the title (icon + label) is clickable — lists the whole
-   * category on the right (agent Links variant). Omitted for CAG → not clickable. */
   onTitleClick?: () => void;
 }
 
@@ -118,7 +116,6 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
         <IconComponent className={`tw-mr-2 tw-size-4 ${iconColorClassName}`} />
         <h3 className={`tw-text-sm tw-font-semibold ${iconColorClassName}`}>{title}</h3>
         {tooltip && (
-          // Stop the tooltip click from bubbling to the (agent-clickable) title.
           <span onClick={(e) => e.stopPropagation()}>
             <HelpTooltip
               buttonClassName="tw-ml-2 tw-size-4 tw-text-muted"
@@ -160,7 +157,6 @@ interface SectionListProps {
   onAddClick: () => void;
   onDeleteItem: (e: React.MouseEvent, item: SectionItem) => void;
   tooltip?: string;
-  /** Forwarded to the header's title click (agent Links variant). */
   onSectionClick?: () => void;
 }
 
@@ -225,33 +221,19 @@ const SectionList: React.FC<SectionListProps> = ({
   );
 };
 
-// ============================================================================
-// Project Context Load Status Types and Utilities
-// ============================================================================
-
-// ============================================================================
-// ItemCard Component
-// ============================================================================
-
 interface ItemCardProps {
   item: GroupItem;
   viewMode: "list";
-  /** Per-file conversion status from the agent pipeline, rendered via the
-   * shared {@link ProcessingStatusIcon}. */
   agentProcessingItem?: ProcessingItem;
   onDelete: (e: React.MouseEvent, item: GroupItem) => void;
-  /** Optional: callback to open the cached parsed content for this file. */
   onOpenCached?: () => void;
 }
 
 function ItemCard({ item, viewMode, agentProcessingItem, onDelete, onOpenCached }: ItemCardProps) {
   const extension = item.id.split(".").pop() || "";
 
-  // add or remove
   const IconComponent = item.isIgnored ? Plus : XIcon;
 
-  // "View parsed content" arrow, revealed on row hover once the source has a
-  // converted snapshot.
   const previewButton =
     onOpenCached && agentProcessingItem?.status === "ready" ? (
       <Button
@@ -284,8 +266,6 @@ function ItemCard({ item, viewMode, agentProcessingItem, onDelete, onOpenCached 
       </div>
 
       <div className="tw-ml-auto tw-flex tw-min-w-[24px] tw-items-center tw-justify-end tw-gap-2">
-        {/* Order is [preview][status][delete]; the status is a bare icon (ready
-            hidden until row hover), error revealed on hover. */}
         {previewButton}
         {agentProcessingItem && (
           <ProcessingStatusIcon item={agentProcessingItem} revealReadyOnHover />
@@ -299,18 +279,6 @@ function ItemCard({ item, viewMode, agentProcessingItem, onDelete, onOpenCached 
   );
 }
 
-/**
- * DESIGN NOTE — this modal's property visual states (the icon below, the
- * Properties section, its value rows) have no component-gallery story, unlike
- * the sibling editors ProjectContextBadgeList and ProjectContextSourceEditor.
- * A story can only mount an exported component, and this file exports just the
- * Obsidian `Modal` subclass; every React part here is module-private. Covering
- * it would mean exporting `ContextManage` solely so the gallery can reach it,
- * which no story in this repo does — the widened production surface costs more
- * than the coverage buys, since the property icon and hue are identical to the
- * two components that are covered. If a future review flags this again, point
- * them at this note.
- */
 function CategoryItemCard({
   item,
   onClick,
@@ -351,8 +319,6 @@ function CategoryItemCard({
     >
       <div className="tw-mr-2 tw-shrink-0">
         {item.type === "web" || item.type === "youtube" ? (
-          // Reuse the canonical URL glyph so the card matches every other URL
-          // surface (Links sidebar, +URL popover, context chips).
           <UrlTypeIcon type={item.type} className="tw-size-6" />
         ) : (
           IconComponent && <IconComponent className={`tw-size-6 ${iconColorClassName}`} />
@@ -376,10 +342,6 @@ interface ContextManageProps {
   onSave: (project: ProjectConfig) => void;
   onCancel: () => void;
   app: App;
-  /** Agent Mode: show the Links (Web/YouTube) section and persist URL edits.
-   * Off for CAG callers, leaving this modal's file-only behavior unchanged. */
-  /** Portal target for the Links +URL popover — the modal's own `contentEl`, so
-   * the popover (layer 30) stacks above this modal (layer 50). */
   popoverContainer?: HTMLElement | null;
 }
 
@@ -424,9 +386,6 @@ function ContextManage({
 }: ContextManageProps) {
   const isMobile = Platform.isMobile;
   const contextUrls = useContextUrls(initialProject);
-  // One shared conversion-status lookup keyed by `processingSourceKey`,
-  // covering both URL rows and File Context rows so they render the same
-  // {@link ProcessingStatusIcon}.
   const { items: agentProcessingItems } = useAgentProcessingItems(
     app,
     initialProject,
@@ -449,7 +408,6 @@ function ContextManage({
     return app.vault.getFiles();
   }, [app.vault]);
 
-  // init groupList
   const createAndPopulateGroupList = useCallback(
     (
       appFiles: TFile[],
@@ -482,7 +440,6 @@ function ContextManage({
         }
       };
 
-      // initialize groups
       const tags: Record<string, Array<GroupItem>> = {};
       const folders: Record<string, Array<GroupItem>> = {};
       const extensions: Record<string, Array<GroupItem>> = {};
@@ -502,15 +459,11 @@ function ContextManage({
         properties[property] = [];
       });
 
-      // Traverse the files and populate them into corresponding groups
       projectAllFiles.forEach((file) => {
-        // tag
         processPatternGroup(file, inclusionPatterns?.tagPatterns, "tagPatterns", tags);
 
-        // folder
         processPatternGroup(file, inclusionPatterns?.folderPatterns, "folderPatterns", folders);
 
-        // extension
         processPatternGroup(
           file,
           inclusionPatterns?.extensionPatterns,
@@ -518,7 +471,6 @@ function ContextManage({
           extensions
         );
 
-        // property
         processPatternGroup(
           file,
           inclusionPatterns?.propertyPatterns,
@@ -526,7 +478,6 @@ function ContextManage({
           properties
         );
 
-        // note/file
         if (
           inclusionPatterns?.notePatterns &&
           shouldIndexFile(
@@ -557,11 +508,9 @@ function ContextManage({
   );
 
   const [groupList, setGroupList] = useState<GroupListItem>(() => {
-    // init include files
     return createAndPopulateGroupList(appAllFiles, inclusionPatterns, exclusionPatterns);
   });
   const [ignoreItems, setIgnoreItems] = useState<IgnoreItems>(() => {
-    // init exclude files
     const excludeFiles = appAllFiles.filter(
       (file) => exclusionPatterns && shouldIndexFile(app, file, exclusionPatterns, null, true)
     );
@@ -579,8 +528,6 @@ function ContextManage({
   const isLinksActive =
     activeSection === "links" || activeSection === "web" || activeSection === "youtube";
 
-  // A file row's status + snapshot-preview, resolved in ONE place so the JSX
-  // doesn't branch per prop. Ignored rows get neither.
   const getFileRowStatusProps = useCallback(
     (item: GroupItem): Pick<ItemCardProps, "agentProcessingItem" | "onOpenCached"> => {
       if (item.isIgnored || activeSection === "ignoreFiles") return {};
@@ -593,7 +540,6 @@ function ContextManage({
     [activeSection, agentProcessingByKey, app]
   );
 
-  //  groupList convert to inclusions format
   const convertGroupListToInclusions = useCallback(
     (list: GroupListItem, appFiles: TFile[]): string => {
       const tagPatterns = Object.keys(list.tags);
@@ -620,7 +566,6 @@ function ContextManage({
     [app.vault]
   );
 
-  // ignore file items convert to exclusions format
   const convertDeletedItemsToExclusions = useCallback((items: IgnoreItems): string => {
     const notePatterns = new Array(...items.files).map((file) => getFilePattern(file));
 
@@ -678,12 +623,10 @@ function ContextManage({
 
     parts.forEach((part) => {
       if (part.startsWith("#")) {
-        // tag
         tags.push(part.substring(1));
       } else if (part.startsWith(".") || part.startsWith("*.")) {
         extensions.push(part.replace("*", ""));
       } else {
-        // All other content is matched as title.
         titles.push(part);
       }
     });
@@ -698,7 +641,6 @@ function ContextManage({
 
   const getDisplayItems = useMemo<DisplayItem[]>(() => {
     if (searchTerm) {
-      // Custom search
       const parsedQuery = parseSearchQuery(searchTerm);
       return allItems
         .filter((item) => {
@@ -756,8 +698,6 @@ function ContextManage({
       return [];
     }
 
-    // Clicking the Tags header (agent Links variant) lists every tag. CAG never
-    // reaches this state — its header isn't clickable — so behavior is unchanged.
     if (activeSection === "tags") {
       return sortItems(
         Object.entries(groupList.tags).map(([tagId, files]) => ({
@@ -778,7 +718,6 @@ function ContextManage({
       return [];
     }
 
-    // Clicking the Folders header (agent Links variant) lists every folder.
     if (activeSection === "folders") {
       return sortItems(
         Object.entries(groupList.folders).map(([folderId, files]) => ({
@@ -811,7 +750,6 @@ function ContextManage({
       return [];
     }
 
-    // Clicking the Properties header (agent Links variant) lists every property.
     if (activeSection === "properties") {
       return sortItems(
         Object.entries(groupList.properties).map(([propertyId, files]) => ({
@@ -831,7 +769,6 @@ function ContextManage({
       }));
     }
 
-    // When no part is selected, return all items
     if (!activeSection) {
       const tagItems = sortItems(
         Object.entries(groupList.tags).map(([tagId, files]) => ({
@@ -887,9 +824,6 @@ function ContextManage({
             ]
           : [];
 
-      // List Web and YouTube as their own cards so the overview surfaces every
-      // context type the same way (one card per non-empty group, exactly like
-      // folders). Leads the grid to mirror the sidebar, where Links sits first.
       const webCount = contextUrls.urlItems.filter((u) => u.type === "web").length;
       const youtubeCount = contextUrls.urlItems.filter((u) => u.type === "youtube").length;
       const linkItems = [
@@ -961,7 +895,6 @@ function ContextManage({
       const ignoreFiles = [...latestIgnoreItems.current.files];
       const matchingFiles: GroupItem[] = getMatchingFilesFromApp(patternConfig).map((v) => ({
         ...v,
-        // add flag if file is ignored
         isIgnored: ignoreFiles.some((f) => f.path === v.id),
       }));
 
@@ -997,7 +930,6 @@ function ContextManage({
       removeFileFromGroupObject(newGroupList.extensions);
       removeFileFromGroupObject(newGroupList.properties);
 
-      // Remove file from notes
       newGroupList.notes = newGroupList.notes.filter((item) => item.id !== filePath);
 
       return newGroupList;
@@ -1016,7 +948,6 @@ function ContextManage({
     []
   );
 
-  // Unified processor
   const groupHandlers = useMemo(() => {
     const createDeleteHandler = (groupType: keyof Omit<GroupListItem, "notes">) => {
       return (e: React.MouseEvent, item: SectionItem) => {
@@ -1050,8 +981,6 @@ function ContextManage({
         },
 
         property: () => {
-          // The modal builds the `[key:value]` pattern from real vault data; add it
-          // straight to the group keyed by that pattern (mirrors the tag flow).
           new PropertySearchModal(app, (propertyPattern) => {
             addPatternToGroup("properties", propertyPattern, {
               propertyPatterns: [propertyPattern],
@@ -1072,7 +1001,6 @@ function ContextManage({
               const existingNote = groupList.notes.find((note) => note.id === file.path);
               if (existingNote) return;
 
-              // remove file from ignore
               setIgnoreItems((prev) => {
                 const newFiles = new Set(prev.files);
                 newFiles.delete(file);
@@ -1090,16 +1018,8 @@ function ContextManage({
         },
 
         extension: () => {
-          // todo(emt-lin)：maybe use this in the future
           new Notice("Adding extension is temporarily not supported.");
           return;
-          /*new ExtensionInputModal(app, (extension: string) => {
-            if (extension.trim() === "") return;
-            const extensionPattern = getExtensionPattern(extension);
-            addPatternToGroup("extensions", extensionPattern, {
-              extensionPatterns: [extensionPattern],
-            });
-          }).open();*/
         },
 
         ignoreFile: () => {
@@ -1115,7 +1035,6 @@ function ContextManage({
                 return { ...prev, files: newFiles };
               });
 
-              // Remove related files from the groupList
               setGroupList((prev) => removeFileFromGroupList(prev, file.path));
             },
             excludeFilePaths: [],
@@ -1203,9 +1122,6 @@ function ContextManage({
     return "All Categories";
   };
 
-  // Agent Links variant: clicking the Tags/Folders header lists that category's
-  // entries on the right. Those are CategoryItems, so the right pane must use the
-  // category-card branch (not the file ItemCard branch) for these states.
   const showingCategoryItems =
     !searchTerm &&
     !activeItem &&
@@ -1216,7 +1132,6 @@ function ContextManage({
 
     const file = app.vault.getAbstractFileByPath(item.id);
     if (file instanceof TFile) {
-      // add file to ignore
       setIgnoreItems((prev) => {
         const newFiles = new Set(prev.files);
         newFiles.add(file);
@@ -1258,7 +1173,6 @@ function ContextManage({
         return { ...prev, files: newFiles };
       });
 
-      // refresh groupList
       refreshGroupListFromCurrentPatterns();
     }
   };
@@ -1272,8 +1186,6 @@ function ContextManage({
         ...initialProject.contextSource,
         inclusions: include,
         exclusions: exclude,
-        // Agent Mode only: persist URL edits back. CAG callers don't enable
-        // Links, so their save payload is byte-for-byte unchanged.
         webUrls: contextUrls.webUrls,
         youtubeUrls: contextUrls.youtubeUrls,
       },
@@ -1283,18 +1195,14 @@ function ContextManage({
   return (
     <div className="tw-flex tw-h-full tw-flex-col">
       <ResizablePanelGroup direction="horizontal" className="tw-flex-1">
-        {/* Left Sidebar - Navigation */}
         <ResizablePanel defaultSize={isMobile ? 35 : 30} minSize={20} maxSize={40}>
           <div className="tw-flex tw-h-full tw-flex-col">
-            {/* Header */}
             <div className="tw-border-b tw-p-4">
               <h2 className="tw-text-lg tw-font-semibold">File Context</h2>
             </div>
 
             <ScrollArea className="tw-max-h-[500px] tw-flex-1">
               <div className="tw-space-y-6 tw-p-4">
-                {/* Links first: URLs are the most-used source in projects, so
-                    the section leads the navigation. */}
                 <LinksSidebarSection
                   activeSection={activeSection}
                   webCount={contextUrls.urlItems.filter((u) => u.type === "web").length}
@@ -1306,7 +1214,6 @@ function ContextManage({
                 />
                 <Separator />
 
-                {/* Tags Section */}
                 <SectionList
                   title="Tags"
                   IconComponent={TagIcon}
@@ -1325,8 +1232,6 @@ function ContextManage({
 
                 <Separator />
 
-                {/* Properties Section — includes notes by a frontmatter property
-                    (e.g. Topics: Physics), the taxonomy some vaults use instead of tags. */}
                 <SectionList
                   title="Properties"
                   IconComponent={SlidersHorizontal}
@@ -1346,7 +1251,6 @@ function ContextManage({
 
                 <Separator />
 
-                {/* Folders Section */}
                 <SectionList
                   title="Folders"
                   IconComponent={FolderIcon}
@@ -1363,7 +1267,6 @@ function ContextManage({
 
                 <Separator />
 
-                {/* Files Section */}
                 <div>
                   <SectionHeader
                     IconComponent={FileText}
@@ -1384,25 +1287,6 @@ function ContextManage({
 
                 <Separator />
 
-                {/* todo(emt-lin)：maybe use this in the future */}
-                {/* Extensions Section */}
-                {/*<SectionList
-                  title="Extensions"
-                  IconComponent={Hash}
-                  iconColorClassName="tw-text-context-manager-green"
-                  items={makeSectionItem(groupList.extensions)}
-                  activeItem={activeItem}
-                  activeSection={activeSection}
-                  sectionType="extensions"
-                  renderIcon={(item) => <FileIcon extension={item.name} />}
-                  onItemClick={groupHandlers.click.extension}
-                  onAddClick={groupHandlers.add.extension}
-                  onDeleteItem={(e, item) => groupHandlers.delete.extension(e, item)}
-                />
-
-                <Separator />*/}
-
-                {/* Ignore Files Section */}
                 <div>
                   <SectionHeader
                     IconComponent={XIcon}
@@ -1427,10 +1311,8 @@ function ContextManage({
 
         <ResizableHandle withHandle />
 
-        {/* Right Content Area */}
         <ResizablePanel defaultSize={isMobile ? 65 : 70}>
           <div className="tw-flex tw-h-full tw-flex-col">
-            {/* Header */}
             <div className="tw-border-b tw-p-4">
               <SearchBar
                 placeholder="Custom search: title, #tag1, .jpg"
@@ -1444,12 +1326,10 @@ function ContextManage({
               />
             </div>
 
-            {/* Content Title */}
             <div className="tw-p-4">
               <h3 className="tw-text-lg tw-font-medium tw-text-muted">{getDisplayTitle()}</h3>
             </div>
 
-            {/* Content Area */}
             <ScrollArea className="tw-max-h-[400px] tw-flex-1 tw-p-4 tw-pt-0">
               {isLinksActive ? (
                 <LinksContentPanel
@@ -1468,8 +1348,7 @@ function ContextManage({
               ) : (
                 <div className="tw-space-y-2" style={{ display: "block" }}>
                   {activeSection || searchTerm
-                    ? // When a category is selected or a search is performed, display the normal item list.
-                      sortItems(getDisplayItems)
+                    ? sortItems(getDisplayItems)
                         .map((item) => {
                           if (showingCategoryItems && isCategoryItem(item)) {
                             return (
@@ -1496,8 +1375,7 @@ function ContextManage({
                           );
                         })
                         .filter(Boolean)
-                    : // When no category is selected and no search, display the grouped category list.
-                      getDisplayItems
+                    : getDisplayItems
                         .map((item) =>
                           isCategoryItem(item) ? (
                             <CategoryItemCard

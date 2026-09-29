@@ -4,18 +4,6 @@ import { cn } from "@/lib/utils";
 import { AlertCircle, CheckCircle2, Clock, HelpCircle, Loader2 } from "lucide-react";
 import React from "react";
 
-/**
- * Single source of truth for rendering an agent {@link ProcessingItem}'s
- * conversion status — the key it's looked up by, its status glyph, and its label.
- *
- * Every agent surface (the composer status popover, the Manage modal's Links
- * panel, and its File Context list) routes through here so the status semantics
- * never drift across them.
- */
-
-/** Canonical lookup key for a processing item: `<cacheKind>:<id>`. Keying on the
- * cache bucket (not just the id) keeps a URL configured as BOTH web and youtube
- * — two items sharing one id — from clobbering each other. */
 export function processingSourceKey(kind: ProcessingItem["cacheKind"], id: string): string {
   return `${kind}:${id}`;
 }
@@ -24,7 +12,6 @@ export function processingItemKey(item: ProcessingItem): string {
   return processingSourceKey(item.cacheKind, item.id);
 }
 
-/** Index a processing-item list by {@link processingItemKey} for O(1) per-row lookup. */
 export function buildProcessingItemLookup(
   items: readonly ProcessingItem[]
 ): ReadonlyMap<string, ProcessingItem> {
@@ -33,8 +20,6 @@ export function buildProcessingItemLookup(
   return map;
 }
 
-/** Human-readable status label. `contentEmpty` is a sub-state of `ready` (fetched
- * but no extractable content), surfaced as "No content". */
 export function getProcessingStatusLabel(
   status: ProcessingItem["status"],
   contentEmpty?: boolean
@@ -55,8 +40,6 @@ export function getProcessingStatusLabel(
 }
 
 function ProcessingStatusGlyph({ item, className }: { item: ProcessingItem; className?: string }) {
-  // contentEmpty rides on "ready": fetched OK but empty, so it warns rather than
-  // resting on the green check.
   if (item.status === "ready" && item.contentEmpty) {
     return <HelpCircle className={cn("tw-size-3.5 tw-text-warning", className)} />;
   }
@@ -77,16 +60,10 @@ function ProcessingStatusGlyph({ item, className }: { item: ProcessingItem; clas
 interface ProcessingStatusIconProps {
   item: ProcessingItem;
   className?: string;
-  /** Dense rows: a settled `ready` item rests hidden until the row is hovered
-   * (it needs no attention), while processing/failed/queued stay visible. The
-   * parent row must carry `tw-group`. */
   revealReadyOnHover?: boolean;
-  /** Wrap the glyph in a tooltip showing the label (or the error when failed).
-   * Off for surfaces that already render the label as adjacent text. */
   tooltip?: boolean;
 }
 
-/** The shared per-item status glyph. */
 export function ProcessingStatusIcon({
   item,
   className,

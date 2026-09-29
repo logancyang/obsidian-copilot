@@ -16,7 +16,6 @@ describe("CopilotPlusExpiredModal", () => {
       render(<CopilotPlusExpiredModalContent onCancel={jest.fn()} isUsingPlusModels={false} />);
 
       expect(screen.queryByText(WARNING)).toBeNull();
-      // The lapsed-license message itself is not conditional.
       expect(screen.getByText(/license key is no longer valid/)).toBeTruthy();
     });
 

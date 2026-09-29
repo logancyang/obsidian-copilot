@@ -12,7 +12,6 @@ const ScrollArea = React.forwardRef<
     className={cn("tw-relative tw-overflow-hidden", className)}
     {...props}
   >
-    {/*[&>div:first-child]:!tw-block：for override the first child div style's (display: table)*/}
     <ScrollAreaPrimitive.Viewport className="tw-size-full tw-rounded-[inherit] [&>div:first-child]:!tw-block">
       {children}
     </ScrollAreaPrimitive.Viewport>
@@ -39,7 +38,6 @@ const ScrollBar = React.forwardRef<
     )}
     {...props}
   >
-    {/* tw-bg-border -> --divider-color: var(--background-modifier-border); */}
     <ScrollAreaPrimitive.ScrollAreaThumb className="tw-relative tw-flex-1 tw-rounded-full tw-bg-[var(--background-modifier-border)]" />
   </ScrollAreaPrimitive.ScrollAreaScrollbar>
 ));

@@ -20,55 +20,13 @@ import { cn } from "@/lib/utils";
 
 const PICKER_PRICING_URL = createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "model_picker_lock");
 
-/**
- * Picker entry shape. The selector is normally driven by `settings.activeModels`,
- * but callers can pass an explicit `models` list (e.g. Agent Mode merges
- * Copilot-configured models with backend-reported ones). To surface a
- * non-API-key reason for a disabled option, set `_disabledReason` on the
- * synthetic entry; the selector will render the option disabled with the
- * reason as a right-side label.
- *
- * `_group` opts entries into section headers in the dropdown — when
- * consecutive entries have differing `_group` values, a non-clickable label
- * is rendered before the next group. Used by Agent Mode to subtitle
- * per-backend sections (e.g. `opencode`, `Claude Code`). Backwards
- * compatible — entries without `_group` render flat as today.
- *
- * Agent Mode tags every entry with `_backendId` so the selector can route
- * the selected key back to the right backend. `getModelKeyFromModel`
- * prefixes the key with the backend id when set, keeping React keys /
- * dropdown values unique even when two backends report the same
- * agent-native model id (e.g. both surface a `sonnet` alias).
- */
 export type ModelSelectorEntry = CustomModel & {
   _disabledReason?: string;
   _group?: string;
   _backendId?: string;
-  /**
-   * Optional second line rendered beneath the title in the dropdown row.
-   * Carries the model's capability blurb so the picker row matches the settings
-   * list row. The collapsed trigger pill ignores it and stays single-line.
-   */
   _subtitle?: string;
-  /**
-   * `true` for an opencode Zen model (opencode's self-hosted free tier). The
-   * dropdown row renders a privacy-warning icon + tooltip beside the name,
-   * since prompts go to a third party that may retain or train on them.
-   */
   _isFree?: boolean;
-  /**
-   * `true` when Self-Host Mode is on and this is a cloud provider/agent. The
-   * dropdown row renders a cloud-egress warning icon + tooltip beside the name;
-   * the model stays selectable (Self-Host Mode marks, it doesn't block).
-   */
   _needsSelfHostWarning?: boolean;
-  /**
-   * `true` for a Copilot model the user has no license to run, shown so the
-   * lineup is discoverable before they buy. The row renders a lock icon +
-   * tooltip beside the name and suppresses the right-side `_disabledReason`
-   * label, which would otherwise print that same sentence twice.
-   * Activation opens pricing rather than selecting the unavailable model.
-   */
   _needsLicense?: boolean;
 };
 
@@ -77,18 +35,9 @@ interface ModelSelectorProps {
   size?: "sm" | "fit" | "default" | "lg" | "icon";
   variant?: "default" | "destructive" | "secondary" | "ghost" | "ghost2" | "link" | "success";
   className?: string;
-  // Always controlled
   value: string;
   onChange: (modelKey: string) => void;
-  /**
-   * Models to show. Agent-backed callers can supply synthesized entries and
-   * mark unusable rows with `_disabledReason`.
-   */
   models: ModelSelectorEntry[];
-  /**
-   * Settings snapshot used for BYOK checks. Omit when the model provider owns
-   * authentication and `_disabledReason` is the only availability gate.
-   */
   apiKeySettings?: Readonly<ModelApiKeySettings>;
 }
 
@@ -129,9 +78,6 @@ export function ModelSelector({
               <span className="tw-truncate">Select Model</span>
             )}
           </div>
-          {/* Persist the cloud-egress warning on the closed trigger too — otherwise a
-              selected cloud model under Self-Host Mode shows no warning until the menu
-              is opened. stopPropagation=false so a click still opens the picker. */}
           {currentModel?._needsSelfHostWarning && (
             <SelfHostCloudWarningIcon className="tw-mt-0.5" stopPropagation={false} />
           )}
@@ -146,8 +92,6 @@ export function ModelSelector({
             ? checkModelApiKey(model, apiKeySettings).hasApiKey
             : true;
           const itemDisabled = Boolean(disabledReason) || !hasApiKey;
-          // A locked Copilot row says why through its lock icon, so the
-          // right-side label would only print that sentence twice.
           const rightLabel = model._needsLicense
             ? null
             : (disabledReason ?? (!hasApiKey ? "Needs API key" : null));
@@ -168,8 +112,6 @@ export function ModelSelector({
                 disabled={itemDisabled && !model._needsLicense}
                 title={disabledReason ?? undefined}
                 onSelect={(event) => {
-                  // Locked models offer plans, never a model switch.
-                  // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
                   if (model._needsLicense) {
                     (event.currentTarget as HTMLElement).win.open(
                       PICKER_PRICING_URL,
@@ -189,7 +131,6 @@ export function ModelSelector({
                   } catch (error) {
                     const msg = `Model switch failed: ` + err2String(error);
                     setModelError(msg);
-                    // Restore to the last valid model
                     const lastValidModel = models.find(
                       (m) => m.enabled !== false && getModelKeyFromModel(m) === value
                     );

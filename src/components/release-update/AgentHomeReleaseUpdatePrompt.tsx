@@ -10,7 +10,6 @@ export interface AgentHomeReleaseUpdatePromptProps {
   video: ReleaseVideo | null;
 }
 
-/** Presents the selected release update treatment inside the empty Agent Home. */
 export function AgentHomeReleaseUpdatePrompt({
   onDismiss,
   onOpen,
@@ -46,7 +45,6 @@ export function AgentHomeReleaseUpdatePrompt({
         </div>
       </div>
       {video && (
-        // Width-capped so a wide pane's 16:9 thumbnail cannot push the banner past the top of the home.
         <a
           aria-label={`Watch demo video: ${video.title}`}
           className="tw-mx-auto tw-mt-3 tw-block tw-max-w-sm tw-overflow-hidden tw-rounded-md tw-border tw-border-solid tw-border-border"

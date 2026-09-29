@@ -22,5 +22,4 @@ const meta = {
 } satisfies Meta<ModePickerProps>;
 export default meta;
 
-/** Auto copy stays permission-neutral because each backend maps it differently. */
 export const Auto: StoryObj<ModePickerProps> = {};

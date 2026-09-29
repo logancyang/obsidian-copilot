@@ -51,11 +51,6 @@ export const NoEffortControl: StoryObj<Props> = {
   },
 };
 
-/**
- * Click a locked row or lock, or Tab to the row and press Enter, to open pricing
- * with model-picker-lock attribution. Drafting another model or effort first
- * must not commit that change when pricing opens. Reopen to check the selection.
- */
 export const Unlicensed: StoryObj<Props> = {
   args: {
     override: {

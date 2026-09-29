@@ -22,9 +22,6 @@ interface ModePickerProps {
   className?: string;
 }
 
-/**
- * Display copy keyed by canonical `CopilotMode`.
- */
 const MODE_DISPLAY: Record<CopilotMode, { label: string; description: string }> = {
   auto: {
     label: "Auto",
@@ -40,11 +37,6 @@ const MODE_DISPLAY: Record<CopilotMode, { label: string; description: string }> 
   },
 };
 
-/**
- * Canonical display label for a mode. Single source of truth so every surface
- * that names a mode (currently this picker's trigger) shows the same copy for a
- * given `CopilotMode` — falls back to the raw value for any unmapped mode.
- */
 export function getModeLabel(value: CopilotMode): string {
   return MODE_DISPLAY[value]?.label ?? value;
 }

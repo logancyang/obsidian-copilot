@@ -12,7 +12,6 @@ function CustomPatternInputModalContent({
   onConfirm: (pattern: string) => void;
   onCancel: () => void;
 }) {
-  // TODO: Add validation
   const [pattern, setPattern] = useState("");
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -55,7 +54,6 @@ export class CustomPatternInputModal extends Modal {
     private onConfirm: (pattern: string) => void
   ) {
     super(app);
-    // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
     this.setTitle("Add Custom Pattern");
   }

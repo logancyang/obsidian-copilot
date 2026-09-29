@@ -6,12 +6,6 @@ interface CopilotBrandIconProps {
   className?: string;
 }
 
-/**
- * The Copilot brand mark as an inline SVG, sized and colored by `className`
- * (the path fills with `currentColor`). Renders the same `0 0 100 100` glyph
- * primitives that Obsidian's `addIcon` registers, so the React surface and the
- * native view/ribbon/command icon can never drift.
- */
 export const CopilotBrandIcon: React.FC<CopilotBrandIconProps> = ({ className }) => (
   <svg
     viewBox="0 0 100 100"

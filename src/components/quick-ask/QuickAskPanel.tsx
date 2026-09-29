@@ -1,11 +1,3 @@
-/**
- * QuickAskPanel - Main UI component for Quick Ask feature.
- * Provides multi-turn chat interface with Copy/Insert/Replace actions.
- *
- * Note: This component fills its container (w-full h-full).
- * All positioning and sizing is managed by QuickAskOverlay.
- */
-
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Notice } from "obsidian";
 import { Send, Square, X, MessageSquareX } from "lucide-react";
@@ -26,10 +18,6 @@ import type { ReplaceInvalidReason } from "@/editor/replaceGuard";
 import { Button } from "@/components/ui/button";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
-/**
- * QuickAskPanel - Floating panel for Quick Ask interactions.
- * Fills its container; sizing is controlled by QuickAskOverlay.
- */
 export function QuickAskPanel({
   plugin,
   view,
@@ -40,40 +28,29 @@ export function QuickAskPanel({
   onResizeStart,
   hasCustomHeight,
 }: QuickAskPanelProps) {
-  // UI state
   const [inputText, setInputText] = useState("");
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isChatPinnedToBottomRef = useRef(true);
 
-  // Get current active file for @ mention context
   const currentActiveFile = plugin.app.workspace.getActiveFile();
-  // Reason: Snapshot file path at mount time for stable Markdown link resolution.
-  // Using dynamic getActiveFile() would cause links to resolve against
-  // whichever note the user switches to after opening Quick Ask.
   const filePathSnapshotRef = useRef<string | null>(currentActiveFile?.path ?? null);
   const filePathSnapshot = filePathSnapshotRef.current;
 
-  // Settings
   const settings = useSettingsValue();
   const [globalModelKey] = useModelKey();
   const selectedModelKey = settings.quickCommandModelKey ?? globalModelKey;
-  // Use local state for includeNoteContext to ensure immediate UI updates
   const [includeNoteContext, setIncludeNoteContext] = useState(
     () => settings.quickCommandIncludeNoteContext
   );
 
-  // Session hook
   const { messages, isStreaming, sendMessage, stop, clear } = useQuickAskSession({
     selectedText,
     selectedModelKey,
     includeNoteContext,
   });
 
-  // Derived state
   const hasMessages = messages.length > 0;
-  // Reason: Use replaceGuard.getRange() as single source of truth for selection state.
-  // Previously used selectionFrom/selectionTo props that were stale and never updated.
   const selectionRange = replaceGuard.getRange();
   const hasSelection = !!selectionRange && selectionRange.from !== selectionRange.to;
 
@@ -82,7 +59,6 @@ export function QuickAskPanel({
     return messages.reduce((lastIdx, m, i) => (m.role === "assistant" ? i : lastIdx), -1);
   }, [messages]);
 
-  // Drag handling using shared hook
   const getCurrentPanelPosition = useCallback(() => {
     const rect = containerRef.current?.getBoundingClientRect();
     return rect ? { x: rect.left, y: rect.top } : { x: 0, y: 0 };
@@ -103,7 +79,6 @@ export function QuickAskPanel({
     onPositionChange: handleDragPositionChange,
   });
 
-  // Resize handle - just forward to Overlay
   const handleResizeMouseDown = useCallback(
     (direction: ResizeDirection) =>
       (e: React.MouseEvent): void => {
@@ -114,19 +89,15 @@ export function QuickAskPanel({
     [onResizeStart]
   );
 
-  // Submit handler
   const handleSubmit = useCallback(async () => {
     if (!inputText.trim() || isStreaming) return;
     const text = inputText;
-    setInputText(""); // Clear input immediately before sending
+    setInputText("");
     await sendMessage(text);
   }, [inputText, isStreaming, sendMessage]);
 
-  // Keyboard handler - only handle Escape (Enter is handled by QuickAskInput)
-  // Allow Lexical typeahead (e.g. @ menu) to consume Escape first
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // P0 Fix: Always stop propagation to prevent CM6 from handling
       e.stopPropagation();
       if (e.key === "Escape" && !e.defaultPrevented) {
         e.preventDefault();
@@ -136,19 +107,16 @@ export function QuickAskPanel({
     [onClose]
   );
 
-  // P0 Fix: Generic handler to stop propagation for other keyboard events
   const handleStopPropagation = useCallback((e: React.SyntheticEvent) => {
     e.stopPropagation();
   }, []);
 
-  // Track whether the user is at (or near) the bottom; only auto-scroll when pinned.
   useEffect(() => {
     const el = chatAreaRef.current;
     if (!el) return;
 
     const thresholdPx = 24;
 
-    /** Returns true if the user is close enough to the bottom to auto-follow new messages. */
     const isAtBottom = (): boolean => {
       return el.scrollHeight - el.scrollTop - el.clientHeight <= thresholdPx;
     };
@@ -157,7 +125,6 @@ export function QuickAskPanel({
       isChatPinnedToBottomRef.current = isAtBottom();
     };
 
-    // Initialize.
     isChatPinnedToBottomRef.current = isAtBottom();
     el.addEventListener("scroll", handleScroll);
 
@@ -166,7 +133,6 @@ export function QuickAskPanel({
     };
   }, [hasMessages]);
 
-  // Auto-scroll to bottom only when pinned
   useEffect(() => {
     const el = chatAreaRef.current;
     if (!el) return;
@@ -174,7 +140,6 @@ export function QuickAskPanel({
     el.scrollTop = el.scrollHeight;
   }, [messages]);
 
-  // Action handlers
   const handleCopy = useCallback(
     async (messageId: string) => {
       const message = messages.find((m) => m.id === messageId);
@@ -200,22 +165,17 @@ export function QuickAskPanel({
         const cleaned = cleanMessageForCopy(message.content);
         const insertPos = view.state.selection.main.to;
 
-        // Reason: CM6 normalizes \r\n → \n internally, so string.length would overcount.
-        // Using state.toText() ensures the length matches CM6's internal representation.
         const insertText = view.state.toText(cleaned);
 
         view.dispatch({
           changes: { from: insertPos, to: insertPos, insert: insertText },
-          // Select the inserted content to highlight it
           selection: { anchor: insertPos, head: insertPos + insertText.length },
         });
-        // Ensure editor gets focus so selection is visible
         view.focus();
 
         new Notice("Inserted");
         onClose();
       } catch {
-        // View might be destroyed or in invalid state
         new Notice("Failed to insert. Editor may have changed.");
       }
     },
@@ -245,7 +205,6 @@ export function QuickAskPanel({
     updateSetting("quickCommandModelKey", configuredModelId);
   }, []);
 
-  // Chat-backend picker entries for the model selector.
   const chatPicker = useChatModelPicker({ value: selectedModelKey, onChange: handleModelChange });
 
   const handleIncludeNoteContextChange = useCallback((checked: boolean) => {
@@ -253,12 +212,9 @@ export function QuickAskPanel({
     updateSetting("quickCommandIncludeNoteContext", checked);
   }, []);
 
-  // Only compute selection validity when not streaming (performance optimization)
-  // During streaming, the button is not clickable anyway
   const replaceValidation = hasSelection && !isStreaming ? replaceGuard.validate() : null;
   const selectionValid = !!replaceValidation?.ok;
   const replaceInvalidReason: ReplaceInvalidReason | null = replaceValidation?.reason ?? null;
-  // Track if button is disabled due to streaming (for accurate tooltip)
   const isDisabledDueToStreaming = hasSelection && isStreaming;
 
   return (
@@ -275,7 +231,6 @@ export function QuickAskPanel({
       onMouseUp={handleStopPropagation}
       onClick={handleStopPropagation}
     >
-      {/* Header: drag handle + close button */}
       <div className="tw-relative tw-flex-none">
         <div
           className="tw-flex tw-h-4 tw-cursor-grab tw-items-center tw-justify-center hover:tw-bg-[color-mix(in_srgb,var(--background-modifier-hover)_20%,transparent)] active:tw-cursor-grabbing"
@@ -293,7 +248,6 @@ export function QuickAskPanel({
         </Button>
       </div>
 
-      {/* Chat area - shown above input when there are messages (like YOLO) */}
       {hasMessages && (
         <div
           ref={chatAreaRef}
@@ -320,10 +274,8 @@ export function QuickAskPanel({
         </div>
       )}
 
-      {/* Spacer to push toolbar to bottom when panel is resized but no messages */}
       {!hasMessages && hasCustomHeight && <div className="tw-flex-1" />}
 
-      {/* Input area - below chat area when there are messages */}
       <div className="tw-px-3 tw-pb-1 tw-pt-2">
         <QuickAskInput
           value={inputText}
@@ -335,7 +287,6 @@ export function QuickAskPanel({
         />
       </div>
 
-      {/* Toolbar - always at bottom */}
       <div className="tw-mt-auto tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-1.5">
         <div className="tw-flex tw-items-center tw-gap-1">
           <ModelSelector
@@ -396,7 +347,6 @@ export function QuickAskPanel({
         </div>
       </div>
 
-      {/* Resize handles */}
       <div
         className="tw-absolute tw-right-0 tw-top-4 tw-h-[calc(100%-16px)] tw-w-1 tw-cursor-ew-resize"
         onMouseDown={handleResizeMouseDown("right")}

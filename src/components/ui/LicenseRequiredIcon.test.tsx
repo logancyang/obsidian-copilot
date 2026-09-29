@@ -17,7 +17,6 @@ describe("LicenseRequiredIcon", () => {
     it("states the reason in text, since the tooltip only answers a hover", () => {
       render(<LicenseRequiredIcon />);
 
-      // Include the requirement in the row's accessible name without hovering.
       expect(screen.getByText("Copilot license required")).toBeTruthy();
     });
 

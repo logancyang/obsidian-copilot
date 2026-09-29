@@ -9,11 +9,9 @@ import { createPluginRoot } from "@/utils/react/createPluginRoot";
 
 export interface CopilotPlusExpiredModalContentProps {
   onCancel: () => void;
-  /** Whether to warn that Copilot models are about to stop working. */
   isUsingPlusModels: boolean;
 }
 
-/** Body of {@link CopilotPlusExpiredModal}, exported prop-driven so the gallery can render both states. */
 export function CopilotPlusExpiredModalContent({
   onCancel,
   isUsingPlusModels,
@@ -54,7 +52,6 @@ export class CopilotPlusExpiredModal extends Modal {
 
   constructor(app: App) {
     super(app);
-    // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
     this.setTitle("Thanks for being a Copilot Plus user 👋");
   }

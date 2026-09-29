@@ -69,7 +69,6 @@ describe("buildAgentProcessingItems", () => {
   });
 
   it("keeps a file snapshot Queued when its fingerprint is unknown (unreadable/old meta)", () => {
-    // Snapshot file present but no stored fingerprint → can't prove it's current.
     const d = disk({ snapshotNames: new Set([cacheFileName("file", PDF)]) });
     const [file] = buildAgentProcessingItems([fileSource], undefined, d, SAVED_ALL);
     expect(file.status).toBe("pending");
@@ -116,8 +115,6 @@ describe("buildAgentProcessingItems", () => {
   });
 
   it("shows in-flight sources (processingSources) as Converting and queues the rest", () => {
-    // Mid-run: the URL is actively fetching (in processingSources) → processing;
-    // the file hasn't started yet → Queued. Both are saved.
     const live = entry({
       phase: "prefetch",
       prefetch: { done: 0, total: 2 },
@@ -125,18 +122,17 @@ describe("buildAgentProcessingItems", () => {
     });
     const [web, file] = buildAgentProcessingItems([webSource, fileSource], live, disk(), SAVED_ALL);
     expect(web.status).toBe("processing");
-    expect(file.status).toBe("pending"); // queued: hasn't started this run
+    expect(file.status).toBe("pending");
   });
 
   it("never shows an unsaved draft as processing, even when a run is in flight", () => {
     const live = entry({ phase: "prefetch", prefetch: { done: 0, total: 1 } });
     const savedOnlyFile = new Set([`file:${PDF}`]);
     const [web] = buildAgentProcessingItems([webSource], live, disk(), savedOnlyFile);
-    expect(web.status).toBe("pending"); // draft-only URL: no run knows about it
+    expect(web.status).toBe("pending");
   });
 
   it("shows all parallel-fetched URLs as Converting together", () => {
-    // URLs fetch in parallel, so processingSources holds them all at once.
     const URL_B = "https://b.example.com/x";
     const live = entry({
       phase: "prefetch",
@@ -156,10 +152,6 @@ describe("buildAgentProcessingItems", () => {
   });
 
   it("shows a saved failure marker as Failed during a run (Option D skips it), Converting only when retried", () => {
-    // Option D cheap-skips a known-bad source on the automatic run, so a valid
-    // marker reads as failed even mid-run — never Queued (nothing re-fetches it
-    // until a manual Retry). It flips to Converting only when the user forces a
-    // retry and the source enters processingSources.
     const d = disk({
       markersByName: new Map([
         [
@@ -182,8 +174,6 @@ describe("buildAgentProcessingItems", () => {
     expect(web.status).toBe("processing");
     expect(web.error).toBeUndefined();
 
-    // The per-row "Retry" path drives `retryingSources` (not processingSources);
-    // it too must override the marker so the row spins immediately on click.
     const retrying = entry({ phase: "done", retryingSources: [{ kind: "web", source: URL_A }] });
     expect(buildAgentProcessingItems([webSource], retrying, d, SAVED_ALL)[0].status).toBe("processing"); // prettier-ignore
   });
@@ -208,17 +198,12 @@ describe("buildAgentProcessingItems", () => {
       });
     const duringRun = entry({ phase: "parse", parsed: { done: 0, total: 1 } });
 
-    // fileSource's live fingerprint is "100:5".
-    // Marker fingerprint matches → cheap-skipped → failed, even mid-run.
     const matched = buildAgentProcessingItems([fileSource], duringRun, withMarker("100:5"), SAVED_ALL)[0]; // prettier-ignore
     expect(matched.status).toBe("failed");
     expect(matched.error).toBe("parse boom");
 
-    // File changed since the failure (fingerprint mismatch) → marker not honored,
-    // the run re-attempts it → Queued, not a stale failure.
     expect(buildAgentProcessingItems([fileSource], duringRun, withMarker("999:9"), SAVED_ALL)[0].status).toBe("pending"); // prettier-ignore
 
-    // Legacy marker without a fingerprint → untrustworthy → re-attempted, not failed.
     expect(buildAgentProcessingItems([fileSource], duringRun, withMarker(undefined), SAVED_ALL)[0].status).toBe("pending"); // prettier-ignore
   });
 
@@ -229,10 +214,8 @@ describe("buildAgentProcessingItems", () => {
       fingerprintsByName: new Map([[name, "100:5"]]),
     });
     const changed = { ...fileSource, fingerprint: "200:9" };
-    // Run active, file not yet re-parsed → Queued.
     const queued = entry({ phase: "parse", parsed: { done: 0, total: 1 } });
     expect(buildAgentProcessingItems([changed], queued, d, SAVED_ALL)[0].status).toBe("pending");
-    // Being re-parsed → processing.
     const active = entry({
       phase: "parse",
       parsed: { done: 0, total: 1 },
@@ -242,8 +225,6 @@ describe("buildAgentProcessingItems", () => {
   });
 
   it("distinguishes a same-URL web and youtube pair by cacheKind (matches the CAG id contract)", () => {
-    // `id` is the raw URL (CAG parity → clean display + remove-by-(cacheKind,url)).
-    // The two rows are still distinct items; cacheKind is what tells them apart.
     const dual: AgentProcessingSource[] = [
       { kind: "web", source: URL_A },
       { kind: "youtube", source: URL_A },
@@ -266,7 +247,6 @@ describe("buildAgentProcessingItems", () => {
   });
 });
 
-/** In-memory {@link AgentCacheDirReader} over a name→content map (missing → throws). */
 function fakeReader(files: Record<string, string>): AgentCacheDirReader {
   return {
     list: async () => Object.keys(files),
@@ -277,7 +257,6 @@ function fakeReader(files: Record<string, string>): AgentCacheDirReader {
   };
 }
 
-/** A throwing reader, modeling a missing/unreadable directory. */
 const throwingReader: AgentCacheDirReader = {
   list: async () => {
     throw new Error("ENOENT: no such directory");
@@ -287,7 +266,6 @@ const throwingReader: AgentCacheDirReader = {
   },
 };
 
-/** A valid snapshot file body with the leading meta block parseSnapshotMeta reads. */
 function snapshotBody(over: {
   sourceType: string;
   fingerprint: string;
@@ -333,12 +311,9 @@ describe("aggregateAgentCacheDirState (off-vault dual-source)", () => {
       new Set([fileName])
     );
 
-    // Snapshots come from BOTH buckets.
     expect(state.snapshotNames.has(webName)).toBe(true);
     expect(state.snapshotNames.has(fileName)).toBe(true);
-    // File fingerprint read only for the requested name.
     expect(state.fingerprintsByName.get(fileName)).toBe("100:5");
-    // Marker parsed from the per-project marker dir.
     expect(state.markersByName.get(fileMarker)?.error).toBe("parse boom");
   });
 
@@ -353,7 +328,6 @@ describe("aggregateAgentCacheDirState (off-vault dual-source)", () => {
     };
     const state = await aggregateAgentCacheDirState(
       { remotes, files: fakeReader({}), markers: fakeReader({}) },
-      // Even if the URL snapshot name is "requested", remotes are never body-read.
       new Set([webName])
     );
     expect(state.snapshotNames.has(webName)).toBe(true);
@@ -376,8 +350,8 @@ describe("aggregateAgentCacheDirState (off-vault dual-source)", () => {
         remotes: fakeReader({}),
         files: fakeReader({}),
         markers: fakeReader({
-          [fileMarker]: "{not json", // malformed → skipped
-          "stray.txt": "ignored", // not a failed-*.json → skipped
+          [fileMarker]: "{not json",
+          "stray.txt": "ignored",
         }),
       },
       new Set()

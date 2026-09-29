@@ -13,14 +13,6 @@ interface TooltipProps {
   buttonClassName?: string;
 }
 
-/**
- * A versatile tooltip component that works on both desktop and mobile devices.
- * On desktop, it shows on hover. On mobile, it shows on click.
- *
- * Can be used in two modes:
- * 1. Help mode (default): Shows a help icon with tooltip
- * 2. Wrapper mode (with children): Wraps any component with tooltip functionality
- */
 export const HelpTooltip: React.FC<TooltipProps> = ({
   content,
   children,
@@ -42,7 +34,6 @@ export const HelpTooltip: React.FC<TooltipProps> = ({
   const handleClick = () => {
     if (isMobile) {
       setShowTooltip(!showTooltip);
-      // Reset the flag after a brief delay
       window.setTimeout(() => {
         isClickingRef.current = false;
       }, 100);
@@ -54,7 +45,6 @@ export const HelpTooltip: React.FC<TooltipProps> = ({
       <Tooltip
         open={showTooltip}
         onOpenChange={(open) => {
-          // Ignore onOpenChange events on mobile when we're handling a click
           if (isMobile && isClickingRef.current) {
             return;
           }

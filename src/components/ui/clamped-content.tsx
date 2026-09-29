@@ -6,21 +6,10 @@ import React, { useId, useLayoutEffect, useRef, useState } from "react";
 const OVERFLOW_TOLERANCE_PX = 1;
 
 export interface ClampedContentProps {
-  /**
-   * CSS class that caps the content while collapsed. Keep the class literal at
-   * the call site so Tailwind can generate it.
-   */
   collapsedClassName: string;
   children: React.ReactNode;
 }
 
-/**
- * Clips overflowing content and offers an explicit expand and collapse control.
- *
- * @param props - Content and the CSS class that defines its collapsed cap.
- * @param props.children - Content that may need to be collapsed.
- * @param props.collapsedClassName - CSS class applied while the content is collapsed.
- */
 export const ClampedContent: React.FC<ClampedContentProps> = ({ collapsedClassName, children }) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const [isExpanded, setIsExpanded] = useState(false);
