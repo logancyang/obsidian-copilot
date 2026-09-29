@@ -21,14 +21,6 @@ async function runClaudeVersion(
   return promisify(execFile)(claudePath, args, options);
 }
 
-/**
- * The resolver's npm-package fallbacks (`cli.js` / `cli-wrapper.cjs`) are Node
- * scripts, not native executables — invoking them directly fails outright on
- * Windows and on Unix depends on a `node` shebang resolvable from Obsidian's
- * minimal PATH. Launch them through Electron's own binary running as Node
- * (`ELECTRON_RUN_AS_NODE`), which always exists, so a resolver-supported
- * install can't get misclassified as broken.
- */
 function buildVersionInvocation(
   claudePath: string,
   env: NodeJS.ProcessEnv
@@ -56,12 +48,6 @@ export type ClaudeVersionCompatibility =
       message: string;
     };
 
-/**
- * Establishes whether the selected Claude Code runtime satisfies the protocol contract the plugin depends on.
- * @param claudePath - The selected Claude Code executable to inspect.
- * @param env - The runtime environment that should govern the compatibility check.
- * @param run - The command runner used to obtain version information.
- */
 export async function probeClaudeVersion(
   claudePath: string,
   env: NodeJS.ProcessEnv,
@@ -97,12 +83,6 @@ export async function probeClaudeVersion(
   return { kind: "supported", version };
 }
 
-/**
- * Enforces compatibility at the session boundary so unsupported runtimes fail with an actionable error.
- * @param claudePath - The selected Claude Code executable that will back the session.
- * @param env - The runtime environment the session will inherit.
- * @param run - The command runner used to verify the selected runtime.
- */
 export async function assertClaudeVersionSupported(
   claudePath: string,
   env: NodeJS.ProcessEnv,

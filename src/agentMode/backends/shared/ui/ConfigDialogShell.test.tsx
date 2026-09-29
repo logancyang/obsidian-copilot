@@ -87,10 +87,6 @@ describe("ConfigDialogShell", () => {
         </ConfigDialogShell>
       );
 
-      // Padding on the container instead of the bands would inset every
-      // divider, leaving a gap at both ends of each hairline. The host modal's
-      // own padding is stripped by the shared full-bleed class that the host
-      // passes as ReactModal's modalClass.
       const shell = container.firstElementChild as HTMLElement;
       expect(shell.className).not.toMatch(/tw-p[xl]?-/);
       const footer = shell.lastElementChild as HTMLElement;

@@ -34,8 +34,6 @@ const CODEX_ERROR: InstallState = {
 
 const UPDATE_HINT = "Update it with the install command below, then reopen this dialog.";
 
-// Deliberately generic: each agent's Configure dialog composes its own body, so
-// borrowing one agent's controls here would read as that agent's approved design.
 const BODY = (
   <>
     <ConfigSection title="First section">

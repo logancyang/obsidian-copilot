@@ -38,7 +38,6 @@ function setBuiltinPreferences(
   updateSetting("agentMode", { ...agentMode, skills: { ...agentMode.skills, builtinPreferences } });
 }
 
-/** The system-prompt jotai store is independent of settings — reset it explicitly. */
 function resetPromptState(): void {
   setDisableBuiltinSystemPrompt(false);
   setSelectedPromptTitle("");
@@ -95,9 +94,6 @@ describe("agentSystemPrompt", () => {
     });
 
     it("keeps the project workspace policy internal and always on", () => {
-      // Operational wiring (where the agent may write and read), not builtin framing — and
-      // pre-AGENTS.md it rode the project mirror / <project_instructions>, which the toggle
-      // never suppressed. Losing it would let a project session scatter output anywhere.
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_PROJECT_WORKSPACE_POLICY);
       setDisableBuiltinSystemPrompt(true);
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_PROJECT_WORKSPACE_POLICY);
@@ -116,14 +112,10 @@ describe("agentSystemPrompt", () => {
     });
 
     it("steers every agent to the enabled Copilot relay skills first, regardless of Plus status", () => {
-      // Default settings → NOT a Plus user; the skills still run first and their
-      // scripts route an unlicensed user to the agent's own tools.
       for (const agent of ["claude", "codex", "opencode"]) {
         const prompt = buildAgentSystemPrompt(agent);
         expect(prompt).toContain(`${ALL_RELAY_SKILLS_LINE} ${COPILOT_SKILL_FALLBACK}`);
       }
-      // Built-in tools are the fallback only when the skill itself says it can't
-      // serve the request, so the request never dead-ends or blocks a free user.
       expect(COPILOT_SKILL_FALLBACK).toContain(
         "Call an equivalent built-in tool only after the skill reports it is unavailable or fails"
       );
@@ -168,7 +160,6 @@ describe("agentSystemPrompt", () => {
     it("routes external questions to the web proactively and keeps vault text out of queries", () => {
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(COPILOT_WEB_RESEARCH_STEERING);
-      // Both halves of the routing rule, plus the privacy constraint on queries.
       expect(prompt).toMatch(/search locally first/i);
       expect(prompt).toMatch(
         /Proactively search\/fetch current facts, external topics and third-party docs/i
@@ -182,11 +173,8 @@ describe("agentSystemPrompt", () => {
       updateSetting("docProcessorBackend", "miyo");
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
-      // The Plus route must be absent, not merely outranked: `copilot-read-pdf` is
-      // pruned from disk in this mode, so steering toward it would dead-end.
       expect(prompt).not.toContain("copilot-read-pdf for PDFs");
       expect(prompt).toContain("miyo-parse");
-      // Cancels the equivalent-tool fallback the relay steering sets up.
       expect(prompt).toMatch(/report and stop: no fallback/i);
       expect(prompt).toContain("PDFs/EPUBs must stay local");
       expect(prompt).toContain("cloud parsers or web services");
@@ -218,7 +206,6 @@ describe("agentSystemPrompt", () => {
       updateSetting("enableMiyoSearchSkill", true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(COPILOT_MIYO_SEARCH_STEERING);
-      // Names the skill and gives concrete triggers for when to call it.
       expect(prompt).toContain("miyo-search");
       expect(prompt).toMatch(/too slow|too few relevant/i);
       expect(prompt).toMatch(/explicitly requested/i);
@@ -254,10 +241,6 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_INSTRUCTION_PRECEDENCE);
     });
 
-    // The cache contract: this string is a provider cache prefix, so anything that is not
-    // product source or a product capability toggle must leave it byte-identical. `toBe`,
-    // not `toContain` — a containment assertion still passes while extra bytes shift
-    // everything after it out of the cached prefix.
     it("emits identical bytes no matter which Chat prompt is selected", () => {
       const baseline = buildAgentSystemPrompt(AGENT);
 
@@ -271,8 +254,6 @@ describe("agentSystemPrompt", () => {
     it("emits identical bytes across vaults, projects, models and sessions", () => {
       const baseline = buildAgentSystemPrompt(AGENT);
 
-      // Everything a session carries that is not product configuration. None of these is an
-      // argument to the builder today; this asserts none of them becomes one.
       updateSetting("defaultModelKey", "some-other-model|anthropic");
       updateSetting("projectsFolder", "vault-b/projects");
       updateSetting("defaultSaveFolder", "vault-b/chats");

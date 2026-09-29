@@ -1,9 +1,7 @@
 import { waitFor } from "@testing-library/react";
 jest.mock("obsidian", () => ({
-  // FileSystemAdapter and requestUrl are referenced by the manager class.
   FileSystemAdapter: class {},
   requestUrl: jest.fn(),
-  // requireNodeModule() gates the Node built-ins these paths resolve through.
   Platform: { isDesktopApp: true, isMobile: false },
 }));
 
@@ -13,15 +11,11 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-// Override only homedir so tests can redirect the OS-local install root into a
-// temp dir; tmpdir() and everything else stay real.
 jest.mock("os", () => {
   const actual = jest.requireActual("os");
   return { ...actual, homedir: jest.fn(() => actual.homedir()) };
 });
 
-// In-memory settings store for the manager's getSettings/setSettings calls.
-// Defined inside jest.mock so it's hoisted alongside the factory.
 jest.mock("@/settings/model", () => {
   type OpencodeSlice = {
     binaryPath?: string;
@@ -51,8 +45,6 @@ jest.mock("@/settings/model", () => {
   };
 });
 
-// The real detector walks this machine's PATH and install dirs, so adopt tests
-// would pass or fail on whether the developer happens to have opencode.
 jest.mock("./opencodeCliDetector", () => ({
   detectOpencodeCliPath: jest.fn(async () => null),
 }));
@@ -82,31 +74,19 @@ describe("isOpencodeVersionOutdated", () => {
   });
 });
 
-// Pull the mock helpers off the mocked module without TS complaints.
 const settingsMock = jest.requireMock("@/settings/model");
 
-// Minimal CopilotPlugin stand-in. Only `manifest.id` and `app.vault.adapter`
-// are touched by the methods under test, and only via getDataDir() (which we
-// don't exercise here).
 const fakePlugin = {
   app: { vault: { adapter: {} } },
   manifest: { id: "copilot-test" },
 } as never;
 
-// The mocked FileSystemAdapter class, used to build a desktop-like plugin whose
-// `adapter instanceof FileSystemAdapter` holds so getDataDir/legacy paths work.
 const FileSystemAdapterMock = jest.requireMock("obsidian").FileSystemAdapter as new () => {
   getBasePath: () => string;
 };
 
-// Deliberately not ".obsidian": the config dir is user-configurable, so using a
-// non-default value proves the legacy-path code reads `vault.configDir`.
 const CONFIG_DIR = "my-config";
 
-/**
- * A desktop CopilotPlugin stand-in whose vault adapter passes the
- * `instanceof FileSystemAdapter` guard so getDataDir()/legacy paths resolve.
- */
 function vaultPlugin(vaultBase = "/vault", pluginId = "copilot-test"): never {
   const adapter = new FileSystemAdapterMock();
   adapter.getBasePath = () => vaultBase;
@@ -117,9 +97,6 @@ function vaultPlugin(vaultBase = "/vault", pluginId = "copilot-test"): never {
 }
 
 describe("verifyOpencodeBinary", () => {
-  // We use the running Node binary as a stand-in for any executable that
-  // accepts `--version` and exits 0. This exercises the success path without
-  // requiring a real opencode binary on disk.
   it("resolves when the binary returns 0 to --version", async () => {
     const result = await verifyOpencodeBinary(process.execPath);
     expect(result.stdout).toMatch(/^v\d+\./);
@@ -167,8 +144,6 @@ describe("computeInstallState", () => {
   });
 
   it("absent when the configured binary is missing on this device (synced vault)", () => {
-    // Fully-configured slice, but the file doesn't exist locally — e.g. the
-    // vault synced from another device where opencode was installed (#123).
     expect(computeInstallState({ binaryPath: "/p", binaryVersion: "1.2.3" }, () => false)).toEqual({
       kind: "absent",
     });
@@ -236,8 +211,6 @@ describe("OpencodeBinaryManager", () => {
     let home: string;
 
     beforeEach(async () => {
-      // An empty OS-local install root, so downloadsSize below reports only
-      // what the bound vault's legacy directory holds.
       home = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-home-"));
       jest.mocked(os.homedir).mockReturnValue(home);
     });
@@ -261,8 +234,6 @@ describe("OpencodeBinaryManager", () => {
         const firstLegacy = await seedLegacy(firstVault, 40);
         const secondLegacy = await seedLegacy(secondVault, 10);
 
-        // The manager outlives a lifecycle, so it can be built against one vault
-        // and then asked to work in another ("Open another vault" without restart).
         const mgr = new OpencodeBinaryManager(vaultPlugin(firstVault));
         mgr.adoptPlugin(vaultPlugin(secondVault));
 
@@ -271,7 +242,6 @@ describe("OpencodeBinaryManager", () => {
         await mgr.uninstall();
 
         expect(fs.existsSync(secondLegacy)).toBe(false);
-        // The vault the user is no longer in keeps its files.
         expect(fs.existsSync(firstLegacy)).toBe(true);
       } finally {
         await fs.promises.rm(firstVault, { recursive: true, force: true });
@@ -320,8 +290,6 @@ describe("OpencodeBinaryManager.refreshInstallState", () => {
   });
 
   it("no-op for custom-source installs even if the file is missing", async () => {
-    // Custom paths are validated at config time and shouldn't be re-checked
-    // on every plugin load — a transient mount issue shouldn't wipe user state.
     const ghost = path.join(tmpDir, "does-not-exist", "opencode");
     settingsMock.__reset({
       binaryPath: ghost,
@@ -398,7 +366,7 @@ describe("OpencodeBinaryManager.setCustomBinaryPath", () => {
   });
 
   it("rejects non-executable files on POSIX", async () => {
-    if (process.platform === "win32") return; // skip — XOK semantics differ on Windows
+    if (process.platform === "win32") return;
     const file = path.join(tmpDir, "not-exec");
     await fs.promises.writeFile(file, "");
     await fs.promises.chmod(file, 0o644);
@@ -436,9 +404,6 @@ describe("OpencodeBinaryManager.setCustomBinaryPath", () => {
   });
 
   it("accepting a real binary captures version from --version and tags source as custom", async () => {
-    // Use the running node binary as a stand-in: it exists, is executable,
-    // and `--version` exits 0 — the same shape verifyOpencodeBinary expects.
-    // Node prints `v22.x.y`; the parser strips the `v` and gives us a semver.
     const mgr = new OpencodeBinaryManager(fakePlugin);
     await mgr.setCustomBinaryPath(process.execPath);
     const stored = settingsMock.__get();
@@ -535,7 +500,6 @@ describe("install-dir paths (outside the vault)", () => {
     expect(opencodeManagedDataDir("/Users/me")).toBe(
       path.join("/Users/me", ".obsidian-copilot", "opencode")
     );
-    // Sanity: nothing about the path references the vault/plugin data dir.
     expect(opencodeManagedDataDir("/Users/me")).not.toContain("plugins");
   });
 
@@ -577,7 +541,6 @@ describe("OpencodeBinaryManager.uninstall / downloadsSize", () => {
     await fs.promises.rm(home, { recursive: true, force: true });
   });
 
-  /** Seed two managed version dirs under the OS-local install root. */
   async function seedDownloads(mgr: OpencodeBinaryManager): Promise<string> {
     const dataDir = mgr.getDataDir();
     for (const [version, bytes] of [
@@ -636,7 +599,6 @@ describe("OpencodeBinaryManager.uninstall / downloadsSize", () => {
     const vaultBase = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-vault-"));
     try {
       const mgr = new OpencodeBinaryManager(vaultPlugin(vaultBase));
-      // Simulate a just-updated tester: binary still lives only inside the vault.
       const legacy = legacyVaultDataDir(vaultBase, CONFIG_DIR, "copilot-test");
       const legacyBin = path.join(legacy, "1.14.0", "bin", "opencode");
       await fs.promises.mkdir(path.dirname(legacyBin), { recursive: true });
@@ -647,8 +609,6 @@ describe("OpencodeBinaryManager.uninstall / downloadsSize", () => {
         binarySource: "managed",
       });
 
-      // Counted even though nothing is in the OS-local dir yet, so the button
-      // isn't a no-op for a freshly-updated tester.
       expect(await mgr.downloadsSize()).toBe(40);
 
       await mgr.uninstall();
@@ -676,8 +636,6 @@ describe("OpencodeBinaryManager.runtimeState", () => {
   it("starts idle and hands every subscriber the same snapshot object", () => {
     const mgr = new OpencodeBinaryManager(fakePlugin);
     expect(mgr.getRuntimeState()).toEqual({ kind: "idle" });
-    // useSyncExternalStore compares snapshots by identity; an unchanged store
-    // returning a fresh object every call would re-render on every commit.
     expect(mgr.getRuntimeState()).toBe(mgr.getRuntimeState());
   });
 
@@ -697,7 +655,6 @@ describe("OpencodeBinaryManager.runtimeState", () => {
   it("reports a failed operation as an error state the next reader can show", async () => {
     const mgr = new OpencodeBinaryManager(fakePlugin);
     await expect(mgr.setCustomBinaryPath("/definitely/not/here")).rejects.toThrow(/No file at/);
-    // Durable rather than announced: whichever surface mounts next renders it.
     expect(mgr.getRuntimeState()).toEqual({
       kind: "error",
       operation: "configure",
@@ -716,13 +673,9 @@ describe("OpencodeBinaryManager.runtimeState", () => {
 
   it("refuses a second operation while one holds the binary-path lock", async () => {
     const mgr = new OpencodeBinaryManager(fakePlugin);
-    // The lock is taken synchronously, before the first await inside the
-    // operation, so the call below is genuinely the second one in.
     const first = mgr.setCustomBinaryPath(process.execPath);
     expect(mgr.isBusy()).toBe(true);
 
-    // Both writers persist binaryPath/binarySource, so letting them overlap is
-    // what lets whichever settles last name a source the user did not choose.
     await expect(mgr.setCustomBinaryPath(process.execPath)).rejects.toBeInstanceOf(
       OperationInFlightError
     );
@@ -745,8 +698,6 @@ describe("OpencodeBinaryManager.runtimeState", () => {
 
     mgr.forgetSettledError();
 
-    // The manager is a module-level singleton, so without this the next vault
-    // opened in the same process would greet the user with this vault's error.
     expect(mgr.getRuntimeState()).toEqual({ kind: "idle" });
   });
 
@@ -756,8 +707,6 @@ describe("OpencodeBinaryManager.runtimeState", () => {
 
     mgr.forgetSettledError();
 
-    // A run still belongs to this process; the new lifecycle adopts it rather
-    // than dropping to idle and offering a rival action underneath it.
     expect(mgr.getRuntimeState()).toEqual({ kind: "busy" });
     await inFlight;
   });

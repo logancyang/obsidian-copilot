@@ -26,11 +26,6 @@ const MANAGED: ManagedBinaryInfo = {
   run: { kind: "idle" },
 };
 
-/**
- * Every story renders through this stateful wrapper so the gallery can exercise
- * the source switch for real: `args.source` seeds the first render (keeping each
- * story's captured state), then clicking a segment swaps the visible branch.
- */
 const InteractiveConfigView: React.FC<Partial<ManagedBinaryConfigViewProps>> = (props) => {
   const [source, setSource] = React.useState<ManagedBinarySource>(props.source ?? "managed");
   return (
@@ -152,7 +147,6 @@ export const ConfigurationRunning: StoryObj<ManagedBinaryConfigViewProps> = {
   },
 };
 
-/** A custom binary is active; retained downloads can be reinstalled or removed. */
 export const RetainedManagedDownloads: StoryObj<ManagedBinaryConfigViewProps> = {
   render: InteractiveConfigView,
   args: {

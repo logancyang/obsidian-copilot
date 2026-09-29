@@ -20,7 +20,6 @@ import { installCodexArchive, CODEX_PINNED_VERSION } from "./codexArchive";
 const TIMEOUT_MS = 5 * 60_000;
 const EMPTY_BINARY_SETTINGS: BinarySettings = Object.freeze({});
 
-/** Owns the native Codex bundle installation; shared lifecycle operations never modify user-owned packages. */
 export class CodexBinaryManager extends ManagedBinaryManager {
   constructor() {
     super("Codex adapter");
@@ -77,8 +76,6 @@ export class CodexBinaryManager extends ManagedBinaryManager {
       const runtime = await run(stagedEntry, ["cli", "--help"], signal);
       if (!runtime.includes("Codex CLI"))
         throw new Error("The bundled Codex runtime could not start.");
-      // Cancellation during verification must not replace the working installation.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
       if (signal.aborted) throw new ManagedInstallAbortError();
       progress.activating();
       await promoteManagedVersion(stageDir, versionDir, "Codex adapter");

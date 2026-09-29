@@ -7,19 +7,10 @@ interface TerminalSignInCommandOptions {
   runtime?: string;
 }
 
-/**
- * Formats terminal sign-in with explicit profile overrides, leaving ordinary
- * shell environment inheritance intact and excluding credential overrides.
- * @param options - Executable, login arguments, safe profile names, and target platform.
- */
 export function terminalSignInCommand(options: TerminalSignInCommandOptions): string | null {
   const { binaryPath, args, profileVariables, envOverrides, platform, runtime } = options;
-  // No executable is offered until an installation is configured.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   if (!binaryPath?.trim()) return null;
   const powershell = platform === "win32";
-  // Ordinary CLI words stay readable; quote paths and values containing shell punctuation.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   const quote = (value: string) =>
     /^[A-Za-z0-9_./-]+$/.test(value)
       ? value
@@ -41,8 +32,6 @@ export function terminalSignInCommand(options: TerminalSignInCommandOptions): st
           ];
     }
   );
-  // PowerShell needs its call operator only when the executable itself is quoted.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   return [...profile, powershell && command.startsWith("'") ? `& ${command}` : command].join(
     powershell ? "; " : " "
   );

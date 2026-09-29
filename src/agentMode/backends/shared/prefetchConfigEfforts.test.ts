@@ -83,8 +83,8 @@ describe("prefetchConfigEfforts", () => {
 
       expect(result).toEqual({ [GPT]: EFFORTS[GPT] });
       const values = setSessionConfigOption.mock.calls.map((c) => c[0].value);
-      expect(values).not.toContain(NEMOTRON); // missing_key never probed
-      expect(values).toEqual([GPT, QWEN, "orig/model"]); // restore is last
+      expect(values).not.toContain(NEMOTRON);
+      expect(values).toEqual([GPT, QWEN, "orig/model"]);
     });
 
     it("returns a frozen empty catalog and probes nothing when the catalog is not config-option-backed", async () => {
@@ -115,10 +115,10 @@ describe("prefetchConfigEfforts", () => {
           { baseModelId: GPT, name: "GPT", credentialState: "ok" },
           { baseModelId: QWEN, name: "Qwen", credentialState: "ok" },
         ],
-        () => probed++ >= 1 // false for the first model, true thereafter
+        () => probed++ >= 1
       );
       const values = setSessionConfigOption.mock.calls.map((c) => c[0].value);
-      expect(values).toEqual([GPT, "orig/model"]); // QWEN skipped, restore still runs
+      expect(values).toEqual([GPT, "orig/model"]);
     });
 
     it("survives a throwing probe, keeps going, and still restores", async () => {
@@ -130,7 +130,7 @@ describe("prefetchConfigEfforts", () => {
         { baseModelId: GPT, name: "GPT", credentialState: "ok" },
         { baseModelId: QWEN, name: "Qwen", credentialState: "ok" },
       ]);
-      expect(result).toEqual({}); // GPT threw, QWEN has no effort
+      expect(result).toEqual({});
       expect(setSessionConfigOption.mock.calls.map((c) => c[0].value)).toEqual([
         GPT,
         QWEN,

@@ -37,7 +37,6 @@ describe("builtinSkillEnv", () => {
     mockGetSettings.mockReset();
     mockGetMiyoCustomUrl.mockReset();
     mockResolveObsidianCliPath.mockReset();
-    // Default: no custom Miyo URL configured (local loopback).
     mockGetMiyoCustomUrl.mockReturnValue("");
     mockResolveObsidianCliPath.mockReturnValue(null);
   });

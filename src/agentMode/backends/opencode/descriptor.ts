@@ -38,33 +38,12 @@ import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
 import { findModelEntry } from "@/agentMode/session/translateBackendState";
 import type { ManagedInstallActionState } from "@/agentMode/session/types";
 
-/** Config option id OpenCode uses to switch the active agent at runtime. */
 const OPENCODE_MODE_CONFIG_OPTION_ID = "mode";
 
-// Lazy-created singleton manager, kept across plugin lifecycles so an install
-// started in one is still running in the next. The instance is reused but its
-// plugin handle is not: `onPluginLoad` rebinds it, see `adoptPlugin`.
 let managerRef: OpencodeBinaryManager | null = null;
 
-/**
- * Effort suffixes opencode appends to model ids. Used to disambiguate
- * genuine effort variants from ids whose trailing segment is part of
- * the model name (e.g. `openrouter/anthropic/claude-3.5-haiku` — the
- * last segment `claude-3.5-haiku` is the model, not an effort).
- */
 const KNOWN_OPENCODE_EFFORTS = new Set(EFFORT_LEVELS_ASCENDING);
 
-/**
- * Wire-format codec for Opencode. Native providers emit
- * `<provider>/<model>[/<effort>]` (3 segments with effort); umbrella
- * providers like OpenRouter emit `<provider>/<sub>/<model>[/<effort>]`
- * (4 segments with effort). The leading segment is always the opencode
- * provider id, mapped onto a Copilot `ChatModelProviders` value via
- * `OPENCODE_PROVIDER_MAP` for picker section grouping. We classify the
- * trailing segment as effort iff it's in the known effort vocabulary —
- * that gates out 3-seg umbrella ids whose last segment is part of the
- * model name (e.g. `openrouter/anthropic/claude-3.5-haiku`).
- */
 const opencodeWire: ModelWireCodec = {
   encode: (selection: ModelSelection) =>
     selection.effort ? `${selection.baseModelId}/${selection.effort}` : selection.baseModelId,
@@ -83,38 +62,17 @@ const opencodeWire: ModelWireCodec = {
   },
 };
 
-/**
- * Resolve the lazy `OpencodeBinaryManager` instance owned by this descriptor.
- * The plugin no longer holds a top-level reference — ownership lives next to
- * the backend that uses it.
- *
- * Resolving does not rebind: callers can outlive the lifecycle they captured
- * their `plugin` in, and the manager's binding is read at operation time by
- * whoever holds it. `onPluginLoad` is the one rebinder.
- */
 export function getOpencodeBinaryManager(plugin: CopilotPlugin): OpencodeBinaryManager {
   if (!managerRef) managerRef = new OpencodeBinaryManager(plugin);
   return managerRef;
 }
 
-/**
- * Re-exported so existing importers keep their path. The implementation lives
- * in `opencodeCliDetector` because the manager needs it too, and importing it
- * from here would close a descriptor↔manager cycle.
- */
 export { detectOpencodeCliPath } from "./opencodeCliDetector";
 
-/**
- * Descriptor for the OpenCode backend. This is the contract `session/` and
- * `ui/` consume — the rest of Agent Mode never imports `OpencodeBackend`,
- * `OpencodeBinaryManager`, or `OpencodeInstallModal` directly.
- */
 export const OpencodeBackendDescriptor: BackendDescriptor = {
   id: "opencode",
   displayName: "opencode",
   Icon: OpencodeLogo,
-  // opencode routes through user-controlled / self-hosted endpoints, so it
-  // stays available in Self-Host Mode.
   selfHostable: true,
   routesCopilotModels: true,
   setupDescription:
@@ -124,7 +82,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   restartOnManagedSkillsChange: true,
   restartOnProviderConfigChange: true,
   restartOnSystemPromptChange: true,
-  // opencode runs a title-summarizer agent and returns clean session titles.
   summarizesSessionTitle: true,
   wire: opencodeWire,
 
@@ -148,8 +105,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     return subscribeToSettingsChange((prev, next) => {
       const p = prev.agentMode?.backends?.opencode;
       const n = next.agentMode?.backends?.opencode;
-      // Only the binary/install fields affect install state; model selection
-      // and probe-session writes on the same object must not trigger a restart.
       if (
         p?.binaryPath !== n?.binaryPath ||
         p?.binaryVersion !== n?.binaryVersion ||
@@ -200,8 +155,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     // suffix, which opencode rejects, and that rejection reverts the whole
     // seed to the agent's own default model. https://github.com/Brevilabs/obsidian-copilot-private/issues/364
     if (apply?.kind === "setConfigOption") {
-      // The effort option is model-specific, so activate the bare model first
-      // and use the option id from the refreshed state.
       const currentBase = context
         ? context.backendReportedCurrent?.baseModelId
         : session.getState()?.model?.current.baseModelId;
@@ -237,14 +190,8 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
         providerRegistry,
         backendConfigRegistry,
         clientVersion: args.clientVersion,
-        // Activates the opencode external_directory allow rule for the off-vault
-        // shared conversions cache. vaultId/path derivation lives entirely in
-        // conversionsLocation — this backend never duplicates it.
         getCacheRoot: () => cacheRoot(args.plugin.app),
         getSelfHostWebSearchChannel: () => {
-          // The native deny is safe only when this lifecycle can provide the
-          // replacement route before OpenCode starts.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
           const bridge = args.plugin.selfHostWebSearchAgentBridge;
           if (!bridge) {
             throw new Error("Copilot self-host web search channel is unavailable.");
@@ -259,16 +206,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
   async onPluginLoad(plugin: CopilotPlugin): Promise<void> {
     const manager = getOpencodeBinaryManager(plugin);
-    // The sole rebind point. Every other caller reaches the manager from a
-    // surface that can outlive its lifecycle — a settings tree still holding
-    // the outgoing vault's plugin can open Configure — so only this hook can
-    // vouch for the lifecycle now running. Same shape `main.ts` uses for
-    // `miyoMutationSession`, and it runs before any UI of this lifecycle exists.
     manager.adoptPlugin(plugin);
-    // The manager is a module-level singleton, so it survives disable→enable
-    // and "Open another vault" in the same process. Clearing at the START of a
-    // lifecycle is the convention `main.ts` documents for exactly that carry-
-    // over — and here it stops a failure from one vault greeting the next.
     manager.forgetSettledError();
     await manager.refreshInstallState();
     await manager.autoUpgrade(OPENCODE_PINNED_VERSION, OPENCODE_MIN_VERSION, (message) => {
@@ -285,14 +223,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     updateAgentModeBackendFields("opencode", { probeSessionId: sessionId });
   },
 
-  /**
-   * OpenCode doesn't use ACP `availableModes` — its "modes" are agents,
-   * switched at runtime via `session/set_config_option` with `configId:
-   * "mode"`. The `copilot-build` agent is provisioned in the spawn-time
-   * config (see `OpencodeBackend.buildOpencodeConfig`); `build` is the
-   * OpenCode built-in we surface as canonical `auto`. Plan mode is not
-   * exposed for opencode (no ACP-visible plan finalization tool).
-   */
   getModeMapping(_modeState, configOptions): ModeMapping | null {
     if (!configOptions) return null;
     const opt = configOptions.find((o) => o.id === OPENCODE_MODE_CONFIG_OPTION_ID);
@@ -305,11 +235,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   },
 };
 
-/**
- * Map an OpenCode provider id (the leading segment of a wire-form modelId)
- * back to its Copilot `ChatModelProviders` value, or `null` for OpenCode-
- * native providers that don't correspond to any Copilot provider.
- */
 function opencodeProviderToCopilot(opencodeProviderId: string): string | null {
   for (const [copilotProvider, oId] of Object.entries(OPENCODE_PROVIDER_MAP)) {
     if (oId === opencodeProviderId) return copilotProvider;

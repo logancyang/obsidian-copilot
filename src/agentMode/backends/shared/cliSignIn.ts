@@ -8,10 +8,8 @@ export interface CliAuthStatus {
 export interface SignInHandlers {
   onUrl?: (url: string) => void;
   onLine?: (line: string) => void;
-  /** Supplies protocol input for CLI account probes that use stdio. */
   onStdin?: (stdin: import("node:stream").Writable) => void;
   signal?: AbortSignal;
-  /** Select the backend's authorization page when CLI output also contains diagnostic URLs. */
   acceptUrl?: (url: string) => boolean;
 }
 export interface CliSignInController {
@@ -19,13 +17,6 @@ export interface CliSignInController {
   cancel: () => void;
 }
 
-/** Owns the browser-login subprocess used by Claude and Codex; credentials stay with their CLI.
- * @param command - Resolved adapter or CLI executable.
- * @param args - Backend-specific browser-login arguments.
- * @param env - Environment used by runtime sessions and status probes.
- * @param readStatus - Authoritative check after the login process exits.
- * @param handlers - Progress, browser fallback, and cancellation for the caller.
- */
 export function signInWithCli(
   command: string,
   args: string[],
@@ -64,8 +55,6 @@ export function signInWithCli(
     }
     try {
       if (process.platform === "win32") {
-        // taskkill addresses a PID, not a group. After exit, await pipe closure instead
-        // of targeting a PID that Windows may have reassigned.
         if (exited) return;
         treeStopped = false;
         execFile(
@@ -85,8 +74,6 @@ export function signInWithCli(
       logWarn("[AgentMode] Login cancellation failed", error);
     }
   };
-  // Closing the initiating dialog or cancelling must never publish a late successful login.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   if (handlers.signal?.aborted) {
     cancel();
     return { done, cancel };
@@ -134,13 +121,6 @@ export function signInWithCli(
   return { done, cancel };
 }
 
-/** Runs logout using the same process ownership as login and verifies the resulting account state.
- * @param command - Configured CLI or adapter executable.
- * @param args - Backend-specific logout arguments.
- * @param env - Session environment selecting the credential profile.
- * @param readStatus - Authoritative account check after the process closes.
- * @param options - Cancellation owned by the initiating surface.
- */
 export async function signOutWithCli(
   command: string,
   args: string[],
@@ -159,13 +139,10 @@ export async function signOutWithCli(
     },
     options
   ).done;
-  // Login's signed-out failure result cannot prove that logout removed any credentials.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   if (!status || options?.signal?.aborted) throw new Error("Sign-out did not complete.");
   return status;
 }
 
-/** Emit complete (newline-delimited) lines from a piped child stream. */
 function attachLineReader(stream: Readable | null, onLine: (line: string) => void): void {
   if (!stream) return;
   stream.setEncoding("utf8");

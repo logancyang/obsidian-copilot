@@ -4,7 +4,6 @@ import { CommandBlock, SetupStep } from "./SetupSteps";
 
 const DEFAULT_PROMPT = process.platform === "win32" ? "PS> " : "$ ";
 
-/** Match the `<code>` block that renders exactly this command behind the shell prompt. */
 const commandBlock =
   (command: string, prompt = DEFAULT_PROMPT) =>
   (_content: string, element: Element | null): boolean =>

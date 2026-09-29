@@ -43,7 +43,6 @@ function makeSystemPrompt(title: string, content: string): UserSystemPrompt {
   return { title, content, createdMs: 0, modifiedMs: 0, lastUsedMs: 0 };
 }
 
-/** The system-prompt jotai store is module-global — reset it between tests. */
 function resetPromptState(): void {
   setDisableBuiltinSystemPrompt(false);
   setSelectedPromptTitle("");
@@ -62,8 +61,6 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-// Mock the skills package so we can drive the deny-list synthesis path
-// without booting the real jotai store / Obsidian App singleton.
 let mockSkills: Skill[] = [];
 let mockSkillManagerReady = false;
 
@@ -101,12 +98,6 @@ function seedSkills(skills: Skill[]): void {
   mockSkillManagerReady = skills.length > 0;
 }
 
-// ---------------------------------------------------------------------------
-// Registry mocks — `buildOpencodeConfig` only calls
-// `backendConfigRegistry.resolveEnabled("opencode")` and
-// `providerRegistry.getApiKey(providerId)`.
-// ---------------------------------------------------------------------------
-
 function makeProvider(
   providerId: string,
   origin: ProviderOrigin,
@@ -126,7 +117,6 @@ function makeProvider(
   };
 }
 
-/** A self-hosted OpenAI-compatible BYOK provider (Ollama / LM Studio / custom). */
 function makeOpenAICompatibleProvider(
   providerId: string,
   baseUrl: string | undefined,
@@ -149,7 +139,6 @@ function makeModel(providerId: string, wireId: string): ConfiguredModel {
   };
 }
 
-/** Build an `EnabledBackendEntry` in the `"ok"` state. */
 function okEntry(provider: Provider, model: ConfiguredModel): EnabledBackendEntry {
   return {
     configuredModelId: model.configuredModelId,
@@ -159,14 +148,9 @@ function okEntry(provider: Provider, model: ConfiguredModel): EnabledBackendEntr
   };
 }
 
-/**
- * Construct the registry deps `buildOpencodeConfig` needs from a seeded list
- * of resolved entries and a key map keyed by `providerId`.
- */
 function makeDeps(args: {
   resolved: EnabledBackendEntry[];
   keys?: Record<string, string | null>;
-  /** Published effort levels keyed by wire id; a missing key answers null. */
 }): OpencodeModelDeps {
   const keys = args.keys ?? {};
   return {
@@ -183,7 +167,6 @@ function makeDeps(args: {
   };
 }
 
-/** The Copilot Plus provider row `CopilotPlusSetupApi` seeds. */
 function makePlusProvider(): Provider {
   return makeProvider(
     "p-plus",
@@ -196,13 +179,6 @@ function makePlusProvider(): Provider {
   );
 }
 
-/**
- * A Copilot Plus reasoning model, as the catalog reconcile persists it.
- *
- * @param efforts - Levels the service published for it. Omit for a row whose
- *   levels are unknown, which is what a service too old to publish them leaves
- *   behind.
- */
 function makePlusReasoningModel(wireId: string, efforts?: readonly string[]): ConfiguredModel {
   const model = makeModel("p-plus", wireId);
   model.info.reasoning = true;
@@ -212,10 +188,6 @@ function makePlusReasoningModel(wireId: string, efforts?: readonly string[]): Co
 
 const NO_MODELS_DEPS = makeDeps({ resolved: [] });
 
-/**
- * The rule OpenCode applies to `action` for `agentId`: top-level rules come
- * first, then the agent's own, and the last match decides.
- */
 function lastRuleFor(
   cfg: GeneratedOpencodeConfig,
   agentId: string,
@@ -476,7 +448,6 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     expect(entry.package).toBe("aisdk:@ai-sdk/openai-compatible");
     expect(entry.name).toBe("Ollama");
     expect(entry.settings?.baseURL).toBe("http://localhost:11434/v1");
-    // Key-less: apiKey must be absent, not an empty string.
     expect(entry.settings?.apiKey).toBeUndefined();
     expect(entry.models).toEqual({
       "llama3.2": {
@@ -575,9 +546,6 @@ describe("buildOpencodeConfig — provider/model injection", () => {
   });
 
   it("keeps a key-less self-hosted provider even when it carries a catalog id", async () => {
-    // Guards the catalog-growth scenario: if a local runner like Ollama ever
-    // gains a models.dev entry, its localhost baseUrl still tolerates a missing
-    // key, so it must not be dropped.
     const provider = makeProvider(
       "p-ollama-catalog",
       { kind: "byok", catalogProviderId: "ollama" },
@@ -596,8 +564,6 @@ describe("buildOpencodeConfig — provider/model injection", () => {
   });
 
   it("omits apiKey entirely when a catalog self-hosted provider has an empty-string keychain entry", async () => {
-    // Regression: `apiKey ?? undefined` would preserve `""` and leak
-    // `Authorization: Bearer ` downstream — assert the field is absent.
     const provider = makeProvider(
       "p-ollama-catalog",
       { kind: "byok", catalogProviderId: "ollama" },
@@ -617,9 +583,6 @@ describe("buildOpencodeConfig — provider/model injection", () => {
   });
 
   it("passes a baseUrl override through for a catalog provider (no npm — opencode resolves the SDK natively)", async () => {
-    // A catalog provider keeps native resolution (no npm), but when the user
-    // overrides its baseUrl we must forward it so opencode routes to the proxy
-    // instead of the registry default — matching the chat backend's behavior.
     const provider = makeProvider(
       "p-openai",
       { kind: "byok", catalogProviderId: "openai" },
@@ -639,10 +602,6 @@ describe("buildOpencodeConfig — provider/model injection", () => {
   });
 
   it("omits the baseURL when a catalog provider's URL is its own host-only endpoint (Google dialog seed)", async () => {
-    // The dialog seeds Google with the host-only endpoint, but the AI SDK
-    // treats baseURL as the complete prefix — forwarding it would drop the
-    // `/v1beta` segment and 404 every call. Recognize the canonical endpoint
-    // and let opencode's registry default (the versioned form) apply.
     const provider = makeProvider(
       "p-google",
       { kind: "byok", catalogProviderId: "google" },
@@ -674,7 +633,6 @@ describe("buildOpencodeConfig — provider/model injection", () => {
   });
 
   it("registers Copilot Plus as a custom openai-compatible provider from its own fields", async () => {
-    // Plus has no catalog identity, so its route comes from the provider row.
     const provider = makeProvider(
       "p-plus",
       { kind: "copilot-plus" },
@@ -754,9 +712,6 @@ describe("buildOpencodeConfig — provider/model injection", () => {
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 offers no effort levels when Copilot Plus levels are unknown, leaving the model at its default", async () => {
-    // A row cached before the service published levels, or one reconciled from a
-    // response that could not be read. Either way an imperfect menu beats
-    // dropping a control that works.
     const deps = makeDeps({
       resolved: [okEntry(makePlusProvider(), makePlusReasoningModel("copilot-plus-flash"))],
       keys: { "p-plus": "plus-token-123" },
@@ -771,8 +726,6 @@ describe("buildOpencodeConfig — provider/model injection", () => {
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 inherits catalog effort choices even when a BYOK row carries levels", async () => {
-    // Only Copilot Plus publishes levels. A BYOK row that happens to carry them
-    // must still keep opencode's own inference, since nothing vouches for them.
     const provider = makeProvider("p-anthropic", { kind: "byok", catalogProviderId: "anthropic" });
     const model = makeModel("p-anthropic", "copilot-plus-flash");
     model.info.reasoning = true;
@@ -825,10 +778,8 @@ describe("buildOpencodeConfig — provider/model injection", () => {
   });
 });
 
-/** The top-level rule every generated config carries. */
 const QUESTION_DENY = { action: "question", resource: "*", effect: "deny" };
 
-/** `copilot-build`'s ask-before-write rules. */
 const COPILOT_BUILD_ASKS = [
   { action: "shell", resource: "*", effect: "ask" },
   { action: "edit", resource: "*", effect: "ask" },
@@ -882,9 +833,6 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     expect(cfg.agents["copilot-build"].system).toContain("{folder_name}");
     expect(cfg.agents["copilot-build"].system).toContain("{activeNote}");
     expect(cfg.agents.build.system).toContain("{folder_name}");
-    // The prompt carries only the pill-syntax directive. Skill discovery is
-    // automatic from `.opencode/skills/`, so the prompt never templates in
-    // SKILL.md authoring instructions.
     expect(cfg.agents["copilot-build"].system).not.toContain("metadata.copilot-enabled-agents");
     expect(cfg.agents.build.system).not.toContain("metadata.copilot-enabled-agents");
     expect(cfg.agents["copilot-build"].permissions).toEqual(COPILOT_BUILD_ASKS);
@@ -911,7 +859,6 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
       expect(cfg.agents[id].system).not.toContain(COPILOT_PROMPT_BASE);
       expect(cfg.agents[id].system).not.toContain("You are Obsidian Copilot");
       expect(cfg.agents[id].system).not.toContain("respond in haiku");
-      // Pill directive is functional wiring, not builtin framing — always sent.
       expect(cfg.agents[id].system).toContain("{folder_name}");
     }
   });
@@ -919,8 +866,6 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
   it("gives both agents the shared product prompt, byte for byte", async () => {
     const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
-    // `toBe`, not `startsWith`: this string is the provider cache prefix, and a
-    // containment check passes while stray bytes push the rest out of the cache.
     expect(cfg.agents["copilot-build"].system).toBe(buildAgentSystemPrompt("opencode"));
     expect(cfg.agents.build.system).toBe(buildAgentSystemPrompt("opencode"));
   });
@@ -972,10 +917,6 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
   it("leaves AGENTS.md discovery to opencode instead of inlining instruction text", async () => {
     const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
-    // opencode walks up from the session cwd and collects every ancestor AGENTS.md on its
-    // own. Configuring `instructions` would be dead weight — those paths merge into the same
-    // Set discovery already filled — and inlining the text would put user bytes back in the
-    // cache prefix this PR exists to stabilize.
     expect(cfg.instructions).toBeUndefined();
     expect(cfg.agents["copilot-build"].system).not.toContain("AGENTS.md instructions:");
   });
@@ -994,7 +935,6 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
       },
     });
     const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
-    // The pill directive doesn't reference the skills folder at all.
     expect(cfg.agents["copilot-build"].system).not.toContain("team-skills");
     expect(cfg.agents.build.system).not.toContain("team-skills");
   });
@@ -1069,8 +1009,6 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
       makeSkill("e", ["codex"]),
     ]);
     const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
-    // a is claude-only → denied. e is codex-only → denied (codex also
-    // populates the cross-discovered `.agents/skills/` path). b/c/d not denied.
     expect(cfg.permissions).toEqual([
       QUESTION_DENY,
       { action: "skill", resource: "a", effect: "deny" },
@@ -1104,9 +1042,7 @@ describe("buildOpencodeConfig — context-cache external_directory allow", () =>
       resource: "/home/u/.obsidian-copilot/vaults/abc123/context-cache/**",
       effect: "allow",
     };
-    // build (auto) gets only the external_directory grant — no shell/edit asks.
     expect(cfg.agents.build.permissions).toEqual([allow]);
-    // copilot-build (default) keeps its ask-before-write rules AND gains allow.
     expect(cfg.agents["copilot-build"].permissions).toEqual([...COPILOT_BUILD_ASKS, allow]);
   });
 
@@ -1470,8 +1406,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
   });
 
   it("skips building the generated config when an override replaces it (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
-    // The override wins wholesale, so building a config would only be work
-    // thrown away.
     updateSetting("agentMode", {
       byok: {},
       activeBackend: "opencode",
@@ -1522,10 +1456,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     expect(logWarn).not.toHaveBeenCalled();
   });
 });
-
-// `COPILOT_PROMPT_BASE` and the full `buildAgentSystemPrompt` composition are
-// unit-tested in `backends/shared/agentSystemPrompt.test.ts`. The opencode tests
-// above only assert that the composed prompt reaches `cfg.agents.<id>.system`.
 
 describe("OPENCODE_PROVIDER_MAP", () => {
   it("maps the BYOK provider ids plus Copilot Plus to opencode provider ids", () => {

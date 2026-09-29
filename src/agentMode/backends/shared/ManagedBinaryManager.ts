@@ -13,7 +13,6 @@ import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { validateExecutableFile } from "@/utils/detectBinary";
 
-// Offline reloads retry at most daily; this file is local to the managed runtime directory.
 const AUTOMATIC_UPDATE_RETRY_DELAY_MS = 24 * 60 * 60 * 1000;
 const IDLE_ACTION_STATE: ManagedInstallActionState = Object.freeze({ kind: "idle" });
 
@@ -29,20 +28,14 @@ export interface InstalledBinary {
 }
 
 export interface ManagedBinaryInstallOptions {
-  /** Receives progress in addition to the manager's shared runtime state. */
   onProgress?: (progress: ManagedInstallProgress) => void;
 }
 
-/** What a backend's install pipeline receives from the manager that runs it. */
 export type ManagedBinaryPipelineOptions<TOptions> = TOptions & {
   signal: AbortSignal;
   progress: InstallProgressReporter;
 };
 
-/**
- * Coordinates installation, custom selection, and removal under one process-local
- * write lock. Backends own package acquisition, version validation, and settings.
- */
 export abstract class ManagedBinaryManager<
   TOptions extends ManagedBinaryInstallOptions = ManagedBinaryInstallOptions,
 > {
@@ -67,7 +60,6 @@ export abstract class ManagedBinaryManager<
     this.subscribers.forEach((notify) => notify());
   }
 
-  /** Projects the shared runtime state onto the install action every setup surface renders. */
   readonly getActionState = (): ManagedInstallActionState => {
     const state = this.getRuntimeState();
     if (state.kind === "installing") {
@@ -81,14 +73,11 @@ export abstract class ManagedBinaryManager<
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     if (state.kind === "busy" || state.kind === "detecting")
       return { kind: "running", label: "Configuring…" };
-    // Retry installs only, never a failed custom-path selection.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     if (state.kind === "error" && state.operation === "install")
       return { kind: "error", message: state.message };
     return IDLE_ACTION_STATE;
   };
 
-  /** Clears a completed failure when a new plugin lifecycle adopts this manager. */
   forgetSettledError(): void {
     // A reopened lifecycle must adopt an active run instead of clearing its progress.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
@@ -105,8 +94,6 @@ export abstract class ManagedBinaryManager<
   }
 
   private publishProgress(progress: ManagedInstallProgress): void {
-    // Late progress must not return a completed installation to the running state.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     if (!this.operation) return;
     this.publishState({ kind: "installing", progress });
   }
@@ -115,8 +102,6 @@ export abstract class ManagedBinaryManager<
     running: ManagedInstallRuntimeState,
     body: (signal: AbortSignal) => Promise<T>
   ): Promise<T> {
-    // Reject a competing writer while every surface observes the active run.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     if (this.operation) throw new ManagedInstallOperationInFlightError(this.displayName);
     const controller = new AbortController();
     this.operation = controller;
@@ -132,13 +117,9 @@ export abstract class ManagedBinaryManager<
         error instanceof ManagedInstallAbortError ||
         (error as Error | undefined)?.name === "AbortError"
       ) {
-        // Cancellation should not leave subscribed surfaces asking for Retry.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
         this.publishState({ kind: "idle" });
       } else {
         this.publishState({
-          // A failed path selection must not offer an install Retry in other windows.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
           operation: running.kind === "installing" ? "install" : "configure",
           kind: "error",
           message: error instanceof Error ? error.message : String(error),
@@ -148,32 +129,17 @@ export abstract class ManagedBinaryManager<
     }
   }
 
-  /**
-   * Updates an existing Copilot-managed installation to this plugin release's
-   * chosen agent version before startup. Retains the previous files
-   * and leaves the selection unchanged if installation fails.
-   * Recent failures delay another attempt on this device unless the target or
-   * minimum supported version changes. Throws if the target version is unsupported.
-   *
-   * @param pin - Agent version chosen for this plugin release, which may be older than the installed version.
-   * @param minimumVersion - Oldest stable agent version this plugin release supports.
-   * @param notify - Receives one success or failure message after an attempted installation.
-   */
   async autoUpgrade(
     pin: string,
     minimumVersion: string,
     notify: (message: string) => void
   ): Promise<void> {
-    // A misconfigured release must not install an agent version that Copilot cannot run.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/535
     assertBinaryCompatible(
       { kind: "installed", version: pin, source: "managed" },
       minimumVersion,
       this.displayName
     );
     const selected = this.readBinarySettings();
-    // Custom selections and first installs require explicit user intent.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
     if (
       this.isBusy() ||
       selected.binarySource !== "managed" ||
@@ -271,12 +237,6 @@ export abstract class ManagedBinaryManager<
     options: ManagedBinaryPipelineOptions<TOptions>
   ): Promise<InstalledBinary>;
 
-  /**
-   * Runs the backend's install pipeline with shared progress reporting. The
-   * caller must hold the operation lock.
-   * @param signal - Cancels the running operation.
-   * @param options - Backend installation options and an optional progress observer.
-   */
   protected async runInstallPipeline(
     signal: AbortSignal,
     options: TOptions
@@ -295,10 +255,6 @@ export abstract class ManagedBinaryManager<
     }
   }
 
-  /**
-   * Installs the backend package while preventing competing binary selection or removal.
-   * @param options - Backend installation options and an optional progress observer.
-   */
   async install(options: TOptions = {} as TOptions): Promise<InstalledBinary> {
     return this.runExclusive({ kind: "installing", progress: null }, (signal) =>
       this.runInstallPipeline(signal, options)
@@ -309,40 +265,28 @@ export abstract class ManagedBinaryManager<
     return [this.getDataDir()];
   }
 
-  /** Total disk space reclaimed by uninstall, including backend-owned legacy installs. */
   async downloadsSize(): Promise<number> {
     const sizes = await Promise.all(this.reclaimableDirs().map(dirSize));
     return sizes.reduce((total, size) => total + size, 0);
   }
 
-  /** Removes managed downloads and preserves a user-selected custom installation. */
   async uninstall(): Promise<void> {
     return this.runExclusive({ kind: "busy" }, async () => {
       await this.removeManagedDownloads();
-      // Custom executables belong to the user; removing downloads must not disconnect them.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
       if (this.readBinarySettings().binarySource !== "custom") this.clearBinarySettings();
     });
   }
 
-  /**
-   * Validates and selects a custom executable, then removes unused managed downloads.
-   * @param binaryPath - Executable to select, or null to clear the configured selection.
-   */
   async setCustomBinaryPath(binaryPath: string | null): Promise<void> {
     return this.runExclusive({ kind: "busy" }, () => this.writeCustomBinaryPath(binaryPath));
   }
 
   protected async writeCustomBinaryPath(binaryPath: string | null): Promise<void> {
-    // Clearing a selection must leave both user-owned files and downloaded versions intact.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     if (binaryPath === null) {
       this.clearBinarySettings();
       return;
     }
     const error = await validateExecutableFile(binaryPath);
-    // Catch invalid paths before persisting a configuration that cannot launch.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     if (error) throw new Error(error);
     const installed = await this.validateCustomBinary(binaryPath);
     this.updateBinarySettings({
@@ -353,8 +297,6 @@ export abstract class ManagedBinaryManager<
     try {
       await this.removeManagedDownloads();
     } catch (error) {
-      // Keep the validated selection usable even when reclaiming disk space fails.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
       throw new Error(
         `Your own binary is now in use, but Copilot could not remove its managed downloads: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -431,8 +373,6 @@ async function realPathOrMissing(filePath: string): Promise<string> {
   try {
     return await fs.promises.realpath(filePath);
   } catch (error) {
-    // Missing downloads and stale custom paths are normal during uninstall.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return filePath;
     throw error;
   }

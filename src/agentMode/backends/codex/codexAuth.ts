@@ -22,8 +22,6 @@ async function invocation(settings: CopilotSettings) {
     sanitizeBuiltinSkillEnvOverrides(config?.envOverrides)
   );
   const entry = resolveSupportedCodexAcpEntry(descriptor.command);
-  // User-owned npm adapters still need Node on Windows; native bundles provide their runtime.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   const node =
     process.platform === "win32" && entry.endsWith(".js") ? await detectBinary("node") : undefined;
   return buildCodexAcpInvocation(entry, [], descriptor.env, process.platform, node ?? undefined);
@@ -31,8 +29,6 @@ async function invocation(settings: CopilotSettings) {
 
 async function readCodexAuthStatus(settings: CopilotSettings) {
   const call = await invocation(settings);
-  // Environment-authenticated sessions need no browser login or persisted credentials.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   if (call.env.CODEX_API_KEY?.trim() || call.env.OPENAI_API_KEY?.trim()) return { signedIn: true };
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 10_000);
@@ -61,8 +57,6 @@ async function readCodexAuthStatus(settings: CopilotSettings) {
           );
         },
         onLine: (line) => {
-          // App-server also emits diagnostics and notifications; only our replies select an account.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
           let reply: AccountReply | null;
           try {
             reply = JSON.parse(line);
@@ -82,8 +76,6 @@ async function readCodexAuthStatus(settings: CopilotSettings) {
             const account = reply.result.account;
             if (account === null) status = { signedIn: false };
             else if (account && typeof account.type === "string") {
-              // Only ChatGPT accounts have an email. API-key accounts remain signed in without a label.
-              // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
               const email =
                 account.type === "chatgpt" && typeof account.email === "string"
                   ? account.email.trim()
@@ -96,16 +88,12 @@ async function readCodexAuthStatus(settings: CopilotSettings) {
             }
             input.end();
           } else if ((reply.id === 0 || reply.id === 1) && reply.error) {
-            // Diagnostics identify the failed protocol step without recording account data or CLI output.
-            // https://github.com/Brevilabs/obsidian-copilot-private/issues/578
             lastReply = reply.id === 0 ? "initialize error" : "account/read error";
             input.end();
           }
         },
       }
     ).done;
-    // Probe failures must not masquerade as successful logout.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
     if (!status || controller.signal.aborted) {
       logWarn("[AgentMode] Codex account probe incomplete", {
         lastReply,
@@ -119,7 +107,6 @@ async function readCodexAuthStatus(settings: CopilotSettings) {
   }
 }
 
-/** Uses the same configured adapter and profile as Codex sessions, without reading credentials. */
 export const codexAuth: BackendAuth = {
   getProbeKey(settings) {
     const config = settings.agentMode?.backends?.codex;
@@ -152,8 +139,6 @@ export const codexAuth: BackendAuth = {
     try {
       return await readCodexAuthStatus(settings);
     } catch {
-      // A failed probe looks signed out in the UI, so record that failure without error text or paths.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/578
       logWarn("[AgentMode] Codex account status unavailable");
       return { signedIn: false };
     }
@@ -189,8 +174,6 @@ export const codexAuth: BackendAuth = {
         acceptUrl: (url) => url.startsWith("https://auth.openai.com/"),
       }
     ).done;
-    // A browser success page cannot establish whether the adapter accepted the account; cancellation is expected.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/578
     if (!result.loggedIn && !handlers?.signal?.aborted)
       logWarn("[AgentMode] Codex browser sign-in ended without a verified account");
     return { signedIn: result.loggedIn, ...(result.label ? { label: result.label } : {}) };

@@ -38,19 +38,8 @@ function unsupportedAdapter(): Error {
   );
 }
 
-/**
- * Validates a Codex adapter's package identity and metadata, then returns its
- * executable path and versions. Older versions are returned so callers can
- * distinguish an installation that needs an upgrade from an invalid package.
- * Throws for missing files or invalid packages. The older Zed adapter is rejected
- * because it shares the `codex-acp` name but uses incompatible mode IDs.
- * https://github.com/logancyang/obsidian-copilot/issues/2916
- * @param adapterPath - Configured native executable, npm launcher, or package entry point.
- * @param platform - Platform whose path rules should resolve the package layout.
- * @param packageFs - Filesystem operations used to inspect package metadata.
- * @returns `version` identifies the installed package, including a native packaging
- * revision when present; `runtimeVersion` is the adapter version used for compatibility checks.
- */
+// The older Zed adapter is rejected: it shares the `codex-acp` name but uses incompatible mode IDs.
+// https://github.com/logancyang/obsidian-copilot/issues/2916
 export function inspectCodexAcpPackage(
   adapterPath: string,
   platform: NodeJS.Platform = process.platform,
@@ -139,14 +128,6 @@ export function inspectCodexAcpPackage(
   return { entryPath, version, runtimeVersion: version };
 }
 
-/**
- * Returns the Codex adapter's executable path and package version only if its
- * package is valid and its runtime meets CODEX_MIN_VERSION. Throws otherwise.
- *
- * @param adapterPath - Configured native executable, npm launcher, or package entry point.
- * @param platform - Operating system whose path rules and native bundle target to validate.
- * @param packageFs - Filesystem used to inspect package metadata.
- */
 export function resolveSupportedCodexAcpPackage(
   adapterPath: string,
   platform: NodeJS.Platform = process.platform,
@@ -165,7 +146,6 @@ export function resolveSupportedCodexAcpPackage(
   return { entryPath, version };
 }
 
-/** Resolve only the package entry for callers that do not need version metadata. */
 export function resolveSupportedCodexAcpEntry(
   adapterPath: string,
   platform: NodeJS.Platform = process.platform,
@@ -184,15 +164,6 @@ export function isSupportedCodexAcpPath(adapterPath: string | undefined): boolea
   }
 }
 
-/**
- * Launches native bundles directly and supported npm entries through the
- * installed Node runtime on Windows, avoiding unspawnable npm command shims.
- * @param entryPath - Validated native executable or npm JavaScript entry point.
- * @param args - Arguments to pass to the adapter.
- * @param env - Environment inherited by the adapter process.
- * @param platform - Platform whose launcher rules should apply.
- * @param nodePath - Installed Node executable required on Windows.
- */
 export function buildCodexAcpInvocation(
   entryPath: string,
   args: string[],

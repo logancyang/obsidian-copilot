@@ -6,10 +6,6 @@ import type {
   RawModeState,
 } from "@/agentMode/session/types";
 
-/**
- * Codex's inventory-free mode table. The picker comes from
- * {@link buildCodexModeState}; this only names the preset fan-out QA turns use.
- */
 export function buildCodexModeMapping(): ModeMapping {
   return {
     kind: "setMode",
@@ -30,7 +26,6 @@ const CURRENT_MODE: Record<string, CopilotMode> = {
   "agent/default": "auto",
 };
 
-/** Present Codex's collaboration workflow and approval presets as one picker. */
 export function buildCodexModeState(
   modeState: RawModeState | null,
   configOptions: BackendConfigOption[] | null

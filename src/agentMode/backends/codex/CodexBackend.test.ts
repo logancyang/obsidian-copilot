@@ -41,7 +41,6 @@ function makeSystemPrompt(title: string, content: string): UserSystemPrompt {
   return { title, content, createdMs: 0, modifiedMs: 0, lastUsedMs: 0 };
 }
 
-/** The system-prompt jotai store is module-global — reset it between tests. */
 function resetPromptState(): void {
   setDisableBuiltinSystemPrompt(false);
   setSelectedPromptTitle("");
@@ -85,8 +84,6 @@ describe("CodexBackend", () => {
       });
 
       const hostPlatform = process.platform;
-      // POSIX descriptor fixtures must not inherit the Windows Node-launch branch.
-      // https://github.com/logancyang/obsidian-copilot/issues/2967
       afterEach(() => Object.defineProperty(process, "platform", { value: hostPlatform }));
       beforeEach(() => {
         Object.defineProperty(process, "platform", { value: "darwin" });
@@ -192,8 +189,6 @@ describe("CodexBackend", () => {
         const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
         const shared = buildAgentSystemPrompt("codex");
 
-        // `toBe`, not `toContain`: this string is the provider cache prefix, and a containment
-        // check passes while stray bytes push everything after it out of the cache.
         expect(JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions).toBe(shared);
       });
 
@@ -244,7 +239,6 @@ describe("CodexBackend", () => {
         const value = JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions;
         expect(value).not.toContain("Obsidian Copilot");
         expect(value).not.toContain("respond in haiku");
-        // Pill directive is functional wiring, not builtin framing — always sent.
         expect(value).toContain("{folder_name}");
       });
 
@@ -264,7 +258,6 @@ describe("CodexBackend", () => {
         const backend = new CodexBackend();
         const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
         const value = JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions;
-        // The pill directive doesn't reference the skills folder at all.
         expect(value).not.toContain("team-skills");
         expect(value).not.toContain("copilot/skills");
       });
@@ -380,8 +373,6 @@ describe("CodexBackend", () => {
       });
 
       it("does not add a project.md fallback to the codex spawn args", async () => {
-        // Omitting the fallback prevents a GLOBAL session from treating a vault-root project.md note
-        // as codex instructions (the spawn descriptor has no scope to gate on).
         const backend = new CodexBackend();
         const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
         expect(desc.args).not.toContainEqual(

@@ -28,11 +28,6 @@ import type {
   RawModelState,
 } from "@/agentMode/session/types";
 
-/**
- * Transcribed from a live `codex-acp@1.1.10` `session/new` reply: one entry per
- * (base model × effort) pair, addressed as `<base>[<effort>]`, with a different
- * effort set per model and a blurb describing that one effort.
- */
 const ADVERTISED_CATALOG: RawModelState = {
   currentModelId: "gpt-5.6-sol[high]",
   availableModels: [
@@ -49,7 +44,6 @@ const ADVERTISED_CATALOG: RawModelState = {
   ],
 };
 
-/** The `category:"model"` option the same reply carries, listing base models only. */
 const ADVERTISED_CONFIG_OPTIONS: BackendConfigOption[] = [
   {
     id: "model",
@@ -171,8 +165,6 @@ describe("descriptor", () => {
             ?.effortOptions.map((o) => o.value);
 
         expect(efforts("gpt-5.6-sol")).toEqual(["low", "medium", "high", "xhigh", "max", "ultra"]);
-        // The same catalog gives gpt-5.5 no `max`/`ultra` — availability is
-        // per-model, never a vocabulary Copilot applies uniformly.
         expect(efforts("gpt-5.5")).toEqual(["low", "medium", "high", "xhigh"]);
       });
 
@@ -182,7 +174,6 @@ describe("descriptor", () => {
           CodexBackendDescriptor
         );
 
-        // The base description must not imply low effort for every variant.
         expect(
           state.model?.availableModels.find((e) => e.baseModelId === "gpt-5.6-sol")?.description
         ).toBe("Latest frontier agentic coding model.");

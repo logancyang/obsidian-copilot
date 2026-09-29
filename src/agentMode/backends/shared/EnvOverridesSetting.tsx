@@ -8,12 +8,7 @@ import React from "react";
 interface Props {
   value: Record<string, string> | undefined;
   onChange: (next: Record<string, string> | undefined) => void;
-  /** Backend label woven into the description, e.g. "Claude" or "opencode". */
   backendDisplayName: string;
-  /**
-   * Two example var names shown in the description and as the first row's
-   * placeholder. Cosmetic only — no validation is performed against this list.
-   */
   hintExamples: [string, string];
 }
 
@@ -43,9 +38,6 @@ function rowsToRecord(rows: Row[]): Record<string, string> | undefined {
   for (const row of rows) {
     const name = row.name.trim();
     if (!name) continue;
-    // Skip names that fail validation so malformed keys never reach
-    // backend spawn paths, which read `envOverrides` from settings
-    // directly without re-sanitizing.
     if (!ENV_VAR_NAME_RE.test(name)) continue;
     out[name] = row.value;
   }
@@ -54,21 +46,6 @@ function rowsToRecord(rows: Row[]): Record<string, string> | undefined {
 
 const COMMIT_DEBOUNCE_MS = 400;
 
-/**
- * Per-agent environment variable editor. Renders a labeled list of
- * `name` / `value` rows plus an "Add variable" button. Values are stored
- * verbatim — `~` is not expanded and whitespace is preserved.
- *
- * Persistence is debounced (`COMMIT_DEBOUNCE_MS`) to avoid rewriting
- * settings on every keystroke; the pending commit is flushed on unmount so
- * the last edit always lands. The parent's `value` is consulted only at
- * mount — external reloads while the editor is open are uncommon.
- *
- * Validation is permissive in the input: invalid names surface an inline
- * warning but don't block typing. `rowsToRecord` then drops malformed
- * rows before commit, so the persisted record (and the env passed to
- * backend subprocesses) only ever contains valid POSIX identifiers.
- */
 export const EnvOverridesSetting: React.FC<Props> = ({
   value,
   onChange,
@@ -106,8 +83,6 @@ export const EnvOverridesSetting: React.FC<Props> = ({
   };
 
   const addRow = (): void => {
-    // Empty rows are visible locally but excluded from the committed record
-    // by `rowsToRecord` — so this purposely doesn't call `commit`.
     setRows((prev) => [...prev, { id: nextRowId(), name: "", value: "" }]);
   };
 

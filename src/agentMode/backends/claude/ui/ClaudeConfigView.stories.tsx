@@ -42,7 +42,6 @@ const meta = {
 } satisfies Meta<ClaudeConfigViewProps>;
 export default meta;
 
-/** First run: no CLI found, so the path field is empty and the steps below explain why. */
 export const NotSetUp: StoryObj<ClaudeConfigViewProps> = {};
 
 export const Ready: StoryObj<ClaudeConfigViewProps> = {
@@ -61,7 +60,6 @@ export const Ready: StoryObj<ClaudeConfigViewProps> = {
   },
 };
 
-/** A custom-path install must be updated in place or cleared so auto-detection can take over. */
 export const UpdateRequired: StoryObj<ClaudeConfigViewProps> = {
   args: {
     state: OUTDATED,
@@ -70,7 +68,6 @@ export const UpdateRequired: StoryObj<ClaudeConfigViewProps> = {
   },
 };
 
-/** Sign-in in flight: the in-app button is busy, the command stays copyable. */
 export const SigningIn: StoryObj<ClaudeConfigViewProps> = {
   args: {
     state: { kind: "ready", source: "custom" },
@@ -89,7 +86,6 @@ export const SigningIn: StoryObj<ClaudeConfigViewProps> = {
   },
 };
 
-/** The CLI printed a URL because it could not open the OAuth page itself. */
 export const OAuthFallback: StoryObj<ClaudeConfigViewProps> = {
   args: {
     state: { kind: "ready", source: "custom" },
@@ -108,7 +104,6 @@ export const OAuthFallback: StoryObj<ClaudeConfigViewProps> = {
   },
 };
 
-/** A long path must not push Auto-detect and Apply out of the band. */
 export const LongPath: StoryObj<ClaudeConfigViewProps> = {
   args: {
     state: { kind: "ready", source: "custom" },

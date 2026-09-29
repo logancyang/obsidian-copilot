@@ -18,7 +18,6 @@ interface AuthenticationSectionProps {
   auth: AuthenticationState;
 }
 
-/** Account controls for CLI-backed agents; the container owns commands and authentication effects. */
 export const AuthenticationSection: React.FC<AuthenticationSectionProps> = ({
   ready,
   unavailableMessage,

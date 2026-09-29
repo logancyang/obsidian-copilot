@@ -78,33 +78,17 @@ export function codexAcpDetectionSearchDirs(): string[] {
   return codexAcpSearchDirs(codexAcpResolverEnv());
 }
 
-/**
- * Wire-format codec for Codex — see `codexModelId` for the format. No provider
- * segment (Codex's catalog isn't routed through Copilot BYOK keys, so
- * `decode().provider` stays `null`).
- */
 const codexWire: ModelWireCodec = {
   encode: (selection: ModelSelection) =>
     formatCodexModelId(selection.baseModelId, selection.effort),
   decode: (wireId: string) => ({ selection: parseCodexModelId(wireId), provider: null }),
 };
 
-/**
- * Codex backend — wraps the configured `codex-acp`, which inherits auth from
- * the bundled Codex CLI login. Auth is adapter-owned (no Copilot-side keys),
- * so the candidate models come entirely from the CLI's live config catalog
- * (active session or preloader cache); curation is the model-management
- * `backends.codex.enabledModels` set surfaced via `getEnabledModelEntries`.
- *
- * Model and effort are separate config options. Effort levels are discovered for
- * each enabled model through a probe session; Copilot enumerates none of its own.
- */
 export const CodexBackendDescriptor: BackendDescriptor = {
   id: "codex",
   auth: codexAuth,
   displayName: "Codex",
   Icon: CodexLogo,
-  // Cloud agent — flagged with a cloud-egress warning while Self-Host Mode is on.
   selfHostable: false,
   routesCopilotModels: false,
   setupDescription:
@@ -114,8 +98,6 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   restartOnManagedSkillsChange: false,
   restartOnProviderConfigChange: false,
   restartOnSystemPromptChange: true,
-  // codex names a session after the raw first prompt (which leaks the injected
-  // context envelope), so the session derives the tab title client-side instead.
   summarizesSessionTitle: false,
   // Codex ends its turn on revise_plan without acting on the deny message.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/41
@@ -124,18 +106,11 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   showModelDescriptions: true,
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
-    // All Codex models are agent-origin.
     return [
       ...agentOriginEnabledModelEntries(settings, "codex", (wireId) => codexWire.decode(wireId)),
     ];
   },
 
-  /**
-   * codex-acp reports inconsistently-cased names (`GPT-5.5` but also
-   * `gpt-5.4`, `gpt-5.3-codex`). Uppercase only the anchored `gpt` prefix so
-   * the column reads consistently — no family/token guessing, so the wire
-   * ids and any mid-string tokens are left untouched.
-   */
   normalizeModelName(name: string): string {
     return name.replace(/^gpt/i, "GPT");
   },
@@ -171,7 +146,6 @@ export const CodexBackendDescriptor: BackendDescriptor = {
         "Codex"
       );
     } catch (error) {
-      // Missing files and invalid packages need different recovery actions. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
       return classifyBinaryInstall(
         (error as NodeJS.ErrnoException).code === "ENOENT"
           ? { kind: "absent" }
@@ -206,8 +180,6 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   async onPluginLoad(): Promise<void> {
-    // A new vault or plugin lifecycle must not inherit a previous installation failure.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     codexBinaryManager.forgetSettledError();
     await codexBinaryManager.autoUpgrade(CODEX_PINNED_VERSION, CODEX_MIN_VERSION, (message) => {
       new Notice(message);
@@ -250,10 +222,6 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   prefetchEffortCatalog: prefetchConfigEfforts,
 
   createBackendProcess(args): BackendProcess {
-    // Codex sees managed skills only via the `.agents/skills/<name>`
-    // symlink. The per-agent toggle drives whether the symlink exists; no
-    // deny synthesis is needed because Codex does not cross-discover from
-    // `.claude/skills/` or `.opencode/skills/`.
     return simpleBinaryBackendProcess(args, new CodexBackend(args.clientVersion));
   },
 

@@ -22,7 +22,6 @@ interface FakeResponse {
   chunks?: Buffer[];
 }
 
-/** Serves one scripted response per request, in order. */
 function serve(...responses: FakeResponse[]): void {
   mockGet.mockImplementation((_url, _options, callback) => {
     const next = responses.shift()!;

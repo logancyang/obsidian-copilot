@@ -36,11 +36,6 @@ const OUTDATED: InstallState = {
   message: `Codex adapter v1.9.0-r1 requires an upgrade. Copilot requires Codex adapter v${CODEX_PINNED_VERSION} or newer.`,
 };
 
-/**
- * Every story renders through this stateful wrapper so the gallery can exercise
- * the source switch for real: `args.source` seeds the first render (keeping each
- * story's captured state), then clicking a segment swaps the visible branch.
- */
 const InteractiveConfigView: React.FC<Partial<CodexConfigViewProps>> = (props) => {
   const [source, setSource] = React.useState<CodexBinarySource>(props.source ?? "managed");
   return (
@@ -88,7 +83,6 @@ const meta = {
 } satisfies Meta<CodexConfigViewProps>;
 export default meta;
 
-/** First run: nothing installed, so the managed path offers a single download. */
 export const ManagedNotInstalled: StoryObj<CodexConfigViewProps> = {
   render: InteractiveConfigView,
 };
@@ -160,10 +154,6 @@ export const CustomPathApplied: StoryObj<CodexConfigViewProps> = {
   },
 };
 
-/**
- * Looking at the custom path before setting one, while the managed binary is the
- * one actually running — the case the "in use right now" note exists for.
- */
 export const CustomNotSetYet: StoryObj<CodexConfigViewProps> = {
   render: InteractiveConfigView,
   args: { source: "custom", state: { kind: "ready", source: "managed" }, activeSource: "managed" },

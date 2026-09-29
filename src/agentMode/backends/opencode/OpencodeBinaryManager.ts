@@ -45,14 +45,10 @@ async function execFileAsync(
   const { stdout } = await promisify(execFile)(file, args, options);
   return { stdout };
 }
-// Generous: first-run on Windows (Defender real-time scan) and macOS
-// (Gatekeeper translocation) can add a few seconds before the binary responds.
 const VERIFY_BINARY_TIMEOUT_MS = 8_000;
-// `opencode upgrade` downloads and swaps a release binary — give it room.
 const UPGRADE_BINARY_TIMEOUT_MS = 180_000;
 
 export interface InstallOptions extends ManagedBinaryInstallOptions {
-  /** Override pinned version. Defaults to OPENCODE_PINNED_VERSION. */
   version?: string;
 }
 
@@ -60,18 +56,8 @@ export type InstallState =
   | { kind: "absent" }
   | { kind: "installed"; version: string; path: string; source: "managed" | "custom" };
 
-/**
- * What the manager is currently doing to the opencode binary, as opposed to
- * {@link InstallState}, which is what the *persisted settings* say. Every UI
- * that can start one of these operations reads this, so none of them offers a
- * competing action while one is running.
- *
- * `busy` covers the operations with nothing to show but the fact that they are
- * running; `installing` is separate because it carries download progress.
- */
 export type RuntimeState = ManagedInstallRuntimeState;
 
-/** Thrown when a second binary-path operation is started while one is running. */
 export class OperationInFlightError extends ManagedInstallOperationInFlightError {
   constructor() {
     super("opencode");
@@ -92,15 +78,6 @@ export class AbortError extends ManagedInstallAbortError {
   }
 }
 
-/**
- * Reports whether the configured OpenCode executable exists on this device.
- * Synced settings can point to a file that exists only on another device;
- * returning `absent` lets Copilot offer installation instead of trying to launch it.
- * Version compatibility is checked separately by toOpencodeInstallState.
- *
- * @param opencode - Saved OpenCode path, version, and installation source.
- * @param fileExists - Checks whether the configured executable exists locally.
- */
 export function computeInstallState(
   opencode: OpencodeBackendSettings | undefined,
   fileExists: (path: string) => boolean = (p) => nodeFs().existsSync(p)
@@ -118,18 +95,10 @@ export function computeInstallState(
   return { kind: "absent" };
 }
 
-/** Read the OpenCode-specific settings slice from current settings. */
 export function readOpencodeSettings(): OpencodeBackendSettings {
   return getSettings().agentMode?.backends?.opencode ?? {};
 }
 
-/**
- * Returns whether a reported OpenCode version fails Copilot's compatibility check.
- * Older versions, prereleases of OPENCODE_MIN_VERSION, and malformed versions fail.
- * Missing or empty versions return false because installation detection handles them.
- *
- * @param version - Version reported by the OpenCode executable, if available.
- */
 export function isOpencodeVersionOutdated(version: string | undefined): boolean {
   if (!version) return false;
   return (
@@ -141,13 +110,6 @@ export function isOpencodeVersionOutdated(version: string | undefined): boolean 
   );
 }
 
-/**
- * Converts a detected OpenCode installation into the status shown by Copilot:
- * `ready`, `incompatible` with OPENCODE_MIN_VERSION, `error` for invalid version
- * metadata, or `absent` when no installation was found.
- *
- * @param state - Locally detected installation with its saved version and source.
- */
 export function toOpencodeInstallState(state: InstallState): BackendInstallState {
   return classifyBinaryInstall(state, OPENCODE_MIN_VERSION, "opencode");
 }
@@ -172,33 +134,10 @@ function clearOpencodeBinary(): void {
   });
 }
 
-/**
- * Per-user, OS-local directory the managed opencode binary installs into,
- * OUTSIDE the Obsidian vault — `~/.obsidian-copilot/opencode`. Composed under
- * the shared {@link copilotAppDataDir} root so the namespace is defined once.
- * Mirrors how companion tools install their CLIs under the home dir (e.g.
- * Miyo's `~/.miyo/bin`).
- *
- * Why not the plugin data dir (`<vault>/.obsidian/plugins/copilot/data/...`):
- * that lives inside the vault, so sync services (Obsidian Sync, iCloud,
- * Dropbox, Syncthing) replicate the ~100MB binary across devices — but the
- * binary is per-OS and per-arch, so a synced copy is useless (or broken) on
- * another machine. Keeping it under the home dir takes it out of every sync
- * scope while staying per-user.
- */
 export function opencodeManagedDataDir(homeDir: string): string {
   return nodePath().join(copilotAppDataDir(homeDir), "opencode");
 }
 
-/**
- * The pre-#2569 in-vault install root,
- * `<vault>/.obsidian/plugins/<id>/data/opencode`. Managed installs used to
- * live here and were replicated across devices by every sync service.
- *
- * Kept only so the user-triggered {@link OpencodeBinaryManager.uninstall} can
- * reclaim a preview tester's stale in-vault copy in the same click — there is
- * no auto-running migration. Never written to.
- */
 export function legacyVaultDataDir(
   vaultBasePath: string,
   configDir: string,
@@ -207,12 +146,6 @@ export function legacyVaultDataDir(
   return nodePath().join(vaultBasePath, configDir, "plugins", pluginId, "data", "opencode");
 }
 
-/**
- * Manages the lifecycle of the opencode binary on disk: platform-aware
- * download from npm, extraction into a per-user OS-local dir
- * (outside the vault, see {@link opencodeManagedDataDir}), and persistence of
- * the install location into `settings.agentMode`. Desktop-only.
- */
 export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> {
   constructor(private plugin: CopilotPlugin) {
     super("opencode");
@@ -227,41 +160,10 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     updateOpencodeFields(settings);
   }
 
-  /**
-   * Point the manager at the plugin instance of the lifecycle now running.
-   *
-   * The manager is cached at module scope and deliberately outlives a lifecycle
-   * (the carry-over `main.ts` documents), so the plugin it was constructed with
-   * can name a vault that is no longer open. {@link uninstall} deletes an
-   * in-vault path derived from that plugin — left stale, it would delete out of
-   * the previous vault. Only the handle is replaced, so a run still in flight
-   * is adopted rather than restarted.
-   *
-   * Call this once per lifecycle, from the backend's `onPluginLoad` and nowhere
-   * else. The binding is global mutable state read at operation time, so a
-   * caller that rebound on its way in would retarget the manager for every
-   * holder — including surfaces of the lifecycle that is actually running.
-   *
-   * @param plugin - The current lifecycle's plugin, whose vault every in-vault
-   * path must be derived from.
-   */
   adoptPlugin(plugin: CopilotPlugin): void {
     this.plugin = plugin;
   }
 
-  /**
-   * Run `body` as the one binary-path operation, publishing `running` for its
-   * duration and settling back to idle (or to an error the UI can show).
-   *
-   * Every *user-triggered* operation that writes `binaryPath`/`binarySource`
-   * goes through here, which is what makes the lock useful: guarding only the
-   * managed install would still let the Configure dialog apply a custom path
-   * underneath it. {@link refreshInstallState} is the one writer outside, and
-   * says there why.
-   *
-   * @param running - State published while `body` runs.
-   * @param body - Receives the signal to honour for cancellation.
-   */
   protected async runExclusive<T>(
     running: RuntimeState,
     body: (signal: AbortSignal) => Promise<T>
@@ -280,31 +182,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     return computeInstallState(readOpencodeSettings());
   }
 
-  /**
-   * Reconcile persisted install state with what's actually on disk. If we
-   * believe a managed install exists but the binary is gone (user deleted it,
-   * restored a vault from backup, etc.), demote to `absent`. Skipped for
-   * custom-source installs — re-checking on every plugin load would punish
-   * users for transient filesystem hiccups (network mounts, etc.).
-   *
-   * DESIGN NOTE — this is the one `binaryPath` writer that stays outside
-   * {@link runExclusive}, and the residual race is accepted. To lose data a
-   * user needs a managed path whose file is already gone, an install still
-   * running from a previous lifecycle, a reload landing mid-run, AND the
-   * single `fileExists` stat below straddling the instant that install
-   * persists its result — at which point the clear would wipe the fresh
-   * install. Taking the lock here would be worse: a reconcile at load would
-   * throw `OperationInFlightError` on every plugin load that happens during a
-   * download, turning a millisecond-wide race into a routine failure. If a
-   * future review flags this again, point them at this note; the cheap fix, if
-   * it ever bites, is to re-read settings after the await and only clear when
-   * the path still matches the one checked.
-   */
   async refreshInstallState(): Promise<void> {
-    // Read raw settings (not getInstallState) so we can still see a configured
-    // path whose file is gone — getInstallState now reports that as `absent`.
-    // Only auto-clear a *managed* install whose binary vanished; a custom path
-    // is the user's to manage and may point at a not-yet-mounted volume.
     const s = readOpencodeSettings();
     if (!s.binaryPath || (s.binarySource ?? "managed") !== "managed") return;
     if (await fileExists(s.binaryPath)) return;
@@ -312,22 +190,12 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     clearOpencodeBinary();
   }
 
-  /**
-   * Absolute path to the per-user, OS-local opencode install root, OUTSIDE the
-   * vault (`~/.obsidian-copilot/opencode`). See {@link opencodeManagedDataDir}
-   * for why this is not under the synced plugin data dir.
-   */
   getDataDir(): string {
     const adapter = this.plugin.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
       throw new Error("Agent Mode requires desktop Obsidian (FileSystemAdapter).");
     }
     const home = requireNodeModule<typeof import("node:os")>("os").homedir();
-    // Guard against a missing/garbage home dir (empty string, or the filesystem
-    // root) before we build an install path under it: `os.homedir()` can return
-    // "" in broken/sandboxed environments, and installing into `/.obsidian-copilot`
-    // would be wrong and almost certainly unwritable. Fail with an actionable
-    // message instead of a confusing downstream spawn error.
     if (!home || !nodePath().isAbsolute(home) || nodePath().parse(home).root === home) {
       throw new Error(
         "Could not resolve your home directory to install the opencode runtime. " +
@@ -337,13 +205,6 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     return opencodeManagedDataDir(home);
   }
 
-  /**
-   * Installs and selects a supported OpenCode release, reusing matching files
-   * when possible. The caller must hold the installation lock so an upgrade can
-   * install the replacement and remove the old version as one operation.
-   *
-   * @param opts - Release version, progress reporter, and cancellation signal.
-   */
   protected async installPipeline(
     opts: ManagedBinaryPipelineOptions<InstallOptions>
   ): Promise<{ version: string; path: string }> {
@@ -367,12 +228,9 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     const binName = expectedBinaryName(target.platform);
     const finalBinPath = nodePath().join(versionDir, "bin", binName);
 
-    // Idempotency: if the existing manifest matches and the binary is in place, no-op.
     const existing = await readManifest(nodePath().join(versionDir, "install-manifest.json"));
     if (existing && existing.assetName === asset.name && (await fileExists(finalBinPath))) {
       logInfo(`[AgentMode] opencode ${version} already installed at ${finalBinPath}`);
-      // Skip the write when settings already match — avoids spuriously waking
-      // every settings subscriber on healthy plugin loads.
       const cur = readOpencodeSettings();
       if (
         cur.binaryVersion !== version ||
@@ -389,10 +247,6 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
       return { version, path: finalBinPath };
     }
 
-    // Create the OS-local install root up front so an unwritable home dir
-    // (sandboxed/confined HOME on Linux Flatpak/Snap, locked-down accounts)
-    // fails here with an actionable message naming the path, rather than later
-    // mid-extraction.
     try {
       await nodeFs().promises.mkdir(dataDir, { recursive: true });
     } catch (e) {
@@ -430,7 +284,6 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
         await nodeFs().promises.chmod(extractedBin, 0o755);
       }
 
-      // Stage the final layout under tmpDir, then atomically rename into place.
       const stageDir = nodePath().join(tmpDir, "stage");
       const stageBinDir = nodePath().join(stageDir, "bin");
       await nodeFs().promises.mkdir(stageBinDir, { recursive: true });
@@ -446,8 +299,6 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
         JSON.stringify(manifest, null, 2)
       );
 
-      // Verification must finish before any published directory changes.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
       opts.progress.verifying();
       const verified = await verifyOpencodeBinary(nodePath().join(stageBinDir, binName));
       if (parseVersionFromStdout(verified.stdout) !== version)
@@ -472,15 +323,6 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     }
   }
 
-  /**
-   * Upgrade a managed install to the pinned version: install the pinned binary
-   * (atomic — the existing one keeps working until the new one is staged in),
-   * then remove the previously-active managed version dir when it differs.
-   *
-   * Owns the operation itself and drives {@link installPipeline} directly, so
-   * the run stays locked — and the row stays on "installing" — until the old
-   * version dir is gone, not just until the new binary lands.
-   */
   async upgradeManaged(opts: InstallOptions = {}): Promise<{ version: string; path: string }> {
     return this.runExclusive({ kind: "installing", progress: null }, async (signal) => {
       const prev = readOpencodeSettings();
@@ -502,12 +344,6 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     });
   }
 
-  /**
-   * Upgrade a user-supplied opencode binary in place via its own
-   * `<binary> upgrade`, then re-verify and persist the new version. The binary
-   * stays where the user put it (`binarySource:"custom"`); managed version dirs
-   * are untouched. Throws with a readable message on failure.
-   */
   async upgradeCustomBinary(): Promise<{ version: string; path: string }> {
     return this.runExclusive({ kind: "installing", progress: null }, async (signal) => {
       const s = readOpencodeSettings();
@@ -517,8 +353,6 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
       const binaryPath = s.binaryPath;
       try {
         await execFileAsync(binaryPath, ["upgrade"], {
-          // Configure exposes Cancel for this shared operation; stop the process as well.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
           signal,
           timeout: UPGRADE_BINARY_TIMEOUT_MS,
           windowsHide: true,
@@ -529,8 +363,6 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
         throw new Error(`\`${binaryPath} upgrade\` failed: ${err.message ?? String(err)}`);
       }
       const { stdout } = await verifyOpencodeBinary(binaryPath);
-      // Cancellation during validation must not publish an updated configuration.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
       this.throwIfAborted(signal);
       const version = parseVersionFromStdout(stdout);
       if (!version) {
@@ -548,13 +380,6 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     });
   }
 
-  /**
-   * Every dir {@link uninstall} reclaims: the OS-local managed root plus the
-   * pre-#2569 in-vault copy (so a tester who just updated, and still has the
-   * binary only inside the vault, isn't told there's nothing to remove).
-   * `getDataDir()` is resolved defensively so a bad home dir doesn't block
-   * reclaiming the in-vault copy.
-   */
   protected reclaimableDirs(): string[] {
     const dirs: string[] = [];
     try {
@@ -591,8 +416,6 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
   }
 }
 
-// Tolerant of leading `v`, build metadata, etc. — keeps the parser working
-// across opencode releases that decorate the version string differently.
 export function parseVersionFromStdout(stdout: string): string | undefined {
   const match = stdout.match(/\d+\.\d+\.\d+(?:[-+][\w.]+)?/);
   return match?.[0];

@@ -9,14 +9,12 @@ jest.mock("@/logger", () => ({ logInfo: jest.fn() }));
 
 const UNAVAILABLE: PlanUsageReading = { kind: "unavailable" };
 
-/** The windows of a usage reading, or the empty list for any other kind. */
 function windowsOf(reading: PlanUsageReading): UsageWindow[] {
   return reading.kind === "usage" ? reading.planUsage.windows : [];
 }
 
 describe("codexPlanUsage", () => {
   describe("planUsageFromCodexRateLimits()", () => {
-    /** The `rate_limits` object from a real Codex rollout, on a Pro account. */
     const LIVE_PRO_SNAPSHOT = {
       limit_id: "codex",
       limit_name: null,
@@ -27,9 +25,6 @@ describe("codexPlanUsage", () => {
     };
 
     it("reads the single weekly window a Pro account reports", () => {
-      // Codex fills `primary` with whatever window the plan has, so on this account the
-      // weekly cap arrives in the slot other plans use for a shorter one. Naming the row
-      // after the slot would have labelled this "5h".
       const reading = planUsageFromCodexRateLimits(LIVE_PRO_SNAPSHOT, 1_000);
 
       expect(reading).toEqual({
@@ -85,8 +80,6 @@ describe("codexPlanUsage", () => {
     });
 
     it("drops a window whose duration it cannot name", () => {
-      // A percentage with no window is a number with no meaning attached; rendering it
-      // would put an unlabelled row in front of the user.
       const reading = planUsageFromCodexRateLimits({
         primary: { used_percent: 13, window_minutes: null },
         secondary: { used_percent: 8, window_minutes: 10_080 },
@@ -103,21 +96,14 @@ describe("codexPlanUsage", () => {
     ])(
       "reports %s unavailable rather than clearing the meters (https://github.com/logancyang/obsidian-copilot-preview/issues/193)",
       (_label, limits) => {
-        // A rollout can never affirm that an account is unmetered, so an empty snapshot
-        // is the absence of news, never a statement that clears a meter.
         expect(planUsageFromCodexRateLimits(limits as never)).toEqual(UNAVAILABLE);
       }
     );
   });
 
   describe("readCodexPlanUsage()", () => {
-    /**
-     * A future reset, because the reader drops windows whose recorded reset has passed
-     * — a fixed instant here would expire and start failing these tests on real time.
-     */
     const RESETS_AT_SECONDS = Math.floor(Date.now() / 1000) + 3_600;
 
-    /** A `token_count` event as Codex appends it, trimmed to the fields this reads. */
     function tokenCountLine(
       usedPercent: number,
       windowMinutes = 10_080,
@@ -152,7 +138,6 @@ describe("codexPlanUsage", () => {
       fs.rmSync(codexHome, { recursive: true, force: true });
     });
 
-    /** Write a rollout under `sessions/<day>/`, optionally stamping its modification time. */
     function writeRollout(day: string, name: string, lines: string[], mtime?: Date): string {
       const dir = path.join(codexHome, "sessions", ...day.split("/"));
       fs.mkdirSync(dir, { recursive: true });
@@ -176,8 +161,6 @@ describe("codexPlanUsage", () => {
     });
 
     it("takes the most recently written rollout, not the most recently dated directory", async () => {
-      // A session opened yesterday and still running now keeps appending to yesterday's
-      // directory, so the newest numbers can sit behind an older-looking path.
       writeRollout(
         "2026/09/01",
         "rollout-2026-09-01T00-05-00-new.jsonl",
@@ -197,8 +180,6 @@ describe("codexPlanUsage", () => {
     });
 
     it("reports a snapshot whose recorded reset has passed unavailable (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
-      // A rollout can be arbitrarily old. After a long idle, presenting the finished
-      // period's 95% as current would be worse than showing nothing.
       writeRollout("2026/08/10", "rollout-2026-08-10T10-00-00-idle.jsonl", [
         tokenCountLine(95, 10_080, Math.floor(Date.now() / 1000) - 60),
       ]);
@@ -207,9 +188,6 @@ describe("codexPlanUsage", () => {
     });
 
     it("falls back past a rollout that has no limits recorded yet (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
-      // Opening a chat creates a rollout holding only session metadata, and on a fresh
-      // plugin start there is no in-memory snapshot to keep showing — the account's
-      // last recorded caps live in the next-newest file.
       writeRollout(
         "2026/08/14",
         "rollout-2026-08-14T09-00-00-prior.jsonl",
@@ -229,8 +207,6 @@ describe("codexPlanUsage", () => {
     });
 
     it("still finds a session active for days behind newer day directories", async () => {
-      // A rollout is filed under the day its session STARTED, so a chat kept open all
-      // week appends to a directory several dates behind the newest one.
       for (let day = 11; day <= 14; day++) {
         writeRollout(
           `2026/08/${day}`,
@@ -265,7 +241,6 @@ describe("codexPlanUsage", () => {
       expect(windowsOf(reading)[0]?.percent).toBe(13);
     });
 
-    /** Filler wide enough that the head of the file falls outside the 256KB tail read. */
     function pastTheTail(): string[] {
       const line = JSON.stringify({
         type: "event_msg",
@@ -280,7 +255,6 @@ describe("codexPlanUsage", () => {
         tokenCountLine(13),
       ]);
 
-      // The bound only means something if the file actually exceeds it.
       expect(fs.statSync(file).size).toBeGreaterThan(256 * 1024);
       const reading = await readCodexPlanUsage(codexHome);
 
@@ -288,9 +262,6 @@ describe("codexPlanUsage", () => {
     });
 
     it("does not read limits that fall outside the tail", async () => {
-      // Rollouts reach megabytes and this runs at every attach and turn boundary, so the
-      // read is bounded. Limits that old are stale anyway, and a stale number on a cap
-      // meter is worse than no number.
       writeRollout("2026/08/14", "rollout-2026-08-14T10-00-00-old.jsonl", [
         tokenCountLine(13),
         ...pastTheTail(),
@@ -324,7 +295,6 @@ describe("codexPlanUsage", () => {
 
     describe("lastRateLimits()", () => {
       it("skips a truncated leading line", () => {
-        // The tail read starts mid-file, so the first line is normally a fragment.
         const tail = ['_count","rate_limits":{"primary"', tokenCountLine(13)].join("\n");
 
         expect(lastRateLimits(tail)?.primary?.used_percent).toBe(13);
