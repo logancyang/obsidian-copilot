@@ -625,8 +625,8 @@ only from itself and `react`. Everything else it names is a type import, which t
 so the protocol layer describes `session/` types without loading `session/` values, `acp/`, `sdk/`,
 `backends/`, Node built-ins, `electron`, `@/logger`, `@/settings/model`, `@/utils`, or `obsidian`
 values. `AgentSessionManager` already throws on `Platform.isMobile`; `src/main.ts` keeps loading
-`@/agentMode` only behind `isDesktopRuntime()` and #613 adds a second, statically importable entry
-that resolves to `protocol/index.ts`.
+`@/agentMode` only behind `isDesktopRuntime()`. The phone loads `@/agentMode/mobile` instead
+(section 9.5).
 
 `app.emulateMobile(true)` flips `Platform.isMobile` inside Electron's Chromium with `require` still
 working (`Platform.isDesktopApp` stays `true`), so a Node-only import would load and run under it.
@@ -724,11 +724,11 @@ projectors, op log, transport and commands; (3) recorded fixtures, parity tests 
 
 ### 9.2 Deferred
 
-| Lane | Deferred work                                                                                                                                                                                                                                                                                                                    |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #613 | WebSocket transport, backoff, connect timeout, `visibilitychange` reconnect, backpressure, frame size limit; connection identity and authorization; command `origin` (and whether a phone-originated pick may change desktop defaults); mobile entry point and UI; version-mismatch screen; analytics; real-iPhone verification. |
-| #610 | Pairing and tokens, see [`REMOTE_PAIRING.md`](./REMOTE_PAIRING.md).                                                                                                                                                                                                                                                              |
-| #607 | Persisting or replaying the op log across restarts.                                                                                                                                                                                                                                                                              |
+| Lane | Deferred work                                                                                                                                                                                                                                                                     |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #613 | Delivered, see sections 5.2.1 and 9.5. Not done: pacing outbound frames to a slow phone (the desktop drops a connection whose unsent backlog passes 64 MiB and the phone resumes from its cursor) and command `origin`, which nothing reads because no command changes a default. |
+| #610 | Pairing and tokens, see [`REMOTE_PAIRING.md`](./REMOTE_PAIRING.md).                                                                                                                                                                                                               |
+| #607 | Persisting or replaying the op log across restarts.                                                                                                                                                                                                                               |
 
 ### 9.2.1 What the client UI needs from its environment
 
@@ -777,3 +777,36 @@ program for `protocol/`.
 - `AgentSessionManager` startup and shutdown are untouched by #609. The host observes the manager
   through `subscribe`, `getSessions`, `getTabSessions` and session listeners, so sessions restored
   at startup appear as ordinary `tab.add` ops.
+
+### 9.5 The phone client
+
+`src/agentMode/mobile/` is the phone's agent entry. `main.ts` loads it behind `!isDesktopRuntime()` and
+registers `RemoteAgentView` for the agent view type; the ribbon icon and the "Open Copilot Agent Chat"
+command open it once the open vault has a paired desktop. Its module closure holds the protocol layer,
+the shared UI (message pane, composer, pickers, tab strip) and a few leaf modules; it never reaches
+`acp/`, `sdk/`, `backends/`, `skills/`, the session manager or the host, and adds no Node or electron
+import beyond what the legacy phone chat already loads. `scripts/mobile-load-smoke.cjs` bundles the entry
+and fails on any of those, or on a dynamic import of a desktop-only module that is not gated by
+`isDesktopRuntime()`, then evaluates the bundle with Node built-ins and electron poisoned.
+
+- `RemoteAgentApp` picks the paired desktop (asking only when several are paired), and `RemoteSession`
+  shows either a full-screen state (`connecting`, `syncing`, `offline`, `unreachable`, `denied`,
+  version mismatch with both versions) or the chat. Once the phone holds a replica, a lost connection
+  shows a banner over it instead. `deriveRemoteStatus` maps the transport's link state and the client's
+  connection state onto that choice.
+- `createRemoteSessionRuntime` builds one client for one desktop: transport, `SessionClient`, a
+  `ClientView` attached to it, and a draft store keyed by the tab set. It never calls
+  `watchAttachedTabs`; the tab pane watches the session it shows. It sends `focus` null while the app
+  is in the background.
+- `createPhonePaneCapabilities` supplies `backendIcon`, `backendName`, `multiAgentAllowed` and
+  `imageBytesBudget` and omits `persistDefaults`, `openPath`, `openPlanPreview` and `insertAtCursor`, so a
+  pick on the phone never changes a desktop default and the plan card has no Open control.
+- Notes travel as paths from the phone's own vault. A path the desktop cannot resolve is reported in the
+  `send` result's `droppedNotePaths` and shown to the user. Images are limited to
+  `REMOTE_IMAGE_BYTES_PER_COMMAND` (5 MiB decoded) because a command is one frame and the listener
+  refuses frames over 16 MiB.
+- Access is Copilot Plus, checked on the desktop only: the listener does not authenticate a phone
+  while the desktop's Plus check fails.
+- Events (`remote_pair_completed`, `remote_pair_failed`, `remote_session_opened`, `remote_command`)
+  carry only a name from a fixed set (`remote/remoteEvents.ts`). The repository has no client event
+  pipeline, so the default sink writes them to the log.

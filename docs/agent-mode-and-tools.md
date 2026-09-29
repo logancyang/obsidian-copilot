@@ -4,7 +4,7 @@ Agent Chat is the default Copilot experience on desktop. It gives an AI agent a 
 
 Agent Chat follows a growing response until you scroll up to read earlier messages. Select the round down-arrow near the bottom of the chat, or scroll to the end, to follow new output again.
 
-Quick Chat remains available for lightweight conversation and is the main chat experience on mobile. For multi-step work, Projects, Skills, or file changes, start with Agent Chat.
+Quick Chat remains available for lightweight conversation and is the main chat experience on mobile, unless the phone is paired with a desktop and can open [Agent Chat on your phone](#agent-chat-on-your-phone). For multi-step work, Projects, Skills, or file changes, start with Agent Chat.
 
 Your sent messages display Markdown formatting, including headings, lists, code blocks, links, and image embeds. Copy and Edit keep the original Markdown text. Links and image embeds in saved chats resolve from the conversation note, even when another note is open.
 
@@ -199,6 +199,20 @@ The notice names the agent that needs to reload. Changing Claude's enabled model
 Choose **Reload** when you want the change to take effect. The agent restarts and reopens every chat using that agent, keeping each chat’s history and anything you had typed but not sent. During a running turn the reload waits for that turn to finish. If the agent cannot reopen a conversation, that tab starts a fresh chat and the old one remains under Recent Chats. If a chat failed to start, correct its settings and choose **Retry** to apply them.
 
 Two changes never wait. Narrowing Miyo's **Search scope** and turning on Self-Host Mode both restart the agent straight away, so no later step in the conversation can search or browse outside the new boundary.
+
+## Agent Chat on your phone
+
+A phone paired with your desktop can open Agent Chat and steer the desktop's agent sessions. The agents keep running on the desktop, so Obsidian must be open and awake there, and Tailscale must be on for both devices. Pair the phone under [Remote](settings.md#remote) first.
+
+Once a desktop is paired, the Copilot ribbon button and **Open Copilot Agent Chat Window** open Agent Chat on the phone. Without a paired desktop, the ribbon button opens Quick Chat. The phone shows the desktop's agent tabs with the same message box, agent, model, effort, and mode pickers, and a session started on either device appears on both.
+
+- **Send and follow along.** Messages stream live. Mention notes with `@`; the desktop reads them from its own copy of the vault, so open the same vault on both devices and let it sync. Images can total 5 MB per message. If a mentioned note is not in the desktop's vault, a notice names it, because the agent could not read it.
+- **Stay in control.** Approve or deny tool permissions, answer the agent's questions, decide on plans, and stop a turn from the phone.
+- **Picks stay on the phone.** A model, effort, or mode you choose on the phone changes only that session. It never changes the defaults saved on the desktop, and the tab you have open on the desktop does not move.
+- **Switching apps is fine.** iOS disconnects Obsidian shortly after you leave it. When you return, the phone reconnects and catches up without reloading. A message that could not be sent returns to the message box; if the connection dropped while it was sending, check the chat before sending it again, because the desktop may already have received it.
+- **When the desktop is out of reach.** The phone says **Can't reach your desktop. Is Tailscale on?** when the desktop does not answer, and that the desktop is offline when Obsidian is closed on it. It retries on its own. If the two devices run different Copilot versions, it asks you to update Copilot on both.
+
+History, Projects, the home screen, web tabs, and settings stay on the desktop.
 
 ## Related
 

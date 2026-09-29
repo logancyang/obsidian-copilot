@@ -23,7 +23,7 @@ For most people, opencode is the best starting point. Copilot can install and ma
 ## Everyday tools
 
 - [Copilot Commands and Quick Ask](custom-commands.md) reuse prompts or work with selected text without leaving the editor.
-- [Quick Chat](chat-interface.md) handles lightweight conversations and is the main chat view on mobile, where Agent Chat is unavailable.
+- [Quick Chat](chat-interface.md) handles lightweight conversations and is the main chat view on mobile. A phone paired with your desktop can also open [Agent Chat](agent-mode-and-tools.md#agent-chat-on-your-phone).
 - [Live Relevant Notes](relevant-notes.md) shows how to preview related notes, drag links into your writing, and add chat context.
 
 ## Models, plans, and Miyo
