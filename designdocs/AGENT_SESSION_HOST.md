@@ -51,6 +51,14 @@ export type Scope = "host" | `session:${string}`;
 
 export interface HostState {
   tabs: readonly TabSummary[]; // attached sessions across all project scopes, display order
+  backends: readonly BackendSummary[]; // picker catalog and readiness, one entry per agent
+  host: HostFlags; // host-wide facts a composer needs
+}
+
+export interface HostFlags {
+  defaultBackendId: BackendId | null; // the agent a new session starts on
+  startingBackendId: BackendId | null; // set while a session is being created
+  startFailed: boolean; // the last start failed; the error text never leaves the desktop
 }
 
 export interface TabSummary {
@@ -73,8 +81,14 @@ its `projectId`; a client filters by the project scope it is showing. The phone 
 `GLOBAL_SCOPE` only. Detached sessions keep running on the host and are not in `tabs`, but their
 `session:<id>` scope stays available.
 
-`HostState` grows in the lane that first reads a field: #612 adds the picker catalog, backend
-readiness and default-backend fields.
+`backends` is the picker catalog (section 6.1). Each `BackendSummary` carries the agent's display
+name, a readiness label (`checking | ready | not_set_up | update_required | setup_error`), the
+model preload state (`absent | pending | ready | error`), whether the agent is self-hostable, the
+enabled models, the models the agent reports for them, the effort levels per model, the saved
+default selection and the license preview rows. Readiness is the install state reduced to its
+kind, so paths, versions and messages stay on the desktop. A client assembles the picker from the
+catalog and its own active session (`protocol/pickerEntries.ts`), because which agents and which
+model rows appear depends on that session.
 
 ### 1.2 Scope `session:<id>`
 
@@ -103,12 +117,19 @@ derives from both scopes and nothing depends on their relative arrival order.
 
 ### 1.3 Client-only view state
 
-Never sent to the host, never replicated: active tab id, active project scope, composer drafts and
-send queue (`AgentInputDraftStore`, keyed by `chatInputId`), scroll position, expanded trail groups,
+Never replicated: active tab id, active project scope, composer drafts and send queue
+(`AgentInputDraftStore`, keyed by `chatInputId`), scroll position, expanded trail groups,
 in-progress tab rename, selected text contexts, web-tab context, `loading`.
 
-`AgentSessionManager.activeSessionId` and `activeProjectId` remain for the legacy desktop UI until
-#612. The host never reads them.
+The active tab and project scope live in a `ClientView` (`protocol/ClientView.ts`), one per client.
+A command never changes it: the client that asked for a session chooses to show it when the result
+names it, so a session that one client creates, replaces or closes cannot move another client's
+visible tab. The view follows the shared tab set: the first tab set selects the last tab of the
+current scope, and when the shown tab leaves the set the view moves to its replacement (the tab
+with the same `chatInputId`), else to the neighbor in the same scope, else to none. A view reports
+the tab it shows with the `focus` frame, and the host tracks the tab each connection focused.
+`AgentSessionManager` reads the desktop panel's view for the flows only the desktop has (history,
+projects, saving the shown chat) and writes it only from those flows.
 
 ### 1.4 Where each field comes from
 
@@ -121,6 +142,7 @@ in-progress tab rename, selected text contexts, web-tab context, `loading`.
 | `usage`, `planUsage` | `getSessionUsage()`, `getPlanUsage()` via `onMessagesChanged`                                        |
 | tab fields           | `AgentSession` getters via `onStatusChanged`, `onLabelChanged`, `onNeedsAttentionChanged`            |
 | tab set and order    | `AgentSessionManager.subscribe()` plus `getTabSessions()`                                            |
+| `backends`, `host`   | `CatalogSource` (`session/host/catalogSource.ts`): settings, model cache, install states, manager    |
 
 Non-transcript slices are projected by reference diff: `AgentSession` replaces `currentState`,
 `currentPlan`, `currentUsage`, `currentPlanUsage` and `currentTodoList` rather than mutating them, so
@@ -220,7 +242,9 @@ export type SessionOp = TranscriptOp<WireMessageContext> | SliceOp;
 export type HostOp =
   | { t: "tab.add"; index: number; tab: TabSummary }
   | { t: "tab.remove"; id: SessionId }
-  | { t: "tab.patch"; id: SessionId; patch: TabPatch };
+  | { t: "tab.patch"; id: SessionId; patch: TabPatch }
+  | { t: "backend.set"; index: number; backend: BackendSummary } // replaces the backend with that id
+  | { t: "host.patch"; patch: Partial<HostFlags> };
 ```
 
 `tab.add` covers create, replace-in-place (`index` is the old tab's position; `tab.remove` for the
@@ -258,7 +282,7 @@ export type CommandErrorCode =
   | "failed";
 ```
 
-Commands never touch `activeSessionId` and carry an explicit `sessionId`.
+Commands never touch a client's view state and carry an explicit `sessionId` where they act on one.
 
 | Command                                                                                                                            | Replaces                                      | Validation                                                                                                                                                                                                                                                                                                                                                       | Host call                                                                                                                        | Ops                                                                                                                  |
 | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -273,9 +297,22 @@ still queued by `AgentSession.runTurn`; a `send` that races a permission answer 
 device sees `session_busy`; two devices answering the same permission produce one `ok` and one
 `stale`.
 
-Tab and picker commands (`createSession`, `replaceSession`, `openTab`, `closeTab`, `renameSession`,
-`applySelection`, `applyMode`) ship in #612 with their first caller. Desktop-only surfaces keep
-calling the manager directly: history, projects (`enterProject`, `exitProject`,
+Tab and picker commands:
+
+| Command                                                                        | Validation                                                                                                                    | Host call                                                                                                                                                                                        | Value                                                         |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| `createSession { backendId?, projectId?, seedSelection? }`                     | `backendId` is a known agent; `seedSelection` is `{ baseModelId, effort }`; `projectId` is a string, default the global scope | `manager.createSession`                                                                                                                                                                          | `{ sessionId }`                                               |
+| `replaceSession { sessionId, backendId?, preserveChatInput?, seedSelection? }` | session exists; same checks as `createSession`                                                                                | `manager.replaceSessionInPlace`                                                                                                                                                                  | `{ sessionId }` of the replacement                            |
+| `openTab { sessionId }`                                                        | session exists                                                                                                                | `manager.openTab` (puts a closed tab back in the set)                                                                                                                                            | none                                                          |
+| `closeTab { sessionId }`                                                       | session exists                                                                                                                | `manager.detachSessionFromTab` (the session keeps running)                                                                                                                                       | none                                                          |
+| `renameSession { sessionId, label }`                                           | `label` is text or null                                                                                                       | `manager.renameSession`                                                                                                                                                                          | none                                                          |
+| `applySelection { sessionId, backendId, baseModelId?, effort? }`               | a model or an effort is present; `backendId` is a known agent                                                                 | same agent: `manager.applySelectionTo`; another agent with a model: `manager.replaceSessionInPlace` seeded with the pick, keeping the composer draft; another agent with only an effort: `stale` | `{ sessionId }` of the session that now carries the selection |
+| `applyMode { sessionId, mode }`                                                | the session's agent reported a way to apply `mode`                                                                            | `manager.applyModeTo`                                                                                                                                                                            | none                                                          |
+
+`unsupported` is the code for an agent that cannot switch model, effort or mode while running. No
+command persists a default: a desktop client remembers a picked agent or mode as its default
+after the host accepts the command, through a desktop capability (section 9.2.1). Desktop-only
+surfaces keep calling the manager directly: history, projects (`enterProject`, `exitProject`,
 `rematerializeContext`), `saveActiveSession`, `closeChatSession`, install/sign-in/held-config
 flows, `getOrCreateActiveSession` auto-start, and `main.ts`.
 
@@ -290,6 +327,7 @@ export type ClientFrame =
   | { type: "hello"; v: number; app: string } // app = plugin version, for error text only
   | { type: "subscribe"; scope: Scope; fromSeq?: number }
   | { type: "unsubscribe"; scope: Scope }
+  | { type: "focus"; sessionId: SessionId | null } // the tab this client shows, or null
   | { type: "command"; id: string; command: Command };
 
 export type ServerFrame =
@@ -335,6 +373,11 @@ scope; an evicted cursor or a new `hostId` costs a snapshot. In-flight commands 
 `send` is not idempotent. The transport layer (#613) owns backoff, the connect timeout and the
 visibility-change reconnect; the client core only reports `connecting | live | reconnecting |
 offline | version_mismatch`.
+
+**Focus.** A client sends `focus` when the tab it shows changes and again after every reconnect,
+because the host forgets a connection's focus with the connection. The host clears the
+`needsAttention` mark of a focused session and does not set it on a session some connection
+focuses (`SessionHost.isSessionFocused`, which the manager consults when a turn finishes).
 
 **Ordering.** Within a connection, frames for one scope arrive in sequence order. A command's ops
 that were emitted synchronously reach the client before its `result`. Ordering across scopes is not
@@ -396,6 +439,7 @@ export class SessionClient {
   getSession(id: SessionId): SessionState | null; // null until its snapshot arrives
   subscribe(listener: () => void): () => void; // one notification per applied frame
   watchSession(id: SessionId): () => void; // ref-counted subscribe(session:<id>)
+  setFocus(id: SessionId | null): void; // reported to the host, re-sent after a reconnect
   command<N extends CommandName>(
     command: Extract<Command, { name: N }>
   ): Promise<CommandResult<CommandValue<N>>>;
@@ -427,7 +471,8 @@ export function useSessionSelector<T>(
 Each hook memoizes the last `(state reference) -> selected value` pair and returns the previous
 value when `eq` (default `Object.is`) says it is unchanged, so a component re-renders only when
 its selection changes. Selectors must return values that are stable while their inputs are stable;
-`selectors.ts` provides the memoized ones (`selectVisibleMessages`, `selectChatRuntime`).
+`useClientView(client, view)` returns the tabs in the view's project scope and the tab the view
+shows. `selectors.ts` provides the memoized ones (`selectVisibleMessages`, `selectChatRuntime`).
 `selectChatRuntime(host, session, id)` returns the chat's runtime state (`messages`,
 `isStarting`, `isTurnInFlight`, `hasPendingPlanPermission`, `currentPlan`, `currentTodoList`,
 `pendingToolPermissions`, `pendingAskUserQuestions`); the message pane reads it through
@@ -438,11 +483,12 @@ its selection changes. Selectors must return values that are stable while their 
 ### 6.1 Host state carries no credentials
 
 `HostState` and `SessionState` are built from named fields only; nothing spreads a settings object
-into them. The host slice added in #612 (the picker catalog) reduces `credentialState` to a
-`disabledReason` string and copies display fields one by one, so `apiKey`, `baseUrl`,
-`openAIOrgId` and backend environment overrides are unreachable from the wire types.
-`host.startFailed`-style flags are booleans; the manager's `lastError` text can echo spawn arguments
-or stderr and never enters host state.
+into them. The picker catalog reduces `credentialState` to a `missingKey` flag and builds every row with
+named fields (`toPickerModel` for anything that arrives shaped like a `CustomModel`), so `apiKey`,
+`baseUrl`, `openAIOrgId` and backend environment overrides are unreachable from the wire types. A
+test serializes both scopes from settings seeded with sentinel credentials and asserts that no
+credential field or value appears. `host.startFailed` is a boolean; the manager's `lastError` text
+can echo spawn arguments or stderr and never enters host state.
 
 Everything in `SessionState` (tool inputs and outputs, note excerpts) is user content by design and
 travels to authenticated clients only.
@@ -485,7 +531,7 @@ enforces them: 8 MiB per image decoded, 4 images and 24 MiB per command. Over-li
 
 ```
 src/agentMode/protocol/          Environment-free. The only agent code the phone loads.
-  state.ts                       HostState, SessionState, TabSummary, MessageOf, Wire* types
+  state.ts                       HostState, SessionState, TabSummary, BackendSummary, MessageOf, Wire* types
   ops.ts                         HostOp, SessionOp, TranscriptOp, SliceOp
   applyTranscript.ts             applyTranscriptOp
   apply.ts                       applyHostOp, applySessionOp
@@ -495,7 +541,9 @@ src/agentMode/protocol/          Environment-free. The only agent code the phone
   transport.ts                   ClientTransport
   SessionClient.ts               replica, cursors, command sender
   selectors.ts                   memoized derived selectors
-  react.ts                       useHostSelector, useSessionSelector
+  pickerEntries.ts               assembles the model picker from the catalog and the active session
+  ClientView.ts                  one client's active tab and project scope
+  react.ts                       useHostSelector, useSessionSelector, useClientView
   index.ts                       the mobile-safe surface
 
 src/agentMode/session/host/      Desktop only. Depends on AgentSession and the manager.
@@ -503,6 +551,8 @@ src/agentMode/session/host/      Desktop only. Depends on AgentSession and the m
   OpLog.ts                       per-scope ring buffer
   SessionProjector.ts            listener/reference diff -> slice and tab ops
   TabProjector.ts                manager notify -> tab.add / remove / patch
+  CatalogProjector.ts            catalog and flag changes -> backend.set / host.patch
+  catalogSource.ts               builds the catalog source from settings, model cache and the manager
   commandHandlers.ts             one function per command
   inProcessTransport.ts          createInProcessTransport
 ```
@@ -622,7 +672,7 @@ replica; that decision needs the measurement.
 ### 9.1 Ships in #609
 
 `protocol/` complete (state, ops, reducers, frames, commands, client, selectors, hooks), the
-in-process transport, `SessionHost` (scopes, op log, projectors, the five commands in section 3),
+in-process transport, `SessionHost` (scopes, op log, projectors, the commands in section 3),
 the `AgentMessageStore` rewrite onto the shared reducer, `getTabSessions()`, the lint fence and
 bundle-closure check, fixtures, benchmark, and tests. The host runs on desktop at startup; no UI
 reads from it.
@@ -632,19 +682,20 @@ projectors, op log, transport and commands; (3) recorded fixtures, parity tests 
 
 ### 9.2 Deferred
 
-| Lane | Deferred work                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #612 | Composer, pickers and tabs on the client; the picker catalog (`session/pickerCatalog.ts`, `toPickerModel`, the `backends` and `host` slices of `HostState`, and the credential-stripping test); the tab and picker commands (`createSession`, `replaceSession`, `openTab`, `closeTab`, `renameSession`, `applySelection`, `applyMode`) with the manager additions they need (`openTab`, `applySelectionTo`, `applyModeTo`); client-side derivation of picker entries; active tab and project scope as client state; delete the `activeSessionId` writes in `createSession`, `closeSession`, `setActiveSession`; attention rule per focused client. |
-| #613 | Must not ship before #612: `createSession` and `replaceSession` still write `activeSessionId` (legacy), so a phone-created session would move the desktop's visible tab until #612 deletes those writes. WebSocket transport, backoff, connect timeout, `visibilitychange` reconnect, backpressure, frame size limit; connection identity and authorization; command `origin`; mobile entry point and UI; version-mismatch screen; analytics; real-iPhone verification.                                                                                                                                                                            |
-| #610 | Pairing and tokens.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| #607 | Persisting or replaying the op log across restarts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Lane | Deferred work                                                                                                                                                                                                                                                                                                                    |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #613 | WebSocket transport, backoff, connect timeout, `visibilitychange` reconnect, backpressure, frame size limit; connection identity and authorization; command `origin` (and whether a phone-originated pick may change desktop defaults); mobile entry point and UI; version-mismatch screen; analytics; real-iPhone verification. |
+| #610 | Pairing and tokens.                                                                                                                                                                                                                                                                                                              |
+| #607 | Persisting or replaying the op log across restarts.                                                                                                                                                                                                                                                                              |
 
-### 9.2.1 What the message pane needs from its environment
+### 9.2.1 What the client UI needs from its environment
 
-The message pane (message list, activity trail, and the permission, question and plan cards)
-reads only the client replica and sends `resolvePermission`, `answerQuestion` and `resolvePlan`.
-Everything else reaches it through `AgentPaneCapabilities` (`ui/AgentPaneContext.tsx`); a
-capability the environment omits hides the control that would call it.
+The message pane (message list, activity trail, and the permission, question and plan cards), the
+composer, the pickers and the tab strip read only the client replica and the client's
+`ClientView`, and send commands. Everything else reaches them through `AgentPaneCapabilities`
+(`ui/AgentPaneContext.tsx`); a capability the environment omits hides the control that would call
+it. Web-tab context, history, projects, the home screen, install and sign-in flows and settings
+are desktop-only: their components are not mounted by a client that lacks the desktop.
 
 | Capability         | Used by                                  | Desktop implementation                             |
 | ------------------ | ---------------------------------------- | -------------------------------------------------- |
@@ -653,10 +704,18 @@ capability the environment omits hides the control that would call it.
 | `insertAtCursor`   | the insert action on a finished response | write into the active editor                       |
 | `openPlanPreview`  | the plan card's Open control             | a workspace leaf that reads the same client        |
 | `closePlanPreview` | after a plan is approved                 | detach that leaf                                   |
+| `backendIcon`      | tab icons and the `@` agent menu         | the icon the backend registry holds for the agent  |
+| `persistDefaults`  | remembering a picked agent or mode       | `manager.setDefaultBackend`, `persistDefaultMode`  |
 
-The composer still acts through `ComposerCommands` (`ui/hooks/useComposerCommands.ts`), a `send` and
-`cancel` seam over the client that reports when a turn ends; #612 replaces it when the composer
-reads the replica for everything else.
+The composer sends and cancels through `useSessionCommands` (`ui/hooks/useSessionCommands.ts`),
+which turns a composed message into a `send` command and reports when the turn it started has
+ended. It reads whether a turn is running, starting or waiting for a plan decision from the
+replica, the agents it can mention from `backends`, and its model and mode pickers from
+`useAgentModelPicker` and `useAgentModePicker`. The tab strip acts through `useTabCommands`.
+Custom commands, `@` mentions of notes (sent as vault paths) and agents, images and the queue of
+follow-ups are composer features that need only the vault the client runs beside and its own
+draft store. A client chooses whether to keep every attached tab's session watched
+(`watchAttachedTabs`, which the desktop does) or only the session it shows.
 
 ### 9.3 Cut as speculative
 

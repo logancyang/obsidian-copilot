@@ -32,7 +32,6 @@ import type { SessionClient } from "@/agentMode/protocol/SessionClient";
 import { AgentPaneCapabilitiesProvider } from "@/agentMode/ui/AgentPaneContext";
 import { createDesktopPaneCapabilities } from "@/agentMode/ui/desktopPaneCapabilities";
 import { useChatRuntime } from "@/agentMode/ui/hooks/useChatRuntime";
-import { useComposerCommands } from "@/agentMode/ui/hooks/useComposerCommands";
 import { useTabCommands } from "@/agentMode/ui/hooks/useTabCommands";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
@@ -42,8 +41,6 @@ import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
 import { useChatInputAutoFocus } from "@/agentMode/ui/hooks/useChatInputAutoFocus";
 import { useRefreshEmptyLandingOnContextSourceChange } from "@/agentMode/ui/hooks/useRefreshEmptyLandingOnContextSourceChange";
-import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
-import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
@@ -104,9 +101,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   useChatInputAutoFocus();
 
-  const { messages, isStarting, isTurnInFlight, hasPendingPlanPermission, currentTodoList } =
+  const { messages, isTurnInFlight, currentTodoList } =
     useChatRuntime(client, sessionId) ?? EMPTY_CHAT_RUNTIME;
-  const composer = useComposerCommands(client, sessionId);
   const { host, activeTab, view: viewState } = useClientView(client, view);
   const tabs = useTabCommands(client, view);
   const isCreating = host?.host.startingBackendId != null;
@@ -266,18 +262,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (isOrphanedProject) new Notice("This project no longer exists.");
   }, [isOrphanedProject]);
 
-  const modelPickerOverride = useAgentModelPicker(client, view);
-  const modePickerOverride = useAgentModePicker(client, view);
-
-  const handleCycleMode = useCallback(() => {
-    if (!modePickerOverride || modePickerOverride.disabled) return;
-    const { options, value, onChange } = modePickerOverride;
-    if (options.length === 0) return;
-    const currentIdx = options.findIndex((o) => o.value === value);
-    const next = options[(currentIdx + 1) % options.length];
-    if (next.value !== value) onChange(next.value);
-  }, [modePickerOverride]);
-
   useChatRelevantNotesContext(app, rootEl, chatInputId, draft, messages, activeProject);
 
   const { isDragActive } = useChatFileDrop({
@@ -345,8 +329,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     placementRef.current = null;
   }
   const projectPlacement = placementRef.current;
-
-  const mainAgentId = activeTab?.backendId ?? host?.host.startingBackendId ?? null;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- sessionId intentionally re-rolls the otherwise argument-free greeting factory
   const greeting = useMemo(() => pickRandomGreeting(), [sessionId]);
@@ -541,19 +523,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const composerNode = (
     <AgentChatInput
-      composer={composer}
-      plugin={plugin}
+      client={client}
+      view={view}
+      sessionId={sessionId}
       chatInputId={chatInputId}
       draft={draft}
       app={app}
-      mainAgentId={mainAgentId}
       updateUserMessageHistory={updateUserMessageHistory}
-      isStarting={isStarting}
-      isLoading={isLoading}
-      hasPendingPlanPermission={hasPendingPlanPermission}
-      modelPickerOverride={modelPickerOverride ?? undefined}
-      modePickerOverride={modePickerOverride ?? undefined}
-      onCycleMode={handleCycleMode}
       activeProjectId={activeProjectId}
       contextLoadBlocking={contextLoadBlocking}
       disabled={isOrphanedProject}
