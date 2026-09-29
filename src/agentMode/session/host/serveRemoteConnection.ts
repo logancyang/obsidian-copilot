@@ -2,6 +2,7 @@ import type { CommandName } from "@/agentMode/protocol/commands";
 import { parseClientFrame } from "@/agentMode/protocol/frameCodec";
 import type { ServerFrame } from "@/agentMode/protocol/frames";
 import type { HostConnection } from "@/agentMode/session/host/SessionHost";
+import { withoutInlineImages } from "@/agentMode/session/host/wireMessages";
 import { logWarn } from "@/logger";
 
 export interface PhoneConnection {
@@ -24,8 +25,9 @@ const CLOSE_GOING_AWAY = 1001;
 const CLOSE_UNSUPPORTED_DATA = 1003;
 const CLOSE_MESSAGE_TOO_BIG = 1009;
 
-// A snapshot of one very long session is the largest frame the host sends. Beyond this the frame
-// is refused and the connection closed rather than buffered for a peer that may not drain it.
+// A snapshot of one very long session is the largest frame the host sends. Beyond this the frame is
+// sent again without its inline images, and one that is still too large is refused and the
+// connection closed rather than buffered for a peer that may not drain it.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
 export const MAX_OUTBOUND_FRAME_CHARS = 32 * 1024 * 1024;
 
@@ -42,7 +44,8 @@ export function serveRemoteConnection(
   const hostConnection = host.connect(
     (frame) => {
       if (detached) return;
-      const text = JSON.stringify(frame);
+      let text = JSON.stringify(frame);
+      if (text.length > MAX_OUTBOUND_FRAME_CHARS) text = JSON.stringify(withoutInlineImages(frame));
       if (text.length > MAX_OUTBOUND_FRAME_CHARS) {
         logWarn("Remote frame too large to send; closing the connection");
         connection.close(CLOSE_MESSAGE_TOO_BIG);

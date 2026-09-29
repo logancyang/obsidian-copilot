@@ -156,6 +156,41 @@ describe("serveRemoteConnection", () => {
       expect(phone.closedWith).toBe(1001);
     });
 
+    it(`sends a snapshot over the outbound limit with its inline images replaced instead of closing, so a long chat with photos still loads on the phone (${ISSUE})`, () => {
+      const phone = new FakePhone();
+      let deliver: (frame: ServerFrame) => void = () => {};
+      serveRemoteConnection(
+        {
+          connect: (send) => {
+            deliver = send;
+            return { receive: () => {}, close: () => {} };
+          },
+        },
+        phone
+      );
+      const photo = {
+        type: "image_url",
+        image_url: { url: `data:image/png;base64,${"A".repeat(MAX_OUTBOUND_FRAME_CHARS)}` },
+      };
+
+      deliver({
+        type: "snapshot",
+        scope: "session:s1",
+        epoch: "e",
+        seq: 2,
+        state: {
+          transcript: [
+            { id: "m1", sender: "user", isVisible: true, message: "look", content: [photo] },
+          ],
+        } as never,
+      });
+
+      expect(phone.closedWith).toBeNull();
+      expect(phone.sent).toHaveLength(1);
+      expect(JSON.stringify(phone.sent[0])).toContain("look");
+      expect(JSON.stringify(phone.sent[0]).length).toBeLessThan(2000);
+    });
+
     it(`refuses to send a frame over the outbound limit and closes with 1009 instead (${ISSUE})`, () => {
       const manager = new FakeManager();
       const host = buildHost(manager);

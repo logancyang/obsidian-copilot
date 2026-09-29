@@ -28,6 +28,11 @@ export const MAX_PENDING_CONNECTIONS = 8;
 const MAX_CONNECTIONS = 64;
 const MAX_UNAUTHENTICATED_PER_ADDRESS = 4;
 const MAX_MESSAGE_BYTES = 8 * 1024 * 1024;
+// A phone that stops reading (out of range, Tailscale dropped) leaves TCP open for minutes while
+// the desktop keeps streaming, so a peer whose unsent backlog passes this is dropped. It has to
+// exceed the largest frame the session protocol sends, which is checked before it is queued.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+const MAX_WRITE_BACKLOG_BYTES = 64 * 1024 * 1024;
 const CLOSE_GRACE_MS = 1500;
 const HANDSHAKE_KEY = /^[A-Za-z0-9+/]{22}==$/;
 const HANDSHAKE_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -53,6 +58,7 @@ export interface RemoteServerOptions {
   authTimeoutMs?: number;
   maxPendingConnections?: number;
   maxUnauthenticatedPerAddress?: number;
+  maxWriteBacklogBytes?: number;
 }
 
 class SocketPeer {
@@ -63,7 +69,10 @@ class SocketPeer {
   private finished = false;
   private graceTimer: number | undefined;
 
-  constructor(readonly socket: Duplex) {
+  constructor(
+    readonly socket: Duplex,
+    private readonly maxWriteBacklogBytes: number
+  ) {
     socket.on("data", (chunk: Uint8Array) => this.receive(chunk));
     socket.on("error", () => socket.destroy());
     socket.once("close", () => {
@@ -102,7 +111,12 @@ class SocketPeer {
   }
 
   send(text: string): void {
-    if (!this.closing) this.write(encodeText(text));
+    if (this.closing) return;
+    if (this.socket.writableLength > this.maxWriteBacklogBytes) {
+      this.socket.destroy();
+      return;
+    }
+    this.write(encodeText(text));
   }
 
   close(code: number): void {
@@ -268,7 +282,10 @@ export class RemoteServer {
         `Sec-WebSocket-Accept: ${accept}\r\n\r\n`
     );
 
-    const peer = new SocketPeer(socket);
+    const peer = new SocketPeer(
+      socket,
+      this.options.maxWriteBacklogBytes ?? MAX_WRITE_BACKLOG_BYTES
+    );
     this.peers.add(peer);
     this.pending += 1;
     let holdsPendingSlot = true;
