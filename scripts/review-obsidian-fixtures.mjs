@@ -178,6 +178,9 @@ async function main() {
     "// global cache warms lazily\nexport const a = 1;",
     "// eslint rejects the obvious shape here\nexport const a = 1;",
     "// See https://github.com/logancyang/obsidian-copilot/pull/1\nexport const a = 1;",
+    "// See https://github.com/logancyang/obsidian-copilot/issues/12oops\nexport const a = 1;",
+    "export const a = 1; // trailing note\nexport const b = 2; // https://github.com/o/r/issues/1",
+    "// Explains the next line\nexport const a = 1; // https://github.com/o/r/issues/1",
   ];
   for (const code of issuelessComments) {
     const result = await lintSourceFixture(code, "src/utils.ts");
@@ -189,6 +192,7 @@ async function main() {
   const allowedComments = [
     "// Needed for https://github.com/logancyang/obsidian-copilot/issues/1\nexport const a = 1;",
     "// A decision spanning lines\n// https://github.com/Brevilabs/obsidian-copilot-private/issues/1\nexport const a = 1;",
+    "// Tracked in https://github.com/logancyang/obsidian-copilot/issues/1.\nexport const a = 1;",
     "// eslint-disable-next-line no-restricted-syntax -- fixture\nexport const a = 1;",
     "// prettier-ignore\nexport const a = [1,2];",
     "/* global activeWindow */\nexport const a = 1;",

@@ -59,11 +59,11 @@ Comments are never compiled or tested, so they drift from the code and mislead t
 human or agent. Names, types, and tests carry **what** the code does; a GitHub issue carries the
 **why**.
 
-- **Every comment links a GitHub issue.** A comment exists only to record a tricky decision tied to
-  a specific issue: one line of why plus the issue's full URL
+- **Every JavaScript/TypeScript comment links a GitHub issue.** A comment exists only to record a
+  tricky decision tied to a specific issue: one line of why plus the issue's full URL
   (`https://github.com/OWNER/REPO/issues/N`). Short refs (`#123`, `owner/repo#123`) and PR links do
-  not count. A block of consecutive `//` lines counts as one comment, so the URL may sit on any of
-  its lines. `copilot/issue-linked-comments` fails `npm run lint` on anything else.
+  not count. A block of consecutive standalone `//` lines counts as one comment, so the URL may sit
+  on any of its lines. `copilot/issue-linked-comments` fails `npm run lint` on anything else.
 - **No JSDoc, banners, restated logic, or issue-less TODOs.** Express a callable's contract through
   its name, parameter names, and types, and its behavior through tests. File an issue instead of
   leaving a TODO.
