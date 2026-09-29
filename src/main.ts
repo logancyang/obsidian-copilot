@@ -1,7 +1,7 @@
 import { startReleaseUpdateCheck } from "@/services/releaseUpdateNotice";
 import { releaseCursorAssociation } from "@/editor/releaseCursorAssociation";
 import { registerNoteHeaderAction } from "@/editor/registerNoteHeaderAction";
-import type { AgentSessionManager, SkillManager } from "@/agentMode";
+import type { AgentSessionManager, SessionHost, SkillManager } from "@/agentMode";
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import {
   buildChatDeepLink,
@@ -155,6 +155,7 @@ export default class CopilotPlugin extends Plugin {
   settingsUnsubscriber?: () => void;
   chatUIState: ChatManagerChatUIState;
   agentSessionManager?: AgentSessionManager;
+  agentSessionHost?: SessionHost;
   skills?: SkillManager;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
@@ -271,6 +272,7 @@ export default class CopilotPlugin extends Plugin {
         PlanPreviewView,
         PLAN_PREVIEW_VIEW_TYPE,
         acpFrameSink,
+        createAgentSessionHost,
         createAgentSessionManager,
         setFrameSinkVaultBasePath,
         SkillManager,
@@ -289,6 +291,7 @@ export default class CopilotPlugin extends Plugin {
       void acpFrameSink.narrowLegacyLogs();
 
       this.agentSessionManager = createAgentSessionManager(this.app, this);
+      this.agentSessionHost = createAgentSessionHost(this.app, this, this.agentSessionManager);
       this.skills = SkillManager.getInstance();
       this.agentModelDiscoveryUnsubscriber = wireAgentModelDiscovery(
         this,
@@ -566,6 +569,7 @@ export default class CopilotPlugin extends Plugin {
     this.chatSelectionHighlightController?.cleanup();
 
     this.agentModelDiscoveryUnsubscriber?.();
+    this.agentSessionHost?.dispose();
     await this.agentSessionManager?.shutdown();
 
     const vaultDataManager = VaultDataManager.getInstance();
