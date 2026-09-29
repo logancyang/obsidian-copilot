@@ -2,21 +2,11 @@ import React from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import type { LexicalEditor } from "lexical";
 
-/**
- * Props for the FocusPlugin component
- */
 interface FocusPluginProps {
-  /** Callback that receives a function to programmatically focus the editor */
   onFocus: (focusFn: () => void) => void;
-  /** Optional callback that receives the editor instance when ready */
   onEditorReady?: (editor: LexicalEditor) => void;
 }
 
-/**
- * Lexical plugin that provides focus management for the editor.
- * Exposes a focus function to parent components and optionally provides
- * access to the editor instance when it's ready.
- */
 export function FocusPlugin({ onFocus, onEditorReady }: FocusPluginProps) {
   const [editor] = useLexicalComposerContext();
 
@@ -26,7 +16,6 @@ export function FocusPlugin({ onFocus, onEditorReady }: FocusPluginProps) {
     };
     onFocus(focusEditor);
 
-    // Also provide the editor instance
     if (onEditorReady) {
       onEditorReady(editor);
     }

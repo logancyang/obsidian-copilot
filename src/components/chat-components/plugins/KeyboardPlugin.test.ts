@@ -7,9 +7,6 @@ import { COMMAND_PRIORITY_HIGH, KEY_ESCAPE_COMMAND, type LexicalEditor } from "l
 import React from "react";
 import { KeyboardPlugin, checkShortcutMatch, isImeCompositionEvent } from "./KeyboardPlugin";
 
-/**
- * Helper function to create a mock KeyboardEvent with specified fields
- */
 function createMockKeyboardEvent(fields: {
   key?: string;
   shiftKey?: boolean;
@@ -202,9 +199,6 @@ describe("KeyboardPlugin", () => {
 
     describe("IME Composition", () => {
       it("should still match shortcuts during IME composition (checkShortcutMatch only checks modifiers)", () => {
-        // Note: The actual IME protection happens in the KeyboardPlugin component
-        // via isImeCompositionEvent, not in checkShortcutMatch. This test verifies
-        // that checkShortcutMatch doesn't interfere with IME handling.
         const event = createMockKeyboardEvent({ isComposing: true });
         expect(checkShortcutMatch(event, SEND_SHORTCUT.ENTER)).toBe(true);
       });

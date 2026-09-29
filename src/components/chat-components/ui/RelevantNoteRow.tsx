@@ -9,12 +9,10 @@ import { ArrowRight, FileInput, FileOutput, FileText, PlusCircle } from "lucide-
 import { TFile } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
 
-/** Map a 0–1 similarity score directly to the meter fill width (70% → 70%). */
 function meterWidth(score: number): string {
   return `${Math.max(0, Math.min(100, score * 100))}%`;
 }
 
-/** Color-grade the meter: stronger matches lean fully into the theme accent. */
 function meterColor(score: number): string {
   const pct = score * 100;
   const k = Math.max(0, Math.min(1, (pct - 30) / 45));
@@ -27,7 +25,6 @@ function RelevanceMeter({
   className,
 }: {
   score: number;
-  /** False when the reader has asked for reduced motion. */
   animated: boolean;
   className?: string;
 }) {
@@ -41,9 +38,6 @@ function RelevanceMeter({
       <div
         className={cn(
           "copilot-relevance-meter-fill tw-h-full tw-rounded-full",
-          // A live re-rank rewrites the score, and growing or shrinking the bar
-          // is what makes a note's rising relevance readable as it happens.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
           animated && "tw-transition-[width,background-color] tw-duration-500 tw-ease-out"
         )}
         style={
@@ -87,12 +81,11 @@ function RelevantNoteHoverCard({
   const similarity = note.metadata.score;
 
   const loadContent = useCallback(async () => {
-    if (fileContent) return; // Don't reload once cached
+    if (fileContent) return;
     const file = app.vault.getAbstractFileByPath(note.note.path);
     if (file instanceof TFile) {
       const content = await app.vault.cachedRead(file);
 
-      // Remove YAML frontmatter if it exists
       let cleanContent = content;
       if (content.startsWith("---")) {
         const endOfFrontmatter = content.indexOf("---", 3);
@@ -195,33 +188,14 @@ function RelevantNoteHoverCard({
 
 export interface RelevantNoteRowProps {
   note: RelevantNoteEntry;
-  /** True while the note is mounted only to play its removal. */
   exiting: boolean;
-  /** True while the note should play its arrival. */
   entering: boolean;
-  /** False when the reader has asked for reduced motion. */
   animated: boolean;
-  /** Registers the rendered row so a rank change can be slid into place. */
   rowRef: (node: HTMLElement | null) => void;
   onAddToChat: () => void;
   onNavigateToNote: () => void;
 }
 
-/**
- * One relevant note: its title, how strongly it matches, and its row actions.
- *
- * The row owns how a re-rank reads to a note taker who is still writing, so it
- * renders the arrival, removal, and score change its caller hands it rather
- * than deciding when a ranking has moved.
- *
- * @param note - Note to render, with the score and link flags behind it.
- * @param exiting - True while the note is mounted only to play its removal.
- * @param entering - True while the note should play its arrival.
- * @param animated - False when the reader has asked for reduced motion.
- * @param rowRef - Registers the row element for the caller's move animation.
- * @param onAddToChat - Inserts the note into the chat input.
- * @param onNavigateToNote - Opens the note.
- */
 export function RelevantNoteRow({
   note,
   exiting,
@@ -246,9 +220,6 @@ export function RelevantNoteRow({
         ref={rowRef}
         className={cn(
           "tw-group tw-rounded-md tw-px-2.5 tw-py-1.5 tw-transition-colors hover:tw-bg-modifier-hover",
-          // A note that arrives or drops out mid-sentence is easy to miss if it
-          // simply appears or vanishes between two frames.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
           entering && "tw-duration-200 tw-animate-in tw-fade-in-0 tw-slide-in-from-top-1",
           exiting && "tw-pointer-events-none tw-opacity-0",
           exiting && animated && "tw-transition-opacity tw-duration-200"

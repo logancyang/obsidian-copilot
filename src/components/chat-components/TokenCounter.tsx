@@ -6,12 +6,6 @@ interface TokenCounterProps {
   tokenCount: number | null;
 }
 
-/**
- * Displays the context used from the latest AI response.
- * Shows "<1k" for counts under 1000, otherwise shows rounded thousands (e.g., "5k").
- * On hover, shows the exact token count.
- * Returns null if no token count is available.
- */
 export const TokenCounter: React.FC<TokenCounterProps> = ({ tokenCount }) => {
   if (tokenCount === null || tokenCount === undefined) {
     return null;

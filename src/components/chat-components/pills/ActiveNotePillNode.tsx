@@ -13,15 +13,8 @@ import { TruncatedPillText } from "./TruncatedPillText";
 import { PillBadge } from "./PillBadge";
 import { useActiveFile } from "@/components/chat-components/context/ActiveFileContext";
 
-// Active note pill doesn't store any file-specific data
-// It always represents the current active file
 export type SerializedActiveNotePillNode = SerializedBasePillNode;
 
-/**
- * ActiveNotePillNode represents the "Current Note" in context
- * It automatically displays whatever file is currently active in Obsidian
- * This is a separate context type from regular notes
- */
 export class ActiveNotePillNode extends BasePillNode {
   static getType(): string {
     return "active-note-pill";
@@ -91,14 +84,9 @@ function convertActiveNotePillElement(_domNode: HTMLElement): DOMConversionOutpu
   return { node };
 }
 
-/**
- * Component that renders the active note pill
- * Uses ActiveFileContext to get the current active file and display its name
- */
 function ActiveNotePillComponent(): JSX.Element {
   const currentActiveFile = useActiveFile();
 
-  // If no active file, show {activeNote} to match what gets sent to LLM
   if (!currentActiveFile) {
     return (
       <PillBadge>
@@ -118,7 +106,6 @@ function ActiveNotePillComponent(): JSX.Element {
     );
   }
 
-  // Active file exists - show its name with "Current" label
   const noteTitle = currentActiveFile.basename;
   const notePath = currentActiveFile.path;
   const isPdf = notePath.toLowerCase().endsWith(".pdf");
@@ -139,7 +126,6 @@ function ActiveNotePillComponent(): JSX.Element {
   );
 }
 
-// Utility functions
 export function $createActiveNotePillNode(): ActiveNotePillNode {
   return new ActiveNotePillNode();
 }
@@ -150,10 +136,6 @@ export function $isActiveNotePillNode(
   return node instanceof ActiveNotePillNode;
 }
 
-/**
- * Removes all active note pills from the editor
- * @returns The number of pills removed
- */
 export function $removeActiveNotePills(): number {
   const root = $getRoot();
   let removedCount = 0;

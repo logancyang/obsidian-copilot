@@ -16,9 +16,6 @@ export interface SerializedFolderPillNode extends SerializedBasePillNode {
   type: "folder-pill";
 }
 
-/**
- * Folder pill node for representing folders in the editor.
- */
 export class FolderPillNode extends BasePillNode {
   static getType(): string {
     return "folder-pill";
@@ -66,9 +63,6 @@ export class FolderPillNode extends BasePillNode {
     };
   }
 
-  /**
-   * Override to display folder name wrapped in curly braces
-   */
   decorate(): JSX.Element {
     const tooltipContent = <div className="tw-text-left">{this.getFolderPath()}</div>;
 
@@ -84,16 +78,10 @@ export class FolderPillNode extends BasePillNode {
     );
   }
 
-  /**
-   * Override to return text content with curly braces
-   */
   getTextContent(): string {
     return `{${this.getFolderPath()}}`;
   }
 
-  /**
-   * Override to export DOM with curly braces
-   */
   exportDOM(editor: LexicalEditor): DOMExportOutput {
     const element = getEditorDocument(editor).win.createSpan({
       text: `{${this.getFolderPath()}}`,
@@ -116,7 +104,6 @@ function convertFolderPillElement(domNode: HTMLElement): DOMConversionOutput | n
   return null;
 }
 
-// Utility functions
 export function $createFolderPillNode(folderPath: string): FolderPillNode {
   return new FolderPillNode(folderPath);
 }

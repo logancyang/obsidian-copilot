@@ -11,13 +11,6 @@ type ChatModeInputProps = Omit<
   "toolControls" | "onToolPillsChange" | "onTagSelected"
 >;
 
-/**
- * Chat-mode wrapper around `ChatInput` that owns the autonomous-agent and
- * vault/web/composer toggle row, the `@vault` / `@websearch` / `@composer`
- * keyword injection at send time, and the pill ↔ toggle synchronization.
- *
- * Agent Mode renders `ChatInput` directly so none of this logic leaks into it.
- */
 const ChatModeInput: React.FC<ChatModeInputProps> = (props) => {
   const { handleSendMessage, inputMessage } = props;
   const [currentChain] = useChainType();
@@ -31,7 +24,6 @@ const ChatModeInput: React.FC<ChatModeInputProps> = (props) => {
     settings.enableAutonomousAgent
   );
 
-  // Mirror the persisted setting into the local toggle.
   useEffect(() => {
     /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- mirror the persisted setting into the local toggle; the toggle is also user-editable so it can't be pure derived state */
     setAutonomousAgentToggle(settings.enableAutonomousAgent);

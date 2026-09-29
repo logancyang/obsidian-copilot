@@ -12,10 +12,6 @@ interface TagCommandPluginProps {
   onTagSelected?: () => void;
 }
 
-/**
- * TagCommandPlugin provides # typeahead functionality for tags
- * Inserts tags as raw text (#tag) instead of pills, so search v3 can process them
- */
 export function TagCommandPlugin({ onTagSelected }: TagCommandPluginProps): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const [currentQuery, setCurrentQuery] = useState("");
@@ -24,7 +20,6 @@ export function TagCommandPlugin({ onTagSelected }: TagCommandPluginProps): JSX.
     limit: 10,
   });
 
-  // Handle tag selection - insert as raw text instead of pill
   const handleSelect = useCallback(
     (option: TagSearchOption) => {
       editor.update(() => {
@@ -39,35 +34,29 @@ export function TagCommandPlugin({ onTagSelected }: TagCommandPluginProps): JSX.
         const textContent = anchorNode.getTextContent();
         const cursorOffset = anchor.offset;
 
-        // Find the # trigger position
         const triggerIndex = textContent.lastIndexOf("#", cursorOffset);
         if (triggerIndex === -1) return;
 
-        // Replace from # to cursor with the tag text
         const beforeText = textContent.slice(0, triggerIndex);
         const afterText = textContent.slice(cursorOffset);
         const tagText = `#${option.tag} `;
 
-        // Replace the text content
         anchorNode.setTextContent(beforeText + tagText + afterText);
 
-        // Set cursor after the inserted tag and space
         const newOffset = beforeText.length + tagText.length;
         anchorNode.select(newOffset, newOffset);
       });
 
-      // Notify parent that a tag was selected from typeahead
       onTagSelected?.();
     },
     [editor, onTagSelected]
   );
 
-  // Use the shared typeahead hook
   const { state, handleHighlight } = useTypeaheadPlugin({
     triggerConfig: {
       char: "#",
       multiChar: false,
-      allowWhitespace: false, // Close typeahead when space is typed
+      allowWhitespace: false,
     },
     options: filteredTags,
     onSelect: handleSelect,
@@ -86,7 +75,7 @@ export function TagCommandPlugin({ onTagSelected }: TagCommandPluginProps): JSX.
           onHighlight={handleHighlight}
           range={state.range}
           query={state.query}
-          showPreview={false} // Tags don't need preview
+          showPreview={false}
         />
       )}
     </>

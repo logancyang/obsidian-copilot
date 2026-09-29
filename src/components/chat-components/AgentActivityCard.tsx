@@ -13,9 +13,6 @@ export interface AgentActivityCardProps {
   children?: React.ReactNode;
 }
 
-/**
- * Provides one visual and interaction contract for reasoning, tools, grouped activity, and delegated work.
- */
 export const AgentActivityCard: React.FC<AgentActivityCardProps> = ({
   icon: Icon,
   label,

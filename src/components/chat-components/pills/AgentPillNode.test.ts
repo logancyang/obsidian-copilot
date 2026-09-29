@@ -24,7 +24,6 @@ describe("AgentPillNode", () => {
       () => {
         const node = $createAgentPillNode("claude", "Claude");
         expect(node.getTextContent()).toBe("");
-        // The id is still available structurally for routing.
         expect(node.getBackendId()).toBe("claude");
       },
       { discrete: true }

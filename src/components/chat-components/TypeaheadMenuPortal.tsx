@@ -2,9 +2,6 @@ import React, { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { TypeaheadMenuContent, TypeaheadOption } from "./TypeaheadMenuContent";
 
-/**
- * Creates a DOM Range from a trigger character position to the current cursor position.
- */
 function tryToPositionRange(leadOffset: number, editorWindow: Window): Range | null {
   const domSelection = editorWindow.getSelection();
   if (domSelection === null || !domSelection.isCollapsed) {
@@ -60,8 +57,6 @@ export function TypeaheadMenuPortal({
     null
   );
 
-  // Derive the popout-aware window/document from the range itself so positioning
-  // and the portal target follow the chat's window, not whichever happens to be focused.
   const targetWin: Window = range?.startContainer.win ?? window;
 
   const calculateWidth = useCallback(

@@ -5,8 +5,6 @@ interface CopilotSpinnerProps {
   animated?: boolean;
 }
 
-// 7-dot sigma (Σ) pattern. animIndex orders the snake trail:
-// top-right → top-center → top-left → center → bottom-left → bottom-center → bottom-right.
 const SIGMA_DOTS: { row: number; col: number; animIndex: number }[] = [
   { row: 0, col: 0, animIndex: 2 },
   { row: 0, col: 1, animIndex: 1 },

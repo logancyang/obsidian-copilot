@@ -47,7 +47,6 @@ const meta = {
 } satisfies Meta<Props>;
 export default meta;
 
-/** Hover the blue-dot icon to verify the live-session tooltip. */
 export const OpenSession: StoryObj<Props> = {
   render: () => <OpenPopover />,
 };

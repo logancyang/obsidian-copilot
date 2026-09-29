@@ -8,10 +8,6 @@ import {
   InsertTextOptions,
 } from "@/components/chat-components/utils/lexicalTextUtils";
 
-/**
- * Plugin that registers the INSERT_TEXT_WITH_PILLS_COMMAND to allow
- * external components to insert text with automatic pill conversion.
- */
 export function TextInsertionPlugin(): null {
   const app = useApp();
   const [editor] = useLexicalComposerContext();

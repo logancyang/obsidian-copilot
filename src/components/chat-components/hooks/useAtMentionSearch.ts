@@ -19,12 +19,8 @@ import {
 import { getEffectiveCustomPromptsFolder } from "@/settings/copilotFolder";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 
-// Maximum number of results to show in @ mention search
 const MAX_SEARCH_RESULTS = 30;
 
-/**
- * Custom hook for @ mention search results with unified fuzzy search
- */
 export function useAtMentionSearch(
   query: string,
   mode: "category" | "search",
@@ -35,23 +31,17 @@ export function useAtMentionSearch(
   currentActiveFile: TFile | null = null,
   agentBrands: ReadonlyArray<AgentMentionBrand> = EMPTY_AGENT_MENTION_BRANDS
 ): (CategoryOption | AtMentionOption)[] {
-  // Get raw data without pre-filtering
   const allNotes = useAllNotes(isCopilotPlus);
   const allFolders = useAllFolders();
 
-  // Only enable web tab polling when actually needed:
-  // - In category mode with a search query (searching across all categories)
-  // - In search mode when webTabs category is selected
   const shouldEnableWebTabPolling =
     isDesktopRuntime() &&
     ((mode === "category" && query.trim().length > 0) ||
       (mode === "search" && selectedCategory === "webTabs"));
   const openWebTabs = useOpenWebTabs({ enabled: shouldEnableWebTabPolling });
 
-  // Use the single-source-of-truth Active Web Tab state
   const { activeWebTabForMentions: activeWebTab } = useActiveWebTabState();
 
-  // Create memoized item arrays (reused in both modes)
   const noteItems: AtMentionOption[] = useMemo(
     () =>
       allNotes.map((file, index) => ({
@@ -62,7 +52,7 @@ export function useAtMentionSearch(
         data: file,
         content: undefined,
         icon: React.createElement(FileText, { className: "tw-size-4" }),
-        searchKeyword: file.path, // Search by note path
+        searchKeyword: file.path,
       })),
     [allNotes]
   );
@@ -93,7 +83,7 @@ export function useAtMentionSearch(
         data: folder,
         content: undefined,
         icon: React.createElement(Folder, { className: "tw-size-4" }),
-        searchKeyword: folder.path, // Search by folder path
+        searchKeyword: folder.path,
       })),
     [allFolders]
   );
@@ -132,8 +122,6 @@ export function useAtMentionSearch(
         data: brand.id,
         content: undefined,
         icon: React.createElement(brand.Icon, { className: "tw-size-4" }),
-        // Cloud agents keep their mention option but get a cloud-egress warning
-        // beside the name while Self-Host Mode is on.
         trailingContent: brand.needsSelfHostWarning
           ? React.createElement(SelfHostCloudWarningIcon)
           : undefined,
@@ -144,7 +132,6 @@ export function useAtMentionSearch(
 
   return useMemo(() => {
     if (mode === "category") {
-      // Show category options when no query
       if (!query) {
         const categoryOptions = availableCategoryOptions.map((cat) => ({
           ...cat,
@@ -153,7 +140,6 @@ export function useAtMentionSearch(
 
         const activeOptions: AtMentionOption[] = [];
 
-        // Add "Active Web Tab" option when the active leaf is Web Viewer (desktop-only)
         if (activeWebTab) {
           activeOptions.push({
             key: "active-web-tab",
@@ -166,7 +152,6 @@ export function useAtMentionSearch(
           });
         }
 
-        // Add "Active Note" option if there is an active file
         if (currentActiveFile) {
           activeOptions.push({
             key: `active-note-${currentActiveFile.path}`,
@@ -182,21 +167,17 @@ export function useAtMentionSearch(
         return activeOptions.length > 0 ? [...activeOptions, ...categoryOptions] : categoryOptions;
       }
 
-      // Search across all categories when query exists
-      // Search tools using exact string matching on name only (case-insensitive)
       const queryLower = query.toLowerCase();
       const matchingTools = toolItems.filter((tool) => {
         return tool.title.toLowerCase().includes(queryLower);
       });
 
-      // Agents rank first: match on display name or backend id (case-insensitive).
       const matchingAgents = agentItems.filter(
         (agent) =>
           agent.title.toLowerCase().includes(queryLower) ||
           (typeof agent.data === "string" && agent.data.toLowerCase().includes(queryLower))
       );
 
-      // Check if "active note" contains the query as a substring (case-insensitive)
       const activeNoteTitle = "active note";
       const activeNoteMatches = activeNoteTitle.includes(queryLower);
       const activeNoteOption =
@@ -212,7 +193,6 @@ export function useAtMentionSearch(
             }
           : null;
 
-      // Check if "active web tab" contains the query as a substring (case-insensitive)
       const activeWebTabTitle = "active web tab";
       const activeWebTabMatches = activeWebTabTitle.includes(queryLower);
       const activeWebTabOption =
@@ -228,7 +208,6 @@ export function useAtMentionSearch(
             }
           : null;
 
-      // Combine all non-tool items for unified fuzzy search
       const allNonToolItems = [...noteItems, ...folderItems, ...webTabItems];
       const fuzzySearchResults = fuzzysort.go(query, allNonToolItems, {
         keys: ["searchKeyword"],
@@ -238,8 +217,6 @@ export function useAtMentionSearch(
 
       const rankedNonToolItems = fuzzySearchResults.map((result) => result.obj);
 
-      // Agents first, then Tools, then Active Web Tab / Active Note (if matches),
-      // then everything else
       return [
         ...matchingAgents,
         ...matchingTools,
@@ -248,7 +225,6 @@ export function useAtMentionSearch(
         ...rankedNonToolItems,
       ].slice(0, MAX_SEARCH_RESULTS);
     } else {
-      // Category-specific search mode - reuse memoized items
       let items: AtMentionOption[] = [];
 
       switch (selectedCategory) {
@@ -269,9 +245,7 @@ export function useAtMentionSearch(
           break;
       }
 
-      // Apply fuzzy search for all categories if there's a query
       if (!query) {
-        // For notes category with no query, rank custom command notes lower
         if (selectedCategory === "notes") {
           const customPromptsFolder = getEffectiveCustomPromptsFolder();
           const regularNotes = items.filter(

@@ -1,11 +1,8 @@
 import { openImagePicker } from "./openImagePicker";
 
 describe("openImagePicker", () => {
-  // jsdom would open nothing, but `.click()` on a file input is also a no-op
-  // that can pop a native dialog under Electron; stub it so tests stay inert.
   let clickSpy: jest.SpyInstance;
   beforeEach(() => {
-    // Obsidian exposes `activeDocument`; jsdom doesn't, so point it at the test doc.
     (window as unknown as { activeDocument: Document }).activeDocument = window.document;
     clickSpy = jest.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
   });

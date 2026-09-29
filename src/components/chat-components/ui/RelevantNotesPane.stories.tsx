@@ -173,7 +173,6 @@ export const VaultNotRegisteredRemote: StoryObj<RelevantNotesPaneProps> = {
   },
 };
 
-/** A manual replay of loading, failure, empty results and recovery; no requests are made. */
 export const StateTransitions: StoryObj<RelevantNotesPaneProps> = {
   render: function StateTransitionsStory() {
     const states = ["loading", "request-error", "no-matches", "matches"] as const;

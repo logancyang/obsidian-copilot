@@ -4,22 +4,13 @@ import { FileText } from "lucide-react";
 import React, { useId } from "react";
 
 export interface RelevantNotesToolbarProps {
-  /** Basename of the note being related, or undefined when there is none. */
   activeFileName: string | undefined;
-  /** Omitted when Miyo is off, since there is no index to follow. */
   liveUpdate?: {
     enabled: boolean;
     onChange: (enabled: boolean) => void;
   };
 }
 
-/**
- * Name the note Relevant Notes is searching against and expose live update.
- *
- * @param activeFileName - Basename shown as the search source.
- * @param liveUpdate - Current live-update state and its setter, when offering
- *   the control makes sense.
- */
 export function RelevantNotesToolbar({
   activeFileName,
   liveUpdate,
@@ -44,11 +35,7 @@ export function RelevantNotesToolbar({
           title="Re-rank these notes while you write"
           className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5 tw-text-xs"
         >
-          {/*
-            The switch is a div with role="switch", which no <label> can name or
-            activate, so the visible word both names it and toggles it itself.
-            https://github.com/Brevilabs/obsidian-copilot-private/issues/362
-          */}
+          {/* A div with role="switch" cannot be named or activated by a <label>. https://github.com/Brevilabs/obsidian-copilot-private/issues/362 */}
           <span
             id={labelId}
             onClick={() => liveUpdate.onChange(!liveUpdate.enabled)}

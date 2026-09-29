@@ -19,8 +19,6 @@ export const BottomLoadingIndicator: React.FC<BottomLoadingIndicatorProps> = ({
           <CopilotSpinner />
         </span>
         <span className="copilot-shimmer-text tw-font-medium">{label}</span>
-        {/* Reserves the chevron slot AgentReasoningBlock renders so the
-            swap to a real reasoning block doesn't shift the right edge. */}
         <span className="tw-ml-auto tw-size-3" aria-hidden="true" />
       </div>
     </div>

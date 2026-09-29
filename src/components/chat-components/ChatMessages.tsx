@@ -10,7 +10,6 @@ import React, { memo } from "react";
 interface ChatMessagesProps {
   chatHistory: ChatMessage[];
   currentAiMessage: string;
-  /** Stable ID for streaming message, shared with final persisted message */
   streamingMessageId?: string | null;
   loading?: boolean;
   loadingMessage?: string;
@@ -21,15 +20,6 @@ interface ChatMessagesProps {
   onDelete: (messageIndex: number) => void;
 }
 
-/**
- * Whether the chat view has nothing to show: no visible message and no
- * in-flight AI response. `ChatMessages` swaps to its suggested-prompts branch
- * on exactly this condition and `Chat` gates the Agent mode banner on it, so
- * the two surfaces cannot drift apart over what counts as an empty chat.
- *
- * @param chatHistory Messages for the active chat, including ones flagged invisible.
- * @param currentAiMessage Text streaming in from the AI right now, empty when nothing is streaming.
- */
 export function isChatEmpty(chatHistory: ChatMessage[], currentAiMessage: string): boolean {
   return !chatHistory.some((message) => message.isVisible) && !currentAiMessage;
 }
@@ -47,7 +37,6 @@ const ChatMessages = memo(
     onEdit,
     onDelete,
   }: ChatMessagesProps) => {
-    // Chat scrolling behavior
     const {
       containerMinHeight,
       scrollContainerCallbackRef,
@@ -59,9 +48,6 @@ const ChatMessages = memo(
     } = useChatScrolling({ chatHistory });
 
     if (isChatEmpty(chatHistory, currentAiMessage)) {
-      // Height comes from the content, not the container: `Chat` centers the
-      // Agent Chat banner in the space this branch leaves free, so filling the
-      // column here would push that banner back to the top.
       return (
         <div className="tw-flex tw-w-full tw-flex-col tw-gap-2">
           {loading && <BottomLoadingIndicator label={loadingMessage} />}
@@ -81,7 +67,6 @@ const ChatMessages = memo(
           {chatHistory.map((message, index) => {
             const visibleMessages = chatHistory.filter((m) => m.isVisible);
             const isLastMessage = index === visibleMessages.length - 1;
-            // Only apply min-height to AI messages that are last
             const shouldApplyMinHeight = isLastMessage && message.sender !== USER_SENDER;
 
             return (

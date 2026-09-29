@@ -17,10 +17,6 @@ export interface SerializedURLPillNode extends SerializedBasePillNode {
   isActive?: boolean;
 }
 
-/**
- * URL pill node with special handling for titles and active state.
- * Uses a custom implementation due to additional complexity.
- */
 export class URLPillNode extends BasePillNode {
   __url: string;
   __title?: string;
@@ -145,7 +141,6 @@ function convertURLPillElement(domNode: HTMLElement): DOMConversionOutput | null
   return null;
 }
 
-// Utility functions
 export function $createURLPillNode(url: string, title?: string, isActive = false): URLPillNode {
   return new URLPillNode(url, title, isActive);
 }

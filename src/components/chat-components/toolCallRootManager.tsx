@@ -18,16 +18,11 @@ declare global {
 export interface ToolCallRootRecord {
   root: Root;
   isUnmounting: boolean;
-  /** Reference to the DOM container to detect container changes across component lifecycles */
   container: HTMLElement;
 }
 
 const STALE_ROOT_MAX_AGE_MS = 60 * 60 * 1000;
 
-/**
- * Retrieve the global registry that keeps track of tool call React roots.
- * The registry is stored on `window` to preserve state across component lifecycles.
- */
 const getRegistry = (): Map<string, Map<string, ToolCallRootRecord>> => {
   if (!window.__copilotToolCallRoots) {
     window.__copilotToolCallRoots = new Map<string, Map<string, ToolCallRootRecord>>();
@@ -36,10 +31,6 @@ const getRegistry = (): Map<string, Map<string, ToolCallRootRecord>> => {
   return window.__copilotToolCallRoots;
 };
 
-/**
- * Retrieve the global registry that keeps track of error block React roots.
- * Separate from tool call roots to prevent ID collisions and race conditions.
- */
 const getErrorBlockRegistry = (): Map<string, Map<string, ToolCallRootRecord>> => {
   if (!window.__copilotErrorBlocks) {
     window.__copilotErrorBlocks = new Map<string, Map<string, ToolCallRootRecord>>();
@@ -48,9 +39,6 @@ const getErrorBlockRegistry = (): Map<string, Map<string, ToolCallRootRecord>> =
   return window.__copilotErrorBlocks;
 };
 
-/**
- * Remove the message entry from the registry when it no longer has active tool call roots.
- */
 const pruneEmptyMessageEntry = (
   messageId: string,
   messageRoots: Map<string, ToolCallRootRecord>,
@@ -66,9 +54,6 @@ const pruneEmptyMessageEntry = (
   }
 };
 
-/**
- * Unmount a tool call root, mark it as inactive, and remove it from the registry.
- */
 const disposeToolCallRoot = (
   messageId: string,
   messageRoots: Map<string, ToolCallRootRecord>,
@@ -91,11 +76,6 @@ const disposeToolCallRoot = (
   pruneEmptyMessageEntry(messageId, messageRoots, registry);
 };
 
-/**
- * Handle container change by immediately removing the old record from the map
- * and scheduling a deferred unmount. This is used when the same messageId + toolCallId
- * is reused with a different DOM container (e.g., streaming -> history transition).
- */
 const handleContainerChange = (
   messageId: string,
   messageRoots: Map<string, ToolCallRootRecord>,
@@ -104,13 +84,10 @@ const handleContainerChange = (
   logContext: string,
   registry: Map<string, Map<string, ToolCallRootRecord>>
 ): void => {
-  // Immediately remove from map so new record can be created
   messageRoots.delete(toolCallId);
 
-  // Mark as unmounting to prevent duplicate disposal attempts
   oldRecord.isUnmounting = true;
 
-  // Defer unmount to avoid "synchronously unmount while React was already rendering" warning
   window.setTimeout(() => {
     try {
       oldRecord.root.unmount();
@@ -119,14 +96,10 @@ const handleContainerChange = (
     }
     oldRecord.isUnmounting = false;
 
-    // Prune empty message entry from registry
     pruneEmptyMessageEntry(messageId, messageRoots, registry);
   }, 0);
 };
 
-/**
- * Schedule a deferred unmount for a tool call root while preventing duplicate requests.
- */
 const scheduleToolCallRootDisposal = (
   messageId: string,
   messageRoots: Map<string, ToolCallRootRecord>,
@@ -154,9 +127,6 @@ const scheduleToolCallRootDisposal = (
   }, 0);
 };
 
-/**
- * Ensure a React root exists for the provided tool call container and return the root record.
- */
 export const ensureToolCallRoot = (
   app: App,
   messageId: string,
@@ -179,10 +149,6 @@ export const ensureToolCallRoot = (
     record = undefined;
   }
 
-  // Detect container change: if the record exists but points to a different container,
-  // dispose the old root and create a new one. This happens when streaming component
-  // unmounts (destroying its DOM) and history component mounts with a new container.
-  // Only check if record.container exists (backwards compatibility with old registries).
   if (record && record.container && record.container !== container) {
     handleContainerChange(
       messageId,
@@ -208,10 +174,6 @@ export const ensureToolCallRoot = (
   return record;
 };
 
-/**
- * Ensure a React root exists for the provided error block container and return the root record.
- * Uses a separate registry from tool calls to prevent ID collisions and race conditions.
- */
 export const ensureErrorBlockRoot = (
   app: App,
   messageId: string,
@@ -234,9 +196,6 @@ export const ensureErrorBlockRoot = (
     record = undefined;
   }
 
-  // Detect container change: if the record exists but points to a different container,
-  // dispose the old root and create a new one.
-  // Only check if record.container exists (backwards compatibility with old registries).
   if (record && record.container && record.container !== container) {
     handleContainerChange(
       messageId,
@@ -262,9 +221,6 @@ export const ensureErrorBlockRoot = (
   return record;
 };
 
-/**
- * Render the `ToolCallBanner` component into the provided root record.
- */
 export const renderToolCallBanner = (
   record: ToolCallRootRecord,
   toolCall: ToolCallMarker
@@ -281,16 +237,10 @@ export const renderToolCallBanner = (
   );
 };
 
-/**
- * Render the `ErrorBlock` component into the provided root record.
- */
 export const renderErrorBlock = (record: ToolCallRootRecord, error: ErrorMarker): void => {
   record.root.render(<ErrorBlock errorContent={error.errorContent} />);
 };
 
-/**
- * Schedule the removal of a tool call root from a message root collection.
- */
 export const removeToolCallRoot = (
   messageId: string,
   messageRoots: Map<string, ToolCallRootRecord>,
@@ -312,9 +262,6 @@ export const removeToolCallRoot = (
   );
 };
 
-/**
- * Schedule the removal of an error block root from a message root collection.
- */
 export const removeErrorBlockRoot = (
   messageId: string,
   messageRoots: Map<string, ToolCallRootRecord>,
@@ -336,9 +283,6 @@ export const removeErrorBlockRoot = (
   );
 };
 
-/**
- * Return (and create if necessary) the tool call root map for a specific message.
- */
 export const getMessageToolCallRoots = (messageId: string): Map<string, ToolCallRootRecord> => {
   const registry = getRegistry();
   let messageRoots = registry.get(messageId);
@@ -351,10 +295,6 @@ export const getMessageToolCallRoots = (messageId: string): Map<string, ToolCall
   return messageRoots;
 };
 
-/**
- * Return (and create if necessary) the error block root map for a specific message.
- * Uses a separate registry from tool calls to prevent ID collisions.
- */
 export const getMessageErrorBlockRoots = (messageId: string): Map<string, ToolCallRootRecord> => {
   const registry = getErrorBlockRegistry();
   let messageRoots = registry.get(messageId);
@@ -367,20 +307,14 @@ export const getMessageErrorBlockRoots = (messageId: string): Map<string, ToolCa
   return messageRoots;
 };
 
-/**
- * Clean up tool call roots that are no longer attached to the DOM.
- * Uses container.isConnected for records with container reference,
- * falls back to timestamp-based cleanup for legacy records.
- */
 export const cleanupStaleToolCallRoots = (now: number = Date.now()): void => {
   const registry = getRegistry();
 
   registry.forEach((messageRoots, messageId) => {
     messageRoots.forEach((record, toolCallId) => {
-      // Primary cleanup: check if container is detached from DOM
       if (record.container) {
         if (record.container.isConnected) {
-          return; // Container still in DOM, skip cleanup
+          return;
         }
         scheduleToolCallRootDisposal(
           messageId,
@@ -393,7 +327,6 @@ export const cleanupStaleToolCallRoots = (now: number = Date.now()): void => {
         return;
       }
 
-      // Fallback for legacy records without container: use timestamp-based cleanup
       const timestamp = Number.parseInt(messageId, 10);
       if (Number.isNaN(timestamp) || now - timestamp < STALE_ROOT_MAX_AGE_MS) {
         return;
@@ -410,20 +343,14 @@ export const cleanupStaleToolCallRoots = (now: number = Date.now()): void => {
   });
 };
 
-/**
- * Clean up error block roots that are no longer attached to the DOM.
- * Uses container.isConnected for records with container reference,
- * falls back to timestamp-based cleanup for legacy records.
- */
 export const cleanupStaleErrorBlockRoots = (now: number = Date.now()): void => {
   const registry = getErrorBlockRegistry();
 
   registry.forEach((messageRoots, messageId) => {
     messageRoots.forEach((record, errorId) => {
-      // Primary cleanup: check if container is detached from DOM
       if (record.container) {
         if (record.container.isConnected) {
-          return; // Container still in DOM, skip cleanup
+          return;
         }
         scheduleToolCallRootDisposal(
           messageId,
@@ -436,7 +363,6 @@ export const cleanupStaleErrorBlockRoots = (now: number = Date.now()): void => {
         return;
       }
 
-      // Fallback for legacy records without container: use timestamp-based cleanup
       const timestamp = Number.parseInt(messageId, 10);
       if (Number.isNaN(timestamp) || now - timestamp < STALE_ROOT_MAX_AGE_MS) {
         return;
@@ -453,9 +379,6 @@ export const cleanupStaleErrorBlockRoots = (now: number = Date.now()): void => {
   });
 };
 
-/**
- * Schedule cleanup for all tool call roots owned by a specific message.
- */
 export const cleanupMessageToolCallRoots = (
   messageId: string,
   messageRoots: Map<string, ToolCallRootRecord>,
@@ -467,9 +390,6 @@ export const cleanupMessageToolCallRoots = (
   });
 };
 
-/**
- * Schedule cleanup for all error block roots owned by a specific message.
- */
 export const cleanupMessageErrorBlockRoots = (
   messageId: string,
   messageRoots: Map<string, ToolCallRootRecord>,

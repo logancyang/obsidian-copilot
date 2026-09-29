@@ -52,17 +52,10 @@ import {
 
 const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
 
-/**
- * A pasted prompt, log, or transcript pushes the reply and every earlier turn
- * off the chat surface, so a user message taller than this collapses behind a
- * Show more control: https://github.com/Brevilabs/obsidian-copilot-private/issues/151
- */
+// Tall pasted user messages collapse behind a Show more control.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/151
 const COLLAPSED_USER_MESSAGE_CLASS_NAME = cn("tw-max-h-[12lh]");
 
-/**
- * Normalizes rendered markdown footnotes to align with inline citation UX.
- * Removes separators/backrefs and fixes numbering artifacts (e.g., "2-1").
- */
 export const normalizeFootnoteRendering = (root: HTMLElement): void => {
   const footnoteSection = root.querySelector(".footnotes");
 
@@ -96,17 +89,7 @@ export const normalizeFootnoteRendering = (root: HTMLElement): void => {
 
 const INLINE_CITATION_RE = /\[(\d+(?:\s*,\s*\d+)*)\]/g;
 
-/**
- * Deprecated: legacy citation rendering is awaiting removal.
- *
- * Makes inline citation numbers (e.g., [1], [2]) clickable by linking them
- * to the corresponding source note. Reads the source mapping from the
- * rendered .copilot-sources section in the same message.
- */
 const linkInlineCitations = (root: HTMLElement): void => {
-  // Build citation number -> source anchor mapping from the rendered sources section.
-  // We store the anchor element (not just the href) so we can copy Obsidian-specific
-  // attributes like data-href and class="internal-link" onto the inline citation link.
   const sourceItems = root.querySelectorAll(".copilot-sources__item");
   if (sourceItems.length === 0) return;
 
@@ -128,12 +111,8 @@ const linkInlineCitations = (root: HTMLElement): void => {
 
   if (citationAnchors.size === 0) return;
 
-  // Bind DOM ops to the document that owns `root` — the chat message may live
-  // in an Obsidian popout while a different window is focused, in which case
-  // `activeDocument` would create nodes with the wrong owner.
   const doc = root.doc;
 
-  // Collect text nodes that contain citation patterns (outside sources section)
   const sourcesEl = root.querySelector(".copilot-sources");
   const textNodes: Text[] = [];
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
@@ -152,7 +131,6 @@ const linkInlineCitations = (root: HTMLElement): void => {
   let n: Text | null;
   while ((n = walker.nextNode() as Text | null)) textNodes.push(n);
 
-  // Replace citation text with clickable links
   textNodes.forEach((node) => {
     const text = node.textContent || "";
     INLINE_CITATION_RE.lastIndex = 0;
@@ -162,7 +140,6 @@ const linkInlineCitations = (root: HTMLElement): void => {
     let match: RegExpExecArray | null;
 
     while ((match = INLINE_CITATION_RE.exec(text)) !== null) {
-      // Text before the citation
       if (match.index > lastIndex) {
         fragment.appendChild(doc.createTextNode(text.slice(lastIndex, match.index)));
       }
@@ -177,12 +154,9 @@ const linkInlineCitations = (root: HTMLElement): void => {
           if (i > 0) span.appendChild(doc.createTextNode(", "));
           const sourceAnchor = citationAnchors.get(num)!;
           const link = doc.win.createEl("a");
-          // Copy all attributes from the source anchor so Obsidian internal-link
-          // metadata (e.g. data-href, class="internal-link") is preserved.
           for (const attr of Array.from(sourceAnchor.attributes)) {
             link.setAttribute(attr.name, attr.value);
           }
-          // Override class and add our citation-specific styling
           link.className = `copilot-citation-link${sourceAnchor.className ? ` ${sourceAnchor.className}` : ""}`;
           link.textContent = String(num);
           link.setAttribute("aria-label", `Source ${num}`);
@@ -201,8 +175,6 @@ const linkInlineCitations = (root: HTMLElement): void => {
       fragment.appendChild(doc.createTextNode(text.slice(lastIndex)));
     }
 
-    // If the text node is inside a placeholder span, replace the span itself
-    // so the placeholder wrapper is cleanly removed.
     const replaceTarget = node.parentElement?.classList.contains("copilot-citation-ref")
       ? node.parentElement
       : node;
@@ -303,13 +275,11 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
 interface ChatSingleMessageProps {
   message: ChatMessage;
   app: App;
-  /** Saved conversation path for user Markdown; empty for an unsaved chat. */
   sourcePath?: string;
   isStreaming: boolean;
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
   onDelete?: () => void;
-  /** Agent Mode metadata placed at the response footer's leading edge, before the timestamp. */
   footerStart?: React.ReactNode;
 }
 
@@ -345,8 +315,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
   const isUnmountingRef = useRef<boolean>(false);
-  // Use a stable ID for the message to preserve tool call roots across re-renders
-  // Prefer message.id (persistent) over timestamp.epoch (regenerated on load)
   const messageId = useRef(
     message.id ||
       (message.timestamp?.epoch
@@ -354,23 +322,17 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         : `temp-${Date.now()}-${Math.random()}`)
   );
 
-  // Store roots in a global map to preserve them across component instances
   const rootsRef = useRef<Map<string, ToolCallRootRecord>>(
     getMessageToolCallRoots(messageId.current)
   );
 
-  // Store error block roots separately to prevent ID collisions and race conditions
   const errorRootsRef = useRef<Map<string, ToolCallRootRecord>>(
     getMessageErrorBlockRoots(messageId.current)
   );
 
-  // Get the global collapsible state map for this message
-  // This persists across component lifecycles (streaming -> final message)
-  // Use ref to avoid triggering re-renders when map contents change
   const collapsibleOpenStateMapRef = useRef(getMessageCollapsibleStates(messageId.current));
   const collapsibleOpenStateMap = collapsibleOpenStateMapRef.current;
 
-  // Check if current model has reasoning capability
   const settings = useSettingsValue();
 
   const preprocess = useCallback(
@@ -384,7 +346,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         summaryText: string,
         streamingSummaryText: string
       ): string => {
-        // Common styles as template strings
         const detailsStyle = `margin: 0.5rem 0 1.5rem; padding: 0.75rem; border: 1px solid var(--background-modifier-border); border-radius: 4px; background-color: var(--background-secondary)`;
         const summaryStyle = `cursor: pointer; color: var(--text-muted); font-size: 0.8em; margin-bottom: 0.5rem; user-select: none`;
         const contentStyle = `margin-top: 0.75rem; padding: 0.75rem; border-radius: 4px; background-color: var(--background-primary)`;
@@ -392,10 +353,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         const openTag = `<${tagName}>`;
         let sectionIndex = 0;
 
-        // Trims content and appends \n so the closing </div> always lands on
-        // its own unindented line. Without this, content ending with a
-        // 4-space-indented line (a markdown code block) would cause </div> to
-        // be consumed by the code block and rendered as escaped literal text.
         const ensureClosingTagOnNewLine = (text: string) => text.trim() + "\n";
 
         const buildDetails = (sectionContent: string, openAttr: string, domId: string) =>
@@ -404,20 +361,16 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           `<div class="tw-text-muted" style="${contentStyle}">${ensureClosingTagOnNewLine(sectionContent)}</div>` +
           `</details>\n\n`;
 
-        // During streaming, if we find any tag that's either unclosed or being processed
         if (isStreaming && content.includes(openTag)) {
-          // Replace any complete sections first
           const completeRegex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
           content = content.replace(completeRegex, (_match, sectionContent: string) => {
             const sectionKey = `${tagName}-${sectionIndex}`;
             sectionIndex += 1;
             const domId = buildCopilotCollapsibleDomId(messageId.current, sectionKey);
-            // Check if user has explicitly set a state; if not, default to collapsed (original behavior)
             const openAttribute = collapsibleOpenStateMap.get(domId) ? " open" : "";
             return buildDetails(sectionContent, openAttribute, domId);
           });
 
-          // Then handle any unclosed tag, but preserve the streamed content
           const unClosedRegex = new RegExp(`<${tagName}>([\\s\\S]*)$`);
           content = content.replace(
             unClosedRegex,
@@ -430,13 +383,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           return content;
         }
 
-        // Not streaming, process all sections normally
         const regex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
         return content.replace(regex, (_match, sectionContent: string) => {
           const sectionKey = `${tagName}-${sectionIndex}`;
           sectionIndex += 1;
           const domId = buildCopilotCollapsibleDomId(messageId.current, sectionKey);
-          // Restore open state from previous render
           const openAttribute = collapsibleOpenStateMap.get(domId) ? " open" : "";
           return buildDetails(sectionContent, openAttribute, domId);
         });
@@ -447,42 +398,32 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       };
 
       const processWriteFileSection = (content: string): string => {
-        // Normalise legacy <writeToFile> tags from saved history to <writeFile>
-        // so they continue to render correctly after the tool rename.
         const normalizeLegacyTags = (text: string): string =>
           text.replace(/<(\/?)writeToFile>/g, "<$1writeFile>");
 
-        // First, unwrap any XML codeblocks that contain writeFile tags
         const unwrapXmlCodeblocks = (text: string): string => {
-          // Pattern to match XML codeblocks that contain writeFile tags (or legacy writeToFile)
           const xmlCodeblockRegex =
             /```(?:xml)?\s*([\s\S]*?<writeFile>[\s\S]*?<\/writeFile>[\s\S]*?)\s*```/g;
 
           return text.replace(xmlCodeblockRegex, (_match: string, xmlContent: string) => {
-            // Extract just the content inside the codeblock and return it without the codeblock wrapper
             return xmlContent.trim();
           });
         };
 
-        // During streaming, also handle unclosed writeFile tags in XML codeblocks
         const unwrapStreamingXmlCodeblocks = (text: string): string => {
           if (!isStreaming) return text;
 
-          // Pattern to match XML codeblocks that contain unclosed writeFile tags
           const streamingXmlCodeblockRegex = /```xml\s*([\s\S]*?<writeFile>[\s\S]*?)$/g;
 
           return text.replace(streamingXmlCodeblockRegex, (_match: string, xmlContent: string) => {
-            // Extract the content and return it without the codeblock wrapper
             return xmlContent.trim();
           });
         };
 
-        // Normalise legacy tags, then unwrap XML codeblocks
         let processedContent = normalizeLegacyTags(content);
         processedContent = unwrapXmlCodeblocks(processedContent);
         processedContent = unwrapStreamingXmlCodeblocks(processedContent);
 
-        // Then process the writeFile sections normally
         return processCollapsibleSection(
           processedContent,
           "writeFile",
@@ -492,77 +433,55 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       };
 
       const replaceLinks = (text: string, regex: RegExp, template: (file: TFile) => string) => {
-        // Split text into code blocks and non-code blocks
         const parts = text.split(/(```[\s\S]*?```|`[^`]*`)/g);
 
         return parts
           .map((part, index) => {
-            // Even indices are normal text, odd indices are code blocks
             if (index % 2 === 0) {
-              // Process links only in non-code blocks
               return part.replace(regex, (match: string, selection: string) => {
                 const file = app.metadataCache.getFirstLinkpathDest(selection, sourcePath);
                 return file ? template(file) : match;
               });
             }
-            // Return code blocks unchanged
             return part;
           })
           .join("");
       };
 
-      // Common AI response preprocessing (LaTeX, dataview/tasks escaping)
       const commonProcessed = preprocessAIResponse(content);
 
-      // Process only Obsidian internal images (starting with ![[)
       const noteImageProcessed = replaceLinks(
         commonProcessed,
         /!\[\[(.*?)]]/g,
         (file) => `![](${app.vault.getResourcePath(file)})`
       );
 
-      // Process think sections (no-op if none); do not depend on current model selection
       const thinkSectionProcessed = processThinkSection(noteImageProcessed);
 
-      // Process writeFile sections
       const writeFileSectionProcessed = processWriteFileSection(thinkSectionProcessed);
 
-      // Transform markdown sources section into HTML structure
       const sourcesSectionProcessed = processInlineCitations(
         writeFileSectionProcessed,
         settings.enableInlineCitations
       );
 
-      // Wrap any remaining raw [^N] footnote marks as placeholder badges.
-      // During streaming, processInlineCitations can't process them until the
-      // sources section has streamed in. Without this, the markdown renderer
-      // interprets [^N] as footnote references and shows bare superscript numbers.
       const citationPlaceholderProcessed = sourcesSectionProcessed.replace(
         /\[\^(\d+)\](?!:)/g,
         '<span class="copilot-citation-ref">[$1]</span>'
       );
 
-      /**
-       * Converts YouTube video embeds to static thumbnails during streaming.
-       * This prevents iframe flickering caused by repeated DOM recreation.
-       * After streaming ends, the original embed syntax is preserved for full video display.
-       */
       const processYouTubeEmbed = (content: string): string => {
         if (!isStreaming) {
-          // After streaming: keep original syntax for full video embed
           return content;
         }
 
-        // Match ![title](url) format and check if URL is YouTube
         const imageEmbedRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
 
         return content.replace(imageEmbedRegex, (match, title: string, url: string) => {
           const videoId = extractYoutubeVideoId(url);
           if (!videoId) {
-            // Not a YouTube URL, keep original
             return match;
           }
-          // During streaming: convert to clickable thumbnail to avoid iframe reload flicker
           const displayTitle = title || "YouTube Video";
           const thumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
           return `[![${displayTitle}](${thumbnail})](${url})`;
@@ -574,21 +493,13 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     [app, isStreaming, settings.enableInlineCitations, collapsibleOpenStateMap]
   );
 
-  // Persist collapsible open/closed state during streaming in real time.
-  // Streaming updates can rebuild the markdown DOM between pointer down/up, preventing a click.
   useEffect(() => {
     const root = contentRef.current;
     if (!root || message.sender === USER_SENDER || !isStreaming) {
       return;
     }
 
-    /**
-     * Handles user click on collapsible summary during streaming.
-     * Directly sets details.open to avoid race conditions where DOM rebuilds
-     * between pointerdown and click, causing double toggle that cancels user intent.
-     */
     const handleSummaryPointerDown = (event: Event): void => {
-      // Only handle primary button (left click)
       if (event instanceof PointerEvent && (event.button !== 0 || !event.isPrimary)) {
         return;
       }
@@ -598,16 +509,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         return;
       }
 
-      // Calculate and apply the next state immediately
       const nextOpen = !details.open;
       details.open = nextOpen;
       collapsibleOpenStateMap.set(details.id, nextOpen);
     };
 
-    /**
-     * Prevents native click from triggering another toggle on <details>.
-     * Since we already handled the state change in pointerdown, block the default behavior.
-     */
     const handleSummaryClick = (event: Event): void => {
       const details = getCopilotCollapsibleDetailsFromEvent(event, root);
       if (!details || !isEventWithinDetailsSummary(event, details)) {
@@ -616,9 +522,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       event.preventDefault();
     };
 
-    /**
-     * Captures actual open/closed state changes from native <details> interactions.
-     */
     const handleDetailsToggle = (event: Event): void => {
       const details = getCopilotCollapsibleDetailsFromEvent(event, root);
       if (!details) {
@@ -627,7 +530,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       collapsibleOpenStateMap.set(details.id, details.open);
     };
 
-    // Use capture phase and listen on root (not document) to minimize scope
     root.addEventListener("pointerdown", handleSummaryPointerDown, true);
     root.addEventListener("click", handleSummaryClick, true);
     root.addEventListener("toggle", handleDetailsToggle, true);
@@ -639,37 +541,27 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   }, [isStreaming, message.sender, collapsibleOpenStateMap]);
 
   useEffect(() => {
-    // Reset unmounting flag when effect runs
     isUnmountingRef.current = false;
 
     if (contentRef.current && message.sender !== USER_SENDER) {
-      // Create a new Component instance if it doesn't exist
       if (!componentRef.current) {
         componentRef.current = new Component();
         componentRef.current.load();
       }
 
-      // Capture open states of collapsible sections before re-rendering
-      // During streaming, don't overwrite user's explicit state changes from pointerdown
       captureCopilotCollapsibleOpenStates(contentRef.current, collapsibleOpenStateMap, {
         overwriteExisting: !isStreaming,
       });
 
       const originMessage = message.message;
 
-      // Use content after reasoning block (or full message if no reasoning block)
       const messageContent = parsedReasoningBlock?.contentAfter ?? originMessage;
       const processedMessage = preprocess(messageContent);
       const parsedMessage = parseToolCallMarkers(processedMessage, messageId.current);
 
       if (!isUnmountingRef.current) {
-        // Bind DOM ops to the document that owns the message container so
-        // popout-window chats don't pick up the wrong document if focus shifts.
         const doc = contentRef.current.doc;
-        // Resolve internal links against the active note so vaults with
-        // duplicate basenames or heading-only links open the right file.
         const sourcePath = app.workspace.getActiveFile()?.path ?? "";
-        // Track existing tool call and error block IDs
         const existingToolCallIds = new Set<string>();
         const existingErrorIds = new Set<string>();
 
@@ -685,21 +577,14 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           existingErrorIds.add(id);
         });
 
-        // Clear only text content divs, preserve tool call and error block containers
         const textDivs = contentRef.current.querySelectorAll(".message-segment");
         textDivs.forEach((div) => div.remove());
 
-        // Process segments and only update what's needed
         let currentIndex = 0;
         parsedMessage.segments.forEach((segment) => {
           if (segment.type === "text" && segment.content.trim()) {
-            // Find where to insert this text segment
             const insertBefore = contentRef.current!.children[currentIndex];
 
-            // `markdown-rendered` opts the container into Obsidian's native
-            // reading-view stylesheet so reloaded messages match the live
-            // render path (AgentMarkdownText). Most visibly, it restores the
-            // gray background pill on inline `<code>` spans.
             const textDiv = doc.win.createDiv("message-segment markdown-rendered");
 
             if (insertBefore) {
@@ -751,7 +636,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             let container = doc.getElementById(`error-block-${errorId}`);
 
             if (!container) {
-              // Insert error block at the current stream position
               const insertBefore = contentRef.current!.children[currentIndex];
               const errorDiv = doc.win.createDiv({
                 cls: "error-block-container",
@@ -767,7 +651,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               container = errorDiv;
             }
 
-            // Use dedicated error block root to prevent ID collisions with tool calls
             const rootRecord = ensureErrorBlockRoot(
               app,
               messageId.current,
@@ -785,7 +668,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           }
         });
 
-        // Clean up any tool calls that no longer exist
         const currentToolCallIds = new Set(
           parsedMessage.segments
             .filter((s) => s.type === "toolCall" && s.toolCall)
@@ -802,7 +684,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           }
         });
 
-        // Clean up any error blocks that no longer exist
         const currentErrorIds = new Set(
           parsedMessage.segments
             .filter((s) => s.type === "error" && s.error)
@@ -824,16 +705,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           }
         });
 
-        // Link inline citations only after streaming completes. During streaming
-        // the sources section is incomplete and the DOM is rebuilt every chunk,
-        // so linking mid-stream wastes cycles and causes visible flickering.
         if (contentRef.current && !isStreaming) {
           linkInlineCitations(contentRef.current);
         }
       }
     }
 
-    // Cleanup function - no longer needed as roots are managed by toolCallRootManager
     return () => {
       isUnmountingRef.current = true;
     };
@@ -847,45 +724,36 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     parsedReasoningBlock,
   ]);
 
-  // Cleanup effect that only runs on component unmount
   useEffect(() => {
     const currentComponentRef = componentRef;
     const currentMessageId = messageId.current;
     const messageRootsSnapshot = rootsRef.current;
     const errorRootsSnapshot = errorRootsRef.current;
 
-    // Clean up old message roots to prevent memory leaks (older than 1 hour)
     const cleanupOldRoots = () => {
       cleanupStaleToolCallRoots();
       cleanupStaleErrorBlockRoots();
     };
 
-    // Run cleanup on mount
     cleanupOldRoots();
 
     return () => {
-      // Set unmounting flag immediately
       isUnmountingRef.current = true;
 
-      // Defer cleanup to avoid React rendering conflicts.
       // eslint-disable-next-line @eslint-react/web-api/no-leaked-timeout -- fire-and-forget defer; no cleanup target available inside an effect-cleanup
       window.setTimeout(() => {
-        // Clean up component
         if (currentComponentRef.current) {
           currentComponentRef.current.unload();
           currentComponentRef.current = null;
         }
 
-        // Only clean up roots if this is a temporary message (streaming message with temp- prefix).
-        // For shared messageId (msg-xxx), container changes are handled by ensureToolCallRoot/ensureErrorBlockRoot
-        // which detect container mismatch and recreate roots as needed.
         if (currentMessageId.startsWith("temp-")) {
           cleanupMessageToolCallRoots(currentMessageId, messageRootsSnapshot, "component cleanup");
           cleanupMessageErrorBlockRoots(currentMessageId, errorRootsSnapshot, "component cleanup");
         }
       }, 0);
     };
-  }, []); // Empty dependency array ensures this only runs on unmount
+  }, []);
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -955,7 +823,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       );
     }
 
-    // Fallback for messages without content array
     return message.sender === USER_SENDER ? (
       <Markdown
         text={message.message}
@@ -967,7 +834,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     );
   };
 
-  // If editing a user message, replace the entire message container with the inline editor
   if (isEditing && message.sender === USER_SENDER) {
     return (
       <div className="tw-my-1 tw-flex tw-w-full tw-flex-col">
@@ -998,7 +864,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         <div className="tw-flex tw-max-w-full tw-flex-col tw-gap-2 tw-overflow-hidden">
           {!isEditing && <MessageContext context={message.context} />}
 
-          {/* Agent Reasoning Block (if present) */}
           {reasoningData && message.sender !== USER_SENDER && (
             <AgentReasoningBlock
               status={reasoningData.status}

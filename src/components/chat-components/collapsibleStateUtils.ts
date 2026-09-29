@@ -6,12 +6,6 @@ declare global {
   }
 }
 
-/**
- * Retrieve the global registry that keeps track of collapsible section states.
- * The registry is stored on `window` to preserve state across component lifecycles,
- * ensuring that user's collapse/expand preferences persist when streaming messages
- * transition to final messages.
- */
 const getCollapsibleStateRegistry = (): Map<string, Map<string, boolean>> => {
   if (!window.__copilotCollapsibleStates) {
     window.__copilotCollapsibleStates = new Map<string, Map<string, boolean>>();
@@ -19,10 +13,6 @@ const getCollapsibleStateRegistry = (): Map<string, Map<string, boolean>> => {
   return window.__copilotCollapsibleStates;
 };
 
-/**
- * Get the collapsible state map for a specific message.
- * Creates a new map if it doesn't exist.
- */
 export const getMessageCollapsibleStates = (messageId: string): Map<string, boolean> => {
   const registry = getCollapsibleStateRegistry();
   let states = registry.get(messageId);
@@ -33,23 +23,14 @@ export const getMessageCollapsibleStates = (messageId: string): Map<string, bool
   return states;
 };
 
-/**
- * Builds a stable DOM id for a collapsible section within a message.
- * Includes messageId to ensure uniqueness across messages.
- */
 export const buildCopilotCollapsibleDomId = (
   messageInstanceId: string,
   sectionKey: string
 ): string => {
-  // Normalize messageId to be safe for DOM id attribute
   const safeMessageId = messageInstanceId.replace(/[^a-zA-Z0-9_-]/g, "_");
   return `${COPILOT_COLLAPSIBLE_DOM_ID_PREFIX}-${safeMessageId}-${sectionKey}`;
 };
 
-/**
- * Captures the open/closed state for Copilot-rendered collapsible sections.
- * Used to persist user toggles across markdown re-renders during streaming.
- */
 export const captureCopilotCollapsibleOpenStates = (
   root: HTMLElement,
   stateById: Map<string, boolean>,
@@ -64,7 +45,6 @@ export const captureCopilotCollapsibleOpenStates = (
     if (!id) {
       return;
     }
-    // During streaming, don't overwrite user's explicit state changes
     if (!overwriteExisting && stateById.has(id)) {
       return;
     }
@@ -72,10 +52,6 @@ export const captureCopilotCollapsibleOpenStates = (
   });
 };
 
-/**
- * Returns the Copilot collapsible <details> element associated with an event.
- * Uses composedPath() when available to remain robust against retargeting.
- */
 export const getCopilotCollapsibleDetailsFromEvent = (
   event: Event,
   root: HTMLElement
@@ -106,9 +82,6 @@ export const getCopilotCollapsibleDetailsFromEvent = (
   return null;
 };
 
-/**
- * Returns true when the event originated from the <summary> of the given <details>.
- */
 export const isEventWithinDetailsSummary = (event: Event, details: HTMLDetailsElement): boolean => {
   const summary = details.querySelector("summary");
   if (!summary) {

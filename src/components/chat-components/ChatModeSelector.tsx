@@ -13,10 +13,6 @@ interface ChatModeSelectorProps {
   defaultOpen?: boolean;
 }
 
-/**
- * Render the two surviving Quick Chat modes and the existing Copilot Plus paywall entry.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/286
- */
 export function ChatModeSelector({
   selectedChain,
   isPaidUser,

@@ -19,22 +19,11 @@ export interface SerializedWebTabPillNode extends SerializedBasePillNode {
   faviconUrl?: string;
 }
 
-/**
- * Format a web tab reference for text serialization.
- * Uses a simple bracket format with globe emoji to identify web tabs.
- * @param url - The web tab URL
- * @param title - Optional title of the web tab
- * @returns Formatted string: `[🌐 title]` if title exists, otherwise `[🌐 domain]`
- */
 function formatWebTabPillTextContent(url: string, title?: string): string {
   const displayText = title?.trim() || getDomainFromUrl(url) || "Untitled";
   return `[🌐: ${displayText}]`;
 }
 
-/**
- * WebTabPillNode represents a web tab from Web Viewer in context.
- * Stores URL, title, and optional favicon URL.
- */
 export class WebTabPillNode extends BasePillNode {
   __url: string;
   __title?: string;
@@ -123,19 +112,11 @@ export class WebTabPillNode extends BasePillNode {
     return this.__faviconUrl;
   }
 
-  /**
-   * Set the title metadata for this web tab pill.
-   * Must be called within a Lexical update context.
-   */
   setTitle(title?: string): void {
     const writable = this.getWritable();
     writable.__title = title;
   }
 
-  /**
-   * Set the favicon URL metadata for this web tab pill.
-   * Must be called within a Lexical update context.
-   */
   setFaviconUrl(faviconUrl?: string): void {
     const writable = this.getWritable();
     writable.__faviconUrl = faviconUrl;
@@ -166,7 +147,6 @@ function convertWebTabPillElement(domNode: HTMLElement): DOMConversionOutput | n
   return null;
 }
 
-/** Create a WebTabPillNode. */
 export function $createWebTabPillNode(
   url: string,
   title?: string,
@@ -175,12 +155,10 @@ export function $createWebTabPillNode(
   return new WebTabPillNode(url, title, faviconUrl);
 }
 
-/** Check if a node is a WebTabPillNode. */
 export function $isWebTabPillNode(node: LexicalNode | null | undefined): node is WebTabPillNode {
   return node instanceof WebTabPillNode;
 }
 
-/** Find all WebTabPillNodes in the editor. */
 export function $findWebTabPills(): WebTabPillNode[] {
   const root = $getRoot();
   const pills: WebTabPillNode[] = [];
@@ -201,7 +179,6 @@ export function $findWebTabPills(): WebTabPillNode[] {
   return pills;
 }
 
-/** Remove WebTabPillNodes by URL. */
 export function $removeWebTabPillsByUrl(url: string): void {
   const pills = $findWebTabPills();
   for (const pill of pills) {

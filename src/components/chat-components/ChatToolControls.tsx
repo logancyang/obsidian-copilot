@@ -14,7 +14,6 @@ import { updateSetting } from "@/settings/model";
 import { isPlusChain } from "@/utils";
 
 interface ChatToolControlsProps {
-  // Tool toggle states
   vaultToggle: boolean;
   setVaultToggle: (value: boolean) => void;
   webToggle: boolean;
@@ -24,12 +23,10 @@ interface ChatToolControlsProps {
   autonomousAgentToggle: boolean;
   setAutonomousAgentToggle: (value: boolean) => void;
 
-  // Toggle-off callbacks for pill removal
   onVaultToggleOff?: () => void;
   onWebToggleOff?: () => void;
   onComposerToggleOff?: () => void;
 
-  // Other props
   currentChain: ChainType;
 }
 
@@ -59,7 +56,6 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
   const handleVaultToggle = () => {
     const newValue = !vaultToggle;
     setVaultToggle(newValue);
-    // If toggling off, remove pills
     if (!newValue && onVaultToggleOff) {
       onVaultToggleOff();
     }
@@ -68,7 +64,6 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
   const handleWebToggle = () => {
     const newValue = !webToggle;
     setWebToggle(newValue);
-    // If toggling off, remove pills
     if (!newValue && onWebToggleOff) {
       onWebToggleOff();
     }
@@ -77,22 +72,18 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
   const handleComposerToggle = () => {
     const newValue = !composerToggle;
     setComposerToggle(newValue);
-    // If toggling off, remove pills
     if (!newValue && onComposerToggleOff) {
       onComposerToggleOff();
     }
   };
 
-  // If not Copilot Plus, don't show any tools
   if (!isCopilotPlus) {
     return null;
   }
 
   return (
     <TooltipProvider delayDuration={0}>
-      {/* Desktop view - show all icons when container is wide enough */}
       <div className="tw-hidden tw-items-center tw-gap-1.5 @[420px]/chat-input:tw-flex">
-        {/* Autonomous Agent button - only show in Copilot Plus mode and NOT in Projects mode */}
         {showAutonomousAgent && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -114,7 +105,6 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
           </Tooltip>
         )}
 
-        {/* Toggle buttons for vault, web search, and composer - show when Autonomous Agent is off */}
         {!autonomousAgentToggle && (
           <>
             <Tooltip>
@@ -174,7 +164,6 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
         )}
       </div>
 
-      {/* Mobile view - show overflow dropdown when container is narrow */}
       <div className="tw-flex tw-items-center tw-gap-0.5 @[420px]/chat-input:tw-hidden">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -183,7 +172,6 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="tw-w-56">
-            {/* Autonomous Agent option - only show in Copilot Plus mode and NOT in Projects mode */}
             {showAutonomousAgent && (
               <DropdownMenuItem
                 onClick={handleAutonomousAgentToggle}
@@ -197,7 +185,6 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
               </DropdownMenuItem>
             )}
 
-            {/* Tool options - show when Autonomous Agent is off */}
             {!autonomousAgentToggle && (
               <>
                 <DropdownMenuItem
@@ -236,7 +223,6 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
               </>
             )}
 
-            {/* Tool options - show when Autonomous Agent is on (disabled) */}
             {autonomousAgentToggle && (
               <>
                 <DropdownMenuItem

@@ -21,21 +21,13 @@ export interface AtMentionOption extends TypeaheadOption {
   isAction?: boolean;
 }
 
-/**
- * Minimal brand shape for a mentionable coding agent. Local to chat-components so
- * the generic composer never imports Agent Mode internals; Agent Mode passes its
- * structurally-compatible `AgentBrand` down as props.
- */
 export interface AgentMentionBrand {
   readonly id: string;
   readonly displayName: string;
   readonly Icon: React.ComponentType<{ className?: string }>;
-  /** `true` when Self-Host Mode is on and this is a cloud agent — the mention
-   *  option shows a cloud-egress warning icon. */
   readonly needsSelfHostWarning?: boolean;
 }
 
-/** Frozen empty brand list — referential stability for the no-agents default. */
 export const EMPTY_AGENT_MENTION_BRANDS: ReadonlyArray<AgentMentionBrand> = Object.freeze([]);
 
 export interface CategoryOption extends TypeaheadOption {
@@ -44,7 +36,6 @@ export interface CategoryOption extends TypeaheadOption {
   isAction?: boolean;
 }
 
-/** "Agents" typeahead group — surfaced only in Agent Mode with a backend installed, rendered first. */
 const AGENTS_CATEGORY: CategoryOption = {
   key: "agents",
   title: "Agents",
@@ -92,12 +83,6 @@ const CATEGORY_OPTIONS: CategoryOption[] = [
   },
 ];
 
-/**
- * Pure helper that decides whether the Copilot built-in `@`-tool surfaces
- * (Tools category and tool hits in search) should be visible. Tools require
- * Copilot Plus AND are suppressed entirely in Agent Mode, which routes
- * through its own backend instead of the Copilot tool runner.
- */
 export function shouldShowAtMentionTools(args: {
   isCopilotPlus: boolean;
   isAgentMode: boolean;
@@ -105,17 +90,6 @@ export function shouldShowAtMentionTools(args: {
   return args.isCopilotPlus && !args.isAgentMode;
 }
 
-/**
- * Hook that provides available @ mention categories. Web Tabs is desktop-only
- * (Web Viewer is not supported on mobile).
- *
- * @param showTools - Whether to include the Copilot Tools category. Compute
- *   via {@link shouldShowAtMentionTools} from the caller's higher-level
- *   signals (e.g. Copilot Plus on, Agent Mode off).
- * @param showAgents - Whether to include the Agents category (Agent Mode with
- *   at least one installed backend). Rendered first when present.
- * @returns Array of CategoryOption objects
- */
 export function useAtMentionCategories(
   showTools: boolean = false,
   showAgents: boolean = false

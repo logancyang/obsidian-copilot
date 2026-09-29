@@ -3,29 +3,16 @@ import { $isToolPillNode, ToolPillNode } from "@/components/chat-components/pill
 import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
 import type { LexicalNode } from "lexical";
 
-/**
- * Props for the ToolPillSyncPlugin component
- */
 interface ToolPillSyncPluginProps {
-  /** Callback triggered when the list of tool pills changes */
   onToolsChange?: (tools: string[]) => void;
-  /** Callback triggered when tool pills are removed from the editor */
   onToolsRemoved?: (removedTools: string[]) => void;
 }
 
-/**
- * Configuration for tool pill synchronization
- */
 const toolPillConfig: PillSyncConfig<string> = {
   isPillNode: $isToolPillNode,
   extractData: (node: LexicalNode) => (node as ToolPillNode).getToolName(),
 };
 
-/**
- * Lexical plugin that monitors tool pill nodes in the editor and syncs
- * their state with parent components. Tracks additions, removals, and
- * changes to tool pills to keep external state in sync with editor content.
- */
 export function ToolPillSyncPlugin({ onToolsChange, onToolsRemoved }: ToolPillSyncPluginProps) {
   return (
     <GenericPillSyncPlugin

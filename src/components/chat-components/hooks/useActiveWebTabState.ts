@@ -10,14 +10,6 @@ const EMPTY_ACTIVE_WEB_TAB_STATE: ActiveWebTabStateSnapshot = {
   activeOrLastWebTab: null,
 };
 
-/**
- * React hook for subscribing to the single-source Active Web Tab snapshot.
- * This hook provides unified access to Active Web Tab state for all UI components.
- *
- * @returns ActiveWebTabStateSnapshot containing:
- *   - activeWebTabForMentions: For @mention search "Active Web Tab" option
- *   - activeOrLastWebTab: For pill display (active or last active tab)
- */
 export function useActiveWebTabState(): ActiveWebTabStateSnapshot {
   const app = useApp();
   const [state, setState] = useState<ActiveWebTabStateSnapshot>(() => {
@@ -40,9 +32,7 @@ export function useActiveWebTabState(): ActiveWebTabStateSnapshot {
     let unsubscribe: (() => void) | undefined;
     try {
       const service = getWebViewerService(app);
-      // Get initial state
       setState(service.getActiveWebTabState());
-      // Subscribe to updates
       unsubscribe = service.subscribeActiveWebTabState(setState);
     } catch {
       setState(EMPTY_ACTIVE_WEB_TAB_STATE);

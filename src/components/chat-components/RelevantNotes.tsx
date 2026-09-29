@@ -64,12 +64,6 @@ interface SettledRelevantNotesRequest {
   result: Awaited<ReturnType<typeof findRelevantNotes>> | typeof UNAVAILABLE_RELEVANT_NOTES_RESULT;
 }
 
-/**
- * Keep the settled request untouched when a live re-query reproduces it.
- *
- * Returning the same object leaves React's state unchanged, so an unchanged
- * ranking cannot restart the row animations while the user is still typing.
- */
 function nextSettledRequest(
   settled: SettledRelevantNotesRequest | null,
   requestKey: string,
@@ -80,15 +74,8 @@ function nextSettledRequest(
     : { requestKey, result };
 }
 
-/**
- * The re-query the pane is currently running or about to run.
- *
- * `restart` enters the request key, so bumping it drops the settled rows and
- * shows the loading state. A live re-query asks the same question again while
- * the reader watches, so it keeps `restart` and only replaces the object: the
- * rows stay on screen instead of blanking on every keystroke pause.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/362
- */
+// A live re-query keeps `restart` so rows stay on screen instead of blanking on each keystroke pause.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/362
 interface RelevantNotesRequery {
   restart: number;
   live: boolean;
@@ -102,7 +89,6 @@ interface UseRelevantNotesOptions {
   miyoServerUrl: string;
   miyoBackendAvailable: boolean;
   miyoCredentialIdentity: string;
-  /** Whether the reader has live update switched on for the pane. */
   liveUpdateEnabled: boolean;
 }
 
@@ -118,31 +104,22 @@ function useRelevantNotes({
   const [settledRequest, setSettledRequest] = useState<SettledRelevantNotesRequest | null>(null);
   const [requery, setRequery] = useState<RelevantNotesRequery>(INITIAL_REQUERY);
   const activeFile = useActiveFile();
-  // Switching live update off must freeze a re-query that is already open, and
-  // the effect below closes over the value it started with.
+  // The effect below closes over its starting value, so a ref lets switching live update off freeze an open re-query.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
   const liveUpdateEnabledRef = useRef(liveUpdateEnabled);
   liveUpdateEnabledRef.current = liveUpdateEnabled;
   const searchOpenRef = useRef(false);
-  // Non-Markdown leaves do not provide a note Miyo can relate, so they share
-  // the neutral no-source state instead of showing setup guidance.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
   const activeFilePath = !paused && activeFile?.extension === "md" ? activeFile.path : undefined;
   const refresh = useCallback(
     () => setRequery((current) => ({ restart: current.restart + 1, live: false })),
     []
   );
   const liveRefresh = useCallback(() => {
-    // Miyo can take longer to answer than the live interval when it is remote
-    // or busy. Starting a second search for the same question would leave both
-    // in flight and throw one answer away, so the tick is skipped instead.
+    // A slow Miyo answer would leave two searches in flight and discard one, so skip the tick.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
     if (searchOpenRef.current) return;
     setRequery((current) => ({ ...current, live: true }));
   }, []);
-  // Without an active note there is nothing to search, so setup state must not
-  // replace the pane's neutral empty state.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
   const requestStatus = !activeFilePath ? "idle" : enableMiyo ? "ready" : "disabled";
   const requestKey =
     requestStatus === "ready"
@@ -161,33 +138,21 @@ function useRelevantNotes({
     let cancelled = false;
 
     async function fetchNotes() {
-      // Leaving a ready request must discard its settled result. Reopening the
-      // same note or re-enabling Miyo then starts a fresh request.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
       if (requestStatus !== "ready" || requestKey === null || !activeFilePath) {
         setSettledRequest(null);
         return;
       }
 
-      // A request key can recur after visiting another note. Clear its earlier
-      // result so the repeated request cannot render stale rows while loading.
-      // A result already settled under this key belongs to a live re-query and
-      // is kept, because dropping it would blank the pane while the user types.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      // A recurring key clears its stale result, except one settled by a live re-query, which would blank the pane while typing.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
       setSettledRequest((settled) => (settled?.requestKey === requestKey ? settled : null));
-      // Switching live update off freezes the ranking the reader is looking at,
-      // so a live re-query that was still open when they switched it off must
-      // not re-rank it on arrival.
+      // A live re-query still open when live update is switched off must not re-rank the frozen list.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
       const frozen = (settled: SettledRelevantNotesRequest | null) =>
         requery.live && !liveUpdateEnabledRef.current && settled?.requestKey === requestKey;
       searchOpenRef.current = true;
       try {
         const result = await findRelevantNotes({ app, filePath: activeFilePath });
-        // A settings or active-note change can supersede an in-flight Miyo
-        // request. Its older result must not replace the newer pane state.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
         if (!cancelled)
           setSettledRequest((settled) =>
             frozen(settled) ? settled : nextSettledRequest(settled, requestKey, result)
@@ -226,7 +191,6 @@ function useRelevantNotes({
 
 interface RelevantNotesProps {
   className?: string;
-  /** Attach a note to the target chat input. */
   onAddToChat: (note: TFile) => void;
 }
 
@@ -236,12 +200,10 @@ export const RelevantNotes = memo(
     const activeFile = useActiveFile();
     const settings = useSettingsValue();
     const miyoBackendAvailable = useMiyoStatus().backend === "available";
-    // The request identity must change with credentials without retaining the
-    // credential itself in request state.
+    // Hash the credential so request identity changes with it without storing the key in state.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
     const miyoCredentialIdentity = sha256(settings.plusLicenseKey);
-    // Mobile without a remote server cannot reach Miyo at all, so following its
-    // index there would only poll a backend every search is refused by.
+    // Mobile without a remote server cannot reach Miyo, so polling its index would only be refused.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
     const canFollowMiyoIndex = shouldUseMiyo(settings);
     const liveUpdateEnabled = canFollowMiyoIndex && settings.relevantNotesLiveUpdate;
@@ -266,9 +228,6 @@ export const RelevantNotes = memo(
     });
     const result = chat.context ? chat.result : noteResult;
     const refresh = chat.context ? chat.refresh : noteRefresh;
-    // The toolbar must name only a source the search contract accepts; showing
-    // an attachment name would imply that Miyo searched it.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
     const activeFileName = chat.context
       ? "Agent chat context"
       : activeFile?.extension === "md"
@@ -303,10 +262,7 @@ export const RelevantNotes = memo(
       if (file instanceof TFile) onAddToChat(file);
     };
 
-    // A local-app deeplink cannot configure the remote server used on mobile
-    // or by an explicit remote endpoint, so those runtimes stay in Copilot.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-    // A saved remote address can remain while this computer is selected.
+    // A local-app deeplink cannot configure a remote server; a saved remote address can remain while local is selected.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
     const canOpenMiyoApp = !Platform.isMobile && getMiyoConnectionMode(settings) === "local";
     const miyoFolderUrl = `${MIYO_DEEPLINK_URL}open?tab=sources&folder=${encodeURIComponent(
@@ -320,9 +276,6 @@ export const RelevantNotes = memo(
       >
         <RelevantNotesToolbar
           activeFileName={activeFileName}
-          // Live update follows the Miyo index, so the control is meaningless
-          // while the pane is showing Miyo setup guidance instead of results.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
           liveUpdate={
             canFollowMiyoIndex
               ? {

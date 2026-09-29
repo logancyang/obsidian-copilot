@@ -48,7 +48,6 @@ function MarkdownHoverPreview(props: RelevantNoteRowProps): React.ReactElement {
       extension: "md",
       vault: app.vault,
     });
-    // Supply note content without creating files in the gallery's vault.
     return Object.assign(Object.create(app) as App, {
       vault: Object.assign(Object.create(app.vault) as App["vault"], {
         getAbstractFileByPath: (path: string) =>
@@ -83,7 +82,6 @@ const baseArgs: RelevantNoteRowProps = {
   onNavigateToNote: () => undefined,
 };
 
-/** Two rankings of the same notes, so the re-rank can be replayed on demand. */
 const RANKINGS: RelevantNoteEntry[][] = [
   [
     entry("Design principles", 0.86),
@@ -93,12 +91,6 @@ const RANKINGS: RelevantNoteEntry[][] = [
   [entry("Product research", 0.91), entry("Weekly review", 0.55), entry("Design principles", 0.31)],
 ];
 
-/**
- * Replays what a live re-query does to the list: rows slide to their new rank,
- * scores grow or shrink, an arriving note fades in and a departing one fades
- * out. Only the button advances it, so a screenshot is never mid-animation by
- * accident.
- */
 function LiveRerank(): React.ReactElement {
   const [ranking, setRanking] = useState(0);
   const { rows, registerRow } = useRelevantNoteRowTransitions(

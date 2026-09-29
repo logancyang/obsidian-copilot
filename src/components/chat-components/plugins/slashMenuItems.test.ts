@@ -59,8 +59,6 @@ describe("composeSlashMenuItems", () => {
     const commands = [makeCommand({ title: "old-cmd" })];
     const items = composeSlashMenuItems(skills, commands, null);
     const names = items.map((i) => i.name);
-    // Both skills (since enabledAgents filter is bypassed) but not the
-    // user-invocable: false one, plus the command.
     expect(names).toEqual(["summarize", "untoggled", "old-cmd"]);
   });
 
@@ -72,7 +70,6 @@ describe("composeSlashMenuItems", () => {
     const commands = [makeCommand({ title: "dup" }), makeCommand({ title: "unique-cmd" })];
     const items = composeSlashMenuItems(skills, commands, "claude");
     expect(items.map((i) => i.name)).toEqual(["dup", "summarize", "unique-cmd"]);
-    // The "dup" entry that survived must be the skill, not the command.
     expect(items.find((i) => i.name === "dup")?.kind).toBe("skill");
   });
 

@@ -27,7 +27,7 @@ export interface TriggerConfig {
   minLength?: number;
   maxLength?: number;
   allowWhitespace?: boolean;
-  multiChar?: boolean; // For triggers like [[
+  multiChar?: boolean;
 }
 
 export interface UseTypeaheadPluginConfig<T extends TypeaheadOption> {
@@ -38,9 +38,6 @@ export interface UseTypeaheadPluginConfig<T extends TypeaheadOption> {
   onHighlight?: (index: number, option: T) => void;
 }
 
-/**
- * Generic hook for typeahead functionality that can be shared across plugins
- */
 export function useTypeaheadPlugin<T extends TypeaheadOption>({
   triggerConfig,
   options,
@@ -56,12 +53,10 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
     range: null,
   });
 
-  // Notify parent of state changes
   useEffect(() => {
     onStateChange?.(state);
   }, [state, onStateChange]);
 
-  // Close menu
   const closeMenu = useCallback(() => {
     setState({
       isOpen: false,
@@ -71,7 +66,6 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
     });
   }, []);
 
-  // Handle highlighting - updates selected index and calls onHighlight
   const handleHighlight = useCallback(
     (index: number) => {
       setState((prev) => ({
@@ -79,7 +73,6 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
         selectedIndex: index,
       }));
 
-      // Call the onHighlight callback if provided
       if (onHighlight && options[index]) {
         onHighlight(index, options[index]);
       }
@@ -87,7 +80,6 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
     [onHighlight, options]
   );
 
-  // Handle keyboard navigation
   const handleKeyDown = useCallback(
     (event: KeyboardEvent | null): boolean => {
       if (!event || !state.isOpen) return false;
@@ -97,11 +89,9 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
           if (options.length === 0) return false;
           event.preventDefault();
           let nextIndex = state.selectedIndex + 1;
-          // Skip disabled options
           while (nextIndex < options.length && options[nextIndex]?.disabled) {
             nextIndex++;
           }
-          // If no valid option found, stay at current position
           if (nextIndex >= options.length) {
             nextIndex = state.selectedIndex;
           }
@@ -113,11 +103,9 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
           if (options.length === 0) return false;
           event.preventDefault();
           let prevIndex = state.selectedIndex - 1;
-          // Skip disabled options
           while (prevIndex >= 0 && options[prevIndex]?.disabled) {
             prevIndex--;
           }
-          // If no valid option found, stay at current position
           if (prevIndex < 0) {
             prevIndex = state.selectedIndex;
           }
@@ -127,15 +115,13 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
 
         case "Enter":
         case "Tab":
-          // If there are no options, close menu and let Enter propagate (don't prevent default)
           if (options.length === 0) {
             closeMenu();
-            return false; // Let the event propagate to submit the message
+            return false;
           }
 
-          // If current option is disabled, don't select it
           if (options[state.selectedIndex]?.disabled) {
-            return true; // Prevent default but don't select
+            return true;
           }
 
           event.preventDefault();
@@ -156,7 +142,6 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
     [state.isOpen, state.selectedIndex, options, onSelect, closeMenu, handleHighlight]
   );
 
-  // Register keyboard commands
   useEffect(() => {
     const removeKeyDownCommand = editor.registerCommand(
       KEY_ARROW_DOWN_COMMAND,
@@ -209,59 +194,50 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
     };
   }, [editor, handleKeyDown, state.isOpen, closeMenu]);
 
-  // Detect trigger patterns in text
   const detectTrigger = useCallback(
     (textContent: string, cursorOffset: number): { triggerIndex: number; query: string } | null => {
       const { char, multiChar = false, allowWhitespace = false } = triggerConfig;
 
       if (multiChar) {
-        // Handle multi-character triggers like [[
         const triggerLength = char.length;
         let triggerIndex = -1;
 
         for (let i = cursorOffset - 1; i >= triggerLength - 1; i--) {
           const segment = textContent.slice(i - triggerLength + 1, i + 1);
           if (segment === char) {
-            // Check if trigger is at start or preceded by whitespace
             if (i - triggerLength + 1 === 0 || /\s/.test(textContent[i - triggerLength])) {
               triggerIndex = i - triggerLength + 1;
               break;
             }
           } else if (!allowWhitespace && /\s/.test(textContent[i])) {
-            // Stop if we hit whitespace without finding trigger (and whitespace not allowed)
             break;
           }
         }
 
         if (triggerIndex !== -1) {
           const query = textContent.slice(triggerIndex + triggerLength, cursorOffset);
-          // Close menu if query starts with space
           if (query.startsWith(" ")) {
             return null;
           }
           return { triggerIndex, query };
         }
       } else {
-        // Handle single-character triggers like @ or /
         let triggerIndex = -1;
 
         for (let i = cursorOffset - 1; i >= 0; i--) {
           const currentChar = textContent[i];
           if (currentChar === char) {
-            // Check if trigger is at start or preceded by whitespace
             if (i === 0 || /\s/.test(textContent[i - 1])) {
               triggerIndex = i;
               break;
             }
           } else if (!allowWhitespace && /\s/.test(currentChar)) {
-            // Stop if we hit whitespace without finding trigger (and whitespace not allowed)
             break;
           }
         }
 
         if (triggerIndex !== -1) {
           const query = textContent.slice(triggerIndex + 1, cursorOffset);
-          // Close menu if query starts with space
           if (query.startsWith(" ")) {
             return null;
           }
@@ -274,7 +250,6 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
     [triggerConfig]
   );
 
-  // Monitor text changes to detect triggers
   useEffect(() => {
     return editor.registerUpdateListener(({ editorState }) => {
       editorState.read(() => {
@@ -304,7 +279,6 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
         if (triggerResult) {
           const { triggerIndex, query } = triggerResult;
 
-          // Use Range for accurate positioning
           const editorWindow = editor._window ?? window;
           const range = tryToPositionRange(triggerIndex, editorWindow);
 
@@ -324,7 +298,6 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
     });
   }, [editor, state.isOpen, closeMenu, detectTrigger]);
 
-  // Reset selected index when options change
   useEffect(() => {
     setState((prev) => ({
       ...prev,
@@ -332,7 +305,6 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
     }));
   }, [options.length]);
 
-  // Ensure selectedIndex stays within bounds
   useEffect(() => {
     setState((prev) => {
       if (prev.selectedIndex >= options.length && options.length > 0) {

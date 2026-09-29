@@ -8,7 +8,6 @@ export interface CopyChatLinkButtonProps {
   onCopyLink?: (id: string) => void | Promise<void>;
 }
 
-/** Copy control shared by Quick Chat and Agent Mode. */
 export function CopyChatLinkButton({ chatId, onCopyLink }: CopyChatLinkButtonProps) {
   return (
     <Tooltip>

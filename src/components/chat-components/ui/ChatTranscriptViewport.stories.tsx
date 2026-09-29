@@ -31,7 +31,6 @@ const meta = {
 } satisfies Meta<ChatTranscriptViewportProps>;
 export default meta;
 
-/** The control floats above a long transcript while the reader is scrolled away. */
 export const Paused: StoryObj<ChatTranscriptViewportProps> = {
   render: (props) => (
     <div className="tw-flex tw-h-64 tw-flex-col tw-overflow-hidden">
@@ -40,7 +39,6 @@ export const Paused: StoryObj<ChatTranscriptViewportProps> = {
   ),
 };
 
-/** The control is absent while the reader follows the end of a response. */
 export const Following: StoryObj<ChatTranscriptViewportProps> = {
   args: { isScrollPaused: false },
   render: (props) => (

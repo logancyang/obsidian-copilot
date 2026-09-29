@@ -11,15 +11,6 @@ interface TruncatedPillTextProps {
   tooltipContent?: React.ReactNode;
 }
 
-/**
- * Component that truncates text content in the middle while preserving opening and closing brackets.
- * Shows ellipsis in the middle when content is too long, ensuring brackets are always visible.
- * Displays a tooltip with full content when text is truncated.
- *
- * @example
- * // Short text: [[Note Name]]
- * // Long text:  [[Very long note na...]]
- */
 export function TruncatedPillText({
   content,
   openBracket,
@@ -32,7 +23,6 @@ export function TruncatedPillText({
   const [open, setOpen] = useState<boolean>(false);
 
   const onOpenChange = (isOpen: boolean): void => {
-    // Only show tooltip if the text is actually truncated
     const isTruncated = textRef.current
       ? textRef.current.offsetWidth < textRef.current.scrollWidth
       : false;
