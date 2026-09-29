@@ -120,7 +120,7 @@ describe("main", () => {
     describe("copyChatLink()", () => {
       beforeEach(() => jest.clearAllMocks());
 
-      it("copies a saved chat as a titled Markdown link to its vault-scoped URI", async () => {
+      it("copies a saved chat's note title when its session has no label (https://github.com/Brevilabs/obsidian-copilot-private/issues/615)", async () => {
         const plugin = createPluginUnderTest([]);
         const file = Object.assign(Object.create(TFile.prototype), {
           path: "Copilot/conversations/renamed.md",
@@ -137,7 +137,7 @@ describe("main", () => {
         const writeText = jest.fn().mockResolvedValue(undefined);
         Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
 
-        await plugin.copyChatLink("Copilot/conversations/renamed.md");
+        await plugin.copyChatLink("Copilot/conversations/renamed.md", undefined);
 
         expect(getSavedChatDeepLinkId).toHaveBeenCalledWith(
           plugin.app,

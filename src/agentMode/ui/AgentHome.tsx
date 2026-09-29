@@ -704,7 +704,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     <AgentChatControls
                       chatLinkId={chatLinkId}
                       onCopyChatLink={(id) =>
-                        plugin.copyChatLink(id, activeSession?.getLabel() ?? descriptor.displayName)
+                        plugin.copyChatLink(id, activeSession?.getLabel() ?? undefined)
                       }
                       onNewChat={handleNewChat}
                       onSaveAsNote={handleSaveAsNote}
