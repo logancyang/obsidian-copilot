@@ -195,6 +195,9 @@ function resolvePlanCommand(
   if (command.feedbackText !== undefined && command.decision !== "feedback") {
     return failure("invalid", "Feedback text only applies to a feedback decision");
   }
+  if (command.feedbackText !== undefined && typeof command.feedbackText !== "string") {
+    return failure("invalid", "Feedback text must be text");
+  }
   const plan = findDecidablePlan(session, command.proposalId);
   if (!plan) return failure("stale", "That plan is no longer awaiting a decision");
   // The next-turn feedback path waits for the running turn to settle, which can outlast the
@@ -349,8 +352,11 @@ async function applyModeCommand(
 ): Promise<CommandResult<void>> {
   const session = findSession(ctx, command.sessionId);
   if (isFailure(session)) return session;
-  const mode = session.getState()?.mode;
-  if (!mode?.apply[command.mode]) {
+  // A phone names the mode as text, so an inherited property such as `constructor` must not pass
+  // for one the agent reported.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+  const apply = session.getState()?.mode?.apply;
+  if (!apply || !Object.hasOwn(apply, command.mode) || !apply[command.mode]) {
     return failure("invalid", `The session has no ${String(command.mode)} mode`);
   }
   await ctx.manager.applyModeTo(session.internalId, command.mode);

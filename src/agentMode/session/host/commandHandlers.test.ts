@@ -70,6 +70,8 @@ function setup() {
   return { manager, one, host, client, run };
 }
 
+const ISSUE_613 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/613";
+
 describe("commandHandlers", () => {
   afterEach(() => {
     jest.useRealTimers();
@@ -328,6 +330,26 @@ describe("commandHandlers", () => {
         proposalId: args.proposalId === "PLAN" ? planId : args.proposalId,
       });
       expect(result).toMatchObject({ ok: false, code });
+      expect(t.client.getSession("s1")!.plan?.decision).toBe("pending");
+    });
+
+    it(`resolvePlan answers invalid for feedback text that is not a string and leaves the plan pending (${ISSUE_613})`, async () => {
+      const t = setup();
+      t.one.backend.holdPrompt();
+      await t.run({ name: "send", sessionId: "s1", text: "plan it" });
+      void t.one.session.handlePlanProposalPermission(PLAN_REQUEST);
+      await settle();
+      const planId = t.client.getSession("s1")!.plan!.id;
+
+      const { result } = await t.run({
+        name: "resolvePlan",
+        sessionId: "s1",
+        proposalId: planId,
+        decision: "feedback",
+        feedbackText: { text: "x" } as never,
+      });
+
+      expect(result).toMatchObject({ ok: false, code: "invalid" });
       expect(t.client.getSession("s1")!.plan?.decision).toBe("pending");
     });
 
@@ -591,6 +613,30 @@ describe("commandHandlers", () => {
           mode: mode as "plan",
         });
         expect(result).toMatchObject({ ok: false, code });
+        expect(t.manager.calls).toEqual([]);
+      }
+    );
+
+    it.each(["__proto__", "constructor", "toString"])(
+      `applyMode answers invalid for %s, a name only the object prototype defines (${ISSUE_613})`,
+      async (mode) => {
+        const t = setup();
+        jest.spyOn(t.one.session, "getState").mockReturnValue({
+          model: null,
+          mode: {
+            current: "default",
+            options: [{ value: "plan", label: "Plan" }],
+            apply: { plan: { kind: "setMode", nativeId: "plan" } },
+          },
+        });
+
+        const { result } = await t.run({
+          name: "applyMode",
+          sessionId: "s1",
+          mode: mode as "plan",
+        });
+
+        expect(result).toMatchObject({ ok: false, code: "invalid" });
         expect(t.manager.calls).toEqual([]);
       }
     );

@@ -125,14 +125,22 @@ describe("serveRemoteConnection", () => {
       expect(JSON.stringify(onCommand.mock.calls)).not.toContain("secret title");
     });
 
-    it(`does not report a command whose name is too long to be one of the protocol's (${ISSUE})`, () => {
-      const { phone, onCommand } = setup();
-      phone.receive({ type: "hello", v: PROTOCOL_VERSION, app: "1.0" });
+    it.each([
+      ["an over-long name", "x".repeat(200)],
+      ["text a person typed", "a note title I typed"],
+      ["an inherited property name", "constructor"],
+      ["the prototype key", "__proto__"],
+    ])(
+      `does not report %s, which is not one of the protocol's commands (${ISSUE})`,
+      (_label, name) => {
+        const { phone, onCommand } = setup();
+        phone.receive({ type: "hello", v: PROTOCOL_VERSION, app: "1.0" });
 
-      phone.receive({ type: "command", id: "1", command: { name: "x".repeat(200) } });
+        phone.receive({ type: "command", id: "1", command: { name } });
 
-      expect(onCommand).not.toHaveBeenCalled();
-    });
+        expect(onCommand).not.toHaveBeenCalled();
+      }
+    );
 
     it("stops delivering host frames and listening once the connection closes", () => {
       const { phone, manager } = setup();

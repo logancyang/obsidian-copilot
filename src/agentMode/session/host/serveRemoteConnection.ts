@@ -1,4 +1,4 @@
-import type { CommandName } from "@/agentMode/protocol/commands";
+import { isCommandName, type CommandName } from "@/agentMode/protocol/commands";
 import { parseClientFrame } from "@/agentMode/protocol/frameCodec";
 import type { ServerFrame } from "@/agentMode/protocol/frames";
 import type { HostConnection } from "@/agentMode/session/host/SessionHost";
@@ -16,10 +16,6 @@ export interface ServeRemoteConnectionOptions {
   onSessionStart?: () => void;
   onCommand?: (name: CommandName) => void;
 }
-
-// The name comes off the wire and reaches an event sink, so an over-long one is not reported.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/613
-const MAX_COMMAND_NAME_CHARS = 40;
 
 const CLOSE_GOING_AWAY = 1001;
 const CLOSE_UNSUPPORTED_DATA = 1003;
@@ -67,7 +63,9 @@ export function serveRemoteConnection(
       started = true;
       options.onSessionStart?.();
     }
-    if (frame.type === "command" && frame.command.name.length <= MAX_COMMAND_NAME_CHARS) {
+    // The name comes off the wire and reaches an event sink, so only a protocol command is reported.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+    if (frame.type === "command" && isCommandName(frame.command.name)) {
       options.onCommand?.(frame.command.name);
     }
     hostConnection.receive(frame);

@@ -299,15 +299,15 @@ device sees `session_busy`; two devices answering the same permission produce on
 
 Tab and picker commands:
 
-| Command                                                                        | Validation                                                                                                                    | Host call                                                                                                                                                                                                                                    | Value                                                         |
-| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `createSession { backendId?, projectId?, seedSelection? }`                     | `backendId` is a known agent; `seedSelection` is `{ baseModelId, effort }`; `projectId` is a string, default the global scope | `manager.createSession`                                                                                                                                                                                                                      | `{ sessionId }`                                               |
-| `replaceSession { sessionId, backendId?, preserveChatInput?, seedSelection? }` | session exists; same checks as `createSession`                                                                                | `manager.replaceSessionInPlace`                                                                                                                                                                                                              | `{ sessionId }` of the replacement                            |
-| `openTab { sessionId }`                                                        | session exists                                                                                                                | `manager.openTab` (puts a closed tab back in the set)                                                                                                                                                                                        | none                                                          |
-| `closeTab { sessionId }`                                                       | session exists                                                                                                                | `manager.detachSessionFromTab` (the session keeps running)                                                                                                                                                                                   | none                                                          |
-| `renameSession { sessionId, label }`                                           | `label` is text or null                                                                                                       | `manager.renameSession`                                                                                                                                                                                                                      | none                                                          |
-| `applySelection { sessionId, backendId, baseModelId?, effort? }`               | a model or an effort is present; `backendId` is a known agent                                                                 | same agent: `manager.applySelectionTo`; another agent with a model: `manager.replaceSessionInPlace` seeded with the pick, keeping the composer draft; another agent with only an effort, or for a session that already has messages: `stale` | `{ sessionId }` of the session that now carries the selection |
-| `applyMode { sessionId, mode }`                                                | the session's agent reported a way to apply `mode`                                                                            | `manager.applyModeTo`                                                                                                                                                                                                                        | none                                                          |
+| Command                                                                        | Validation                                                                                                                                               | Host call                                                                                                                                                                                                                                    | Value                                                         |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `createSession { backendId?, projectId?, seedSelection? }`                     | `backendId` is a known agent; `seedSelection` is `{ baseModelId, effort }`; `projectId` is the global scope (the default) or a project the desktop knows | `manager.createSession`                                                                                                                                                                                                                      | `{ sessionId }`                                               |
+| `replaceSession { sessionId, backendId?, preserveChatInput?, seedSelection? }` | session exists; same checks as `createSession`                                                                                                           | `manager.replaceSessionInPlace`                                                                                                                                                                                                              | `{ sessionId }` of the replacement                            |
+| `openTab { sessionId }`                                                        | session exists                                                                                                                                           | `manager.openTab` (puts a closed tab back in the set)                                                                                                                                                                                        | none                                                          |
+| `closeTab { sessionId }`                                                       | session exists                                                                                                                                           | `manager.detachSessionFromTab` (the session keeps running)                                                                                                                                                                                   | none                                                          |
+| `renameSession { sessionId, label }`                                           | `label` is text or null                                                                                                                                  | `manager.renameSession`                                                                                                                                                                                                                      | none                                                          |
+| `applySelection { sessionId, backendId, baseModelId?, effort? }`               | a model or an effort is present; `backendId` is a known agent                                                                                            | same agent: `manager.applySelectionTo`; another agent with a model: `manager.replaceSessionInPlace` seeded with the pick, keeping the composer draft; another agent with only an effort, or for a session that already has messages: `stale` | `{ sessionId }` of the session that now carries the selection |
+| `applyMode { sessionId, mode }`                                                | the session's agent reported a way to apply `mode`                                                                                                       | `manager.applyModeTo`                                                                                                                                                                                                                        | none                                                          |
 
 `unsupported` is the code for an agent that cannot switch model, effort or mode while running. No
 command persists a default: a desktop client remembers a picked agent or mode as its default
@@ -325,20 +325,29 @@ export const PROTOCOL_VERSION = 1;
 
 export type ClientFrame =
   | { type: "hello"; v: number; app: string } // app = plugin version, for error text only
-  | { type: "subscribe"; scope: Scope; fromSeq?: number }
+  | { type: "subscribe"; scope: Scope; fromSeq?: number; epoch?: string }
   | { type: "unsubscribe"; scope: Scope }
   | { type: "focus"; sessionId: SessionId | null } // the tab this client shows, or null
   | { type: "command"; id: string; command: Command };
 
 export type ServerFrame =
   | { type: "hello"; v: number; app: string; hostId: string; ok: boolean }
-  | { type: "snapshot"; scope: Scope; seq: number; state: HostState | SessionState | null }
-  | { type: "ops"; scope: Scope; from: number; ops: readonly (HostOp | SessionOp)[] }
+  | {
+      type: "snapshot";
+      scope: Scope;
+      epoch: string;
+      seq: number;
+      state: HostState | SessionState | null;
+    }
+  | { type: "ops"; scope: Scope; epoch: string; from: number; ops: readonly (HostOp | SessionOp)[] }
   | { type: "result"; id: string; result: CommandResult<unknown> };
 ```
 
 **Sequencing.** Each scope has its own counter. A scope starts at `seq 0` (empty log) and every op
-increments it. `ops.from` is the sequence number of the first op in the frame; the frame covers
+increments it. A log also has an `epoch`, a random id created with the log: a host that restarts, or a
+session swapped in behind an existing id, starts a new log whose sequence numbers overlap the old one.
+A cursor is the pair `(epoch, seq)`, and `snapshot` and `ops` frames carry the `epoch` of the log they
+describe. `ops.from` is the sequence number of the first op in the frame; the frame covers
 `from .. from + ops.length - 1`. `hostId` is a random id created when the host starts.
 
 **Handshake.** The client sends `hello`. The host answers `hello` with `ok: false` when `v` differs
@@ -350,9 +359,10 @@ discards every stored cursor when `hostId` differs from the one it last saw.
 **Subscribe.**
 
 1. The host flushes, so the log head reflects every applied op.
-2. If `fromSeq` is a number the log still covers (`oldest - 1 <= fromSeq <= head`), the host replies
-   `ops` with `from = fromSeq + 1` and everything after it; the array is empty when the client is
-   current. Otherwise it replies `snapshot` at `seq = head`.
+2. If `fromSeq` is a number the log still covers (`oldest - 1 <= fromSeq <= head`) and `epoch` names
+   that log, the host replies `ops` with `from = fromSeq + 1` and everything after it; the array is
+   empty when the client is current. Otherwise (no epoch, another log's epoch, an evicted position) it
+   replies `snapshot` at `seq = head`.
 3. The connection is then subscribed: later frames for the scope go out on each flush.
 4. Unknown scope, or a session that later disposes, yields `snapshot` with `state: null`.
 
@@ -363,15 +373,16 @@ discards every stored cursor when `hostId` differs from the one it last saw.
 | `c + 1`             | apply all, `c += ops.length`                                                                                             |
 | `<= c`              | apply only the suffix beyond `c` (overlap after a resume)                                                                |
 | `> c + 1`           | gap: drop the frame, send `subscribe(scope)` without `fromSeq`, ignore `ops` for that scope until the `snapshot` arrives |
+| another `epoch`     | treated as a gap: the frame belongs to a different log than the cursor                                                   |
 
-`snapshot` replaces the scope state and sets `c = seq`.
+`snapshot` replaces the scope state and sets the cursor to `(epoch, seq)`.
 
 **Reconnect (normal path).** On every open the client sends `hello`, then `subscribe(scope,
-cursor)` for each wanted scope. A reconnect within the log window costs one small `ops` frame per
-scope; an evicted cursor or a new `hostId` costs a snapshot. In-flight commands resolve with
+fromSeq, epoch)` for each wanted scope. A reconnect within the log window costs one small `ops` frame per
+scope; an evicted cursor, a new `hostId` or another log's `epoch` costs a snapshot. In-flight commands resolve with
 `code: "failed"` and message `disconnected`; a command is never re-sent automatically because
-`send` is not idempotent. The transport layer (#613) owns backoff, the connect timeout and the
-visibility-change reconnect; the client core only reports `connecting | live | reconnecting |
+`send` is not idempotent. The network transport (section 5.2.1) owns backoff, the connect timeout and
+the visibility-change reconnect; the client core only reports `connecting | live | reconnecting |
 offline | version_mismatch`.
 
 **Focus.** A client sends `focus` when the tab it shows changes and again after every reconnect,
@@ -425,6 +436,19 @@ Delivery is always asynchronous (`queueMicrotask`), so a client callback never r
 emit and the timing model matches a network. The reducers are immutable, which is what makes
 by-reference delivery safe. Whether production should also serialize is decided by the benchmark in
 section 8.3.
+
+### 5.2.1 WebSocket transport
+
+A paired phone reaches the host over the authenticated channel of [`REMOTE_PAIRING.md`](./REMOTE_PAIRING.md).
+
+- **Desktop.** `serveRemoteConnection(host, connection)` (`session/host/serveRemoteConnection.ts`)
+  connects one `RemoteConnection` to `SessionHost.connect`. Frames leave as JSON text; text from the
+  phone is parsed by `parseClientFrame` (`protocol/frameCodec.ts`), and anything that is not a
+  well-formed client frame closes the connection with `1003`. A frame over 32 MiB is sent again with every
+  inline image of its transcript replaced by a placeholder (a user message carries its images as data
+  URLs), and one still over the limit closes the connection with `1009`. Inbound messages are capped at
+  8 MiB by the listener, and the listener destroys a connection whose unsent backlog passes 64 MiB, which
+  is a phone that stopped reading while the desktop kept streaming.
 
 ### 5.3 Client core
 

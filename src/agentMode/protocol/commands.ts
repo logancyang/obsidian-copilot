@@ -84,6 +84,32 @@ export interface CommandValues {
 
 export type CommandName = Command["name"];
 
+const COMMAND_NAME_FLAGS: Readonly<Record<CommandName, true>> = {
+  send: true,
+  cancel: true,
+  resolvePermission: true,
+  answerQuestion: true,
+  resolvePlan: true,
+  createSession: true,
+  replaceSession: true,
+  openTab: true,
+  closeTab: true,
+  renameSession: true,
+  applySelection: true,
+  applyMode: true,
+};
+
+const COMMAND_NAMES: ReadonlySet<string> = new Set(Object.keys(COMMAND_NAME_FLAGS));
+
+/**
+ * Whether `name`, which arrives off the wire as arbitrary text, is one of the protocol's commands.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+ * @param name - The command name a peer sent.
+ */
+export function isCommandName(name: string): name is CommandName {
+  return COMMAND_NAMES.has(name);
+}
+
 export type CommandValue<N extends CommandName> = CommandValues[N];
 
 export type CommandErrorCode =
