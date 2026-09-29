@@ -3,12 +3,10 @@ import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel } from "@/modelManagement";
 import { ModelCapability } from "@/constants";
 
-/** Bare descriptor-style decode (claude): the wire id IS the baseModelId. */
 const bareDecode = (wireId: string): { selection: { baseModelId: string } } => ({
   selection: { baseModelId: wireId },
 });
 
-/** Suffix-style decode (codex): `<base>/<effort>` strips a known effort. */
 const KNOWN_EFFORTS = new Set(["minimal", "low", "medium", "high", "xhigh"]);
 const suffixDecode = (wireId: string): { selection: { baseModelId: string } } => {
   const segments = wireId.split("/");
@@ -43,7 +41,6 @@ describe("agentOriginEnabledModelEntries", () => {
     const a = agentOriginEnabledModelEntries(settingsWith("claude", [], []), "claude", bareDecode);
     const b = agentOriginEnabledModelEntries(settingsWith("codex", [], []), "codex", suffixDecode);
     expect(a).toHaveLength(0);
-    // Frozen empty constant — same reference across calls (referential stability).
     expect(a).toBe(b);
   });
 
@@ -58,7 +55,6 @@ describe("agentOriginEnabledModelEntries", () => {
       "claude-opus-4-1",
       "claude-sonnet-4-5",
     ]);
-    // Agent-native: CLI-owned auth, never a credential flag.
     expect(entries.every((e) => e.credentialState === "ok")).toBe(true);
     expect(entries[0].name).toBe("claude-sonnet-4-5");
   });
@@ -91,8 +87,6 @@ describe("agentOriginEnabledModelEntries", () => {
     const vision = entries.find((e) => e.baseModelId === "claude-sonnet-4-5");
     const unknown = entries.find((e) => e.baseModelId === "legacy");
     expect(vision?.capabilities).toContain(ModelCapability.VISION);
-    // `model()` builds info without `modalities` → "unknown", so the picker can
-    // fall back to the catalog rather than asserting no vision.
     expect(unknown?.capabilities).toBeUndefined();
   });
 

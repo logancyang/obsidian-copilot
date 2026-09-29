@@ -5,22 +5,10 @@ import type { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { augmentPathForNodeShebang } from "@/agentMode/acp/nodeShebangPath";
 import type { BackendDescriptor, BackendProcess } from "@/agentMode/session/types";
 
-/**
- * Build a spawn descriptor for a backend whose only configuration is a
- * user-provided binary path (no managed install, no extra args). Auth is
- * inherited from the user's environment / login state — no API key
- * injection. `envOverrides` is merged last so user values can override even
- * the augmented `PATH`.
- */
 export function buildSimpleSpawnDescriptor(
   binaryPath: string | undefined,
   configErrorMessage: string,
   envOverrides?: Record<string, string>,
-  /**
-   * Plugin-managed env (e.g. runtime paths and credentials for builtin skills).
-   * Merged after `process.env` but BEFORE user `envOverrides` so a user can
-   * still intentionally shadow it.
-   */
   managedEnv?: Readonly<Record<string, string>>
 ): AcpSpawnDescriptor {
   if (!binaryPath) throw new Error(configErrorMessage);
@@ -36,11 +24,6 @@ export function buildSimpleSpawnDescriptor(
   };
 }
 
-/**
- * Wrap an `AcpBackend` in `AcpBackendProcess` to satisfy the descriptor's
- * `createBackendProcess` factory. Centralizes the "ACP-track plumbing" so
- * subprocess backends (codex, opencode) don't repeat the construction.
- */
 export function simpleBinaryBackendProcess(
   args: {
     plugin: CopilotPlugin;

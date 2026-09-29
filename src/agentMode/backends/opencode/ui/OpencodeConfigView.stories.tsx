@@ -38,11 +38,6 @@ const OUTDATED: InstallState = {
   message: `opencode v1.18.31 is not supported. Copilot requires opencode v${OPENCODE_MIN_VERSION} or newer.`,
 };
 
-/**
- * Every story renders through this stateful wrapper so the gallery can exercise
- * the source switch for real: `args.source` seeds the first render (keeping each
- * story's captured state), then clicking a segment swaps the visible branch.
- */
 const InteractiveConfigView: React.FC<Partial<OpencodeConfigViewProps>> = (props) => {
   const [source, setSource] = React.useState<OpencodeBinarySource>(props.source ?? "managed");
   return (
@@ -72,7 +67,6 @@ const meta = {
 } satisfies Meta<OpencodeConfigViewProps>;
 export default meta;
 
-/** First run: nothing installed, so the managed path offers a single download. */
 export const ManagedNotInstalled: StoryObj<OpencodeConfigViewProps> = {
   render: InteractiveConfigView,
 };
@@ -107,10 +101,6 @@ export const CustomPathApplied: StoryObj<OpencodeConfigViewProps> = {
   },
 };
 
-/**
- * Looking at the custom path before setting one, while the managed binary is the
- * one actually running — the case the "in use right now" note exists for.
- */
 export const CustomNotSetYet: StoryObj<OpencodeConfigViewProps> = {
   render: InteractiveConfigView,
   args: { source: "custom", state: { kind: "ready", source: "managed" }, activeSource: "managed" },

@@ -12,12 +12,6 @@ interface Props {
   app: App;
 }
 
-/**
- * Claude card extras. CLI detection / path / auth configuration lives in the
- * Configure dialog (`ClaudeInstallModal`, opened via
- * `descriptor.openInstallUI`); this panel hosts the model-behavior toggle and
- * spawn-time environment overrides that remain on the settings card.
- */
 export const ClaudeSettingsPanel: React.FC<Props> = () => {
   const settings = useSettingsValue();
   return (

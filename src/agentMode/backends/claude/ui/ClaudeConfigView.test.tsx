@@ -15,7 +15,6 @@ const OUTDATED: InstallState = {
   message: "Claude 2.1.205 is not supported. Copilot requires 2.1.206 or newer.",
 };
 
-/** Match the `<code>` block that renders exactly this command behind the shell prompt. */
 const commandBlock =
   (command: string) =>
   (_content: string, element: Element | null): boolean =>

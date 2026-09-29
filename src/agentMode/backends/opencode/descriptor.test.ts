@@ -117,9 +117,6 @@ describe("descriptor", () => {
       });
 
       it("recognizes opencode's full effort vocabulary (none/minimal/low/medium/high/xhigh/max)", () => {
-        // Opencode advertises Anthropic models with `/max` and `/xhigh` and
-        // OpenRouter reasoning models with `/none`. Each must collapse onto
-        // its bare base.
         for (const effort of ["none", "minimal", "low", "medium", "high", "xhigh", "max"]) {
           expect(decode(`anthropic/claude-opus-4-7/${effort}`)).toEqual({
             selection: { baseModelId: "anthropic/claude-opus-4-7", effort },
@@ -129,9 +126,6 @@ describe("descriptor", () => {
       });
 
       it("returns no-effort representation for 3-segment ids whose suffix isn't a known effort", () => {
-        // OpenRouter-style 3-segment ids without an effort suffix — the
-        // trailing segment is part of the model name. The whole id is the
-        // baseModelId; provider is still attributed from the leading segment.
         expect(decode("openrouter/anthropic/claude-sonnet-4-5")).toEqual({
           selection: { baseModelId: "openrouter/anthropic/claude-sonnet-4-5", effort: null },
           provider: "openrouterai",
@@ -143,10 +137,6 @@ describe("descriptor", () => {
       });
 
       it("parses 4-segment umbrella ids as variants when the last segment is a known effort", () => {
-        // OpenRouter wraps native ids under `openrouter/`, so its variants
-        // are 4-segment: `openrouter/<sub>/<model>/<effort>`. Without this
-        // case the picker would render seven duplicate rows per OpenRouter
-        // reasoning model.
         expect(decode("openrouter/anthropic/claude-sonnet-4.5/high")).toEqual({
           selection: { baseModelId: "openrouter/anthropic/claude-sonnet-4.5", effort: "high" },
           provider: "openrouterai",
@@ -159,8 +149,6 @@ describe("descriptor", () => {
           selection: { baseModelId: "openrouter/openai/gpt-5", effort: "xhigh" },
           provider: "openrouterai",
         });
-        // OpenRouter route variants like `:exacto` live inside the model
-        // segment — the effort suffix still attaches at the trailing slash.
         expect(decode("openrouter/openai/gpt-oss-120b:exacto/none")).toEqual({
           selection: { baseModelId: "openrouter/openai/gpt-oss-120b:exacto", effort: "none" },
           provider: "openrouterai",
@@ -168,14 +156,10 @@ describe("descriptor", () => {
       });
 
       it("returns no-effort representation for unparseable shapes (1 segment or unknown trailing segment)", () => {
-        // 1-segment ids have no provider segment to attribute.
         expect(decode("just-a-name")).toEqual({
           selection: { baseModelId: "just-a-name", effort: null },
           provider: null,
         });
-        // 4+ segment ids whose trailing segment isn't a known effort fall
-        // through to a no-effort representation. The leading segment still
-        // attributes a provider when it maps.
         expect(decode("anthropic/foo/bar/baz")).toEqual({
           selection: { baseModelId: "anthropic/foo/bar/baz", effort: null },
           provider: "anthropic",
@@ -211,12 +195,6 @@ describe("descriptor", () => {
           "openrouter/anthropic/claude-sonnet-4.5",
           "openrouter/anthropic/claude-sonnet-4.5/none",
           "openrouter/anthropic/claude-sonnet-4.5/high",
-          // Catalog-less BYOK (openai-compatible) — provider id is the synthetic
-          // copilot providerId, and the model id may itself contain slashes
-          // (LM Studio repo-prefixed ids like `lmstudio-community/Qwen-…-GGUF`).
-          // The trailing segment isn't a known effort, so decode treats the
-          // whole string as `baseModelId` with `effort: null` — and encode
-          // reproduces it verbatim.
           "lmstudio-byok-id/lmstudio-community/Qwen2.5-7B-Instruct-GGUF",
           "ollama-byok-id/llama3.2",
         ];
@@ -227,11 +205,6 @@ describe("descriptor", () => {
       });
 
       it("preserves slashes-in-model for catalog-less BYOK wire ids", () => {
-        // The wire id `<copilotProviderId>/<lmstudioRepoPrefix>/<modelName>`
-        // round-trips: baseModelId carries the full id, effort is null,
-        // provider is null because the synthetic providerId isn't in
-        // OPENCODE_PROVIDER_MAP (and that's the correct, lossless mapping
-        // — the picker just doesn't get a Copilot-provider section header).
         const wireId = "byok-uuid-abc/lmstudio-community/Qwen2.5-7B-Instruct-GGUF";
         const decoded = OpencodeBackendDescriptor.wire.decode(wireId);
         expect(decoded).toEqual({
@@ -243,7 +216,6 @@ describe("descriptor", () => {
     });
 
     describe("applySelection()", () => {
-      /** Catalog entry for the model a test activates, carrying the levels it offers. */
       function entryOffering(baseModelId: string, efforts: string[]): ModelEntry {
         return {
           baseModelId,
@@ -428,7 +400,6 @@ describe("descriptor", () => {
         const legacyVault = await vaultWithLegacyInstall("opencode-load-b-", 12);
         try {
           await OpencodeBackendDescriptor.onPluginLoad?.(vaultPlugin(emptyVault));
-          // Held across the reload, the way an open Configure dialog holds it.
           const manager = getOpencodeBinaryManager(vaultPlugin(emptyVault));
           const before = await manager.downloadsSize();
 
@@ -491,7 +462,6 @@ describe("descriptor", () => {
 
   const CONFIG_DIR = "my-config";
 
-  /** Desktop CopilotPlugin stand-in whose in-vault paths resolve under `vaultBase`. */
   function vaultPlugin(vaultBase: string): never {
     const adapter = new FileSystemAdapter();
     adapter.getBasePath = () => vaultBase;
@@ -501,7 +471,6 @@ describe("descriptor", () => {
     } as never;
   }
 
-  /** A vault holding `bytes` of pre-#2569 in-vault opencode install. */
   async function vaultWithLegacyInstall(prefix: string, bytes: number): Promise<string> {
     const vaultBase = await fs.promises.mkdtemp(path.join(os.tmpdir(), prefix));
     const bin = path.join(
@@ -521,17 +490,10 @@ describe("descriptor", () => {
       const legacyVault = await vaultWithLegacyInstall("opencode-desc-b-", 12);
       try {
         const first = getOpencodeBinaryManager(vaultPlugin(emptyVault));
-        // Only `legacyVault` holds an in-vault copy, so a change here is the
-        // manager having switched vaults. Measured as a delta because the
-        // OS-local install root is real and may be non-empty on this machine.
         const before = await first.downloadsSize();
         const second = getOpencodeBinaryManager(vaultPlugin(legacyVault));
 
-        // One manager, so an install running from the previous lifecycle survives.
         expect(second).toBe(first);
-        // Resolving is not a claim to be the running lifecycle: a settings tree
-        // that outlived its own could otherwise aim the singleton — and the
-        // uninstall of whoever else holds it — at a vault nobody is in.
         expect((await second.downloadsSize()) - before).toBe(0);
       } finally {
         await fs.promises.rm(emptyVault, { recursive: true, force: true });

@@ -115,8 +115,6 @@ describe("backendRegistry", () => {
       expect(backendNeedsSelfHostWarning(CodexBackendDescriptor, on)).toBe(true);
     });
 
-    // Self-Host Mode marks but never redirects: a persisted cloud-agent
-    // activeBackend stays that backend (still spawnable — the user decides).
     it("getActiveBackendDescriptor keeps a cloud agent active while the mode is on", () => {
       expect(getActiveBackendDescriptor(baseSettings("claude", true))).toBe(
         ClaudeBackendDescriptor
@@ -135,7 +133,6 @@ describe("backendRegistry", () => {
       expect(ids.has("claude")).toBe(true);
       expect(ids.has("codex")).toBe(true);
       expect(ids.has("opencode")).toBe(false);
-      // Stable reference across calls (drives referential stability downstream).
       expect(getCloudAgentIds()).toBe(ids);
     });
   });

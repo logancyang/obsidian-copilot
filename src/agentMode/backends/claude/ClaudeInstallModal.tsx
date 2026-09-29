@@ -15,12 +15,6 @@ import {
   type ClaudeDescriptor,
 } from "./descriptor";
 
-/**
- * Stateful half of the Claude Configure dialog: the only place that reads
- * settings, validates a pasted path, drives the CLI's sign-in, and raises
- * notices. Everything it computes is handed to {@link ClaudeConfigView} as
- * plain data.
- */
 const ClaudeConfigContainer: React.FC<{
   descriptor: ClaudeDescriptor;
   onClose: () => void;
@@ -82,13 +76,11 @@ const ClaudeConfigContainer: React.FC<{
   );
 };
 
-/** Configure dialog for the Claude backend. Opened via `descriptor.openInstallUI`. */
 export class ClaudeInstallModal extends FullBleedReactModal {
   constructor(
     app: App,
     private readonly descriptor: ClaudeDescriptor
   ) {
-    // No native title: ConfigDialogShell draws its own heading beside the badge.
     super(app);
   }
 

@@ -136,7 +136,6 @@ describe("codexArchive", () => {
           sha256: createHash("sha256").update(bytes).digest("hex"),
           archiveBytes: bytes.length,
         });
-        // GNU tar cannot read ZIP; native ZIP extraction is exercised on macOS/Windows.
         const extractor = jest
           .spyOn(
             jest.requireActual<typeof import("@/agentMode/backends/shared/extractArchive")>(

@@ -15,7 +15,6 @@ const meta = {
 } satisfies Meta<ClaudeAutoModePermissionSettingProps>;
 export default meta;
 
-/** The default uses Claude's classifier and can still ask before risky actions. */
 export const Auto: StoryObj<ClaudeAutoModePermissionSettingProps> = {};
 
 export const AcceptEdits: StoryObj<ClaudeAutoModePermissionSettingProps> = {

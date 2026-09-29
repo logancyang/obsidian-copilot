@@ -9,12 +9,6 @@ export function codexBinaryPathPlaceholder(platform: NodeJS.Platform): string {
     : "/absolute/path/to/codex-acp";
 }
 
-/**
- * Uses the selected adapter with explicit profile overrides.
- * @param binaryPath - Selected native adapter or npm package entry point.
- * @param envOverrides - Configured environment, filtered to non-secret profile settings.
- * @param platform - Platform whose terminal will run the command.
- */
 export function codexSignInCommand(
   binaryPath: string | undefined,
   envOverrides: Record<string, string> | undefined,
@@ -26,8 +20,6 @@ export function codexSignInCommand(
     profileVariables: ["CODEX_HOME", "CODEX_PATH"],
     envOverrides,
     platform,
-    // Windows npm adapters are JavaScript entry points; native bundles launch directly.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
     runtime: platform === "win32" && binaryPath?.endsWith(".js") ? "node" : undefined,
   });
 }

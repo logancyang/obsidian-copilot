@@ -9,15 +9,6 @@ import { CODEX_PINNED_VERSION } from "./cliSetup";
 export { CODEX_PINNED_VERSION } from "./cliSetup";
 const RELEASE = `https://github.com/Brevilabs/codex-acp-binary/releases/download/v${CODEX_PINNED_VERSION}`;
 
-/**
- * Downloads, verifies, and extracts the Codex adapter and bundled runtime for
- * this platform. Leaves the active installation unchanged so the caller can
- * validate the extracted files before selecting them.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/379
- * @param stage - Empty temporary directory in which to extract the bundle.
- * @param signal - Cancels download and extraction.
- * @param progress - Reports downloaded bytes and archive extraction.
- */
 export async function installCodexArchive(
   stage: string,
   signal: AbortSignal,
@@ -34,8 +25,6 @@ export async function installCodexArchive(
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   if (signal.aborted) throw new ManagedInstallAbortError();
   const stem = `codex-acp-v${CODEX_PINNED_VERSION}-${target}`;
-  // Linux releases use tar.gz so extraction works with GNU tar.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   const archiveName = `${stem}${process.platform === "linux" ? ".tar.gz" : ".zip"}`;
   const manifest = (await requestUrl(`${RELEASE}/${stem}.json`)).json as {
     archive: string;

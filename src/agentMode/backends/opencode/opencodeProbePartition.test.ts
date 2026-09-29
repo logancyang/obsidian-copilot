@@ -7,7 +7,6 @@ describe("partitionOpencodeOnlyWireIds", () => {
       ["anthropic/claude-sonnet-4-5", "openai/gpt-5", "opencode/big-pickle"],
       managed
     );
-    // Only the opencode-only id survives; the BYOK-managed ones are suppressed.
     expect(result).toEqual(["opencode/big-pickle"]);
   });
 
@@ -22,7 +21,6 @@ describe("partitionOpencodeOnlyWireIds", () => {
   it("treats the FIRST segment as the provider id for multi-segment wire ids", () => {
     const managed = new Set(["openrouter"]);
     const result = partitionOpencodeOnlyWireIds(
-      // openrouter is managed → dropped; mistral (first segment) is not → kept.
       ["openrouter/anthropic/claude-3.5-haiku", "mistral/large/latest"],
       managed
     );
@@ -64,7 +62,6 @@ describe("partitionOpencodeOnlyWireIds", () => {
     const b = partitionOpencodeOnlyWireIds([], new Set(["anthropic"]));
     expect(a).toEqual([]);
     expect(Object.isFrozen(a)).toBe(true);
-    // Same frozen constant returned for every empty case.
     expect(a).toBe(b);
   });
 

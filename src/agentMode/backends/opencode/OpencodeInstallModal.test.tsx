@@ -33,7 +33,6 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { App, Notice } from "obsidian";
 import React from "react";
 
-// A path computeInstallState's on-disk existence check accepts without stubbing fs.
 const EXISTING_BINARY_PATH = __filename;
 
 interface Deferred<T> {
@@ -66,9 +65,6 @@ const makeManager = (): {
   const uninstall = jest.fn().mockResolvedValue(undefined);
   const cancelCurrentOperation = jest.fn();
 
-  // The dialog reads progress off the manager now, so the fake has to be a
-  // store: `subscribeRuntimeState`/`getRuntimeState` must keep stable
-  // identities or `useSyncExternalStore` resubscribes on every commit.
   let runtime: RuntimeState = { kind: "idle" };
   const listeners = new Set<() => void>();
   const publish = (state: RuntimeState) => {
@@ -204,8 +200,6 @@ describe("OpencodeInstallModal", () => {
       fireEvent.click(screen.getByRole("button", { name: "Download & install" }));
       expect(screen.getByText("Starting…")).toBeTruthy();
 
-      // Progress arrives through the manager's runtime state now, so the row
-      // and this dialog show the same run rather than each tracking its own.
       publish({
         kind: "installing",
         progress: { label: "Downloading opencode — 300 B / 1000 B", percent: 29 },
@@ -236,8 +230,6 @@ describe("OpencodeInstallModal", () => {
       expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();
       expect(screen.queryByText("Aborted")).toBeNull();
 
-      // Unmounting is not a cancellation: reopening the dialog must still show
-      // this same operation.
       cancelCurrentOperation.mockClear();
       unmount();
       expect(cancelCurrentOperation).not.toHaveBeenCalled();
@@ -294,8 +286,6 @@ describe("OpencodeInstallModal", () => {
       });
       publish({ kind: "idle" });
 
-      // The reason described a binary this install has replaced. It survives a
-      // *failed* install on purpose: nothing changed, so it is still true.
       expect(screen.queryByText("tar exited with 1")).toBeNull();
     });
 
@@ -309,8 +299,6 @@ describe("OpencodeInstallModal", () => {
       upgradeManaged.mockRejectedValue(new OperationInFlightError());
       renderContainer(manager);
 
-      // The reinstall takes the lock; the upgrade clicked underneath it never
-      // owns the run, so it must not take the run's display with it.
       fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.3" }));
@@ -334,8 +322,6 @@ describe("OpencodeInstallModal", () => {
         fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.3" }));
       });
 
-      // Cancel is the user's own doing; the strip must go back to offering the
-      // upgrade rather than reporting "Aborted" as a failure.
       expect(screen.queryByText("Aborted")).toBeNull();
       expect(screen.getByRole("button", { name: "Upgrade to v2.0.3" })).toBeTruthy();
     });
@@ -362,7 +348,6 @@ describe("OpencodeInstallModal", () => {
         fireEvent.click(screen.getByRole("button", { name: "Apply" }));
       });
 
-      // The reason belonged to the managed download, not to the binary now in play.
       expect(screen.queryByText("GitHub API rate-limited")).toBeNull();
     });
 
@@ -447,8 +432,6 @@ describe("OpencodeInstallModal", () => {
         fireEvent.click(screen.getByRole("button", { name: "Clear" }));
       });
 
-      // The caller awaits this with no catch of its own, so an unreported
-      // rejection would leave the button resetting with nothing said.
       expect(noticeMessages().join(" ")).toContain("Couldn't clear the custom path");
       expect(noticeMessages()).not.toContain("Custom opencode path cleared.");
     });
@@ -462,8 +445,6 @@ describe("OpencodeInstallModal", () => {
         installDeferred().reject(new OperationInFlightError());
       });
 
-      // This is the one failure the shared runtime state cannot render: it
-      // belongs to the operation that won, not to this dialog.
       expect(noticeMessages().join(" ")).toContain("already running");
     });
 

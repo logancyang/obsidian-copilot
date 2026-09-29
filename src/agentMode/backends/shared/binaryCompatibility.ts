@@ -6,16 +6,6 @@ export type BinaryInspection =
   | { kind: "error"; message: string }
   | { kind: "installed"; version: string; source: "managed" | "custom" };
 
-/**
- * Determines whether an agent installation meets Copilot's minimum version requirement.
- * Returns `ready` for supported versions, `incompatible` for older versions or
- * prereleases of the minimum version, and `error` for invalid version metadata.
- * Missing installations and existing inspection errors pass through unchanged.
- *
- * @param inspection - Installation details already checked by the caller, including the runtime version.
- * @param minimumVersion - Oldest stable agent version Copilot supports.
- * @param displayName - Agent name to include in error messages.
- */
 export function classifyBinaryInstall(
   inspection: BinaryInspection,
   minimumVersion: string,
@@ -23,7 +13,6 @@ export function classifyBinaryInstall(
 ): InstallState {
   if (inspection.kind !== "installed") return inspection;
   const parsed = parseSemver(inspection.version);
-  // Invalid metadata must not make a configured runtime appear ready. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
   if (!parsed || !parseSemver(minimumVersion)) {
     return {
       kind: "error",
@@ -44,22 +33,12 @@ export function classifyBinaryInstall(
   return { kind: "ready", source: inspection.source };
 }
 
-/**
- * Throws when an agent installation is missing, has invalid version metadata,
- * or fails Copilot's minimum version requirement. Call before launching an agent
- * or selecting a release to download.
- *
- * @param inspection - Installation details or proposed download version to validate.
- * @param minimumVersion - Oldest stable agent version Copilot supports.
- * @param displayName - Agent name to include in error messages.
- */
 export function assertBinaryCompatible(
   inspection: BinaryInspection,
   minimumVersion: string,
   displayName: string
 ): void {
   const state = classifyBinaryInstall(inspection, minimumVersion, displayName);
-  // Execution cannot recover from missing or invalid packages without configuration. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
   if (state.kind !== "ready")
     throw new Error(
       "message" in state

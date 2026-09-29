@@ -56,9 +56,6 @@ describe("resolveOpencodeBinary — Unix", () => {
   });
 
   it("ignores a stale override (e.g. cross-OS sync) and falls back to detection", () => {
-    // The bug this resolver guards against: a user's settings sync pulls in
-    // a POSIX override path onto Windows, or vice versa. The override doesn't
-    // exist on the new platform, so the resolver must keep walking.
     const native = "/home/me/.opencode/bin/opencode";
     const fs = makeFs([native]);
     expect(
@@ -100,10 +97,6 @@ describe("resolveOpencodeBinary — Windows", () => {
   });
 
   it("ignores a POSIX override synced from another OS", () => {
-    // Concrete repro: settings sync brings `/Users/<them>/.opencode/bin/opencode`
-    // from a macOS install onto a Windows machine where a native opencode
-    // exists. Auto-detect must skip the dead POSIX path and find the local
-    // .exe instead.
     const native = "C:\\Users\\me\\.opencode\\bin\\opencode.exe";
     expect(
       resolveOpencodeBinary(

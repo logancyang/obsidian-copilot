@@ -1,8 +1,5 @@
 import * as codexVersion from "./codexVersion";
 import { installCodexArchive, CODEX_PINNED_VERSION } from "./codexArchive";
-// Only the download is faked: the real CODEX_PINNED_VERSION must reach the manager so the
-// install assertions still compare the version directory against the adapter version the
-// launcher check demands. A literal here decouples the two on every pin bump.
 jest.mock("./codexArchive", () => ({
   ...jest.requireActual<object>("./codexArchive"),
   installCodexArchive: jest.fn(),
@@ -265,8 +262,6 @@ describe("CodexBinaryManager", () => {
       });
     });
     describe("setCustomBinaryPath()", () => {
-      // Real filesystem fixtures need the host path rules, unlike mocked bundle installs.
-      // https://github.com/logancyang/obsidian-copilot/issues/2967
       beforeEach(() => setPlatform(originalPlatform));
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 normalizes a supported package symlink before selecting the custom adapter", async () => {
         const entry = writeAdapter(path.join(tempDir, "custom"));

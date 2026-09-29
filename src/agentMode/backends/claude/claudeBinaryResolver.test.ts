@@ -122,7 +122,6 @@ describe("resolveClaudeBinary — Unix", () => {
   });
 
   it("finds claude under a non-default nvm version via enumeration", () => {
-    // `nvm use 20 && npm i -g @anthropic-ai/claude-code` with the default still 18.
     const claudePath = "/home/me/.nvm/versions/node/v20.18.0/bin/claude";
     const fs = makeFs(
       [claudePath],
@@ -233,9 +232,6 @@ describe("resolveClaudeBinary — Windows", () => {
   });
 
   it("never picks the desktop app's WindowsApps GUI launcher", () => {
-    // `Claude.exe` registered by the desktop app under
-    // %LOCALAPPDATA%\Microsoft\WindowsApps opens a GUI window instead of
-    // running headless. Auto-detect must never select it.
     const guiLauncher = "C:\\Users\\me\\AppData\\Local\\Microsoft\\WindowsApps\\Claude.exe";
     expect(resolveClaudeBinary(winInput(makeFs([guiLauncher])))).toBeNull();
   });

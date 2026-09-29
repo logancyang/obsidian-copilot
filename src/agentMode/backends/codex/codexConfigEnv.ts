@@ -29,12 +29,6 @@ function parseCodexConfig(value: string | undefined): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
-/**
- * Current codex-acp versions ignore server-mode argv and consume Codex config
- * from this JSON env var. User config can customize product defaults, while
- * plugin-owned fields win so inherited values cannot silently remove the
- * prompt and safety defaults Agent Mode requires.
- */
 export function mergeCodexConfigEnv(
   existing: string | undefined,
   developerInstructions: string

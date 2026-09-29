@@ -13,7 +13,6 @@ export interface ClaudeAutoModePermissionSettingProps {
   onChange: (value: ClaudeAutoModePermission) => void;
 }
 
-/** Presentational settings row for choosing what Claude's canonical Auto mode permits. */
 export const ClaudeAutoModePermissionSetting: React.FC<ClaudeAutoModePermissionSettingProps> = ({
   value,
   onChange,

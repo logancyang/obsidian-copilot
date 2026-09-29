@@ -6,13 +6,6 @@ interface ExtractionOptions {
   stripComponents?: number;
 }
 
-/**
- * Extracts a release using system tar, with actionable errors when it is unavailable.
- * Callers must use tar archives on Linux; macOS and Windows bsdtar also support ZIP.
- * @param archivePath - Downloaded release archive.
- * @param destDir - Existing staging directory owned by the installation.
- * @param options - Cancellation and archive wrapper directories to remove.
- */
 export async function extractArchive(
   archivePath: string,
   destDir: string,
@@ -36,8 +29,6 @@ export async function extractArchive(
     proc.on("error", (cause: NodeJS.ErrnoException) => {
       error = cause;
     });
-    // Wait for tar to exit before the installation cleans up its stage after cancellation.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
     proc.on("close", (code) => {
       if (options.signal?.aborted) reject(new ManagedInstallAbortError());
       else if (error?.code === "ENOENT")

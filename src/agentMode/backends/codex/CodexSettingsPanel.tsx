@@ -10,12 +10,6 @@ interface Props {
   app: App;
 }
 
-/**
- * Codex card extras. The codex-acp install / path / auth configuration lives
- * in the Configure dialog (`CodexInstallModal`, opened via
- * `descriptor.openInstallUI`); this panel only hosts the spawn-time
- * environment-variable overrides that remain on the settings card.
- */
 export const CodexSettingsPanel: React.FC<Props> = () => {
   const settings = useSettingsValue();
   return (

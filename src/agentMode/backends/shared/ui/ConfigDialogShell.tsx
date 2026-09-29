@@ -5,32 +5,15 @@ import { AlertTriangle } from "lucide-react";
 import React from "react";
 
 interface ConfigDialogShellProps {
-  /** Dialog heading. Owned here, not by the modal's native title chrome, so it can share a line with the badge. */
   title: string;
-  /** Readiness of the agent being configured; rendered as the badge beside the title. */
   state: InstallState;
-  /** Account status for auth-capable agents; null while probing. */
   authStatus?: BackendAuthStatus | null;
-  /** Blocking-condition strip below the header — compose <ConfigWarningStrip>. */
   warning?: React.ReactNode;
-  /** Ordered body sections — compose <ConfigSection> children. */
   children: React.ReactNode;
-  /** Footer-right content. Defaults to a single "Done" button. */
   footer?: React.ReactNode;
   onClose: () => void;
 }
 
-/**
- * Presentational layout shared by every agent's Configure dialog so the header,
- * sections, and footer stay visually consistent across the three (intentionally
- * bespoke) bodies. Rendered inside a per-agent `ReactModal` subclass — it is not
- * itself a modal, but it does own the title, which is why its subclasses leave
- * Obsidian's native title element empty.
- *
- * Every band owns its own padding so the dividers between them run edge to edge.
- * That only holds inside a host using the shared full-bleed modal frame; without
- * it the frame's own padding insets every divider by a theme-dependent amount.
- */
 export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
   title,
   state,
@@ -62,19 +45,11 @@ export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
 );
 
 interface ConfigWarningStripProps {
-  /** Readiness state; only the states that carry a message are worth a strip. */
   state: InstallState;
-  /** Sentence appended after the state's message, telling the user how to clear it. */
   detail?: string;
-  /** In-dialog remedy, for agents that can fix themselves without leaving the dialog. */
   action?: React.ReactNode;
 }
 
-/**
- * Alert strip for the one thing standing between the user and a working agent.
- * Renders only for the states that carry a message, so callers can hand it the
- * live install state without branching on the kind themselves.
- */
 export const ConfigWarningStrip: React.FC<ConfigWarningStripProps> = ({
   state,
   detail,
@@ -97,11 +72,6 @@ export const ConfigWarningStrip: React.FC<ConfigWarningStripProps> = ({
   );
 };
 
-/**
- * One labeled section inside a {@link ConfigDialogShell}. The optional title
- * renders a subtle header above the body; a hairline divider separates each
- * section from the content above it.
- */
 export const ConfigSection: React.FC<{
   title?: string;
   badge?: React.ReactNode;

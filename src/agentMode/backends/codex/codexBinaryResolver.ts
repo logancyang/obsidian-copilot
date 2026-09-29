@@ -1,9 +1,3 @@
-/**
- * Locate a user-installed `codex-acp` adapter for the Codex Configure dialog.
- * On Windows, the npm shim (`codex-acp.cmd`) is not spawnable through Agent
- * Mode's no-shell process path, so resolve the package's JavaScript entry point
- * and let the backend launch it through the user's installed Node runtime.
- */
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { nodeToolBinDirCandidates, type NodeToolFs } from "@/utils/nodeToolBinDirs";
 

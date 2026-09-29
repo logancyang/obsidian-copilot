@@ -28,8 +28,6 @@ export function AgentBackendHeader({
   resolvedPath,
   onConfigure,
 }: AgentBackendHeaderProps) {
-  // Keep progress and failures visible while configuration remains accessible.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
   const updating = managedInstall.kind === "running";
   const updateFailed = managedInstall.kind === "error";
   return (

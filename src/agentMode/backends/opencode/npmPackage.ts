@@ -12,12 +12,6 @@ export interface NpmAsset {
   integrity: string;
 }
 
-/**
- * Resolve the first published platform package in the host's fallback order.
- * @param version - OpenCode release to install.
- * @param candidates - Platform variants ordered from most suitable to fallback.
- * @param signal - Cancellation owned by the managed install operation.
- */
 export async function resolveNpmAsset(
   version: string,
   candidates: string[],
@@ -44,13 +38,6 @@ export async function resolveNpmAsset(
   throw new Error(`No matching OpenCode npm package found. Tried: ${candidates.join(", ")}.`);
 }
 
-/**
- * Check npm's sha512 claim before any archive content reaches the install stage.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/560
- * @param archivePath - Fully downloaded package tarball.
- * @param integrity - Registry integrity value for that exact package version.
- * @param signal - Cancellation owned by the managed install operation.
- */
 export async function verifyNpmIntegrity(
   archivePath: string,
   integrity: string,
@@ -69,16 +56,6 @@ export async function verifyNpmIntegrity(
   }
 }
 
-/**
- * Extract only npm's expected executable; other tar entries never become files.
- * This keeps installation independent of a system archive command. The archive
- * has already passed {@link verifyNpmIntegrity}, so its headers are trusted.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/560
- * @param archivePath - Verified npm tarball.
- * @param destPath - Staged executable path inside the managed install root.
- * @param binaryName - Executable name for the resolved operating system.
- * @param signal - Cancellation owned by the managed install operation.
- */
 export async function extractNpmBinary(
   archivePath: string,
   destPath: string,

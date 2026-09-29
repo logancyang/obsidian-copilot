@@ -7,19 +7,10 @@ export type OpencodeLibc = "glibc" | "musl";
 export interface AssetTarget {
   platform: OpencodePlatform;
   arch: OpencodeArch;
-  /** Only set on linux. */
   libc?: OpencodeLibc;
-  /** Only set on x64. `undefined` ⇒ assume modern (AVX2 present). */
   hasAvx2?: boolean;
 }
 
-/**
- * Build the prioritized list of OpenCode npm platform variants
- * for the given target. The first match wins; later entries are fallbacks
- * when the preferred variant is not published for a release.
- *
- * Mirrors the fallback order in OpenCode's launcher script.
- */
 export function buildAssetCandidates(target: AssetTarget): string[] {
   const base = `opencode-${target.platform}-${target.arch}`;
   const out: string[] = [];
@@ -60,10 +51,6 @@ export function mapNodeArch(nodeArch: string): OpencodeArch | undefined {
   return undefined;
 }
 
-/**
- * Best-effort musl libc detection. Linux only; returns false on other OSes.
- * Falls back to false if probes fail (glibc is the safer default).
- */
 export async function detectMusl(): Promise<boolean> {
   if (process.platform !== "linux") return false;
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
@@ -85,11 +72,6 @@ export async function detectMusl(): Promise<boolean> {
   }
 }
 
-/**
- * Best-effort AVX2 detection on x64 hosts. Returns `true` when the probe
- * fails — modern hardware is the safer default and the manager already
- * falls back to the non-baseline asset if the baseline asset is missing.
- */
 export async function detectAvx2(): Promise<boolean> {
   if (process.arch !== "x64") return false;
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
@@ -125,10 +107,6 @@ export interface ResolvedTarget {
   candidates: string[];
 }
 
-/**
- * Resolve the current host's opencode asset target by probing the system,
- * and return the prioritized asset-stem candidate list.
- */
 export async function resolveOpencodeTarget(): Promise<ResolvedTarget> {
   const platform = mapNodePlatform(process.platform);
   const arch = mapNodeArch(process.arch);
@@ -148,7 +126,6 @@ export async function resolveOpencodeTarget(): Promise<ResolvedTarget> {
   return { target, candidates: buildAssetCandidates(target) };
 }
 
-/** Expected binary file name inside the extracted archive. */
 export function expectedBinaryName(platform: OpencodePlatform): string {
   return platform === "windows" ? "opencode.exe" : "opencode";
 }

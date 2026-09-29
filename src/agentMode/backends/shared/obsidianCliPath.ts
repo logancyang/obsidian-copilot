@@ -9,13 +9,6 @@ interface ObsidianCliPathInput {
   isExecutable?: (candidate: string) => boolean;
 }
 
-/**
- * Resolve the terminal-capable CLI shipped with the running Obsidian install.
- * The GUI executable cannot carry terminal output on Windows, while Linux may
- * use either the current install or its registered per-user copy.
- *
- * @param input - Host platform, Electron resources directory, home directory, and optional executable probe.
- */
 export function resolveObsidianCliPath(input: ObsidianCliPathInput): string | null {
   if (!input.resourcesPath) return null;
   const path = requireNodeModule<typeof import("node:path")>("path");

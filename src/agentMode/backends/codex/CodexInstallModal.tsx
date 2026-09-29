@@ -27,7 +27,6 @@ interface CodexConfigContainerProps {
   onClose: () => void;
 }
 
-/** Connects the shared configuration view to Codex's settings and binary manager. */
 export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ manager, onClose }) => {
   const app = useApp();
   const settings = useSettingsValue();
@@ -39,8 +38,6 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
     `${binaryPath}:${JSON.stringify(codex?.envOverrides)}`
   );
   const configuredSource = binaryPath ? (codex?.binarySource ?? "custom") : null;
-  // A missing managed adapter needs a first install, just as it does in OpenCode.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
   const activeSource =
     state.kind === "ready" || state.kind === "incompatible" ? state.source : null;
   const runtime = React.useSyncExternalStore(
@@ -59,8 +56,6 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
   const [hasDownloads, setHasDownloads] = React.useState(false);
   React.useEffect(() => {
     let current = true;
-    // Ignore obsolete download scans so completed operations control retained-file removal.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
     void manager
       .downloadsSize()
       .then((bytes) => {
@@ -72,8 +67,6 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
     };
   }, [manager, runtime.kind]);
   let destination = "Unavailable";
-  // An invalid managed destination must not prevent configuring a user-owned adapter.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   try {
     destination = formatBinaryPathForDisplay(manager.getDataDir());
   } catch {
@@ -82,8 +75,6 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
 
   const install = (): void => {
     manager.install().catch((error: unknown) => {
-      // Cancellation belongs to the user; a competing action cannot overwrite shared progress.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
       if ((error as Error)?.name === "AbortError") return;
       if (error instanceof ManagedInstallOperationInFlightError) new Notice(error.message);
       logError("[AgentMode] Codex install failed", error);
@@ -121,8 +112,6 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
             await manager.uninstall();
             new Notice(`Codex adapter uninstalled (freed ${size}).`);
           } catch (error) {
-            // Removal can fail while files are in use; report failure without claiming they were removed.
-            // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
             new Notice(
               `Couldn't uninstall the Codex adapter: ${error instanceof Error ? error.message : String(error)}`
             );
@@ -133,8 +122,6 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
         "Uninstall"
       ).open();
     } catch (error) {
-      // If download inspection fails, do not confirm removal with an unknown size.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
       new Notice(
         `Couldn't inspect Codex downloads: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -151,8 +138,6 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
         onSignOut: auth.signOut,
         terminalCommand: codexSignInCommand(binaryPath, codex?.envOverrides, process.platform),
       }}
-      // Keep progress and Cancel visible when a managed install starts in another window.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
       source={runtime.kind === "installing" ? "managed" : source}
       onSourceChange={setSource}
       activeSource={activeSource}
@@ -160,8 +145,6 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
         platform: `${process.platform}-${process.arch}`,
         version: CODEX_PINNED_VERSION,
         destination,
-        // Retained files stay removable; only installs honor cancellation.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
         hasDownloads: hasDownloads || activeSource === "managed",
         canCancel: runtime.kind === "installing",
         run,
@@ -183,7 +166,6 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
   );
 };
 
-/** Hosts Codex configuration in Obsidian's native modal; the manager owns operations across closes. */
 export class CodexInstallModal extends FullBleedReactModal {
   constructor(app: App) {
     super(app);

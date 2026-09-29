@@ -7,13 +7,10 @@ import type { Meta, StoryObj } from "@/lib/story";
 import * as React from "react";
 
 interface SetupStepsStoryProps {
-  /** Command in the first step, so the overflow case can push a long one through. */
   installCommand: string;
-  /** Prompt convention for the platform whose commands the story renders. */
   shell?: CommandShell;
 }
 
-/** The two-step "don't have it yet" block the CLI dialogs compose. */
 const SetupStepsBlock: React.FC<SetupStepsStoryProps> = ({ installCommand, shell }) => (
   <div className="tw-flex tw-flex-col tw-gap-4">
     <SetupStep index={1} title="Install it">
@@ -37,10 +34,8 @@ const meta = {
 } satisfies Meta<SetupStepsStoryProps>;
 export default meta;
 
-/** Copyable setup commands for a user-owned CLI. */
 export const CommandsOnly: StoryObj<SetupStepsStoryProps> = {};
 
-/** A one-liner installer that has to wrap without pushing Copy out of reach. */
 export const LongCommand: StoryObj<SetupStepsStoryProps> = {
   args: {
     installCommand:

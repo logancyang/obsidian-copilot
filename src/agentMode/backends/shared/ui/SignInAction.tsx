@@ -12,9 +12,6 @@ export interface SignInActionProps {
   signInLabel?: string;
 }
 
-/** Browser sign-in controls shared by Claude and Codex, including recoverable browser-launch failure.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/379
- */
 export const SignInAction: React.FC<SignInActionProps> = (auth) => (
   <div className="tw-flex tw-flex-col tw-items-start tw-gap-2" aria-live="polite">
     {auth.status?.signedIn ? (

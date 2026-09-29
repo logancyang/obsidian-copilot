@@ -10,7 +10,6 @@ import {
   opencodeWireBaseIdFor,
 } from "./opencodeModelResolve";
 
-/** Build a minimal `Provider` row for a given origin + type. */
 function makeProvider(
   providerId: string,
   origin: ProviderOrigin,
@@ -27,7 +26,6 @@ function makeProvider(
   };
 }
 
-/** Build a minimal `ConfiguredModel` row. */
 function makeModel(configuredModelId: string, providerId: string, wireId: string): ConfiguredModel {
   return {
     configuredModelId,
@@ -37,11 +35,6 @@ function makeModel(configuredModelId: string, providerId: string, wireId: string
   };
 }
 
-/**
- * Assemble a `CopilotSettings`-shaped object with only the slices
- * `opencodeEnabledModelEntries` reads. Cast through `unknown` since the resolver
- * touches just `backends` / `configuredModels` / `providers`.
- */
 function makeSettings(args: {
   enabledModels?: string[];
   configuredModels?: ConfiguredModel[];
@@ -103,7 +96,7 @@ describe("opencodeModelResolve", () => {
       expect(isOpencodeZenWireId("opencode/deepseek-v4-flash-free")).toBe(true);
       expect(isOpencodeZenWireId("lmstudio/gpt-oss-20b")).toBe(false);
       expect(isOpencodeZenWireId("openrouter/anthropic/claude")).toBe(false);
-      expect(isOpencodeZenWireId("opencode-zen/x")).toBe(false); // prefix must be exactly `opencode/`
+      expect(isOpencodeZenWireId("opencode-zen/x")).toBe(false);
     });
   });
 
@@ -170,8 +163,6 @@ describe("opencodeModelResolve", () => {
     });
 
     it("flags cloud-hosted models with needsSelfHostWarning when Self-Host Mode is on", () => {
-      // opencode is self-hostable, but it can host cloud BYOK providers — those
-      // models must still carry the cloud-egress warning; local ones must not.
       const settings = makeSettings({
         enableSelfHostMode: true,
         enabledModels: ["cloud", "local"],
@@ -217,7 +208,6 @@ describe("opencodeModelResolve", () => {
       const first = opencodeEnabledModelEntries(makeSettings({ enabledModels: [] }));
       const second = opencodeEnabledModelEntries(makeSettings({ enabledModels: [] }));
       expect(first).toHaveLength(0);
-      // Referential stability: the same frozen constant on every empty call.
       expect(first).toBe(second);
     });
 
@@ -262,9 +252,6 @@ describe("opencodeModelResolve", () => {
 
   describe("COPILOT_PLUS_OPENCODE_PROVIDER_ID", () => {
     it("equals the Copilot provider id host code builds wire ids from", () => {
-      // `plusUtils.isUsingLicensedModels` reconstructs the prefixed wire id from
-      // `ChatModelProviders.COPILOT_PLUS`, because this module sits behind the
-      // desktop-only Agent Mode barrel. Drift would silently stop it matching.
       expect(COPILOT_PLUS_OPENCODE_PROVIDER_ID).toBe(ChatModelProviders.COPILOT_PLUS);
     });
   });
@@ -297,8 +284,6 @@ describe("opencodeModelResolve", () => {
     });
 
     it("answers for a configured model that no backend has enabled yet", () => {
-      // No `backends.opencode` slice at all: provider sync configures a model
-      // before enrolling it, and the id must be available in between.
       const settings = makeSettings({
         providers: { "plus-1": plusProvider },
         configuredModels: [makeModel("cm1", "plus-1", "copilot-plus-flash")],

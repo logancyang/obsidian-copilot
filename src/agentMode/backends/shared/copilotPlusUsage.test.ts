@@ -23,7 +23,6 @@ describe("copilotPlusUsage", () => {
     mockGetUsage.mockReset();
     mockGetModels.mockReset();
     resetSettings();
-    // `resetSettings` deliberately preserves this cache in production.
     setSettings({ copilotPlusCatalog: { models: [], defaultEnabledIds: [] } });
   });
 
@@ -80,9 +79,6 @@ describe("copilotPlusUsage", () => {
     ])(
       "reports %s unusable rather than clearing the meters (https://github.com/logancyang/obsidian-copilot-preview/issues/193)",
       (_label, snapshot) => {
-        // The endpoint omits a window both when the plan does not cap it and when the
-        // counters cannot be read. The two are indistinguishable, so neither may clear
-        // a meter the user is looking at.
         expect(planUsageFromCopilotPlusUsage(snapshot as never)).toEqual({ kind: "unavailable" });
       }
     );
@@ -91,8 +87,6 @@ describe("copilotPlusUsage", () => {
   describe("CopilotPlusUsageReader", () => {
     describe("readPlanUsage()", () => {
       it("reads plan usage through the Brevilabs client", async () => {
-        // Caps change as the account is used, so unlike context windows they
-        // cannot come from a cache.
         mockGetUsage.mockResolvedValue({ used: { weekly: { usedPercent: 21 } } });
 
         const reading = await new CopilotPlusUsageReader().readPlanUsage();
@@ -119,8 +113,6 @@ describe("copilotPlusUsage", () => {
       });
 
       it("answers from the cached lineup without touching the network (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
-        // Sizing a meter must not spend a request, and the window reported has
-        // to agree with the model row the agent was configured from.
         const reader = new CopilotPlusUsageReader();
 
         await expect(reader.readContextWindow("gemini-3-pro")).resolves.toBe(1_048_576);
