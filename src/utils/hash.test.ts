@@ -1,11 +1,5 @@
 import { md5, sha256 } from "./hash";
 
-// Test vectors below are standard RFC 1321 / FIPS 180-4 reference values and
-// match what `crypto-js`'s `MD5(str).toString()` / `SHA256(str).toString()`
-// produced for the same UTF-8-encoded inputs. Preserving these byte-for-byte
-// keeps existing on-disk cache keys (PDF cache, file cache, project cache,
-// search index doc hashes) valid across the crypto-js removal.
-
 describe("md5", () => {
   it.each([
     ["", "d41d8cd98f00b204e9800998ecf8427e"],
@@ -27,7 +21,6 @@ describe("md5", () => {
   });
 
   it("handles UTF-8 multibyte input", () => {
-    // crypto-js encodes JS strings as UTF-8 before hashing; "café" → 63 61 66 c3 a9.
     expect(md5("café")).toBe("07117fe4a1ebd544965dc19573183da2");
   });
 

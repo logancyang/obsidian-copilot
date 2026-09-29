@@ -3,75 +3,14 @@ import ChatModelManager from "@/LLMProviders/chatModelManager";
 import { CompactionResult, ParsedContextItem } from "@/types/compaction";
 import { HumanMessage } from "@langchain/core/messages";
 
-/**
- * ContextCompactor - Compresses large context using map-reduce summarization.
- *
- * ## How It Works
- *
- * When context attached to a user message exceeds a configurable threshold (in tokens),
- * this class automatically compresses it using a map-reduce pattern:
- *
- * ### 1. PARSE Phase
- * The XML-structured context is parsed into discrete items. Each context block
- * (note_context, active_note, url_content, etc.) becomes a separate item with:
- * - type: The XML tag name
- * - path: File path or URL
- * - title: Note/page title
- * - content: The actual text content
- * - metadata: Additional info (ctime, mtime)
- *
- * ### 2. MAP Phase (Parallel Summarization)
- * Large items (>50k chars) are sent to the LLM for summarization in parallel.
- * - Max 3 concurrent requests to avoid API overload
- * - Failed summarizations keep original content
- * - If >50% fail, compaction aborts entirely (fail-safe)
- *
- * ### 3. REDUCE Phase (Rebuild)
- * Summarized items are recombined into the original XML structure.
- * - Preserves all metadata (title, path, timestamps)
- * - Marks summarized content with [SUMMARIZED] prefix
- * - Maintains item order for consistent citations
- *
- * ## Configuration
- *
- * The threshold is set in Settings > QA > Auto-Compact Threshold (in tokens).
- * Internally converted to chars using 4 chars/token estimate.
- * Set to 0 to disable auto-compaction.
- *
- * ## Example
- *
- * Before (500k chars):
- * ```xml
- * <note_context>
- *   <title>Research Notes</title>
- *   <path>notes/research.md</path>
- *   <content>[... 50,000 chars of content ...]</content>
- * </note_context>
- * ```
- *
- * After (~5k chars):
- * ```xml
- * <note_context>
- *   <title>Research Notes</title>
- *   <path>notes/research.md</path>
- *   <content>[SUMMARIZED]
- *   Key findings: ... (concise summary preserving main ideas)
- *   </content>
- * </note_context>
- * ```
- */
 export class ContextCompactor {
   private static instance: ContextCompactor;
   private chatModelManager: ChatModelManager;
 
-  /** Minimum chars to consider an item for summarization */
   private readonly MIN_ITEM_SIZE = 50000;
-  /** Max parallel LLM calls */
   private readonly MAX_CONCURRENCY = 3;
-  /** Max chars per item before truncation */
   private readonly MAX_ITEM_SIZE = 500000;
 
-  /** XML block types to parse */
   private readonly BLOCK_TYPES = [
     "note_context",
     "active_note",
@@ -110,26 +49,20 @@ Summary:`;
     return ContextCompactor.instance;
   }
 
-  /**
-   * Compact context using map-reduce summarization.
-   */
   async compact(content: string): Promise<CompactionResult> {
     const originalCharCount = content.length;
     logInfo(`[ContextCompactor] Starting compaction of ${originalCharCount} chars`);
 
-    // Parse XML into items
     const items = this.parseItems(content);
     if (items.length === 0) {
       return this.noOpResult(content);
     }
 
-    // Map: summarize large items
     const summaries = await this.summarizeItems(items);
     if (summaries.size === 0) {
       return this.noOpResult(content);
     }
 
-    // Reduce: rebuild with summaries
     const compacted = this.rebuild(content, items, summaries);
 
     logInfo(
@@ -147,11 +80,6 @@ Summary:`;
     };
   }
 
-  /**
-   * Creates a no-op compaction result when no compaction was performed.
-   * @param content - The original content that was not compacted
-   * @returns A CompactionResult indicating no changes were made
-   */
   private noOpResult(content: string): CompactionResult {
     return {
       content,
@@ -163,10 +91,6 @@ Summary:`;
     };
   }
 
-  /**
-   * Parse XML content into discrete items.
-   * Filters out nested blocks to avoid overlapping replacements.
-   */
   private parseItems(content: string): ParsedContextItem[] {
     const items: ParsedContextItem[] = [];
 
@@ -179,11 +103,8 @@ Summary:`;
       }
     }
 
-    // Sort by start index
     items.sort((a, b) => a.startIndex - b.startIndex);
 
-    // Filter out nested items (fully contained within another item)
-    // This prevents overlapping replacements that corrupt indices
     return items.filter(
       (item, i) =>
         !items.some(
@@ -193,13 +114,6 @@ Summary:`;
     );
   }
 
-  /**
-   * Parses a single XML block into a ParsedContextItem.
-   * @param block - The raw XML block string
-   * @param type - The type of context block (e.g., 'note_context', 'active_note')
-   * @param startIndex - The character index where this block starts in the original content
-   * @returns A ParsedContextItem or null if parsing fails
-   */
   private parseBlock(block: string, type: string, startIndex: number): ParsedContextItem | null {
     const extract = (tag: string) => new RegExp(`<${tag}>([^<]*)</${tag}>`).exec(block)?.[1] || "";
     const extractContent = () => /<content>([\s\S]*?)<\/content>/.exec(block)?.[1] || "";
@@ -220,13 +134,9 @@ Summary:`;
     };
   }
 
-  /**
-   * Map phase: summarize large items in parallel batches.
-   */
   private async summarizeItems(items: ParsedContextItem[]): Promise<Map<number, string>> {
     const summaries = new Map<number, string>();
 
-    // Filter items needing summarization
     const toProcess = items
       .map((item, index) => ({ index, item }))
       .filter(({ item }) => item.content.length >= this.MIN_ITEM_SIZE);
@@ -235,7 +145,6 @@ Summary:`;
 
     logInfo(`[ContextCompactor] Summarizing ${toProcess.length} items`);
 
-    // Process in batches
     for (let i = 0; i < toProcess.length; i += this.MAX_CONCURRENCY) {
       const batch = toProcess.slice(i, i + this.MAX_CONCURRENCY);
       const results = await Promise.all(
@@ -253,7 +162,6 @@ Summary:`;
       });
     }
 
-    // Abort if too many failures
     if (summaries.size < toProcess.length * 0.5) {
       logInfo(`[ContextCompactor] High failure rate, aborting compaction`);
       return new Map();
@@ -262,11 +170,6 @@ Summary:`;
     return summaries;
   }
 
-  /**
-   * Summarizes a single context item using the LLM.
-   * @param item - The parsed context item to summarize
-   * @returns The summarized content string
-   */
   private async summarize(item: ParsedContextItem): Promise<string> {
     let content = item.content;
     if (content.length > this.MAX_ITEM_SIZE) {
@@ -283,9 +186,6 @@ Summary:`;
     return typeof response.content === "string" ? response.content.trim() : "";
   }
 
-  /**
-   * Reduce phase: rebuild content with summaries.
-   */
   private rebuild(
     original: string,
     items: ParsedContextItem[],
@@ -293,7 +193,6 @@ Summary:`;
   ): string {
     let result = original;
 
-    // Process from end to preserve indices
     Array.from(summaries.keys())
       .sort((a, b) => b - a)
       .forEach((index) => {
@@ -306,7 +205,6 @@ Summary:`;
     return result;
   }
 
-  /** Block types that use <url> instead of <path> */
   private readonly URL_BASED_TYPES = [
     "url_content",
     "web_tab_context",
@@ -314,12 +212,6 @@ Summary:`;
     "youtube_video_context",
   ];
 
-  /**
-   * Builds an XML block from a parsed item with its summary content.
-   * @param item - The original parsed context item
-   * @param summary - The summarized content to include
-   * @returns The rebuilt XML block string with summary
-   */
   private buildBlock(item: ParsedContextItem, summary: string): string {
     const parts = [`<${item.type}>`];
 

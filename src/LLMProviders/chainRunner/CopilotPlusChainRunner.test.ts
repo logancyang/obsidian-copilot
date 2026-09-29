@@ -18,12 +18,6 @@ jest.mock("@/settings/model", () => ({
 
 type ToolCall = { tool: StructuredTool; args: Record<string, unknown> };
 
-/**
- * Reach the private tool-execution step without driving a full chat turn.
- *
- * @param toolCalls - Tool calls to execute in order.
- * @returns The runner's collected tool outputs and sources.
- */
 function executeToolCalls(toolCalls: ToolCall[]) {
   const runner = new CopilotPlusChainRunner({} as never) as unknown as {
     executeToolCalls: (calls: ToolCall[]) => Promise<{

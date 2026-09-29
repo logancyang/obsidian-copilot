@@ -12,12 +12,8 @@ import {
   WELL_KNOWN_BIN_DIRS,
 } from "./binaryPath";
 
-// Isolate binaryPath's merging/ordering from the live version-manager probe;
-// the resolver's own behavior is covered in nodeToolBinDirs.test.ts.
 jest.mock("@/utils/nodeToolBinDirs", () => ({ resolveNodeToolBinDirs: jest.fn(() => []) }));
 
-// PATH fixtures follow the host separator; native CI exercises Windows semicolons.
-// https://github.com/logancyang/obsidian-copilot/issues/2967
 const nativeWellKnownDirs = process.platform === "win32" ? [] : WELL_KNOWN_BIN_DIRS;
 const inheritedPath = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"].join(path.delimiter);
 
@@ -118,9 +114,6 @@ describe("binaryPath", () => {
 
   describe("module evaluation", () => {
     test("does not require Node built-ins at module evaluation time", () => {
-      // The module is on the eager settings-UI import graph, which mobile also
-      // evaluates; an eval-time require of a Node built-in would crash the
-      // plugin at load there.
       const throwingIds = ["os", "fs", "path", "node:os", "node:fs", "node:path"];
       try {
         jest.isolateModules(() => {

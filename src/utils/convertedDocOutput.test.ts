@@ -133,13 +133,11 @@ describe("saveConvertedDocOutput", () => {
   });
 
   it("__ separator distinguishes a/b/x.pdf from a_b/x.pdf", async () => {
-    // a/b/x.pdf
     const adapter1 = makeVaultAdapter();
     adapter1.files["output/x.md"] = "<!-- source: other/x.pdf -->\nother";
     const vault1 = makeVault(adapter1);
     await saveConvertedDocOutput(makeTFile("a/b/x.pdf"), "content1", vault1, "output");
 
-    // a_b/x.pdf
     const adapter2 = makeVaultAdapter();
     adapter2.files["output/x.md"] = "<!-- source: other/x.pdf -->\nother";
     const vault2 = makeVault(adapter2);

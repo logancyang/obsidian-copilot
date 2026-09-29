@@ -17,15 +17,10 @@ jest.mock("@/utils/vaultAdapterUtils", () => ({
   readFrontmatterViaAdapter: jest.fn().mockResolvedValue(null),
 }));
 
-/** A RecentUsageManager stub that echoes the persisted timestamp back. */
 const lastAccessedStub = {
   getEffectiveLastUsedAt: (_path: string, persisted?: number | null) => persisted ?? 0,
 } as unknown as RecentUsageManager<string>;
 
-/**
- * Build an `app` whose metadataCache returns the given frontmatter for any
- * file, so we can assert how `fileToHistoryItem` reads scope metadata.
- */
 function makeApp(frontmatter: Record<string, unknown>) {
   return {
     metadataCache: {

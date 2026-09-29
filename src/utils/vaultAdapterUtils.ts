@@ -1,20 +1,9 @@
 import { App, Platform, TAbstractFile, TFile, TFolder } from "obsidian";
 
-/**
- * Whether the host filesystem treats paths case-insensitively — i.e. whether two spellings of
- * one path can name the same file. Callers that fold case on a path MUST gate on this: on a
- * case-sensitive volume `agents.md` and `AGENTS.md` really are two different files, and
- * conflating them silently redirects reads and writes to the wrong one.
- */
 export function hasCaseInsensitiveFilesystem(): boolean {
   return Platform.isWin || Platform.isMacOS || Platform.isIosApp;
 }
 
-/**
- * Move a file or folder to the user's configured trash via FileManager.trashFile (Obsidian 1.4+).
- * Respects the user's deletion preference (system trash / vault .trash / permanent).
- * Cast is needed because the bundled `obsidian.d.ts` doesn't yet expose this method.
- */
 export async function trashFile(app: App, file: TAbstractFile): Promise<void> {
   const fileManager = app.fileManager as unknown as {
     trashFile(f: TAbstractFile): Promise<void>;
@@ -22,10 +11,6 @@ export async function trashFile(app: App, file: TAbstractFile): Promise<void> {
   await fileManager.trashFile(file);
 }
 
-/**
- * Resolve a file path to a TFile, with adapter fallback for hidden directories.
- * Returns a real TFile if in vault cache, a synthetic TFile if only on disk, or null.
- */
 export async function resolveFileByPath(app: App, filePath: string): Promise<TFile | null> {
   const file = app.vault.getAbstractFileByPath(filePath);
   if (file instanceof TFile) return file;
@@ -37,16 +22,10 @@ export async function resolveFileByPath(app: App, filePath: string): Promise<TFi
   return null;
 }
 
-/**
- * Check if a file path points to a real vault-cached file (not a hidden directory file).
- */
 export function isInVaultCache(app: App, filePath: string): boolean {
   return app.vault.getAbstractFileByPath(filePath) != null;
 }
 
-/**
- * List markdown files in a folder, with adapter fallback for hidden directories.
- */
 export async function listMarkdownFiles(app: App, folderPath: string): Promise<TFile[]> {
   const folder = app.vault.getAbstractFileByPath(folderPath);
   if (folder instanceof TFolder) {
@@ -66,10 +45,6 @@ export async function listMarkdownFiles(app: App, folderPath: string): Promise<T
   return [];
 }
 
-/**
- * Patch frontmatter fields in a file, with adapter fallback for hidden directories.
- * Uses processFrontMatter for vault-cached files, regex-based YAML patching otherwise.
- */
 export async function patchFrontmatter(
   app: App,
   filePath: string,
@@ -89,7 +64,6 @@ export async function patchFrontmatter(
   if (!(await app.vault.adapter.exists(filePath))) return;
 
   const raw = await app.vault.adapter.read(filePath);
-  // Reason: detect line ending style to preserve consistency when appending new fields
   const lineEnding = raw.includes("\r\n") ? "\r\n" : "\n";
   const updated = raw.replace(
     /^(\uFEFF?---\r?\n[\s\S]*?\r?\n)(---)/,
@@ -116,24 +90,17 @@ export async function patchFrontmatter(
   }
 }
 
-/**
- * Read frontmatter key-value pairs from a file via adapter.
- * Used when metadataCache returns null (hidden directory files).
- * Returns null if file has no frontmatter block.
- */
 export async function readFrontmatterViaAdapter(
   app: App,
   filePath: string
 ): Promise<Record<string, string> | null> {
   const raw = await app.vault.adapter.read(filePath);
-  // Reason: strip BOM and accept CRLF line endings for Windows/external-editor compatibility
   const normalized = raw.replace(/^\uFEFF/, "");
   const yaml = normalized.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
   if (!yaml) return null;
 
   const result: Record<string, string> = {};
   for (const line of yaml.split(/\r?\n/)) {
-    // Reason: use [\w-] instead of \w to support hyphenated YAML keys (e.g. copilot-project-last-used)
     const match = line.match(/^([\w-]+):\s*(.+)/);
     if (match) {
       result[match[1]] = match[2].trim().replace(/^["']|["']$/g, "");
@@ -142,7 +109,6 @@ export async function readFrontmatterViaAdapter(
   return result;
 }
 
-/** True when an error message indicates an existing-file conflict from vault.create. */
 export function isFileAlreadyExistsError(error: unknown): boolean {
   if (!error) return false;
   const message =
@@ -154,7 +120,6 @@ export function isFileAlreadyExistsError(error: unknown): boolean {
   return message.toLowerCase().includes("already exists");
 }
 
-/** True when an error message indicates an ENAMETOOLONG filesystem failure. */
 export function isNameTooLongError(error: unknown): boolean {
   if (!error) return false;
   const message =
@@ -167,10 +132,6 @@ export function isNameTooLongError(error: unknown): boolean {
   return normalized.includes("enametoolong") || normalized.includes("name too long");
 }
 
-/**
- * Create a synthetic TFile object from adapter stat data.
- * Used for files in hidden directories not indexed by Obsidian's vault cache.
- */
 async function createSyntheticTFile(app: App, filePath: string): Promise<TFile> {
   const stat = await app.vault.adapter.stat(filePath);
   const name = filePath.split("/").pop() ?? "";

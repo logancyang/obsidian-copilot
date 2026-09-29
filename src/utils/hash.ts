@@ -1,15 +1,3 @@
-/**
- * Pure-JS MD5 and SHA-256 producing lowercase-hex digests that match what
- * `crypto-js`'s `MD5(str).toString()` / `SHA256(str).toString()` produced.
- *
- * Used for cache keys and content fingerprints — not for security. Pure JS so
- * it stays available across Obsidian's desktop (Electron) and mobile (WebView)
- * runtimes, where `node:crypto` is unavailable and `crypto.subtle.digest` is
- * async-only.
- *
- * Inputs are interpreted as UTF-8 (matching crypto-js's default `Utf8.parse`).
- */
-
 const HEX = "0123456789abcdef";
 
 function bytesToHex(bytes: Uint8Array): string {
@@ -19,8 +7,6 @@ function bytesToHex(bytes: Uint8Array): string {
   }
   return out;
 }
-
-// ---------- MD5 (RFC 1321) ----------
 
 const MD5_T = new Int32Array([
   -0x28955b88, -0x173848aa, 0x242070db, -0x3e423112, -0x0a83f051, 0x4787c62a, -0x57cfb9ed,
@@ -48,13 +34,11 @@ function rotl32(x: number, n: number): number {
 export function md5(input: string): string {
   const msg = new TextEncoder().encode(input);
   const len = msg.length;
-  // Pad to a multiple of 64 with at least 9 trailing bytes (0x80 + 8-byte length).
   const paddedLen = (((len + 8) >>> 6) + 1) << 6;
   const padded = new Uint8Array(paddedLen);
   padded.set(msg);
   padded[len] = 0x80;
   const dv = new DataView(padded.buffer);
-  // Length in bits, little-endian, 64-bit. JS numbers handle len * 8 up to ~2^50.
   const bitLenLow = (len * 8) >>> 0;
   const bitLenHigh = Math.floor(len / 0x20000000);
   dv.setUint32(paddedLen - 8, bitLenLow, true);
@@ -103,7 +87,6 @@ export function md5(input: string): string {
     d0 = (d0 + d) | 0;
   }
 
-  // MD5 digest: state words in little-endian byte order.
   const out = new Uint8Array(16);
   const outDv = new DataView(out.buffer);
   outDv.setInt32(0, a0, true);
@@ -112,8 +95,6 @@ export function md5(input: string): string {
   outDv.setInt32(12, d0, true);
   return bytesToHex(out);
 }
-
-// ---------- SHA-256 (FIPS 180-4) ----------
 
 const SHA256_K = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -138,7 +119,6 @@ export function sha256(input: string): string {
   padded.set(msg);
   padded[len] = 0x80;
   const dv = new DataView(padded.buffer);
-  // Length in bits, big-endian, 64-bit. JS numbers handle len * 8 up to ~2^50.
   const bitLenLow = (len * 8) >>> 0;
   const bitLenHigh = Math.floor(len / 0x20000000);
   dv.setUint32(paddedLen - 8, bitLenHigh, false);

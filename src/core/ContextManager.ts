@@ -21,7 +21,6 @@ import { getNotesFromPath, getNotesFromTags } from "@/utils";
 import { App, TFile, Vault } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
 
-// Lazy-loaded to avoid circular dependency issues in tests
 let ContextCompactorClass: typeof import("./ContextCompactor").ContextCompactor | null = null;
 async function getContextCompactor() {
   if (!ContextCompactorClass) {
@@ -31,15 +30,6 @@ async function getContextCompactor() {
   return ContextCompactorClass.getInstance();
 }
 
-/**
- * ContextManager - Handles all context processing business logic
- *
- * Key responsibilities:
- * - Process context for individual messages
- * - Reprocess context when files change or messages are edited
- * - Ensure context is always fresh and up-to-date
- * - Handle different types of context (notes, URLs, selected text)
- */
 export class ContextManager {
   private static instance: ContextManager;
   private contextProcessor: ContextProcessor;
@@ -59,10 +49,6 @@ export class ContextManager {
     return ContextManager.instance;
   }
 
-  /**
-   * Process context for a single message
-   * This generates fresh context content from current file states
-   */
   async processMessageContext(
     app: App,
     message: ChatMessage,
@@ -81,7 +67,6 @@ export class ContextManager {
 
       const processedMessage = message.originalMessage || message.message;
 
-      // 1. Process custom prompts first
       const { processedPrompt: processedUserMessage, includedFiles } = await processPrompt(
         app,
         processedMessage,
@@ -90,32 +75,24 @@ export class ContextManager {
         activeNote
       );
 
-      // 2. Build L2 context from previous turns (uses stored envelope content, preserves compaction)
       const { l2Context, l2Paths } = this.buildL2ContextFromPreviousTurns(message.id!, messageRepo);
 
-      // 3. Extract URLs and process them (for Copilot Plus chain)
       const contextUrls = message.context?.urls || [];
       const urlContextAddition =
         chainType === ChainType.COPILOT_PLUS_CHAIN
           ? await this.mention.processUrlList(vault, contextUrls)
           : { urlContext: "", imageUrls: [] };
 
-      // 4. Process context notes (L3 - current turn only, excluding files already in L2 or system prompt)
-      // Combine exclusions: custom prompt files + system prompt files + files already in L2
       const processedNotePaths = new Set([
         ...includedFiles.map((file) => file.path),
         ...systemPromptIncludedFiles.map((file) => file.path),
         ...l2Paths,
       ]);
-      // Track only L3 context paths (excludes L5 user message files from includedFiles)
-      // This is used for compactedPaths to avoid false deduplication of L5 files
       const l3ContextPaths = new Set<string>();
       const contextNotes = message.context?.notes || [];
 
-      // Filter out notes already in L2 to avoid duplication
       const notes = contextNotes.filter((note) => !l2Paths.has(note.path));
 
-      // Add active note if requested and not already in L2
       if (
         includeActiveNote &&
         activeNote &&
@@ -135,38 +112,33 @@ export class ContextManager {
         chainType
       );
 
-      // Add processed context notes to tracking sets
       notes.forEach((note) => {
         processedNotePaths.add(note.path);
         l3ContextPaths.add(note.path);
       });
 
-      // 5. Process context tags
       const contextTags = message.context?.tags || [];
       let tagContextAddition = "";
       const tagNotePaths: string[] = [];
 
       if (contextTags.length > 0) {
-        // Get all notes that have any of the specified tags (in frontmatter)
         const taggedNotes = getNotesFromTags(app, contextTags);
 
-        // Filter out already processed notes to avoid duplication
         const filteredTaggedNotes = taggedNotes.filter(
           (note) => !processedNotePaths.has(note.path)
         );
 
         if (filteredTaggedNotes.length > 0) {
           tagContextAddition = await this.contextProcessor.processContextNotes(
-            new Set(), // Don't exclude any notes since we already filtered
+            new Set(),
             fileParserManager,
             vault,
             filteredTaggedNotes,
-            false, // Don't include active note again
+            false,
             null,
             chainType
           );
 
-          // Add processed tagged notes to tracking sets and collect paths
           filteredTaggedNotes.forEach((note) => {
             processedNotePaths.add(note.path);
             l3ContextPaths.add(note.path);
@@ -175,32 +147,28 @@ export class ContextManager {
         }
       }
 
-      // 6. Process context folders
       const contextFolders = message.context?.folders || [];
       let folderContextAddition = "";
       const folderNotePaths: string[] = [];
 
       if (contextFolders.length > 0) {
-        // Get all notes from the specified folders
         const folderNotes = contextFolders.flatMap((folder) => getNotesFromPath(vault, folder));
 
-        // Filter out already processed notes to avoid duplication
         const filteredFolderNotes = folderNotes.filter(
           (note) => !processedNotePaths.has(note.path)
         );
 
         if (filteredFolderNotes.length > 0) {
           folderContextAddition = await this.contextProcessor.processContextNotes(
-            new Set(), // Don't exclude any notes since we already filtered
+            new Set(),
             fileParserManager,
             vault,
             filteredFolderNotes,
-            false, // Don't include active note again
+            false,
             null,
             chainType
           );
 
-          // Add processed folder notes to tracking sets and collect paths
           filteredFolderNotes.forEach((note) => {
             processedNotePaths.add(note.path);
             l3ContextPaths.add(note.path);
@@ -209,18 +177,15 @@ export class ContextManager {
         }
       }
 
-      // 7. Process selected text contexts
       // Retries must preserve the sent excerpts even if the composer now has another selection.
       // https://github.com/logancyang/obsidian-copilot/issues/3210
       const selectedTextContextAddition = this.contextProcessor.processSelectedTextContexts(
         message.context?.selectedTextContexts
       );
 
-      // 8. Process web tab contexts (L3 - current turn only)
       const webTabs = message.context?.webTabs || [];
       const webTabContextAddition = await this.contextProcessor.processContextWebTabs(webTabs);
 
-      // 9. Build context portion separately (for compaction boundary preservation)
       const contextPortion =
         l2Context +
         noteContextAddition +
@@ -230,10 +195,8 @@ export class ContextManager {
         selectedTextContextAddition +
         webTabContextAddition;
 
-      // Combine everything (L2 previous context, then L3 current turn context)
       let finalProcessedMessage = processedUserMessage + contextPortion;
 
-      // 10. Auto-compact if context exceeds threshold (tokens * 4 = chars estimate)
       const charThreshold = getSettings().autoCompactThreshold * 4;
 
       let wasCompacted = false;
@@ -241,11 +204,9 @@ export class ContextManager {
       if (finalProcessedMessage.length > charThreshold) {
         updateLoadingMessage?.(LOADING_MESSAGES.COMPACTING);
         const compactor = await getContextCompactor();
-        // Only compact context portion, not user message, to preserve boundary
         const result = await compactor.compact(contextPortion);
         if (result.wasCompacted) {
           compactedContextPortion = result.content;
-          // Reconstruct with preserved user message + compacted context
           finalProcessedMessage = processedUserMessage + compactedContextPortion;
           wasCompacted = true;
           logInfo(
@@ -257,7 +218,6 @@ export class ContextManager {
 
       logInfo(`[ContextManager] Successfully processed context for message ${message.id}`);
 
-      // Build envelope - if compacted, use compacted context directly (no slicing needed)
       const contextEnvelope = wasCompacted
         ? this.buildCompactedEnvelope({
             chainType,
@@ -265,7 +225,6 @@ export class ContextManager {
             systemPrompt: systemPrompt || "",
             processedUserMessage,
             compactedContext: compactedContextPortion,
-            // Only include L3 context paths, not L5 user message files from includedFiles
             compactedPaths: Array.from(l3ContextPaths),
           })
         : this.buildPromptContextEnvelope({
@@ -297,10 +256,6 @@ export class ContextManager {
     }
   }
 
-  /**
-   * Reprocess context for a specific message
-   * This ensures edited messages get fresh context
-   */
   async reprocessMessageContext(
     app: App,
     messageId: string,
@@ -329,7 +284,7 @@ export class ContextManager {
       chainType,
       includeActiveNote,
       activeNote,
-      messageRepo, // Use same repo for L2 building
+      messageRepo,
       systemPrompt,
       systemPromptIncludedFiles
     );
@@ -338,32 +293,6 @@ export class ContextManager {
     logInfo(`[ContextManager] Completed context reprocessing for message ${messageId}`);
   }
 
-  /**
-   * Build L2 context from previous turns in the conversation.
-   * Uses stored L3 content from previous messages' envelopes (preserving compaction).
-   * Returns both the context and the set of paths already in L2 (for deduplication in L3).
-   *
-   * Important: When a message was compacted, its L3 already contains all prior L2 context
-   * (in summarized form). To avoid duplication, we only include L3 text from the most recent
-   * compacted message onwards, but still collect paths from ALL messages for deduplication.
-   *
-   * NOTE: Staleness detection was intentionally removed for simplicity.
-   * A previous implementation tracked file modification times (mtime) and would detect
-   * when compacted context was stale (source files modified after compaction). This was
-   * removed because:
-   * 1. It added significant complexity (~100 lines of mtime tracking)
-   * 2. The edge case of files changing mid-conversation is rare
-   * 3. Users can manually trigger reprocessing if needed
-   *
-   * If staleness detection is needed in the future, consider:
-   * - Tracking mtime alongside paths in compactedPaths metadata
-   * - Comparing current file mtime with stored mtime when building L2
-   * - Skipping path deduplication for stale compacted segments
-   *
-   * L2 deduplication: Segments are deduplicated by ID (last-write-wins). When the same
-   * artifact (note, URL, etc.) appears in multiple turns, only the most recent version
-   * is kept in L2, preventing linear growth.
-   */
   private buildL2ContextFromPreviousTurns(
     currentMessageId: string,
     messageRepo: MessageRepository
@@ -379,15 +308,10 @@ export class ContextManager {
       .slice(0, currentIndex)
       .filter((msg) => msg.sender === "user");
 
-    // Deduplicated map: segment ID → compacted content (last-write-wins)
     const l2SegmentMap = new Map<string, string>();
-    // Insertion order tracking for stable output
     const l2SegmentOrder: string[] = [];
     const l2Paths = new Set<string>();
 
-    // Find the most recent compacted message index.
-    // When a message is compacted, its L3 already includes all prior context (L2 + L3),
-    // so we only need L3 text from that message onwards to avoid duplication.
     let mostRecentCompactedIndex = -1;
     for (let i = previousUserMessages.length - 1; i >= 0; i--) {
       const msg = previousUserMessages[i];
@@ -404,19 +328,13 @@ export class ContextManager {
       const l3Layer = msg.contextEnvelope?.layers?.find((l) => l.id === "L3_TURN");
 
       if (l3Layer) {
-        // Only include L3 content from the most recent compacted message onwards.
-        // Earlier messages' content is already included in the compacted L3.
         if (i >= mostRecentCompactedIndex) {
           for (const segment of l3Layer.segments || []) {
             if (segment.content) {
-              // compactSegmentForL2 handles per-block filtering of non-recoverable
-              // (ephemeral) blocks like selected_text / web_selected_text, so they
-              // don't persist into L2 and shadow the current turn's fresh context.
               const compacted = this.compactSegmentForL2(segment.content);
               if (!compacted.trim()) {
                 continue;
               }
-              // Deduplicate by segment ID: later turns overwrite earlier ones
               if (!l2SegmentMap.has(segment.id)) {
                 l2SegmentOrder.push(segment.id);
               }
@@ -425,7 +343,6 @@ export class ContextManager {
           }
         }
 
-        // Track paths from ALL messages for deduplication
         for (const segment of l3Layer.segments || []) {
           if (segment.metadata?.notePath) {
             l2Paths.add(segment.metadata.notePath as string);
@@ -444,12 +361,8 @@ export class ContextManager {
       }
     }
 
-    // Build the L2 context string in insertion order (deduplicated)
     const l2Content = l2SegmentOrder.map((id) => l2SegmentMap.get(id)!).join("\n");
 
-    // Reason: Match only compactor-produced <prior_context source="..."> blocks.
-    // Requiring the source= attribute avoids false-positives from <prior_context_note>
-    // and literal XML examples in unescaped user note content.
     const hasCompactedContent = /<prior_context\s+source=/.test(l2Content);
     const l2Context = hasCompactedContent
       ? l2Content + "\n\n" + getL2RefetchInstruction()
@@ -468,7 +381,6 @@ export class ContextManager {
 
     const layerSegments: Partial<Record<PromptLayerId, PromptLayerSegment[]>> = {};
 
-    // L1: System & Policies - stable across conversation
     if (params.systemPrompt) {
       layerSegments.L1_SYSTEM = [
         {
@@ -480,7 +392,6 @@ export class ContextManager {
       ];
     }
 
-    // L2: Previous Turn Context - one segment per note with path as ID
     if (params.l2PreviousContext) {
       const l2Segments = this.parseContextIntoSegments(params.l2PreviousContext, true);
       if (l2Segments.length > 0) {
@@ -488,18 +399,13 @@ export class ContextManager {
       }
     }
 
-    // L3: Turn Context - one segment per note with path as ID
     const turnSegments: PromptLayerSegment[] = [];
 
-    // Parse notes into individual segments
     if (params.noteContextAddition) {
       const noteSegments = this.parseContextIntoSegments(params.noteContextAddition, false);
       turnSegments.push(...noteSegments);
     }
 
-    // Parse other context types into per-artifact segments for accurate smart referencing.
-    // Each XML block gets its own segment with a content-derived ID (URL, path, etc.)
-    // so L2/L3 deduplication works at the individual artifact level.
     this.appendParsedSegments(turnSegments, params.tagContextAddition, {
       source: "tags",
       notePaths: params.tagNotePaths,
@@ -516,7 +422,6 @@ export class ContextManager {
       layerSegments.L3_TURN = turnSegments;
     }
 
-    // L5: User Message - varies per turn
     layerSegments.L5_USER = [
       {
         id: `${messageId}-user`,
@@ -537,11 +442,6 @@ export class ContextManager {
     });
   }
 
-  /**
-   * Build a simplified envelope after compaction.
-   * All context is combined into a single L3 segment with the compacted content.
-   * Stores paths for deduplication in multi-turn context.
-   */
   private buildCompactedEnvelope(params: {
     chainType: ChainType;
     message: ChatMessage;
@@ -557,7 +457,6 @@ export class ContextManager {
 
     const layerSegments: Partial<Record<PromptLayerId, PromptLayerSegment[]>> = {};
 
-    // L1: System & Policies - unchanged
     if (params.systemPrompt) {
       layerSegments.L1_SYSTEM = [
         {
@@ -569,8 +468,6 @@ export class ContextManager {
       ];
     }
 
-    // L3: All compacted context as a single segment
-    // Store paths for deduplication in multi-turn context
     if (params.compactedContext.trim()) {
       layerSegments.L3_TURN = [
         {
@@ -586,7 +483,6 @@ export class ContextManager {
       ];
     }
 
-    // L5: User Message - unchanged
     layerSegments.L5_USER = [
       {
         id: `${messageId}-user`,
@@ -607,20 +503,10 @@ export class ContextManager {
     });
   }
 
-  /**
-   * Parse context XML string into individual segments (one per context item).
-   * Delegates to the standalone parseContextIntoSegments function.
-   */
   private parseContextIntoSegments(contextXml: string, stable: boolean): PromptLayerSegment[] {
     return parseContextIntoSegments(contextXml, stable);
   }
 
-  /**
-   * Parse context XML into individual per-artifact segments and append to target.
-   * Each XML block gets its own segment with a content-derived ID (URL, path, etc.)
-   * from the registry. Extra metadata (e.g., notePaths for tags/folders) is merged
-   * into each resulting segment.
-   */
   private appendParsedSegments(
     target: PromptLayerSegment[],
     content: string,
@@ -640,7 +526,6 @@ export class ContextManager {
         target.push(seg);
       }
     } else {
-      // Fallback: content didn't parse into known XML blocks, keep as single segment
       target.push({
         id: `unparsed-${Date.now()}`,
         content: normalized,
@@ -650,36 +535,15 @@ export class ContextManager {
     }
   }
 
-  /**
-   * Check if a message needs context reprocessing
-   */
   needsContextReprocessing(message: ChatMessage): boolean {
     return message.needsContextReprocessing === true;
   }
 
-  /**
-   * Get all selected text contexts
-   */
   getSelectedTextContexts() {
     return getSelectedTextContexts();
   }
 
-  /**
-   * Compact an L3 segment's content for inclusion in L2 (previous turn context).
-   *
-   * Uses a single-pass approach: matches all top-level registered blocks and
-   * decides per-block whether to strip, compact, or pass through. This avoids
-   * penetrating into nested content (e.g. literal `<selected_text>` inside a
-   * note's `<content>`). Inter-block text and unknown tags pass through untouched.
-   *
-   * @param content - The segment content (one or more XML blocks)
-   * @returns Compacted content for L2, or empty string if all blocks were filtered
-   */
   private compactSegmentForL2(content: string): string {
-    // Reason: Build a single regex matching all known top-level block types plus
-    // compaction artifacts (prior_context / prior_context_note). Each match is
-    // handled as a whole unit, so nested literal tags inside <content> are never
-    // independently targeted.
     const allTags = [
       ...CONTEXT_BLOCK_TYPES.map((bt) => bt.tag),
       "prior_context",
@@ -688,30 +552,23 @@ export class ContextManager {
     const blockRegex = new RegExp(`<(${allTags})(\\s[^>]*)?>[\\s\\S]*?</\\1>`, "g");
 
     const result = content.replace(blockRegex, (block, tag: string) => {
-      // Non-recoverable blocks (selected_text, web_selected_text) are turn-scoped
-      // and must not persist into L2.
       const blockType = CONTEXT_BLOCK_TYPES.find((bt) => bt.tag === tag);
       if (blockType && !blockType.recoverable) {
         return "";
       }
 
-      // prior_context_note is appended once at the L2 level by the caller,
-      // so embedded copies are stripped to avoid duplicates.
       if (tag === "prior_context_note") {
         return "";
       }
 
-      // prior_context blocks pass through unchanged (already compacted).
       if (tag === "prior_context") {
         return block;
       }
 
-      // Recoverable registered blocks get compacted.
       if (blockType) {
         return compactXmlBlock(block, tag);
       }
 
-      // Unknown tags pass through unchanged.
       return block;
     });
 
@@ -719,9 +576,6 @@ export class ContextManager {
   }
 }
 
-/**
- * Result returned by ContextManager after processing context for a message.
- */
 export interface ContextProcessingResult {
   processedContent: string;
   contextEnvelope?: PromptContextEnvelope;

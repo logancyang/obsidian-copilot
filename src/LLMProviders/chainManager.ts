@@ -30,18 +30,15 @@ export default class ChainManager {
   public memoryManager: MemoryManager;
   public userMemoryManager: UserMemoryManager;
   private pendingModelError: Error | null = null;
-  /** Model-management API — resolves the chat backend's selected model. */
   private readonly modelManagement: ModelManagementApi;
 
   constructor(app: App, modelManagement: ModelManagementApi) {
-    // Instantiate singletons
     this.app = app;
     this.modelManagement = modelManagement;
     this.memoryManager = MemoryManager.getInstance();
     this.chatModelManager = ChatModelManager.getInstance();
     this.userMemoryManager = new UserMemoryManager(app);
 
-    // Initialize async operations
     void this.initialize().catch((err) => logError("ChainManager initialize failed", err));
 
     subscribeToSettingsChange(() => {
@@ -81,16 +78,10 @@ export default class ChainManager {
     }
   }
 
-  /**
-   * Update the active model and create a new chain with the specified model
-   * name.
-   */
   async createChainWithNewModel(
     options: SetChainOptions = {},
     neededReInitChatMode: boolean = true
   ): Promise<void> {
-    // The selection is a `configuredModelId` in the chat backend (no longer a
-    // legacy "name|provider" key).
     let selectedModelId: string | undefined;
     const chainType = getChainType();
 
@@ -114,13 +105,6 @@ export default class ChainManager {
         this.pendingModelError = null;
       }
 
-      // Chain-type housekeeping. Do NOT write `chainType` back to the atom —
-      // the atom is owned by the UI dropdowns. The
-      // captured local `chainType` may already be stale by the time we reach
-      // here (we just awaited `setChatModel(...)`), and writing it back used
-      // to create a self-sustaining `setChainType` → ChainOwner
-      // subscriber → `createChainWithNewModel` loop that froze Obsidian on
-      // apply-Plus-key.
       if (this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {
         this.validateChainType(chainType);
       } else {
@@ -142,7 +126,6 @@ export default class ChainManager {
       case ChainType.LLM_CHAIN:
         return new LLMChainRunner(this);
       case ChainType.COPILOT_PLUS_CHAIN:
-        // Use AutonomousAgentChainRunner if the setting is enabled
         if (settings.enableAutonomousAgent) {
           return new AutonomousAgentChainRunner(this);
         }
@@ -175,14 +158,13 @@ export default class ChainManager {
 
     const chatModel = this.chatModelManager.getChatModel();
 
-    // Handle ignoreSystemMessage
     if (ignoreSystemMessage || isOSeriesModel(chatModel)) {
       let effectivePrompt = ChatPromptTemplate.fromMessages([
         new MessagesPlaceholder("history"),
         HumanMessagePromptTemplate.fromTemplate("{input}"),
       ]);
 
-      // TODO: hack for o-series models, to be removed when langchainjs supports system prompt
+      // Workaround: o-series models reject system prompts in langchainjs.
       // https://github.com/langchain-ai/langchain/issues/28895
       if (isOSeriesModel(chatModel)) {
         effectivePrompt = ChatPromptTemplate.fromMessages([
@@ -194,9 +176,6 @@ export default class ChainManager {
       void this.createChainWithNewModel({ prompt: effectivePrompt }, false).catch((err) =>
         logError("createChainWithNewModel failed", err)
       );
-      /*this.setChain(getChainType(), {
-        prompt: effectivePrompt,
-      });*/
     }
 
     const chainRunner = this.getChainRunner();

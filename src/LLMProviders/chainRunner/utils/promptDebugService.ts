@@ -19,12 +19,6 @@ interface GeneratePromptDebugReportParams {
   userMessage: ChatMessage;
 }
 
-/**
- * Build an annotated prompt debug report for the autonomous agent.
- *
- * @param params - Context required to assemble the prompt sections.
- * @returns Structured prompt report with provenance metadata.
- */
 export async function generatePromptDebugReportForAgent(
   params: GeneratePromptDebugReportParams
 ): Promise<PromptDebugReport> {
@@ -62,12 +56,6 @@ export async function generatePromptDebugReportForAgent(
   });
 }
 
-/**
- * Convenience helper to compute the base prompt with memory using the provided chain manager.
- *
- * @param chainManager - Chain manager hosting the user memory manager.
- * @returns The base system prompt inclusive of memory content.
- */
 export async function resolveBasePrompt(chainManager: ChainManager): Promise<string> {
   return getSystemPromptWithMemory(
     chainManager.userMemoryManager,
@@ -83,12 +71,6 @@ interface AgentPromptDebugOptions {
   userMessage: ChatMessage;
 }
 
-/**
- * Produce a prompt debug report directly from an agent runner context.
- *
- * @param options - Agent context, available tools, and user message.
- * @returns Annotated prompt debug report.
- */
 export async function buildAgentPromptDebugReport(
   options: AgentPromptDebugOptions
 ): Promise<PromptDebugReport> {

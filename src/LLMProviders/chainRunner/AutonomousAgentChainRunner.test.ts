@@ -4,15 +4,6 @@ import {
   ToolCallChunk,
 } from "./utils/nativeToolCalling";
 
-/**
- * Test suite for Gemini tool call name extraction fix (Issue #2233)
- *
- * Root cause: Gemini's @langchain/google-genai nests tool call names inside
- * `functionCall.name` instead of at the top level `name` property. Without
- * the fallback, all Gemini tool call names are empty, causing
- * buildToolCallsFromChunks to skip them → treated as "no tool calls" →
- * empty response since thinking tokens were filtered.
- */
 describe("accumulateToolCallChunk", () => {
   describe("OpenAI-format chunks (top-level name)", () => {
     it("should accumulate name from top-level tc.name", () => {
@@ -50,7 +41,6 @@ describe("accumulateToolCallChunk", () => {
     it("should extract name from functionCall.name when top-level name is missing", () => {
       const chunks = new Map<number, ToolCallChunk>();
 
-      // Gemini sends chunks with functionCall.name instead of top-level name
       accumulateToolCallChunk(chunks, {
         index: 0,
         id: "call_456",
@@ -92,7 +82,6 @@ describe("accumulateToolCallChunk", () => {
         args: "{}",
       });
 
-      // Top-level name takes priority via nullish coalescing (??)
       expect(chunks.get(0)!.name).toBe("topLevel");
     });
   });
@@ -143,13 +132,10 @@ describe("buildToolCallsFromChunks", () => {
 
   it("should skip chunks with no name (the bug this fix addresses)", () => {
     const chunks = new Map<number, ToolCallChunk>();
-    // This is what happened before the fix: Gemini chunks had no name
-    // because the accumulator didn't check functionCall.name
     chunks.set(0, { name: "", args: '{"query":"test"}' });
 
     const result = buildToolCallsFromChunks(chunks);
 
-    // Empty name → skipped → no tool calls → treated as final response
     expect(result).toHaveLength(0);
   });
 
@@ -201,7 +187,6 @@ describe("End-to-end: Gemini streaming → buildToolCallsFromChunks", () => {
   it("should correctly process Gemini-format chunks through the full pipeline", () => {
     const chunks = new Map<number, ToolCallChunk>();
 
-    // Simulate Gemini streaming: name comes via functionCall, not top-level
     accumulateToolCallChunk(chunks, {
       index: 0,
       id: "call_gemini_1",
@@ -219,7 +204,6 @@ describe("End-to-end: Gemini streaming → buildToolCallsFromChunks", () => {
   it("should correctly process OpenAI-format chunks through the full pipeline", () => {
     const chunks = new Map<number, ToolCallChunk>();
 
-    // Simulate OpenAI streaming: name at top level
     accumulateToolCallChunk(chunks, {
       index: 0,
       id: "call_openai_1",
@@ -237,8 +221,6 @@ describe("End-to-end: Gemini streaming → buildToolCallsFromChunks", () => {
   it("should handle sequential Gemini tool calls (the failing scenario)", () => {
     const chunks = new Map<number, ToolCallChunk>();
 
-    // This is the exact scenario that was failing:
-    // Gemini 3.1 Pro returns 2 sequential tool calls, but names were dropped
     accumulateToolCallChunk(chunks, {
       index: 0,
       id: "call_g1",
@@ -254,7 +236,6 @@ describe("End-to-end: Gemini streaming → buildToolCallsFromChunks", () => {
 
     const result = buildToolCallsFromChunks(chunks);
 
-    // Both tool calls should be preserved — before the fix, both were dropped
     expect(result).toHaveLength(2);
     expect(result[0].name).toBe("localSearch");
     expect(result[1].name).toBe("readNote");

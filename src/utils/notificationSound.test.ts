@@ -38,7 +38,6 @@ interface MockAudio {
   };
 }
 
-/** jsdom has no Web Audio, so every test supplies its own. */
 function installMockAudio(state: AudioContextState = "running"): MockAudio {
   const oscillator: MockAudio["oscillator"] = {
     type: "sine",
@@ -78,7 +77,6 @@ describe("notificationSound", () => {
   });
 
   afterEach(() => {
-    // Also drops the module-level context so the next test starts cold.
     disposeNotificationSound();
     jest.restoreAllMocks();
     delete (window as unknown as Record<string, unknown>).AudioContext;
@@ -106,7 +104,6 @@ describe("notificationSound", () => {
 
       playNotificationSound("bell");
 
-      // Two frequencies, one strike: both start at 0, both take half the peak.
       expect(audio.instance.createOscillator).toHaveBeenCalledTimes(2);
       expect(audio.oscillator.frequency.setValueAtTime.mock.calls).toEqual([
         [659.25, 0],

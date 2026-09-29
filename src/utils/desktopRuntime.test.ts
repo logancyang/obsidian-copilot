@@ -19,8 +19,6 @@ describe("desktopRuntime", () => {
     });
 
     it("is false under app.emulateMobile(true) — isDesktopApp stays true but isMobile flips", () => {
-      // The bug this guards: gating only on Platform.isDesktopApp let desktop-only
-      // code load under emulateMobile (where Node is stubbed), crashing the plugin.
       setPlatform(true, true);
       expect(isDesktopRuntime()).toBe(false);
     });
@@ -39,8 +37,6 @@ describe("desktopRuntime", () => {
   describe("requireNodeModule()", () => {
     it("returns the live built-in module on desktop — the same instance static importers see", () => {
       setPlatform(true, false);
-      // Node's events module IS the EventEmitter class; identity (not a copy)
-      // is what lets rendererEventsShim patch the property every importer reads.
       const events = requireNodeModule<typeof import("node:events")>("events");
       expect(events.EventEmitter).toBe(EventEmitter);
     });

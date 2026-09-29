@@ -6,18 +6,12 @@ interface PromptPayloadSnapshot {
   timestamp: string;
   modelName?: string;
   serializedMessages: string;
-  messagesArray: unknown[]; // Store for intelligent analysis
+  messagesArray: unknown[];
   contextEnvelope?: PromptContextEnvelope;
 }
 
 let latestSnapshot: PromptPayloadSnapshot | null = null;
 
-/**
- * Safely serialize the model conversation payload for logging while preserving readability.
- *
- * @param value - Messages array destined for the LLM.
- * @returns Pretty-printed JSON representation with circular references handled.
- */
 function safeSerialize(value: unknown): string {
   const seen = new WeakSet();
 
@@ -41,17 +35,12 @@ function safeSerialize(value: unknown): string {
   );
 }
 
-/**
- * Intelligently builds a layered view from the actual messages array.
- * Detects tool injections, maps content to envelope layers, and shows structure.
- */
 function buildLayeredViewFromMessages(
   messages: unknown[],
   envelope?: PromptContextEnvelope
 ): string {
   const lines: string[] = [];
 
-  // Metadata line
   if (envelope) {
     lines.push(
       `msg:${envelope.messageId ?? "N/A"} | conv:${envelope.conversationId ?? "N/A"} | v${envelope.version}`
@@ -59,11 +48,9 @@ function buildLayeredViewFromMessages(
     lines.push("");
   }
 
-  // Get all registered tool names from the registry
   const registry = ToolRegistry.getInstance();
   const registeredToolNames = new Set(registry.getAllTools().map((def) => def.tool.name));
 
-  // Helper to detect and extract tool markers
   const detectTools = (content: string): { tool: string; preview: string }[] => {
     const tools: { tool: string; preview: string }[] = [];
     const toolPattern = /<(\w+)>([\s\S]*?)<\/\1>/g;
@@ -72,7 +59,6 @@ function buildLayeredViewFromMessages(
     while ((match = toolPattern.exec(content)) !== null) {
       const toolName = match[1];
       const toolContent = match[2];
-      // Check if this is a registered tool
       if (registeredToolNames.has(toolName)) {
         const preview =
           toolContent.length > 200
@@ -84,7 +70,6 @@ function buildLayeredViewFromMessages(
     return tools;
   };
 
-  // Helper to extract text content from message
   const getTextContent = (msg: { role?: unknown; content?: unknown }): string => {
     if (typeof msg.content === "string") {
       return msg.content;
@@ -98,7 +83,6 @@ function buildLayeredViewFromMessages(
     return "";
   };
 
-  // Process messages array
   const messageArray = Array.isArray(messages) ? messages : [];
   let historyCount = 0;
 
@@ -110,7 +94,6 @@ function buildLayeredViewFromMessages(
       lines.push("━━━ SYSTEM MESSAGE ━━━");
       lines.push("");
 
-      // Try to identify L1, L2 from envelope
       const l1 = envelope?.layers.find((l) => l.id === "L1_SYSTEM");
       const l2 = envelope?.layers.find((l) => l.id === "L2_PREVIOUS");
 
@@ -123,7 +106,6 @@ function buildLayeredViewFromMessages(
         lines.push(preview);
         lines.push("");
 
-        // Check for L2
         if (l2 && l2.text) {
           const hashShort = l2.hash.substring(0, 8);
           lines.push(`🔒 L2_PREVIOUS (${hashShort}) [CACHEABLE]`);
@@ -133,7 +115,6 @@ function buildLayeredViewFromMessages(
           lines.push("");
         }
 
-        // Detect tools in system message (e.g., localSearch RAG - turn-specific)
         const remainingContent = content.substring(l1End);
         const tools = detectTools(remainingContent);
         if (tools.length > 0) {
@@ -146,10 +127,8 @@ function buildLayeredViewFromMessages(
           }
         }
       } else {
-        // Fallback: just show content with tool detection
         const tools = detectTools(content);
         if (tools.length > 0) {
-          // Split content before first tool
           const firstToolMatch = content.match(/<(\w+)>/);
           if (firstToolMatch) {
             const beforeTools = content.substring(0, firstToolMatch.index);
@@ -178,14 +157,12 @@ function buildLayeredViewFromMessages(
         }
       }
     } else if (msg.role === "user" || msg.role === "assistant") {
-      // Count history messages (skip the last user message)
       if (i < messageArray.length - 1) {
         historyCount++;
       }
     }
   }
 
-  // Chat history summary
   if (historyCount > 0) {
     lines.push("━━━ CHAT HISTORY (L4) ━━━");
     lines.push("");
@@ -193,7 +170,6 @@ function buildLayeredViewFromMessages(
     lines.push("");
   }
 
-  // Last user message
   const lastMsg = messageArray[messageArray.length - 1] as
     | { role?: unknown; content?: unknown }
     | undefined;
@@ -203,7 +179,6 @@ function buildLayeredViewFromMessages(
 
     const content = getTextContent(lastMsg);
 
-    // Detect tools in user message (turn-specific)
     const tools = detectTools(content);
     if (tools.length > 0) {
       lines.push("--- PER-TURN TOOL RESULTS ---");
@@ -215,7 +190,6 @@ function buildLayeredViewFromMessages(
       }
     }
 
-    // Try to find L3, L5 from envelope
     const l3 = envelope?.layers.find((l) => l.id === "L3_TURN");
     const l5 = envelope?.layers.find((l) => l.id === "L5_USER");
 
@@ -238,11 +212,6 @@ function buildLayeredViewFromMessages(
   return lines.join("\n");
 }
 
-/**
- * Record the latest prompt payload destined for the LLM so it can be shared on demand.
- *
- * @param params - Metadata describing the payload, message array, and optional context envelope.
- */
 export function recordPromptPayload(params: {
   messages: unknown[];
   modelName?: string;
@@ -255,11 +224,10 @@ export function recordPromptPayload(params: {
       timestamp: new Date().toISOString(),
       modelName,
       serializedMessages: safeSerialize(messages),
-      messagesArray: messages, // Store for analysis
+      messagesArray: messages,
       contextEnvelope,
     };
   } catch {
-    // Fall back to best-effort stringification to avoid blocking logging entirely.
     latestSnapshot = {
       timestamp: new Date().toISOString(),
       modelName,
@@ -270,17 +238,10 @@ export function recordPromptPayload(params: {
   }
 }
 
-/**
- * Clear the stored prompt payload so stale data is not shared after a reset/new chat.
- */
 export function clearRecordedPromptPayload(): void {
   latestSnapshot = null;
 }
 
-/**
- * Flush the recorded payload into the Copilot log file using a markdown block.
- * Shows the ACTUAL messages sent to the LLM, plus layered metadata if available.
- */
 export async function flushRecordedPromptPayloadToLog(): Promise<void> {
   if (!latestSnapshot) {
     return;
@@ -289,7 +250,6 @@ export async function flushRecordedPromptPayloadToLog(): Promise<void> {
   const { timestamp, modelName, serializedMessages, messagesArray, contextEnvelope } =
     latestSnapshot;
 
-  // Always show the actual messages JSON (what really gets sent to the LLM)
   const lines = [
     `### Prompt — ${timestamp}${modelName ? ` — ${modelName}` : ""}`,
     "",
@@ -301,8 +261,6 @@ export async function flushRecordedPromptPayloadToLog(): Promise<void> {
     "",
   ];
 
-  // Intelligently build layered view from actual messages + envelope
-  // This automatically detects tool injections and maps to layers
   const layeredView = buildLayeredViewFromMessages(messagesArray, contextEnvelope);
   lines.push("**Layered Context Metadata:**");
   lines.push("");
@@ -315,11 +273,6 @@ export async function flushRecordedPromptPayloadToLog(): Promise<void> {
   latestSnapshot = null;
 }
 
-/**
- * Internal helper exposed for tests to inspect the stored snapshot state.
- *
- * @returns The current snapshot or null if none is stored.
- */
 export function __getLatestPromptPayloadSnapshotForTests(): PromptPayloadSnapshot | null {
   return latestSnapshot;
 }

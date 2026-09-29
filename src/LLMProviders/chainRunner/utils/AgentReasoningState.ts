@@ -1,31 +1,11 @@
-/**
- * Agent Reasoning Block State Management
- *
- * This module provides state management for the Agent Reasoning Block UI component,
- * which replaces the old tool call banner with a more informative reasoning display.
- */
-
-/**
- * Represents a single reasoning step in the agent loop
- */
 export interface ReasoningStep {
   timestamp: number;
   summary: string;
   toolName?: string;
 }
 
-/**
- * Status of the reasoning block
- * - idle: No agent activity
- * - reasoning: Agent is actively processing/executing tools
- * - collapsed: Reasoning complete, block is collapsed
- * - complete: Response complete, block can be expanded
- */
 export type ReasoningStatus = "idle" | "reasoning" | "collapsed" | "complete";
 
-/**
- * Full state for the Agent Reasoning Block
- */
 export interface AgentReasoningState {
   status: ReasoningStatus;
   startTime: number | null;
@@ -33,9 +13,6 @@ export interface AgentReasoningState {
   steps: ReasoningStep[];
 }
 
-/**
- * Creates the initial reasoning state
- */
 export function createInitialReasoningState(): AgentReasoningState {
   return {
     status: "idle",
@@ -45,21 +22,11 @@ export function createInitialReasoningState(): AgentReasoningState {
   };
 }
 
-/**
- * Data structure for serialized reasoning block (embedded in message)
- */
 export interface SerializedReasoningData {
   elapsed: number;
   steps: string[];
 }
 
-/**
- * Serialize reasoning state to a marker format for embedding in messages.
- * Format: <!--AGENT_REASONING:status:elapsedSeconds:["step1","step2"]-->
- *
- * @param state - The reasoning state to serialize
- * @returns Marker string to embed in message
- */
 export function serializeReasoningBlock(state: AgentReasoningState): string {
   if (state.status === "idle") {
     return "";
@@ -69,9 +36,6 @@ export function serializeReasoningBlock(state: AgentReasoningState): string {
   return `<!--AGENT_REASONING:${state.status}:${state.elapsedSeconds}:${stepsJson}-->`;
 }
 
-/**
- * Parsed reasoning data from a marker
- */
 export interface ParsedReasoningBlock {
   hasReasoning: boolean;
   status: ReasoningStatus;
@@ -80,12 +44,6 @@ export interface ParsedReasoningBlock {
   contentAfter: string;
 }
 
-/**
- * Parse reasoning block marker from message content.
- *
- * @param content - Message content that may contain reasoning marker
- * @returns Parsed reasoning data or null if no marker found
- */
 export function parseReasoningBlock(content: string): ParsedReasoningBlock | null {
   const match = content.match(/<!--AGENT_REASONING:(\w+):(\d+):(.+?)-->/);
   if (!match) {
@@ -98,7 +56,6 @@ export function parseReasoningBlock(content: string): ParsedReasoningBlock | nul
   try {
     steps = JSON.parse(stepsJson) as string[];
   } catch {
-    // Invalid JSON, return empty steps
     steps = [];
   }
 
@@ -111,35 +68,19 @@ export function parseReasoningBlock(content: string): ParsedReasoningBlock | nul
   };
 }
 
-/**
- * Query expansion info for localSearch.
- * Contains both the individual expansion components and a combined list of all recall terms.
- */
 export interface QueryExpansionInfo {
   originalQuery: string;
-  salientTerms: string[]; // Terms from original query (used for ranking)
-  expandedQueries: string[]; // Alternative phrasings (used for recall)
-  recallTerms: string[]; // All terms combined that were used for recall
+  salientTerms: string[];
+  expandedQueries: string[];
+  recallTerms: string[];
 }
 
-/**
- * Source info for localSearch results
- */
 export interface LocalSearchSourceInfo {
   titles: string[];
   count: number;
   queryExpansion?: QueryExpansionInfo;
 }
 
-/**
- * Generate a human-readable summary for a tool result.
- *
- * @param toolName - Name of the tool that was executed
- * @param result - Result from the tool execution
- * @param sourceInfo - Optional source info for localSearch results
- * @param args - Optional original tool call arguments for context
- * @returns Human-readable summary string
- */
 export function summarizeToolResult(
   toolName: string,
   result: { success: boolean; result?: string },
@@ -147,14 +88,12 @@ export function summarizeToolResult(
   args?: Record<string, unknown>
 ): string {
   if (!result.success) {
-    // Reuse the human-friendly call summary (e.g., "Searching notes") → "Searching notes failed"
     return `${summarizeToolCall(toolName, args)} failed`;
   }
 
   switch (toolName) {
     case "localSearch": {
       if (sourceInfo && sourceInfo.count > 0) {
-        // Show just the count and first few note titles (terms are shown in tool call summary)
         const titleList = sourceInfo.titles.slice(0, 3);
         const remaining = sourceInfo.count - titleList.length;
         let result = `Found ${sourceInfo.count} note${sourceInfo.count !== 1 ? "s" : ""}: ${titleList.join(", ")}`;
@@ -252,11 +191,9 @@ export function summarizeToolResult(
       return "Updated memory";
     case "writeFile":
     case "editFile": {
-      // Parse the result to check if accepted/rejected
       const filePath = args?.path as string | undefined;
       const fileName = filePath ? filePath.split("/").pop() || filePath : "file";
 
-      // Result is JSON string, check for rejected/accepted status
       const resultStr = result.result || "";
       if (resultStr.includes('"rejected"') || resultStr.includes("rejected")) {
         return `Edit rejected for "${fileName}"`;
@@ -264,9 +201,6 @@ export function summarizeToolResult(
       if (resultStr.includes('"failed"') || resultStr.includes("Error")) {
         return `Edit failed for "${fileName}"`;
       }
-      // TODO(@wenzhengjiang): Handle no-op cases (e.g., "File is too small", "Search text not found")
-      // Requires ComposerTools to return structured results instead of plain strings.
-      // See docs/TODO-composer-tool-redesign.md
       return toolName === "writeFile" ? `Wrote to "${fileName}"` : `Edited "${fileName}"`;
     }
     default:
@@ -274,17 +208,6 @@ export function summarizeToolResult(
   }
 }
 
-// TODO: The `expansion` parameter and QueryExpansionInfo interface are now dead code --
-// the agent runner no longer pre-expands queries. Clean up the expansion branch below
-// and the _preExpandedQuery schema field in SearchTools.ts.
-/**
- * Generate a summary for when a tool is being called.
- *
- * @param toolName - Name of the tool being called
- * @param args - Arguments being passed to the tool
- * @param expansion - Optional pre-expanded query data for localSearch
- * @returns Human-readable summary string
- */
 export function summarizeToolCall(
   toolName: string,
   args?: Record<string, unknown>,
@@ -292,9 +215,7 @@ export function summarizeToolCall(
 ): string {
   switch (toolName) {
     case "localSearch": {
-      // If we have pre-expanded terms, show all recall terms
       if (expansion && expansion.recallTerms && expansion.recallTerms.length > 0) {
-        // Filter to valid strings only, excluding "[object Object]" artifacts
         const validTerms = expansion.recallTerms.filter(
           (t): t is string =>
             typeof t === "string" &&
@@ -312,7 +233,6 @@ export function summarizeToolCall(
           return `Searching notes for ${terms}${termsSuffix}`;
         }
       }
-      // Fallback to query if no expansion available
       const query = args?.query as string | undefined;
       if (query) {
         const truncatedQuery = query.length > 50 ? query.slice(0, 50) + "..." : query;
@@ -341,7 +261,6 @@ export function summarizeToolCall(
     case "readNote": {
       const notePath = args?.notePath as string | undefined;
       if (notePath) {
-        // Extract note title from path (remove .md extension and get last segment)
         const noteTitle = notePath.split("/").pop()?.replace(/\.md$/i, "") || notePath;
         return `Reading "${noteTitle}"`;
       }
@@ -439,24 +358,10 @@ export function summarizeToolCall(
   }
 }
 
-/**
- * Truncate text to a maximum length, adding ellipsis if needed.
- */
 function truncate(text: string, maxLen: number): string {
   return text.length > maxLen ? text.slice(0, maxLen - 3) + "..." : text;
 }
 
-/**
- * Extract the first sentence from model's intermediate reasoning content.
- * Used to show what the model found/concluded from previous tool calls.
- *
- * Uses a simple approach: take first line, truncate if needed.
- * This avoids edge cases with abbreviations (Dr., U.S.) that confuse regex-based
- * sentence detection.
- *
- * @param content - Model's intermediate content (may contain reasoning about findings)
- * @returns First line/sentence if found, null otherwise
- */
 export function extractFirstSentence(content: string): string | null {
   if (!content || content.trim().length === 0) {
     return null;

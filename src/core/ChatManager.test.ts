@@ -1,4 +1,3 @@
-// Mock dependencies first to avoid circular dependencies
 jest.mock("./MessageRepository");
 jest.mock("@/LLMProviders/chatModelManager");
 jest.mock("./ContextCompactor");
@@ -86,7 +85,6 @@ describe("ChatManager", () => {
   let mockPlugin: MockPlugin;
   let mockContextManager: jest.Mocked<ContextManager>;
 
-  // Helper function to create mock messages
   const createMockMessage = (id: string, message: string, sender: string): ChatMessage => ({
     id,
     message,
@@ -96,7 +94,6 @@ describe("ChatManager", () => {
   });
 
   beforeEach(() => {
-    // Setup mocks
     mockMessageRepo = {
       addMessage: jest.fn(),
       getMessage: jest.fn(),
@@ -134,7 +131,6 @@ describe("ChatManager", () => {
       reprocessMessageContext: jest.fn(),
     } as unknown as jest.Mocked<ContextManager>;
 
-    // Mock ContextManager.getInstance
     (ContextManager.getInstance as jest.Mock).mockReturnValue(mockContextManager);
 
     chatManager = new ChatManager(
@@ -149,8 +145,6 @@ describe("ChatManager", () => {
     jest.clearAllMocks();
   });
 
-  // These integration cases use the real builder; the template isolation suites below
-  // intentionally replace it to exercise malformed prompt and memory boundaries.
   describe("vault instruction integration", () => {
     const builder = jest.requireMock<Record<string, jest.Mock>>(
       "@/system-prompts/systemPromptBuilder"
@@ -307,10 +301,10 @@ describe("ChatManager", () => {
         ChainType.LLM_CHAIN,
         false,
         mockActiveFile,
-        expect.anything(), // messageRepo
-        expect.any(String), // systemPrompt
-        expect.any(Array), // systemPromptIncludedFiles
-        undefined // updateLoadingMessage
+        expect.anything(),
+        expect.any(String),
+        expect.any(Array),
+        undefined
       );
       expect(mockMessageRepo.updateProcessedText).toHaveBeenCalledWith(
         "msg-1",
@@ -387,7 +381,6 @@ describe("ChatManager", () => {
 
       await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN, true);
 
-      // Should have called addMessage with updated context that includes active note
       expect(mockMessageRepo.addMessage).toHaveBeenCalledWith(
         "Hello",
         "Hello",
@@ -419,7 +412,6 @@ describe("ChatManager", () => {
       const result = await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN, true);
 
       expect(result).toBe("msg-1");
-      // Should not include active note in context
       expect(mockMessageRepo.addMessage).toHaveBeenCalledWith(
         "Hello",
         "Hello",
@@ -441,7 +433,7 @@ describe("ChatManager", () => {
 
       mockPlugin.app.workspace.getActiveFile.mockReturnValue(null);
       mockMessageRepo.addMessage.mockReturnValue("msg-1");
-      mockMessageRepo.getMessage.mockReturnValue(undefined); // Simulate failure
+      mockMessageRepo.getMessage.mockReturnValue(undefined);
 
       await expect(
         chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN)
@@ -470,8 +462,8 @@ describe("ChatManager", () => {
         ChainType.LLM_CHAIN,
         false,
         mockActiveFile,
-        expect.any(String), // systemPrompt
-        expect.any(Array) // systemPromptIncludedFiles
+        expect.any(String),
+        expect.any(Array)
       );
     });
 
@@ -501,7 +493,7 @@ describe("ChatManager", () => {
       const mockUserMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
       const mockLLMMessage = {
         ...createMockMessage("msg-1", "Hello with context", USER_SENDER),
-        contextEnvelope: { layers: [] } as unknown as PromptContextEnvelope, // Has envelope, no lazy reprocessing needed
+        contextEnvelope: { layers: [] } as unknown as PromptContextEnvelope,
       };
 
       mockMessageRepo.getMessage.mockReturnValue(mockAiMessage);
@@ -533,13 +525,11 @@ describe("ChatManager", () => {
     it("should lazily reprocess context when envelope is missing (loaded from disk)", async () => {
       const mockAiMessage = createMockMessage("msg-2", "AI response", "AI");
       const mockUserMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
-      // First call: no envelope (loaded from disk)
       const mockLLMMessageNoEnvelope = createMockMessage(
         "msg-1",
         "Hello with context",
         USER_SENDER
       );
-      // Second call: after reprocessing, has envelope
       const mockLLMMessageWithEnvelope = {
         ...createMockMessage("msg-1", "Hello with context", USER_SENDER),
         contextEnvelope: { layers: [] } as unknown as PromptContextEnvelope,
@@ -560,14 +550,14 @@ describe("ChatManager", () => {
       expect(mockContextManager.reprocessMessageContext).toHaveBeenCalledWith(
         mockPlugin.app,
         "msg-1",
-        expect.anything(), // messageRepo
-        expect.anything(), // fileParserManager
-        undefined, // vault (undefined in mock)
-        "copilot_plus_chain", // chainType
-        false, // includeActiveNote
-        undefined, // activeNote
-        "Test system prompt", // systemPrompt
-        [] // systemPromptIncludedFiles
+        expect.anything(),
+        expect.anything(),
+        undefined,
+        "copilot_plus_chain",
+        false,
+        undefined,
+        "Test system prompt",
+        []
       );
       expect(mockChainManager.runChain).toHaveBeenCalledWith(
         mockLLMMessageWithEnvelope,
@@ -593,7 +583,7 @@ describe("ChatManager", () => {
         sender: USER_SENDER,
         timestamp: null,
         isVisible: true,
-      }; // No ID
+      };
 
       mockMessageRepo.getMessage.mockReturnValue(mockAiMessage);
       mockMessageRepo.getDisplayMessages.mockReturnValue([mockUserMessage, mockAiMessage]);
@@ -839,7 +829,6 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN, true);
 
-        // Verify that active note was added to context
         expect(mockMessageRepo.addMessage).toHaveBeenCalledWith(
           "Hello",
           "Hello",
@@ -896,8 +885,8 @@ describe("ChatManager", () => {
           ChainType.LLM_CHAIN,
           false,
           mockActiveFile,
-          expect.any(String), // systemPrompt
-          expect.any(Array) // systemPromptIncludedFiles
+          expect.any(String),
+          expect.any(Array)
         );
       });
     });
@@ -964,16 +953,8 @@ describe("ChatManager", () => {
       mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
       mockMessageRepo.updateProcessedText.mockReturnValue(true);
 
-      await chatManager.sendMessage(
-        "Hello",
-        context,
-        ChainType.LLM_CHAIN,
-        false, // includeActiveNote
-        true // includeActiveWebTab
-      );
+      await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN, false, true);
 
-      // The webTabs should include the active tab with isActive: true
-      // Note: Raw URL is preserved (no normalization applied to stored URL)
       expect(mockMessageRepo.addMessage).toHaveBeenCalledWith(
         "Hello",
         "Hello",
@@ -1014,8 +995,6 @@ describe("ChatManager", () => {
       mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
       mockMessageRepo.updateProcessedText.mockReturnValue(true);
 
-      // includeActiveWebTab=false but marker in text should still trigger inclusion
-      // Note: Raw URL is preserved (no normalization applied to stored URL)
       await chatManager.sendMessage("Check {activeWebTab}", context, ChainType.LLM_CHAIN);
 
       expect(mockMessageRepo.addMessage).toHaveBeenCalledWith(
@@ -1066,7 +1045,6 @@ describe("ChatManager", () => {
 
       await chatManager.sendMessage("Hello {activeWebTab}", context, ChainType.LLM_CHAIN);
 
-      // Should merge and not duplicate
       const addMessageCall = mockMessageRepo.addMessage.mock.calls[0];
       const webTabs = addMessageCall[3]?.webTabs ?? [];
       expect(webTabs).toHaveLength(1);
@@ -1081,7 +1059,6 @@ describe("ChatManager", () => {
     });
 
     it("should merge active tab when only hash fragment differs (regression test for duplicate entries)", async () => {
-      // Regression test: same page with different hash should NOT create duplicate entry
       const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
       const context: MessageContext = {
         notes: [],
@@ -1095,7 +1072,6 @@ describe("ChatManager", () => {
         ],
       };
 
-      // User navigated to a different section on the same page
       mockGetWebViewerService.mockReturnValue({
         getActiveWebTabState: () => ({
           activeWebTabForMentions: {
@@ -1117,13 +1093,11 @@ describe("ChatManager", () => {
       const addMessageCall = mockMessageRepo.addMessage.mock.calls[0];
       const webTabs = addMessageCall[3]?.webTabs ?? [];
 
-      // Should merge (same page, different hash) - NOT create duplicate entry
       expect(webTabs).toHaveLength(1);
-      // Active tab's URL (with its hash) is now preserved to support SPA routing
       expect(webTabs[0]).toEqual(
         expect.objectContaining({
-          url: "https://docs.example.com/guide#section2", // Active tab's URL preserved (with hash)
-          title: "Guide - Section 2", // Title updated from active tab
+          url: "https://docs.example.com/guide#section2",
+          title: "Guide - Section 2",
           faviconUrl: "https://docs.example.com/favicon.ico",
           isActive: true,
         })
@@ -1162,8 +1136,6 @@ describe("ChatManager", () => {
       const addMessageCall = mockMessageRepo.addMessage.mock.calls[0];
       const webTabs = addMessageCall[3]?.webTabs ?? [];
 
-      // Only the new active tab should have isActive: true
-      // Note: Raw URL is preserved (no normalization applied to stored URL)
       const activeTabs = webTabs.filter((t: { isActive?: boolean }) => t.isActive);
       expect(activeTabs).toHaveLength(1);
       expect(activeTabs[0].url).toBe("https://third.com");
@@ -1178,7 +1150,6 @@ describe("ChatManager", () => {
         webTabs: [{ url: "https://existing.com" }],
       };
 
-      // Simulate Web Viewer service throwing (mobile scenario)
       mockGetWebViewerService.mockImplementation(() => {
         throw new Error("Web Viewer not available on mobile");
       });
@@ -1189,13 +1160,11 @@ describe("ChatManager", () => {
       mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
       mockMessageRepo.updateProcessedText.mockReturnValue(true);
 
-      // Should not throw, should return sanitized tabs unchanged
       await chatManager.sendMessage("Hello {activeWebTab}", context, ChainType.LLM_CHAIN);
 
       const addMessageCall = mockMessageRepo.addMessage.mock.calls[0];
       const webTabs = addMessageCall[3]?.webTabs ?? [];
 
-      // Should still have the existing tab, just sanitized
       expect(webTabs).toHaveLength(1);
       expect(webTabs[0]?.url).toBe("https://existing.com");
     });
@@ -1211,7 +1180,7 @@ describe("ChatManager", () => {
 
       mockGetWebViewerService.mockReturnValue({
         getActiveWebTabState: () => ({
-          activeWebTabForMentions: null, // No active tab
+          activeWebTabForMentions: null,
         }),
       });
 
@@ -1254,7 +1223,6 @@ describe("ChatManager", () => {
       mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
       mockMessageRepo.updateProcessedText.mockReturnValue(true);
 
-      // No marker in text, includeActiveWebTab defaults to false
       await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
       const addMessageCall = mockMessageRepo.addMessage.mock.calls[0];
@@ -1295,19 +1263,17 @@ describe("ChatManager", () => {
       mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
       mockMessageRepo.updateProcessedText.mockReturnValue(true);
 
-      // Even with marker in text and includeActiveWebTab=true, web selection should suppress
       await chatManager.sendMessage(
         "Check {activeWebTab}",
         context,
         ChainType.LLM_CHAIN,
         false,
-        true // includeActiveWebTab=true
+        true
       );
 
       const addMessageCall = mockMessageRepo.addMessage.mock.calls[0];
       const webTabs = addMessageCall[3]?.webTabs ?? [];
 
-      // Should NOT include active web tab because web selection exists
       expect(webTabs).toHaveLength(0);
       expect(webTabs.find((t: { isActive?: boolean }) => t.isActive)).toBeUndefined();
     });
@@ -1346,13 +1312,11 @@ describe("ChatManager", () => {
       mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
       mockMessageRepo.updateProcessedText.mockReturnValue(true);
 
-      // Any selection (including note selection) should suppress active web tab
       await chatManager.sendMessage("Check {activeWebTab}", context, ChainType.LLM_CHAIN);
 
       const addMessageCall = mockMessageRepo.addMessage.mock.calls[0];
       const webTabs = addMessageCall[3]?.webTabs ?? [];
 
-      // Should NOT include active web tab because note selection exists
       expect(webTabs).toHaveLength(0);
       expect(webTabs.find((t: { isActive?: boolean }) => t.isActive)).toBeUndefined();
     });
@@ -1400,7 +1364,6 @@ describe("ChatManager", () => {
       const addMessageCall = mockMessageRepo.addMessage.mock.calls[0];
       const webTabs = addMessageCall[3]?.webTabs ?? [];
 
-      // Should preserve existing webTabs but NOT inject active tab
       expect(webTabs).toHaveLength(1);
       expect(webTabs[0]?.url).toBe("https://existing.example.com");
       expect(webTabs.find((t: { isActive?: boolean }) => t.isActive)).toBeUndefined();
@@ -1423,7 +1386,6 @@ describe("ChatManager", () => {
         webTabs: [],
       };
 
-      // Reset mock to track calls
       mockGetWebViewerService.mockClear();
       mockGetWebViewerService.mockReturnValue({
         getActiveWebTabState: () => ({
@@ -1448,13 +1410,11 @@ describe("ChatManager", () => {
         true
       );
 
-      // getWebViewerService should NOT be called because web selection suppresses active tab
       expect(mockGetWebViewerService).not.toHaveBeenCalled();
     });
   });
 
   describe("System Prompt Template Processing", () => {
-    // Import mocked modules for manipulation
     const { processPrompt } = jest.requireMock<{ processPrompt: jest.Mock }>(
       "@/commands/customCommandUtils"
     );
@@ -1467,7 +1427,6 @@ describe("ChatManager", () => {
     const { getSettings } = jest.requireMock<{ getSettings: jest.Mock }>("@/settings/model");
 
     beforeEach(() => {
-      // Reset to defaults
       getEffectiveUserPrompt.mockReturnValue("");
       processPrompt.mockResolvedValue({ processedPrompt: "", includedFiles: [] });
       getSystemPrompt.mockReturnValue("Test system prompt");
@@ -1481,7 +1440,6 @@ describe("ChatManager", () => {
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
-        // User custom prompt without any { } characters, with trailing whitespace
         const userCustomPrompt = "Simple prompt without templates    ";
         getEffectiveUserPrompt.mockReturnValue(userCustomPrompt);
         getSystemPrompt.mockReturnValue(
@@ -1498,10 +1456,8 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
-        // processPrompt should NOT be called because no template tokens in user custom prompt
         expect(processPrompt).not.toHaveBeenCalled();
 
-        // Trailing whitespace should be preserved (no trimEnd when templates not processed)
         const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain(userCustomPrompt);
       });
@@ -1511,7 +1467,6 @@ describe("ChatManager", () => {
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
-        // User custom prompt with JSON - processPrompt will be called but JSON is handled internally
         const userCustomPrompt = '{"foo": "bar", "nested": {"a": 1}}';
         getEffectiveUserPrompt.mockReturnValue(userCustomPrompt);
         getSystemPrompt.mockReturnValue(
@@ -1521,8 +1476,6 @@ describe("ChatManager", () => {
           `DEFAULT\n<user_custom_instructions>\n${userCustomPrompt}\n</user_custom_instructions>`
         );
 
-        // processPrompt will be called but should return the JSON unchanged
-        // (because processPrompt internally checks if variableName.startsWith('"'))
         processPrompt.mockResolvedValue({
           processedPrompt: userCustomPrompt,
           includedFiles: [],
@@ -1536,10 +1489,8 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
-        // processPrompt IS called (because prompt contains { and })
         expect(processPrompt).toHaveBeenCalled();
 
-        // JSON content should be preserved (processPrompt handles it internally)
         const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain(userCustomPrompt.trimEnd());
       });
@@ -1558,7 +1509,6 @@ describe("ChatManager", () => {
           `DEFAULT\n<user_custom_instructions>\n${userCustomPrompt}\n</user_custom_instructions>`
         );
 
-        // Mock processPrompt to return {} unchanged (because skipEmptyBraces: true)
         processPrompt.mockResolvedValue({
           processedPrompt: userCustomPrompt,
           includedFiles: [],
@@ -1572,7 +1522,6 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
-        // Verify processPrompt was called with skipEmptyBraces: true
         expect(processPrompt).toHaveBeenCalledWith(
           mockPlugin.app,
           userCustomPrompt,
@@ -1582,7 +1531,6 @@ describe("ChatManager", () => {
           true
         );
 
-        // Verify {} is preserved as literal
         const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain("{}");
       });
@@ -1592,7 +1540,6 @@ describe("ChatManager", () => {
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
-        // JSON with trailing whitespace
         const userCustomPrompt = '{"format": "json"}   \n';
         getEffectiveUserPrompt.mockReturnValue(userCustomPrompt);
         getSystemPrompt.mockReturnValue(
@@ -1602,7 +1549,6 @@ describe("ChatManager", () => {
           `DEFAULT\n<user_custom_instructions>\n${userCustomPrompt}\n</user_custom_instructions>`
         );
 
-        // processPrompt returns JSON unchanged (handled internally)
         processPrompt.mockResolvedValue({
           processedPrompt: userCustomPrompt,
           includedFiles: [],
@@ -1616,7 +1562,6 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
-        // Since processPrompt doesn't modify the JSON, trailing whitespace is trimmed by trimEnd()
         const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain('{"format": "json"}');
       });
@@ -1626,7 +1571,6 @@ describe("ChatManager", () => {
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
-        // User custom prompt WITH template variables but templating disabled
         getEffectiveUserPrompt.mockReturnValue("Use {activeNote} content");
         getSettings.mockReturnValue({ enableCustomPromptTemplating: false });
         getSystemPrompt.mockReturnValue(
@@ -1643,7 +1587,6 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
-        // processPrompt should NOT be called because templating is disabled
         expect(processPrompt).not.toHaveBeenCalled();
       });
 
@@ -1652,7 +1595,6 @@ describe("ChatManager", () => {
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
-        // No user custom prompt
         getEffectiveUserPrompt.mockReturnValue("");
 
         mockPlugin.app.workspace.getActiveFile.mockReturnValue(mockActiveFile);
@@ -1662,7 +1604,6 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
-        // processPrompt should NOT be called because no user custom prompt
         expect(processPrompt).not.toHaveBeenCalled();
       });
     });
@@ -1695,14 +1636,13 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
-        // Verify processPrompt was called with correct arguments
         expect(processPrompt).toHaveBeenCalledWith(
-          mockPlugin.app, // app
-          userCustomPrompt, // prompt
-          "", // selectedText (empty for system prompts)
-          mockPlugin.app.vault, // vault
-          mockActiveFile, // activeNote
-          true // skipEmptyBraces (system prompts treat {} as literal)
+          mockPlugin.app,
+          userCustomPrompt,
+          "",
+          mockPlugin.app.vault,
+          mockActiveFile,
+          true
         );
       });
 
@@ -1733,7 +1673,6 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
-        // Verify contextManager received includedFiles
         expect(mockContextManager.processMessageContext).toHaveBeenCalledWith(
           mockPlugin.app,
           mockMessage,
@@ -1744,8 +1683,8 @@ describe("ChatManager", () => {
           mockActiveFile,
           expect.anything(),
           expect.any(String),
-          expect.arrayContaining([mockIncludedFile]), // Should contain the included file
-          undefined // updateLoadingMessage
+          expect.arrayContaining([mockIncludedFile]),
+          undefined
         );
       });
     });
@@ -1780,7 +1719,6 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
-        // Verify the system prompt passed to contextManager has injected content
         const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain("<user_custom_instructions>");
         expect(systemPromptArg).toContain(processedContent.trimEnd());
@@ -1788,13 +1726,10 @@ describe("ChatManager", () => {
       });
 
       it("should preserve $ characters in user prompt without interpreting as replacement patterns", async () => {
-        // Regression test: String.prototype.replace treats $&, $1, $$ etc. as special sequences.
-        // Using function replacement avoids this issue.
         const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
-        // User prompt containing $ patterns that would be misinterpreted by string replacement
         const userCustomPrompt = "Cost is $100. Use $& and $1 patterns. Double $$ too.";
 
         getEffectiveUserPrompt.mockReturnValue(userCustomPrompt);
@@ -1805,7 +1740,6 @@ describe("ChatManager", () => {
           `DEFAULT_SYSTEM_PROMPT\n<user_custom_instructions>\n${userCustomPrompt}\n</user_custom_instructions>`
         );
 
-        // No templates, so processPrompt won't be called
         mockPlugin.app.workspace.getActiveFile.mockReturnValue(mockActiveFile);
         mockPlugin.app.vault = { adapter: { stat: jest.fn() } };
         mockMessageRepo.addMessage.mockReturnValue("msg-1");
@@ -1814,17 +1748,13 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
-        // Verify the $ characters are preserved exactly as-is
         const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain("$100");
         expect(systemPromptArg).toContain("$&");
         expect(systemPromptArg).toContain("$1");
         expect(systemPromptArg).toContain("$$");
-        // Full content should be preserved
         expect(systemPromptArg).toContain(userCustomPrompt);
 
-        // CRITICAL: Structural assertion to catch $& expansion bug
-        // If $& were interpreted, it would inject the entire matched block, causing nested tags
         const openTagCount = (
           (systemPromptArg as string).match(/<user_custom_instructions>/g) || []
         ).length;
@@ -1836,14 +1766,11 @@ describe("ChatManager", () => {
       });
 
       it("should preserve $ characters when template processing is involved", async () => {
-        // Regression test: Even when templates are processed, $ in output must not be interpreted
         const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
-        // User prompt with template AND $ characters
         const userCustomPrompt = "Use {activeNote}. Price: $50 each, total $& cost.";
-        // Simulated processed output still contains $
         const processedContent =
           "Use {activeNote}\n\n<variable>Note about $100 item</variable>. Price: $50 each, total $& cost.";
 
@@ -1868,14 +1795,11 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
-        // Verify $ characters from processed content are preserved
         const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain("$100");
         expect(systemPromptArg).toContain("$50");
         expect(systemPromptArg).toContain("$&");
 
-        // CRITICAL: Structural assertion to catch $& expansion bug
-        // If $& were interpreted, it would inject the entire matched block, causing nested tags
         const openTagCount = (
           (systemPromptArg as string).match(/<user_custom_instructions>/g) || []
         ).length;
@@ -1899,7 +1823,6 @@ describe("ChatManager", () => {
 
         getEffectiveUserPrompt.mockReturnValue(userCustomPrompt);
         getSystemPrompt.mockReturnValue(systemPromptWithoutMemory);
-        // Memory prefix + system prompt
         getSystemPromptWithMemory.mockResolvedValue(
           `${memoryContent}\n\n${systemPromptWithoutMemory}`
         );
@@ -1917,18 +1840,16 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
-        // Verify processPrompt was only called with user custom prompt, not memory
         expect(processPrompt).toHaveBeenCalledTimes(1);
         expect(processPrompt).toHaveBeenCalledWith(
           mockPlugin.app,
-          userCustomPrompt, // Only user custom prompt
+          userCustomPrompt,
           "",
           mockPlugin.app.vault,
           mockActiveFile,
-          true // skipEmptyBraces
+          true
         );
 
-        // Verify the final system prompt still contains memory prefix
         const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain(memoryContent);
       });
@@ -1949,7 +1870,6 @@ describe("ChatManager", () => {
           `DEFAULT\n<user_custom_instructions>\n${userCustomPrompt}\n</user_custom_instructions>`
         );
 
-        // Make processPrompt throw an error
         processPrompt.mockRejectedValue(new Error("Template processing failed"));
 
         mockPlugin.app.workspace.getActiveFile.mockReturnValue(mockActiveFile);
@@ -1958,12 +1878,10 @@ describe("ChatManager", () => {
         mockMessageRepo.getMessage.mockReturnValue(mockMessage);
         mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
 
-        // Should not throw, should continue with original prompt
         await expect(chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN)).resolves.toBe(
           "msg-1"
         );
 
-        // Verify contextManager was still called (chat continues)
         expect(mockContextManager.processMessageContext).toHaveBeenCalled();
       });
     });
@@ -1974,10 +1892,8 @@ describe("ChatManager", () => {
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
-        // When builtin is disabled, getSystemPrompt returns userCustomPrompt directly
         const userCustomPrompt = "Custom prompt with {activeNote}";
         getEffectiveUserPrompt.mockReturnValue(userCustomPrompt);
-        // No <user_custom_instructions> block - just the user prompt
         getSystemPrompt.mockReturnValue(userCustomPrompt);
         getSystemPromptWithMemory.mockResolvedValue(userCustomPrompt);
 
@@ -1995,10 +1911,8 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
-        // Verify the system prompt is the processed content (not wrapped in block)
         const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toBe(processedContent.trimEnd());
-        // Should NOT contain the original unprocessed prompt
         expect(systemPromptArg).not.toContain(userCustomPrompt);
       });
 
@@ -2012,7 +1926,6 @@ describe("ChatManager", () => {
 
         getEffectiveUserPrompt.mockReturnValue(userCustomPrompt);
         getSystemPrompt.mockReturnValue(userCustomPrompt);
-        // Memory + user prompt (no DEFAULT_SYSTEM_PROMPT)
         getSystemPromptWithMemory.mockResolvedValue(`${memoryContent}\n${userCustomPrompt}`);
 
         processPrompt.mockResolvedValue({
@@ -2029,9 +1942,7 @@ describe("ChatManager", () => {
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
         const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
-        // Should contain memory prefix
         expect(systemPromptArg).toContain(memoryContent);
-        // Should contain processed content
         expect(systemPromptArg).toContain("PROCESSED");
       });
     });
@@ -2045,8 +1956,6 @@ describe("ChatManager", () => {
         const userCustomPrompt = "Use {activeNote}";
         getEffectiveUserPrompt.mockReturnValue(userCustomPrompt);
 
-        // Simulate a mismatch: getSystemPrompt returns different content than
-        // the suffix of getSystemPromptWithMemory (edge case, shouldn't happen normally)
         getSystemPrompt.mockReturnValue("DIFFERENT_SYSTEM_PROMPT");
         getSystemPromptWithMemory.mockResolvedValue(
           "Memory\n\nACTUAL_SYSTEM_PROMPT_THAT_DOESNT_MATCH"
@@ -2063,15 +1972,12 @@ describe("ChatManager", () => {
         mockMessageRepo.getMessage.mockReturnValue(mockMessage);
         mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
 
-        // Should not throw
         await expect(chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN)).resolves.toBe(
           "msg-1"
         );
 
-        // Verify contextManager was called (chat continues)
         expect(mockContextManager.processMessageContext).toHaveBeenCalled();
 
-        // In fallback case, should return original basePromptWithMemory unchanged
         const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toBe("Memory\n\nACTUAL_SYSTEM_PROMPT_THAT_DOESNT_MATCH");
       });

@@ -3,7 +3,6 @@ import { ChatMessage, MessageContext, StoredMessage } from "@/types/message";
 import { formatDateTime, FormattedDateTime } from "@/utils";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
-// Mock dependencies
 jest.mock("@/utils", () => ({
   formatDateTime: jest.fn(),
 }));
@@ -98,7 +97,6 @@ describe("MessageRepository", () => {
     it("should filter out invisible messages", () => {
       messageRepo.addMessage("Hello", "Hello", "user");
 
-      // Make message invisible by directly accessing internal array
       const internalMessages = (messageRepo as unknown as { messages: StoredMessage[] }).messages;
       internalMessages[0].isVisible = false;
 
@@ -112,16 +110,14 @@ describe("MessageRepository", () => {
       const id1 = messageRepo.addMessage("Hello", "Hello with context", "user");
       messageRepo.addMessage("Response", "Response", "AI");
 
-      // getLLMMessages() returns display text for chat history (no context)
       const messages = messageRepo.getLLMMessages();
 
       expect(messages).toHaveLength(2);
-      expect(messages[0].message).toBe("Hello"); // Display text only
+      expect(messages[0].message).toBe("Hello");
       expect(messages[1].message).toBe("Response");
-      expect(messages[0].isVisible).toBe(false); // LLM messages are not visible
+      expect(messages[0].isVisible).toBe(false);
       expect(messages[1].isVisible).toBe(false);
 
-      // For full context, use getLLMMessage(id)
       const fullMessage = messageRepo.getLLMMessage(id1);
       expect(fullMessage?.message).toBe("Hello with context");
     });
@@ -157,7 +153,6 @@ describe("MessageRepository", () => {
       const llmMessage = messageRepo.getLLMMessage(messageId);
       expect(llmMessage?.message).toBe("Hello with context");
 
-      // Display message should remain unchanged
       const displayMessage = messageRepo.getMessage(messageId);
       expect(displayMessage?.message).toBe("Hello");
     });

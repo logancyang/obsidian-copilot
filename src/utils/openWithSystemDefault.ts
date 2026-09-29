@@ -1,15 +1,6 @@
 import { logError } from "@/logger";
 import { Notice } from "obsidian";
 
-/**
- * Open an absolute filesystem path with the OS default application via
- * Electron's shell. Used for paths that should not be routed through
- * `app.workspace.openLinkText` — e.g. files outside the vault, or under
- * agent dotfile folders Obsidian doesn't index — because `openLinkText`
- * would otherwise materialize a phantom note (and its parent folders) for
- * an unresolved target. Surfaces the path via a `Notice` on failure so the
- * user can still open it manually.
- */
 export async function openWithSystemDefault(absPath: string): Promise<void> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- Electron shell is optional and loaded lazily for this desktop-only action

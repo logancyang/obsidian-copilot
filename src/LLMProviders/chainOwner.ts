@@ -3,12 +3,6 @@ import { App } from "obsidian";
 import ChainManager from "./chainManager";
 import type { ModelManagementApi } from "@/modelManagement";
 
-/**
- * Owns the single {@link ChainManager} the Quick Chat surfaces share, and
- * rebuilds its chain whenever the selected model or chain type changes. Holding
- * one instance keeps conversation memory continuous across mode switches — a
- * per-view chain manager would reset it on every toggle.
- */
 export default class ChainOwner {
   public static instance: ChainOwner;
   private readonly chainMangerInstance: ChainManager;

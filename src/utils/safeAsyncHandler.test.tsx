@@ -91,10 +91,6 @@ describe("safeAsyncHandler", () => {
     });
 
     it("leaves a memoized child unrendered when its parent rerenders around it", () => {
-      // The shape every call site relies on: wrap during render, hand the result
-      // to a memo'd child, and rerender the parent for an unrelated reason (a
-      // composer keystroke, a streamed token). A wrapper allocated per render
-      // would break the child's shallow prop comparison and remap the list.
       const renderChild = jest.fn();
       const Child = memo(function Child({ onAct }: { onAct: () => void }) {
         renderChild();

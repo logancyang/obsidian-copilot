@@ -26,7 +26,6 @@ import ChainManager from "./chainManager";
 const APP = {} as App;
 const MODEL_MANAGEMENT = {} as ModelManagementApi;
 
-/** Build a fresh owner and hand back the callbacks it registered. */
 function createOwner(): {
   owner: ChainOwner;
   onModelKeyChange: () => void;
@@ -44,8 +43,6 @@ describe("chainOwner", () => {
   describe("ChainOwner", () => {
     beforeEach(() => {
       jest.clearAllMocks();
-      // Reason: the singleton outlives a test, so a stale instance would hand the
-      // next case the previous one's subscriptions and chain manager.
       ChainOwner.instance = undefined as unknown as ChainOwner;
     });
 

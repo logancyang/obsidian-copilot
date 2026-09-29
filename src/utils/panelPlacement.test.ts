@@ -1,6 +1,5 @@
 import { computeVerticalPlacement, type VerticalPlacementInput } from "./panelPlacement";
 
-/** Helper: build input with sensible defaults. */
 function makeInput(overrides: Partial<VerticalPlacementInput> = {}): VerticalPlacementInput {
   return {
     scrollRect: { top: 50, bottom: 850 },
@@ -15,15 +14,13 @@ function makeInput(overrides: Partial<VerticalPlacementInput> = {}): VerticalPla
 }
 
 describe("computeVerticalPlacement", () => {
-  // --- Both anchors visible ---
-
   it("places below when enough space below", () => {
     const input = makeInput({
       visibleBottom: { top: 100, bottom: 120 },
       visibleTop: { top: 80, bottom: 100 },
     });
     const result = computeVerticalPlacement(input);
-    expect(result.top).toBe(120 + 6); // visibleBottom.bottom + gap
+    expect(result.top).toBe(120 + 6);
     expect(result.anchorBottomY).toBeUndefined();
   });
 
@@ -33,8 +30,8 @@ describe("computeVerticalPlacement", () => {
       visibleTop: { top: 500, bottom: 520 },
     });
     const result = computeVerticalPlacement(input);
-    expect(result.anchorBottomY).toBe(500 - 6); // visibleTop.top - gap
-    expect(result.top).toBe(500 - 6 - 400); // anchorBottomY - panelHeight
+    expect(result.anchorBottomY).toBe(500 - 6);
+    expect(result.top).toBe(500 - 6 - 400);
   });
 
   it("centers when neither above nor below fits", () => {
@@ -45,13 +42,9 @@ describe("computeVerticalPlacement", () => {
       panelHeight: 400,
     });
     const result = computeVerticalPlacement(input);
-    // editorCenter = (50 + 500) / 2 - 400 / 2 = 275 - 200 = 75
-    // Clamped: max(12, min(75, 900 - 12 - 400)) = max(12, min(75, 488)) = 75
     expect(result.top).toBe(75);
     expect(result.anchorBottomY).toBeUndefined();
   });
-
-  // --- Only bottom anchor visible ---
 
   it("places below when only bottom visible and space fits", () => {
     const input = makeInput({
@@ -59,7 +52,7 @@ describe("computeVerticalPlacement", () => {
       visibleTop: null,
     });
     const result = computeVerticalPlacement(input);
-    expect(result.top).toBe(120 + 6); // visibleBottom.bottom + gap
+    expect(result.top).toBe(120 + 6);
     expect(result.anchorBottomY).toBeUndefined();
   });
 
@@ -69,8 +62,6 @@ describe("computeVerticalPlacement", () => {
       visibleTop: null,
     });
     const result = computeVerticalPlacement(input);
-    // spaceBelow = 850 - 800 - 6 = 44, requiredSpace = 412 → center
-    // editorCenter = (50 + 850) / 2 - 200 = 250
     expect(result.top).toBe(250);
     expect(result.anchorBottomY).toBeUndefined();
   });
@@ -82,12 +73,9 @@ describe("computeVerticalPlacement", () => {
       panelHeight: 400,
     });
     const result = computeVerticalPlacement(input);
-    // spaceBelow = 850 - 420 - 6 = 424, requiredSpace = 412 → fits below
     expect(result.top).toBe(420 + 6);
     expect(result.anchorBottomY).toBeUndefined();
   });
-
-  // --- Only top anchor visible ---
 
   it("places above when only top visible and enough space", () => {
     const input = makeInput({
@@ -107,13 +95,9 @@ describe("computeVerticalPlacement", () => {
       panelHeight: 400,
     });
     const result = computeVerticalPlacement(input);
-    // spaceAbove = 100 - 50 - 6 = 44, requiredSpace = 412, so center
-    // editorCenter = (50 + 850) / 2 - 200 = 250
     expect(result.top).toBe(250);
     expect(result.anchorBottomY).toBeUndefined();
   });
-
-  // --- Neither anchor visible ---
 
   it("centers when neither anchor is visible", () => {
     const input = makeInput({
@@ -121,7 +105,6 @@ describe("computeVerticalPlacement", () => {
       visibleTop: null,
     });
     const result = computeVerticalPlacement(input);
-    // editorCenter = (50 + 850) / 2 - 200 = 250
     expect(result.top).toBe(250);
     expect(result.anchorBottomY).toBeUndefined();
   });

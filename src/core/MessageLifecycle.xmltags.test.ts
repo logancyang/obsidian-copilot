@@ -4,9 +4,6 @@ import { MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
-/**
- * Tests specifically for proper XML tag formatting in context processing
- */
 describe("Message Context XML Tag Formatting", () => {
   let messageRepository: MessageRepository;
 
@@ -62,7 +59,6 @@ describe("Message Context XML Tag Formatting", () => {
       context
     );
 
-    // Get the full message with processed context (not history view)
     const fullMessage = messageRepository.getLLMMessage(messageId);
     expect(fullMessage?.message).toContain("<note_context>");
     expect(fullMessage?.message).toContain("<title>quarterly-review</title>");
@@ -110,7 +106,6 @@ The landscape of artificial intelligence continues to evolve rapidly. Here are t
       context
     );
 
-    // Get the full message with processed context
     const fullMessage = messageRepository.getLLMMessage(messageId);
     expect(fullMessage?.message).toContain("<url_content>");
     expect(fullMessage?.message).toContain("<url>https://example.com/ai-trends-2024</url>");
@@ -163,7 +158,6 @@ function fibonacci(n) {
       context
     );
 
-    // Get the full message with processed context
     const fullMessage = messageRepository.getLLMMessage(messageId);
     expect(fullMessage?.message).toContain(`<${SELECTED_TEXT_TAG}>`);
     expect(fullMessage?.message).toContain("<title>Recursion Examples</title>");
@@ -240,11 +234,9 @@ The Single Responsibility Principle states that a class should have only one rea
       context
     );
 
-    // Get the full message with processed context
     const fullMessage = messageRepository.getLLMMessage(messageId);
     const message = fullMessage!.message;
 
-    // Verify all three context types are present with proper tags
     expect(message).toContain("<note_context>");
     expect(message).toContain("</note_context>");
     expect(message).toContain("<url_content>");
@@ -252,7 +244,6 @@ The Single Responsibility Principle states that a class should have only one rea
     expect(message).toContain(`<${SELECTED_TEXT_TAG}>`);
     expect(message).toContain(`</${SELECTED_TEXT_TAG}>`);
 
-    // Verify proper nesting and structure
     expect(message.indexOf("<note_context>")).toBeLessThan(message.indexOf("</note_context>"));
     expect(message.indexOf("<url_content>")).toBeLessThan(message.indexOf("</url_content>"));
     expect(message.indexOf(`<${SELECTED_TEXT_TAG}>`)).toBeLessThan(
@@ -290,7 +281,6 @@ The Single Responsibility Principle states that a class should have only one rea
       context
     );
 
-    // Get the full message with processed context
     const fullMessage = messageRepository.getLLMMessage(messageId);
     expect(fullMessage?.message).toContain("<note_context_error>");
     expect(fullMessage?.message).toContain("<title>corrupted-file</title>");
@@ -346,7 +336,6 @@ React is a JavaScript library for building user interfaces.
       context
     );
 
-    // Get the full message with processed context
     const fullMessage = messageRepository.getLLMMessage(messageId);
     expect(fullMessage?.message).toContain(`<${WEB_SELECTED_TEXT_TAG}>`);
     expect(fullMessage?.message).toContain("<title>React Documentation</title>");
@@ -355,7 +344,6 @@ React is a JavaScript library for building user interfaces.
     expect(fullMessage?.message).toContain("Getting Started with React");
     expect(fullMessage?.message).toContain("</content>");
     expect(fullMessage?.message).toContain(`</${WEB_SELECTED_TEXT_TAG}>`);
-    // Should NOT contain note-specific tags
     expect(fullMessage?.message).not.toContain("<path>");
     expect(fullMessage?.message).not.toContain("<start_line>");
     expect(fullMessage?.message).not.toContain("<end_line>");
@@ -413,21 +401,17 @@ Web content about React best practices
       context
     );
 
-    // Get the full message with processed context
     const fullMessage = messageRepository.getLLMMessage(messageId);
     const message = fullMessage!.message;
 
-    // Verify both context types are present with proper tags
     expect(message).toContain(`<${SELECTED_TEXT_TAG}>`);
     expect(message).toContain(`</${SELECTED_TEXT_TAG}>`);
     expect(message).toContain(`<${WEB_SELECTED_TEXT_TAG}>`);
     expect(message).toContain(`</${WEB_SELECTED_TEXT_TAG}>`);
 
-    // Verify note selection has path and line numbers
     expect(message).toContain("<path>dev/react-patterns.md</path>");
     expect(message).toContain("<start_line>15</start_line>");
 
-    // Verify web selection has url but no path/line numbers
     expect(message).toContain("<url>https://react.dev/best-practices</url>");
   });
 });

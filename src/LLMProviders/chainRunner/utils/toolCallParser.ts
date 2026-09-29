@@ -29,22 +29,14 @@ interface ParsedMessage {
 const TOOL_RESULT_UI_MAX_LENGTH = 5000;
 const TOOL_RESULT_OMITTED_THRESHOLD_MESSAGE = `Result omitted to keep the UI responsive (payload exceeded ${TOOL_RESULT_UI_MAX_LENGTH.toLocaleString()} characters).`;
 
-/**
- * Safely encode tool result so it can be embedded inside an HTML comment
- * We use URI encoding with a prefix to avoid introducing `-->` in the payload
- */
 function encodeResultForMarker(result: string): string {
   try {
     return `ENC:${encodeURIComponent(result)}`;
   } catch {
-    // Fallback to original if encoding fails
     return result;
   }
 }
 
-/**
- * Decode tool result previously encoded for marker embedding
- */
 function decodeResultFromMarker(result: string | undefined): string | undefined {
   if (typeof result !== "string") return result;
   if (!result.startsWith("ENC:")) return result;
@@ -55,20 +47,10 @@ function decodeResultFromMarker(result: string | undefined): string | undefined 
   }
 }
 
-/**
- * Build a short placeholder message when a tool payload is too large for the UI.
- *
- * @param toolName - Name of the tool that produced the payload.
- * @returns Placeholder string for banner rendering.
- */
 function buildOmittedResultMessage(toolName: string): string {
   return `Tool '${toolName}' ${TOOL_RESULT_OMITTED_THRESHOLD_MESSAGE}`;
 }
 
-/**
- * Parse error chunks from a text segment
- * Format: <errorChunk>error content</errorChunk>
- */
 function parseErrorChunks(
   text: string,
   baseIndex: number = 0,
@@ -81,7 +63,6 @@ function parseErrorChunks(
   let match;
 
   while ((match = errorRegex.exec(text)) !== null) {
-    // Add text before the error chunk
     if (match.index > lastIndex) {
       errorChunks.push({
         type: "text",
@@ -89,8 +70,6 @@ function parseErrorChunks(
       });
     }
 
-    // Add the error chunk
-    // Use position-based ID for stability across re-renders
     const [fullMatch, errorContent] = match;
     const startIndex = baseIndex + match.index;
     const errorId = messagePrefix ? `${messagePrefix}-error-${startIndex}` : `error-${startIndex}`;
@@ -109,7 +88,6 @@ function parseErrorChunks(
     lastIndex = match.index + fullMatch.length;
   }
 
-  // Add any remaining text
   if (lastIndex < text.length) {
     errorChunks.push({
       type: "text",
@@ -117,7 +95,6 @@ function parseErrorChunks(
     });
   }
 
-  // If no error chunks found, return the entire text
   if (errorChunks.length === 0) {
     errorChunks.push({
       type: "text",
@@ -128,16 +105,8 @@ function parseErrorChunks(
   return errorChunks;
 }
 
-/**
- * Parse tool call markers and error chunks from a message
- * Format: <!--TOOL_CALL_START:id:toolName:displayName:emoji:confirmationMessage:isExecuting-->content<!--TOOL_CALL_END:id:result-->
- * Error Format: <errorChunk>error content</errorChunk>
- * @param message - The message string to parse
- * @param messageId - Optional message ID to ensure error IDs are unique across messages
- */
 export function parseToolCallMarkers(message: string, messageId?: string): ParsedMessage {
   const segments: ParsedMessage["segments"] = [];
-  // Use [\s\S] instead of . with 's' flag for compatibility with ES6
   const toolCallRegex =
     /<!--TOOL_CALL_START:([^:]+):([^:]+):([^:]+):([^:]+):([^:]*):([^:]+)-->([\s\S]*?)<!--TOOL_CALL_END:\1:([\s\S]*?)-->/g;
 
@@ -145,12 +114,10 @@ export function parseToolCallMarkers(message: string, messageId?: string): Parse
   let match;
 
   while ((match = toolCallRegex.exec(message)) !== null) {
-    // Add text before the tool call (and parse any error chunks in it)
     if (match.index > lastIndex) {
       const textBefore = message.slice(lastIndex, match.index);
       const parsedChunks = parseErrorChunks(textBefore, lastIndex, messageId);
 
-      // Only add non-empty text segments
       parsedChunks.forEach((chunk) => {
         if (chunk.type === "text" && chunk.content.trim()) {
           segments.push({
@@ -167,7 +134,6 @@ export function parseToolCallMarkers(message: string, messageId?: string): Parse
       });
     }
 
-    // Parse the tool call
     const [
       fullMatch,
       id,
@@ -180,7 +146,6 @@ export function parseToolCallMarkers(message: string, messageId?: string): Parse
       result,
     ] = match;
 
-    // Decode the result and check if it's too large for UI display
     const rawResult = typeof result === "string" ? result : "";
     const decodedResult = decodeResultFromMarker(rawResult);
     const resultLength = typeof decodedResult === "string" ? decodedResult.length : 0;
@@ -209,7 +174,6 @@ export function parseToolCallMarkers(message: string, messageId?: string): Parse
     lastIndex = match.index + fullMatch.length;
   }
 
-  // Add any remaining text (and parse any error chunks in it)
   if (lastIndex < message.length) {
     const remainingText = message.slice(lastIndex);
     const parsedChunks = parseErrorChunks(remainingText, lastIndex, messageId);
@@ -230,7 +194,6 @@ export function parseToolCallMarkers(message: string, messageId?: string): Parse
     });
   }
 
-  // If no segments found, return the entire message as text (after checking for errors)
   if (segments.length === 0) {
     const parsedChunks = parseErrorChunks(message, 0, messageId);
 
@@ -253,13 +216,6 @@ export function parseToolCallMarkers(message: string, messageId?: string): Parse
   return { segments };
 }
 
-/**
- * Create a tool call marker
- *
- * @deprecated This function is deprecated and will be removed in a future version.
- * Agent mode now uses the Agent Reasoning Block (AgentReasoningState.ts) instead of
- * tool call markers. This function is kept only for backward compatibility.
- */
 export function createToolCallMarker(
   id: string,
   toolName: string,

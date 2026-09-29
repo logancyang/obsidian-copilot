@@ -12,11 +12,6 @@ import {
 
 const encode = (text: string) => new TextEncoder().encode(text);
 
-/**
- * File handle standing in for an open log. `chunkSize` forces the short reads a
- * real `FileHandle` is free to return, and a `size` above the content's length
- * stands in for a file that shrank after it was measured.
- */
 function fakeHandle(content: Uint8Array, chunkSize = content.length, size = content.length) {
   const handle: LogReadable = {
     stat: async () => ({ size }),
@@ -41,7 +36,6 @@ describe("logTail", () => {
     });
 
     it("drops a character cut in half at the front so the tail never starts with a replacement glyph", () => {
-      // 3 bytes per character: a 4-byte tail starts one byte into the middle one.
       expect(tailOfText("行行行", 4)).toEqual({ text: "行", totalBytes: 9 });
     });
   });
@@ -61,7 +55,6 @@ describe("logTail", () => {
     });
 
     it("cuts an oversized text on a character boundary and reports its full size", () => {
-      // 3 bytes per character: a 4-byte cap lands one byte into the second one.
       expect(headOfText("行行行", 4)).toEqual({ text: "行", totalBytes: 9 });
     });
   });

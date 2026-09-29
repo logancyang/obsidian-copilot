@@ -2,7 +2,6 @@ import { ActionBlockStreamer } from "./ActionBlockStreamer";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
 
-// Mock the ToolManager and ToolResultFormatter
 jest.mock("@/tools/toolManager");
 jest.mock("@/tools/ToolResultFormatter");
 
@@ -17,18 +16,15 @@ describe("ActionBlockStreamer", () => {
     writeFileTool = { name: "writeFile" };
     MockedToolManager.callTool.mockClear();
 
-    // Mock ToolResultFormatter to return the raw result without "File change result: " prefix
     MockedToolResultFormatter.format = jest.fn((_toolName, result) => result);
 
     streamer = new ActionBlockStreamer(MockedToolManager, writeFileTool);
   });
 
-  // Helper function to process chunks and collect results
   async function processChunks(chunks: { content: string | null }[]): Promise<unknown[]> {
     const outputContents: unknown[] = [];
     for (const chunk of chunks) {
       for await (const result of streamer.processChunk(chunk)) {
-        // Always push the content, even if it's null, undefined, or empty string
         outputContents.push(result.content);
       }
     }
@@ -39,10 +35,8 @@ describe("ActionBlockStreamer", () => {
     const chunks = [{ content: "Hello " }, { content: "world, this is " }, { content: "a test." }];
     const output = await processChunks(chunks);
 
-    // All chunks should be yielded as-is
     expect(output).toEqual(["Hello ", "world, this is ", "a test."]);
 
-    // No tool calls should be made
     expect(MockedToolManager.callTool).not.toHaveBeenCalled();
   });
 
@@ -56,7 +50,6 @@ describe("ActionBlockStreamer", () => {
     ];
     const output = await processChunks(chunks);
 
-    // Should yield original chunk plus tool result
     expect(output).toEqual([
       "Some text before <writeFile><path>file.txt</path><content>content</content></writeFile> and some text after.",
       "\nFile written successfully.\n",
@@ -98,7 +91,6 @@ describe("ActionBlockStreamer", () => {
     ];
     const output = await processChunks(chunks);
 
-    // All chunks should be yielded as-is, plus tool result when complete block is detected
     expect(output).toEqual([
       "Here is a file <writeFile><path>split.txt</path>",
       "<content>split content</content>",
@@ -124,7 +116,6 @@ describe("ActionBlockStreamer", () => {
     ];
     const output = await processChunks(chunks);
 
-    // Should yield original chunk plus both tool results
     expect(output).toEqual([
       "<writeFile><path>f1.txt</path><content>c1</content></writeFile>Some text<writeFile><path>f2.txt</path><content>c2</content></writeFile>",
       "\nFile 1 written.\n",
@@ -149,13 +140,11 @@ describe("ActionBlockStreamer", () => {
     ];
     const output = await processChunks(chunks);
 
-    // Should yield all chunks as-is
     expect(output).toEqual([
       "Starting... <writeFile><path>unclosed.txt</path>",
       "<content>this will not be closed",
     ]);
 
-    // No tool calls should be made for incomplete blocks
     expect(MockedToolManager.callTool).not.toHaveBeenCalled();
   });
 
@@ -188,7 +177,6 @@ describe("ActionBlockStreamer", () => {
     ];
     const output = await processChunks(chunks);
 
-    // Should yield all chunks as-is, null content is yielded but not added to buffer
     expect(output).toEqual(["Hello", null, "", " World"]);
   });
 
@@ -217,13 +205,11 @@ describe("ActionBlockStreamer", () => {
     ];
     const output = await processChunks(chunks);
 
-    // Should yield chunk as-is plus tool result
     expect(output).toEqual([
       "<writeFile><path>missing-content.txt</path></writeFile>",
       "\nMalformed handled.\n",
     ]);
 
-    // Tool should be called with undefined content
     expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeFileTool, {
       path: "missing-content.txt",
       content: undefined,

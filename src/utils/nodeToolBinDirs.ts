@@ -1,21 +1,3 @@
-/**
- * Resolve the bin directories where Node-based CLI tools live under common
- * version managers (nvm, fnm, Volta, asdf, n) and `npm install -g` prefixes.
- *
- * macOS GUI apps (Obsidian launched from Finder/Dock) inherit a sparse
- * `launchd` PATH (`/usr/bin:/bin:/usr/sbin:/sbin`) that omits Homebrew and
- * every version-manager `bin` dir, so neither `which <binary>` (detection) nor
- * a `#!/usr/bin/env node` spawn can see them. This is the single source of
- * truth for the extra directories both paths prepend, so detect-time and
- * spawn-time PATH stay in lockstep.
- *
- * Deliberately a static, deterministic resolver rather than spawning a login
- * shell to import the user's real PATH: no subprocess cost, no shell-choice
- * ambiguity, no executing arbitrary user rc code.
- *
- * Pure leaf: callers inject `homeDir`, `platform`, `env`, and `fs` so tests
- * don't touch real disk.
- */
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
 type PathModule = typeof import("node:path");
@@ -34,16 +16,6 @@ export interface NodeToolBinDirsInput {
   fs: NodeToolFs;
 }
 
-/**
- * Ordered, deduped list of candidate bin directories — version-manager layouts
- * that may or may not exist on disk. Earlier entries win during `which`/`where`
- * resolution, so a version manager's "active" install is listed before its
- * other versions. Callers that build PATH should use
- * {@link resolveNodeToolBinDirs} (existence-filtered); callers that probe for a
- * specific file under each dir (e.g. the Claude resolver) want this unfiltered
- * list so a present binary is found even when its parent dir wasn't otherwise
- * registered.
- */
 export function nodeToolBinDirCandidates(input: NodeToolBinDirsInput): string[] {
   const path = requireNodeModule<PathModule>("path");
   const candidates =
@@ -60,10 +32,6 @@ export function nodeToolBinDirCandidates(input: NodeToolBinDirsInput): string[] 
   return out;
 }
 
-/**
- * {@link nodeToolBinDirCandidates} filtered to directories that exist — the set
- * to prepend to PATH for `which`/`where` and `#!/usr/bin/env node` spawns.
- */
 export function resolveNodeToolBinDirs(input: NodeToolBinDirsInput): string[] {
   return nodeToolBinDirCandidates(input).filter((dir) => dirExists(input.fs, dir));
 }
@@ -80,9 +48,6 @@ function unixCandidates(input: NodeToolBinDirsInput, p: PlatformPath): Array<str
   const { homeDir, env, fs, platform } = input;
   const dirs: Array<string | null> = [];
 
-  // nvm — NVM_BIN (set only inside an interactive shell) plus the default and
-  // every installed version's bin dir, so a binary installed under a
-  // non-default version (`nvm use 20 && npm i -g ...`) is still found.
   dirs.push(env.NVM_BIN ?? null);
   const nvmDir = env.NVM_DIR ?? p.join(homeDir, ".nvm");
   const nvmVersions = p.join(nvmDir, "versions", "node");
@@ -90,7 +55,6 @@ function unixCandidates(input: NodeToolBinDirsInput, p: PlatformPath): Array<str
   if (nvmDefault) dirs.push(nvmDefault);
   dirs.push(...enumerateVersionBins(fs, nvmVersions, ["bin"], p));
 
-  // fnm — active shell's symlinked bin, then every installed version.
   if (env.FNM_MULTISHELL_PATH) dirs.push(p.join(env.FNM_MULTISHELL_PATH, "bin"));
   for (const base of fnmBaseDirs(homeDir, env, platform, p)) {
     dirs.push(
@@ -98,16 +62,8 @@ function unixCandidates(input: NodeToolBinDirsInput, p: PlatformPath): Array<str
     );
   }
 
-  // Volta
   dirs.push(env.VOLTA_HOME ? p.join(env.VOLTA_HOME, "bin") : p.join(homeDir, ".volta", "bin"));
 
-  // asdf — shims wrap every managed tool; bin is the asdf CLI itself. The data
-  // dir (where shims live) is NOT the install dir: Homebrew-style setups point
-  // ASDF_DIR at the install path while shims stay under the default ~/.asdf
-  // data dir. So prefer ASDF_DATA_DIR, then a default ~/.asdf with real shims,
-  // and only fall back to ASDF_DIR — otherwise a present ~/.asdf/shims would be
-  // missed. Probe the shims dir itself, not the data dir: an empty ~/.asdf with
-  // shims under ASDF_DIR must not shadow the real install.
   const defaultAsdfData = p.join(homeDir, ".asdf");
   const asdfRoot =
     env.ASDF_DATA_DIR ??
@@ -117,10 +73,8 @@ function unixCandidates(input: NodeToolBinDirsInput, p: PlatformPath): Array<str
   dirs.push(p.join(asdfRoot, "shims"));
   dirs.push(p.join(asdfRoot, "bin"));
 
-  // n — installs to $N_PREFIX (default /usr/local, already a well-known dir).
   if (env.N_PREFIX) dirs.push(p.join(env.N_PREFIX, "bin"));
 
-  // npm global prefixes
   if (env.npm_config_prefix) dirs.push(p.join(env.npm_config_prefix, "bin"));
   dirs.push(p.join(homeDir, ".npm-global", "bin"));
   dirs.push(p.join(homeDir, ".local", "bin"));
@@ -132,19 +86,15 @@ function windowsCandidates(input: NodeToolBinDirsInput, p: PlatformPath): Array<
   const { homeDir, env } = input;
   const dirs: Array<string | null> = [];
 
-  // npm global (`npm i -g` drops shims here) — the most common GUI-app gap.
   dirs.push(env.npm_config_prefix ?? null);
   dirs.push(env.APPDATA ? p.join(env.APPDATA, "npm") : null);
   dirs.push(p.join(homeDir, "AppData", "Roaming", "npm"));
 
-  // nvm-windows points the active version at a stable symlink.
   dirs.push(env.NVM_SYMLINK ?? null);
   dirs.push(env.NVM_HOME ?? null);
 
-  // fnm on Windows puts node.exe directly under the multishell dir (no /bin).
   if (env.FNM_MULTISHELL_PATH) dirs.push(env.FNM_MULTISHELL_PATH);
 
-  // Volta
   dirs.push(env.VOLTA_HOME ? p.join(env.VOLTA_HOME, "bin") : p.join(homeDir, ".volta", "bin"));
 
   return dirs;
@@ -166,11 +116,6 @@ function fnmBaseDirs(
   return [p.join(homeDir, ".local", "share", "fnm")];
 }
 
-/**
- * Read a version manager's `versions` directory and return the per-version bin
- * dirs, newest-first (numeric sort). `subPath` is appended after the version
- * folder (e.g. `["bin"]` for nvm, `["installation", "bin"]` for fnm).
- */
 function enumerateVersionBins(
   fs: NodeToolFs,
   versionsDir: string,
@@ -191,12 +136,6 @@ function enumerateVersionBins(
 
 const NVM_LATEST_ALIASES = new Set(["node", "stable"]);
 
-/**
- * Resolve nvm's `default` alias to a concrete version's bin dir. nvm doesn't
- * export `NVM_BIN` to GUI children, so the alias file is the most reliable
- * pointer to the user's chosen default. Aliases can chain (`default → lts/* →
- * lts/hydrogen → vX.Y.Z`); unresolvable ones yield null.
- */
 function resolveNvmDefaultBin(
   nvmDir: string,
   versionsDir: string,

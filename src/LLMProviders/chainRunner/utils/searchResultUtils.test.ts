@@ -35,7 +35,7 @@ describe("searchResultUtils", () => {
       const documents = [
         { title: "Doc1", content: "Content 1", includeInContext: true },
         { title: "Doc2", content: "Content 2", includeInContext: false },
-        { title: "Doc3", content: "Content 3" }, // undefined defaults to true
+        { title: "Doc3", content: "Content 3" },
       ];
 
       const result = formatSearchResultsForLLM(documents);
@@ -67,7 +67,6 @@ describe("searchResultUtils", () => {
         {
           title: "Test Document",
           content: "This is the content",
-          // no path, no mtime
         },
       ];
 
@@ -119,7 +118,7 @@ describe("searchResultUtils", () => {
       const documents = [
         { title: "Empty Doc", content: "" },
         { title: "Null Doc", content: null },
-        { title: "Undefined Doc" }, // content undefined
+        { title: "Undefined Doc" },
       ];
 
       const result = formatSearchResultsForLLM(documents);
@@ -185,7 +184,7 @@ describe("searchResultUtils", () => {
       expect(sources[0]).toEqual({
         title: "Document 1",
         path: "path/to/doc1.md",
-        score: 0.98, // Uses rerank_score when available
+        score: 0.98,
         explanation: { someData: "value" },
       });
     });

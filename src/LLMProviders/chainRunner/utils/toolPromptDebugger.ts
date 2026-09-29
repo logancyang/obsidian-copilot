@@ -1,9 +1,6 @@
 import { PromptSection, joinPromptSections } from "./modelAdapter";
 import { processRawChatHistory, processedMessagesToTextOnly } from "./chatHistoryUtils";
 
-/**
- * Options for building prompt debug sections with annotated provenance.
- */
 interface BuildPromptDebugSectionsOptions {
   systemSections: PromptSection[];
   rawHistory?: unknown[];
@@ -12,21 +9,12 @@ interface BuildPromptDebugSectionsOptions {
   enhancedUserMessage: string;
 }
 
-/**
- * Resulting debug report containing structured sections and the annotated string representation.
- */
 export interface PromptDebugReport {
   sections: PromptSection[];
   annotatedPrompt: string;
   systemPrompt: string;
 }
 
-/**
- * Build ordered prompt sections that include system prompt components, optional chat history, and user messages.
- *
- * @param options - Data required to assemble annotated prompt sections.
- * @returns Prompt sections with provenance metadata.
- */
 function buildPromptDebugSections(options: BuildPromptDebugSectionsOptions): PromptSection[] {
   const { systemSections, rawHistory, adapterName, originalUserMessage, enhancedUserMessage } =
     options;
@@ -68,12 +56,6 @@ function buildPromptDebugSections(options: BuildPromptDebugSectionsOptions): Pro
   return sections;
 }
 
-/**
- * Format prompt sections into an annotated string that highlights each section's origin.
- *
- * @param sections - Prompt sections with provenance metadata.
- * @returns Multiline string with section headers that identify code sources.
- */
 function formatPromptSectionsWithAnnotations(sections: PromptSection[]): string {
   return sections
     .map((section) => {
@@ -83,12 +65,6 @@ function formatPromptSectionsWithAnnotations(sections: PromptSection[]): string 
     .join("\n\n");
 }
 
-/**
- * Build a complete prompt debug report containing structured sections and the annotated string output.
- *
- * @param options - Data required to assemble annotated prompt sections.
- * @returns Report including sections, annotated prompt, and the raw system prompt string.
- */
 export function buildPromptDebugReport(
   options: BuildPromptDebugSectionsOptions
 ): PromptDebugReport {

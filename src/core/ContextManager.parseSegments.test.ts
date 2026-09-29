@@ -232,7 +232,6 @@ Compacted note
         const tag = blockType.tag;
         let xml: string;
 
-        // Build a valid XML block based on the source extractor type
         switch (blockType.sourceExtractor) {
           case "path":
             xml = `<${tag}><path>test/file.md</path><content>test</content></${tag}>`;

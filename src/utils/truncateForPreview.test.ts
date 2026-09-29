@@ -19,8 +19,6 @@ describe("truncateForPreview", () => {
   });
 
   it("backs the cut up to the last newline at or before the limit", () => {
-    // Newline sits 5 chars before the limit; the cut should land on it so the
-    // rendered slice ends on a clean line boundary.
     const head = "x".repeat(PREVIEW_RENDER_LIMIT - 5);
     const content = `${head}\n${"y".repeat(100)}`;
     const result = truncateForPreview(content);
@@ -36,9 +34,6 @@ describe("truncateForPreview", () => {
   });
 
   it("keeps the full budget when the only newline is far before the limit (one giant line)", () => {
-    // Mirrors a one-line JSON/spreadsheet dump: a short header line, then a
-    // huge unbroken line. Snapping back to the header newline would collapse
-    // the preview, so we must hard-cut at the limit instead.
     const content = `head\n${"x".repeat(PREVIEW_RENDER_LIMIT * 2)}`;
     const result = truncateForPreview(content);
     expect(result.truncated).toBe(true);
