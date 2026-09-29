@@ -41,6 +41,7 @@ jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: jest.fn(() => fal
 jest.mock("@/utils/notificationSound", () => ({ disposeNotificationSound: jest.fn() }));
 jest.mock("@/utils/chatDeepLink", () => ({
   buildChatDeepLink: jest.fn(),
+  buildMarkdownChatLink: (title: string, link: string) => `[${title}](${link})`,
   findChatFileByDeepLinkId: jest.fn(),
   getSavedChatDeepLinkId: jest.fn(),
 }));
@@ -119,9 +120,18 @@ describe("main", () => {
     describe("copyChatLink()", () => {
       beforeEach(() => jest.clearAllMocks());
 
-      it("copies the saved file's frontmatter epoch as a vault-scoped URI", async () => {
+      it("copies a saved chat as a titled Markdown link to its vault-scoped URI", async () => {
         const plugin = createPluginUnderTest([]);
-        Object.assign(plugin, { app: { vault: { getName: () => "My Vault" } } });
+        const file = Object.assign(Object.create(TFile.prototype), {
+          path: "Copilot/conversations/renamed.md",
+          basename: "renamed",
+        }) as TFile;
+        Object.assign(plugin, {
+          app: {
+            vault: { getName: () => "My Vault", getAbstractFileByPath: () => file },
+            metadataCache: { getFileCache: () => ({ frontmatter: { topic: "Release planning" } }) },
+          },
+        });
         jest.mocked(getSavedChatDeepLinkId).mockResolvedValue("epoch:1735732800000");
         jest.mocked(buildChatDeepLink).mockReturnValue("obsidian://copilot-chat?stable");
         const writeText = jest.fn().mockResolvedValue(undefined);
@@ -134,10 +144,12 @@ describe("main", () => {
           "Copilot/conversations/renamed.md"
         );
         expect(buildChatDeepLink).toHaveBeenCalledWith("My Vault", "epoch:1735732800000");
-        expect(writeText).toHaveBeenCalledWith("obsidian://copilot-chat?stable");
+        expect(writeText).toHaveBeenCalledWith(
+          "[Release planning](obsidian://copilot-chat?stable)"
+        );
       });
 
-      it("copies a native agent identity without looking for a Markdown note", async () => {
+      it("copies a native agent chat with its displayed session label", async () => {
         const plugin = createPluginUnderTest([]);
         Object.assign(plugin, { app: { vault: { getName: () => "My Vault" } } });
         const nativeId = "copilot-agent-session://codex/abc";
@@ -145,11 +157,50 @@ describe("main", () => {
         const writeText = jest.fn().mockResolvedValue(undefined);
         Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
 
-        await plugin.copyChatLink(nativeId);
+        await plugin.copyChatLink(nativeId, "Refactor auth");
 
         expect(getSavedChatDeepLinkId).not.toHaveBeenCalled();
         expect(buildChatDeepLink).toHaveBeenCalledWith("My Vault", nativeId);
-        expect(writeText).toHaveBeenCalledWith("obsidian://copilot-chat?native");
+        expect(writeText).toHaveBeenCalledWith("[Refactor auth](obsidian://copilot-chat?native)");
+      });
+
+      it("uses a hidden saved chat's filename when Obsidian has not indexed it (https://github.com/Brevilabs/obsidian-copilot-private/issues/615)", async () => {
+        const plugin = createPluginUnderTest([]);
+        Object.assign(plugin, {
+          app: {
+            vault: {
+              getName: () => "My Vault",
+              getAbstractFileByPath: () => null,
+              adapter: {
+                exists: jest.fn().mockResolvedValue(true),
+                stat: jest.fn().mockResolvedValue({ ctime: 1, mtime: 1, size: 1 }),
+              },
+            },
+            metadataCache: { getFileCache: () => null },
+          },
+        });
+        jest.mocked(getSavedChatDeepLinkId).mockResolvedValue("epoch:1735732800000");
+        jest.mocked(buildChatDeepLink).mockReturnValue("obsidian://copilot-chat?hidden");
+        const writeText = jest.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+
+        await plugin.copyChatLink(".copilot/conversations/Release planning.md");
+
+        expect(writeText).toHaveBeenCalledWith(
+          "[Release planning](obsidian://copilot-chat?hidden)"
+        );
+      });
+
+      it("uses a readable title when a native chat has no session label (https://github.com/Brevilabs/obsidian-copilot-private/issues/615)", async () => {
+        const plugin = createPluginUnderTest([]);
+        Object.assign(plugin, { app: { vault: { getName: () => "My Vault" } } });
+        jest.mocked(buildChatDeepLink).mockReturnValue("obsidian://copilot-chat?native");
+        const writeText = jest.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+
+        await plugin.copyChatLink("copilot-agent-session://codex/abc");
+
+        expect(writeText).toHaveBeenCalledWith("[Chat](obsidian://copilot-chat?native)");
       });
     });
 
