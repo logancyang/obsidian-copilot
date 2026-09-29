@@ -2,7 +2,7 @@ import { Notice } from "obsidian";
 import { OPENCODE_PINNED_VERSION, OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
 import { resolveEffort } from "@/lib/model-effort";
 import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
-import OpencodeLogo from "@/agentMode/backends/opencode/logo.svg";
+import OpencodeLogo from "@/lib/agent-logos/opencode.svg";
 import type CopilotPlugin from "@/main";
 import { prefetchConfigEfforts } from "@/agentMode/backends/shared/prefetchConfigEfforts";
 import {

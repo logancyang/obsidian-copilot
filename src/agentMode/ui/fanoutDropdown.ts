@@ -1,4 +1,3 @@
-import { backendRegistry } from "@/agentMode/backends/registry";
 import {
   isDirectAnswerTurn,
   type AgentAnswer,
@@ -6,6 +5,7 @@ import {
   type FanoutTurn,
 } from "@/agentMode/session/fanout/fanoutTypes";
 import type { AgentBrand, BackendId } from "@/agentMode/session/types";
+import type { AgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
 
 export const FANOUT_SUMMARY_OPTION = "__summary__";
 
@@ -49,17 +49,29 @@ export interface FanoutOption {
   state?: FanoutAgentState;
 }
 
-function brandFor(backendId: BackendId): { displayName: string; Icon?: AgentBrand["Icon"] } {
-  const descriptor = backendRegistry[backendId];
-  if (!descriptor) return { displayName: backendId };
-  return { displayName: descriptor.displayName, Icon: descriptor.Icon };
+export interface FanoutBrand {
+  displayName: string;
+  Icon?: AgentBrand["Icon"];
 }
 
-export function fanoutDisplayName(backendId: BackendId): string {
-  return brandFor(backendId).displayName;
+export type FanoutBrandLookup = (backendId: BackendId) => FanoutBrand;
+
+/**
+ * Names and icons for the agents in a fan-out answer, drawn from what the surrounding environment
+ * supplies, so the message pane needs no registry of every agent. An agent the environment does
+ * not know shows under its id.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/613
+ */
+export function fanoutBrandLookup(
+  capabilities: Pick<AgentPaneCapabilities, "backendIcon" | "backendName">
+): FanoutBrandLookup {
+  return (backendId) => ({
+    displayName: capabilities.backendName?.(backendId) ?? backendId,
+    Icon: capabilities.backendIcon?.(backendId),
+  });
 }
 
-export function buildFanoutOptions(turn: FanoutTurn): FanoutOption[] {
+export function buildFanoutOptions(turn: FanoutTurn, brandFor: FanoutBrandLookup): FanoutOption[] {
   const backendIds = Object.keys(turn.answers);
   const options: FanoutOption[] = isDirectAnswerTurn(turn)
     ? []

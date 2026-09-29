@@ -1,6 +1,8 @@
+import { useAgentPaneCapabilities } from "@/agentMode/ui/AgentPaneContext";
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import {
   buildFanoutOptions,
+  fanoutBrandLookup,
   FANOUT_SUMMARY_OPTION,
   selectedAnswer,
   summaryDisplayState,
@@ -79,7 +81,11 @@ const FanoutStatusDot: React.FC<FanoutStatusDotProps> = ({ state }) => {
 
 export const FanoutTurnView: React.FC<FanoutTurnViewProps> = memo(
   ({ turn, app, value, onSelect }) => {
-    const options = useMemo(() => buildFanoutOptions(turn), [turn]);
+    const capabilities = useAgentPaneCapabilities();
+    const options = useMemo(
+      () => buildFanoutOptions(turn, fanoutBrandLookup(capabilities)),
+      [turn, capabilities]
+    );
 
     return (
       <div className="tw-flex tw-flex-col tw-gap-2">

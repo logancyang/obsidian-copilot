@@ -1,5 +1,5 @@
 import { createFixtureClient } from "@/agentMode/ui/agentPane.fixtures";
-import { useSessionCommands } from "@/agentMode/ui/hooks/useSessionCommands";
+import { describeDroppedNotes, useSessionCommands } from "@/agentMode/ui/hooks/useSessionCommands";
 import { logWarn } from "@/logger";
 import type { Command } from "@/agentMode/protocol/commands";
 import { act, renderHook } from "@testing-library/react";
@@ -147,6 +147,23 @@ describe("useSessionCommands", () => {
       ]);
     });
 
+    it("tells the user which mentioned notes the desktop could not find https://github.com/Brevilabs/obsidian-copilot-private/issues/613", async () => {
+      const fixture = createFixtureClient({
+        sessionId: SESSION_ID,
+        onCommand: () => ({
+          ok: true as const,
+          value: { userMessageId: "m1", droppedNotePaths: ["Phone only/Trip.md"] },
+        }),
+      });
+      const { result } = renderHook(() => useSessionCommands(fixture.client, SESSION_ID));
+
+      await result.current.send("See [[Trip]]");
+
+      expect(mockNotice).toHaveBeenCalledWith(
+        "A note you mentioned is not in the desktop's vault, so the agent could not read it: Trip."
+      );
+    });
+
     it("omits context, images and mentioned agents the message does not have", async () => {
       const fixture = createFixtureClient({ sessionId: SESSION_ID, onCommand: runOnSend("idle") });
       const { result } = renderHook(() => useSessionCommands(fixture.client, SESSION_ID));
@@ -233,6 +250,20 @@ describe("useSessionCommands", () => {
       });
       const refused = renderHook(() => useSessionCommands(refusing.client, SESSION_ID));
       await expect(refused.result.current.cancel()).rejects.toThrow("No session s1");
+    });
+  });
+
+  describe("describeDroppedNotes()", () => {
+    it("names a single dropped note by its file name", () => {
+      expect(describeDroppedNotes(["Daily/2026-09-29.md"])).toBe(
+        "A note you mentioned is not in the desktop's vault, so the agent could not read it: 2026-09-29."
+      );
+    });
+
+    it("counts several notes, names the first three and summarises the rest", () => {
+      expect(describeDroppedNotes(["a.md", "b.md", "c.md", "d.md", "e.md"])).toBe(
+        "5 notes you mentioned are not in the desktop's vault, so the agent could not read them: a, b, c and 2 more."
+      );
     });
   });
 });

@@ -20,6 +20,7 @@ export function createDesktopPaneCapabilities(
   return {
     vaultBase: getVaultBase(app),
     backendIcon: (backendId) => backendRegistry[backendId]?.Icon,
+    backendName: (backendId) => backendRegistry[backendId]?.displayName,
     persistDefaults: {
       setDefaultBackend: (backendId) => manager.setDefaultBackend(backendId),
       persistDefaultMode: (backendId, mode) => {

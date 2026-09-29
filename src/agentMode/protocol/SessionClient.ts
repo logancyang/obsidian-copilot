@@ -46,7 +46,13 @@ export interface HostVersion {
   app: string;
 }
 
-const DISCONNECTED: CommandResult<never> = { ok: false, code: "failed", message: "disconnected" };
+export const DISCONNECTED_MESSAGE = "disconnected";
+
+const DISCONNECTED: CommandResult<never> = {
+  ok: false,
+  code: "failed",
+  message: DISCONNECTED_MESSAGE,
+};
 
 export class SessionClient {
   private connection: ConnectionState = "connecting";

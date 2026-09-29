@@ -25,6 +25,9 @@ export interface PersistDefaults {
 export interface AgentPaneCapabilities {
   vaultBase: string | null;
   backendIcon?: (backendId: BackendId) => React.ComponentType<{ className?: string }> | undefined;
+  backendName?: (backendId: BackendId) => string | undefined;
+  multiAgentAllowed?: boolean;
+  imageBytesBudget?: number;
   persistDefaults?: PersistDefaults;
   openPath?: (path: string, options?: { newLeaf?: boolean }) => void;
   insertAtCursor?: (text: string) => void;

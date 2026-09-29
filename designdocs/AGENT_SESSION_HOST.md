@@ -460,7 +460,10 @@ A paired phone reaches the host over the authenticated channel of [`REMOTE_PAIRI
   ("Update Copilot on both devices"), because a desktop on a Copilot without the session protocol
   admits the phone and never answers hello. Close codes `4401` and `4403` end the retries because the
   desktop rejected the phone.
-- **Commands are never re-sent.** The client fails an in-flight command with `disconnected`.
+- **Commands are never re-sent.** The client fails an in-flight command with `disconnected`. A
+  composer whose `send` failed returns the message, and the follow-ups queued behind it, to the
+  composer. After a lost connection it asks the user to check the chat before sending again, because
+  the host may have run the command and lost only its answer.
 
 The same recorded sessions run over this transport in `SessionHost.remote.parity.test.ts`, with the
 real listener on loopback and `ws` as the phone's WebSocket.
