@@ -15,6 +15,7 @@ module.exports = {
     "^@agentclientprotocol/sdk$": "<rootDir>/__mocks__/@agentclientprotocol/sdk.js",
     "^@anthropic-ai/claude-agent-sdk$": "<rootDir>/__mocks__/@anthropic-ai/claude-agent-sdk.js",
     "^react-resizable-panels$": "<rootDir>/__mocks__/react-resizable-panels.js",
+    "^ws$": "<rootDir>/node_modules/ws/index.js",
   },
   testRegex: ".*\\.test\\.(jsx?|tsx?)$",
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node", "md"],
