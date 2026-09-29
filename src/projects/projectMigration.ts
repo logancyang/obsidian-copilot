@@ -52,9 +52,7 @@ async function saveFailedProjectToUnsupported(
             const backedUpProject = JSON.parse(jsonMatch[1]);
             if (JSON.stringify(backedUpProject) === JSON.stringify(project)) return false;
           }
-        } catch {
-          // Can't verify — treat as collision and create suffixed backup
-        }
+        } catch {}
       }
       filePath = `${unsupportedFolder}/${baseName} - ${suffix}.md`;
       suffix++;

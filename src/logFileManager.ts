@@ -112,7 +112,6 @@ class LogFileManager {
         await app.vault.adapter.write(path, content);
       }
     } catch {
-      // swallow write errors; logging should never crash the app
     } finally {
       this.flushing = false;
     }
@@ -127,9 +126,7 @@ class LogFileManager {
       if (await app.vault.adapter.exists(path)) {
         await app.vault.adapter.remove(path);
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   private sanitizeSettingsForLog(): Record<string, unknown> {
@@ -182,9 +179,7 @@ class LogFileManager {
       const settingsLines = ["", "## Settings", "```json", ...settingsJson.split("\n"), "```"];
 
       bufferSnapshot.push(...settingsLines);
-    } catch {
-      // If settings export fails, continue without settings block
-    }
+    } catch {}
 
     try {
       const content = bufferSnapshot.join("\n") + (bufferSnapshot.length ? "\n" : "");
@@ -199,9 +194,7 @@ class LogFileManager {
       } else {
         await app.vault.create(path, content);
       }
-    } catch {
-      // Swallow write errors; logging should never crash the app
-    }
+    } catch {}
 
     const abstract = app.vault.getAbstractFileByPath(path);
     const file = abstract instanceof TFile ? abstract : null;
@@ -210,9 +203,7 @@ class LogFileManager {
         const leaf = app.workspace.getLeaf(true);
         await leaf.openFile(file);
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 }
 

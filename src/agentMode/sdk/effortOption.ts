@@ -80,8 +80,6 @@ export async function probeClaudeSdkCatalog(
   } finally {
     try {
       await probe.interrupt();
-    } catch {
-      // Probe is being torn down; swallow.
-    }
+    } catch {}
   }
 }

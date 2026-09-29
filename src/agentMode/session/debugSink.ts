@@ -203,12 +203,7 @@ export class FrameSink {
       for (const target of [paths.logPath, paths.rotatedPath]) {
         try {
           await narrowExistingFile(runtime, target, getPosixOwnerUid(runtime));
-        } catch {
-          // Each generation stands alone: one this sink must refuse, or a
-          // runtime that cannot report its uid, says nothing about the other,
-          // which may still hold the user's own plaintext. Startup must not
-          // fail over a diagnostic log either, so nothing propagates.
-        }
+        } catch {}
       }
     });
     this.writeChain = task;
@@ -330,9 +325,7 @@ export class FrameSink {
       if (stat.size < ROTATE_BYTES) return;
       await removeIfExists(runtime, paths.rotatedPath);
       await runtime.rename(paths.logPath, paths.rotatedPath);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 }
 
@@ -538,9 +531,7 @@ function isNotFoundError(error: unknown): boolean {
 async function removeIfExists(runtime: NodeRuntime, path: string): Promise<void> {
   try {
     await runtime.rm(path, { force: true });
-  } catch {
-    // ignore — file already gone or adapter unavailable
-  }
+  } catch {}
 }
 
 function stableHash(value: string): string {

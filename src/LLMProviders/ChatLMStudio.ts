@@ -35,9 +35,7 @@ function createLMStudioFetch(baseFetch?: typeof window.fetch): typeof window.fet
         if (modified) {
           init = { ...init, body: JSON.stringify(body) };
         }
-      } catch {
-        // Not JSON, pass through unchanged
-      }
+      } catch {}
     }
     return underlyingFetch(input, init);
   };

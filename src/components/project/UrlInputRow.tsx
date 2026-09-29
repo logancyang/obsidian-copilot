@@ -33,9 +33,7 @@ export function UrlInputRow({
     try {
       const text = await navigator.clipboard.readText();
       if (text) submitText(text);
-    } catch {
-      // Clipboard unavailable / denied — typing still works.
-    }
+    } catch {}
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {

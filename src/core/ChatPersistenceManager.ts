@@ -86,9 +86,7 @@ export class ChatPersistenceManager {
             if (adapterFm.topic) existingTopic = adapterFm.topic;
             if (adapterFm.lastAccessedAt) existingLastAccessedAt = Number(adapterFm.lastAccessedAt);
           }
-        } catch {
-          // Ignore — proceed without preserved frontmatter
-        }
+        } catch {}
       }
 
       const preferredFileName = existingFile
@@ -739,9 +737,7 @@ ${chatContent}`;
         if (adapterFm?.epoch) {
           epoch = Number(adapterFm.epoch);
         }
-      } catch {
-        // Ignore
-      }
+      } catch {}
     }
 
     if (!epoch) {

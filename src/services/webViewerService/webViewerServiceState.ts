@@ -129,9 +129,7 @@ export class WebViewerStateManager {
           if (leafTitle && leafTitle.toLowerCase() === titleHintLower) {
             titleMatchedLeaves.push(leaf);
           }
-        } catch {
-          // Ignore and continue scanning other leaves
-        }
+        } catch {}
       }
 
       if (titleMatchedLeaves.length === 1) {
@@ -303,15 +301,11 @@ export class WebViewerStateManager {
           for (const event of entry.events) {
             webview.removeEventListener(event, entry.handler);
           }
-        } catch {
-          // Ignore cleanup errors
-        }
+        } catch {}
 
         this.webviewLoadListeners.delete(webview);
       }
-    } catch {
-      // Ignore errors
-    }
+    } catch {}
   }
 
   private cleanupWebviewLoadListeners(): void {
@@ -322,9 +316,7 @@ export class WebViewerStateManager {
             webview.removeEventListener(event, handler);
           }
         }
-      } catch {
-        // Ignore cleanup errors
-      }
+      } catch {}
     }
     this.webviewLoadListeners.clear();
   }
@@ -353,9 +345,7 @@ export class WebViewerStateManager {
     for (const callback of this.webviewLoadCallbacks) {
       try {
         callback();
-      } catch {
-        // Ignore callback errors
-      }
+      } catch {}
     }
   }
 

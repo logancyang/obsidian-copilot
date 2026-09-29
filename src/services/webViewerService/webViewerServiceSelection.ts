@@ -152,9 +152,7 @@ export class WebSelectionTracker {
       };
 
       this.onSelectionChange(context);
-    } catch {
-      // Ignore errors - web viewer may not be available
-    }
+    } catch {}
   }
 
   private getOrCreateLeafState(leaf: WebViewerLeaf): LeafSelectionTrackingState {

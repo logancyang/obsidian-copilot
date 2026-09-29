@@ -58,31 +58,75 @@ const noDirectNodeImportsRule = {
   },
 };
 
-const copilotLintPlugin = {
-  rules: {
-    "no-direct-node-imports": noDirectNodeImportsRule,
+const GITHUB_ISSUE_URL = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+/;
+const TOOL_DIRECTIVE =
+  /^(eslint-disable|eslint-enable|@ts-|prettier-ignore|(istanbul|c8|v8) ignore|webpack[A-Z]|@vite-ignore|#(end)?region\b|[@#]__PURE__|[@#]__NO_SIDE_EFFECTS__|@jsx|@license|@preserve|@(jest|vitest)-environment|@type\s|@satisfies|@typedef|<reference|<amd-)/;
+const BLOCK_ONLY_DIRECTIVE = /^(eslint-env|eslint|globals?|exported)\s/;
+
+const isToolDirective = (comment) => {
+  const body = comment.value.replace(/^[/*\s]+/, "");
+  return (
+    comment.value.startsWith("!") ||
+    /@(jest|vitest)-environment/.test(comment.value) ||
+    TOOL_DIRECTIVE.test(body) ||
+    (comment.type === "Block" && BLOCK_ONLY_DIRECTIVE.test(body))
+  );
+};
+
+const issueLinkedCommentsRule = {
+  meta: {
+    type: "suggestion",
+    schema: [],
+    messages: {
+      issueless:
+        "Comments must link the GitHub issue that records the decision (https://github.com/OWNER/REPO/issues/N). Express everything else through names, types, and tests.",
+    },
+  },
+  create(context) {
+    return {
+      Program() {
+        const groups = [];
+        for (const comment of context.sourceCode.getAllComments()) {
+          if (comment.type === "Shebang") continue;
+          const group = groups.at(-1);
+          const previous = group?.at(-1);
+          if (
+            previous?.type === "Line" &&
+            comment.type === "Line" &&
+            comment.loc.start.line === previous.loc.end.line + 1
+          ) {
+            group.push(comment);
+          } else {
+            groups.push([comment]);
+          }
+        }
+        for (const group of groups) {
+          if (group.some((comment) => GITHUB_ISSUE_URL.test(comment.value))) continue;
+          for (const comment of group) {
+            if (!isToolDirective(comment)) {
+              context.report({ loc: comment.loc, messageId: "issueless" });
+            }
+          }
+        }
+      },
+    };
   },
 };
 
-// obsidianmd ships its rules as warnings, and a warning stream nobody gates on
-// is how 30 `prefer-create-el` violations reached the plugin's community listing
-// unnoticed. Promote every rule the codebase already satisfies to an error so
-// the next one fails `npm run lint` in CI on the PR that introduces it. Rules
-// listed here keep the recommended severity because they have a known backlog or
-// a deliberate override; each needs its own reason, not a blanket exemption.
+const copilotLintPlugin = {
+  rules: {
+    "no-direct-node-imports": noDirectNodeImportsRule,
+    "issue-linked-comments": issueLinkedCommentsRule,
+  },
+};
+
 const OBSIDIANMD_UNRATCHETED = new Set([
-  // Declarative settings migration, tracked by logancyang/obsidian-copilot-preview#297.
   "settings-tab/prefer-setting-definitions",
-  // Turned off below; promoting here would resurrect them.
   "ui/sentence-case",
   "platform",
-  // Configured below with a project-specific message payload.
   "rule-custom-message",
 ]);
 
-// Only raise the severity of rules the recommended config already turns on.
-// Rules it leaves off are its own judgement call; adopting one is a separate
-// decision with its own cleanup, not something this ratchet should smuggle in.
 const OBSIDIANMD_RATCHET = Object.fromEntries(
   Object.entries(
     (Array.isArray(obsidianmd.configs.recommended)
@@ -111,9 +155,7 @@ const restrictedSourceImports = [
   },
 ];
 
-// Namespace imports let esbuild omit Zod's locale registry; named `z` imports can push the
-// production artifact over Obsidian Sync's limit.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/94
+// Named `z` imports pull Zod's locale registry into main.js: https://github.com/Brevilabs/obsidian-copilot-private/issues/94
 const restrictedZodSourceImport = {
   selector:
     "ImportDeclaration[source.value='zod'][importKind='value'] ImportSpecifier[imported.name='z'][importKind='value'], ImportDeclaration[source.value='zod/v4'][importKind='value'] ImportSpecifier[imported.name='z'][importKind='value']",
@@ -121,7 +163,6 @@ const restrictedZodSourceImport = {
     'Use `import * as z from "zod"` so the production bundle can tree-shake unused Zod locales.',
 };
 
-// Raw browser storage bypasses Obsidian's vault-scoped persistence APIs.
 const restrictedBrowserStorage = {
   selector:
     "Identifier[name=/^(localStorage|sessionStorage)$/], " +
@@ -165,17 +206,8 @@ export default [
     ],
   },
 
-  // obsidianmd recommended brings:
-  //   - eslint:recommended
-  //   - typescript-eslint recommendedTypeChecked on .ts/.tsx (recommended on .js/.jsx)
-  //   - obsidianmd plugin + all obsidianmd-namespaced rules
-  //   - import / @microsoft/sdl / depend / no-unsanitized
-  //   - Obsidian-injected globals (activeDocument, createDiv, etc.)
   ...obsidianmd.configs.recommended,
 
-  // React + tailwind plugins ship flat configs with no `files` filter, so
-  // they'd cascade onto package.json (which uses the JSON parser) and crash.
-  // Constrain them to JSX/TSX sources where React/JSX rules actually apply.
   {
     files: ["**/*.{jsx,tsx}"],
     ...eslintReact.configs.recommended,
@@ -183,15 +215,6 @@ export default [
   {
     files: ["**/*.{jsx,tsx}"],
     rules: {
-      // Deferred to follow-up PRs — these flag legitimate anti-patterns but
-      // each fix requires per-component intent analysis, and they're surfaced
-      // as warnings (not errors) so they don't block CI.
-      //
-      // no-direct-set-state-in-use-effect: ~50 violations. Common pattern is
-      // "sync local state with prop", which has no one-size-fits-all fix —
-      // some cases want render-time derivation, others want a `key` prop reset
-      // or `useSyncExternalStore`. Refactoring blindly risks behavior regressions
-      // in the chat UI's stateful components.
       "@eslint-react/hooks-extra/no-direct-set-state-in-use-effect": "warn",
     },
   },
@@ -212,7 +235,6 @@ export default [
     files: ["**/*.{js,jsx,mjs,cjs,ts,tsx}"],
     languageOptions: {
       globals: {
-        // Obsidian plugin runtime injects `app` as a global (see CLAUDE.md).
         app: "readonly",
       },
     },
@@ -222,15 +244,11 @@ export default [
         callees: ["classnames", "clsx", "ctl", "cn", "cva"],
         config: "./tailwind.config.js",
         cssFiles: ["**/*.css", "!**/node_modules", "!**/.*", "!**/dist", "!**/build"],
-        // Obsidian-provided utility classes used in JSX but not defined in our CSS.
         whitelist: ["clickable-icon", "mod-cta"],
       },
     },
     rules: {
-      // Carry-over from legacy .eslintrc
       "no-prototype-builtins": "off",
-      // Use project-specific console-call messages below while preserving the
-      // Obsidian config's custom message for the Function constructor.
       "obsidianmd/rule-custom-message": [
         "error",
         {
@@ -250,35 +268,15 @@ export default [
       "tailwindcss/no-custom-classname": "error",
       "tailwindcss/no-contradicting-classname": "error",
 
-      // obsidianmd: defer to follow-up PRs
       "obsidianmd/ui/sentence-case": "off",
 
-      // obsidianmd: disabled intentionally — Platform.isMacOS branching is on-purpose
       "obsidianmd/platform": "off",
 
-      // Bundled by obsidianmd/recommended via tseslint.configs.recommendedTypeChecked.
-      // Disabled here because the codebase intentionally uses `any` / dynamic typing
-      // around Obsidian's untyped APIs and LangChain message shapes — flipping these
-      // on would require refactoring thousands of call sites with no functional gain.
-      //
-      // Violation counts (src/**/*.{ts,tsx}) are noted inline. Rules with low counts
-      // are candidates to enable in small follow-up PRs.
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
 
-      // --- Heavy: any-flow through Obsidian/LangChain APIs ---
-      // no-unsafe-member-access: enabled globally; tests are exempted via the
-      // test-file override below.
-      "@typescript-eslint/no-unsafe-assignment": "off", // enabled for tests below; follow-up PR for production
-      "@typescript-eslint/no-unsafe-call": "off", // 107 violations
-
-      // --- Medium: promise / method ergonomics ---
-      // Enabled in the TS-only block below.
-
-      // no-deprecated: defer — surface the warnings, but don't fail CI yet
       "@typescript-eslint/no-deprecated": "off",
 
-      // Ban the Obsidian-injected global `app` (footgun in popouts; hides
-      // dependencies from tests). Thread `app` via useApp() in React or as a
-      // parameter in plain modules. See PLUGIN_DEV_GUIDE.md.
       "no-restricted-globals": [
         "error",
         {
@@ -288,12 +286,6 @@ export default [
         },
       ],
 
-      // Ban `Platform.isDesktopApp` — it stays true under
-      // `app.emulateMobile(true)` (which stubs Node's built-ins to null), so
-      // desktop-only / Node-dependent code still runs there and crashes the
-      // plugin. Gate on isDesktopRuntime() (desktop app AND not mobile) instead.
-      // The helper itself (src/utils/desktopRuntime.ts) is exempt via an inline
-      // disable, since it owns the canonical check.
       "no-restricted-properties": [
         "error",
         {
@@ -306,8 +298,6 @@ export default [
     },
   },
 
-  // Runtime Node access in plugin source must cross the shared desktop guard.
-  // Tests may import Node directly because they execute under Jest, not Obsidian.
   {
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/**/*.test.{ts,tsx}", "src/**/__mocks__/**"],
@@ -317,27 +307,15 @@ export default [
     },
   },
 
-  // Three AST-level import bans, combined in one block:
-  //
-  // 1. Parent-relative imports (`../foo`, `..`) — use the `@/` path alias
-  //    instead. Survives file moves, keeps grep unambiguous, avoids long
-  //    `../../../` chains. Same-directory `./foo` remains allowed.
-  //
-  // 2. `createRoot` from `react-dom/client` outside `createPluginRoot` —
-  //    every standalone React root must go through that helper so descendants
-  //    can rely on `useApp()` unconditionally (bug class fixed in PR #2466).
-  //
-  // 3. Runtime named `z` imports from Zod — namespace imports allow esbuild to
-  //    omit Zod's locale registry from the production bundle. Tests are exempt
-  //    because they do not ship in main.js.
-  //
-  // All three selectors must live in the same block: flat config replaces (does
-  // not merge) rule values when the same rule key appears in multiple
-  // matching blocks, so splitting them would silently disable the earlier
-  // ban on every file the later block also matches.
-  //
-  // `createPluginRoot.tsx` is exempted via `ignores` — it owns `createRoot`,
-  // and has no parent imports today.
+  {
+    files: ["**/*.{js,jsx,mjs,cjs,ts,tsx}"],
+    plugins: { copilot: copilotLintPlugin },
+    rules: {
+      "copilot/issue-linked-comments": "error",
+      "no-empty": ["error", { allowEmptyCatch: true }],
+    },
+  },
+
   {
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/utils/react/createPluginRoot.tsx"],
@@ -352,8 +330,6 @@ export default [
     },
   },
 
-  // createPluginRoot owns the otherwise-restricted React root import, but it
-  // still belongs to the production logging boundary.
   {
     files: ["src/utils/react/createPluginRoot.tsx"],
     rules: {
@@ -374,8 +350,6 @@ export default [
     },
   },
 
-  // Test output is intentionally written to the console. Keep the production
-  // import restrictions without applying the logging boundary to test files.
   {
     files: ["src/**/*.test.{js,jsx,ts,tsx}"],
     rules: {
@@ -385,8 +359,6 @@ export default [
 
   {
     files: ["src/components/ui/**/*.{ts,tsx}"],
-    // Tests may reach further; stories deliberately may not — a story that needs
-    // plugin state to build a fixture is reporting a coupled component.
     ignores: ["src/components/ui/**/*.test.{ts,tsx}"],
     rules: {
       "@typescript-eslint/consistent-type-imports": "error",
@@ -395,8 +367,6 @@ export default [
         {
           patterns: [
             {
-              // Allowlist, not denylist: almost every src/ directory holds a store or
-              // singleton somewhere, so enumerating the bad ones will always lag.
               group: [
                 "@/*",
                 "!@/components",
@@ -423,8 +393,6 @@ export default [
 
   {
     files: ["dev/gallery/**/*.{ts,tsx}", "src/**/*.stories.{ts,tsx}"],
-    // Test fixtures intentionally import production stories and contexts but are
-    // erased from the gallery bundle, so only runtime gallery code needs this fence.
     ignores: ["dev/gallery/**/*.test.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-restricted-imports": [
@@ -456,7 +424,6 @@ export default [
     },
   },
 
-  // Test files need Jest globals
   {
     files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "__mocks__/**"],
     languageOptions: {
@@ -472,23 +439,13 @@ export default [
       "eslint-comments/disable-enable-pair": "off",
       "eslint-comments/no-restricted-disable": "off",
       "eslint-comments/require-description": "off",
-      // Tests intentionally consume the global `app` mock (window.app, set up in
-      // __mocks__/obsidian.js) to feed it into the parameterized production
-      // functions under test. The footgun the ban guards against (popout windows,
-      // hidden dependencies) is a production concern, so don't enforce it here.
       "no-restricted-globals": "off",
-      // Tests use intentional `any` mocks; disable type-safety rules that flood
-      // the test suite without adding signal.
       "@typescript-eslint/no-unsafe-member-access": "off",
-      // Tests freely reach across layers and import ACP wire types directly to
-      // build fixtures; the layer enforcement only applies to production code.
       "boundaries/dependencies": "off",
       "no-restricted-imports": "off",
     },
   },
 
-  // Tests have been cleaned of unsafe `any` assignments. Production code
-  // (~499 violations) is a follow-up; keep tests enforced.
   {
     files: ["**/*.test.{ts,tsx}"],
     rules: {
@@ -496,7 +453,6 @@ export default [
     },
   },
 
-  // Node-context files (build configs, scripts)
   {
     files: [
       "*.{js,mjs,cjs}",
@@ -524,8 +480,6 @@ export default [
     },
   },
 
-  // CommonJS tools use require() by construction. The renderer patch also
-  // runs only from the Node build pipeline despite its historical .js suffix.
   {
     files: [
       "**/*.cjs",
@@ -538,22 +492,10 @@ export default [
     },
   },
 
-  // Element types (order matters — first match wins; files before folders):
-  //   registry     src/agentMode/backends/registry.ts (file)
-  //   barrel       src/agentMode/index.ts (file)
-  //   session      src/agentMode/session
-  //   acp          src/agentMode/acp
-  //   sdk          src/agentMode/sdk
-  //   backend      src/agentMode/backends/<name>
-  //   ui           src/agentMode/ui
-  //   skills       src/agentMode/skills
-  //   host         src/** (everything else under src/)
   {
     files: ["src/**/*.{ts,tsx,js,jsx}"],
     plugins: { boundaries },
     settings: {
-      // Required so `eslint-plugin-boundaries` can resolve `@/*` path aliases
-      // to their `src/*` targets.
       "import/resolver": {
         typescript: { project: "./tsconfig.json" },
         node: true,
@@ -608,11 +550,6 @@ export default [
                 },
               },
             },
-            // modelManagement: self-contained module. Host code may
-            // freely reach into the module at the boundary layer; the
-            // barrel-only entry rule (no deep imports of
-            // `@/modelManagement/types/*`) is enforced by
-            // `no-restricted-imports` patterns further down.
             { from: { type: "modelmgmt" }, allow: { to: { type: ["modelmgmt", "host"] } } },
             {
               from: { type: "host" },
@@ -624,8 +561,6 @@ export default [
     },
   },
 
-  // Re-disable boundaries/dependencies for tests — the block above otherwise
-  // re-enables the rule for test files via the broader `src/**` pattern.
   {
     files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "__mocks__/**"],
     rules: {
@@ -633,19 +568,6 @@ export default [
     },
   },
 
-  // Two path-based import fences, combined in one block (flat config
-  // replaces — does not merge — rule values when the same rule key
-  // appears across matching blocks, so both fences MUST live here):
-  //
-  //   1. `@agentclientprotocol/sdk` — confined to src/agentMode/acp/.
-  //      Other agent-mode layers depend on the session-domain types
-  //      in @/agentMode/session/types instead.
-  //   2. `@/modelManagement/*` deep imports — host code must enter the
-  //      modelManagement module via its barrel (`@/modelManagement`).
-  //      This replaces a `modelmgmt-barrel` boundary element with the
-  //      lighter no-restricted-imports mechanism already used for (1).
-  //
-  // Module-internal files are exempted in the override blocks below.
   {
     files: ["src/**/*.{ts,tsx}"],
     rules: {
@@ -683,8 +605,6 @@ export default [
     },
   },
 
-  // TypeScript-specific overrides (the @typescript-eslint plugin is registered
-  // by obsidianmd's recommended config only for .ts/.tsx files).
   {
     files: ["**/*.ts", "**/*.tsx"],
     languageOptions: {
@@ -697,12 +617,6 @@ export default [
       "@typescript-eslint/no-empty-function": "off",
       "@typescript-eslint/ban-ts-comment": "off",
       "@typescript-eslint/no-unused-vars": ["error", { args: "none" }],
-      // An async handler passed to a void-returning JSX attribute drops its
-      // rejection: React never sees the promise, so a failure mid-handler leaves
-      // the control looking inert and writes nothing to the Copilot log. Wrap
-      // such handlers in `safeAsyncHandler` instead of relaxing this check.
-      // checksVoidReturn relaxed for inheritedMethods only: Obsidian awaits
-      // `Plugin.onload`, so declaring it async is correct there.
       "@typescript-eslint/no-misused-promises": [
         "error",
         { checksVoidReturn: { inheritedMethods: false } },
@@ -711,17 +625,10 @@ export default [
       "@typescript-eslint/no-unsafe-return": "error",
       "@typescript-eslint/unbound-method": "error",
       ...OBSIDIANMD_RATCHET,
-      // TypeScript handles undefined-identifier detection (and does so cross-realm
-      // correctly); per typescript-eslint's own guidance, disable no-undef on TS.
       "no-undef": "off",
     },
   },
 
-  // Agent Mode tests use heavy `any` mocking for backend / SDK / ACP wire
-  // types whose real shapes are vendor-controlled and inconvenient to model
-  // in test scaffolding. Loosen the test-only unsafe rules for the
-  // agent-mode subtree only; production code stays enforced. Placed after the
-  // general TS block so it actually overrides.
   {
     files: ["src/agentMode/**/*.test.{ts,tsx}"],
     rules: {
@@ -731,13 +638,6 @@ export default [
     },
   },
 
-  // Type-aware rules need the type information only the `**/*.ts(x)` block
-  // above requests via parserOptions.project. Scope them off by excluding
-  // TypeScript rather than by listing non-TS extensions: which files
-  // eslint-plugin-obsidianmd applies no-plugin-as-component to differs by
-  // version, and a type-aware rule reaching an untyped target such as
-  // manifest.json cannot load, which makes ESLint abort the whole run instead
-  // of reporting findings. scripts/review-obsidian-fixtures.mjs guards this.
   {
     ignores: ["**/*.ts", "**/*.tsx"],
     rules: {
@@ -746,8 +646,6 @@ export default [
     },
   },
 
-  // package.json: keep depend/ban-dependencies enabled from obsidianmd's
-  // recommended config and make deliberate dependency choices explicit here.
   {
     files: ["**/package.json"],
     rules: {
@@ -760,12 +658,6 @@ export default [
     },
   },
 
-  // Jest assertions like `expect(mock.method).toHaveBeenCalled()` reference
-  // methods unbound by design. The rule has no clean workaround for jest
-  // patterns (binding changes the reference identity and breaks the assertion),
-  // so disable it in tests. Scoped to .ts/.tsx because the @typescript-eslint
-  // plugin is only registered for those files. Placed last so it overrides the
-  // TS-only block above.
   {
     files: ["**/*.test.{ts,tsx}"],
     rules: {
@@ -773,11 +665,6 @@ export default [
     },
   },
 
-  // Tests run under Jest against jsdom, not inside Obsidian on a phone: they
-  // build fixture DOM with the native API because the Obsidian helpers do not
-  // exist there, and they import Node built-ins directly because Node is the
-  // runtime. Both rules stay errors for shipped source; this block is placed
-  // last so it overrides the ratchet in the TS-only block above.
   {
     files: ["**/*.test.{ts,tsx}"],
     rules: {

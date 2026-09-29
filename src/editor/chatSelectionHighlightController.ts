@@ -18,9 +18,7 @@ export function hideChatSelectionHighlight(view: EditorView): void {
     if (effects.length > 0) {
       view.dispatch({ effects });
     }
-  } catch {
-    // Ignore errors during cleanup (view may be destroyed)
-  }
+  } catch {}
 }
 
 interface Snapshot {

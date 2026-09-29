@@ -820,9 +820,7 @@ describe("withTimeout", () => {
 
     try {
       await withTimeout(operation, 50, "Test operation");
-    } catch {
-      // Expected to timeout
-    }
+    } catch {}
 
     await new Promise((resolve) => window.setTimeout(resolve, 10));
     expect(wasAborted).toBe(true);

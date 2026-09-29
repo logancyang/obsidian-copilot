@@ -69,9 +69,7 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
   let destination = "Unavailable";
   try {
     destination = formatBinaryPathForDisplay(manager.getDataDir());
-  } catch {
-    /* Managed actions report their own error. */
-  }
+  } catch {}
 
   const install = (): void => {
     manager.install().catch((error: unknown) => {

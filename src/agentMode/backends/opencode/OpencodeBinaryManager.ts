@@ -384,9 +384,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     const dirs: string[] = [];
     try {
       dirs.push(this.getDataDir());
-    } catch {
-      /* unusable home dir — nothing managed to reclaim there */
-    }
+    } catch {}
     const adapter = this.plugin.app.vault.adapter;
     if (adapter instanceof FileSystemAdapter) {
       dirs.push(
