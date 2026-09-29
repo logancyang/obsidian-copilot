@@ -43,7 +43,6 @@ describe("SessionClient", () => {
       transport.setOpen(true);
       transport.deliver({ type: "hello", v: 2, app: "9.9.9", hostId: "h", ok: false });
       expect(client.getConnection()).toBe("version_mismatch");
-      expect(client.getHostApp()).toBe("9.9.9");
       expect(client.getHostVersion()).toEqual({ v: 2, app: "9.9.9" });
       expect(transport.sentOfType("subscribe")).toEqual([]);
     });

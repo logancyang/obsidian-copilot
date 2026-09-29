@@ -77,10 +77,6 @@ export class SessionClient {
     return this.connection;
   }
 
-  getHostApp(): string | null {
-    return this.hostVersion?.app ?? null;
-  }
-
   getHostVersion(): HostVersion | null {
     return this.hostVersion;
   }
