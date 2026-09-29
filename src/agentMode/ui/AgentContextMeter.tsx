@@ -1,6 +1,6 @@
-import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import type { SessionClient } from "@/agentMode/protocol/SessionClient";
 import { withoutExpiredWindows } from "@/agentMode/session/planUsage";
-import type { PlanUsage, SessionUsage } from "@/agentMode/session/types";
+import type { PlanUsage, SessionId, SessionUsage } from "@/agentMode/session/types";
 import { usePlanUsage } from "@/agentMode/ui/hooks/usePlanUsage";
 import { useSessionUsage } from "@/agentMode/ui/hooks/useSessionUsage";
 import { TokenCounter } from "@/components/chat-components/TokenCounter";
@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 import * as React from "react";
 
 interface AgentContextMeterProps {
-  backend: AgentChatBackend;
+  client: SessionClient;
+  sessionId: SessionId;
 }
 
 const WARNING_THRESHOLD = 0.85;
@@ -166,9 +167,9 @@ export function UsageMeter({ usage, contextWindow, planUsage }: UsageMeterProps)
   );
 }
 
-export default function AgentContextMeter({ backend }: AgentContextMeterProps) {
-  const usage = useSessionUsage(backend);
-  const planUsage = usePlanUsage(backend);
+export default function AgentContextMeter({ client, sessionId }: AgentContextMeterProps) {
+  const usage = useSessionUsage(client, sessionId);
+  const planUsage = usePlanUsage(client, sessionId);
 
   const rawWindow = usage?.contextWindow;
   const contextWindow =

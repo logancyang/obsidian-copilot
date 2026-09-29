@@ -1,5 +1,5 @@
-import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { PlanUsage, SessionUsage } from "@/agentMode/session/types";
+import { createFixtureClient } from "@/agentMode/ui/agentPane.fixtures";
 import AgentContextMeter from "@/agentMode/ui/AgentContextMeter";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -9,22 +9,16 @@ beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
 });
 
-function makeBackend(
-  usage: SessionUsage | null,
-  planUsage: PlanUsage | null = null
-): AgentChatBackend {
-  return {
-    getSessionUsage: () => usage,
-    getPlanUsage: () => planUsage,
-    getBackendState: () => null,
-    subscribe: () => () => {},
-  } as unknown as AgentChatBackend;
+const SESSION_ID = "session-1";
+
+function makeFixture(usage: SessionUsage | null, planUsage: PlanUsage | null = null) {
+  return createFixtureClient({ sessionId: SESSION_ID, session: { usage, planUsage } });
 }
 
-function renderMeter(backend: AgentChatBackend) {
+function renderMeter(fixture: ReturnType<typeof makeFixture>) {
   return render(
     <TooltipProvider>
-      <AgentContextMeter backend={backend} />
+      <AgentContextMeter client={fixture.client} sessionId={SESSION_ID} />
     </TooltipProvider>
   );
 }
@@ -40,7 +34,7 @@ describe("AgentContextMeter", () => {
       cacheWriteTokens: 500,
       updatedAt: 1,
     };
-    renderMeter(makeBackend(usage));
+    renderMeter(makeFixture(usage));
 
     const trigger = screen.getByLabelText("Usage");
     expect(trigger.textContent).not.toContain("25%");
@@ -58,7 +52,7 @@ describe("AgentContextMeter", () => {
       contextWindow: 200_000,
       updatedAt: 1,
     };
-    renderMeter(makeBackend(usage));
+    renderMeter(makeFixture(usage));
 
     const trigger = screen.getByLabelText("Usage");
     expect(trigger.className).toContain("tw-text-warning");
@@ -74,7 +68,7 @@ describe("AgentContextMeter", () => {
       contextWindow: 200_000,
       updatedAt: 1,
     };
-    renderMeter(makeBackend(usage));
+    renderMeter(makeFixture(usage));
 
     const trigger = screen.getByLabelText("Usage");
     expect(trigger.className).toContain("tw-text-accent");
@@ -87,20 +81,24 @@ describe("AgentContextMeter", () => {
       inputTokens: 10_000,
       updatedAt: 1,
     };
-    const { container } = renderMeter(makeBackend(usage));
+    const { container } = renderMeter(makeFixture(usage));
 
     expect(screen.queryByLabelText("Context usage")).toBeNull();
     expect(container.textContent).toContain("12k");
   });
 
   it("renders nothing (no separator) when usage is null", () => {
-    const { container } = render(<AgentContextMeter backend={makeBackend(null)} />);
+    const { container } = render(
+      <AgentContextMeter client={makeFixture(null).client} sessionId={SESSION_ID} />
+    );
     expect(container.childElementCount).toBe(0);
   });
 
   it("renders nothing (no separator, no chip) when usedTokens is 0 and there is no contextWindow", () => {
     const usage: SessionUsage = { usedTokens: 0, updatedAt: 1 };
-    const { container } = render(<AgentContextMeter backend={makeBackend(usage)} />);
+    const { container } = render(
+      <AgentContextMeter client={makeFixture(usage).client} sessionId={SESSION_ID} />
+    );
     expect(container.childElementCount).toBe(0);
     expect(screen.queryByLabelText("Context usage")).toBeNull();
   });
@@ -110,7 +108,7 @@ describe("AgentContextMeter", () => {
       windows: [{ id: "weekly", label: "Weekly", percent: 15 }],
       updatedAt: 1,
     };
-    renderMeter(makeBackend(null, planUsage));
+    renderMeter(makeFixture(null, planUsage));
 
     const trigger = screen.getByLabelText("Usage");
     expect(trigger.querySelector("svg")).not.toBeNull();
@@ -126,7 +124,7 @@ describe("AgentContextMeter", () => {
       ],
       updatedAt: 1,
     };
-    renderMeter(makeBackend(usage, planUsage));
+    renderMeter(makeFixture(usage, planUsage));
 
     fireEvent.focus(screen.getByLabelText("Usage"));
 
@@ -145,7 +143,7 @@ describe("AgentContextMeter", () => {
       ],
       updatedAt: 1,
     };
-    renderMeter(makeBackend(usage, planUsage));
+    renderMeter(makeFixture(usage, planUsage));
 
     fireEvent.focus(screen.getByLabelText("Usage"));
 
@@ -159,7 +157,7 @@ describe("AgentContextMeter", () => {
       windows: [{ id: "seven_day", label: "Weekly", percent: 137 }],
       updatedAt: 1,
     };
-    renderMeter(makeBackend(usage, planUsage));
+    renderMeter(makeFixture(usage, planUsage));
 
     fireEvent.focus(screen.getByLabelText("Usage"));
 
@@ -168,7 +166,7 @@ describe("AgentContextMeter", () => {
 
   it("renders no cap rows when the backend reports no plan usage", () => {
     const usage: SessionUsage = { usedTokens: 50_000, contextWindow: 200_000, updatedAt: 1 };
-    renderMeter(makeBackend(usage, null));
+    renderMeter(makeFixture(usage, null));
 
     fireEvent.focus(screen.getByLabelText("Usage"));
 
@@ -185,7 +183,7 @@ describe("AgentContextMeter", () => {
       ],
       updatedAt: 1,
     };
-    renderMeter(makeBackend(usage, planUsage));
+    renderMeter(makeFixture(usage, planUsage));
 
     fireEvent.focus(screen.getByLabelText("Usage"));
 

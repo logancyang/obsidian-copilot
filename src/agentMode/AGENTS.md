@@ -5,7 +5,7 @@ Eight element types, strict imports. Enforced by `eslint-plugin-boundaries`
 `boundaries/dependencies` exactly — when in doubt, the lint config wins.
 
 1. **`session/`** — **the contract layer.** Hosts the
-   backend-agnostic session, message store, UI-state bridge,
+   backend-agnostic session, message store,
    persistence manager.
 2. **`acp/`** — the generic ACP runtime (subprocess, JSON-RPC connection,
    vault-backed ACP client, JSON-RPC stream tap) —

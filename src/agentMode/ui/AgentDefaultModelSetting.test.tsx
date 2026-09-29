@@ -36,7 +36,7 @@ function makeManager(opts: {
     getModelCacheSignature: () => "ready#",
     subscribe: () => () => {},
     subscribeModelCache: () => () => {},
-    getActiveChatUIState: () => null,
+    getActiveSession: () => null,
     getDefaultSelection: () => opts.defaultSelection ?? null,
     getCachedModelCatalog: () => null,
     getEffortCatalog: () => effortByModel,

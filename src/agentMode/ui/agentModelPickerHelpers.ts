@@ -5,7 +5,6 @@ import type { ModelCapability } from "@/constants";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { lockedCopilotEntries, shouldPreviewCopilotModels } from "@/lib/lockedCopilotEntries";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { backendNeedsSelfHostWarning, backendRegistry } from "@/agentMode/backends/registry";
@@ -195,7 +194,6 @@ export function resolveBaseModelId(entry: ModelSelectorEntry): string | undefine
 
 export interface ModelActiveContext {
   activeSession: AgentSession | null;
-  activeChatUIState: AgentChatUIState | null;
   activeBackendId: BackendId | null;
   activeDescriptor: BackendDescriptor | undefined;
   activeSessionHasHistory: boolean;
@@ -205,7 +203,6 @@ export interface ModelActiveContext {
 
 export function collectModelActiveContext(manager: AgentSessionManager): ModelActiveContext {
   const activeSession = manager.getActiveSession();
-  const activeChatUIState = manager.getActiveChatUIState();
   const activeBackendId = activeSession?.backendId ?? null;
   const activeDescriptor = activeBackendId ? backendRegistry[activeBackendId] : undefined;
   const activeSessionHasHistory = activeSession?.hasUserVisibleMessages() ?? false;
@@ -216,7 +213,6 @@ export function collectModelActiveContext(manager: AgentSessionManager): ModelAc
   );
   return {
     activeSession,
-    activeChatUIState,
     activeBackendId,
     activeDescriptor,
     activeSessionHasHistory,
@@ -318,14 +314,14 @@ export function buildEffortSibling(
   manager: AgentSessionManager,
   ctx: ModelActiveContext
 ): AgentModelPickerOverride["effort"] {
-  const { activeBackendId, activeCurrentEntry, activeModelState, activeChatUIState } = ctx;
+  const { activeBackendId, activeCurrentEntry, activeModelState, activeSession } = ctx;
   if (!activeBackendId || !activeCurrentEntry) return undefined;
   if (activeCurrentEntry.effortOptions.length === 0) return undefined;
   if (!activeModelState) return undefined;
   return {
     options: activeCurrentEntry.effortOptions,
     value: activeModelState.current.effort,
-    disabled: activeChatUIState?.canSwitchEffort() === false,
+    disabled: activeSession?.canSwitchEffort() === false,
     onChange: (value) => {
       manager
         .applySelection({ effort: value }, { expectBackendId: activeBackendId })
@@ -368,7 +364,7 @@ export function buildModelOnChange(
   ctx: ModelActiveContext,
   entries: ModelSelectorEntry[]
 ): (modelKey: string) => void {
-  const { activeSession, activeChatUIState } = ctx;
+  const { activeSession } = ctx;
   return (modelKey) => {
     const entry = entries.find((e) => getModelKeyFromModel(e) === modelKey);
     if (!entry) return;
@@ -401,7 +397,7 @@ export function buildModelOnChange(
       return;
     }
     manager.setDefaultBackend(targetBackendId);
-    if (activeChatUIState?.canSwitchModel() === false) {
+    if (activeSession?.canSwitchModel() === false) {
       new Notice("This agent doesn't support runtime model switching.");
       return;
     }
@@ -445,7 +441,7 @@ export function buildCommitSelection(
   entries: ModelSelectorEntry[],
   modelOnChange: (modelKey: string) => void
 ): (modelKey: string, effort: string | null) => void {
-  const { activeSession, activeChatUIState } = ctx;
+  const { activeSession } = ctx;
   return (modelKey, effort) => {
     const entry = entries.find((e) => getModelKeyFromModel(e) === modelKey);
     if (!entry) return;
@@ -471,7 +467,7 @@ export function buildCommitSelection(
       );
       return;
     }
-    if (activeChatUIState?.canSwitchModel() === false) {
+    if (activeSession?.canSwitchModel() === false) {
       new Notice("This agent doesn't support runtime model switching.");
       return;
     }

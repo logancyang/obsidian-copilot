@@ -1,9 +1,10 @@
-import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import { AgentSession } from "@/agentMode/session/AgentSession";
+import { applyPlanDecision, findDecidablePlan } from "@/agentMode/session/planDecision";
 import type { BackendDescriptor } from "@/agentMode/session/descriptor";
 import type {
   BackendProcess,
   PermissionPrompt,
+  PlanDecisionAction,
   SessionUpdateHandler,
 } from "@/agentMode/session/types";
 import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
@@ -13,7 +14,7 @@ jest.mock("@/settings/model", () => ({
   getSettings: jest.fn().mockReturnValue({ agentMode: {} }),
 }));
 
-describe("AgentChatUIState", () => {
+describe("planDecision", () => {
   function planReview(
     feedbackDelivery?: "permission" | "next_turn",
     { permissionArrived = true }: { permissionArrived?: boolean } = {}
@@ -56,8 +57,7 @@ describe("AgentChatUIState", () => {
       },
       getDescriptor: () => descriptor,
     });
-    const chat = new AgentChatUIState(session);
-    const firstTurn = chat.sendMessage("Draft a plan").turn;
+    const firstTurn = session.sendPrompt("Draft a plan").turn;
     const request: PermissionPrompt = {
       sessionId: "codex-session",
       toolCall: {
@@ -80,10 +80,15 @@ describe("AgentChatUIState", () => {
     const permission = permissionArrived
       ? session.handlePlanProposalPermission(request)
       : new Promise<never>(() => undefined);
-    const plan = chat.getCurrentPlan();
+    const plan = session.getCurrentPlan();
     if (!plan) throw new Error("Expected a pending plan");
+    const decide = (decision: PlanDecisionAction, feedback?: string) => {
+      const decidable = findDecidablePlan(session, plan.id);
+      if (!decidable) return Promise.resolve();
+      return applyPlanDecision(session, decidable, decision, feedback);
+    };
     return {
-      chat,
+      decide,
       session,
       plan,
       permission,
@@ -95,7 +100,36 @@ describe("AgentChatUIState", () => {
     };
   }
 
-  describe("resolvePlanProposal()", () => {
+  describe("findDecidablePlan()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 finds no plan before the plan permission arrives and finds it once it has", async () => {
+      const review = planReview("permission", { permissionArrived: false });
+      expect(findDecidablePlan(review.session, review.plan.id)).toBeNull();
+      expect(review.session.getCurrentPlan()?.id).toBe(review.plan.id);
+
+      const permission = review.session.handlePlanProposalPermission(review.request);
+      const plan = findDecidablePlan(review.session, review.plan.id);
+      expect(plan?.pendingToolCallId).toBe("plan-review-tool");
+      await applyPlanDecision(review.session, plan!, "approve");
+      expect((await permission).outcome).toEqual({
+        outcome: "selected",
+        optionId: "implement_plan",
+      });
+      review.finishFirstTurn();
+      await review.firstTurn;
+    });
+
+    it("finds no plan for an unknown proposal id or one that is already decided", async () => {
+      const review = planReview();
+      expect(findDecidablePlan(review.session, "other-proposal")).toBeNull();
+
+      await review.decide("approve");
+      expect(findDecidablePlan(review.session, review.plan.id)).toBeNull();
+      review.finishFirstTurn();
+      await review.firstTurn;
+    });
+  });
+
+  describe("applyPlanDecision()", () => {
     it.each([
       ["approve", "Approved plan"],
       ["reject", "Rejected plan"],
@@ -104,9 +138,9 @@ describe("AgentChatUIState", () => {
       "shows the user's %s decision in the transcript (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)",
       async (decision, expected) => {
         const review = planReview();
-        await review.chat.resolvePlanProposal(review.plan.id, decision, "revise step two");
-        const part = review.chat
-          .getMessages()
+        await review.decide(decision, "revise step two");
+        const part = review.session.store
+          .getDisplayMessages()
           .flatMap((message) => message.parts ?? [])
           .find((item) => item.kind === "tool_call" && item.id === "plan-review-tool");
         expect(part?.kind).toBe("tool_call");
@@ -119,11 +153,7 @@ describe("AgentChatUIState", () => {
     );
     it("sends Codex feedback as a visible follow-up after its plan permission ends the turn (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", async () => {
       const review = planReview("next_turn");
-      const resolution = review.chat.resolvePlanProposal(
-        review.plan.id,
-        "feedback",
-        "  save it to a note  "
-      );
+      const resolution = review.decide("feedback", "  save it to a note  ");
 
       expect(await review.permission).toEqual({
         outcome: { outcome: "selected", optionId: "revise_plan" },
@@ -136,13 +166,15 @@ describe("AgentChatUIState", () => {
       expect(review.prompt).toHaveBeenCalledTimes(2);
       expect(review.prompt.mock.calls[1][0].prompt[0].text).toContain("save it to a note");
       expect(
-        review.chat.getMessages().some((message) => message.message === "save it to a note")
+        review.session.store
+          .getDisplayMessages()
+          .some((message) => message.message === "save it to a note")
       ).toBe(true);
     });
 
     it("keeps permission-message feedback in the original turn for adapters that consume it", async () => {
       const review = planReview();
-      await review.chat.resolvePlanProposal(review.plan.id, "feedback", "revise step two");
+      await review.decide("feedback", "revise step two");
       expect((await review.permission).denyMessage).toBe("revise step two");
       review.finishFirstTurn();
       await review.firstTurn;
@@ -151,37 +183,22 @@ describe("AgentChatUIState", () => {
 
     it("does not send Codex feedback when the permission turn fails before a follow-up can begin", async () => {
       const review = planReview("next_turn");
-      const resolution = review.chat.resolvePlanProposal(review.plan.id, "feedback", "save it");
+      const resolution = review.decide("feedback", "save it");
       await review.permission;
       review.failFirstTurn();
 
       await expect(resolution).rejects.toThrow("ACP transport closed");
       expect(review.prompt).toHaveBeenCalledTimes(1);
-      expect(review.chat.getMessages().some((message) => message.message === "save it")).toBe(
-        false
-      );
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 ignores a decision made before the plan permission arrives and keeps the card reviewable", async () => {
-      const review = planReview("permission", { permissionArrived: false });
-      await review.chat.resolvePlanProposal(review.plan.id, "approve");
-      expect(review.chat.getCurrentPlan()?.id).toBe(review.plan.id);
-
-      const permission = review.session.handlePlanProposalPermission(review.request);
-      await review.chat.resolvePlanProposal(review.plan.id, "approve");
-      expect((await permission).outcome).toEqual({
-        outcome: "selected",
-        optionId: "implement_plan",
-      });
-      review.finishFirstTurn();
-      await review.firstTurn;
+      expect(
+        review.session.store.getDisplayMessages().some((message) => message.message === "save it")
+      ).toBe(false);
     });
 
     it.each(["approve", "reject"] as const)(
       "settles %s without starting a follow-up turn",
       async (decision) => {
         const review = planReview("next_turn");
-        await review.chat.resolvePlanProposal(review.plan.id, decision);
+        await review.decide(decision);
         const permission = await review.permission;
         expect(permission.outcome).toEqual({
           outcome: "selected",
@@ -194,43 +211,18 @@ describe("AgentChatUIState", () => {
     );
   });
 
-  describe("resolveAskUserQuestion()", () => {
-    it("shows the selected answer in the transcript (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
-      const review = planReview();
-      const answer = review.session.handleAskUserQuestion({
-        sessionId: "codex-session",
-        requestId: "question-one",
-        questions: [{ question: "Format: choose one", options: [{ label: "Checklist" }] }],
-      });
-      review.chat.resolveAskUserQuestion("question-one", { "Format: choose one": "Checklist" });
-      await answer;
-      const part = review.chat
-        .getMessages()
-        .flatMap((message) => message.parts ?? [])
-        .find((item) => item.kind === "tool_call" && item.id === "question-one");
-      expect(part?.kind).toBe("tool_call");
-      if (part?.kind === "tool_call") {
-        expect(lookupToolSummary(part).collapsedLine(part, { vaultBase: null })).toBe(
-          "Answered: Checklist"
-        );
-      }
-      review.finishFirstTurn();
-      await review.firstTurn;
-    });
-  });
-
-  describe("isTurnInFlight()", () => {
-    it("stays true while an approved plan is being implemented and clears when the turn finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", async () => {
+  describe("applyPlanDecision() session status", () => {
+    it("keeps the session running while an approved plan is implemented and idles when the turn finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", async () => {
       const review = planReview("next_turn");
-      expect(review.chat.isTurnInFlight()).toBe(true);
+      expect(review.session.getStatus()).toBe("awaiting_permission");
 
-      await review.chat.resolvePlanProposal(review.plan.id, "approve");
+      await review.decide("approve");
       await review.permission;
-      expect(review.chat.isTurnInFlight()).toBe(true);
+      expect(review.session.getStatus()).toBe("running");
 
       review.finishFirstTurn();
       await review.firstTurn;
-      expect(review.chat.isTurnInFlight()).toBe(false);
+      expect(review.session.getStatus()).toBe("idle");
     });
   });
 });

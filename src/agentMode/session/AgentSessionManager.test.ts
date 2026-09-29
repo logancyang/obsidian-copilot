@@ -772,8 +772,6 @@ describe("AgentSessionManager", () => {
         const session = await mgr.createSession();
         expect(mgr.getSessions()).toEqual([session]);
         expect(mgr.getActiveSession()).toBe(session);
-        expect(mgr.getActiveChatUIState()).not.toBeNull();
-        expect(mgr.getChatUIState(session.internalId)).toBe(mgr.getActiveChatUIState());
       });
 
       it("creating a second session sets it as active but keeps the first in the pool", async () => {
@@ -2577,15 +2575,17 @@ describe("AgentSessionManager.replaceSessionInPlace", () => {
     expect(mgr.getActiveSession()).toBe(replacement);
   });
 
-  it("the replacement also takes the chatUIState slot at the same index", async () => {
+  it("the replacement takes the replaced session's position in the pool", async () => {
     const mgr = buildManager();
     const a = await mgr.createSession();
     const b = await mgr.createSession();
     mgr.setActiveSession(a.internalId);
     const replacement = await mgr.replaceSessionInPlace(a.internalId);
     await flushBackgroundClose();
-    expect(mgr.getActiveChatUIState()).toBe(mgr.getChatUIState(replacement.internalId));
-    expect(mgr.getChatUIState(b.internalId)).not.toBeNull();
+    expect(mgr.getSessions().map((session) => session.internalId)).toEqual([
+      replacement.internalId,
+      b.internalId,
+    ]);
   });
 });
 

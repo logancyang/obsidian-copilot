@@ -30,6 +30,7 @@ import type { SessionClient } from "@/agentMode/protocol/SessionClient";
 import { AgentPaneCapabilitiesProvider } from "@/agentMode/ui/AgentPaneContext";
 import { createDesktopPaneCapabilities } from "@/agentMode/ui/desktopPaneCapabilities";
 import { useChatRuntime } from "@/agentMode/ui/hooks/useChatRuntime";
+import { useComposerCommands } from "@/agentMode/ui/hooks/useComposerCommands";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { buildNativeChatId } from "@/utils/nativeChatId";
@@ -42,7 +43,6 @@ import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
-import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { agentProjectContextLoadAtom, type ProjectConfig } from "@/aiParams";
@@ -67,7 +67,6 @@ import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface AgentHomeProps {
   client: SessionClient;
-  backend: AgentChatBackend;
   sessionId: string;
   chatInputId: string;
   manager: AgentSessionManager;
@@ -80,7 +79,6 @@ const EMPTY_PROJECT_NAMES_BY_ID: Readonly<Record<string, string>> = Object.freez
 
 const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   client,
-  backend,
   sessionId,
   chatInputId,
   manager,
@@ -102,6 +100,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const { messages, isStarting, isTurnInFlight, hasPendingPlanPermission, currentTodoList } =
     useChatRuntime(client, sessionId) ?? EMPTY_CHAT_RUNTIME;
+  const composer = useComposerCommands(client, sessionId);
   const isLoading = draft.loading || isTurnInFlight;
 
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
@@ -544,7 +543,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const composerNode = (
     <AgentChatInput
-      backend={backend}
+      composer={composer}
       plugin={plugin}
       chatInputId={chatInputId}
       draft={draft}
@@ -710,7 +709,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       openChatIds={openChatIds}
                       runningChatIds={runningChatIds}
                       onOpenSourceFile={handleOpenSourceFile}
-                      usageMeter={<AgentContextMeter backend={backend} />}
+                      usageMeter={<AgentContextMeter client={client} sessionId={sessionId} />}
                       showMultiAgentUpsell
                     />
                     {composerNode}

@@ -428,10 +428,10 @@ Each hook memoizes the last `(state reference) -> selected value` pair and retur
 value when `eq` (default `Object.is`) says it is unchanged, so a component re-renders only when
 its selection changes. Selectors must return values that are stable while their inputs are stable;
 `selectors.ts` provides the memoized ones (`selectVisibleMessages`, `selectChatRuntime`).
-`selectChatRuntime(host, session, id)` returns the same shape as today's `AgentChatRuntimeState`
-(`messages`, `isStarting`, `isTurnInFlight`, `hasPendingPlanPermission`, `currentPlan`,
-`currentTodoList`, `pendingToolPermissions`, `pendingAskUserQuestions`) so #611 swaps
-`useAgentChatRuntimeState` mechanically.
+`selectChatRuntime(host, session, id)` returns the chat's runtime state (`messages`,
+`isStarting`, `isTurnInFlight`, `hasPendingPlanPermission`, `currentPlan`, `currentTodoList`,
+`pendingToolPermissions`, `pendingAskUserQuestions`); the message pane reads it through
+`useChatRuntime(client, sessionId)`.
 
 ## 6. Data boundaries
 
@@ -572,7 +572,7 @@ Follows `AGENTS.md`: one top-level `describe` per module, one nested `describe` 
 | Each command produces its expected ops                                                                      | `commandHandlers.test.ts`, table-driven from section 3: valid input yields the listed ops in order; each validation branch yields its error code and no ops; two devices answering one permission yield one `ok` and one `stale`.                                                                                                                                                                                                                 |
 | Reducer never calls `Date.now()` or a random source                                                         | `applyTranscript.test.ts` replays ops with `Date.now`, `performance.now` and `Math.random` replaced by throwing stubs and inputs deep-frozen. Static: the lint rule in section 7.3.                                                                                                                                                                                                                                                               |
 | `npm run test`, `lint`, `build` pass                                                                        | Existing `AgentSession.test.ts` and the UI tests run against the rewritten store and are the behavior-preservation net. New: each store method emits exactly one op or none, and replaying the emitted ops from an empty transcript reproduces `getMessages()`.                                                                                                                                                                                   |
-| `selectChatRuntime` equals today's `AgentChatUIState` getters                                               | `selectors.test.ts` compares both after each script step, which de-risks #611.                                                                                                                                                                                                                                                                                                                                                                    |
+| `selectChatRuntime` equals the live session's getters                                                       | `selectors.test.ts` compares both after each script step, which de-risks #611.                                                                                                                                                                                                                                                                                                                                                                    |
 
 ### 8.2 Recorded sessions as fixtures
 
@@ -604,7 +604,7 @@ Capture uses the existing frame log, not new production code:
    the repository is public.
 
 `SessionHost.parity.test.ts` plays every fixture and, after every step, asserts that the replica
-equals the host projection and that `selectChatRuntime` equals today's `AgentChatUIState` getters.
+equals the host projection and that `selectChatRuntime` equals the live session's getters.
 A second client that subscribes halfway through each script must finish equal to the first.
 
 ### 8.3 Streaming overhead
@@ -634,11 +634,29 @@ projectors, op log, transport and commands; (3) recorded fixtures, parity tests 
 
 | Lane | Deferred work                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #611 | Message pane on `selectChatRuntime`; delete `AgentChatUIState` and `AgentChatBackend`; `PlanPreviewView` on the client; narrow context-chip props to `NoteRef`; file-opening through an injected capability.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | #612 | Composer, pickers and tabs on the client; the picker catalog (`session/pickerCatalog.ts`, `toPickerModel`, the `backends` and `host` slices of `HostState`, and the credential-stripping test); the tab and picker commands (`createSession`, `replaceSession`, `openTab`, `closeTab`, `renameSession`, `applySelection`, `applyMode`) with the manager additions they need (`openTab`, `applySelectionTo`, `applyModeTo`); client-side derivation of picker entries; active tab and project scope as client state; delete the `activeSessionId` writes in `createSession`, `closeSession`, `setActiveSession`; attention rule per focused client. |
 | #613 | Must not ship before #612: `createSession` and `replaceSession` still write `activeSessionId` (legacy), so a phone-created session would move the desktop's visible tab until #612 deletes those writes. WebSocket transport, backoff, connect timeout, `visibilitychange` reconnect, backpressure, frame size limit; connection identity and authorization; command `origin`; mobile entry point and UI; version-mismatch screen; analytics; real-iPhone verification.                                                                                                                                                                            |
 | #610 | Pairing and tokens.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | #607 | Persisting or replaying the op log across restarts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+
+### 9.2.1 What the message pane needs from its environment
+
+The message pane (message list, activity trail, and the permission, question and plan cards)
+reads only the client replica and sends `resolvePermission`, `answerQuestion` and `resolvePlan`.
+Everything else reaches it through `AgentPaneCapabilities` (`ui/AgentPaneContext.tsx`); a
+capability the environment omits hides the control that would call it.
+
+| Capability         | Used by                                  | Desktop implementation                             |
+| ------------------ | ---------------------------------------- | -------------------------------------------------- |
+| `vaultBase`        | tool summaries shorten absolute paths    | the vault folder on disk (the host's, on a phone)  |
+| `openPath`         | a completed tool call's target link      | open the note, or the file with the system default |
+| `insertAtCursor`   | the insert action on a finished response | write into the active editor                       |
+| `openPlanPreview`  | the plan card's Open control             | a workspace leaf that reads the same client        |
+| `closePlanPreview` | after a plan is approved                 | detach that leaf                                   |
+
+The composer still acts through `ComposerCommands` (`ui/hooks/useComposerCommands.ts`), a `send` and
+`cancel` seam over the client that reports when a turn ends; #612 replaces it when the composer
+reads the replica for everything else.
 
 ### 9.3 Cut as speculative
 

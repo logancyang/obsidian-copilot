@@ -2,7 +2,6 @@ import type { BackendState } from "@/agentMode/session/types";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
-import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import { AgentInputDraftStore } from "@/agentMode/session/AgentInputDraftStore";
 import {
   agentProjectContextLoadAtom,
@@ -190,7 +189,6 @@ export class AgentSessionManager {
   private backends = new Map<BackendId, BackendProcess>();
   private starting = new Map<BackendId, Promise<BackendProcess>>();
   private sessions = new Map<string, AgentSession>();
-  private chatUIStates = new Map<string, AgentChatUIState>();
   private activeSessionId: string | null = null;
   private activeProjectId: ProjectScopeId = GLOBAL_SCOPE;
   private scopeSeq = 0;
@@ -889,7 +887,6 @@ export class AgentSessionManager {
         : {}),
     });
     this.sessions.set(session.internalId, session);
-    this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
     if (landingCaptureSignature) {
       this.landingCaptureSignatures.set(session.internalId, landingCaptureSignature);
     } else {
@@ -1724,7 +1721,6 @@ export class AgentSessionManager {
     }
     this.detachAutoSave(id);
     this.sessions.delete(id);
-    this.chatUIStates.delete(id);
     this.landingCaptureSignatures.delete(id);
     this.lastSeenProjectContentEpochBySession.delete(id);
     this.detachedFromTabIds.delete(id);
@@ -1800,7 +1796,6 @@ export class AgentSessionManager {
     );
     if (oldIdx >= 0) {
       this.moveMapEntry(this.sessions, created.internalId, oldIdx);
-      this.moveMapEntry(this.chatUIStates, created.internalId, oldIdx);
       this.notify();
     }
     void this.closeSession(oldId).catch((e) =>
@@ -1860,16 +1855,8 @@ export class AgentSessionManager {
     return null;
   }
 
-  getChatUIState(id: string): AgentChatUIState | null {
-    return this.chatUIStates.get(id) ?? null;
-  }
-
   getActiveSession(): AgentSession | null {
     return this.activeSessionId ? (this.sessions.get(this.activeSessionId) ?? null) : null;
-  }
-
-  getActiveChatUIState(): AgentChatUIState | null {
-    return this.activeSessionId ? (this.chatUIStates.get(this.activeSessionId) ?? null) : null;
   }
 
   getSessions(): AgentSession[] {
@@ -1947,7 +1934,6 @@ export class AgentSessionManager {
       })
     );
     this.sessions.clear();
-    this.chatUIStates.clear();
     this.landingCaptureSignatures.clear();
     this.lastSeenProjectContentEpochBySession.clear();
     this.activeSessionId = null;
@@ -2040,7 +2026,6 @@ export class AgentSessionManager {
     const oldIdx = Array.from(this.sessions.keys()).indexOf(previousActiveId);
     if (oldIdx >= 0) {
       this.moveMapEntry(this.sessions, loaded.internalId, oldIdx);
-      this.moveMapEntry(this.chatUIStates, loaded.internalId, oldIdx);
     }
     void this.closeSession(previousActiveId).catch((e) =>
       logWarn(`[AgentMode] closing empty tab during history load failed`, e)
@@ -2279,7 +2264,6 @@ export class AgentSessionManager {
       this.lastSeenProjectContentEpochBySession.set(internalId, RESUMED_SESSION_BEHIND_EPOCH);
     }
     this.sessions.set(session.internalId, session);
-    this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
     this.detachedFromTabIds.delete(session.internalId);
     this.attachAutoSave(session);
     this.attachAttentionTracking(session);
@@ -2584,7 +2568,6 @@ export class AgentSessionManager {
       for (const s of dead) {
         this.detachAutoSave(s.internalId);
         this.sessions.delete(s.internalId);
-        this.chatUIStates.delete(s.internalId);
         this.landingCaptureSignatures.delete(s.internalId);
         this.lastSeenProjectContentEpochBySession.delete(s.internalId);
         this.detachedFromTabIds.delete(s.internalId);

@@ -1,5 +1,4 @@
 import { act, renderHook } from "@testing-library/react";
-import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor, BackendState } from "@/agentMode/session/types";
@@ -78,24 +77,21 @@ describe("useAgentModelPicker", () => {
       let catalogSignal = "catalog-one";
       let activeListener: (() => void) | null = null;
       let cacheListener: (() => void) | null = null;
-      const activeUI = {
-        subscribe: (listener: () => void) => {
-          activeListener = listener;
-          return () => {
-            activeListener = null;
-          };
-        },
-      } as unknown as AgentChatUIState;
       const session = {
         internalId: "active",
         backendId: "opencode",
         getStatus: () => "idle",
         getState: () => state,
         hasUserVisibleMessages: () => false,
+        subscribe: (listener: { onModelChanged?: () => void }) => {
+          activeListener = () => listener.onModelChanged?.();
+          return () => {
+            activeListener = null;
+          };
+        },
       } as unknown as AgentSession;
       const manager = {
         getActiveSession: () => session,
-        getActiveChatUIState: () => activeUI,
         subscribe: () => jest.fn(),
         subscribeModelCache: (listener: () => void) => {
           cacheListener = listener;

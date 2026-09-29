@@ -23,7 +23,6 @@ import type {
 import type { ModelActiveContext } from "./agentModelPickerHelpers";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { CopilotSettings } from "@/settings/model";
 
 type ModelCatalog = NonNullable<ReturnType<AgentSessionManager["getCachedModelCatalog"]>>;
@@ -85,7 +84,6 @@ describe("collectModelActiveContext", () => {
         getState: () => activeState,
         hasUserVisibleMessages: () => false,
       }),
-      getActiveChatUIState: () => null,
     } as unknown as AgentSessionManager;
 
     expect(collectModelActiveContext(manager).activeModelState).toBe(activeState.model);
@@ -98,7 +96,6 @@ describe("collectModelActiveContext", () => {
         getState: () => null,
         hasUserVisibleMessages: () => false,
       }),
-      getActiveChatUIState: () => null,
     } as unknown as AgentSessionManager;
 
     expect(collectModelActiveContext(manager).activeModelState).toBeNull();
@@ -141,16 +138,18 @@ function makeCatalog(availableModels: ModelEntry[] | null): ModelCatalog {
   return { availableModels };
 }
 
-function makeUIState(opts: {
-  canSwitchModel?: boolean | null;
-  canSwitchEffort?: boolean | null;
-  canSwitchMode?: boolean | null;
-}): AgentChatUIState {
+function makeSwitchableSession(
+  base: { backendId: string; internalId?: string },
+  opts: {
+    canSwitchModel?: boolean | null;
+    canSwitchEffort?: boolean | null;
+  }
+): AgentSession {
   return {
+    ...base,
     canSwitchModel: () => opts.canSwitchModel ?? null,
     canSwitchEffort: () => opts.canSwitchEffort ?? null,
-    canSwitchMode: () => opts.canSwitchMode ?? null,
-  } as unknown as AgentChatUIState;
+  } as unknown as AgentSession;
 }
 
 function makeManager(opts: {
@@ -202,7 +201,6 @@ function claudeWithInstallState(installState: InstallState): BackendDescriptor {
 function noSessionContext(): ModelActiveContext {
   return {
     activeSession: null,
-    activeChatUIState: null,
     activeBackendId: null,
     activeDescriptor: undefined,
     activeSessionHasHistory: false,
@@ -348,7 +346,6 @@ describe("buildPickerEntries", () => {
     });
     const ctx: ModelActiveContext = {
       activeSession: null,
-      activeChatUIState: null,
       activeBackendId: null,
       activeDescriptor: undefined,
       activeSessionHasHistory: false,
@@ -375,7 +372,6 @@ describe("buildPickerEntries", () => {
     });
     const ctx: ModelActiveContext = {
       activeSession: null,
-      activeChatUIState: null,
       activeBackendId: null,
       activeDescriptor: undefined,
       activeSessionHasHistory: false,
@@ -401,7 +397,6 @@ describe("buildPickerEntries", () => {
     });
     const ctx: ModelActiveContext = {
       activeSession: { backendId: "codex" } as unknown as AgentSession,
-      activeChatUIState: null,
       activeBackendId: "codex",
       activeDescriptor: codex,
       activeSessionHasHistory: true,
@@ -424,7 +419,6 @@ describe("buildPickerEntries", () => {
     });
     const ctx: ModelActiveContext = {
       activeSession: { backendId: "codex" } as unknown as AgentSession,
-      activeChatUIState: null,
       activeBackendId: "codex",
       activeDescriptor: codex,
       activeSessionHasHistory: false,
@@ -447,7 +441,6 @@ describe("buildPickerEntries", () => {
     });
     const ctx: ModelActiveContext = {
       activeSession: { backendId: "codex" } as unknown as AgentSession,
-      activeChatUIState: null,
       activeBackendId: "codex",
       activeDescriptor: codex,
       activeSessionHasHistory: false,
@@ -479,7 +472,6 @@ describe("buildPickerEntries", () => {
     });
     const ctx: ModelActiveContext = {
       activeSession: null,
-      activeChatUIState: null,
       activeBackendId: null,
       activeDescriptor: undefined,
       activeSessionHasHistory: false,
@@ -504,7 +496,6 @@ describe("buildPickerEntries", () => {
     });
     const ctx: ModelActiveContext = {
       activeSession: { backendId: "opencode" } as unknown as AgentSession,
-      activeChatUIState: null,
       activeBackendId: "opencode",
       activeDescriptor: opencode,
       activeSessionHasHistory: false,
@@ -536,7 +527,6 @@ describe("buildPickerEntries", () => {
     });
     const ctx: ModelActiveContext = {
       activeSession: { backendId: "codex" } as unknown as AgentSession,
-      activeChatUIState: null,
       activeBackendId: "codex",
       activeDescriptor: codex,
       activeSessionHasHistory: false,
@@ -564,7 +554,6 @@ describe("buildPickerEntries", () => {
     });
     const ctx: ModelActiveContext = {
       activeSession: { backendId: "codex" } as unknown as AgentSession,
-      activeChatUIState: null,
       activeBackendId: "codex",
       activeDescriptor: codex,
       activeSessionHasHistory: false,
@@ -588,7 +577,6 @@ describe("buildPickerEntries", () => {
     });
     const ctx: ModelActiveContext = {
       activeSession: { backendId: "opencode" } as unknown as AgentSession,
-      activeChatUIState: null,
       activeBackendId: "opencode",
       activeDescriptor: opencode,
       activeSessionHasHistory: false,
@@ -614,7 +602,6 @@ describe("buildPickerEntries", () => {
     });
     const ctx: ModelActiveContext = {
       activeSession: null,
-      activeChatUIState: null,
       activeBackendId: null,
       activeDescriptor: undefined,
       activeSessionHasHistory: false,
@@ -640,7 +627,6 @@ describe("buildPickerEntries", () => {
     });
     const ctx: ModelActiveContext = {
       activeSession: null,
-      activeChatUIState: null,
       activeBackendId: null,
       activeDescriptor: undefined,
       activeSessionHasHistory: false,
@@ -664,7 +650,6 @@ describe("buildPickerEntries", () => {
     });
     const ctx: ModelActiveContext = {
       activeSession: { backendId: "codex" } as unknown as AgentSession,
-      activeChatUIState: null,
       activeBackendId: "codex",
       activeDescriptor: codex,
       activeSessionHasHistory: false,
@@ -871,8 +856,10 @@ describe("buildEffortSibling", () => {
       effortOptions: opts.effortOptions,
     };
     return {
-      activeSession: { backendId: "codex" } as unknown as AgentSession,
-      activeChatUIState: makeUIState({ canSwitchEffort: opts.canSwitchEffort }),
+      activeSession: makeSwitchableSession(
+        { backendId: "codex" },
+        { canSwitchEffort: opts.canSwitchEffort }
+      ),
       activeBackendId: "codex",
       activeDescriptor: makeDescriptor("codex"),
       activeSessionHasHistory: false,
@@ -928,11 +915,13 @@ describe("buildModelOnChange", () => {
 
   function ctxFor(activeBackendId: string | null): ModelActiveContext {
     const session = activeBackendId
-      ? ({ backendId: activeBackendId, internalId: "tab-1" } as unknown as AgentSession)
+      ? makeSwitchableSession(
+          { backendId: activeBackendId, internalId: "tab-1" },
+          { canSwitchModel: true }
+        )
       : null;
     return {
       activeSession: session,
-      activeChatUIState: makeUIState({ canSwitchModel: true }),
       activeBackendId,
       activeDescriptor: activeBackendId ? makeDescriptor("codex") : undefined,
       activeSessionHasHistory: false,
@@ -955,7 +944,10 @@ describe("buildModelOnChange", () => {
   it("same-backend pick with canSwitchModel === false does not call applySelection", () => {
     const applySelection = jest.fn().mockResolvedValue(undefined);
     const ctx = ctxFor("codex");
-    ctx.activeChatUIState = makeUIState({ canSwitchModel: false });
+    ctx.activeSession = makeSwitchableSession(
+      { backendId: "codex", internalId: "tab-1" },
+      { canSwitchModel: false }
+    );
     const manager = makeManager({ applySelection });
     const entries = [pickerEntry("codex", "gpt-5")];
     const onChange = buildModelOnChange(manager, ctx, entries);
@@ -1072,7 +1064,6 @@ describe("buildPickerEntries — persisted capability propagation", () => {
   function ctxFor(backendId: "codex" | "claude" | "opencode"): ModelActiveContext {
     return {
       activeSession: { backendId } as unknown as AgentSession,
-      activeChatUIState: null,
       activeBackendId: backendId,
       activeDescriptor: makeDescriptor(backendId),
       activeSessionHasHistory: false,
