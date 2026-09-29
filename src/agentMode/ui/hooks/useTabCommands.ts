@@ -29,15 +29,25 @@ export function useTabCommands(client: SessionClient, view: ClientView): TabComm
   return useMemo(() => {
     const scopeOf = (id: SessionId): ProjectScopeId =>
       client.getHost()?.tabs.find((tab) => tab.id === id)?.projectId ?? view.getProjectScope();
+    // A second press before the host answers joins the first request: the host raises its
+    // "starting" flag only after it has begun creating, so the button alone cannot stop it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/612
+    let creating: Promise<CommandResult<{ sessionId: SessionId }>> | null = null;
+    const create = async (): Promise<CommandResult<{ sessionId: SessionId }>> => {
+      const projectId = view.getProjectScope();
+      const result = logged(
+        "createSession",
+        await client.command({ name: "createSession", projectId })
+      );
+      if (result.ok) view.activate({ id: result.value.sessionId, projectId });
+      return result;
+    };
     return {
-      async createTab() {
-        const projectId = view.getProjectScope();
-        const result = logged(
-          "createSession",
-          await client.command({ name: "createSession", projectId })
-        );
-        if (result.ok) view.activate({ id: result.value.sessionId, projectId });
-        return result;
+      createTab() {
+        creating ??= create().finally(() => {
+          creating = null;
+        });
+        return creating;
       },
       showTab(id) {
         const tab = client.getHost()?.tabs.find((candidate) => candidate.id === id);

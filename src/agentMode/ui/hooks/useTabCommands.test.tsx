@@ -51,6 +51,20 @@ describe("useTabCommands", () => {
       );
     });
 
+    it("sends one createSession command when the button is pressed again before the host answers https://github.com/Brevilabs/obsidian-copilot-private/issues/612", async () => {
+      const { fixture, view, commands } = rig({
+        onCommand: () => ({ ok: true, value: { sessionId: "fresh" } }),
+      });
+      const first = commands.createTab();
+      const second = commands.createTab();
+      expect(await first).toEqual({ ok: true, value: { sessionId: "fresh" } });
+      expect(await second).toEqual({ ok: true, value: { sessionId: "fresh" } });
+      expect(fixture.commands).toEqual([{ name: "createSession", projectId: GLOBAL }]);
+      expect(view.getActiveTabId()).toBe("fresh");
+      await commands.createTab();
+      expect(fixture.commands).toHaveLength(2);
+    });
+
     it("shows a tab that is in the shared tab set, switching scope with it, without sending a command", () => {
       const { fixture, view, commands } = rig();
       commands.showTab("p");
