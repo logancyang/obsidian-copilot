@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
+import type { KeepAwakeMode } from "@/keepAwake";
 import type { RemoteHostViewState } from "@/remote/hostState";
 import { RemoteHostPanel } from "@/remote/ui/RemoteHostPanel";
 
@@ -17,8 +18,13 @@ const READY: RemoteHostViewState = {
   error: null,
 };
 
-function renderPanel(state: Partial<RemoteHostViewState> = {}) {
+function renderPanel(
+  state: Partial<RemoteHostViewState> = {},
+  keepAwake: { keepAwakeMode?: KeepAwakeMode } = {}
+) {
   const props = {
+    ...keepAwake,
+    onKeepAwakeModeChange: jest.fn(),
     state: { ...READY, ...state },
     onStartPairing: jest.fn(),
     onCancelPairing: jest.fn(),
@@ -179,6 +185,52 @@ describe("RemoteHostPanel", () => {
         fireEvent.click(screen.getAllByRole("button", { name: "Revoke" })[1]);
 
         expect(props.onRevoke).toHaveBeenCalledWith("b");
+      });
+    });
+
+    describe("keep-awake setting", () => {
+      const device = { id: "a", name: "iPhone", createdAt: 1, lastSeenAt: null, connected: false };
+      const KEEP_AWAKE_TITLE = "Keep this computer awake for remote access";
+
+      it("offers Never, While plugged in and Always with the current choice selected once a phone is paired", () => {
+        renderPanel({ devices: [device] }, { keepAwakeMode: "plugged" });
+
+        const select = screen.getByRole<HTMLSelectElement>("combobox");
+        expect(screen.getByText(KEEP_AWAKE_TITLE)).toBeTruthy();
+        expect(Array.from(select.options).map((option) => option.textContent)).toEqual([
+          "Never",
+          "While plugged in",
+          "Always",
+        ]);
+        expect(select.value).toBe("plugged");
+      });
+
+      it("reports the chosen mode", () => {
+        const props = renderPanel({ devices: [device] }, { keepAwakeMode: "plugged" });
+
+        fireEvent.change(screen.getByRole<HTMLSelectElement>("combobox"), {
+          target: { value: "never" },
+        });
+
+        expect(props.onKeepAwakeModeChange).toHaveBeenCalledWith("never");
+      });
+
+      it("is hidden while no phone is paired", () => {
+        renderPanel({ devices: [] }, { keepAwakeMode: "plugged" });
+
+        expect(screen.queryByText(KEEP_AWAKE_TITLE)).toBeNull();
+      });
+
+      it("is hidden when the computer's power APIs are unavailable", () => {
+        renderPanel({ devices: [device] });
+
+        expect(screen.queryByText(KEEP_AWAKE_TITLE)).toBeNull();
+      });
+
+      it("is hidden without Copilot Plus", () => {
+        renderPanel({ plus: false, devices: [device] }, { keepAwakeMode: "plugged" });
+
+        expect(screen.queryByText(KEEP_AWAKE_TITLE)).toBeNull();
       });
     });
 

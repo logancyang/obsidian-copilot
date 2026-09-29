@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
+import type { KeepAwakeMode } from "@/keepAwake";
 import type { PairedDeviceView, RemoteHostViewState } from "@/remote/hostState";
 import { QrCode } from "@/remote/ui/QrCode";
 import React from "react";
@@ -13,7 +14,15 @@ export interface RemoteHostPanelProps {
   onRevoke: (deviceId: string) => void;
   onRecheck: () => void;
   onUpgrade: () => void;
+  keepAwakeMode?: KeepAwakeMode;
+  onKeepAwakeModeChange?: (mode: KeepAwakeMode) => void;
 }
+
+const KEEP_AWAKE_OPTIONS: Array<{ label: string; value: KeepAwakeMode }> = [
+  { label: "Never", value: "never" },
+  { label: "While plugged in", value: "plugged" },
+  { label: "Always", value: "always" },
+];
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
@@ -88,6 +97,8 @@ export const RemoteHostPanel: React.FC<RemoteHostPanelProps> = ({
   onRevoke,
   onRecheck,
   onUpgrade,
+  keepAwakeMode,
+  onKeepAwakeModeChange,
 }) => {
   if (!state.plus) {
     // A phone stays paired after Plus lapses and pairs again when Plus returns, so it must stay
@@ -151,6 +162,19 @@ export const RemoteHostPanel: React.FC<RemoteHostPanelProps> = ({
       </SettingSection>
 
       <PairedPhones devices={state.devices} onRevoke={onRevoke} />
+
+      {state.devices.length > 0 && keepAwakeMode !== undefined && (
+        <SettingSection label="Power">
+          <SettingItem
+            type="select"
+            title="Keep this computer awake for remote access"
+            description="While a phone is paired, stops this computer from sleeping when idle, only while Obsidian is open. Closing a laptop lid still sleeps it. Running agent turns always keep the computer awake, whatever you choose here."
+            value={keepAwakeMode}
+            onChange={(value) => onKeepAwakeModeChange?.(value as KeepAwakeMode)}
+            options={KEEP_AWAKE_OPTIONS}
+          />
+        </SettingSection>
+      )}
     </div>
   );
 };

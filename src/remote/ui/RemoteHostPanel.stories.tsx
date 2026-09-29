@@ -26,6 +26,7 @@ const meta = {
     onRevoke: () => {},
     onRecheck: () => {},
     onUpgrade: () => {},
+    onKeepAwakeModeChange: () => {},
   },
   parameters: { gallery: { host: "settings-tab", layout: "padded" } },
 } satisfies Meta<RemoteHostPanelProps>;
@@ -71,6 +72,7 @@ export const PairingCode: StoryObj<RemoteHostPanelProps> = {
 
 export const PairedPhones: StoryObj<RemoteHostPanelProps> = {
   args: {
+    keepAwakeMode: "plugged",
     state: {
       ...READY,
       listening: true,
@@ -121,4 +123,26 @@ export const ListenerError: StoryObj<RemoteHostPanelProps> = {
       error: "Copilot could not start the Remote listener. Check the logs and try again.",
     },
   },
+};
+
+const ONE_PHONE: RemoteHostViewState["devices"] = [
+  {
+    id: "a",
+    name: "iPhone",
+    createdAt: NOW - 86_400_000,
+    lastSeenAt: NOW - 3_600_000,
+    connected: false,
+  },
+];
+
+export const KeepAwakeAlways: StoryObj<RemoteHostPanelProps> = {
+  args: { keepAwakeMode: "always", state: { ...READY, listening: true, devices: ONE_PHONE } },
+};
+
+export const KeepAwakeNever: StoryObj<RemoteHostPanelProps> = {
+  args: { keepAwakeMode: "never", state: { ...READY, listening: true, devices: ONE_PHONE } },
+};
+
+export const PairedPhoneWithoutPowerControl: StoryObj<RemoteHostPanelProps> = {
+  args: { state: { ...READY, listening: true, devices: ONE_PHONE } },
 };

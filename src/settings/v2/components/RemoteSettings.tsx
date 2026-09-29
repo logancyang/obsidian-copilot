@@ -4,6 +4,7 @@ import { describePairOutcome } from "@/remote/client/pairMessages";
 import type { PairedDesktopView } from "@/remote/ui/RemoteClientPanel";
 import { RemoteClientPanel } from "@/remote/ui/RemoteClientPanel";
 import { RemoteHostPanel } from "@/remote/ui/RemoteHostPanel";
+import type { KeepAwakeService } from "@/keepAwake";
 import type { RemoteClient } from "@/remote/client";
 import type { RemoteHostService } from "@/remote/host";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
@@ -11,8 +12,18 @@ import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { DesktopOnlySettingsPanel } from "./DesktopOnlySettingsPanel";
 
-const DesktopRemote: React.FC<{ host: RemoteHostService }> = ({ host }) => {
+const NO_SUBSCRIPTION = () => () => {};
+const NO_MODE = (): undefined => undefined;
+
+const DesktopRemote: React.FC<{ host: RemoteHostService; keepAwake?: KeepAwakeService }> = ({
+  host,
+  keepAwake,
+}) => {
   const state = useSyncExternalStore(host.subscribe, host.getState);
+  const keepAwakeMode = useSyncExternalStore(
+    keepAwake?.subscribe ?? NO_SUBSCRIPTION,
+    keepAwake?.getMode ?? NO_MODE
+  );
 
   useEffect(() => {
     void host.recheck();
@@ -34,6 +45,8 @@ const DesktopRemote: React.FC<{ host: RemoteHostService }> = ({ host }) => {
       onRevoke={(deviceId) => host.revokeDevice(deviceId)}
       onRecheck={() => void host.recheck()}
       onUpgrade={() => navigateToPlusPage("settings")}
+      keepAwakeMode={keepAwakeMode}
+      onKeepAwakeModeChange={(mode) => keepAwake?.setMode(mode)}
     />
   );
 };
@@ -89,7 +102,7 @@ export const RemoteSettings: React.FC = () => {
   const plugin = usePlugin();
   if (isDesktopRuntime()) {
     return plugin.remoteHost ? (
-      <DesktopRemote host={plugin.remoteHost} />
+      <DesktopRemote host={plugin.remoteHost} keepAwake={plugin.keepAwake} />
     ) : (
       <DesktopOnlySettingsPanel message="Remote access could not start. Reload Obsidian to retry." />
     );

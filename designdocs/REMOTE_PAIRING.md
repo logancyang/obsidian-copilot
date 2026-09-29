@@ -126,3 +126,21 @@ have the same name and version, byte-identical files, and every dependency they 
 interchangeable copy from each location. The copy it keeps is the shallowest, alphabetically first one, so the
 bundle does not depend on the order esbuild resolves imports in, and only imports of a package installed more
 than once go through the plugin.
+
+## Keeping the desktop awake
+
+[#608](https://github.com/Brevilabs/obsidian-copilot-private/issues/608). `KeepAwakeService` (`src/keepAwake/`)
+holds at most one Electron `powerSaveBlocker` (`prevent-app-suspension`: idle system sleep is blocked, the
+display may still sleep) for the vault window, and releases it on plugin unload and on `pagehide`, because the
+blocker lives in Electron's main process and would otherwise outlive a reloaded or closed window.
+
+| Holds the blocker when                                                | Notes                                                                                                   |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Any agent session is `running` (`AgentSessionManager.hasRunningTurn`) | Every desktop user, paired or not. A turn waiting on a permission prompt does not count.                |
+| A phone is paired, Plus is active, and the mode allows it             | `never`: no. `plugged` (default): only while `powerMonitor.isOnBatteryPower()` is false. `always`: yes. |
+
+The mode is per desktop and per vault window, kept in `app.saveLocalStorage` (`copilot-keep-awake-mode:v1`)
+so it never syncs to another desktop. Both APIs come from `electron.remote`; when either is missing the
+service is not created and the setting is hidden. `on-ac` / `on-battery` events are delivered on macOS and
+Windows only, so on Linux a power source change is noticed at the next turn or pairing change. Closing a
+laptop lid still sleeps the machine.

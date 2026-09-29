@@ -1370,6 +1370,43 @@ describe("AgentSessionManager", () => {
         await mgr.shutdown();
       });
     });
+
+    describe("hasRunningTurn()", () => {
+      it("is false when no session exists", () => {
+        expect(buildManager().hasRunningTurn()).toBe(false);
+      });
+
+      it("is true while any session is running and false once every session has left running", async () => {
+        const mgr = buildManager();
+        const a = await createShown(mgr);
+        const b = await createShown(mgr);
+        getSessionTestHandle(a).setStatus("running");
+        getSessionTestHandle(b).setStatus("running");
+        expect(mgr.hasRunningTurn()).toBe(true);
+
+        getSessionTestHandle(a).setStatus("idle");
+        expect(mgr.hasRunningTurn()).toBe(true);
+        getSessionTestHandle(b).setStatus("error");
+        expect(mgr.hasRunningTurn()).toBe(false);
+      });
+
+      it("is false for sessions that are starting or waiting on a permission prompt, which have no work in flight to freeze (https://github.com/Brevilabs/obsidian-copilot-private/issues/608)", async () => {
+        const mgr = buildManager();
+        const a = await createShown(mgr);
+        const b = await createShown(mgr);
+        getSessionTestHandle(a).setStatus("starting");
+        getSessionTestHandle(b).setStatus("awaiting_permission");
+        expect(mgr.hasRunningTurn()).toBe(false);
+      });
+
+      it("is false after a running session is closed", async () => {
+        const mgr = buildManager();
+        const a = await createShown(mgr);
+        getSessionTestHandle(a).setStatus("running");
+        await mgr.closeSession(a.internalId);
+        expect(mgr.hasRunningTurn()).toBe(false);
+      });
+    });
   });
 });
 
