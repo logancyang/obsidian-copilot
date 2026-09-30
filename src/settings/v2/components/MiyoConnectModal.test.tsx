@@ -37,116 +37,116 @@ describe("MiyoConnectContent", () => {
         openSpy.mockRestore();
       }
     });
-  });
 
-  it("renders the guide step with a working Retry/Cancel", () => {
-    const onRetry = jest.fn();
-    const onClose = jest.fn();
-    render(
-      <MiyoConnectContent
-        step="guide"
-        downloadUrl="https://example.com"
-        canAutoAdd
-        onClose={onClose}
-        onRetry={onRetry}
-        onAddVault={noopAdd}
-      />
-    );
+    it("shows the guide step and wires Retry connection and Cancel to their callbacks", () => {
+      const onRetry = jest.fn();
+      const onClose = jest.fn();
+      render(
+        <MiyoConnectContent
+          step="guide"
+          downloadUrl="https://example.com"
+          canAutoAdd
+          onClose={onClose}
+          onRetry={onRetry}
+          onAddVault={noopAdd}
+        />
+      );
 
-    expect(screen.getByText("Miyo isn't running")).toBeTruthy();
-    fireEvent.click(screen.getByText("Retry connection"));
-    expect(onRetry).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByText("Cancel"));
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
+      expect(screen.getByText("Miyo isn't running")).toBeTruthy();
+      fireEvent.click(screen.getByText("Retry connection"));
+      expect(onRetry).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByText("Cancel"));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
 
-  it("renders the addVault step with the register heading + one-click button", () => {
-    const onRetry = jest.fn();
-    render(
-      <MiyoConnectContent
-        step="addVault"
-        downloadUrl="https://example.com"
-        canAutoAdd
-        onClose={noop}
-        onRetry={onRetry}
-        onAddVault={noopAdd}
-      />
-    );
+    it("shows the register heading and one-click button on the addVault step, without a Retry button", () => {
+      const onRetry = jest.fn();
+      render(
+        <MiyoConnectContent
+          step="addVault"
+          downloadUrl="https://example.com"
+          canAutoAdd
+          onClose={noop}
+          onRetry={onRetry}
+          onAddVault={noopAdd}
+        />
+      );
 
-    expect(screen.getByText("Register this vault with Miyo")).toBeTruthy();
-    expect(screen.getByText("Register & connect")).toBeTruthy();
-    expect(screen.queryByText("Retry")).toBeNull();
-  });
+      expect(screen.getByText("Register this vault with Miyo")).toBeTruthy();
+      expect(screen.getByText("Register & connect")).toBeTruthy();
+      expect(screen.queryByText("Retry")).toBeNull();
+    });
 
-  it("one-click registers when canAutoAdd (local Miyo)", async () => {
-    const onAddVault = jest.fn(async () => "added" as const);
-    render(
-      <MiyoConnectContent
-        step="addVault"
-        downloadUrl="https://example.com"
-        canAutoAdd
-        onClose={noop}
-        onRetry={jest.fn()}
-        onAddVault={onAddVault}
-      />
-    );
+    it("registers the vault with one click when canAutoAdd is true", async () => {
+      const onAddVault = jest.fn(async () => "added" as const);
+      render(
+        <MiyoConnectContent
+          step="addVault"
+          downloadUrl="https://example.com"
+          canAutoAdd
+          onClose={noop}
+          onRetry={jest.fn()}
+          onAddVault={onAddVault}
+        />
+      );
 
-    fireEvent.click(screen.getByText("Register & connect"));
-    await waitFor(() => expect(onAddVault).toHaveBeenCalledTimes(1));
-  });
+      fireEvent.click(screen.getByText("Register & connect"));
+      await waitFor(() => expect(onAddVault).toHaveBeenCalledTimes(1));
+    });
 
-  it("surfaces an error and stays put when registration fails", async () => {
-    const onAddVault = jest.fn(async () => "error" as const);
-    render(
-      <MiyoConnectContent
-        step="addVault"
-        downloadUrl="https://example.com"
-        canAutoAdd
-        onClose={noop}
-        onRetry={jest.fn()}
-        onAddVault={onAddVault}
-      />
-    );
+    it("shows a register-failed message when registration returns an error", async () => {
+      const onAddVault = jest.fn(async () => "error" as const);
+      render(
+        <MiyoConnectContent
+          step="addVault"
+          downloadUrl="https://example.com"
+          canAutoAdd
+          onClose={noop}
+          onRetry={jest.fn()}
+          onAddVault={onAddVault}
+        />
+      );
 
-    fireEvent.click(screen.getByText("Register & connect"));
-    await waitFor(() => expect(screen.getByText(/Couldn't register this vault/i)).toBeTruthy());
-  });
+      fireEvent.click(screen.getByText("Register & connect"));
+      await waitFor(() => expect(screen.getByText(/Couldn't register this vault/i)).toBeTruthy());
+    });
 
-  it("falls back to the add-folder deeplink + Retry when it can't one-click (remote/mobile)", () => {
-    const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
-    render(
-      <MiyoConnectContent
-        step="addVault"
-        downloadUrl="https://example.com"
-        canAutoAdd={false}
-        onClose={noop}
-        onRetry={jest.fn()}
-        onAddVault={noopAdd}
-      />
-    );
+    it("offers the add-folder deeplink and Retry instead of one-click registration when canAutoAdd is false", () => {
+      const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
+      render(
+        <MiyoConnectContent
+          step="addVault"
+          downloadUrl="https://example.com"
+          canAutoAdd={false}
+          onClose={noop}
+          onRetry={jest.fn()}
+          onAddVault={noopAdd}
+        />
+      );
 
-    expect(screen.queryByText("Register & connect")).toBeNull();
-    expect(screen.getByText("Retry")).toBeTruthy();
-    fireEvent.click(screen.getByText("Open Miyo"));
-    expect(openSpy).toHaveBeenCalledWith("miyo://add-folder", "_blank");
-    openSpy.mockRestore();
-  });
+      expect(screen.queryByText("Register & connect")).toBeNull();
+      expect(screen.getByText("Retry")).toBeTruthy();
+      fireEvent.click(screen.getByText("Open Miyo"));
+      expect(openSpy).toHaveBeenCalledWith("miyo://add-folder", "_blank");
+      openSpy.mockRestore();
+    });
 
-  it("does not show the register-failed message when the folder registered but Miyo is unreachable", async () => {
-    const onAddVault = jest.fn(async () => "unreachable" as const);
-    render(
-      <MiyoConnectContent
-        step="addVault"
-        downloadUrl="https://example.com"
-        canAutoAdd
-        onClose={noop}
-        onRetry={jest.fn()}
-        onAddVault={onAddVault}
-      />
-    );
+    it("shows no register-failed message when the folder registered but Miyo is unreachable", async () => {
+      const onAddVault = jest.fn(async () => "unreachable" as const);
+      render(
+        <MiyoConnectContent
+          step="addVault"
+          downloadUrl="https://example.com"
+          canAutoAdd
+          onClose={noop}
+          onRetry={jest.fn()}
+          onAddVault={onAddVault}
+        />
+      );
 
-    fireEvent.click(screen.getByText("Register & connect"));
-    await waitFor(() => expect(onAddVault).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText(/Couldn't register this vault/i)).toBeNull();
+      fireEvent.click(screen.getByText("Register & connect"));
+      await waitFor(() => expect(onAddVault).toHaveBeenCalledTimes(1));
+      expect(screen.queryByText(/Couldn't register this vault/i)).toBeNull();
+    });
   });
 });

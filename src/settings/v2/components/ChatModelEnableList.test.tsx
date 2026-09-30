@@ -70,13 +70,16 @@ describe("ChatModelEnableList", () => {
       ];
       backends = { chat: { enabledModels: ["a"] } };
     });
-    it("searches chat models and enables or disables them without desktop agents (https://github.com/Brevilabs/obsidian-copilot-private/issues/373)", () => {
+    it("lists only non-agent models and enables or disables one per switch click without desktop agents (https://github.com/Brevilabs/obsidian-copilot-private/issues/373)", () => {
       render(<ChatModelEnableList />);
       expect(screen.queryByText("Agent model")).toBeNull();
       fireEvent.click(screen.getAllByRole("switch")[0]);
       fireEvent.click(screen.getAllByRole("switch")[1]);
       expect(disableModel).toHaveBeenCalledWith("chat", "a");
       expect(enableModel).toHaveBeenCalledWith("chat", "b");
+    });
+    it("narrows the list to models matching the search text (https://github.com/Brevilabs/obsidian-copilot-private/issues/373)", () => {
+      render(<ChatModelEnableList />);
       fireEvent.change(screen.getByPlaceholderText("Search chat models…"), {
         target: { value: "model-b" },
       });
