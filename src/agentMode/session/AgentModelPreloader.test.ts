@@ -104,6 +104,66 @@ function buildDescriptor(makeProc: () => MockProcHandle): {
 }
 
 describe("AgentModelPreloader", () => {
+  describe("stopBackend()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 waits for an already closing warm process before allowing removal", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      await preloader.preload(descriptor.id);
+      let release!: () => void;
+      procHandle.shutdown.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          })
+      );
+      preloader.clearCached(descriptor.id);
+      let stopped = false;
+      const stopping = preloader.stopBackend(descriptor.id).then(() => {
+        stopped = true;
+      });
+      await Promise.resolve();
+      expect(stopped).toBe(false);
+      release();
+      await stopping;
+      expect(preloader.takeWarm(descriptor.id)).toBeNull();
+      expect(procHandle.shutdown).toHaveBeenCalledTimes(1);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 retains a failed warm owner and stops it on retry", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      await preloader.preload(descriptor.id);
+      procHandle.shutdown.mockRejectedValueOnce(new Error("stop failed"));
+      await expect(preloader.stopBackend(descriptor.id)).rejects.toThrow("stop failed");
+      await preloader.stopBackend(descriptor.id);
+      expect(procHandle.shutdown).toHaveBeenCalledTimes(2);
+      expect(preloader.takeWarm(descriptor.id)).toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 stops a process that is still discovering models and prevents caching it after uninstall", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      let rejectProbe!: (error: Error) => void;
+      procHandle.newSession.mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectProbe = reject;
+          })
+      );
+      const probing = preloader.preload(descriptor.id);
+      await waitFor(() => expect(procHandle.newSession).toHaveBeenCalled());
+      descriptor.getInstallState = () => ({ kind: "absent" });
+      procHandle.shutdown.mockImplementation(async () => {
+        rejectProbe(new Error("closed"));
+      });
+      await preloader.stopBackend(descriptor.id);
+      await probing;
+      expect(procHandle.shutdown).toHaveBeenCalled();
+      expect(preloader.getCachedModelCatalog(descriptor.id)).toBeNull();
+      expect(preloader.takeWarm(descriptor.id)).toBeNull();
+    });
+  });
+
   describe("preload()", () => {
     it("retains the probe subprocess after a successful preload and hands it to the manager", async () => {
       const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());

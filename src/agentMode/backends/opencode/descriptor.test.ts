@@ -53,16 +53,21 @@ describe("descriptor", () => {
       });
     });
 
-    describe("managedInstall.subscribeCustomSelection()", () => {
+    describe("managedInstall.subscribeBeforeManagedRemoval()", () => {
       it("registers an awaited runtime refresh and returns its cleanup", () => {
         const plugin = vaultPlugin(os.tmpdir());
         const manager = getOpencodeBinaryManager(plugin);
         const cleanup = jest.fn();
         const refresh = jest.fn(async () => {});
-        const subscribe = jest.spyOn(manager, "subscribeCustomSelection").mockReturnValue(cleanup);
+        const subscribe = jest
+          .spyOn(manager, "subscribeBeforeManagedRemoval")
+          .mockReturnValue(cleanup);
         try {
           expect(
-            OpencodeBackendDescriptor.managedInstall?.subscribeCustomSelection?.(plugin, refresh)
+            OpencodeBackendDescriptor.managedInstall?.subscribeBeforeManagedRemoval?.(
+              plugin,
+              refresh
+            )
           ).toBe(cleanup);
           expect(subscribe).toHaveBeenCalledWith(refresh);
         } finally {

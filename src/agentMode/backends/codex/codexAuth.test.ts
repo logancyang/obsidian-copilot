@@ -78,6 +78,73 @@ describe("codexAuth", () => {
     jest.restoreAllMocks();
     jest.useRealTimers();
   });
+  describe("stop()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 waits for the managed probe to close and leaves the custom probe running", async () => {
+      const managed = child();
+      const custom = child();
+      custom.pid = 987655;
+      mockSpawn.mockReset().mockReturnValueOnce(managed).mockReturnValueOnce(custom);
+      const kill = jest.spyOn(process, "kill").mockReturnValue(true);
+      const managedProbe = codexAuth.getStatus(settings);
+      const customProbe = codexAuth.getStatus(configured({ binaryPath: "/custom/adapter" }));
+      await Promise.resolve();
+      await Promise.resolve();
+      let stopped = false;
+      const stopping = codexAuth.stop!("/bundle/codex-acp").then(() => {
+        stopped = true;
+      });
+      await Promise.resolve();
+      expect(stopped).toBe(false);
+      expect(kill).toHaveBeenCalledWith(-987654, "SIGTERM");
+      expect(kill).not.toHaveBeenCalledWith(-987655, "SIGTERM");
+      managed.emit("close");
+      await stopping;
+      expect(stopped).toBe(true);
+      await expect(managedProbe).resolves.toEqual({ signedIn: false });
+      const stopCustom = codexAuth.stop!("/custom/adapter");
+      custom.emit("close");
+      await stopCustom;
+      await customProbe;
+    });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 reports a probe that fails to stop instead of hanging removal", async () => {
+      jest.useFakeTimers();
+      const proc = child();
+      mockSpawn.mockReturnValueOnce(proc);
+      jest.spyOn(process, "kill").mockImplementation(() => {
+        throw new Error("Access denied");
+      });
+      const probing = codexAuth.getStatus(settings);
+      await Promise.resolve();
+      await Promise.resolve();
+      const stopping = expect(codexAuth.stop!("/bundle/codex-acp")).rejects.toThrow("did not stop");
+      await jest.advanceTimersByTimeAsync(10000);
+      proc.emit("close");
+      await probing;
+      await stopping;
+    });
+    it.each(["signIn", "signOut"] as const)(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/620 stops an owned %s process before removal",
+      async (method) => {
+        const proc = child();
+        mockSpawn.mockReturnValueOnce(proc);
+        const kill = jest.spyOn(process, "kill").mockReturnValue(true);
+        const auth = codexAuth[method]!(settings).catch(() => ({ signedIn: false }));
+        await Promise.resolve();
+        await Promise.resolve();
+        const stopping = codexAuth.stop!("/bundle/codex-acp");
+        expect(kill).toHaveBeenCalledWith(-987654, "SIGTERM");
+        proc.emit("close");
+        await stopping;
+        await expect(auth).resolves.toEqual({ signedIn: false });
+      }
+    );
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 cancels an owned operation before it can spawn", async () => {
+      const pending = codexAuth.getStatus(settings);
+      await codexAuth.stop!("/bundle/codex-acp");
+      await expect(pending).resolves.toEqual({ signedIn: false });
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+  });
   describe("getProbeKey()", () => {
     it(`preserves managed login identity across same-version UUID replacements: ${ISSUE}`, () => {
       const original = configured({
@@ -284,9 +351,9 @@ describe("codexAuth", () => {
           });
           if (host === "win32")
             expect(mockExec).toHaveBeenCalledWith(
-              "taskkill",
+              "taskkill.exe",
               ["/PID", String(processChild.pid), "/T", "/F"],
-              { windowsHide: true },
+              { windowsHide: true, timeout: 10_000 },
               expect.any(Function)
             );
           else expect(kill).toHaveBeenCalledWith(-processChild.pid, "SIGTERM");

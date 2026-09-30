@@ -25,6 +25,8 @@ export class AgentModelPreloader {
   private readonly pendingRefresh = new Set<BackendId>();
   private readonly listeners = new Set<() => void>();
   private readonly warmExitUnsubs = new Map<BackendId, () => void>();
+  private readonly probing = new Map<BackendId, BackendProcess>();
+  private readonly closing = new Map<BackendId, { proc: BackendProcess; done: Promise<void> }>();
   private disposed = false;
 
   constructor(
@@ -52,12 +54,31 @@ export class AgentModelPreloader {
       this.warm.delete(backendId);
       this.warmExitUnsubs.get(backendId)?.();
       this.warmExitUnsubs.delete(backendId);
-      warm.proc.shutdown().catch((e) => {
+      const closed = warm.proc.shutdown();
+      this.closing.set(backendId, { proc: warm.proc, done: closed });
+      void closed.catch((e) => {
         logWarn(`[AgentMode] preload clearCached: shutdown of warm ${backendId} failed`, e);
       });
       changed = true;
     }
     if (changed) this.notify();
+  }
+
+  /**
+   * Releases both a cached process and a probe still discovering models before removal.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+   * @param backendId - Backend whose owned probe processes must exit.
+   */
+  async stopBackend(backendId: BackendId): Promise<void> {
+    const previous = this.closing.get(backendId);
+    // Retain failed owners for retry. https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+    if (previous) await previous.done.catch(() => previous.proc.shutdown());
+    await this.probing.get(backendId)?.shutdown();
+    await this.inflight.get(backendId);
+    this.clearCached(backendId);
+    const closing = this.closing.get(backendId);
+    if (closing !== previous) await closing?.done;
+    this.closing.delete(backendId);
   }
 
   takeWarm(backendId: BackendId): WarmBackend | null {
@@ -98,6 +119,7 @@ export class AgentModelPreloader {
   private startProbeChain(backendId: BackendId): Promise<void> {
     const promise = this.runProbeChain(backendId).finally(() => {
       this.inflight.delete(backendId);
+      this.probing.delete(backendId);
       this.pendingRefresh.delete(backendId);
     });
     this.inflight.set(backendId, promise);
@@ -157,6 +179,7 @@ export class AgentModelPreloader {
       logWarn(`[AgentMode] preload skipped: unknown backend ${backendId}`);
       return;
     }
+    await this.closing.get(backendId)?.done;
     await this.beforeBackendStart?.(backendId);
     if (this.disposed || descriptor.getInstallState(getSettings()).kind !== "ready") return;
 
@@ -166,7 +189,7 @@ export class AgentModelPreloader {
       clientVersion: this.plugin.manifest.version,
       descriptor,
     });
-
+    this.probing.set(backendId, proc);
     let probe: { sessionId: SessionId; state: BackendState } | null = null;
     try {
       await proc.start?.();
@@ -192,7 +215,9 @@ export class AgentModelPreloader {
 
     // Prefetch awaits RPCs before the exit listener is installed; never cache a
     // dead process or retain one after shutdown. https://github.com/Brevilabs/obsidian-copilot-private/issues/550
-    if (this.disposed || !proc.isRunning()) {
+    // Removal also invalidates an in-flight probe. https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+    const ready = descriptor.getInstallState(getSettings()).kind === "ready";
+    if (this.disposed || !proc.isRunning() || !ready) {
       this.effortCatalog.delete(backendId);
       try {
         await proc.shutdown();

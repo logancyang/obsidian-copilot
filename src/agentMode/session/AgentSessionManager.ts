@@ -189,6 +189,7 @@ export interface AgentSessionManagerOptions {
 export class AgentSessionManager {
   private backends = new Map<BackendId, BackendProcess>();
   private starting = new Map<BackendId, Promise<BackendProcess>>();
+  private readonly startingProcesses = new Map<BackendId, BackendProcess>();
   private sessions = new Map<string, AgentSession>();
   private chatUIStates = new Map<string, AgentChatUIState>();
   private activeSessionId: string | null = null;
@@ -1538,6 +1539,9 @@ export class AgentSessionManager {
     if (this.disposed) return false;
     const inflight = this.starting.get(backendId);
     if (inflight) {
+      // Release pending startup before awaiting it. https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+      if (options?.deferWhileBusy === false)
+        await this.startingProcesses.get(backendId)?.shutdown();
       await inflight.catch(() => undefined);
     }
     const backend = this.backends.get(backendId);
@@ -1621,9 +1625,11 @@ export class AgentSessionManager {
     if (this.disposed) return;
     const installState = this.opts.resolveDescriptor(backendId)?.getInstallState(getSettings());
     if (installState?.kind === "checking") return;
+    // Release probes before dependent startup. https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+    if (options?.deferWhileBusy === false) await this.preloader.stopBackend(backendId);
     if (installState?.kind !== "ready") {
-      await this.restartBackend(backendId, "binary no longer available");
-      this.preloader.clearCached(backendId);
+      await this.restartBackend(backendId, "binary no longer available", options);
+      await this.preloader.stopBackend(backendId);
       if (!installState || installState.kind === "absent") {
         if (this.preloadStatus.delete(backendId)) this.notify();
       }
@@ -1635,17 +1641,13 @@ export class AgentSessionManager {
     }
   }
 
-  private async refreshWarmProbe(backendId: BackendId, reason: string): Promise<boolean> {
+  private refreshWarmProbe(backendId: BackendId, reason: string): boolean {
     if (this.disposed) return false;
     if (!this.isBackendInstalled(backendId)) return false;
     const probe = this.preloader.refresh(backendId);
     if (!probe) return false;
     logInfo(`[AgentMode] refreshing warm ${backendId} probe: ${reason}`);
     this.registerPreload(backendId, probe);
-    // The warm process can hold the same executable lock as a live chat. A
-    // completed refresh must release it before managed cleanup can proceed.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
-    await probe;
     return true;
   }
 
@@ -2560,6 +2562,7 @@ export class AgentSessionManager {
         clientVersion: this.plugin.manifest.version,
         descriptor,
       });
+      this.startingProcesses.set(backendId, proc);
       if (proc.start) await proc.start();
       this.wireProcessCallbacks(backendId, proc);
       this.installBackendExitHandler(backendId, proc, descriptor);
@@ -2571,6 +2574,7 @@ export class AgentSessionManager {
       return await startPromise;
     } finally {
       this.starting.delete(backendId);
+      this.startingProcesses.delete(backendId);
     }
   }
 
@@ -2690,8 +2694,7 @@ export class AgentSessionManager {
       // A Search scope change queued behind another refresh must keep its
       // non-deferrable privacy semantics when the first refresh completes.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
-      // Managed cleanup must wait for the queued refresh to release its executable,
-      // including a refresh that was already running when the binary changed.
+      // Managed cleanup awaits the queued refresh to release its executable.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
       if (immediate) await inFlight;
       return;

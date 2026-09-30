@@ -337,9 +337,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   });
   for (const descriptor of listBackendDescriptors()) {
     const managedInstall = descriptor.managedInstall;
-    if (managedInstall?.subscribeCustomSelection) {
+    if (managedInstall?.subscribeBeforeManagedRemoval) {
       plugin.register(
-        managedInstall.subscribeCustomSelection(plugin, async () => {
+        managedInstall.subscribeBeforeManagedRemoval(plugin, async (binaryPath) => {
+          if (binaryPath) await descriptor.auth?.stop?.(binaryPath);
           await seedManagedBuiltins();
           // A binary being removed cannot keep serving a busy chat. Reuse restart
           // recovery so conversations and drafts survive before files are reclaimed.
@@ -353,14 +354,13 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       // probes. https://github.com/Brevilabs/obsidian-copilot-private/issues/530
       if (initializing.has(descriptor.id)) return;
       const installState = descriptor.getInstallState(getSettings());
-      // Custom selection awaits its own refresh before deleting the old executable;
+      // Managed removal awaits its own refresh before deleting the old executable;
       // a second asynchronous refresh would race that deletion and session recovery.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
       if (
-        managedInstall?.subscribeCustomSelection &&
+        managedInstall?.subscribeBeforeManagedRemoval &&
         managedInstall.getState(plugin).kind === "running" &&
-        installState.kind === "ready" &&
-        installState.source === "custom"
+        (installState.kind !== "ready" || installState.source === "custom")
       )
         return;
       // The first warm probe must see newly installed skills. https://github.com/logancyang/obsidian-copilot/issues/3022

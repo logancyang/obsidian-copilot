@@ -79,7 +79,7 @@ The **Authentication** section shows your signed-in ChatGPT email and plan when 
 
 You can also choose **Sign in** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
 
-Switching to your own Codex binary refreshes the agent before removing unused managed downloads. An active turn is stopped so Windows can release the old executable; Copilot reopens the conversation with the selected binary. Your custom binary and account credentials remain on your computer. Cancel is available during downloads; configuration changes finish before another action can start.
+Switching to your own Codex binary refreshes the agent before removing unused managed downloads. Copilot stops the old agent and waits for its processes to exit before deleting managed files. This also applies when you uninstall a managed binary. An active turn is stopped; Copilot reopens the conversation with the selected binary. Your custom binary and account credentials remain on your computer. Cancel is available during downloads; configuration changes finish before another action can start.
 
 If your adapter is below the supported minimum, select **Configure** in Settings to manage it. Agent Chat also offers **Upgrade**, with shared progress and errors. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
 

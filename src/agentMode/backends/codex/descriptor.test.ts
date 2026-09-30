@@ -415,15 +415,17 @@ describe("descriptor", () => {
       );
     });
 
-    describe("managedInstall.subscribeCustomSelection()", () => {
+    describe("managedInstall.subscribeBeforeManagedRemoval()", () => {
       it("registers an awaited runtime refresh and returns its cleanup", () => {
         const manager = getCodexBinaryManager();
         const cleanup = jest.fn();
         const refresh = jest.fn(async () => {});
-        const subscribe = jest.spyOn(manager, "subscribeCustomSelection").mockReturnValue(cleanup);
+        const subscribe = jest
+          .spyOn(manager, "subscribeBeforeManagedRemoval")
+          .mockReturnValue(cleanup);
         try {
           expect(
-            CodexBackendDescriptor.managedInstall?.subscribeCustomSelection?.(
+            CodexBackendDescriptor.managedInstall?.subscribeBeforeManagedRemoval?.(
               {} as CopilotPlugin,
               refresh
             )

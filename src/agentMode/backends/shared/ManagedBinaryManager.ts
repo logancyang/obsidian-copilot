@@ -12,7 +12,6 @@ import type { ManagedInstallActionState } from "@/agentMode/session/types";
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { validateExecutableFile } from "@/utils/detectBinary";
-import { stopWindowsProcessesInDirectory } from "@/utils/stopWindowsProcessesInDirectory";
 
 const AUTOMATIC_UPDATE_RETRY_DELAY_MS = 24 * 60 * 60 * 1000;
 const IDLE_ACTION_STATE: ManagedInstallActionState = Object.freeze({ kind: "idle" });
@@ -44,19 +43,19 @@ export abstract class ManagedBinaryManager<
   private operation: AbortController | null = null;
   private runtimeState: ManagedInstallRuntimeState = { kind: "idle" };
   private readonly subscribers = new Set<() => void>();
-  private readonly customSelectionHandlers = new Set<() => Promise<void>>();
+  private readonly removalHandlers = new Set<(binaryPath?: string) => Promise<void>>();
 
   constructor(private readonly displayName: string) {}
 
   /**
-   * Lets runtime owners finish switching away from managed files before cleanup.
+   * Lets runtime owners release managed files before uninstall or custom selection.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/620
-   * @param handler - Refreshes the backend using the newly selected custom binary.
+   * @param handler - Stops execution of the previous managed binary before deletion.
    */
-  subscribeCustomSelection(handler: () => Promise<void>): () => void {
-    this.customSelectionHandlers.add(handler);
+  subscribeBeforeManagedRemoval(handler: (binaryPath?: string) => Promise<void>): () => void {
+    this.removalHandlers.add(handler);
     return () => {
-      this.customSelectionHandlers.delete(handler);
+      this.removalHandlers.delete(handler);
     };
   }
 
@@ -284,8 +283,22 @@ export abstract class ManagedBinaryManager<
 
   async uninstall(): Promise<void> {
     return this.runExclusive({ kind: "busy" }, async () => {
-      await this.removeManagedDownloads();
-      if (this.readBinarySettings().binarySource !== "custom") this.clearBinarySettings();
+      const previous = this.readBinarySettings();
+      if (previous.binarySource === "custom") {
+        await this.removeManagedDownloads();
+        return;
+      }
+      // Mark unavailable before stopping owners so neither a busy chat nor a probe
+      // restarts the executable being removed. Restore selection if removal fails.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+      this.clearBinarySettings();
+      try {
+        await this.beforeManagedRemoval(previous.binaryPath);
+        await this.removeManagedDownloads();
+      } catch (error) {
+        this.updateBinarySettings(previous);
+        throw error;
+      }
     });
   }
 
@@ -301,6 +314,7 @@ export abstract class ManagedBinaryManager<
     const error = await validateExecutableFile(binaryPath);
     if (error) throw new Error(error);
     const installed = await this.validateCustomBinary(binaryPath);
+    const previous = this.readBinarySettings();
     this.updateBinarySettings({
       binaryPath: installed.path,
       binaryVersion: installed.version,
@@ -310,13 +324,19 @@ export abstract class ManagedBinaryManager<
       // Refresh owners before reclaiming files; a settings notification alone
       // neither waits for process exit nor interrupts a busy managed runtime.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
-      await Promise.all(Array.from(this.customSelectionHandlers, (refresh) => refresh()));
+      await this.beforeManagedRemoval(
+        previous.binarySource === "managed" ? previous.binaryPath : undefined
+      );
       await this.removeManagedDownloads();
     } catch (error) {
       throw new Error(
         `Your own binary is now in use, but Copilot could not remove its managed downloads: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+  }
+
+  private async beforeManagedRemoval(binaryPath?: string): Promise<void> {
+    await Promise.all(Array.from(this.removalHandlers, (stop) => stop(binaryPath)));
   }
 
   private async removeManagedDownloads(): Promise<void> {
@@ -348,10 +368,6 @@ export abstract class ManagedBinaryManager<
         )
           continue;
       }
-      // Windows retains locks from native account probes and other vaults until
-      // those executables exit, even after this vault's runtime has refreshed.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
-      await stopWindowsProcessesInDirectory(await realPathOrMissing(dir));
       await fs.promises.rm(dir, { recursive: true, force: true });
     }
   }

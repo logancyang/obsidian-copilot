@@ -1,5 +1,6 @@
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { logWarn } from "@/logger";
+import { terminateProcessTree } from "@/utils/terminateProcessTree";
 type Readable = import("node:stream").Readable;
 export interface CliAuthStatus {
   loggedIn: boolean;
@@ -24,8 +25,7 @@ export function signInWithCli(
   readStatus: () => Promise<CliAuthStatus>,
   handlers: SignInHandlers = {}
 ): CliSignInController {
-  const { spawn, execFile } =
-    requireNodeModule<typeof import("node:child_process")>("child_process");
+  const { spawn } = requireNodeModule<typeof import("node:child_process")>("child_process");
   let child: ReturnType<typeof spawn>;
   let resolveDone: (status: CliAuthStatus) => void;
   const done = new Promise<CliAuthStatus>((resolve) => {
@@ -57,18 +57,21 @@ export function signInWithCli(
       if (process.platform === "win32") {
         if (exited) return;
         treeStopped = false;
-        execFile(
-          "taskkill",
-          ["/PID", String(child.pid), "/T", "/F"],
-          { windowsHide: true },
+        void terminateProcessTree(child).then(
+          () => {
+            treeStopped = true;
+            if (closed) finish({ loggedIn: false });
+          },
           (error) => {
             treeStopped = true;
-            if (error) logWarn("[AgentMode] Login process-tree cancellation failed", error);
+            logWarn("[AgentMode] Login process-tree cancellation failed", error);
             if (closed) finish({ loggedIn: false });
           }
         );
       } else {
-        process.kill(-child.pid, "SIGTERM");
+        void terminateProcessTree(child).catch((error) =>
+          logWarn("[AgentMode] Login cancellation failed", error)
+        );
       }
     } catch (error) {
       logWarn("[AgentMode] Login cancellation failed", error);

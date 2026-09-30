@@ -11,7 +11,6 @@ import {
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import * as cleanup from "@/utils/stopWindowsProcessesInDirectory";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
@@ -343,6 +342,55 @@ describe("ManagedBinaryManager", () => {
       });
     });
     describe("uninstall()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 waits for runtime shutdown before removing a managed selection", async () => {
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
+        manager.settings = {
+          binarySource: "managed",
+          binaryPath: "/managed/binary",
+          binaryVersion: "1.2.3",
+        };
+        let release!: () => void;
+        let started!: () => void;
+        const stopping = new Promise<void>((resolve) => {
+          started = resolve;
+        });
+        manager.subscribeBeforeManagedRemoval(async () => {
+          started();
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        });
+        const uninstalling = manager.uninstall();
+        const waited = await Promise.race([
+          stopping.then(() => true),
+          uninstalling.then(() => false),
+        ]);
+        if (waited) {
+          expect(fs.existsSync(manager.getDataDir())).toBe(true);
+          expect(manager.settings.binarySource).toBeUndefined();
+          release();
+        }
+        await uninstalling;
+        expect(waited).toBe(true);
+        expect(fs.existsSync(manager.getDataDir())).toBe(false);
+        expect(manager.settings.binarySource).toBeUndefined();
+      });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 preserves files and restores the managed selection when runtime shutdown fails", async () => {
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
+        const selected = {
+          binarySource: "managed" as const,
+          binaryPath: "/managed/binary",
+          binaryVersion: "1.2.3",
+        };
+        manager.settings = selected;
+        manager.subscribeBeforeManagedRemoval(async (binaryPath) => {
+          expect(binaryPath).toBe(selected.binaryPath);
+          throw new Error("Cannot stop runtime");
+        });
+        await expect(manager.uninstall()).rejects.toThrow("Cannot stop runtime");
+        expect(fs.existsSync(manager.getDataDir())).toBe(true);
+        expect(manager.settings).toEqual(selected);
+      });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 removes all managed versions and clears the managed selection", async () => {
         fs.mkdirSync(path.join(manager.getDataDir(), "1.2.3"), { recursive: true });
         manager.settings = {
@@ -367,16 +415,19 @@ describe("ManagedBinaryManager", () => {
           binaryVersion: "1.2.3",
         };
         const selected = manager.settings;
+        const stop = jest.fn();
+        manager.subscribeBeforeManagedRemoval(stop);
         await manager.uninstall();
+        expect(stop).not.toHaveBeenCalled();
         expect(fs.existsSync(manager.getDataDir())).toBe(false);
         expect(fs.existsSync(customPath)).toBe(true);
         expect(manager.settings).toEqual(selected);
       });
     });
-    describe("subscribeCustomSelection()", () => {
+    describe("subscribeBeforeManagedRemoval()", () => {
       it("notifies runtime owners with the validated selection and detaches them on unsubscribe", async () => {
         const selections: string[] = [];
-        const unsubscribe = manager.subscribeCustomSelection(async () => {
+        const unsubscribe = manager.subscribeBeforeManagedRemoval(async () => {
           selections.push(manager.settings.binaryPath!);
         });
         await manager.setCustomBinaryPath(customPath);
@@ -387,35 +438,6 @@ describe("ManagedBinaryManager", () => {
     });
 
     describe("setCustomBinaryPath()", () => {
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 releases Windows executable locks before removing managed downloads", async () => {
-        fs.mkdirSync(manager.getDataDir(), { recursive: true });
-        let release!: () => void;
-        let started!: () => void;
-        const stopping = new Promise<void>((resolve) => {
-          started = resolve;
-        });
-        const stop = jest
-          .spyOn(cleanup, "stopWindowsProcessesInDirectory")
-          .mockImplementation(async () => {
-            started();
-            await new Promise<void>((resolve) => {
-              release = resolve;
-            });
-          });
-        try {
-          const selected = manager.setCustomBinaryPath(customPath);
-          expect(await Promise.race([stopping.then(() => true), selected.then(() => false)])).toBe(
-            true
-          );
-          expect(fs.existsSync(manager.getDataDir())).toBe(true);
-          release();
-          await selected;
-          expect(fs.existsSync(manager.getDataDir())).toBe(false);
-          expect(fs.existsSync(customPath)).toBe(true);
-        } finally {
-          stop.mockRestore();
-        }
-      });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 waits for the selected custom runtime to replace the managed process before deleting downloads", async () => {
         fs.mkdirSync(manager.getDataDir(), { recursive: true });
         const managedPath = path.join(manager.getDataDir(), "agent");
@@ -425,7 +447,7 @@ describe("ManagedBinaryManager", () => {
         const refreshing = new Promise<void>((resolve) => {
           started = resolve;
         });
-        manager.subscribeCustomSelection(async () => {
+        manager.subscribeBeforeManagedRemoval(async () => {
           expect(manager.settings.binaryPath).toBe(customPath);
           started();
           await new Promise<void>((resolve) => {

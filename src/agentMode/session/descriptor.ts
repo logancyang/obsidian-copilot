@@ -48,7 +48,10 @@ export interface ManagedInstallAction {
   subscribe(plugin: CopilotPlugin, onChange: () => void): () => void;
   run(plugin: CopilotPlugin): Promise<void>;
   /** Await release of managed files before cleanup. https://github.com/Brevilabs/obsidian-copilot-private/issues/620 */
-  subscribeCustomSelection?(plugin: CopilotPlugin, refresh: () => Promise<void>): () => void;
+  subscribeBeforeManagedRemoval?(
+    plugin: CopilotPlugin,
+    stop: (binaryPath?: string) => Promise<void>
+  ): () => void;
 }
 
 export interface BackendAuthStatus {
@@ -67,6 +70,8 @@ export interface ApplySelectionContext {
 }
 
 export interface BackendAuth {
+  /** Release auth processes using this binary, preserving credentials. https://github.com/Brevilabs/obsidian-copilot-private/issues/620 */
+  stop?(binaryPath: string): Promise<void>;
   getProbeKey?(settings: CopilotSettings): string;
   getStatus(settings: CopilotSettings): Promise<BackendAuthStatus>;
   signIn(settings: CopilotSettings, handlers?: BackendSignInHandlers): Promise<BackendAuthStatus>;
