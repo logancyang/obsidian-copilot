@@ -46,7 +46,7 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
     };
   }, []);
 
-  const resolvedModel = useResolvedChatBackendModel(app, selectedModelKey, false);
+  const resolvedModel = useResolvedChatBackendModel(app, selectedModelKey);
 
   const {
     isStreaming,

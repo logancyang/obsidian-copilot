@@ -132,7 +132,7 @@ export function CustomCommandChatModalContent({
     updateSetting("quickCommandIncludeNoteContext", checked);
   }, []);
 
-  const resolvedModel = useResolvedChatBackendModel(app, userSelectedModelKey, false);
+  const resolvedModel = useResolvedChatBackendModel(app, userSelectedModelKey);
 
   const chatPicker = useChatModelPicker({
     value: userSelectedModelKey,

@@ -41,18 +41,16 @@ jest.mock("@/services/keychainService", () => ({ KeychainService: { getInstance:
 describe("useResolvedChatBackendModel", () => {
   describe("useResolvedChatBackendModel()", () => {
     it("resolves an explicitly selected legacy model without fallback", () => {
-      const { result } = renderHook(() =>
-        useResolvedChatBackendModel({} as App, "gpt-4o|openai", false)
-      );
+      const { result } = renderHook(() => useResolvedChatBackendModel({} as App, "gpt-4o|openai"));
       expect(result.current).toEqual({ name: "gpt-4o", configuredModelId: "model-a" });
     });
     it("returns no model for a stale strict selection (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)", () => {
-      const { result } = renderHook(() => useResolvedChatBackendModel({} as App, "removed", false));
+      const { result } = renderHook(() => useResolvedChatBackendModel({} as App, "removed"));
       expect(result.current).toBeNull();
     });
-    it("retains first-model fallback for chat callers", () => {
+    it("returns no model when nothing is selected (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)", () => {
       const { result } = renderHook(() => useResolvedChatBackendModel({} as App, undefined));
-      expect(result.current?.configuredModelId).toBe("model-a");
+      expect(result.current).toBeNull();
     });
   });
 });
