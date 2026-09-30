@@ -2,6 +2,7 @@ import {
   createSelfHostWebSearchAgentBridge,
   hasSelfHostSearchKey,
   selfHostWebSearch,
+  selfHostYoutube4llm,
   type SelfHostWebSearchAgentBridge,
   type SelfHostWebSearchAgentChannel,
 } from "./selfHostServices";
@@ -635,55 +636,59 @@ describe("selfHostServices", () => {
       });
     });
 
-    describe("provider dispatch", () => {
-      it.each([
-        [
-          "firecrawl",
-          "firecrawlApiKey",
-          "fc-key",
-          "https://api.firecrawl.dev/v2/search",
-          { data: { web: [] } },
-        ],
-        [
-          "perplexity",
-          "perplexityApiKey",
-          "pplx-key",
-          "https://api.perplexity.ai/chat/completions",
-          { choices: [] },
-        ],
-        [
-          "parallel",
-          "parallelApiKey",
-          "parallel-key",
-          "https://api.parallel.ai/v1/search",
-          { results: [] },
-        ],
-        ["exa", "exaApiKey", "exa-key", "https://api.exa.ai/search", { results: [] }],
-      ])(
-        "routes %s to its direct endpoint (https://github.com/Brevilabs/obsidian-copilot-private/issues/285)",
-        async (provider, keyField, key, url, responseBody) => {
-          mockGetSettings.mockReturnValue(providerSettings(provider, { [keyField]: key }));
-          mockJsonResponse(responseBody);
-
-          await selfHostWebSearch("test");
-
-          expect(mockFetch).toHaveBeenCalledWith(url, expect.any(Object));
-        }
+    it("defaults to Firecrawl for an unknown provider", async () => {
+      mockGetSettings.mockReturnValue(
+        providerSettings("unknown-provider", { firecrawlApiKey: "fc-key" })
       );
+      mockJsonResponse({ data: { web: [] } });
 
-      it("defaults to Firecrawl for an unknown provider", async () => {
-        mockGetSettings.mockReturnValue(
-          providerSettings("unknown-provider", { firecrawlApiKey: "fc-key" })
-        );
-        mockJsonResponse({ data: { web: [] } });
+      await selfHostWebSearch("test");
 
-        await selfHostWebSearch("test");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://api.firecrawl.dev/v2/search",
+        expect.any(Object)
+      );
+    });
+  });
 
-        expect(mockFetch).toHaveBeenCalledWith(
-          "https://api.firecrawl.dev/v2/search",
-          expect.any(Object)
-        );
+  describe("selfHostYoutube4llm()", () => {
+    beforeEach(() => {
+      mockGetSettings.mockReturnValue(
+        providerSettings("firecrawl", { supadataApiKey: "supadata-test-key" })
+      );
+    });
+
+    it("requests the video transcript with the Supadata key and returns its text", async () => {
+      mockFetch.mockResolvedValueOnce({
+        status: 200,
+        json: async () => ({ content: "Hello from the video" }),
       });
+
+      const result = await selfHostYoutube4llm("https://www.youtube.com/watch?v=abc&t=1");
+
+      expect(result.response).toEqual({ transcript: "Hello from the video" });
+      const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain(`url=${encodeURIComponent("https://www.youtube.com/watch?v=abc&t=1")}`);
+      expect(options.headers).toMatchObject({ "x-api-key": "supadata-test-key" });
+    });
+
+    it("includes the status and body when Supadata rejects the request", async () => {
+      mockFetch.mockResolvedValueOnce({
+        status: 401,
+        text: async () => "Invalid API key",
+      });
+
+      await expect(selfHostYoutube4llm("https://youtu.be/abc")).rejects.toThrow(
+        "Supadata transcript request failed (401): Invalid API key"
+      );
+    });
+
+    it("fails when Supadata starts an async job without returning a job id", async () => {
+      mockFetch.mockResolvedValueOnce({ status: 202, json: async () => ({}) });
+
+      await expect(selfHostYoutube4llm("https://youtu.be/abc")).rejects.toThrow(
+        "Supadata returned async status but no job_id"
+      );
     });
   });
 });

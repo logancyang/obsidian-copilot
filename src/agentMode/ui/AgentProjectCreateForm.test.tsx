@@ -19,62 +19,63 @@ function renderForm(props: Partial<React.ComponentProps<typeof AgentProjectCreat
   render(<AgentProjectCreateForm {...props} onSave={onSave} onCancel={onCancel} />);
   return { onSave, onCancel };
 }
-
 describe("AgentProjectCreateForm", () => {
-  it("disables Create until a name is entered", () => {
-    renderForm();
-    const create = screen.getByText("Create").closest("button") as HTMLButtonElement;
-    expect(create.disabled).toBe(true);
+  describe("AgentProjectCreateForm()", () => {
+    it("disables Create until a name is entered", () => {
+      renderForm();
+      const create = screen.getByText("Create").closest("button") as HTMLButtonElement;
+      expect(create.disabled).toBe(true);
 
-    fireEvent.change(screen.getByPlaceholderText("Project name"), {
-      target: { value: "  Research  " },
+      fireEvent.change(screen.getByPlaceholderText("Project name"), {
+        target: { value: "  Research  " },
+      });
+      expect(create.disabled).toBe(false);
     });
-    expect(create.disabled).toBe(false);
-  });
 
-  it("saves the trimmed name", async () => {
-    const { onSave } = renderForm();
-    fireEvent.change(screen.getByPlaceholderText("Project name"), {
-      target: { value: "  Research  " },
+    it("saves the trimmed name", async () => {
+      const { onSave } = renderForm();
+      fireEvent.change(screen.getByPlaceholderText("Project name"), {
+        target: { value: "  Research  " },
+      });
+      fireEvent.click(screen.getByText("Create"));
+      await waitFor(() => expect(onSave).toHaveBeenCalledWith({ name: "Research" }));
     });
-    fireEvent.click(screen.getByText("Create"));
-    await waitFor(() => expect(onSave).toHaveBeenCalledWith({ name: "Research" }));
-  });
 
-  it("submits on Enter from the name field", async () => {
-    const { onSave } = renderForm();
-    const input = screen.getByPlaceholderText("Project name");
-    fireEvent.change(input, { target: { value: "Research" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(onSave).toHaveBeenCalledWith({ name: "Research" }));
-  });
-
-  it("cancels without saving", () => {
-    const { onCancel, onSave } = renderForm();
-    fireEvent.click(screen.getByText("Cancel"));
-    expect(onCancel).toHaveBeenCalledTimes(1);
-    expect(onSave).not.toHaveBeenCalled();
-  });
-});
-
-describe("makeNewProjectConfig", () => {
-  it("builds a name-only config with the Agent-Mode-empty defaults", () => {
-    const project = makeNewProjectConfig("Research");
-    expect(project.name).toBe("Research");
-    expect(project.systemPrompt).toBe("");
-    expect(project.projectModelKey).toBe("");
-    expect(project.modelConfigs).toEqual({});
-    expect(project.contextSource).toEqual({
-      inclusions: "",
-      exclusions: "",
-      webUrls: "",
-      youtubeUrls: "",
+    it("submits on Enter from the name field", async () => {
+      const { onSave } = renderForm();
+      const input = screen.getByPlaceholderText("Project name");
+      fireEvent.change(input, { target: { value: "Research" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      await waitFor(() => expect(onSave).toHaveBeenCalledWith({ name: "Research" }));
     });
-    expect(project.created).toBe(project.UsageTimestamps);
-    expect(typeof project.created).toBe("number");
+
+    it("cancels without saving", () => {
+      const { onCancel, onSave } = renderForm();
+      fireEvent.click(screen.getByText("Cancel"));
+      expect(onCancel).toHaveBeenCalledTimes(1);
+      expect(onSave).not.toHaveBeenCalled();
+    });
   });
 
-  it("assigns a unique id per call", () => {
-    expect(makeNewProjectConfig("A").id).not.toBe(makeNewProjectConfig("A").id);
+  describe("makeNewProjectConfig()", () => {
+    it("builds a name-only config with the Agent-Mode-empty defaults", () => {
+      const project = makeNewProjectConfig("Research");
+      expect(project.name).toBe("Research");
+      expect(project.systemPrompt).toBe("");
+      expect(project.projectModelKey).toBe("");
+      expect(project.modelConfigs).toEqual({});
+      expect(project.contextSource).toEqual({
+        inclusions: "",
+        exclusions: "",
+        webUrls: "",
+        youtubeUrls: "",
+      });
+      expect(project.created).toBe(project.UsageTimestamps);
+      expect(typeof project.created).toBe("number");
+    });
+
+    it("assigns a unique id per call", () => {
+      expect(makeNewProjectConfig("A").id).not.toBe(makeNewProjectConfig("A").id);
+    });
   });
 });

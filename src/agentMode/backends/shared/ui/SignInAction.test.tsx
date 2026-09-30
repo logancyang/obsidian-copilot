@@ -21,6 +21,20 @@ describe("SignInAction", () => {
       fireEvent.click(screen.getByRole("button", { name: "Cancel sign-in" }));
       expect(onCancel).toHaveBeenCalled();
     });
+    it("disables the button while a sign-in is running without a fallback link", () => {
+      render(
+        <SignInAction status={{ signedIn: false }} signingIn url={null} onSignIn={jest.fn()} />
+      );
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Signing in…" }).disabled).toBe(
+        true
+      );
+    });
+    it("disables the button until the initial sign-in status is known", () => {
+      render(<SignInAction status={null} signingIn={false} url={null} onSignIn={jest.fn()} />);
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Checking sign-in…" }).disabled
+      ).toBe(true);
+    });
     it(`offers Retry after failure and confirms authoritative success: ${ISSUE}`, () => {
       const onSignIn = jest.fn();
       const { rerender } = render(

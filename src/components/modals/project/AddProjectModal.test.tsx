@@ -6,13 +6,6 @@ jest.mock("@/projects/state", () => ({
   getCachedProjectRecordById: () => getCachedProjectRecordById(),
 }));
 
-jest.mock("@/projects/projectPaths", () => ({
-  getProjectAnchorFromConfigPath: (configPath: string) => ({
-    projectFolderPath: configPath.split("/").slice(0, -1).join("/"),
-    projectsRoot: configPath.split("/").slice(0, -2).join("/"),
-  }),
-}));
-
 const readAgentsFile = jest.fn(async (): Promise<string> => "");
 const agentsFileIsUninitialized = jest.fn(async (): Promise<boolean> => true);
 const captureInstructionFiles = jest.fn(

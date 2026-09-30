@@ -1,7 +1,6 @@
 import { startReleaseUpdateCheck } from "@/services/releaseUpdateNotice";
 import { requestLatestRelease } from "@/hooks/useLatestVersion";
 import { ReleaseNotesModal } from "@/components/release-update/ReleaseNotesDialog";
-import { isNewerVersion } from "@/utils";
 import { logWarn } from "@/logger";
 import { App, Notice } from "obsidian";
 
@@ -10,9 +9,6 @@ jest.mock("@/components/release-update/ReleaseNotesDialog", () => ({
   ReleaseNotesModal: jest.fn().mockImplementation(() => ({ open: jest.fn() })),
 }));
 jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
-jest.mock("@/utils", () => ({
-  isNewerVersion: jest.fn(() => true),
-}));
 
 const release = { version: "4.1.0", body: "New features", htmlUrl: "https://github.com/release" };
 const app = { workspace: { containerEl: document.createElement("div") } } as unknown as App;
@@ -26,7 +22,6 @@ describe("releaseUpdateNotice", () => {
     const onShown = jest.fn<void, [string]>();
     beforeEach(() => {
       jest.clearAllMocks();
-      jest.mocked(isNewerVersion).mockReturnValue(true);
       jest.mocked(requestLatestRelease).mockResolvedValue(release);
     });
 
@@ -77,10 +72,7 @@ describe("releaseUpdateNotice", () => {
     });
 
     it.each(["4.1.0", "4.2.0"])("does not notify an installed version of %s", async (version) => {
-      jest.mocked(isNewerVersion).mockReturnValue(false);
       startReleaseUpdateCheck(app, version, null, onShown);
-      await settle();
-      expect(isNewerVersion).toHaveBeenCalledWith(release.version, version);
       await settle();
       expect(Notice).not.toHaveBeenCalled();
       expect(onShown).not.toHaveBeenCalled();

@@ -2,7 +2,11 @@ import { ChatModelProviders } from "@/constants";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
 import type { EnabledBackendEntry } from "@/modelManagement/types/runtime";
 
-import { findChatBackendEntry, resolveChatModelSelectionId } from "./chatModelSelection";
+import {
+  findChatBackendEntry,
+  isChatModelSelectionForEntry,
+  resolveChatModelSelectionId,
+} from "./chatModelSelection";
 
 function provider(id: string, overrides: Partial<Provider> = {}): Provider {
   return {
@@ -31,16 +35,81 @@ function entry(
 }
 
 describe("chatModelSelection", () => {
-  describe("resolveChatModelSelectionId()", () => {
-    it("resolves configured-model ids", () => {
+  describe("findChatBackendEntry()", () => {
+    it("returns the entry whose configured-model id is selected", () => {
       const p = provider("p1");
       const entries = [entry("a", "gpt-4o", p), entry("b", "gpt-5", p)];
 
       expect(findChatBackendEntry(entries, "b")?.configuredModelId).toBe("b");
+    });
+
+    it("returns the first usable entry when nothing is selected", () => {
+      const p = provider("p1");
+      const entries: EnabledBackendEntry[] = [
+        { configuredModelId: "broken", state: "broken" },
+        entry("a", "gpt-4o", p),
+      ];
+
+      expect(findChatBackendEntry(entries, undefined)?.configuredModelId).toBe("a");
+    });
+
+    it("returns undefined when no entry is usable", () => {
+      expect(
+        findChatBackendEntry([{ configuredModelId: "broken", state: "broken" }], "broken")
+      ).toBeUndefined();
+    });
+
+    it.each([undefined, "", "removed", "broken"])(
+      "returns undefined for %s when first-entry fallback is off (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)",
+      (selection) => {
+        const entries: EnabledBackendEntry[] = [
+          { configuredModelId: "broken", state: "broken" },
+          entry("a", "gpt-4o", provider("p1")),
+        ];
+        expect(findChatBackendEntry(entries, selection, false)).toBeUndefined();
+      }
+    );
+
+    it("maps a legacy selection when first-entry fallback is off (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)", () => {
+      expect(
+        findChatBackendEntry([entry("a", "gpt-4o", provider("p1"))], "gpt-4o|openai", false)
+          ?.configuredModelId
+      ).toBe("a");
+    });
+  });
+
+  describe("isChatModelSelectionForEntry()", () => {
+    it("matches the entry's configured-model id and its legacy name|provider key", () => {
+      const target = entry("a", "gpt-4o", provider("p1"));
+
+      expect(isChatModelSelectionForEntry(target, "a")).toBe(true);
+      expect(isChatModelSelectionForEntry(target, `gpt-4o|${ChatModelProviders.OPENAI}`)).toBe(
+        true
+      );
+    });
+
+    it("rejects a selection that names a different model or provider", () => {
+      const target = entry("a", "gpt-4o", provider("p1"));
+
+      expect(isChatModelSelectionForEntry(target, "b")).toBe(false);
+      expect(isChatModelSelectionForEntry(target, `gpt-5|${ChatModelProviders.OPENAI}`)).toBe(
+        false
+      );
+      expect(isChatModelSelectionForEntry(target, `gpt-4o|${ChatModelProviders.ANTHROPIC}`)).toBe(
+        false
+      );
+    });
+  });
+
+  describe("resolveChatModelSelectionId()", () => {
+    it("returns the configured-model id that was selected", () => {
+      const p = provider("p1");
+      const entries = [entry("a", "gpt-4o", p), entry("b", "gpt-5", p)];
+
       expect(resolveChatModelSelectionId(entries, "b")).toBe("b");
     });
 
-    it("resolves legacy name|provider keys", () => {
+    it("maps a legacy name|provider key to its configured model", () => {
       const p = provider("p1");
       const target = entry("a", "gpt-4o", p);
 
@@ -49,7 +118,7 @@ describe("chatModelSelection", () => {
       );
     });
 
-    it("resolves legacy Copilot Plus keys to the Plus configured model", () => {
+    it("maps a legacy Copilot Plus key to the Plus configured model", () => {
       const plus = provider("plus", {
         origin: { kind: "copilot-plus" },
         requiresApiKey: false,
@@ -65,7 +134,7 @@ describe("chatModelSelection", () => {
       ).toBe("plus-model");
     });
 
-    it("resolves legacy local-provider aliases after migration to openai-compatible", () => {
+    it("maps a legacy local-provider key to the migrated openai-compatible model", () => {
       const ollama = provider("ollama", {
         displayName: "Ollama",
         baseUrl: "http://localhost:11434/v1",
@@ -81,7 +150,7 @@ describe("chatModelSelection", () => {
       ).toBe("ollama-model");
     });
 
-    it("resolves a legacy xAI key when a custom endpoint uses the OpenAI-format constructor", () => {
+    it("maps a legacy xAI key when the endpoint is a custom OpenAI-format URL", () => {
       const xai = provider("xai", {
         baseUrl: "https://proxy.example.com/v1",
         origin: { kind: "byok", catalogProviderId: "xai" },
@@ -95,7 +164,7 @@ describe("chatModelSelection", () => {
       ).toBe("xai-model");
     });
 
-    it("falls back to the first valid entry for stale selections", () => {
+    it("falls back to the first usable entry when the selection matches nothing", () => {
       const p = provider("p1");
       const entries: EnabledBackendEntry[] = [
         { configuredModelId: "broken", state: "broken" },
@@ -103,24 +172,6 @@ describe("chatModelSelection", () => {
       ];
 
       expect(resolveChatModelSelectionId(entries, "gone")).toBe("a");
-    });
-  });
-  describe("findChatBackendEntry()", () => {
-    it.each([undefined, "", "removed", "broken"])(
-      "requires an explicit enabled selection for %s without fallback (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)",
-      (selection) => {
-        const entries: EnabledBackendEntry[] = [
-          { configuredModelId: "broken", state: "broken" },
-          entry("a", "gpt-4o", provider("p1")),
-        ];
-        expect(findChatBackendEntry(entries, selection, false)).toBeUndefined();
-      }
-    );
-    it("resolves a legacy selection without fallback (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)", () => {
-      expect(
-        findChatBackendEntry([entry("a", "gpt-4o", provider("p1"))], "gpt-4o|openai", false)
-          ?.configuredModelId
-      ).toBe("a");
     });
   });
 });

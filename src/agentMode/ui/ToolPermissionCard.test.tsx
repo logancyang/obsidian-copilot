@@ -22,14 +22,6 @@ function makeRequest(options: PermissionOption[]): PermissionPrompt {
 
 describe("ToolPermissionCard", () => {
   describe("ToolPermissionCard()", () => {
-    it("fills the available action-rail width", () => {
-      const { container } = render(
-        <ToolPermissionCard request={makeRequest([])} onResolve={jest.fn()} />
-      );
-
-      expect(container.firstElementChild?.classList.contains("tw-w-full")).toBe(true);
-    });
-
     it("names the tool when the request title carries only its argument for https://github.com/Brevilabs/obsidian-copilot-private/issues/599", () => {
       const request = makeRequest([]);
       request.toolCall.title = "latest stable Node.js version";
@@ -157,7 +149,7 @@ describe("ToolPermissionCard", () => {
       ]);
     });
 
-    it("orders compact actions by kind and makes unbroken labels shrinkable", () => {
+    it("orders actions by kind and shows an unbroken label in full", () => {
       const unbrokenLabel = "AllowAccessToNetwork.example.com".repeat(8);
       render(
         <ToolPermissionCard
@@ -175,15 +167,80 @@ describe("ToolPermissionCard", () => {
         "Allow for Session",
         "No",
       ]);
-      const button = screen.getByRole("button", { name: unbrokenLabel });
-      expect(button.classList.contains("tw-max-w-full")).toBe(true);
-      expect(button.classList.contains("tw-min-w-0")).toBe(true);
-      expect(button.firstElementChild).toMatchObject({
-        tagName: "SPAN",
-        textContent: unbrokenLabel,
+    });
+
+    it("labels an option that quotes a command prefix with its prose and shows the prefix on hover https://github.com/Brevilabs/obsidian-copilot-private/issues/618", async () => {
+      const onResolve = jest.fn();
+      const prefix = 'python3 -c \'from pathlib import Path; Path("note.md").write_text("hi")\'';
+      render(
+        <ToolPermissionCard
+          request={makeRequest([
+            { optionId: "approved", name: "Yes, proceed", kind: "allow_once" },
+            {
+              optionId: "approved-execpolicy-amendment",
+              name: `Yes, and don't ask again for commands that start with \`${prefix}\``,
+              kind: "allow_always",
+            },
+            {
+              optionId: "abort",
+              name: "No, and tell Codex what to do differently",
+              kind: "reject_once",
+            },
+          ])}
+          onResolve={onResolve}
+        />
+      );
+
+      expect(screen.queryByText(prefix)).toBeNull();
+      const button = screen.getByRole("button", {
+        name: "Yes, and don't ask again for commands that start with…",
       });
-      expect(button.firstElementChild?.classList.contains("tw-min-w-0")).toBe(true);
-      expect(button.firstElementChild?.classList.contains("tw-break-all")).toBe(true);
+
+      fireEvent.pointerMove(button, { pointerType: "mouse" });
+      expect((await screen.findByRole("tooltip")).textContent).toBe(prefix);
+
+      fireEvent.click(button);
+      expect(onResolve).toHaveBeenLastCalledWith(TOOL_CALL_ID, "approved-execpolicy-amendment");
+    });
+
+    it("shows an option's description above its quoted code in one tooltip https://github.com/Brevilabs/obsidian-copilot-private/issues/618", async () => {
+      render(
+        <ToolPermissionCard
+          request={makeRequest([
+            {
+              optionId: "rule",
+              name: "Always allow `git status`",
+              description: "Adds a rule to your Codex config",
+              kind: "allow_always",
+            },
+          ])}
+          onResolve={jest.fn()}
+        />
+      );
+
+      fireEvent.pointerMove(screen.getByRole("button", { name: "Always allow…" }), {
+        pointerType: "mouse",
+      });
+      expect((await screen.findByRole("tooltip")).textContent).toBe(
+        "Adds a rule to your Codex config\ngit status"
+      );
+    });
+
+    it("numbers options whose labels differ only in quoted code https://github.com/Brevilabs/obsidian-copilot-private/issues/618", () => {
+      render(
+        <ToolPermissionCard
+          request={makeRequest([
+            { optionId: "git", name: "Always allow `git status`", kind: "allow_always" },
+            { optionId: "npm", name: "Always allow `npm test`", kind: "allow_always" },
+          ])}
+          onResolve={jest.fn()}
+        />
+      );
+
+      expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+        "Always allow… 1",
+        "Always allow… 2",
+      ]);
     });
   });
 });

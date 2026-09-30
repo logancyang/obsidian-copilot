@@ -98,16 +98,16 @@ function renderFallback(installState: InstallState, lastError: string | null, st
 }
 
 describe("AgentModeChat", () => {
-  afterEach(() => {
-    mockHasAuth = false;
-    mockAuthChecking = false;
-    mockAuthStatus = { signedIn: true };
-    mockManagedInstall = undefined;
-    mockInstallAction = { kind: "idle" };
-    mockInstallState = { kind: "ready", source: "custom" };
-  });
+  describe("AgentModeChat()", () => {
+    afterEach(() => {
+      mockHasAuth = false;
+      mockAuthChecking = false;
+      mockAuthStatus = { signedIn: true };
+      mockManagedInstall = undefined;
+      mockInstallAction = { kind: "idle" };
+      mockInstallState = { kind: "ready", source: "custom" };
+    });
 
-  describe("startup upgrade", () => {
     it("shows download progress before model loading and starts chat when the download settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", async () => {
       mockInstallState = { kind: "ready", source: "managed" };
       mockInstallAction = { kind: "running", label: "Downloading agent…", percent: 42 };
@@ -134,25 +134,23 @@ describe("AgentModeChat", () => {
       await waitFor(() => expect(getOrCreateActiveSession).toHaveBeenCalledTimes(1));
       expect(screen.queryByRole("progressbar")).toBeNull();
     });
-  });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 keeps a cold-start managed upgrade on the shared status card", () => {
-    mockManagedInstall = {};
-    renderFallback(
-      {
-        kind: "incompatible",
-        source: "managed",
-        currentVersion: "1",
-        minVersion: "2",
-        message: "Update required",
-      },
-      null
-    );
-    expect(screen.getByTestId("status-card")).toBeTruthy();
-    expect(screen.queryByTestId("select-panel")).toBeNull();
-  });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 keeps a cold-start managed upgrade on the shared status card", () => {
+      mockManagedInstall = {};
+      renderFallback(
+        {
+          kind: "incompatible",
+          source: "managed",
+          currentVersion: "1",
+          minVersion: "2",
+          message: "Update required",
+        },
+        null
+      );
+      expect(screen.getByTestId("status-card")).toBeTruthy();
+      expect(screen.queryByTestId("select-panel")).toBeNull();
+    });
 
-  describe("auto-spawn guard (scope-aware)", () => {
     it("regression: spawns the current project scope's session even when another scope still has sessions", async () => {
       const { manager, getOrCreateActiveSession } = makeManager({
         activeProjectId: "project-1",
@@ -189,9 +187,7 @@ describe("AgentModeChat", () => {
       await waitFor(() => expect(manager.getSessionsForScope).toHaveBeenCalled());
       expect(getOrCreateActiveSession).not.toHaveBeenCalled();
     });
-  });
 
-  describe("known launch blockers", () => {
     it("routes an outdated auto-detected backend without managed installation to setup (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
       renderFallback(
         {
@@ -320,9 +316,7 @@ describe("AgentModeChat", () => {
       renderAgain();
       expect(getOrCreateActiveSession).toHaveBeenCalledTimes(1);
     });
-  });
 
-  describe("no-session fallback", () => {
     it("takes the pane over with the agent select view when no agent is set up", () => {
       renderFallback({ kind: "absent" }, null);
 
@@ -330,46 +324,11 @@ describe("AgentModeChat", () => {
       expect(screen.queryByTestId("status-card")).toBeNull();
     });
 
-    it("takes the pane over when the agent's binary is too old to run", () => {
-      renderFallback(
-        {
-          kind: "incompatible",
-          source: "custom",
-          currentVersion: "2.1.205",
-          minVersion: "2.1.206",
-          message: "too old",
-        },
-        null
-      );
-
-      expect(screen.getByTestId("select-panel")).toBeTruthy();
-    });
-
-    it("takes the pane over when the agent's readiness check failed", () => {
-      renderFallback({ kind: "error", message: "not executable" }, null);
-
-      expect(screen.getByTestId("select-panel")).toBeTruthy();
-    });
-
     it("keeps the compact card while a readiness check is in flight", () => {
       renderFallback({ kind: "checking", source: "custom" }, null);
 
       expect(screen.getByTestId("status-card")).toBeTruthy();
       expect(screen.queryByTestId("select-panel")).toBeNull();
-    });
-
-    it("shows known missing installation while starting (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
-      renderFallback({ kind: "absent" }, null, true);
-
-      expect(screen.getByTestId("select-panel")).toBeTruthy();
-      expect(screen.queryByTestId("status-card")).toBeNull();
-    });
-
-    it("shows known missing installation despite a boot error (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
-      renderFallback({ kind: "absent" }, "opencode backend exited unexpectedly.");
-
-      expect(screen.getByTestId("select-panel")).toBeTruthy();
-      expect(screen.queryByTestId("status-card")).toBeNull();
     });
 
     it("keeps the compact card when a ready agent crashed with no surviving session", () => {

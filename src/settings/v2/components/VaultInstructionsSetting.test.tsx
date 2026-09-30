@@ -4,7 +4,7 @@ import React from "react";
 
 describe("VaultInstructionsSetting", () => {
   describe("VaultInstructionsSetting()", () => {
-    it("places the file action beside the description and the full-width editor underneath", () => {
+    it("shows the saved instructions in an editor next to an Open AGENTS.md action", () => {
       render(
         <VaultInstructionsSetting
           value="Cite every source."
@@ -13,18 +13,11 @@ describe("VaultInstructionsSetting", () => {
         />
       );
 
-      const title = screen.getByText("Custom vault instructions");
-      const openButton = screen.getByRole("button", { name: "Open AGENTS.md" });
-      const editor = screen.getByRole<HTMLTextAreaElement>("textbox", {
-        name: "Custom vault instructions",
-      });
-      const headerRow = title.parentElement?.parentElement;
-
-      expect(headerRow).not.toBeNull();
-      expect(headerRow?.contains(openButton)).toBe(true);
-      expect(headerRow?.contains(editor)).toBe(false);
-      expect(editor.parentElement).toBe(headerRow?.parentElement);
-      expect(editor.classList.contains("tw-w-full")).toBe(true);
+      expect(
+        screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Custom vault instructions" })
+          .value
+      ).toBe("Cite every source.");
+      expect(screen.getByRole("button", { name: "Open AGENTS.md" })).toBeTruthy();
     });
 
     it("forwards editor changes and the open action", () => {

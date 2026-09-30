@@ -1,5 +1,5 @@
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
-import { sanitizeSettings, type CopilotSettings } from "@/settings/model";
+import type { CopilotSettings } from "@/settings/model";
 
 type AgentMode = CopilotSettings["agentMode"];
 
@@ -237,47 +237,6 @@ describe("deviceProfiles", () => {
       expect(bDisk.agentMode.deviceProfiles?.[DEVICE_B]?.claudeCliPath).toBe("/b/claude");
       expect(hydrateDeviceProfile(bDisk, DEVICE_A).agentMode.claudeCli?.path).toBe("/a/claude");
       expect(hydrateDeviceProfile(bDisk, DEVICE_B).agentMode.claudeCli?.path).toBe("/b/claude");
-    });
-  });
-
-  describe("sanitizeSettings()", () => {
-    it("preserves a valid profile map and drops empty/invalid entries", () => {
-      const raw = {
-        agentMode: {
-          deviceProfiles: {
-            [DEVICE_A]: {
-              claudeCliPath: "/a/claude",
-              opencode: { binaryPath: "/a/oc", binaryVersion: "1", binarySource: "custom" },
-              codex: { envOverrides: { GOOD: "1", "bad-key": "x" } },
-            },
-            [DEVICE_B]: {},
-            "": { claudeCliPath: "/x" },
-          },
-        },
-      };
-
-      const out = sanitizeSettings(raw as unknown as CopilotSettings);
-      const profiles = out.agentMode.deviceProfiles ?? {};
-
-      expect(profiles[DEVICE_A]?.claudeCliPath).toBe("/a/claude");
-      expect(profiles[DEVICE_A]?.opencode?.binarySource).toBe("custom");
-      expect(profiles[DEVICE_A]?.codex?.envOverrides).toEqual({ GOOD: "1" });
-      expect(profiles[DEVICE_B]).toBeUndefined();
-      expect(profiles[""]).toBeUndefined();
-    });
-
-    it("marks every unannotated Codex path as custom ownership (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
-      const out = sanitizeSettings({
-        agentMode: {
-          backends: { codex: { binaryPath: "/flat/codex" } },
-          deviceProfiles: {
-            [DEVICE_A]: { codex: { binaryPath: "/profile/codex" } },
-          },
-        },
-      } as unknown as CopilotSettings);
-
-      expect(out.agentMode.backends.codex?.binarySource).toBe("custom");
-      expect(out.agentMode.deviceProfiles?.[DEVICE_A]?.codex?.binarySource).toBe("custom");
     });
   });
 });

@@ -23,6 +23,14 @@ interface ToolPermissionCardProps {
 }
 
 const EMPTY_OPTION_NAMES: readonly string[] = Object.freeze([]);
+// Codex quotes the whole command prefix in its "don't ask again" option name, which can fill the card.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/618
+const QUOTED_CODE = /\s*`([^`\n]+)`/;
+
+interface OptionLabel {
+  text: string;
+  code?: string;
+}
 
 export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
   request,
@@ -32,7 +40,14 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
   const { toolCall, options } = request;
   const [busy, setBusy] = useState(false);
   const orderedOptions = useMemo(() => sortOptions(options), [options]);
-  const optionNames = useMemo(() => disambiguateOptionNames(orderedOptions), [orderedOptions]);
+  const optionLabels = useMemo(
+    () => orderedOptions.map((o) => splitOptionName(o.name)),
+    [orderedOptions]
+  );
+  const optionNames = useMemo(
+    () => disambiguateOptionNames(optionLabels.map((label) => label.text)),
+    [optionLabels]
+  );
   const diffContents = useMemo(() => extractDiffContents(toolCall.content), [toolCall.content]);
   const inputJson = useMemo(() => formatAgentInput(toolCall.rawInput), [toolCall.rawInput]);
   const title = toolCall.title ?? "Tool call";
@@ -98,6 +113,7 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
       <div className="copilot-divider-t tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-px-3 tw-py-2">
         <TooltipProvider delayDuration={0}>
           {orderedOptions.map((option, index) => {
+            const { code } = optionLabels[index];
             const button = (
               <Button
                 key={option.optionId}
@@ -107,11 +123,11 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
                 disabled={busy}
                 onClick={() => choose(option.optionId)}
               >
-                <span className="tw-min-w-0 tw-break-all">{optionNames[index]}</span>
+                <span className="tw-min-w-0 tw-break-words">{optionNames[index]}</span>
               </Button>
             );
 
-            if (!option.description) return button;
+            if (!option.description && !code) return button;
 
             return (
               <Tooltip key={option.optionId}>
@@ -121,6 +137,8 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
                   className="tw-max-w-sm tw-whitespace-pre-wrap tw-break-words"
                 >
                   {option.description}
+                  {option.description && code ? "\n" : null}
+                  {code ? <code>{code}</code> : null}
                 </TooltipContent>
               </Tooltip>
             );
@@ -149,26 +167,32 @@ function sortOptions(options: PermissionOption[]): PermissionOption[] {
   );
 }
 
-function disambiguateOptionNames(options: PermissionOption[]): readonly string[] {
-  if (options.length === 0) return EMPTY_OPTION_NAMES;
+function splitOptionName(name: string): OptionLabel {
+  const match = QUOTED_CODE.exec(name);
+  if (!match) return { text: name };
+  return { text: name.replace(match[0], "…").trim(), code: match[1] };
+}
+
+function disambiguateOptionNames(names: string[]): readonly string[] {
+  if (names.length === 0) return EMPTY_OPTION_NAMES;
 
   const totals = new Map<string, number>();
   const suffixes = new Map<string, number>();
-  const reservedNames = new Set(options.map((option) => option.name));
+  const reservedNames = new Set(names);
 
-  for (const option of options) {
-    totals.set(option.name, (totals.get(option.name) ?? 0) + 1);
+  for (const name of names) {
+    totals.set(name, (totals.get(name) ?? 0) + 1);
   }
 
-  return options.map((option) => {
-    if (totals.get(option.name) === 1) return option.name;
+  return names.map((name) => {
+    if (totals.get(name) === 1) return name;
 
-    let suffix = (suffixes.get(option.name) ?? 0) + 1;
-    while (reservedNames.has(`${option.name} ${suffix}`)) suffix++;
-    suffixes.set(option.name, suffix);
+    let suffix = (suffixes.get(name) ?? 0) + 1;
+    while (reservedNames.has(`${name} ${suffix}`)) suffix++;
+    suffixes.set(name, suffix);
 
-    const name = `${option.name} ${suffix}`;
-    reservedNames.add(name);
-    return name;
+    const numbered = `${name} ${suffix}`;
+    reservedNames.add(numbered);
+    return numbered;
   });
 }

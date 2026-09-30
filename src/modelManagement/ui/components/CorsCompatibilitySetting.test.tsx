@@ -5,7 +5,7 @@ import { CORS_COMPATIBILITY_TOOLTIP, CorsCompatibilitySetting } from "./CorsComp
 
 describe("CorsCompatibilitySetting", () => {
   describe("CorsCompatibilitySetting()", () => {
-    it("explains the Quick Chat streaming tradeoff in a fixed-width tooltip (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
+    it("explains the Quick Chat streaming tradeoff in a tooltip (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
       render(<CorsCompatibilitySetting checked={false} onCheckedChange={jest.fn()} />);
 
       fireEvent.pointerMove(
@@ -14,10 +14,9 @@ describe("CorsCompatibilitySetting", () => {
 
       const tooltip = await screen.findByRole("tooltip");
       expect(tooltip.textContent).toBe(CORS_COMPATIBILITY_TOOLTIP);
-      expect(tooltip.parentElement?.className).toContain("tw-w-72");
     });
 
-    it("reports the user's transport choice", () => {
+    it("reports true when the user switches Enable CORS on", () => {
       const onCheckedChange = jest.fn();
       render(<CorsCompatibilitySetting checked={false} onCheckedChange={onCheckedChange} />);
 

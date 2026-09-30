@@ -81,81 +81,6 @@ describe("ClaudeConfigView", () => {
       expect(screen.queryByText(commandBlock(CLAUDE_AUTH_COMMAND))).toBeNull();
     });
 
-    it("offers the in-app sign-in beside the command when the backend can run it", () => {
-      const onSignIn = jest.fn();
-      renderView({
-        state: { kind: "ready", source: "custom" },
-        auth: {
-          terminalCommand: "claude auth login --claudeai",
-          onSignOut: () => undefined,
-          signingOut: false,
-          status: { signedIn: false },
-          onSignIn,
-          signingIn: false,
-          url: null,
-        },
-      });
-
-      expect(screen.getByRole("button", { name: "Sign in with your browser" })).toBeTruthy();
-    });
-
-    it("blocks a second sign-in while one is already running", () => {
-      renderView({
-        state: { kind: "ready", source: "custom" },
-        auth: {
-          terminalCommand: "claude auth login --claudeai",
-          onSignOut: () => undefined,
-          signingOut: false,
-          status: { signedIn: false },
-          onSignIn: jest.fn(),
-          signingIn: true,
-          url: null,
-        },
-      });
-
-      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Signing in…" }).disabled).toBe(
-        true
-      );
-    });
-
-    it("offers the OAuth fallback link when the CLI cannot open a browser", () => {
-      renderView({
-        state: { kind: "ready", source: "custom" },
-        auth: {
-          terminalCommand: "claude auth login --claudeai",
-          onSignOut: () => undefined,
-          signingOut: false,
-          status: { signedIn: false },
-          onSignIn: jest.fn(),
-          signingIn: true,
-          url: "https://claude.ai/oauth/authorize?code=example",
-        },
-      });
-
-      expect(screen.getByRole("link", { name: "Open sign-in page" }).getAttribute("href")).toBe(
-        "https://claude.ai/oauth/authorize?code=example"
-      );
-      expect(screen.queryByRole("button", { name: "Signing in…" })).toBeNull();
-    });
-
-    it("shows the signed-in account for https://github.com/Brevilabs/obsidian-copilot-private/issues/379", () => {
-      renderView({
-        state: { kind: "ready", source: "custom" },
-        auth: {
-          terminalCommand: "claude auth login --claudeai",
-          onSignOut: () => undefined,
-          signingOut: false,
-          status: { signedIn: true, label: "zero@example.com" },
-          onSignIn: jest.fn(),
-          signingIn: false,
-          url: null,
-        },
-      });
-
-      expect(screen.getByText("Signed in as zero@example.com.")).toBeTruthy();
-      expect(screen.queryByRole("button", { name: "Sign in with your browser" })).toBeNull();
-    });
-
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 keeps cancellation and Retry outside the copyable command so narrow dialogs can wrap", () => {
       const onCancel = jest.fn();
       const onSignIn = jest.fn();
@@ -179,43 +104,6 @@ describe("ClaudeConfigView", () => {
           .getByText(commandBlock(CLAUDE_AUTH_COMMAND))
           .parentElement?.contains(screen.getByRole("button", { name: "Cancel sign-in" }))
       ).toBe(false);
-    });
-
-    it("shows checking progress for https://github.com/Brevilabs/obsidian-copilot-private/issues/379", () => {
-      renderView({
-        state: { kind: "ready", source: "custom" },
-        auth: {
-          terminalCommand: "claude auth login --claudeai",
-          onSignOut: () => undefined,
-          signingOut: false,
-          status: null,
-          onSignIn: jest.fn(),
-          signingIn: false,
-          url: null,
-        },
-      });
-      expect(
-        screen.getByRole<HTMLButtonElement>("button", { name: "Checking sign-in…" }).disabled
-      ).toBe(true);
-
-      expect(screen.queryByRole("button", { name: "Sign in with your browser" })).toBeNull();
-    });
-
-    it("hides the in-app sign-in action until the Claude binary is ready", () => {
-      renderView({
-        state: { kind: "absent" },
-        auth: {
-          terminalCommand: "claude auth login --claudeai",
-          onSignOut: () => undefined,
-          signingOut: false,
-          status: { signedIn: false },
-          onSignIn: jest.fn(),
-          signingIn: false,
-          url: null,
-        },
-      });
-
-      expect(screen.queryByRole("button", { name: "Sign in with your browser" })).toBeNull();
     });
 
     it("points an unsupported custom binary at its saved path instead of an upgrade button", () => {

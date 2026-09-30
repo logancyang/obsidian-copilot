@@ -29,8 +29,8 @@ beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
 });
 
-describe("ChatButtons lifecycle-action gating", () => {
-  describe("user message", () => {
+describe("ChatButtons", () => {
+  describe("ChatButtons() for a user message", () => {
     it("shows Edit and Delete when their handlers are provided", () => {
       renderButtons({ message: message(USER_SENDER), onEdit: () => {}, onDelete: () => {} });
       expect(screen.getByTitle("Copy")).toBeTruthy();
@@ -46,7 +46,7 @@ describe("ChatButtons lifecycle-action gating", () => {
     });
   });
 
-  describe("assistant message", () => {
+  describe("ChatButtons() for an assistant message", () => {
     it("shows Regenerate and Delete when their handlers are provided", () => {
       renderButtons({
         message: message("AI"),

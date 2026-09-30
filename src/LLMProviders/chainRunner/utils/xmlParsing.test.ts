@@ -1,112 +1,79 @@
 import { escapeXml, unescapeXml } from "./xmlParsing";
 
-describe("escapeXml", () => {
-  it("should escape ampersands", () => {
-    expect(escapeXml("foo & bar")).toBe("foo &amp; bar");
+describe("xmlParsing", () => {
+  describe("escapeXml()", () => {
+    it.each([
+      ["an ampersand", "foo & bar", "foo &amp; bar"],
+      ["a less-than sign", "foo < bar", "foo &lt; bar"],
+      ["a greater-than sign", "foo > bar", "foo &gt; bar"],
+      ["double quotes", 'foo "bar" baz', "foo &quot;bar&quot; baz"],
+      ["single quotes", "foo 'bar' baz", "foo &apos;bar&apos; baz"],
+    ])("escapes %s", (_label, input, expected) => {
+      expect(escapeXml(input)).toBe(expected);
+    });
+
+    it("escapes every special character in markup", () => {
+      expect(escapeXml('<tag attr="value">content & more</tag>')).toBe(
+        "&lt;tag attr=&quot;value&quot;&gt;content &amp; more&lt;/tag&gt;"
+      );
+    });
+
+    it("escapes the ampersand of text that already looks like an entity", () => {
+      expect(escapeXml("&lt;&gt;&quot;&apos;&amp;")).toBe(
+        "&amp;lt;&amp;gt;&amp;quot;&amp;apos;&amp;amp;"
+      );
+    });
+
+    it("returns plain and empty strings unchanged", () => {
+      expect(escapeXml("hello world")).toBe("hello world");
+      expect(escapeXml("")).toBe("");
+    });
+
+    it("returns an empty string for non-string input", () => {
+      expect(escapeXml(null)).toBe("");
+      expect(escapeXml(undefined)).toBe("");
+      expect(escapeXml(123)).toBe("");
+    });
   });
 
-  it("should escape less than signs", () => {
-    expect(escapeXml("foo < bar")).toBe("foo &lt; bar");
-  });
+  describe("unescapeXml()", () => {
+    it.each([
+      ["an ampersand", "foo &amp; bar", "foo & bar"],
+      ["a less-than sign", "foo &lt; bar", "foo < bar"],
+      ["a greater-than sign", "foo &gt; bar", "foo > bar"],
+      ["double quotes", "foo &quot;bar&quot; baz", 'foo "bar" baz'],
+      ["single quotes", "foo &apos;bar&apos; baz", "foo 'bar' baz"],
+    ])("unescapes %s", (_label, input, expected) => {
+      expect(unescapeXml(input)).toBe(expected);
+    });
 
-  it("should escape greater than signs", () => {
-    expect(escapeXml("foo > bar")).toBe("foo &gt; bar");
-  });
+    it("unescapes every entity in escaped markup", () => {
+      expect(unescapeXml("&lt;tag attr=&quot;value&quot;&gt;content &amp; more&lt;/tag&gt;")).toBe(
+        '<tag attr="value">content & more</tag>'
+      );
+    });
 
-  it("should escape double quotes", () => {
-    expect(escapeXml('foo "bar" baz')).toBe("foo &quot;bar&quot; baz");
-  });
+    it("unescapes a double-escaped ampersand only once", () => {
+      expect(unescapeXml("&amp;amp;")).toBe("&amp;");
+    });
 
-  it("should escape single quotes", () => {
-    expect(escapeXml("foo 'bar' baz")).toBe("foo &apos;bar&apos; baz");
-  });
+    it("returns plain and empty strings unchanged", () => {
+      expect(unescapeXml("hello world")).toBe("hello world");
+      expect(unescapeXml("")).toBe("");
+    });
 
-  it("should escape multiple special characters", () => {
-    expect(escapeXml('<tag attr="value">content & more</tag>')).toBe(
-      "&lt;tag attr=&quot;value&quot;&gt;content &amp; more&lt;/tag&gt;"
-    );
-  });
+    it("returns an empty string for non-string input", () => {
+      expect(unescapeXml(null)).toBe("");
+      expect(unescapeXml(undefined)).toBe("");
+      expect(unescapeXml(123)).toBe("");
+    });
 
-  it("should handle empty strings", () => {
-    expect(escapeXml("")).toBe("");
-  });
-
-  it("should handle strings with no special characters", () => {
-    expect(escapeXml("hello world")).toBe("hello world");
-  });
-
-  it("should handle non-string inputs", () => {
-    expect(escapeXml(null)).toBe("");
-    expect(escapeXml(undefined)).toBe("");
-    expect(escapeXml(123)).toBe("");
-  });
-
-  it("should escape XML entity references", () => {
-    expect(escapeXml("&lt;&gt;&quot;&apos;&amp;")).toBe(
-      "&amp;lt;&amp;gt;&amp;quot;&amp;apos;&amp;amp;"
-    );
-  });
-});
-
-describe("unescapeXml", () => {
-  it("should unescape ampersands", () => {
-    expect(unescapeXml("foo &amp; bar")).toBe("foo & bar");
-  });
-
-  it("should unescape less than signs", () => {
-    expect(unescapeXml("foo &lt; bar")).toBe("foo < bar");
-  });
-
-  it("should unescape greater than signs", () => {
-    expect(unescapeXml("foo &gt; bar")).toBe("foo > bar");
-  });
-
-  it("should unescape double quotes", () => {
-    expect(unescapeXml("foo &quot;bar&quot; baz")).toBe('foo "bar" baz');
-  });
-
-  it("should unescape single quotes", () => {
-    expect(unescapeXml("foo &apos;bar&apos; baz")).toBe("foo 'bar' baz");
-  });
-
-  it("should unescape multiple entities", () => {
-    expect(unescapeXml("&lt;tag attr=&quot;value&quot;&gt;content &amp; more&lt;/tag&gt;")).toBe(
-      '<tag attr="value">content & more</tag>'
-    );
-  });
-
-  it("should handle empty strings", () => {
-    expect(unescapeXml("")).toBe("");
-  });
-
-  it("should handle strings with no entities", () => {
-    expect(unescapeXml("hello world")).toBe("hello world");
-  });
-
-  it("should handle non-string inputs", () => {
-    expect(unescapeXml(null)).toBe("");
-    expect(unescapeXml(undefined)).toBe("");
-    expect(unescapeXml(123)).toBe("");
-  });
-
-  it("should handle double-escaped ampersand correctly", () => {
-    expect(unescapeXml("&amp;amp;")).toBe("&amp;");
-  });
-});
-
-describe("roundtrip escapeXml -> unescapeXml", () => {
-  it("should preserve original string after roundtrip", () => {
-    const original = '<tag attr="value">text & more</tag>';
-    expect(unescapeXml(escapeXml(original))).toBe(original);
-  });
-
-  it("should preserve URL with special characters", () => {
-    const url = "https://example.com/path?param=value&other=<test>";
-    expect(unescapeXml(escapeXml(url))).toBe(url);
-  });
-
-  it("should preserve markdown content with special characters", () => {
-    const markdown = "Use `<code>` for inline code & **bold** text";
-    expect(unescapeXml(escapeXml(markdown))).toBe(markdown);
+    it.each([
+      ["markup", '<tag attr="value">text & more</tag>'],
+      ["a URL with a query string", "https://example.com/path?param=value&other=<test>"],
+      ["markdown", "Use `<code>` for inline code & **bold** text"],
+    ])("restores %s that was escaped with escapeXml", (_label, original) => {
+      expect(unescapeXml(escapeXml(original))).toBe(original);
+    });
   });
 });

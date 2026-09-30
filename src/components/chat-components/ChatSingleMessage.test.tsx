@@ -89,216 +89,50 @@ function render(ui: React.ReactElement) {
   return renderComponent(<AppContext.Provider value={testApp}>{ui}</AppContext.Provider>);
 }
 
-describe("ChatSingleMessage", () => {
-  describe("ChatSingleMessage() markdown rendering", () => {
-    const createAppStub = (): App =>
-      ({
-        workspace: { getActiveFile: jest.fn(() => null) },
-        metadataCache: { getFirstLinkpathDest: jest.fn(() => null) },
-      }) as unknown as App;
-
-    const baseAiMessage: ChatMessage = {
-      id: "ai-1",
-      sender: "AI",
-      message: "",
-      isVisible: true,
-      timestamp: null,
-    };
-
-    beforeEach(() => {
-      renderMarkdownMock.mockReset();
-      renderMarkdownMock.mockImplementation(
-        async (_app: unknown, text: string, el: HTMLElement) => {
-          el.textContent = text;
-        }
-      );
-    });
-
-    beforeAll(() => {
-      (window as unknown as Record<string, unknown>).activeDocument = window.document;
-    });
-
-    function assertNoClosingTagOnIndentedLine(capturedMarkdown: string[]) {
-      for (const md of capturedMarkdown) {
-        for (const line of md.split("\n")) {
-          if (/^ {4}/.test(line)) {
-            expect(line).not.toContain("</div>");
-            expect(line).not.toContain("</details>");
-          }
-        }
-      }
+function stubContentDimensions(scrollHeightPx: number, clientHeightPx: number): () => void {
+  const originalScrollHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "scrollHeight"
+  );
+  const originalClientHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "clientHeight"
+  );
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+    configurable: true,
+    get: () => scrollHeightPx,
+  });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get: () => clientHeightPx,
+  });
+  return () => {
+    if (originalScrollHeight) {
+      Object.defineProperty(HTMLElement.prototype, "scrollHeight", originalScrollHeight);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
     }
+    if (originalClientHeight) {
+      Object.defineProperty(HTMLElement.prototype, "clientHeight", originalClientHeight);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
+    }
+  };
+}
 
-    it("does not place </div> on a 4-space-indented line (non-streaming, think block)", async () => {
-      const thinkContent =
-        "Planning my response:\n    *   Be helpful and direct.\n    *   Answer clearly.";
-      const messageText = `<think>${thinkContent}</think>Here is my answer.`;
+describe("ChatSingleMessage", () => {
+  beforeAll(() => {
+    (window as unknown as Record<string, unknown>).activeDocument = window.document;
+  });
 
-      const capturedMarkdown: string[] = [];
-      renderMarkdownMock.mockImplementation(async (_app: unknown, md: string, el: HTMLElement) => {
-        capturedMarkdown.push(md);
-        el.textContent = "rendered";
-      });
-
-      render(
-        <TooltipProvider>
-          <ChatSingleMessage
-            message={{ ...baseAiMessage, message: messageText }}
-            app={createAppStub()}
-            isStreaming={false}
-            onDelete={() => {}}
-          />
-        </TooltipProvider>
-      );
-
-      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
-
-      assertNoClosingTagOnIndentedLine(capturedMarkdown);
-    });
-
-    it("does not place </div> on a 4-space-indented line (streaming, complete think block)", async () => {
-      const thinkContent = "Thinking:\n    1.  First step.\n    2.  Second step.";
-      const messageText = `<think>${thinkContent}</think>Response text.`;
-
-      const capturedMarkdown: string[] = [];
-      renderMarkdownMock.mockImplementation(async (_app: unknown, md: string, el: HTMLElement) => {
-        capturedMarkdown.push(md);
-        el.textContent = "rendered";
-      });
-
-      render(
-        <TooltipProvider>
-          <ChatSingleMessage
-            message={{ ...baseAiMessage, message: messageText }}
-            app={createAppStub()}
-            isStreaming={true}
-            onDelete={() => {}}
-          />
-        </TooltipProvider>
-      );
-
-      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
-
-      assertNoClosingTagOnIndentedLine(capturedMarkdown);
-    });
-
-    it("does not place </div> on a 4-space-indented line (streaming, unclosed think block)", async () => {
-      const messageText = "<think>Thinking:\n    *   Still streaming.";
-
-      const capturedMarkdown: string[] = [];
-      renderMarkdownMock.mockImplementation(async (_app: unknown, md: string, el: HTMLElement) => {
-        capturedMarkdown.push(md);
-        el.textContent = "rendered";
-      });
-
-      render(
-        <TooltipProvider>
-          <ChatSingleMessage
-            message={{ ...baseAiMessage, message: messageText }}
-            app={createAppStub()}
-            isStreaming={true}
-            onDelete={() => {}}
-          />
-        </TooltipProvider>
-      );
-
-      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
-
-      assertNoClosingTagOnIndentedLine(capturedMarkdown);
+  beforeEach(() => {
+    renderMarkdownMock.mockReset();
+    renderMarkdownMock.mockImplementation(async (_app: unknown, text: string, el: HTMLElement) => {
+      el.textContent = text;
     });
   });
 
-  describe("normalizeFootnoteRendering()", () => {
-    beforeEach(() => {
-      renderMarkdownMock.mockReset();
-      renderMarkdownMock.mockImplementation(
-        async (_app: unknown, text: string, el: HTMLElement) => {
-          el.textContent = text;
-        }
-      );
-    });
-
-    it("removes separator and backref while preserving non-footnote elements", () => {
-      const container = window.document.createElement("div");
-      container.append(
-        ...new DOMParser().parseFromString(
-          `
-      <div>
-        <p>Body <sup><a href="#fn-1">1-1</a></sup></p>
-        <hr class="content-separator" />
-        <div class="footnotes">
-          <hr class="footnotes-sep" />
-          <ol>
-            <li id="fn-1">
-              Entry <a class="footnote-backref" href="#ref">↩</a>
-            </li>
-          </ol>
-        </div>
-      </div>
-    `,
-          "text/html"
-        ).body.children
-      );
-
-      normalizeFootnoteRendering(container);
-
-      expect(container.querySelector(".footnotes hr")).toBeNull();
-      expect(container.querySelector(".footnote-backref")).toBeNull();
-      expect(container.querySelector(".content-separator")).not.toBeNull();
-      expect(container.querySelector('a[href="#fn-1"]')?.textContent).toBe("1");
-    });
-
-    it("leaves non-numeric footnote references untouched", () => {
-      const container = window.document.createElement("div");
-      container.append(
-        ...new DOMParser().parseFromString(
-          `
-      <p>Body <sup><a href="#fn-note">Note-A</a></sup></p>
-      <a class="footnote-backref" href="#ref">↩</a>
-    `,
-          "text/html"
-        ).body.children
-      );
-
-      normalizeFootnoteRendering(container);
-
-      expect(container.querySelector('a[href="#fn-note"]')?.textContent).toBe("Note-A");
-      expect(container.querySelector(".footnote-backref")).toBeNull();
-    });
-  });
-
-  function stubContentDimensions(scrollHeightPx: number, clientHeightPx: number): () => void {
-    const originalScrollHeight = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      "scrollHeight"
-    );
-    const originalClientHeight = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      "clientHeight"
-    );
-    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
-      configurable: true,
-      get: () => scrollHeightPx,
-    });
-    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
-      configurable: true,
-      get: () => clientHeightPx,
-    });
-    return () => {
-      if (originalScrollHeight) {
-        Object.defineProperty(HTMLElement.prototype, "scrollHeight", originalScrollHeight);
-      } else {
-        Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
-      }
-      if (originalClientHeight) {
-        Object.defineProperty(HTMLElement.prototype, "clientHeight", originalClientHeight);
-      } else {
-        Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
-      }
-    };
-  }
-
-  describe("ChatSingleMessage() DOM rendering", () => {
+  describe("ChatSingleMessage()", () => {
     const baseMessage: ChatMessage = {
       id: "message-1",
       message: "Test message",
@@ -318,19 +152,6 @@ describe("ChatSingleMessage", () => {
           getFirstLinkpathDest: jest.fn(() => null),
         },
       }) as unknown as App;
-
-    beforeEach(() => {
-      renderMarkdownMock.mockReset();
-      renderMarkdownMock.mockImplementation(
-        async (_app: unknown, text: string, el: HTMLElement) => {
-          el.textContent = text;
-        }
-      );
-    });
-
-    beforeAll(() => {
-      (window as unknown as Record<string, unknown>).activeDocument = window.document;
-    });
 
     it.each([false, true])(
       "renders user Markdown through Obsidian with rich content = %s",
@@ -476,7 +297,7 @@ describe("ChatSingleMessage", () => {
       );
     });
 
-    describe("MessageContext()", () => {
+    describe("sent context selections", () => {
       it.each(["note", "web"] as const)(
         "shows one full-excerpt tooltip for a sent %s selection https://github.com/Brevilabs/obsidian-copilot-private/issues/465",
         async (sourceType) => {
@@ -626,7 +447,6 @@ describe("ChatSingleMessage", () => {
 
       const duration = screen.getByText("Worked for 24s");
       const footer = duration.closest(".tw-justify-between");
-      expect(footer?.classList.contains("tw-items-center")).toBe(true);
       expect(footer?.contains(screen.getByTitle("Copy"))).toBe(true);
       expect(screen.queryByText(timestamp)).toBeNull();
 
@@ -710,6 +530,109 @@ describe("ChatSingleMessage", () => {
       } finally {
         restoreContentHeight();
       }
+    });
+
+    it.each([
+      {
+        label: "a complete think block after the response finishes",
+        isStreaming: false,
+        message:
+          "<think>Planning my response:\n    *   Be helpful and direct.\n    *   Answer clearly.</think>Here is my answer.",
+      },
+      {
+        label: "a complete think block while streaming",
+        isStreaming: true,
+        message:
+          "<think>Thinking:\n    1.  First step.\n    2.  Second step.</think>Response text.",
+      },
+      {
+        label: "an unclosed think block while streaming",
+        isStreaming: true,
+        message: "<think>Thinking:\n    *   Still streaming.",
+      },
+    ])(
+      "keeps closing tags off 4-space-indented lines of $label",
+      async ({ isStreaming, message }) => {
+        const capturedMarkdown: string[] = [];
+        renderMarkdownMock.mockImplementation(
+          async (_app: unknown, md: string, el: HTMLElement) => {
+            capturedMarkdown.push(md);
+            el.textContent = "rendered";
+          }
+        );
+
+        render(
+          <TooltipProvider>
+            <ChatSingleMessage
+              message={{ ...baseMessage, message }}
+              app={createAppStub()}
+              isStreaming={isStreaming}
+              onDelete={() => {}}
+            />
+          </TooltipProvider>
+        );
+
+        await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+        const indentedLines = capturedMarkdown
+          .flatMap((md) => md.split("\n"))
+          .filter((line) => /^ {4}/.test(line));
+        expect(indentedLines.length).toBeGreaterThan(0);
+        for (const line of indentedLines) {
+          expect(line).not.toContain("</div>");
+          expect(line).not.toContain("</details>");
+        }
+      }
+    );
+  });
+
+  describe("normalizeFootnoteRendering()", () => {
+    it("removes separator and backref while preserving non-footnote elements", () => {
+      const container = window.document.createElement("div");
+      container.append(
+        ...new DOMParser().parseFromString(
+          `
+      <div>
+        <p>Body <sup><a href="#fn-1">1-1</a></sup></p>
+        <hr class="content-separator" />
+        <div class="footnotes">
+          <hr class="footnotes-sep" />
+          <ol>
+            <li id="fn-1">
+              Entry <a class="footnote-backref" href="#ref">↩</a>
+            </li>
+          </ol>
+        </div>
+      </div>
+    `,
+          "text/html"
+        ).body.children
+      );
+
+      normalizeFootnoteRendering(container);
+
+      expect(container.querySelector(".footnotes hr")).toBeNull();
+      expect(container.querySelector(".footnote-backref")).toBeNull();
+      expect(container.querySelector(".content-separator")).not.toBeNull();
+      expect(container.querySelector('a[href="#fn-1"]')?.textContent).toBe("1");
+    });
+
+    it("leaves non-numeric footnote references untouched", () => {
+      const container = window.document.createElement("div");
+      container.append(
+        ...new DOMParser().parseFromString(
+          `
+      <p>Body <sup><a href="#fn-note">Note-A</a></sup></p>
+      <a class="footnote-backref" href="#ref">↩</a>
+    `,
+          "text/html"
+        ).body.children
+      );
+
+      normalizeFootnoteRendering(container);
+
+      expect(container.querySelector('a[href="#fn-note"]')?.textContent).toBe("Note-A");
+      expect(container.querySelector(".footnote-backref")).toBeNull();
     });
   });
 });

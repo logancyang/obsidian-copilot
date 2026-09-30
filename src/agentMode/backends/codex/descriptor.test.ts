@@ -304,6 +304,21 @@ describe("descriptor", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 exposes the configured Codex browser sign-in capability", () => {
       expect(CodexBackendDescriptor.auth).toBe(codexAuth);
     });
+    describe("normalizeModelName()", () => {
+      it("upper-cases the GPT prefix of a model name", () => {
+        expect(CodexBackendDescriptor.normalizeModelName!("gpt-5.5")).toBe("GPT-5.5");
+      });
+    });
+    describe("getResolvedBinaryPath()", () => {
+      it("returns the configured adapter path, or null when none is configured", () => {
+        expect(
+          CodexBackendDescriptor.getResolvedBinaryPath!(
+            settingsWithCodex({ binaryPath: "/codex/index.js" })
+          )
+        ).toBe("/codex/index.js");
+        expect(CodexBackendDescriptor.getResolvedBinaryPath!(settingsWithCodex({}))).toBeNull();
+      });
+    });
     describe("getInstallState()", () => {
       it.each(["managed", "custom"] as const)(
         "https://github.com/Brevilabs/obsidian-copilot-private/issues/535 reports below-minimum %s runtime as incompatible",
@@ -346,29 +361,11 @@ describe("descriptor", () => {
         }
       );
       it.each([
-        ["legacy path", {}, "1.13.0", { kind: "ready", source: "custom" }],
+        ["legacy path", {}, "2.0.0", { kind: "ready", source: "custom" }],
         [
           "managed revised bundle",
-          { binarySource: "managed", binaryVersion: "1.13.0-r1" },
-          "1.13.0-r1",
-          { kind: "ready", source: "managed" },
-        ],
-        [
-          "custom mismatch",
-          { binarySource: "custom", binaryVersion: "1.13.0" },
-          "1.13.0",
-          { kind: "ready", source: "custom" },
-        ],
-        [
-          "managed packaging mismatch",
-          { binarySource: "managed", binaryVersion: "1.13.0-r2" },
-          "1.13.0-r2",
-          { kind: "ready", source: "managed" },
-        ],
-        [
-          "managed pin",
-          { binarySource: "managed", binaryVersion: CODEX_PINNED_VERSION },
-          CODEX_PINNED_VERSION,
+          { binarySource: "managed", binaryVersion: "2.0.0-r1" },
+          "2.0.0-r1",
           { kind: "ready", source: "managed" },
         ],
       ])(

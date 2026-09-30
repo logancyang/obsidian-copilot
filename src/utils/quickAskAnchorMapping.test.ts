@@ -1,90 +1,60 @@
 import { mapQuickAskAnchorPositions, type QuickAskAnchorPositions } from "./quickAskAnchorMapping";
 
-function makeChanges() {
-  const calls: Array<{ pos: number; assoc?: number }> = [];
-  return {
-    calls,
-    changes: {
-      mapPos(pos: number, assoc?: number) {
-        calls.push({ pos, assoc });
-        return pos * 10 + (assoc ?? 0);
-      },
-    },
-  };
-}
+const changes = {
+  mapPos: (pos: number, assoc = 0) => pos * 10 + assoc,
+};
 
-describe("mapQuickAskAnchorPositions", () => {
-  it("maps cursor selections once so all anchors stay identical", () => {
-    const { calls, changes } = makeChanges();
-    const anchors: QuickAskAnchorPositions = {
-      bottomAnchorPos: 12,
-      topAnchorPos: 12,
-      focusAnchorPos: 12,
-    };
+describe("quickAskAnchorMapping", () => {
+  describe("mapQuickAskAnchorPositions()", () => {
+    it("maps a cursor selection once so all three anchors stay identical", () => {
+      const anchors: QuickAskAnchorPositions = {
+        bottomAnchorPos: 12,
+        topAnchorPos: 12,
+        focusAnchorPos: 12,
+      };
 
-    const result = mapQuickAskAnchorPositions(anchors, changes);
-
-    expect(calls).toEqual([{ pos: 12, assoc: 1 }]);
-    expect(result).toEqual({
-      bottomAnchorPos: 121,
-      topAnchorPos: 121,
-      focusAnchorPos: 121,
+      expect(mapQuickAskAnchorPositions(anchors, changes)).toEqual({
+        bottomAnchorPos: 121,
+        topAnchorPos: 121,
+        focusAnchorPos: 121,
+      });
     });
-  });
 
-  it("maps forward selection (focus at bottom) with correct assoc values", () => {
-    const { calls, changes } = makeChanges();
-    const anchors: QuickAskAnchorPositions = {
-      bottomAnchorPos: 20,
-      topAnchorPos: 10,
-      focusAnchorPos: 20,
-    };
+    it("maps a forward selection with bottom and focus anchored backward and top forward", () => {
+      const anchors: QuickAskAnchorPositions = {
+        bottomAnchorPos: 20,
+        topAnchorPos: 10,
+        focusAnchorPos: 20,
+      };
 
-    mapQuickAskAnchorPositions(anchors, changes);
-
-    expect(calls).toEqual([
-      { pos: 20, assoc: -1 },
-      { pos: 10, assoc: 1 },
-      { pos: 20, assoc: -1 },
-    ]);
-  });
-
-  it("maps reverse selection (focus at top) with correct assoc values", () => {
-    const { calls, changes } = makeChanges();
-    const anchors: QuickAskAnchorPositions = {
-      bottomAnchorPos: 20,
-      topAnchorPos: 10,
-      focusAnchorPos: 10,
-    };
-
-    mapQuickAskAnchorPositions(anchors, changes);
-
-    expect(calls).toEqual([
-      { pos: 20, assoc: -1 },
-      { pos: 10, assoc: 1 },
-      { pos: 10, assoc: 1 },
-    ]);
-  });
-
-  it("handles null anchors gracefully", () => {
-    const { changes } = makeChanges();
-    const result = mapQuickAskAnchorPositions(
-      { bottomAnchorPos: null, topAnchorPos: null, focusAnchorPos: null },
-      changes
-    );
-    expect(result).toEqual({
-      bottomAnchorPos: null,
-      topAnchorPos: null,
-      focusAnchorPos: null,
+      expect(mapQuickAskAnchorPositions(anchors, changes)).toEqual({
+        bottomAnchorPos: 199,
+        topAnchorPos: 101,
+        focusAnchorPos: 199,
+      });
     });
-  });
 
-  it("handles newline-end selections the same as any other bottom anchor", () => {
-    const { changes } = makeChanges();
-    const result = mapQuickAskAnchorPositions(
-      { bottomAnchorPos: 11, topAnchorPos: 2, focusAnchorPos: 11 },
-      changes
-    );
-    expect(result.bottomAnchorPos).toBe(109);
+    it("maps a reverse selection with the focus anchored forward like the top", () => {
+      const anchors: QuickAskAnchorPositions = {
+        bottomAnchorPos: 20,
+        topAnchorPos: 10,
+        focusAnchorPos: 10,
+      };
+
+      expect(mapQuickAskAnchorPositions(anchors, changes)).toEqual({
+        bottomAnchorPos: 199,
+        topAnchorPos: 101,
+        focusAnchorPos: 101,
+      });
+    });
+
+    it("keeps null anchors null", () => {
+      expect(
+        mapQuickAskAnchorPositions(
+          { bottomAnchorPos: null, topAnchorPos: null, focusAnchorPos: null },
+          changes
+        )
+      ).toEqual({ bottomAnchorPos: null, topAnchorPos: null, focusAnchorPos: null });
+    });
   });
 });

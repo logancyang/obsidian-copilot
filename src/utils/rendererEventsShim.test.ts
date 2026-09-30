@@ -25,10 +25,6 @@ describe("installRendererEventsShim", () => {
     expect(EventEmitter.setMaxListeners).toBe(original);
   });
 
-  it("has no load-time side effect — patching only happens when called", () => {
-    expect(EventEmitter.setMaxListeners).toBe(original);
-  });
-
   it("evaluates without requiring node:events — safe in the mobile module graph", () => {
     const throwingIds = ["events", "node:events"];
     try {

@@ -7,94 +7,100 @@ import {
 } from "./compactionUtils";
 
 describe("compactionUtils", () => {
-  describe("DEFAULT_COMPACTION_CONFIG", () => {
-    it("should have expected default values", () => {
-      expect(DEFAULT_COMPACTION_CONFIG.previewCharsPerSection).toBe(500);
-      expect(DEFAULT_COMPACTION_CONFIG.maxSections).toBe(20);
-      expect(DEFAULT_COMPACTION_CONFIG.verbatimThreshold).toBe(5000);
-    });
-  });
-
-  describe("mergeConfig", () => {
-    it("should use defaults when no config provided", () => {
-      const config = mergeConfig();
-      expect(config).toEqual(DEFAULT_COMPACTION_CONFIG);
+  describe("mergeConfig()", () => {
+    it("returns the default config when no overrides are given", () => {
+      expect(mergeConfig()).toEqual(DEFAULT_COMPACTION_CONFIG);
     });
 
-    it("should override specific values", () => {
+    it("overrides only the provided fields and keeps the other defaults", () => {
       const config = mergeConfig({ previewCharsPerSection: 100 });
       expect(config.previewCharsPerSection).toBe(100);
       expect(config.maxSections).toBe(DEFAULT_COMPACTION_CONFIG.maxSections);
     });
   });
 
-  describe("truncateWithEllipsis", () => {
-    it("should return text unchanged if under maxLength", () => {
+  describe("truncateWithEllipsis()", () => {
+    it("returns text at or under maxLength unchanged", () => {
       expect(truncateWithEllipsis("Short.", 100)).toBe("Short.");
     });
 
-    it("should truncate at sentence boundary when possible", () => {
-      const text = "First sentence. Second sentence. Third sentence is much longer.";
+    it("cuts at the last sentence boundary past the halfway point and appends an ellipsis", () => {
+      const text =
+        "First sentence. Second sentence. Third sentence that goes on and on to make it longer.";
       const result = truncateWithEllipsis(text, 50);
       expect(result).toContain("First sentence.");
-      expect(result).toContain("...");
+      expect(result).toContain("Second sentence.");
+      expect(result.endsWith("...")).toBe(true);
+      expect(result.length).toBeLessThan(text.length);
     });
 
-    it("should truncate at word boundary as fallback", () => {
-      const text = "word1 word2 word3 word4 word5";
-      const result = truncateWithEllipsis(text, 20);
-      expect(result).toContain("...");
-      expect(result.length).toBeLessThanOrEqual(25);
+    it("cuts at a paragraph break when there is no sentence boundary", () => {
+      const text = "First paragraph with no sentence breaks\n\nSecond paragraph here";
+      expect(truncateWithEllipsis(text, 50)).toBe("First paragraph with no sentence breaks\n\n...");
+    });
+
+    it("cuts at a word boundary when there is no sentence or paragraph boundary", () => {
+      const text = "word1 word2 word3 word4 word5 word6 word7 word8";
+      expect(truncateWithEllipsis(text, 25)).toBe("word1 word2 word3 word4 ...");
+    });
+
+    it("hard-cuts at maxLength and appends an ellipsis when the text has no break points", () => {
+      expect(truncateWithEllipsis("verylongwordwithoutanyspaces", 10)).toBe("verylongwo...");
     });
   });
 
-  describe("compactBySection", () => {
-    it("should preserve all headings", () => {
+  describe("compactBySection()", () => {
+    it("keeps sections within the preview budget verbatim", () => {
       const content = `## Section 1
-Content 1
+Short content.
 
 ## Section 2
-Content 2`;
-      const result = compactBySection(content, 500, 20);
-      expect(result).toContain("## Section 1");
-      expect(result).toContain("## Section 2");
+Also short.`;
+      expect(compactBySection(content, 500, 20)).toBe(content);
     });
 
-    it("should truncate long sections", () => {
-      const content = `## Section 1
-${"A".repeat(1000)}`;
+    it("keeps every heading, including nested levels, while truncating long section bodies", () => {
+      const content = `# Main Title
+${"A".repeat(1000)}
+
+## Section 1
+Content for section 1.
+
+### Subsection 1.1
+${"B".repeat(1000)}`;
       const result = compactBySection(content, 100, 20);
+      expect(result).toContain("# Main Title");
       expect(result).toContain("## Section 1");
-      expect(result.length).toBeLessThan(content.length);
+      expect(result).toContain("### Subsection 1.1");
+      expect(result).toContain("Content for section 1.");
+      expect(result.length).toBeLessThan(content.length / 2);
     });
 
-    it("should limit number of sections", () => {
+    it("keeps the first maxSections sections and reports how many were omitted", () => {
       const sections = Array.from({ length: 30 }, (_, i) => `## Section ${i}\nContent`);
-      const content = sections.join("\n\n");
-      const result = compactBySection(content, 500, 10);
+      const result = compactBySection(sections.join("\n\n"), 500, 10);
       expect(result).toContain("## Section 0");
       expect(result).toContain("## Section 9");
       expect(result).not.toContain("## Section 10");
-      expect(result).toContain("more sections omitted");
+      expect(result).toContain("[... 20 more sections omitted ...]");
     });
 
-    it("should handle content without headings", () => {
+    it("truncates content without headings to four times the preview budget", () => {
       const content = "A".repeat(5000);
       const result = compactBySection(content, 500, 20);
-      expect(result.length).toBeLessThan(content.length);
-      expect(result).toContain("...");
+      expect(result).toBe(`${"A".repeat(2000)}...`);
     });
   });
 
-  describe("escapeXmlAttr", () => {
-    it("should escape special XML characters", () => {
+  describe("escapeXmlAttr()", () => {
+    it("escapes quotes, ampersands, angle brackets, and apostrophes", () => {
       expect(escapeXmlAttr('test "quoted"')).toBe("test &quot;quoted&quot;");
       expect(escapeXmlAttr("test & ampersand")).toBe("test &amp; ampersand");
       expect(escapeXmlAttr("test <tag>")).toBe("test &lt;tag&gt;");
       expect(escapeXmlAttr("test 'apostrophe'")).toBe("test &apos;apostrophe&apos;");
     });
 
-    it("should handle empty string", () => {
+    it("returns an empty string unchanged", () => {
       expect(escapeXmlAttr("")).toBe("");
     });
   });

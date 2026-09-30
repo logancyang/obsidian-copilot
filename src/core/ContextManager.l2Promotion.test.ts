@@ -87,427 +87,160 @@ function createMockMessageRepo(
   } as unknown as MessageRepository;
 }
 
-describe("ContextManager L2 promotion filtering", () => {
-  let contextManager: ContextManager;
+function promoteToL2(manager: ContextManager, segments: PromptLayerSegment[]): string {
+  const repo = createMockMessageRepo([
+    { id: "msg-1", sender: "user", contextEnvelope: buildEnvelopeWithL3Segments(segments) },
+    { id: "msg-2", sender: "user" },
+  ]);
+  return asInternal(manager).buildL2ContextFromPreviousTurns("msg-2", repo).l2Context;
+}
 
-  beforeEach(() => {
-    contextManager = ContextManager.getInstance();
-  });
+function segment(id: string, content: string): PromptLayerSegment {
+  return { id, content, stable: false, metadata: { source: "current_turn" } };
+}
 
-  it("should exclude selected_text segments from L2", () => {
-    const noteSegment: PromptLayerSegment = {
-      id: "notes/test.md",
-      content: `<note_context>\n<title>Test</title>\n<path>notes/test.md</path>\n<content>Note content</content>\n</note_context>`,
-      stable: false,
-      metadata: { source: "current_turn", notePath: "notes/test.md" },
-    };
+function compactedSegment(blocks: string[]): PromptLayerSegment {
+  return {
+    id: "compacted_context",
+    content: blocks.join("\n\n"),
+    stable: false,
+    metadata: { source: "compacted", wasCompacted: true, compactedPaths: [] },
+  };
+}
 
-    const selectedTextSegment: PromptLayerSegment = {
-      id: "selected_text",
-      content: `<selected_text>\n<title>My Note</title>\n<path>dev/file.md</path>\n<start_line>1</start_line>\n<end_line>5</end_line>\n<content>Old selected text that should NOT appear in L2</content>\n</selected_text>`,
-      stable: false,
-      metadata: { source: "current_turn" },
-    };
+const noteBlock = (title: string, path: string, content: string) =>
+  `<note_context>\n<title>${title}</title>\n<path>${path}</path>\n<content>${content}</content>\n</note_context>`;
+const urlBlock = (url: string, content: string) =>
+  `<url_content>\n<url>${url}</url>\n<content>${content}</content>\n</url_content>`;
+const selectedTextBlock = (content: string) =>
+  `<selected_text>\n<title>My Note</title>\n<path>dev/file.md</path>\n<start_line>1</start_line>\n<end_line>5</end_line>\n<content>${content}</content>\n</selected_text>`;
+const webSelectedTextBlock = (content: string) =>
+  `<web_selected_text>\n<title>React Docs</title>\n<url>https://react.dev</url>\n<content>${content}</content>\n</web_selected_text>`;
 
-    const mockRepo = createMockMessageRepo([
-      {
-        id: "msg-1",
-        sender: "user",
-        contextEnvelope: buildEnvelopeWithL3Segments([noteSegment, selectedTextSegment]),
-      },
-      { id: "msg-2", sender: "user" },
-    ]);
+describe("ContextManager", () => {
+  describe("ContextManager", () => {
+    let contextManager: ContextManager;
 
-    const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
-      "msg-2",
-      mockRepo
-    );
+    beforeEach(() => {
+      contextManager = ContextManager.getInstance();
+    });
 
-    expect(l2Context).toContain("note_context");
-    expect(l2Context).toContain("Note content");
+    describe("buildL2ContextFromPreviousTurns()", () => {
+      it("promotes recoverable note and URL blocks from earlier turns", () => {
+        const l2Context = promoteToL2(contextManager, [
+          segment("notes/test.md", noteBlock("Test", "notes/test.md", "Note content here")),
+          segment("https://example.com", urlBlock("https://example.com", "URL content here")),
+        ]);
 
-    expect(l2Context).not.toContain("selected_text");
-    expect(l2Context).not.toContain("Old selected text");
-  });
+        expect(l2Context).toContain("Note content here");
+        expect(l2Context).toContain("URL content here");
+      });
 
-  it("should exclude web_selected_text segments from L2", () => {
-    const webSelectedSegment: PromptLayerSegment = {
-      id: "web_selected_text",
-      content: `<web_selected_text>\n<title>React Docs</title>\n<url>https://react.dev</url>\n<content>Web selection content</content>\n</web_selected_text>`,
-      stable: false,
-      metadata: { source: "current_turn" },
-    };
+      it("drops selected_text blocks but keeps the note blocks beside them", () => {
+        const l2Context = promoteToL2(contextManager, [
+          segment("notes/test.md", noteBlock("Test", "notes/test.md", "Note content")),
+          segment("selected_text", selectedTextBlock("Old selected text")),
+        ]);
 
-    const mockRepo = createMockMessageRepo([
-      {
-        id: "msg-1",
-        sender: "user",
-        contextEnvelope: buildEnvelopeWithL3Segments([webSelectedSegment]),
-      },
-      { id: "msg-2", sender: "user" },
-    ]);
+        expect(l2Context).toContain("Note content");
+        expect(l2Context).not.toContain("selected_text");
+        expect(l2Context).not.toContain("Old selected text");
+      });
 
-    const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
-      "msg-2",
-      mockRepo
-    );
+      it("drops web_selected_text blocks", () => {
+        const l2Context = promoteToL2(contextManager, [
+          segment("web_selected_text", webSelectedTextBlock("Web selection content")),
+        ]);
 
-    expect(l2Context).not.toContain("web_selected_text");
-    expect(l2Context).not.toContain("Web selection content");
-  });
+        expect(l2Context).not.toContain("web_selected_text");
+        expect(l2Context).not.toContain("Web selection content");
+      });
 
-  it("should promote recoverable blocks (note_context, url_content) to L2", () => {
-    const noteSegment: PromptLayerSegment = {
-      id: "notes/test.md",
-      content: `<note_context>\n<title>Test</title>\n<path>notes/test.md</path>\n<content>Note content here</content>\n</note_context>`,
-      stable: false,
-      metadata: { source: "current_turn", notePath: "notes/test.md" },
-    };
+      it("drops non-recoverable blocks anywhere inside a compacted multi-block segment", () => {
+        const l2Context = promoteToL2(contextManager, [
+          compactedSegment([
+            selectedTextBlock("Stale selection before"),
+            noteBlock("Keep", "notes/keep.md", "Note in compacted segment"),
+            webSelectedTextBlock("Stale web selection after"),
+            urlBlock("https://keep.com", "URL in compacted segment"),
+          ]),
+        ]);
 
-    const urlSegment: PromptLayerSegment = {
-      id: "https://example.com",
-      content: `<url_content>\n<url>https://example.com</url>\n<content>URL content here</content>\n</url_content>`,
-      stable: false,
-      metadata: { source: "current_turn" },
-    };
+        expect(l2Context).toContain("Note in compacted segment");
+        expect(l2Context).toContain("URL in compacted segment");
+        expect(l2Context).not.toContain("<selected_text>");
+        expect(l2Context).not.toContain("Stale selection before");
+        expect(l2Context).not.toContain("<web_selected_text>");
+        expect(l2Context).not.toContain("Stale web selection after");
+      });
 
-    const mockRepo = createMockMessageRepo([
-      {
-        id: "msg-1",
-        sender: "user",
-        contextEnvelope: buildEnvelopeWithL3Segments([noteSegment, urlSegment]),
-      },
-      { id: "msg-2", sender: "user" },
-    ]);
+      it("keeps unregistered block types beside known blocks in a compacted segment", () => {
+        const l2Context = promoteToL2(contextManager, [
+          compactedSegment([
+            noteBlock("Note", "notes/a.md", "Known block"),
+            `<future_block_type>\nSome future content that should survive\n</future_block_type>`,
+          ]),
+        ]);
 
-    const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
-      "msg-2",
-      mockRepo
-    );
+        expect(l2Context).toContain("Known block");
+        expect(l2Context).toContain("Some future content that should survive");
+      });
 
-    expect(l2Context).toContain("Note content here");
-    expect(l2Context).toContain("URL content here");
-  });
+      it("keeps prior_context blocks and appends the re-fetch instruction once", () => {
+        const l2Context = promoteToL2(contextManager, [
+          compactedSegment([
+            `<prior_context source="note_context" type="compacted">\nCompacted note summary\n</prior_context>`,
+          ]),
+        ]);
 
-  it("should allow unknown/unregistered tags to pass through to L2", () => {
-    const priorContextSegment: PromptLayerSegment = {
-      id: "old/note.md",
-      content: `<prior_context source="old/note.md" type="note">\nCompacted summary\n</prior_context>`,
-      stable: false,
-      metadata: { source: "previous_turns_compacted", notePath: "old/note.md" },
-    };
+        expect(l2Context).toContain("Compacted note summary");
+        expect(l2Context.match(/<prior_context_note>/g)).toHaveLength(1);
+      });
 
-    const mockRepo = createMockMessageRepo([
-      {
-        id: "msg-1",
-        sender: "user",
-        contextEnvelope: buildEnvelopeWithL3Segments([priorContextSegment]),
-      },
-      { id: "msg-2", sender: "user" },
-    ]);
+      it("replaces a stored prior_context_note instead of duplicating it", () => {
+        const l2Context = promoteToL2(contextManager, [
+          compactedSegment([
+            `<prior_context source="note_context" type="compacted">\nSome compacted note\n</prior_context>`,
+            `<prior_context_note>\nYou have prior context. Re-fetch if needed.\n</prior_context_note>`,
+          ]),
+        ]);
 
-    const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
-      "msg-2",
-      mockRepo
-    );
+        expect(l2Context).toContain("Some compacted note");
+        expect(l2Context).not.toContain("You have prior context");
+        expect(l2Context.match(/<prior_context_note>/g)).toHaveLength(1);
+      });
 
-    expect(l2Context).toContain("prior_context");
-    expect(l2Context).toContain("Compacted summary");
-  });
+      it("does not append the re-fetch instruction when note content merely mentions <prior_context>", () => {
+        const l2Context = promoteToL2(contextManager, [
+          segment(
+            "notes/xml-docs.md",
+            noteBlock(
+              "XML Docs",
+              "notes/xml-docs.md",
+              "Example: <prior_context> is used for compaction"
+            )
+          ),
+        ]);
 
-  it("should handle mixed recoverable and non-recoverable segments correctly", () => {
-    const noteSegment: PromptLayerSegment = {
-      id: "notes/keep.md",
-      content: `<note_context>\n<title>Keep</title>\n<path>notes/keep.md</path>\n<content>Should be in L2</content>\n</note_context>`,
-      stable: false,
-      metadata: { source: "current_turn", notePath: "notes/keep.md" },
-    };
+        expect(l2Context).toContain("XML Docs");
+        expect(l2Context).not.toContain("prior_context_note");
+      });
 
-    const selectedSegment: PromptLayerSegment = {
-      id: "selected_text",
-      content: `<selected_text>\n<title>Drop</title>\n<path>drop.md</path>\n<start_line>1</start_line>\n<end_line>1</end_line>\n<content>Should NOT be in L2</content>\n</selected_text>`,
-      stable: false,
-      metadata: { source: "current_turn" },
-    };
+      it("keeps a literal <selected_text> tag that appears inside note content", () => {
+        const l2Context = promoteToL2(contextManager, [
+          segment(
+            "notes/xml-guide.md",
+            noteBlock(
+              "XML Guide",
+              "notes/xml-guide.md",
+              "Use <selected_text>your selection here</selected_text> to pass context"
+            )
+          ),
+        ]);
 
-    const urlSegment: PromptLayerSegment = {
-      id: "https://keep.com",
-      content: `<url_content>\n<url>https://keep.com</url>\n<content>Also in L2</content>\n</url_content>`,
-      stable: false,
-      metadata: { source: "current_turn" },
-    };
-
-    const mockRepo = createMockMessageRepo([
-      {
-        id: "msg-1",
-        sender: "user",
-        contextEnvelope: buildEnvelopeWithL3Segments([noteSegment, selectedSegment, urlSegment]),
-      },
-      { id: "msg-2", sender: "user" },
-    ]);
-
-    const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
-      "msg-2",
-      mockRepo
-    );
-
-    expect(l2Context).toContain("Should be in L2");
-    expect(l2Context).toContain("Also in L2");
-    expect(l2Context).not.toContain("Should NOT be in L2");
-  });
-
-  it("should filter non-recoverable blocks inside a compacted multi-block segment", () => {
-    const compactedSegment: PromptLayerSegment = {
-      id: "compacted_context",
-      content: [
-        `<selected_text>\n<title>Drop Me</title>\n<path>drop.md</path>\n<start_line>1</start_line>\n<end_line>1</end_line>\n<content>Stale selection in compacted segment</content>\n</selected_text>`,
-        `<note_context>\n<title>Keep</title>\n<path>notes/keep.md</path>\n<content>Note in compacted segment</content>\n</note_context>`,
-        `<url_content>\n<url>https://keep.com</url>\n<content>URL in compacted segment</content>\n</url_content>`,
-      ].join("\n\n"),
-      stable: false,
-      metadata: { source: "compacted", wasCompacted: true, compactedPaths: [] },
-    };
-
-    const mockRepo = createMockMessageRepo([
-      {
-        id: "msg-1",
-        sender: "user",
-        contextEnvelope: buildEnvelopeWithL3Segments([compactedSegment]),
-      },
-      { id: "msg-2", sender: "user" },
-    ]);
-
-    const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
-      "msg-2",
-      mockRepo
-    );
-
-    expect(l2Context).toContain("Note in compacted segment");
-    expect(l2Context).toContain("URL in compacted segment");
-    expect(l2Context).not.toContain("<selected_text>");
-    expect(l2Context).not.toContain("Stale selection in compacted segment");
-  });
-
-  it("should not leak non-recoverable blocks when they appear after recoverable blocks in a compacted segment", () => {
-    const compactedSegment: PromptLayerSegment = {
-      id: "compacted_context",
-      content: [
-        `<note_context>\n<title>Note</title>\n<path>notes/a.md</path>\n<content>Recoverable note</content>\n</note_context>`,
-        `<web_selected_text>\n<title>Web Sel</title>\n<url>https://example.com</url>\n<content>Stale web selection</content>\n</web_selected_text>`,
-      ].join("\n\n"),
-      stable: false,
-      metadata: { source: "compacted", wasCompacted: true, compactedPaths: [] },
-    };
-
-    const mockRepo = createMockMessageRepo([
-      {
-        id: "msg-1",
-        sender: "user",
-        contextEnvelope: buildEnvelopeWithL3Segments([compactedSegment]),
-      },
-      { id: "msg-2", sender: "user" },
-    ]);
-
-    const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
-      "msg-2",
-      mockRepo
-    );
-
-    expect(l2Context).toContain("Recoverable note");
-    expect(l2Context).not.toContain("<web_selected_text>");
-    expect(l2Context).not.toContain("Stale web selection");
-  });
-
-  it("should not duplicate prior_context_note when compacted segment already contains one", () => {
-    const compactedSegment: PromptLayerSegment = {
-      id: "compacted_context",
-      content: [
-        `<prior_context source="note_context" type="compacted">\nSome compacted note\n</prior_context>`,
-        `<prior_context_note>\nYou have prior context. Re-fetch if needed.\n</prior_context_note>`,
-      ].join("\n\n"),
-      stable: false,
-      metadata: { source: "compacted", wasCompacted: true, compactedPaths: [] },
-    };
-
-    const mockRepo = createMockMessageRepo([
-      {
-        id: "msg-1",
-        sender: "user",
-        contextEnvelope: buildEnvelopeWithL3Segments([compactedSegment]),
-      },
-      { id: "msg-2", sender: "user" },
-    ]);
-
-    const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
-      "msg-2",
-      mockRepo
-    );
-
-    expect(l2Context).toContain("Some compacted note");
-    const noteCount = (l2Context.match(/<prior_context_note>/g) || []).length;
-    expect(noteCount).toBeLessThanOrEqual(1);
-  });
-
-  it("should not append re-fetch instruction when only prior_context_note exists without real prior_context blocks", () => {
-    const noteSegment: PromptLayerSegment = {
-      id: "notes/normal.md",
-      content: `<note_context>\n<title>Normal</title>\n<path>notes/normal.md</path>\n<content>Regular note content</content>\n</note_context>`,
-      stable: false,
-      metadata: { source: "current_turn", notePath: "notes/normal.md" },
-    };
-
-    const mockRepo = createMockMessageRepo([
-      {
-        id: "msg-1",
-        sender: "user",
-        contextEnvelope: buildEnvelopeWithL3Segments([noteSegment]),
-      },
-      { id: "msg-2", sender: "user" },
-    ]);
-
-    const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
-      "msg-2",
-      mockRepo
-    );
-
-    expect(l2Context).toContain("Regular note content");
-    expect(l2Context).not.toContain("prior_context_note");
-  });
-
-  it("should preserve unknown tags when mixed with known tags in a compacted segment", () => {
-    const compactedSegment: PromptLayerSegment = {
-      id: "compacted_context",
-      content: [
-        `<note_context>\n<title>Note</title>\n<path>notes/a.md</path>\n<content>Known block</content>\n</note_context>`,
-        `<future_block_type>\nSome future content that should survive\n</future_block_type>`,
-      ].join("\n\n"),
-      stable: false,
-      metadata: { source: "compacted", wasCompacted: true, compactedPaths: [] },
-    };
-
-    const mockRepo = createMockMessageRepo([
-      {
-        id: "msg-1",
-        sender: "user",
-        contextEnvelope: buildEnvelopeWithL3Segments([compactedSegment]),
-      },
-      { id: "msg-2", sender: "user" },
-    ]);
-
-    const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
-      "msg-2",
-      mockRepo
-    );
-
-    expect(l2Context).toContain("Known block");
-    expect(l2Context).toContain("future_block_type");
-    expect(l2Context).toContain("Some future content that should survive");
-  });
-
-  it("should not false-positive on literal <prior_context> in user note content", () => {
-    const noteSegment: PromptLayerSegment = {
-      id: "notes/xml-docs.md",
-      content: `<note_context>\n<title>XML Docs</title>\n<path>notes/xml-docs.md</path>\n<content>Example: <prior_context> is used for compaction</content>\n</note_context>`,
-      stable: false,
-      metadata: { source: "current_turn", notePath: "notes/xml-docs.md" },
-    };
-
-    const mockRepo = createMockMessageRepo([
-      {
-        id: "msg-1",
-        sender: "user",
-        contextEnvelope: buildEnvelopeWithL3Segments([noteSegment]),
-      },
-      { id: "msg-2", sender: "user" },
-    ]);
-
-    const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
-      "msg-2",
-      mockRepo
-    );
-
-    expect(l2Context).toContain("XML Docs");
-    expect(l2Context).not.toContain("prior_context_note");
-  });
-
-  it("should not strip literal <selected_text> inside note content", () => {
-    const noteSegment: PromptLayerSegment = {
-      id: "notes/xml-guide.md",
-      content: `<note_context>\n<title>XML Guide</title>\n<path>notes/xml-guide.md</path>\n<content>Use <selected_text>your selection here</selected_text> to pass context</content>\n</note_context>`,
-      stable: false,
-      metadata: { source: "current_turn", notePath: "notes/xml-guide.md" },
-    };
-
-    const mockRepo = createMockMessageRepo([
-      {
-        id: "msg-1",
-        sender: "user",
-        contextEnvelope: buildEnvelopeWithL3Segments([noteSegment]),
-      },
-      { id: "msg-2", sender: "user" },
-    ]);
-
-    const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
-      "msg-2",
-      mockRepo
-    );
-
-    expect(l2Context).toContain("XML Guide");
-    expect(l2Context).toContain("your selection here");
-  });
-
-  it("should handle two blocks of the same tag independently", () => {
-    const segment: PromptLayerSegment = {
-      id: "compacted_context",
-      content: [
-        `<note_context>\n<title>Note A</title>\n<path>a.md</path>\n<content>Content A</content>\n</note_context>`,
-        `<note_context>\n<title>Note B</title>\n<path>b.md</path>\n<content>Content B</content>\n</note_context>`,
-      ].join("\n\n"),
-      stable: false,
-      metadata: { source: "compacted", wasCompacted: true, compactedPaths: [] },
-    };
-
-    const mockRepo = createMockMessageRepo([
-      {
-        id: "msg-1",
-        sender: "user",
-        contextEnvelope: buildEnvelopeWithL3Segments([segment]),
-      },
-      { id: "msg-2", sender: "user" },
-    ]);
-
-    const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
-      "msg-2",
-      mockRepo
-    );
-
-    expect(l2Context).toContain("Note A");
-    expect(l2Context).toContain("Note B");
-  });
-
-  it("should append re-fetch instruction only when real prior_context blocks exist", () => {
-    const compactedSegment: PromptLayerSegment = {
-      id: "compacted_context",
-      content: `<prior_context source="note_context" type="compacted">\nCompacted note summary\n</prior_context>`,
-      stable: false,
-      metadata: { source: "compacted", wasCompacted: true, compactedPaths: [] },
-    };
-
-    const mockRepo = createMockMessageRepo([
-      {
-        id: "msg-1",
-        sender: "user",
-        contextEnvelope: buildEnvelopeWithL3Segments([compactedSegment]),
-      },
-      { id: "msg-2", sender: "user" },
-    ]);
-
-    const { l2Context } = asInternal(contextManager).buildL2ContextFromPreviousTurns(
-      "msg-2",
-      mockRepo
-    );
-
-    expect(l2Context).toContain("Compacted note summary");
-    expect(l2Context).toContain("prior_context_note");
+        expect(l2Context).toContain("XML Guide");
+        expect(l2Context).toContain("your selection here");
+      });
+    });
   });
 });

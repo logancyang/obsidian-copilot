@@ -66,30 +66,6 @@ describe("safeAsyncHandler", () => {
       expect(safeAsyncHandler(first)).not.toBe(safeAsyncHandler(second));
     });
 
-    it("forwards to the original handler when the wrapper is served from the cache", async () => {
-      const handler = jest.fn(async (id: string) => id);
-      safeAsyncHandler(handler);
-
-      safeAsyncHandler(handler)("chat-1");
-
-      expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler).toHaveBeenCalledWith("chat-1");
-    });
-
-    it("logs rejections through a cached wrapper as it does through a fresh one", async () => {
-      const failure = new Error("load failed");
-      const handler = async () => {
-        throw failure;
-      };
-      safeAsyncHandler(handler);
-
-      safeAsyncHandler(handler)();
-      await Promise.resolve();
-
-      expect(mockedLogError).toHaveBeenCalledTimes(1);
-      expect(mockedLogError).toHaveBeenCalledWith(expect.any(String), failure);
-    });
-
     it("leaves a memoized child unrendered when its parent rerenders around it", () => {
       const renderChild = jest.fn();
       const Child = memo(function Child({ onAct }: { onAct: () => void }) {

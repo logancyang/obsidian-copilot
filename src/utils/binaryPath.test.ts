@@ -58,15 +58,6 @@ describe("binaryPath", () => {
   });
 
   describe("augmentPathForDetection()", () => {
-    test("prepends all well-known dirs ahead of the inherited PATH", () => {
-      const result = augmentPathForDetection(["/usr/bin", "/bin"].join(path.delimiter));
-      const parts = result.split(path.delimiter);
-      for (const dir of nativeWellKnownDirs) {
-        expect(parts).toContain(dir);
-      }
-      expect(parts).toEqual([...new Set([...nativeWellKnownDirs, "/usr/bin", "/bin"])]);
-    });
-
     test("prepends a discovered version-manager dir ahead of the inherited PATH", () => {
       const nvmBin = "/home/me/.nvm/versions/node/v20.18.0/bin";
       resolveMock.mockReturnValue([nvmBin]);

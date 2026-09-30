@@ -72,31 +72,9 @@ describe("ProjectPickerList", () => {
   }
 
   describe("ProjectPickerList()", () => {
-    it("renders projects in most-recently-used order from persisted timestamps", () => {
+    it("renders projects in most-recently-used order from persisted timestamps when no usage manager is provided", () => {
       const { container } = renderPicker();
       expect(renderedOrder(container, names)).toEqual(["C", "B", "A"]);
-    });
-
-    it("renders neutral folder icons for every project", () => {
-      const { container } = renderPicker();
-      const folders = Array.from(container.querySelectorAll(".lucide-folder"));
-      expect(folders).toHaveLength(names.length);
-      for (const folder of folders) {
-        expect(folder.classList.contains("tw-text-muted")).toBe(true);
-        expect(folder.getAttribute("class")).not.toMatch(/tw-(?:bg|text)-project-/);
-      }
-    });
-
-    it("centers project folders in the same leading slot as the create icon", () => {
-      const { container } = render(
-        <ProjectPickerList projects={[projectA]} onSelect={noop} onCreate={noop} app={app} />
-      );
-      const plusSlot = container.querySelector(".lucide-plus")?.parentElement;
-      const folderSlot = container.querySelector(".lucide-folder")?.parentElement;
-
-      expect(plusSlot?.classList.contains("tw-size-6")).toBe(true);
-      expect(folderSlot?.classList.contains("tw-size-6")).toBe(true);
-      expect(folderSlot?.classList.contains("tw-justify-center")).toBe(true);
     });
 
     it("pages every project inline and selects the last result (https://github.com/Brevilabs/obsidian-copilot-private/issues/372)", () => {
@@ -164,11 +142,6 @@ describe("ProjectPickerList", () => {
       fireEvent.keyDown(row, { key: " " });
       expect(onSelect).toHaveBeenCalledTimes(2);
       expect(onSelect).toHaveBeenLastCalledWith(projectA);
-    });
-
-    it("falls back to persisted order when no usage manager is provided", () => {
-      const { container } = renderPicker(undefined);
-      expect(renderedOrder(container, names)).toEqual(["C", "B", "A"]);
     });
 
     it("re-sorts to reflect an in-memory touch ahead of the throttled persist", () => {

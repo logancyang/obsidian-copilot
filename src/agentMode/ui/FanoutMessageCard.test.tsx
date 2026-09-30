@@ -6,27 +6,17 @@ import { AI_SENDER } from "@/constants";
 import { render, screen } from "@testing-library/react";
 import React from "react";
 
-jest.mock("@/agentMode/ui/FanoutTurnView", () => ({
-  FanoutTurnView: () => <div>Summary response</div>,
+jest.mock("@/agentMode/ui/AgentMarkdownText", () => ({
+  AgentMarkdownText: ({ text }: { text: string }) => <div>{text}</div>,
 }));
 
-jest.mock("@/agentMode/ui/fanoutDropdown", () => ({
-  defaultFanoutOption: () => "summary",
-  fanoutDisplayName: (backendId: string) => backendId,
-  FANOUT_SUMMARY_OPTION: "summary",
-}));
-
-jest.mock("@/agentMode/session/fanout/fanoutTypes", () => ({
-  renderFanoutComposite: () => "Summary response",
+jest.mock("@/agentMode/backends/registry", () => ({
+  backendRegistry: {},
 }));
 
 jest.mock("@/utils", () => ({
   cleanMessageForCopy: (text: string) => text,
   insertAtCursor: jest.fn(),
-}));
-
-jest.mock("obsidian", () => ({
-  Platform: { isMobile: false },
 }));
 
 describe("FanoutMessageCard", () => {
@@ -56,10 +46,9 @@ describe("FanoutMessageCard", () => {
         </TooltipProvider>
       );
 
-      const duration = screen.getByText("Worked for 24s");
-      const footer = duration.closest(".tw-justify-between");
-      expect(footer?.classList.contains("tw-items-center")).toBe(true);
-      expect(footer?.contains(screen.getByTitle("Copy"))).toBe(true);
+      expect(screen.getByText("Summary response")).toBeTruthy();
+      expect(screen.getByText("Worked for 24s")).toBeTruthy();
+      expect(screen.getByTitle("Copy")).toBeTruthy();
       expect(screen.queryByText(timestamp)).toBeNull();
 
       rerender(

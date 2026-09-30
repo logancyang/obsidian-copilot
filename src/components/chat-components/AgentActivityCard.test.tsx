@@ -5,18 +5,17 @@ import React from "react";
 
 describe("AgentActivityCard", () => {
   describe("AgentActivityCard()", () => {
-    it("uses the shared inset without exposing static rows as controls", () => {
+    it("shows its icon and label without exposing a static row as a control", () => {
       const { container } = render(<AgentActivityCard icon={Brain} label="Reasoning" />);
 
-      const header = container.querySelector("[data-agent-activity-card-header]");
-      expect(header?.classList.contains("tw-pl-1")).toBe(true);
+      expect(screen.getByText("Reasoning")).toBeTruthy();
       expect(container.querySelector(".lucide-brain")).not.toBeNull();
       expect(screen.queryByRole("button")).toBeNull();
     });
 
-    it("toggles through the same pointer and keyboard interaction contract", () => {
+    it("toggles on click, Enter, and Space and reveals its details only while open", () => {
       const onToggle = jest.fn();
-      const { container, rerender } = render(
+      const { rerender } = render(
         <AgentActivityCard
           icon={Brain}
           label="Reasoning"
@@ -46,14 +45,6 @@ describe("AgentActivityCard", () => {
       const openHeader = screen.getByRole("button", { name: "Reasoning" });
       expect(openHeader.getAttribute("aria-expanded")).toBe("true");
       expect(screen.getByText("Details")).not.toBeNull();
-      expect(
-        container.querySelector(".lucide-chevron-right")?.classList.contains("tw-rotate-90")
-      ).toBe(true);
-      expect(
-        container
-          .querySelector(`[id="${openHeader.getAttribute("aria-controls")}"]`)
-          ?.classList.contains("tw-border-l")
-      ).toBe(true);
     });
   });
 });

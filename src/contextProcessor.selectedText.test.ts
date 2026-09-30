@@ -1,175 +1,106 @@
 import { SELECTED_TEXT_TAG, WEB_SELECTED_TEXT_TAG } from "@/constants";
+import { ContextProcessor } from "@/contextProcessor";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
 
-const mockSelectedTextContexts: (NoteSelectedTextContext | WebSelectedTextContext)[] = [];
+const noteContext: NoteSelectedTextContext = {
+  id: "note-1",
+  sourceType: "note",
+  content: "function fibonacci(n) {\n  return n <= 1 ? n : fibonacci(n-1) + fibonacci(n-2);\n}",
+  noteTitle: "Algorithms",
+  notePath: "dev/algorithms.md",
+  startLine: 10,
+  endLine: 12,
+};
 
-jest.mock("@/aiParams", () => ({
-  getSelectedTextContexts: () => mockSelectedTextContexts,
-}));
+const webContext: WebSelectedTextContext = {
+  id: "web-1",
+  sourceType: "web",
+  content: "# React Documentation\n\nReact is a JavaScript library for building user interfaces.",
+  title: "React Docs",
+  url: "https://react.dev/learn",
+};
 
-import { ContextProcessor } from "@/contextProcessor";
+describe("contextProcessor", () => {
+  describe("ContextProcessor", () => {
+    let processor: ContextProcessor;
 
-describe("ContextProcessor.processSelectedTextContexts", () => {
-  let processor: ContextProcessor;
+    beforeEach(() => {
+      processor = ContextProcessor.getInstance(window.app);
+    });
 
-  beforeEach(() => {
-    mockSelectedTextContexts.length = 0;
+    describe("processSelectedTextContexts()", () => {
+      it("formats a note selection with title, path, line range, and content", () => {
+        const result = processor.processSelectedTextContexts([noteContext]);
 
-    processor = ContextProcessor.getInstance(window.app);
-  });
+        expect(result).toBe(
+          `\n\n<${SELECTED_TEXT_TAG}>\n<title>Algorithms</title>\n<path>dev/algorithms.md</path>\n<start_line>10</start_line>\n<end_line>12</end_line>\n<content>\n${noteContext.content}\n</content>\n</${SELECTED_TEXT_TAG}>`
+        );
+      });
 
-  it("should return empty string when no selected text contexts", () => {
-    const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
-    expect(result).toBe("");
-  });
+      it("formats a web selection with title, url, and content and no note fields", () => {
+        const result = processor.processSelectedTextContexts([webContext]);
 
-  it("should format note selected text with proper XML tags", () => {
-    const noteContext: NoteSelectedTextContext = {
-      id: "note-1",
-      sourceType: "note",
-      content: "function fibonacci(n) {\n  return n <= 1 ? n : fibonacci(n-1) + fibonacci(n-2);\n}",
-      noteTitle: "Algorithms",
-      notePath: "dev/algorithms.md",
-      startLine: 10,
-      endLine: 12,
-    };
+        expect(result).toBe(
+          `\n\n<${WEB_SELECTED_TEXT_TAG}>\n<title>React Docs</title>\n<url>https://react.dev/learn</url>\n<content>\n${webContext.content}\n</content>\n</${WEB_SELECTED_TEXT_TAG}>`
+        );
+      });
 
-    mockSelectedTextContexts.push(noteContext);
+      it("emits note and web selections in the order given", () => {
+        const result = processor.processSelectedTextContexts([webContext, noteContext]);
 
-    const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
+        expect(result.indexOf(`<${WEB_SELECTED_TEXT_TAG}>`)).toBeGreaterThanOrEqual(0);
+        expect(result.indexOf(`<${WEB_SELECTED_TEXT_TAG}>`)).toBeLessThan(
+          result.indexOf(`<${SELECTED_TEXT_TAG}>`)
+        );
+      });
 
-    expect(result).toContain(`<${SELECTED_TEXT_TAG}>`);
-    expect(result).toContain(`</${SELECTED_TEXT_TAG}>`);
-    expect(result).toContain("<title>Algorithms</title>");
-    expect(result).toContain("<path>dev/algorithms.md</path>");
-    expect(result).toContain("<start_line>10</start_line>");
-    expect(result).toContain("<end_line>12</end_line>");
-    expect(result).toContain("<content>");
-    expect(result).toContain("function fibonacci");
-    expect(result).toContain("</content>");
+      it("escapes XML special characters in note title and path", () => {
+        const result = processor.processSelectedTextContexts([
+          { ...noteContext, noteTitle: "Test <Note>", notePath: "test/path&file.md" },
+        ]);
 
-    expect(result).not.toContain(`<${WEB_SELECTED_TEXT_TAG}>`);
-    expect(result).not.toContain("<url>");
-  });
+        expect(result).toContain("<title>Test &lt;Note&gt;</title>");
+        expect(result).toContain("<path>test/path&amp;file.md</path>");
+      });
 
-  it("includes a Reading view excerpt and path without unknown line tags (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
-    const result = processor.processSelectedTextContexts([
-      {
-        id: "reading-excerpt",
-        sourceType: "note",
-        content: "Rendered note passage",
-        noteTitle: "Research",
-        notePath: "Projects/Research.md",
-        startLine: 0,
-        endLine: 0,
-      },
-    ]);
+      it("escapes XML special characters in web title, url, and content", () => {
+        const result = processor.processSelectedTextContexts([
+          {
+            ...webContext,
+            title: "Page <Title>",
+            url: "https://example.com/page?a=1&b=2",
+            content: "Content with <html> tags",
+          },
+        ]);
 
-    expect(result).toContain("<path>Projects/Research.md</path>");
-    expect(result).toContain("<content>\nRendered note passage\n</content>");
-    expect(result).not.toContain("<start_line>");
-    expect(result).not.toContain("<end_line>");
-  });
+        expect(result).toContain("<title>Page &lt;Title&gt;</title>");
+        expect(result).toContain("<url>https://example.com/page?a=1&amp;b=2</url>");
+        expect(result).toContain("Content with &lt;html&gt; tags");
+      });
 
-  it("should format web selected text with proper XML tags", () => {
-    const webContext: WebSelectedTextContext = {
-      id: "web-1",
-      sourceType: "web",
-      content:
-        "# React Documentation\n\nReact is a JavaScript library for building user interfaces.",
-      title: "React Docs",
-      url: "https://react.dev/learn",
-    };
+      it("includes a Reading view excerpt and path without unknown line tags (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
+        const result = processor.processSelectedTextContexts([
+          {
+            id: "reading-excerpt",
+            sourceType: "note",
+            content: "Rendered note passage",
+            noteTitle: "Research",
+            notePath: "Projects/Research.md",
+            startLine: 0,
+            endLine: 0,
+          },
+        ]);
 
-    mockSelectedTextContexts.push(webContext);
+        expect(result).toContain("<path>Projects/Research.md</path>");
+        expect(result).toContain("<content>\nRendered note passage\n</content>");
+        expect(result).not.toContain("<start_line>");
+        expect(result).not.toContain("<end_line>");
+      });
 
-    const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
-
-    expect(result).toContain(`<${WEB_SELECTED_TEXT_TAG}>`);
-    expect(result).toContain(`</${WEB_SELECTED_TEXT_TAG}>`);
-    expect(result).toContain("<title>React Docs</title>");
-    expect(result).toContain("<url>https://react.dev/learn</url>");
-    expect(result).toContain("<content>");
-    expect(result).toContain("React Documentation");
-    expect(result).toContain("</content>");
-
-    expect(result).not.toContain(`<${SELECTED_TEXT_TAG}>`);
-    expect(result).not.toContain("<path>");
-    expect(result).not.toContain("<start_line>");
-    expect(result).not.toContain("<end_line>");
-  });
-
-  it("should handle mixed note and web selected text contexts", () => {
-    const noteContext: NoteSelectedTextContext = {
-      id: "note-1",
-      sourceType: "note",
-      content: "Local note content about React patterns",
-      noteTitle: "React Patterns",
-      notePath: "dev/react-patterns.md",
-      startLine: 15,
-      endLine: 20,
-    };
-
-    const webContext: WebSelectedTextContext = {
-      id: "web-1",
-      sourceType: "web",
-      content: "Web content about React best practices",
-      title: "React Best Practices",
-      url: "https://react.dev/best-practices",
-    };
-
-    mockSelectedTextContexts.push(noteContext, webContext);
-
-    const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
-
-    expect(result).toContain(`<${SELECTED_TEXT_TAG}>`);
-    expect(result).toContain(`</${SELECTED_TEXT_TAG}>`);
-    expect(result).toContain(`<${WEB_SELECTED_TEXT_TAG}>`);
-    expect(result).toContain(`</${WEB_SELECTED_TEXT_TAG}>`);
-
-    expect(result).toContain("<path>dev/react-patterns.md</path>");
-    expect(result).toContain("<start_line>15</start_line>");
-    expect(result).toContain("<end_line>20</end_line>");
-
-    expect(result).toContain("<url>https://react.dev/best-practices</url>");
-
-    expect(result).toContain("Local note content about React patterns");
-    expect(result).toContain("Web content about React best practices");
-  });
-
-  it("should escape XML special characters in content", () => {
-    const noteContext: NoteSelectedTextContext = {
-      id: "note-1",
-      sourceType: "note",
-      content: 'Code with <tags> & special "chars"',
-      noteTitle: "Test <Note>",
-      notePath: "test/path&file.md",
-      startLine: 1,
-      endLine: 1,
-    };
-
-    mockSelectedTextContexts.push(noteContext);
-
-    const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
-
-    expect(result).toContain("<title>Test &lt;Note&gt;</title>");
-    expect(result).toContain("<path>test/path&amp;file.md</path>");
-  });
-
-  it("should escape XML special characters in web context", () => {
-    const webContext: WebSelectedTextContext = {
-      id: "web-1",
-      sourceType: "web",
-      content: "Content with <html> tags",
-      title: "Page <Title>",
-      url: "https://example.com/page?a=1&b=2",
-    };
-
-    mockSelectedTextContexts.push(webContext);
-
-    const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
-
-    expect(result).toContain("<title>Page &lt;Title&gt;</title>");
-    expect(result).toContain("<url>https://example.com/page?a=1&amp;b=2</url>");
+      it("returns an empty string when there are no selections", () => {
+        expect(processor.processSelectedTextContexts([])).toBe("");
+        expect(processor.processSelectedTextContexts(undefined)).toBe("");
+      });
+    });
   });
 });

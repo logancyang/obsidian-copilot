@@ -70,6 +70,7 @@ import {
   isUsingLicensedModels,
   canUseMultiAgent,
   checkIsPaidUser,
+  ensureMultiAgentEntitlement,
   isPlusEnabled,
   isSelfHostModeValid,
   markPaidPendingEntitlement,
@@ -530,6 +531,47 @@ describe("plusUtils", () => {
       );
 
       expect(canUseMultiAgent()).toBe(false);
+    });
+  });
+
+  describe("ensureMultiAgentEntitlement()", () => {
+    function revalidatesAs(flags: { isPaidUser: boolean; isPlusUser: boolean }): void {
+      mockValidateLicenseKey.mockImplementation(async () => {
+        mockGetSettings.mockReturnValue(buildSettings(flags));
+        return { isValid: flags.isPaidUser };
+      });
+    }
+
+    it("allows a cached Plus user without any network call", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({ isPaidUser: true, isPlusUser: true }));
+
+      await expect(ensureMultiAgentEntitlement()).resolves.toBe(true);
+      expect(mockValidateLicenseKey).not.toHaveBeenCalled();
+    });
+
+    it("allows a stale non-Plus cache that the backend confirms as Plus, revalidating with the given app", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({ isPaidUser: false, isPlusUser: false }));
+      revalidatesAs({ isPaidUser: true, isPlusUser: true });
+      const app = {} as never;
+
+      await expect(ensureMultiAgentEntitlement(app)).resolves.toBe(true);
+      expect(mockValidateLicenseKey).toHaveBeenCalledTimes(1);
+      expect(mockValidateLicenseKey).toHaveBeenCalledWith(app, { trigger: "multi_agent_per_turn" });
+    });
+
+    it("blocks a Lite user who is paid but below Plus", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({ isPaidUser: false, isPlusUser: false }));
+      revalidatesAs({ isPaidUser: true, isPlusUser: false });
+
+      await expect(ensureMultiAgentEntitlement()).resolves.toBe(false);
+    });
+
+    it("blocks a free user whose license the backend rejects", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({ isPaidUser: false, isPlusUser: false }));
+      mockValidateLicenseKey.mockResolvedValue({ isValid: false });
+
+      await expect(ensureMultiAgentEntitlement()).resolves.toBe(false);
+      expect(mockValidateLicenseKey).toHaveBeenCalledTimes(1);
     });
   });
 

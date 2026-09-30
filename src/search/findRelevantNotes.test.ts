@@ -1,11 +1,5 @@
 import { logError } from "@/logger";
 import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
-import {
-  getMiyoFilePath,
-  getMiyoFolderName,
-  getVaultRelativeMiyoPath,
-  shouldUseMiyo,
-} from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import {
   findRelevantNotes,
@@ -42,18 +36,14 @@ jest.mock("@/miyo/MiyoClient", () => {
   };
 });
 
-jest.mock("@/miyo/miyoUtils", () => ({
-  getMiyoFolderName: jest.fn(),
-  getMiyoFilePath: jest.fn((_: unknown, path: string) => `vault/${path}`),
-  getVaultRelativeMiyoPath: jest.fn((_: unknown, path: string) => path.replace(/^vault\//, "")),
-  getMiyoCustomUrl: jest.fn().mockReturnValue(""),
-  shouldUseMiyo: jest.fn(),
-}));
-
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logError: jest.fn(),
 }));
+
+function setVaultName(name: string) {
+  (window.app.vault as unknown as { getName: () => string }).getName = () => name;
+}
 
 function createMarkdownFile(path: string): TFile {
   const TFileConstructor = TFile as unknown as new (filePath: string) => TFile;
@@ -62,17 +52,9 @@ function createMarkdownFile(path: string): TFile {
 
 describe("findRelevantNotes", () => {
   const mockedGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
-  const mockedShouldUseMiyo = shouldUseMiyo as jest.MockedFunction<typeof shouldUseMiyo>;
   const mockedGetLinkedNotes = getLinkedNotes as jest.MockedFunction<typeof getLinkedNotes>;
   const mockedGetBacklinkedNotes = getBacklinkedNotes as jest.MockedFunction<
     typeof getBacklinkedNotes
-  >;
-  const mockedGetMiyoFolderName = getMiyoFolderName as jest.MockedFunction<
-    typeof getMiyoFolderName
-  >;
-  const mockedGetMiyoFilePath = getMiyoFilePath as jest.MockedFunction<typeof getMiyoFilePath>;
-  const mockedGetVaultRelativeMiyoPath = getVaultRelativeMiyoPath as jest.MockedFunction<
-    typeof getVaultRelativeMiyoPath
   >;
   const mockedMiyoClient = MiyoClient as unknown as jest.Mock;
   const mockedLogError = logError as jest.MockedFunction<typeof logError>;
@@ -85,14 +67,9 @@ describe("findRelevantNotes", () => {
         miyoServerUrl: "",
         debug: false,
       } as CopilotSettings);
-      mockedShouldUseMiyo.mockReturnValue(true);
       mockedGetLinkedNotes.mockReturnValue([]);
       mockedGetBacklinkedNotes.mockReturnValue([]);
-      mockedGetMiyoFolderName.mockReturnValue("vault");
-      mockedGetMiyoFilePath.mockImplementation((_: unknown, path: string) => `vault/${path}`);
-      mockedGetVaultRelativeMiyoPath.mockImplementation((_: unknown, path: string) =>
-        path.replace(/^vault\//, "")
-      );
+      setVaultName("vault");
       mockResolveBaseUrl.mockResolvedValue("http://127.0.0.1:8742");
       mockSearchRelated.mockResolvedValue({ results: [] });
       mockFileStatus.mockResolvedValue({ status: "pending" });
@@ -274,7 +251,11 @@ describe("findRelevantNotes", () => {
     });
 
     it("returns no link-only rows when enabled Miyo cannot run (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockedShouldUseMiyo.mockReturnValue(false);
+      mockedGetSettings.mockReturnValue({
+        enableMiyo: true,
+        miyoConnectionMode: "remote",
+        miyoServerUrl: "",
+      } as CopilotSettings);
       mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
       const result = await findRelevantNotes({
@@ -306,14 +287,17 @@ describe("findRelevantNotes", () => {
       mockedGetSettings.mockReturnValue({ enableMiyo: false } as CopilotSettings);
       const disabledResult = await findRelevantNotes({ app: window.app, filePath: "source.md" });
 
-      mockedGetSettings.mockReturnValue({ enableMiyo: true } as CopilotSettings);
-      mockedShouldUseMiyo.mockReturnValue(false);
+      mockedGetSettings.mockReturnValue({
+        enableMiyo: true,
+        miyoConnectionMode: "remote",
+        miyoServerUrl: "",
+      } as CopilotSettings);
       const runtimeUnavailableResult = await findRelevantNotes({
         app: window.app,
         filePath: "source.md",
       });
 
-      mockedShouldUseMiyo.mockReturnValue(true);
+      mockedGetSettings.mockReturnValue({ enableMiyo: true } as CopilotSettings);
       mockSearchRelated.mockRejectedValue(new MiyoRequestError(503, "Service unavailable"));
       const failedSearchResult = await findRelevantNotes({
         app: window.app,
@@ -436,7 +420,6 @@ describe("findRelevantNotes", () => {
         expect(result.status).toBe(expectedStatus);
         expect(result.details).toEqual(expectedDetails);
         expect(mockFileStatus).toHaveBeenCalledWith("http://127.0.0.1:8742", "vault/source.md");
-        expect(mockedGetMiyoFilePath).toHaveBeenCalledWith(window.app, "source.md");
         expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
         expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
         expect(mockedLogError).not.toHaveBeenCalled();
@@ -540,7 +523,7 @@ describe("findRelevantNotes", () => {
     });
 
     it("identifies the unregistered vault without showing graph-only rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/401)", async () => {
-      mockedGetMiyoFolderName.mockReturnValue("Work Vault");
+      setVaultName("Work Vault");
       mockSearchRelated.mockRejectedValue(new MiyoRequestError(404, "No indexed chunks"));
       mockFileStatus.mockRejectedValue(new MiyoRequestError(404, "Folder not registered"));
 

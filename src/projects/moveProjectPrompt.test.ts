@@ -8,13 +8,6 @@ jest.mock("@/projects/ProjectFileManager", () => ({
   ProjectFileManager: { getInstance: () => ({ updateProject: mockUpdateProject }) },
 }));
 
-jest.mock("@/projects/projectPaths", () => ({
-  getProjectAnchorFromConfigPath: (configPath: string) => ({
-    projectFolderPath: configPath.split("/").slice(0, -1).join("/"),
-    projectsRoot: configPath.split("/").slice(0, -2).join("/"),
-  }),
-}));
-
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),

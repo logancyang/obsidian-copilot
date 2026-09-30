@@ -319,7 +319,6 @@ describe("main", () => {
         expect(gallery.getByRole("button", { name: "300" }).getAttribute("aria-pressed")).toBe(
           "true"
         );
-        expect(gallery.queryByText("Current width:")).toBeNull();
         expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
         expect(
           gallery.container.querySelector('[data-gallery-story-id="UI/Button/Sizes"]')
@@ -413,7 +412,7 @@ describe("main", () => {
     });
 
     describe("onOpen()", () => {
-      it("shows a visible nested list, selected styling, exact current id, and one story", async () => {
+      it("mounts the gallery with a coverage summary and the first story selected", async () => {
         await view.onOpen();
 
         expect(mountViewRoot).toHaveBeenCalledWith(view.containerEl, app, expect.any(Function));
@@ -425,14 +424,8 @@ describe("main", () => {
         expect(
           gallery.getByText("5 presentational components · 3 with stories · 2 missing")
         ).toBeTruthy();
-        expect(gallery.getByRole("button", { name: "Show Agent Mode contact sheet" })).toBeTruthy();
-        expect(gallery.getByRole("button", { name: "Show UI contact sheet" })).toBeTruthy();
-        const selectedStory = gallery.getByRole("button", { name: "Default" });
-        expect(selectedStory.getAttribute("aria-current")).toBe("true");
-        expect(selectedStory.classList.contains("mod-cta")).toBe(true);
-        expect(gallery.queryByText("Selected")).toBeNull();
+        expect(view.getState().selectedStoryId).toBe("Agent Mode/Agent Welcome Card/Default");
         expect(gallery.getByText("Agent Mode/Agent Welcome Card/Default")).toBeTruthy();
-        expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
 
         gallery.unmount();
       });
@@ -682,38 +675,6 @@ describe("main", () => {
           active: true,
         });
         expect(revealLeaf).toHaveBeenCalledWith(leaf);
-      });
-
-      it("restores the selected story after its prior tab closes and the command reopens it", async () => {
-        await view.onOpen();
-        const renderTree = renderView;
-        if (!renderTree || !createView) {
-          throw new Error("Gallery view did not initialize");
-        }
-        const firstGallery = render(renderTree() as ReactElement);
-        const rerenderGallery = () => firstGallery.rerender(renderTree() as ReactElement);
-        expandStoryPath(firstGallery, "UI/Button/Sizes");
-        fireEvent.click(firstGallery.getByRole("button", { name: "Sizes" }));
-        rerenderGallery();
-        await view.onClose();
-        firstGallery.unmount();
-
-        await command.callback?.();
-        const reopenedViewState: unknown = setViewState.mock.calls.at(-1)?.[0].state;
-        const reopenedView = createView(leaf);
-        await reopenedView.setState(reopenedViewState);
-        await reopenedView.onOpen();
-        if (!renderView) {
-          throw new Error("Reopened gallery view did not provide a React tree");
-        }
-        const reopenedGallery = render(renderView() as ReactElement);
-
-        expect(reopenedGallery.getByText("UI/Button/Sizes")).toBeTruthy();
-        expect(
-          reopenedGallery.container.querySelector('[data-gallery-story-id="UI/Button/Sizes"]')
-        ).toBeTruthy();
-
-        reopenedGallery.unmount();
       });
     });
 

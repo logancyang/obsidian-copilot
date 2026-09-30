@@ -27,390 +27,234 @@ const mockApp = {
 };
 const app = mockApp as unknown as App;
 
-describe("parseTextForPills", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+const text = (content: string) => ({ type: "text", content });
 
-  describe("with no options enabled", () => {
-    it("should return text as-is when no options are enabled", () => {
-      const text = "Some [[note]] text with @tool and #tag and {folder} and https://example.com";
-      const result = parseTextForPills(app, text, {
-        includeNotes: false,
-        includeURLs: false,
-        includeTools: false,
-        includeCustomTemplates: false,
-      });
-
-      expect(result).toEqual([
-        {
-          type: "text",
-          content: text,
-        },
-      ]);
-    });
-  });
-
-  describe("with notes only", () => {
+describe("lexicalTextUtils", () => {
+  describe("parseTextForPills()", () => {
     beforeEach(() => {
-      mockApp.metadataCache.getFirstLinkpathDest.mockImplementation((noteName: string) => {
-        if (noteName === "Valid Note" || noteName === "Valid Note.md") {
-          return new TFile();
-        }
-        return null;
-      });
-
+      jest.clearAllMocks();
       MockTFile.mockImplementation(function (this: Record<string, unknown>) {
         this.basename = "Valid Note";
         this.path = "Valid Note.md";
       });
-
+      mockApp.metadataCache.getFirstLinkpathDest.mockImplementation((noteName: string) =>
+        noteName === "Valid Note" || noteName === "Valid Note.md" ? new TFile() : null
+      );
       mockApp.workspace.getActiveFile.mockReturnValue(null);
+      mockApp.vault.getAllLoadedFiles.mockReturnValue([
+        mockTFolder({ path: "Projects", name: "Projects" }),
+        mockTFolder({ path: "folder with spaces", name: "folder with spaces" }),
+      ]);
     });
 
-    it("should parse valid note references", () => {
-      const text = "Check out [[Valid Note]] for more info";
-      const result = parseTextForPills(app, text, { includeNotes: true });
-
-      expect(result).toEqual([
-        {
-          type: "text",
-          content: "Check out ",
-        },
+    it("turns a note reference into a note pill between its surrounding text", () => {
+      expect(
+        parseTextForPills(app, "Check out [[Valid Note]] for more info", { includeNotes: true })
+      ).toEqual([
+        text("Check out "),
         {
           type: "note-pill",
           content: "Valid Note",
           file: expect.any(TFile) as unknown,
           isActive: false,
         },
-        {
-          type: "text",
-          content: " for more info",
-        },
+        text(" for more info"),
       ]);
     });
 
-    it("should keep invalid note references as text", () => {
-      const text = "Invalid [[Nonexistent Note]] reference";
-      const result = parseTextForPills(app, text, { includeNotes: true });
-
-      expect(result).toEqual([
-        {
-          type: "text",
-          content: "Invalid ",
-        },
-        {
-          type: "text",
-          content: "[[Nonexistent Note]]",
-        },
-        {
-          type: "text",
-          content: " reference",
-        },
-      ]);
-    });
-
-    it("should handle multiple note references", () => {
-      const text = "[[Valid Note]] and [[Nonexistent Note]]";
-      const result = parseTextForPills(app, text, { includeNotes: true });
-
-      expect(result).toHaveLength(3);
-      expect(result[0].type).toBe("note-pill");
-      expect(result[1].content).toBe(" and ");
-      expect(result[2].type).toBe("text");
-      expect(result[2].content).toBe("[[Nonexistent Note]]");
-    });
-  });
-
-  describe("with URLs only", () => {
-    it("should parse valid URLs", () => {
-      const text = "Visit https://example.com for details";
-      const result = parseTextForPills(app, text, { includeURLs: true });
-
-      expect(result).toEqual([
-        {
-          type: "text",
-          content: "Visit ",
-        },
-        {
-          type: "url-pill",
-          content: "https://example.com",
-          url: "https://example.com",
-        },
-        {
-          type: "text",
-          content: " for details",
-        },
-      ]);
-    });
-
-    it("should handle URLs with trailing commas", () => {
-      const text = "Visit https://example.com, for details";
-      const result = parseTextForPills(app, text, { includeURLs: true });
-
-      expect(result[1].content).toBe("https://example.com");
-      expect(result[1].url).toBe("https://example.com");
-    });
-
-    it("should parse multiple URLs", () => {
-      const text = "Visit https://example.com and http://test.org";
-      const result = parseTextForPills(app, text, { includeURLs: true });
-
-      expect(result).toHaveLength(4);
-      expect(result[0].content).toBe("Visit ");
-      expect(result[1].type).toBe("url-pill");
-      expect(result[2].content).toBe(" and ");
-      expect(result[3].type).toBe("url-pill");
-    });
-  });
-
-  describe("with tools only", () => {
-    it("should parse valid tool references", () => {
-      const text = "Use @vault to search files";
-      const result = parseTextForPills(app, text, { includeTools: true });
-
-      expect(result).toEqual([
-        {
-          type: "text",
-          content: "Use ",
-        },
-        {
-          type: "tool-pill",
-          content: "@vault",
-          toolName: "@vault",
-        },
-        {
-          type: "text",
-          content: " to search files",
-        },
-      ]);
-    });
-
-    it("should keep invalid tool references as text", () => {
-      const text = "Use @invalid tool";
-      const result = parseTextForPills(app, text, { includeTools: true });
-
-      expect(result).toEqual([
-        {
-          type: "text",
-          content: "Use ",
-        },
-        {
-          type: "text",
-          content: "@invalid",
-        },
-        {
-          type: "text",
-          content: " tool",
-        },
-      ]);
-    });
-  });
-
-  describe("with folders only", () => {
-    beforeEach(() => {
-      const mockFolder = mockTFolder({ path: "Projects", name: "Projects" });
-
-      mockApp.vault.getAllLoadedFiles.mockReturnValue([mockFolder]);
-    });
-
-    it("should parse valid folder references", () => {
-      const text = "Files in {Projects} folder";
-      const result = parseTextForPills(app, text, { includeCustomTemplates: true });
-
-      expect(result).toEqual([
-        {
-          type: "text",
-          content: "Files in ",
-        },
-        {
-          type: "folder-pill",
-          content: "Projects",
-          folder: expect.any(Object) as unknown,
-        },
-        {
-          type: "text",
-          content: " folder",
-        },
-      ]);
-    });
-
-    it("should keep invalid folder references as text", () => {
-      const text = "Files in {Nonexistent} folder";
-      const result = parseTextForPills(app, text, { includeCustomTemplates: true });
-
-      expect(result).toEqual([
-        {
-          type: "text",
-          content: "Files in ",
-        },
-        {
-          type: "text",
-          content: "{Nonexistent}",
-        },
-        {
-          type: "text",
-          content: " folder",
-        },
-      ]);
-    });
-  });
-
-  describe("with mixed options (dynamic indexing test)", () => {
-    beforeEach(() => {
-      mockApp.metadataCache.getFirstLinkpathDest.mockImplementation((noteName: string) => {
-        if (noteName === "Test Note") return new TFile();
-        return null;
-      });
-
-      MockTFile.mockImplementation(function (this: Record<string, unknown>) {
-        this.basename = "Test Note";
-        this.path = "Test Note.md";
-      });
-
-      mockApp.vault.getMarkdownFiles.mockReturnValue([{ path: "note1.md" }]);
-
-      mockApp.metadataCache.getFileCache.mockReturnValue({
-        frontmatter: { tags: ["test"] },
-      });
-
-      const mockFolder = mockTFolder({ path: "TestFolder", name: "TestFolder" });
-      mockApp.vault.getAllLoadedFiles.mockReturnValue([mockFolder]);
-
-      mockApp.workspace.getActiveFile.mockReturnValue(null);
-    });
-
-    it("should correctly parse when only notes and URLs are enabled", () => {
-      const text = "Check [[Test Note]] and https://example.com";
-      const result = parseTextForPills(app, text, {
-        includeNotes: true,
-        includeURLs: true,
-      });
-
-      expect(result).toHaveLength(4);
-      expect(result[0].content).toBe("Check ");
-      expect(result[1].type).toBe("note-pill");
-      expect(result[2].content).toBe(" and ");
-      expect(result[3].type).toBe("url-pill");
-    });
-
-    it("should correctly parse when only URLs and tools are enabled", () => {
-      const text = "Visit https://example.com or use @vault";
-      const result = parseTextForPills(app, text, {
-        includeURLs: true,
-        includeTools: true,
-      });
-
-      expect(result).toHaveLength(4);
-      expect(result[0].content).toBe("Visit ");
-      expect(result[1].type).toBe("url-pill");
-      expect(result[2].content).toBe(" or use ");
-      expect(result[3].type).toBe("tool-pill");
-    });
-
-    it("should correctly parse when only tools are enabled (tags appear as text)", () => {
-      const text = "Use @vault for #test content";
-      const result = parseTextForPills(app, text, {
-        includeTools: true,
-      });
-
-      expect(result).toHaveLength(3);
-      expect(result[0].content).toBe("Use ");
-      expect(result[1].type).toBe("tool-pill");
-      expect(result[2].content).toBe(" for #test content");
-    });
-
-    it("should correctly parse when all options are enabled (tags as text)", () => {
-      const text = "[[Test Note]] https://example.com @vault #test {TestFolder}";
-      const result = parseTextForPills(app, text, {
-        includeNotes: true,
-        includeURLs: true,
-        includeTools: true,
-        includeCustomTemplates: true,
-      });
-
-      expect(result).toHaveLength(7);
-      expect(result[0].type).toBe("note-pill");
-      expect(result[1].content).toBe(" ");
-      expect(result[2].type).toBe("url-pill");
-      expect(result[3].content).toBe(" ");
-      expect(result[4].type).toBe("tool-pill");
-      expect(result[5].content).toBe(" #test ");
-      expect(result[6].type).toBe("folder-pill");
-    });
-
-    it("should handle mixed valid and invalid references (tags as text)", () => {
-      const text =
-        "[[Test Note]] [[Invalid]] @vault @invalid #test #invalid {TestFolder} {Invalid}";
-      const result = parseTextForPills(app, text, {
-        includeNotes: true,
-        includeTools: true,
-        includeCustomTemplates: true,
-      });
-
-      expect(result[0].type).toBe("note-pill");
-      expect(result[2].type).toBe("text");
-      expect(result[2].content).toBe("[[Invalid]]");
-      expect(result[4].type).toBe("tool-pill");
-      const hasInvalidToolAndTags = result.some(
-        (r) => r.type === "text" && r.content?.includes("@invalid") && r.content?.includes("#test")
-      );
-      expect(hasInvalidToolAndTags || result[6]?.content === "@invalid").toBe(true);
-      expect(result.some((r) => r.type === "folder-pill")).toBe(true);
-      expect(result.some((r) => r.type === "text" && r.content?.includes("{Invalid}"))).toBe(true);
-    });
-  });
-
-  describe("edge cases", () => {
-    it("should handle empty text", () => {
-      const result = parseTextForPills(app, "");
-      expect(result).toEqual([]);
-    });
-
-    it("should handle text with no matches", () => {
-      const text = "Just plain text without any special patterns";
-      const result = parseTextForPills(app, text, {
-        includeNotes: true,
-        includeURLs: true,
-        includeTools: true,
-        includeCustomTemplates: true,
-      });
-
-      expect(result).toEqual([
-        {
-          type: "text",
-          content: text,
-        },
-      ]);
-    });
-
-    it("should handle nested brackets correctly", () => {
-      const text = "[[Note with [brackets]]]";
-      const result = parseTextForPills(app, text, { includeNotes: true });
-
-      expect(result).toHaveLength(2);
-      expect(result[0].type).toBe("text");
-      expect(result[0].content).toBe("[[Note with [brackets]]");
-      expect(result[1].type).toBe("text");
-      expect(result[1].content).toBe("]");
-    });
-
-    it("should handle special characters in patterns (tags as text)", () => {
-      const text = "@tool-name #tag_with_underscores {folder with spaces}";
-
-      const mockFolder = mockTFolder({ path: "folder with spaces", name: "folder with spaces" });
-      mockApp.vault.getAllLoadedFiles.mockReturnValue([mockFolder]);
-
-      const result = parseTextForPills(app, text, {
-        includeTools: true,
-        includeCustomTemplates: true,
-      });
-
-      expect(result.some((r) => r.type === "text" && r.content?.includes("@tool"))).toBe(true);
+    it("turns a URL into a URL pill between its surrounding text", () => {
       expect(
-        result.some((r) => r.type === "text" && r.content?.includes("#tag_with_underscores"))
-      ).toBe(true);
-      expect(result.some((r) => r.type === "folder-pill")).toBe(true);
+        parseTextForPills(app, "Visit https://example.com for details", { includeURLs: true })
+      ).toEqual([
+        text("Visit "),
+        { type: "url-pill", content: "https://example.com", url: "https://example.com" },
+        text(" for details"),
+      ]);
+    });
+
+    it("turns a known tool reference into a tool pill between its surrounding text", () => {
+      expect(parseTextForPills(app, "Use @vault to search files", { includeTools: true })).toEqual([
+        text("Use "),
+        { type: "tool-pill", content: "@vault", toolName: "@vault" },
+        text(" to search files"),
+      ]);
+    });
+
+    it("turns an existing folder reference into a folder pill between its surrounding text", () => {
+      expect(
+        parseTextForPills(app, "Files in {Projects} folder", { includeCustomTemplates: true })
+      ).toEqual([
+        text("Files in "),
+        { type: "folder-pill", content: "Projects", folder: expect.any(Object) as unknown },
+        text(" folder"),
+      ]);
+    });
+
+    it("matches a folder whose name contains spaces", () => {
+      const result = parseTextForPills(app, "See {folder with spaces} now", {
+        includeCustomTemplates: true,
+      });
+
+      expect(result.map((part) => part.type)).toEqual(["text", "folder-pill", "text"]);
+      expect(result[1].content).toBe("folder with spaces");
+    });
+
+    it("strips trailing punctuation from a URL pill", () => {
+      const result = parseTextForPills(app, "Visit https://example.com, for details", {
+        includeURLs: true,
+      });
+
+      expect(result[1]).toEqual({
+        type: "url-pill",
+        content: "https://example.com",
+        url: "https://example.com",
+      });
+    });
+
+    it("keeps unresolvable note references as text", () => {
+      expect(
+        parseTextForPills(app, "Invalid [[Nonexistent Note]] reference", { includeNotes: true })
+      ).toEqual([text("Invalid "), text("[[Nonexistent Note]]"), text(" reference")]);
+    });
+
+    it("keeps unknown tool references as text", () => {
+      expect(parseTextForPills(app, "Use @invalid tool", { includeTools: true })).toEqual([
+        text("Use "),
+        text("@invalid"),
+        text(" tool"),
+      ]);
+    });
+
+    it("keeps nonexistent folder references as text", () => {
+      expect(
+        parseTextForPills(app, "Files in {Nonexistent} folder", { includeCustomTemplates: true })
+      ).toEqual([text("Files in "), text("{Nonexistent}"), text(" folder")]);
+    });
+
+    it("parses each of several URLs into its own pill", () => {
+      const result = parseTextForPills(app, "Visit https://example.com and http://test.org", {
+        includeURLs: true,
+      });
+
+      expect(result.map((part) => [part.type, part.content])).toEqual([
+        ["text", "Visit "],
+        ["url-pill", "https://example.com"],
+        ["text", " and "],
+        ["url-pill", "http://test.org"],
+      ]);
+    });
+
+    it("pills a resolvable note and keeps an unresolvable one as text in the same message", () => {
+      const result = parseTextForPills(app, "[[Valid Note]] and [[Nonexistent Note]]", {
+        includeNotes: true,
+      });
+
+      expect(result.map((part) => [part.type, part.content])).toEqual([
+        ["note-pill", "Valid Note"],
+        ["text", " and "],
+        ["text", "[[Nonexistent Note]]"],
+      ]);
+    });
+
+    it("parses only the pill kinds that are enabled and leaves the rest as text", () => {
+      const result = parseTextForPills(app, "[[Valid Note]] https://example.com @vault", {
+        includeNotes: false,
+        includeURLs: true,
+        includeTools: true,
+      });
+
+      expect(result.map((part) => [part.type, part.content])).toEqual([
+        ["text", "[[Valid Note]] "],
+        ["url-pill", "https://example.com"],
+        ["text", " "],
+        ["tool-pill", "@vault"],
+      ]);
+    });
+
+    it("parses every pill kind in one message and leaves #tags as plain text", () => {
+      const result = parseTextForPills(
+        app,
+        "[[Valid Note]] https://example.com @vault #test {Projects}",
+        {
+          includeNotes: true,
+          includeURLs: true,
+          includeTools: true,
+          includeCustomTemplates: true,
+        }
+      );
+
+      expect(result.map((part) => [part.type, part.content])).toEqual([
+        ["note-pill", "Valid Note"],
+        ["text", " "],
+        ["url-pill", "https://example.com"],
+        ["text", " "],
+        ["tool-pill", "@vault"],
+        ["text", " #test "],
+        ["folder-pill", "Projects"],
+      ]);
+    });
+
+    it("keeps invalid references as text while still pilling the valid ones around them", () => {
+      const result = parseTextForPills(
+        app,
+        "[[Valid Note]] [[Invalid]] @vault @invalid {Projects} {Invalid}",
+        {
+          includeNotes: true,
+          includeTools: true,
+          includeCustomTemplates: true,
+        }
+      );
+
+      expect(result.map((part) => [part.type, part.content])).toEqual([
+        ["note-pill", "Valid Note"],
+        ["text", " "],
+        ["text", "[[Invalid]]"],
+        ["text", " "],
+        ["tool-pill", "@vault"],
+        ["text", " "],
+        ["text", "@invalid"],
+        ["text", " "],
+        ["folder-pill", "Projects"],
+        ["text", " "],
+        ["text", "{Invalid}"],
+      ]);
+    });
+
+    it("returns the text unchanged as one text segment when no option is enabled", () => {
+      const input = "Some [[note]] text with @tool and #tag and {folder} and https://example.com";
+
+      expect(
+        parseTextForPills(app, input, {
+          includeNotes: false,
+          includeURLs: false,
+          includeTools: false,
+          includeCustomTemplates: false,
+        })
+      ).toEqual([text(input)]);
+    });
+
+    it("returns one text segment when the text contains no references", () => {
+      const input = "Just plain text without any special patterns";
+
+      expect(
+        parseTextForPills(app, input, {
+          includeNotes: true,
+          includeURLs: true,
+          includeTools: true,
+          includeCustomTemplates: true,
+        })
+      ).toEqual([text(input)]);
+    });
+
+    it("returns no segments for empty text", () => {
+      expect(parseTextForPills(app, "")).toEqual([]);
+    });
+
+    it("splits a note reference containing brackets into two text segments", () => {
+      expect(parseTextForPills(app, "[[Note with [brackets]]]", { includeNotes: true })).toEqual([
+        text("[[Note with [brackets]]"),
+        text("]"),
+      ]);
     });
   });
 });

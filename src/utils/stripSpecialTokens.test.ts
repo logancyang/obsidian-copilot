@@ -1,123 +1,59 @@
 import { stripSpecialTokens } from "@/utils/stripSpecialTokens";
 
 describe("stripSpecialTokens", () => {
-  it("strips ChatML <|im_end|>", () => {
-    expect(stripSpecialTokens("hello<|im_end|>")).toBe("hello");
-  });
+  describe("stripSpecialTokens()", () => {
+    it.each([
+      ["ChatML", "<|im_end|>"],
+      ["ChatML", "<|im_start|>"],
+      ["Llama 3", "<|eot_id|>"],
+      ["Llama 3", "<|start_header_id|>"],
+      ["Llama 3", "<|end_header_id|>"],
+      ["Gemma", "<end_of_turn>"],
+      ["Gemma", "<start_of_turn>"],
+      ["Phi", "<|end|>"],
+      ["Phi", "<|assistant|>"],
+      ["Phi", "<|user|>"],
+      ["Phi", "<|system|>"],
+      ["Mistral", "</s>"],
+      ["Mistral", "[INST]"],
+      ["Mistral", "[/INST]"],
+      ["Qwen", "<|endoftext|>"],
+      ["DeepSeek", "<|end▁of▁sentence|>"],
+      ["Command R", "<|END_OF_TURN_TOKEN|>"],
+      ["Command R", "<|START_OF_TURN_TOKEN|>"],
+    ])("removes the %s token %s from the surrounding text", (_family, token) => {
+      expect(stripSpecialTokens(`before${token}after`)).toBe("beforeafter");
+    });
 
-  it("strips ChatML <|im_start|>", () => {
-    expect(stripSpecialTokens("<|im_start|>assistant")).toBe("assistant");
-  });
+    it("strips tokens from different families in one pass", () => {
+      expect(stripSpecialTokens("[INST]question[/INST]<|im_end|>answer<|eot_id|>")).toBe(
+        "questionanswer"
+      );
+    });
 
-  it("strips Llama 3 <|eot_id|>", () => {
-    expect(stripSpecialTokens("done<|eot_id|>")).toBe("done");
-  });
+    it("strips every occurrence of a repeated token", () => {
+      expect(stripSpecialTokens("<|im_end|>text<|im_end|>more<|im_end|>")).toBe("textmore");
+    });
 
-  it("strips Llama 3 <|start_header_id|>", () => {
-    expect(stripSpecialTokens("<|start_header_id|>user")).toBe("user");
-  });
+    it("leaves normal text unchanged", () => {
+      const text = "This is a perfectly normal response with no special tokens.";
+      expect(stripSpecialTokens(text)).toBe(text);
+    });
 
-  it("strips Llama 3 <|end_header_id|>", () => {
-    expect(stripSpecialTokens("assistant<|end_header_id|>")).toBe("assistant");
-  });
+    it("leaves an empty string unchanged", () => {
+      expect(stripSpecialTokens("")).toBe("");
+    });
 
-  it("strips Gemma <end_of_turn>", () => {
-    expect(stripSpecialTokens("response<end_of_turn>")).toBe("response");
-  });
+    it("leaves regular HTML tags unchanged", () => {
+      const html = "<div>Hello <strong>world</strong></div>";
+      expect(stripSpecialTokens(html)).toBe(html);
+    });
 
-  it("strips Gemma <start_of_turn>", () => {
-    expect(stripSpecialTokens("<start_of_turn>model")).toBe("model");
-  });
-
-  it("strips Phi <|end|>", () => {
-    expect(stripSpecialTokens("text<|end|>")).toBe("text");
-  });
-
-  it("strips Phi <|assistant|>", () => {
-    expect(stripSpecialTokens("<|assistant|>answer")).toBe("answer");
-  });
-
-  it("strips Phi <|user|>", () => {
-    expect(stripSpecialTokens("<|user|>question")).toBe("question");
-  });
-
-  it("strips Phi <|system|>", () => {
-    expect(stripSpecialTokens("<|system|>prompt")).toBe("prompt");
-  });
-
-  it("strips Mistral </s>", () => {
-    expect(stripSpecialTokens("end</s>")).toBe("end");
-  });
-
-  it("strips Mistral [INST]", () => {
-    expect(stripSpecialTokens("[INST]input")).toBe("input");
-  });
-
-  it("strips Mistral [/INST]", () => {
-    expect(stripSpecialTokens("output[/INST]")).toBe("output");
-  });
-
-  it("strips Qwen <|endoftext|>", () => {
-    expect(stripSpecialTokens("text<|endoftext|>")).toBe("text");
-  });
-
-  it("strips DeepSeek <|end▁of▁sentence|>", () => {
-    expect(stripSpecialTokens("sentence<|end\u2581of\u2581sentence|>")).toBe("sentence");
-  });
-
-  it("strips Command R <|END_OF_TURN_TOKEN|>", () => {
-    expect(stripSpecialTokens("turn<|END_OF_TURN_TOKEN|>")).toBe("turn");
-  });
-
-  it("strips Command R <|START_OF_TURN_TOKEN|>", () => {
-    expect(stripSpecialTokens("<|START_OF_TURN_TOKEN|>next")).toBe("next");
-  });
-
-  it("leaves normal text unchanged", () => {
-    const text = "This is a perfectly normal response with no special tokens.";
-    expect(stripSpecialTokens(text)).toBe(text);
-  });
-
-  it("leaves empty string unchanged", () => {
-    expect(stripSpecialTokens("")).toBe("");
-  });
-
-  it("leaves text with regular angle brackets unchanged", () => {
-    const html = "<div>Hello <strong>world</strong></div>";
-    expect(stripSpecialTokens(html)).toBe(html);
-  });
-
-  it("does NOT strip <s> (can appear in normal text)", () => {
-    expect(stripSpecialTokens("<s>beginning")).toBe("<s>beginning");
-  });
-
-  it("strips </s> Mistral EOS even when preceded by HTML-looking <s>", () => {
-    expect(stripSpecialTokens("The <s>strikethrough</s> text here.")).toBe(
-      "The <s>strikethrough text here."
-    );
-  });
-
-  it("strips token at end of real text without affecting the rest", () => {
-    expect(stripSpecialTokens("Here is the answer.<|im_end|>")).toBe("Here is the answer.");
-  });
-
-  it("strips token at start of real text without affecting the rest", () => {
-    expect(stripSpecialTokens("<|im_start|>Here is the answer.")).toBe("Here is the answer.");
-  });
-
-  it("strips multiple tokens from a single chunk", () => {
-    expect(stripSpecialTokens("<|im_start|>assistant\nHello there!<|im_end|>")).toBe(
-      "assistant\nHello there!"
-    );
-  });
-
-  it("strips tokens from different families in one pass", () => {
-    expect(stripSpecialTokens("[INST]question[/INST]<|im_end|>answer<|eot_id|>")).toBe(
-      "questionanswer"
-    );
-  });
-
-  it("handles repeated occurrences of the same token", () => {
-    expect(stripSpecialTokens("<|im_end|>text<|im_end|>more<|im_end|>")).toBe("textmore");
+    it("keeps <s> because it can appear in normal text, while still stripping a closing </s>", () => {
+      expect(stripSpecialTokens("<s>beginning")).toBe("<s>beginning");
+      expect(stripSpecialTokens("The <s>strikethrough</s> text here.")).toBe(
+        "The <s>strikethrough text here."
+      );
+    });
   });
 });

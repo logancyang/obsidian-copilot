@@ -1,5 +1,7 @@
 import { App, Vault } from "obsidian";
 import { ProjectRegister } from "@/projects/projectRegister";
+import type { ProjectFileRecord } from "@/projects/type";
+import { getCachedProjectRecords, updateCachedProjectRecords } from "@/projects/state";
 import type { CopilotSettings } from "@/settings/model";
 
 jest.mock("obsidian", () => ({
@@ -19,29 +21,18 @@ jest.mock("@/projects/ProjectFileManager", () => {
   return { ProjectFileManager: { getInstance: jest.fn(() => instance) } };
 });
 
-jest.mock("@/projects/projectUtils", () => ({
-  ensureProjectFrontmatter: jest.fn(),
-  getProjectsFolder: jest.fn(() => "copilot/projects"),
-  isProjectConfigFile: jest.fn(() => false),
-  parseProjectConfigFile: jest.fn(),
-  loadAllProjects: jest.fn(),
-}));
-
-jest.mock("@/projects/state", () => ({
-  deleteCachedProjectRecordByFilePath: jest.fn(),
-  getCachedProjectRecordByFilePath: jest.fn(),
-  getCachedProjectRecordById: jest.fn(),
-  getCachedProjectRecords: jest.fn(() => []),
-  isPendingFileWrite: jest.fn(() => false),
-  replaceCachedProjectRecordByFilePath: jest.fn(),
-  updateCachedProjectRecords: jest.fn(),
-  upsertCachedProjectRecord: jest.fn(),
-}));
-
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(() => ({ copilotFolder: "copilot" })),
   subscribeToSettingsChange: jest.fn().mockReturnValue(() => {}),
 }));
+
+function recordWithId(id: string): ProjectFileRecord {
+  return {
+    project: { id, name: id },
+    filePath: `copilot/projects/${id}/project.md`,
+    folderName: id,
+  } as ProjectFileRecord;
+}
 
 function settingsWithRoot(copilotFolder: string): CopilotSettings {
   return { copilotFolder } as CopilotSettings;
@@ -51,7 +42,6 @@ describe("projectRegister", () => {
   describe("ProjectRegister", () => {
     let settingsChangeHandler: (prev: CopilotSettings, next: CopilotSettings) => void;
     let fetchProjects: jest.Mock;
-    let updateCachedProjectRecords: jest.Mock;
     let register: ProjectRegister;
 
     beforeEach(() => {
@@ -64,9 +54,7 @@ describe("projectRegister", () => {
       fetchProjects = ProjectFileManager.getInstance().fetchProjects;
       fetchProjects.mockReset().mockResolvedValue([]);
 
-      ({ updateCachedProjectRecords } = jest.requireMock<{
-        updateCachedProjectRecords: jest.Mock;
-      }>("@/projects/state"));
+      updateCachedProjectRecords([]);
 
       const mockVault = { on: jest.fn(), off: jest.fn() } as unknown as Vault;
       register = new ProjectRegister({ vault: mockVault } as unknown as App);
@@ -101,61 +89,76 @@ describe("projectRegister", () => {
     }
 
     describe("handleSettingsChange()", () => {
-      it("reloads projects when the derived folder changes because the root changed", async () => {
-        settingsChangeHandler(settingsWithRoot("copilot"), settingsWithRoot("team/ai"));
+      it("replaces the cached projects with the new folder's projects when the root changed", async () => {
+        const fresh = [recordWithId("fresh")];
+        updateCachedProjectRecords([recordWithId("stale")]);
+        fetchProjects.mockResolvedValueOnce(fresh);
 
-        jest.advanceTimersByTime(1000);
-        await Promise.resolve();
-        await Promise.resolve();
+        settingsChangeHandler(settingsWithRoot("copilot"), settingsWithRoot("team/ai"));
+        await jest.advanceTimersByTimeAsync(1000);
 
         expect(fetchProjects).toHaveBeenCalledTimes(1);
-        expect(updateCachedProjectRecords).toHaveBeenCalledWith([]);
+        expect(getCachedProjectRecords()).toEqual(fresh);
       });
 
       it("does not reload when the root — and thus the derived folder — is unchanged", () => {
-        settingsChangeHandler(settingsWithRoot("copilot"), settingsWithRoot("copilot"));
+        const cached = [recordWithId("cached")];
+        updateCachedProjectRecords(cached);
 
+        settingsChangeHandler(settingsWithRoot("copilot"), settingsWithRoot("copilot"));
         jest.advanceTimersByTime(1000);
 
         expect(fetchProjects).not.toHaveBeenCalled();
+        expect(getCachedProjectRecords()).toEqual(cached);
+      });
+
+      it("clears the cached projects when reloading from the new folder fails", async () => {
+        updateCachedProjectRecords([recordWithId("stale")]);
+        fetchProjects.mockRejectedValueOnce(new Error("fetch failed"));
+
+        settingsChangeHandler(settingsWithRoot("copilot"), settingsWithRoot("team/ai"));
+        await jest.advanceTimersByTimeAsync(1000);
+
+        expect(getCachedProjectRecords()).toEqual([]);
       });
 
       it("discards a slow reload that resolves after a newer one committed", async () => {
-        const freshRecords = [{ project: { id: "final" } }];
+        const freshRecords = [recordWithId("final")];
         const stale = startReloadStalledInFetch("a", "b");
         await jest.advanceTimersByTimeAsync(1000);
 
         fetchProjects.mockResolvedValueOnce(freshRecords);
         settingsChangeHandler(settingsWithRoot("b"), settingsWithRoot("c"));
         await jest.advanceTimersByTimeAsync(1000);
-        expect(updateCachedProjectRecords).toHaveBeenCalledTimes(1);
-        expect(updateCachedProjectRecords).toHaveBeenCalledWith(freshRecords);
+        expect(getCachedProjectRecords()).toEqual(freshRecords);
 
-        stale.resolve([{ project: { id: "intermediate" } }]);
+        stale.resolve([recordWithId("intermediate")]);
         await jest.advanceTimersByTimeAsync(0);
 
-        expect(updateCachedProjectRecords).toHaveBeenCalledTimes(1);
+        expect(getCachedProjectRecords()).toEqual(freshRecords);
       });
 
       it("keeps the newer records when an earlier reload fails after a newer one committed", async () => {
-        const freshRecords = [{ project: { id: "final" } }];
+        const freshRecords = [recordWithId("final")];
         const stale = startReloadStalledInFetch("a", "b");
         await jest.advanceTimersByTimeAsync(1000);
 
         fetchProjects.mockResolvedValueOnce(freshRecords);
         settingsChangeHandler(settingsWithRoot("b"), settingsWithRoot("c"));
         await jest.advanceTimersByTimeAsync(1000);
-        expect(updateCachedProjectRecords).toHaveBeenCalledWith(freshRecords);
+        expect(getCachedProjectRecords()).toEqual(freshRecords);
 
         stale.reject(new Error("fetch failed"));
         await jest.advanceTimersByTimeAsync(0);
 
-        expect(updateCachedProjectRecords).not.toHaveBeenCalledWith([]);
+        expect(getCachedProjectRecords()).toEqual(freshRecords);
       });
     });
 
     describe("cleanup()", () => {
       it("stops an in-flight reload from committing after teardown", async () => {
+        const cached = [recordWithId("cached")];
+        updateCachedProjectRecords(cached);
         let releaseFetch!: (records: unknown[]) => void;
         fetchProjects.mockReturnValueOnce(
           new Promise<unknown[]>((resolve) => {
@@ -167,10 +170,10 @@ describe("projectRegister", () => {
         await jest.advanceTimersByTimeAsync(1000);
 
         register.cleanup();
-        releaseFetch([{ project: { id: "late" } }]);
+        releaseFetch([recordWithId("late")]);
         await jest.advanceTimersByTimeAsync(0);
 
-        expect(updateCachedProjectRecords).not.toHaveBeenCalled();
+        expect(getCachedProjectRecords()).toEqual(cached);
       });
     });
   });

@@ -26,142 +26,133 @@ const renderControls = (manager: AgentSessionManager, scope?: string) =>
     initialProps: { s: scope },
   });
 
-describe("useAgentHistoryControls scope", () => {
-  it("regression: the global landing caller (no scope) loads ALL history", async () => {
-    const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
-    const { result } = renderControls(manager);
+describe("useAgentHistoryControls", () => {
+  describe("useAgentHistoryControls()", () => {
+    it("loads the history of every chat when no scope is given", async () => {
+      const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
+      const { result } = renderControls(manager);
 
-    await act(async () => {
-      await result.current.loadChatHistory();
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+
+      expect(manager.getChatHistoryItems).toHaveBeenCalledWith(undefined);
+      expect(result.current.chatHistoryItems).toHaveLength(2);
     });
 
-    expect(manager.getChatHistoryItems).toHaveBeenCalledWith(undefined);
-    expect(result.current.chatHistoryItems).toHaveLength(2);
-  });
+    it("loads only the chats of the given project scope", async () => {
+      const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
+      const { result } = renderControls(manager, "project-1");
 
-  it("loads only the active scope's chats when a project scope is passed", async () => {
-    const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
-    const { result } = renderControls(manager, "project-1");
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
 
-    await act(async () => {
-      await result.current.loadChatHistory();
+      expect(manager.getChatHistoryItems).toHaveBeenCalledWith("project-1");
     });
 
-    expect(manager.getChatHistoryItems).toHaveBeenCalledWith("project-1");
-  });
+    it("hides the previous scope's chats after a scope change until the new scope's load lands", async () => {
+      const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
+      const { result, rerender } = renderControls(manager, "project-1");
 
-  it("GLOBAL_SCOPE behaves like the global all-chats view", async () => {
-    const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
-    const { result } = renderControls(manager, GLOBAL_SCOPE);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+      expect(result.current.chatHistoryItems).toHaveLength(2);
 
-    await act(async () => {
-      await result.current.loadChatHistory();
+      rerender({ s: "project-2" });
+      expect(result.current.chatHistoryItems).toHaveLength(0);
+
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+      expect(manager.getChatHistoryItems).toHaveBeenLastCalledWith("project-2");
+      expect(result.current.chatHistoryItems).toHaveLength(2);
     });
 
-    expect(manager.getChatHistoryItems).toHaveBeenCalledWith(GLOBAL_SCOPE);
-  });
+    it("ignores a load that resolves after its scope was replaced by another scope", async () => {
+      const resolvers: Record<string, (items: ChatHistoryItem[]) => void> = {};
+      const manager = {
+        getChatHistoryItems: jest.fn(
+          (s?: string) =>
+            new Promise<ChatHistoryItem[]>((resolve) => {
+              resolvers[s ?? GLOBAL_SCOPE] = resolve;
+            })
+        ),
+        updateChatTitle: jest.fn(async () => {}),
+        deleteChatHistory: jest.fn(async () => {}),
+      } as unknown as AgentSessionManager & { getChatHistoryItems: jest.Mock };
 
-  it("hides the previous scope's items on a scope change until the refetch lands", async () => {
-    const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
-    const { result, rerender } = renderControls(manager, "project-1");
+      const { result, rerender } = renderControls(manager, "project-1");
 
-    await act(async () => {
-      await result.current.loadChatHistory();
-    });
-    expect(result.current.chatHistoryItems).toHaveLength(2);
+      let loadA!: Promise<void>;
+      act(() => {
+        loadA = result.current.loadChatHistory();
+      });
 
-    rerender({ s: "project-2" });
-    expect(result.current.chatHistoryItems).toHaveLength(0);
+      rerender({ s: "project-2" });
+      let loadB!: Promise<void>;
+      act(() => {
+        loadB = result.current.loadChatHistory();
+      });
 
-    await act(async () => {
-      await result.current.loadChatHistory();
-    });
-    expect(manager.getChatHistoryItems).toHaveBeenLastCalledWith("project-2");
-    expect(result.current.chatHistoryItems).toHaveLength(2);
-  });
+      await act(async () => {
+        resolvers["project-2"]([item("b1"), item("b2")]);
+        await loadB;
+      });
+      expect(result.current.chatHistoryItems).toHaveLength(2);
 
-  it("drops a stale out-of-order load whose scope was superseded mid-flight", async () => {
-    const resolvers: Record<string, (items: ChatHistoryItem[]) => void> = {};
-    const manager = {
-      getChatHistoryItems: jest.fn(
-        (s?: string) =>
-          new Promise<ChatHistoryItem[]>((resolve) => {
-            resolvers[s ?? GLOBAL_SCOPE] = resolve;
-          })
-      ),
-      updateChatTitle: jest.fn(async () => {}),
-      deleteChatHistory: jest.fn(async () => {}),
-    } as unknown as AgentSessionManager & { getChatHistoryItems: jest.Mock };
-
-    const { result, rerender } = renderControls(manager, "project-1");
-
-    let loadA!: Promise<void>;
-    act(() => {
-      loadA = result.current.loadChatHistory();
+      await act(async () => {
+        resolvers["project-1"]([item("a1")]);
+        await loadA;
+      });
+      expect(result.current.chatHistoryItems).toHaveLength(2);
     });
 
-    rerender({ s: "project-2" });
-    let loadB!: Promise<void>;
-    act(() => {
-      loadB = result.current.loadChatHistory();
+    it("reports the history as settled only once a load for the current scope completes", async () => {
+      const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
+      const { result, rerender } = renderControls(manager, "project-1");
+
+      expect(result.current.chatHistorySettled).toBe(false);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+      expect(result.current.chatHistorySettled).toBe(true);
+
+      rerender({ s: "project-2" });
+      expect(result.current.chatHistorySettled).toBe(false);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+      expect(result.current.chatHistorySettled).toBe(true);
     });
 
-    await act(async () => {
-      resolvers["project-2"]([item("b1"), item("b2")]);
-      await loadB;
-    });
-    expect(result.current.chatHistoryItems).toHaveLength(2);
+    it("reports the history as settled with no chats when the load fails", async () => {
+      const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
+      manager.getChatHistoryItems.mockRejectedValueOnce(new Error("vault read failed"));
+      const { result } = renderControls(manager, "project-1");
 
-    await act(async () => {
-      resolvers["project-1"]([item("a1")]);
-      await loadA;
-    });
-    expect(result.current.chatHistoryItems).toHaveLength(2);
-  });
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
 
-  it("reports settled only after a load for the CURRENT scope completes", async () => {
-    const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
-    const { result, rerender } = renderControls(manager, "project-1");
-
-    expect(result.current.chatHistorySettled).toBe(false);
-    await act(async () => {
-      await result.current.loadChatHistory();
-    });
-    expect(result.current.chatHistorySettled).toBe(true);
-
-    rerender({ s: "project-2" });
-    expect(result.current.chatHistorySettled).toBe(false);
-    await act(async () => {
-      await result.current.loadChatHistory();
-    });
-    expect(result.current.chatHistorySettled).toBe(true);
-  });
-
-  it("settles even when the load fails, leaving the items empty", async () => {
-    const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
-    manager.getChatHistoryItems.mockRejectedValueOnce(new Error("vault read failed"));
-    const { result } = renderControls(manager, "project-1");
-
-    await act(async () => {
-      await result.current.loadChatHistory();
+      expect(result.current.chatHistorySettled).toBe(true);
+      expect(result.current.chatHistoryItems).toHaveLength(0);
     });
 
-    expect(result.current.chatHistorySettled).toBe(true);
-    expect(result.current.chatHistoryItems).toHaveLength(0);
-  });
+    it("deletes the chat and reloads the history of the same scope", async () => {
+      const manager = makeManager() as AgentSessionManager & {
+        getChatHistoryItems: jest.Mock;
+        deleteChatHistory: jest.Mock;
+      };
+      const { result } = renderControls(manager, "project-1");
 
-  it("refreshes within the same scope after a delete", async () => {
-    const manager = makeManager() as AgentSessionManager & {
-      getChatHistoryItems: jest.Mock;
-      deleteChatHistory: jest.Mock;
-    };
-    const { result } = renderControls(manager, "project-1");
+      await act(async () => {
+        await result.current.deleteChat("a");
+      });
 
-    await act(async () => {
-      await result.current.deleteChat("a");
+      expect(manager.deleteChatHistory).toHaveBeenCalledWith("a");
+      expect(manager.getChatHistoryItems).toHaveBeenCalledWith("project-1");
     });
-
-    expect(manager.deleteChatHistory).toHaveBeenCalledWith("a");
-    expect(manager.getChatHistoryItems).toHaveBeenCalledWith("project-1");
   });
 });

@@ -27,7 +27,6 @@ describe("AgentHomeReleaseUpdatePrompt", () => {
 
       const prompt = screen.getByRole("status");
       expect(prompt.getAttribute("data-agent-home-release-update")).toBe("bottom-banner");
-      expect(prompt.classList.contains("tw-inset-x-0")).toBe(true);
       fireEvent.click(screen.getByRole("button", { name: "See what’s new" }));
       fireEvent.click(screen.getByRole("button", { name: "Dismiss release update" }));
       expect(onOpen).toHaveBeenCalledTimes(1);

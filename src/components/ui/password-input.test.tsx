@@ -2,19 +2,6 @@ import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { PasswordInput } from "@/components/ui/password-input";
 
-jest.mock("@/components/ui/input", () => ({
-  Input: React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-    function Input(props, ref) {
-      return <input ref={ref} {...props} />;
-    }
-  ),
-}));
-
-jest.mock("lucide-react", () => ({
-  Eye: () => <span data-testid="eye" />,
-  EyeOff: () => <span data-testid="eye-off" />,
-}));
-
 describe("password-input", () => {
   describe("PasswordInput()", () => {
     it("renders and adopts externally updated values verbatim", () => {

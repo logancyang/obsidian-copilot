@@ -49,44 +49,44 @@ describe("projectUtils", () => {
     },
   ];
 
-  describe("filterProjects", () => {
-    test("should return all projects for empty query", () => {
+  describe("filterProjects()", () => {
+    it("returns every project for an empty query", () => {
       const result = filterProjects(mockProjects, "");
       expect(result).toEqual(mockProjects);
       expect(result.length).toBe(3);
     });
 
-    test("should return all projects for whitespace query", () => {
+    it("returns every project for a whitespace-only query", () => {
       const result = filterProjects(mockProjects, "   ");
       expect(result).toEqual(mockProjects);
       expect(result.length).toBe(3);
     });
 
-    test("should return matching projects when searching by project name", () => {
+    it("returns the projects whose name contains the query", () => {
       const result = filterProjects(mockProjects, "React");
       expect(result.length).toBe(1);
       expect(result[0].name).toBe("React Project");
     });
 
-    test("should return matching projects when searching by project description", () => {
+    it("returns the projects whose description contains the query", () => {
       const result = filterProjects(mockProjects, "Vue.js");
       expect(result.length).toBe(1);
       expect(result[0].name).toBe("Vue Dashboard");
     });
 
-    test("should return empty array for non-matching query", () => {
+    it("returns an empty array when no project matches", () => {
       const result = filterProjects(mockProjects, "NonExistentProject");
       expect(result).toEqual([]);
       expect(result.length).toBe(0);
     });
 
-    test("should perform case-insensitive search by default", () => {
+    it("matches regardless of letter case by default", () => {
       const result = filterProjects(mockProjects, "react");
       expect(result.length).toBe(1);
       expect(result[0].name).toBe("React Project");
     });
 
-    test("should perform case-sensitive search when configured", () => {
+    it("matches only the exact letter case when caseSensitive is set", () => {
       const options: ProjectSearchOptions = { caseSensitive: true };
 
       const result1 = filterProjects(mockProjects, "React", options);
@@ -97,7 +97,7 @@ describe("projectUtils", () => {
       expect(result2.length).toBe(0);
     });
 
-    test("should search only in project names when configured", () => {
+    it("ignores descriptions when searchInDescription is false", () => {
       const options: ProjectSearchOptions = {
         searchInName: true,
         searchInDescription: false,
@@ -111,7 +111,7 @@ describe("projectUtils", () => {
       expect(result2.length).toBe(0);
     });
 
-    test("should search only in project descriptions when configured", () => {
+    it("ignores names when searchInName is false", () => {
       const options: ProjectSearchOptions = {
         searchInName: false,
         searchInDescription: true,
@@ -125,25 +125,25 @@ describe("projectUtils", () => {
       expect(result2.length).toBe(0);
     });
 
-    test("should handle partial matches", () => {
+    it("matches a substring of a project name", () => {
       const result = filterProjects(mockProjects, "project");
       expect(result.length).toBe(1);
       expect(result[0].name).toBe("React Project");
     });
 
-    test("should handle projects without description", () => {
+    it("still matches by name for a project without a description", () => {
       const result = filterProjects(mockProjects, "API");
       expect(result.length).toBe(1);
       expect(result[0].name).toBe("API Service");
     });
 
-    test("should handle empty project array", () => {
+    it("returns an empty array for an empty project list", () => {
       const result = filterProjects([], "any query");
       expect(result).toEqual([]);
       expect(result.length).toBe(0);
     });
 
-    test("should handle null or undefined project array", () => {
+    it("returns an empty array when the project list is null or undefined", () => {
       const result1 = filterProjects(null, "query");
       expect(result1).toEqual([]);
 
@@ -151,13 +151,7 @@ describe("projectUtils", () => {
       expect(result2).toEqual([]);
     });
 
-    test("should handle multiple projects matching same query", () => {
-      const result = filterProjects(mockProjects, "project");
-      expect(result.length).toBe(1);
-      expect(result[0].name).toBe("React Project");
-    });
-
-    test("should handle special characters and spaces", () => {
+    it("matches queries containing punctuation literally", () => {
       const specialProject: ProjectConfig = {
         id: "special",
         name: "Test-Project_123",
@@ -179,18 +173,6 @@ describe("projectUtils", () => {
       const result2 = filterProjects(testProjects, "(special)");
       expect(result2.length).toBe(1);
       expect(result2[0].name).toBe("Test-Project_123");
-    });
-
-    test("should test complete combination of configuration options", () => {
-      const options: ProjectSearchOptions = {
-        caseSensitive: false,
-        searchInName: true,
-        searchInDescription: true,
-      };
-
-      const result = filterProjects(mockProjects, "vue", options);
-      expect(result.length).toBe(1);
-      expect(result[0].name).toBe("Vue Dashboard");
     });
   });
 });

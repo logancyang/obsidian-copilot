@@ -55,7 +55,7 @@ describe("useQuickAskSession", () => {
       expect(result.current.messages).toEqual([]);
       expect(mockReset).toHaveBeenCalled();
     });
-    it("requests strict model resolution and exposes unavailable selections to the panel (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)", () => {
+    it("exposes unavailable selections to the panel (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)", () => {
       jest.mocked(useResolvedChatBackendModel).mockReturnValue(null);
       const { result } = renderHook(() =>
         useQuickAskSession({
@@ -64,7 +64,7 @@ describe("useQuickAskSession", () => {
           includeNoteContext: false,
         })
       );
-      expect(useResolvedChatBackendModel).toHaveBeenCalledWith(mockApp, "removed", false);
+      expect(useResolvedChatBackendModel).toHaveBeenCalledWith(mockApp, "removed");
       expect(result.current.hasModel).toBe(false);
       expect(result.current.messages).toEqual([]);
     });

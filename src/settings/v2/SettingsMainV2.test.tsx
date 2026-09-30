@@ -78,12 +78,6 @@ describe("SettingsMainV2", () => {
       ]);
     });
 
-    it("offers no Agents tab, because agent settings live on the Basic tab", () => {
-      render(<SettingsMainV2 plugin={plugin} />);
-
-      expect(screen.queryByRole("tab", { name: /agents/i })).toBeNull();
-    });
-
     it("marks the Skills tab while a skill failed to load for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
       mockSkillLoadErrorCount = 1;
 

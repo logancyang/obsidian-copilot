@@ -1,380 +1,203 @@
 import { ThinkBlockStreamer } from "./ThinkBlockStreamer";
 
+jest.mock("@/logger");
+
+function createStreamer(excludeThinking = false): {
+  streamer: ThinkBlockStreamer;
+  message: () => string;
+} {
+  let currentMessage = "";
+  const streamer = new ThinkBlockStreamer((msg) => {
+    currentMessage = msg;
+  }, excludeThinking);
+  return { streamer, message: () => currentMessage };
+}
+
+const reasoningDelta = (reasoning: string) => ({
+  content: "",
+  additional_kwargs: { delta: { reasoning } },
+});
+
+const answer = (content: string) => ({ content, additional_kwargs: {} });
+
 describe("ThinkBlockStreamer", () => {
-  describe("OpenRouter delta.reasoning format", () => {
-    it("should NOT treat empty reasoning_details array as thinking content", () => {
-      let currentMessage = "";
-      const streamer = new ThinkBlockStreamer((msg) => {
-        currentMessage = msg;
+  describe("ThinkBlockStreamer", () => {
+    describe("processChunk()", () => {
+      it("wraps streamed OpenRouter delta.reasoning in one think block that closes when the answer starts", () => {
+        const { streamer, message } = createStreamer();
+
+        streamer.processChunk(reasoningDelta("Thinking step 1: "));
+        expect(message()).toBe("\n<think>Thinking step 1: ");
+
+        streamer.processChunk(reasoningDelta("Thinking step 2."));
+        expect(message()).toBe("\n<think>Thinking step 1: Thinking step 2.");
+
+        streamer.processChunk(answer("Here's the result."));
+        expect(message()).toBe(
+          "\n<think>Thinking step 1: Thinking step 2.</think>Here's the result."
+        );
       });
 
-      streamer.processChunk({
-        content: "Regular content",
-        additional_kwargs: {
-          reasoning_details: [],
-        },
+      it("does not treat an empty reasoning_details array as thinking content", () => {
+        const { streamer, message } = createStreamer();
+
+        streamer.processChunk({
+          content: "Regular content",
+          additional_kwargs: { reasoning_details: [] },
+        });
+
+        expect(message()).toBe("Regular content");
       });
 
-      expect(currentMessage).toBe("Regular content");
-      expect(currentMessage).not.toContain("<think>");
-    });
+      it("does not repeat reasoning that arrives in reasoning_details after the same text streamed as delta.reasoning", () => {
+        const { streamer, message } = createStreamer();
 
-    it("should handle delta.reasoning for streaming", () => {
-      let currentMessage = "";
-      const streamer = new ThinkBlockStreamer((msg) => {
-        currentMessage = msg;
-      });
-
-      streamer.processChunk({
-        content: "",
-        additional_kwargs: {
-          delta: {
-            reasoning: "Thinking step 1: ",
+        streamer.processChunk(reasoningDelta("Analyzing the "));
+        streamer.processChunk(reasoningDelta("question carefully."));
+        streamer.processChunk({
+          content: "",
+          additional_kwargs: {
+            reasoning_details: [{ text: "Analyzing the question carefully." }],
           },
-        },
+        });
+        expect(message()).toBe("\n<think>Analyzing the question carefully.");
+
+        streamer.processChunk(answer("Here's my answer."));
+        expect(message()).toBe(
+          "\n<think>Analyzing the question carefully.</think>Here's my answer."
+        );
       });
 
-      expect(currentMessage).toBe("\n<think>Thinking step 1: ");
+      it("wraps Claude thinking blocks in a think block that closes when a text block arrives", () => {
+        const { streamer, message } = createStreamer();
 
-      streamer.processChunk({
-        content: "",
-        additional_kwargs: {
-          delta: {
-            reasoning: "Thinking step 2.",
-          },
-        },
+        streamer.processChunk({
+          content: [{ type: "thinking", thinking: "Let me analyze this..." }],
+        });
+        expect(message()).toBe("\n<think>Let me analyze this...");
+
+        streamer.processChunk({ content: [{ type: "text", text: "Based on my analysis, " }] });
+        expect(message()).toBe("\n<think>Let me analyze this...</think>Based on my analysis, ");
       });
 
-      expect(currentMessage).toBe("\n<think>Thinking step 1: Thinking step 2.");
+      it("opens an empty think block without writing undefined when a Claude thinking block has no thinking text", () => {
+        const { streamer, message } = createStreamer();
 
-      streamer.processChunk({
-        content: "Here's the result.",
-        additional_kwargs: {},
+        streamer.processChunk({ content: [{ type: "thinking" }] });
+
+        expect(message()).toBe("\n<think>");
       });
 
-      expect(currentMessage).toBe(
-        "\n<think>Thinking step 1: Thinking step 2.</think>Here's the result."
-      );
-    });
+      it("keeps streamed Deepseek reasoning_content in one think block until the answer starts", () => {
+        const { streamer, message } = createStreamer();
 
-    it("should NOT duplicate when both delta.reasoning and reasoning_details are present", () => {
-      let currentMessage = "";
-      const streamer = new ThinkBlockStreamer((msg) => {
-        currentMessage = msg;
+        streamer.processChunk({
+          content: "",
+          additional_kwargs: { reasoning_content: "Thinking step 1..." },
+        });
+        expect(message()).toBe("\n<think>Thinking step 1...");
+
+        streamer.processChunk({
+          content: "",
+          additional_kwargs: { reasoning_content: " Step 2..." },
+        });
+        expect(message()).toBe("\n<think>Thinking step 1... Step 2...");
+
+        streamer.processChunk(answer("Final answer."));
+        expect(message()).toBe("\n<think>Thinking step 1... Step 2...</think>Final answer.");
       });
 
-      streamer.processChunk({
-        content: "",
-        additional_kwargs: {
-          delta: {
-            reasoning: "Analyzing the ",
-          },
-        },
+      it("writes nothing when Deepseek reasoning_content is undefined", () => {
+        const { streamer, message } = createStreamer();
+
+        streamer.processChunk({
+          content: "",
+          additional_kwargs: { reasoning_content: undefined },
+        });
+
+        expect(message()).toBe("");
       });
 
-      expect(currentMessage).toBe("\n<think>Analyzing the ");
+      it("opens a separate think block for each reasoning burst between answer text", () => {
+        const { streamer, message } = createStreamer();
 
-      streamer.processChunk({
-        content: "",
-        additional_kwargs: {
-          delta: {
-            reasoning: "question carefully.",
-          },
-        },
-      });
-
-      expect(currentMessage).toBe("\n<think>Analyzing the question carefully.");
-
-      streamer.processChunk({
-        content: "",
-        additional_kwargs: {
-          reasoning_details: [
-            {
-              text: "Analyzing the question carefully.",
-            },
-          ],
-        },
-      });
-
-      expect(currentMessage).toBe("\n<think>Analyzing the question carefully.");
-      expect(currentMessage).not.toContain(
-        "Analyzing the question carefully.Analyzing the question carefully."
-      );
-
-      streamer.processChunk({
-        content: "Here's my answer.",
-        additional_kwargs: {},
-      });
-
-      expect(currentMessage).toBe(
-        "\n<think>Analyzing the question carefully.</think>Here's my answer."
-      );
-    });
-  });
-
-  describe("Claude array-based format", () => {
-    it("should handle Claude's content array with thinking type", () => {
-      let currentMessage = "";
-      const streamer = new ThinkBlockStreamer((msg) => {
-        currentMessage = msg;
-      });
-
-      streamer.processChunk({
-        content: [
-          {
-            type: "thinking",
-            thinking: "Let me analyze this...",
-          },
-        ],
-      });
-
-      expect(currentMessage).toBe("\n<think>Let me analyze this...");
-
-      streamer.processChunk({
-        content: [
-          {
-            type: "text",
-            text: "Based on my analysis, ",
-          },
-        ],
-      });
-
-      expect(currentMessage).toBe("\n<think>Let me analyze this...</think>Based on my analysis, ");
-    });
-
-    it("should guard against undefined thinking content in Claude format", () => {
-      let currentMessage = "";
-      const streamer = new ThinkBlockStreamer((msg) => {
-        currentMessage = msg;
-      });
-
-      streamer.processChunk({
-        content: [
-          {
-            type: "thinking",
-          },
-        ],
-      });
-
-      expect(currentMessage).toBe("\n<think>");
-      expect(currentMessage).not.toContain("undefined");
-    });
-  });
-
-  describe("Deepseek format", () => {
-    it("should handle Deepseek reasoning_content", () => {
-      let currentMessage = "";
-      const streamer = new ThinkBlockStreamer((msg) => {
-        currentMessage = msg;
-      });
-
-      streamer.processChunk({
-        content: "",
-        additional_kwargs: {
-          reasoning_content: "Deepseek is thinking...",
-        },
-      });
-
-      expect(currentMessage).toBe("\n<think>Deepseek is thinking...");
-
-      streamer.processChunk({
-        content: "The answer is here.",
-        additional_kwargs: {},
-      });
-
-      expect(currentMessage).toBe("\n<think>Deepseek is thinking...</think>The answer is here.");
-    });
-
-    it("should guard against undefined reasoning_content in Deepseek format", () => {
-      let currentMessage = "";
-      const streamer = new ThinkBlockStreamer((msg) => {
-        currentMessage = msg;
-      });
-
-      streamer.processChunk({
-        content: "",
-        additional_kwargs: {
-          reasoning_content: undefined,
-        },
-      });
-
-      expect(currentMessage).toBe("");
-      expect(currentMessage).not.toContain("undefined");
-      expect(currentMessage).not.toContain("<think>");
-    });
-
-    it("should handle streaming Deepseek reasoning_content without premature closure", () => {
-      let currentMessage = "";
-      const streamer = new ThinkBlockStreamer((msg) => {
-        currentMessage = msg;
-      });
-
-      streamer.processChunk({
-        content: "",
-        additional_kwargs: {
-          reasoning_content: "Thinking step 1...",
-        },
-      });
-
-      expect(currentMessage).toBe("\n<think>Thinking step 1...");
-
-      streamer.processChunk({
-        content: "",
-        additional_kwargs: {
-          reasoning_content: " Step 2...",
-        },
-      });
-
-      expect(currentMessage).toBe("\n<think>Thinking step 1... Step 2...");
-      expect(currentMessage).not.toContain("</think>\n<think>");
-
-      streamer.processChunk({
-        content: "Final answer.",
-        additional_kwargs: {},
-      });
-
-      expect(currentMessage).toBe("\n<think>Thinking step 1... Step 2...</think>Final answer.");
-    });
-  });
-
-  describe("excludeThinking option", () => {
-    it("should skip OpenRouter thinking content when excludeThinking is true", () => {
-      let currentMessage = "";
-      const streamer = new ThinkBlockStreamer((msg) => {
-        currentMessage = msg;
-      }, true);
-
-      streamer.processChunk({
-        content: "",
-        additional_kwargs: {
-          delta: {
-            reasoning: "This should be skipped",
-          },
-        },
-      });
-
-      expect(currentMessage).toBe("");
-
-      streamer.processChunk({
-        content: "This should be included",
-        additional_kwargs: {},
-      });
-
-      expect(currentMessage).toBe("This should be included");
-    });
-
-    it("should skip Claude thinking content when excludeThinking is true", () => {
-      let currentMessage = "";
-      const streamer = new ThinkBlockStreamer((msg) => {
-        currentMessage = msg;
-      }, true);
-
-      streamer.processChunk({
-        content: [
-          {
-            type: "thinking",
-            thinking: "Claude thinking",
-          },
-        ],
-      });
-
-      expect(currentMessage).toBe("");
-      expect(currentMessage).not.toContain("<think>");
-    });
-  });
-
-  describe("close() method", () => {
-    it("should close any open think block at the end", () => {
-      let currentMessage = "";
-      const streamer = new ThinkBlockStreamer((msg) => {
-        currentMessage = msg;
-      });
-
-      streamer.processChunk({
-        content: "",
-        additional_kwargs: {
-          delta: {
-            reasoning: "Thinking...",
-          },
-        },
-      });
-
-      expect(currentMessage).toBe("\n<think>Thinking...");
-
-      const result = streamer.close();
-      expect(result.content).toBe("\n<think>Thinking...</think>");
-    });
-
-    it("should not add extra closing tag if already closed", () => {
-      let currentMessage = "";
-      const streamer = new ThinkBlockStreamer((msg) => {
-        currentMessage = msg;
-      });
-
-      streamer.processChunk({
-        content: "",
-        additional_kwargs: {
-          delta: {
-            reasoning: "Thinking...",
-          },
-        },
-      });
-
-      streamer.processChunk({
-        content: "Done",
-        additional_kwargs: {},
-      });
-
-      expect(currentMessage).toBe("\n<think>Thinking...</think>Done");
-
-      const result = streamer.close();
-      expect(result.content).toBe("\n<think>Thinking...</think>Done");
-      expect(result.content.match(/<\/think>/g)?.length).toBe(1);
-    });
-  });
-
-  describe("mixed content scenarios", () => {
-    it("should handle rapid alternation between thinking and regular content", () => {
-      let currentMessage = "";
-      const streamer = new ThinkBlockStreamer((msg) => {
-        currentMessage = msg;
-      });
-
-      const chunks = [
-        { thinking: "Think 1", content: "" },
-        { thinking: "", content: "Text 1" },
-        { thinking: "Think 2", content: "" },
-        { thinking: "", content: "Text 2" },
-        { thinking: "Think 3", content: "" },
-        { thinking: "", content: "Text 3" },
-      ];
-
-      chunks.forEach((chunk) => {
-        if (chunk.thinking) {
-          streamer.processChunk({
-            content: "",
-            additional_kwargs: {
-              delta: {
-                reasoning: chunk.thinking,
-              },
-            },
-          });
-        } else {
-          streamer.processChunk({
-            content: chunk.content,
-            additional_kwargs: {},
-          });
+        for (const n of [1, 2, 3]) {
+          streamer.processChunk(reasoningDelta(`Think ${n}`));
+          streamer.processChunk(answer(`Text ${n}`));
         }
+
+        expect(message()).toBe(
+          "\n<think>Think 1</think>Text 1\n<think>Think 2</think>Text 2\n<think>Think 3</think>Text 3"
+        );
       });
 
-      const thinkMatches = currentMessage.match(/<think>/g);
-      const thinkCloseMatches = currentMessage.match(/<\/think>/g);
-      expect(thinkMatches?.length).toBe(3);
-      expect(thinkCloseMatches?.length).toBe(3);
+      it("drops OpenRouter reasoning when excludeThinking is on and keeps the answer", () => {
+        const { streamer, message } = createStreamer(true);
 
-      expect(currentMessage).toContain("</think>Text 1");
-      expect(currentMessage).toContain("</think>Text 2");
-      expect(currentMessage).toContain("</think>Text 3");
+        streamer.processChunk(reasoningDelta("This should be skipped"));
+        expect(message()).toBe("");
+
+        streamer.processChunk(answer("This should be included"));
+        expect(message()).toBe("This should be included");
+      });
+
+      it("drops Claude thinking blocks when excludeThinking is on", () => {
+        const { streamer, message } = createStreamer(true);
+
+        streamer.processChunk({ content: [{ type: "thinking", thinking: "Claude thinking" }] });
+
+        expect(message()).toBe("");
+      });
+    });
+
+    describe("getToolCalls()", () => {
+      it("builds tool calls from tool_call_chunks streamed across chunks", () => {
+        const { streamer } = createStreamer();
+
+        streamer.processChunk({
+          content: "",
+          tool_call_chunks: [{ index: 0, id: "call_1", name: "localSearch", args: '{"query":' }],
+        });
+        streamer.processChunk({
+          content: "",
+          tool_call_chunks: [{ index: 0, args: '"notes"}' }],
+        });
+
+        expect(streamer.getToolCalls()).toEqual([
+          { id: "call_1", name: "localSearch", args: { query: "notes" } },
+        ]);
+      });
+    });
+
+    describe("close()", () => {
+      it("closes a think block that is still open at the end of the stream", () => {
+        const { streamer, message } = createStreamer();
+        streamer.processChunk(reasoningDelta("Thinking..."));
+        expect(message()).toBe("\n<think>Thinking...");
+
+        expect(streamer.close().content).toBe("\n<think>Thinking...</think>");
+      });
+
+      it("adds no second closing tag when the think block already closed", () => {
+        const { streamer } = createStreamer();
+        streamer.processChunk(reasoningDelta("Thinking..."));
+        streamer.processChunk(answer("Done"));
+
+        const { content } = streamer.close();
+
+        expect(content).toBe("\n<think>Thinking...</think>Done");
+      });
+
+      it("appends the formatted error after the streamed content when an error chunk was recorded", () => {
+        const { streamer } = createStreamer();
+        streamer.processChunk(answer("Partial answer"));
+        streamer.processErrorChunk("rate limited");
+
+        const { content } = streamer.close();
+
+        expect(content.startsWith("Partial answer\n")).toBe(true);
+        expect(content).toContain("rate limited");
+      });
     });
   });
 });

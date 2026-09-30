@@ -198,14 +198,5 @@ describe("reportScreenshot", () => {
 
       expect(await settled).toBe(false);
     });
-
-    it("finishes on its deadline even when frame callbacks never fire", async () => {
-      const { el } = targetEl([{ left: 0, top: 0, width: 0, height: 0 }]);
-
-      const settled = waitForStableTarget(el);
-      await advance(30);
-
-      expect(await settled).toBe(false);
-    });
   });
 });

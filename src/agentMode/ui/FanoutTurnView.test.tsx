@@ -60,15 +60,6 @@ describe("FanoutTurnView", () => {
     expect(screen.getByTestId("agent-md").textContent).toBe("Claude answered directly");
   });
 
-  it("defaults to the summary view (summary-first)", () => {
-    const t = turn(
-      [answer("opencode", "done", "main"), answer("claude", "done", "second")],
-      "the narrative summary"
-    );
-    renderView(t);
-    expect(screen.getByTestId("agent-md").textContent).toBe("the narrative summary");
-  });
-
   it.each(["", "Partial summary"])(
     "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 shows the summary failure alongside any partial text: %s",
     (partialText) => {

@@ -65,115 +65,107 @@ describe("discoverProjectSkills", () => {
     opencode: ".opencode/skills",
   } as const;
 
-  it("returns an empty list when no agent dirs exist", async () => {
-    const fs = mkFs({});
-    const out = await discoverProjectSkills({
-      vaultRootAbsPath: VAULT,
-      agentDirsProjectRel: AGENT_DIRS,
-      fs,
+  describe("discoverProjectSkills()", () => {
+    it("returns a single candidate when one valid skill lives under one agent dir", async () => {
+      const fs = mkFs({
+        "/vault/.claude/skills/foo/SKILL.md": { kind: "file", content: skillMd("foo") },
+      });
+      const { accepted: out } = await discoverProjectSkills({
+        vaultRootAbsPath: VAULT,
+        agentDirsProjectRel: AGENT_DIRS,
+        fs,
+      });
+      expect(out).toHaveLength(1);
+      expect(out[0]).toMatchObject({
+        agent: "claude",
+        name: "foo",
+        filePath: "/vault/.claude/skills/foo/SKILL.md",
+        dirPath: "/vault/.claude/skills/foo",
+      });
+      expect(typeof out[0].contentHash).toBe("string");
+      expect(out[0].contentHash.length).toBeGreaterThan(0);
     });
-    expect(out).toEqual({ accepted: [], rejected: [] });
-  });
 
-  it("returns an empty list when an agent dir exists but is empty", async () => {
-    const fs = mkFs({ "/vault/.claude/skills": { kind: "dir" } });
-    const out = await discoverProjectSkills({
-      vaultRootAbsPath: VAULT,
-      agentDirsProjectRel: AGENT_DIRS,
-      fs,
+    it("returns one candidate per agent when the same skill lives in multiple dirs", async () => {
+      const fs = mkFs({
+        "/vault/.claude/skills/foo/SKILL.md": { kind: "file", content: skillMd("foo") },
+        "/vault/.agents/skills/foo/SKILL.md": { kind: "file", content: skillMd("foo") },
+      });
+      const { accepted: out } = await discoverProjectSkills({
+        vaultRootAbsPath: VAULT,
+        agentDirsProjectRel: AGENT_DIRS,
+        fs,
+      });
+      expect(out.map((c) => c.agent).sort()).toEqual(["claude", "codex"]);
+      expect(out[0].contentHash).toBe(out[1].contentHash);
     });
-    expect(out).toEqual({ accepted: [], rejected: [] });
-  });
 
-  it("returns a single candidate when one valid skill lives under one agent dir", async () => {
-    const fs = mkFs({
-      "/vault/.claude/skills/foo/SKILL.md": { kind: "file", content: skillMd("foo") },
+    it("returns hidden format failures for external-editor recovery in https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+      const fs = mkFs({
+        "/vault/.claude/skills/bad/SKILL.md": {
+          kind: "file",
+          content: "this is not valid frontmatter",
+        },
+        "/vault/.claude/skills/good/SKILL.md": {
+          kind: "file",
+          content: skillMd("good"),
+        },
+      });
+      const out = await discoverProjectSkills({
+        vaultRootAbsPath: VAULT,
+        agentDirsProjectRel: AGENT_DIRS,
+        fs,
+      });
+      expect(out.accepted.map((c) => c.name)).toEqual(["good"]);
+      expect(out.rejected).toEqual([
+        {
+          name: "bad",
+          dirPath: "/vault/.claude/skills/bad",
+          filePath: "/vault/.claude/skills/bad/SKILL.md",
+          reason: expect.stringMatching(/frontmatter/),
+        },
+      ]);
     });
-    const { accepted: out } = await discoverProjectSkills({
-      vaultRootAbsPath: VAULT,
-      agentDirsProjectRel: AGENT_DIRS,
-      fs,
-    });
-    expect(out).toHaveLength(1);
-    expect(out[0]).toMatchObject({
-      agent: "claude",
-      name: "foo",
-      filePath: "/vault/.claude/skills/foo/SKILL.md",
-      dirPath: "/vault/.claude/skills/foo",
-    });
-    expect(typeof out[0].contentHash).toBe("string");
-    expect(out[0].contentHash.length).toBeGreaterThan(0);
-  });
 
-  it("returns hidden format failures for external-editor recovery in https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
-    const fs = mkFs({
-      "/vault/.claude/skills/bad/SKILL.md": {
-        kind: "file",
-        content: "this is not valid frontmatter",
-      },
-      "/vault/.claude/skills/good/SKILL.md": {
-        kind: "file",
-        content: skillMd("good"),
-      },
+    it("returns an empty list when no agent dirs exist", async () => {
+      const fs = mkFs({});
+      const out = await discoverProjectSkills({
+        vaultRootAbsPath: VAULT,
+        agentDirsProjectRel: AGENT_DIRS,
+        fs,
+      });
+      expect(out).toEqual({ accepted: [], rejected: [] });
     });
-    const out = await discoverProjectSkills({
-      vaultRootAbsPath: VAULT,
-      agentDirsProjectRel: AGENT_DIRS,
-      fs,
-    });
-    expect(out.accepted.map((c) => c.name)).toEqual(["good"]);
-    expect(out.rejected).toEqual([
-      {
-        name: "bad",
-        dirPath: "/vault/.claude/skills/bad",
-        filePath: "/vault/.claude/skills/bad/SKILL.md",
-        reason: expect.stringMatching(/frontmatter/),
-      },
-    ]);
-  });
 
-  it("skips a symlinked top-level entry (reconciliation handles those)", async () => {
-    const fs = mkFs({
-      "/vault/.claude/skills/linked": {
-        kind: "symlink",
-        target: "/vault/copilot/skills/foo",
-      },
-      "/vault/.claude/skills/real/SKILL.md": {
-        kind: "file",
-        content: skillMd("real"),
-      },
+    it("skips a directory without a SKILL.md", async () => {
+      const fs = mkFs({
+        "/vault/.claude/skills/staging/notes.md": { kind: "file", content: "scratch" },
+      });
+      const out = await discoverProjectSkills({
+        vaultRootAbsPath: VAULT,
+        agentDirsProjectRel: AGENT_DIRS,
+        fs,
+      });
+      expect(out).toEqual({ accepted: [], rejected: [] });
     });
-    const { accepted: out } = await discoverProjectSkills({
-      vaultRootAbsPath: VAULT,
-      agentDirsProjectRel: AGENT_DIRS,
-      fs,
-    });
-    expect(out.map((c) => c.name)).toEqual(["real"]);
-  });
 
-  it("returns one candidate per agent when the same skill lives in multiple dirs", async () => {
-    const fs = mkFs({
-      "/vault/.claude/skills/foo/SKILL.md": { kind: "file", content: skillMd("foo") },
-      "/vault/.agents/skills/foo/SKILL.md": { kind: "file", content: skillMd("foo") },
+    it("skips a symlinked top-level entry (reconciliation handles those)", async () => {
+      const fs = mkFs({
+        "/vault/.claude/skills/linked": {
+          kind: "symlink",
+          target: "/vault/copilot/skills/foo",
+        },
+        "/vault/.claude/skills/real/SKILL.md": {
+          kind: "file",
+          content: skillMd("real"),
+        },
+      });
+      const { accepted: out } = await discoverProjectSkills({
+        vaultRootAbsPath: VAULT,
+        agentDirsProjectRel: AGENT_DIRS,
+        fs,
+      });
+      expect(out.map((c) => c.name)).toEqual(["real"]);
     });
-    const { accepted: out } = await discoverProjectSkills({
-      vaultRootAbsPath: VAULT,
-      agentDirsProjectRel: AGENT_DIRS,
-      fs,
-    });
-    expect(out.map((c) => c.agent).sort()).toEqual(["claude", "codex"]);
-    expect(out[0].contentHash).toBe(out[1].contentHash);
-  });
-
-  it("skips a directory without a SKILL.md", async () => {
-    const fs = mkFs({
-      "/vault/.claude/skills/staging/notes.md": { kind: "file", content: "scratch" },
-    });
-    const out = await discoverProjectSkills({
-      vaultRootAbsPath: VAULT,
-      agentDirsProjectRel: AGENT_DIRS,
-      fs,
-    });
-    expect(out).toEqual({ accepted: [], rejected: [] });
   });
 });

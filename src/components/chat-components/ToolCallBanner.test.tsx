@@ -1,121 +1,16 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { ToolCallBanner } from "@/components/chat-components/ToolCallBanner";
 
-jest.mock("@/components/ui/collapsible", () => ({
-  Collapsible: ({ children, open }: { children: React.ReactNode; open: boolean }) => (
-    <div data-testid="collapsible" data-open={open}>
-      {children}
-    </div>
-  ),
-  CollapsibleContent: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="collapsible-content">{children}</div>
-  ),
-  CollapsibleTrigger: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="collapsible-trigger">{children}</div>
-  ),
-}));
-
-jest.mock("lucide-react", () => ({
-  Check: () => <div data-testid="check-icon">Check</div>,
-  X: () => <div data-testid="x-icon">X</div>,
-  ChevronRight: () => <div data-testid="chevron-icon">ChevronRight</div>,
-}));
-
-jest.mock("@/tools/ToolResultFormatter", () => ({
-  ToolResultFormatter: {
-    format: jest.fn((_toolName: string, result: string) => result),
-  },
-}));
+const defaultProps = {
+  toolName: "testTool",
+  displayName: "Test Tool",
+  emoji: "🔧",
+};
 
 describe("ToolCallBanner", () => {
-  const defaultProps = {
-    toolName: "testTool",
-    displayName: "Test Tool",
-    emoji: "🔧",
-  };
-
-  describe("actuallyExecuting logic (defensive check)", () => {
-    it("should show animation when executing with no result", () => {
-      const { container } = render(
-        <ToolCallBanner {...defaultProps} isExecuting={true} result={null} />
-      );
-
-      const shimmerOverlay = container.querySelector(".tw-absolute.tw-inset-0.tw-z-\\[1\\]");
-      expect(shimmerOverlay).not.toBeNull();
-
-      expect(screen.getByText(/Calling Test Tool/)).toBeTruthy();
-    });
-
-    it("should hide animation when not executing with result", () => {
-      const { container } = render(
-        <ToolCallBanner {...defaultProps} isExecuting={false} result="Success" />
-      );
-
-      const shimmerOverlay = container.querySelector(".tw-absolute.tw-inset-0.tw-z-\\[1\\]");
-      expect(shimmerOverlay).toBeNull();
-
-      expect(screen.getByText(/Called Test Tool/)).toBeTruthy();
-    });
-
-    it("should hide animation when executing=true but result is present (bug fix)", () => {
-      const { container } = render(
-        <ToolCallBanner {...defaultProps} isExecuting={true} result="Success" />
-      );
-
-      const shimmerOverlay = container.querySelector(".tw-absolute.tw-inset-0.tw-z-\\[1\\]");
-      expect(shimmerOverlay).toBeNull();
-
-      expect(screen.getByText(/Called Test Tool/)).toBeTruthy();
-    });
-
-    it("should hide animation when not executing with empty result", () => {
-      const { container } = render(
-        <ToolCallBanner {...defaultProps} isExecuting={false} result="" />
-      );
-
-      const shimmerOverlay = container.querySelector(".tw-absolute.tw-inset-0.tw-z-\\[1\\]");
-      expect(shimmerOverlay).toBeNull();
-
-      expect(screen.getByText(/Called Test Tool/)).toBeTruthy();
-    });
-  });
-
-  describe("expansion behavior", () => {
-    it("should not allow expansion while executing without result", () => {
-      render(<ToolCallBanner {...defaultProps} isExecuting={true} result={null} />);
-
-      const collapsible = screen.getByTestId("collapsible");
-      expect(collapsible.getAttribute("data-open")).toBe("false");
-    });
-
-    it("should allow expansion when not executing with result", () => {
-      render(<ToolCallBanner {...defaultProps} isExecuting={false} result="Success" />);
-
-      const collapsible = screen.getByTestId("collapsible");
-      expect(collapsible.getAttribute("data-open")).toBe("false");
-    });
-
-    it("should allow expansion when executing=true but has result (actuallyExecuting=false)", () => {
-      render(<ToolCallBanner {...defaultProps} isExecuting={true} result="Success" />);
-
-      const collapsible = screen.getByTestId("collapsible");
-      expect(collapsible.getAttribute("data-open")).toBe("false");
-    });
-  });
-
-  describe("text rendering", () => {
-    it('should show "Calling" when executing without result', () => {
-      render(<ToolCallBanner {...defaultProps} isExecuting={true} result={null} />);
-      expect(screen.getByText(/Calling Test Tool/)).toBeTruthy();
-    });
-
-    it('should show "Called" when not executing with result', () => {
-      render(<ToolCallBanner {...defaultProps} isExecuting={false} result="Success" />);
-      expect(screen.getByText(/Called Test Tool/)).toBeTruthy();
-    });
-
-    it("should show confirmation message when executing and message provided", () => {
+  describe("ToolCallBanner()", () => {
+    it("announces a running call as 'Calling <tool>...' with its confirmation message", () => {
       render(
         <ToolCallBanner
           {...defaultProps}
@@ -124,114 +19,107 @@ describe("ToolCallBanner", () => {
           confirmationMessage="Processing data"
         />
       );
+
+      expect(screen.getByText(/Calling Test Tool\.\.\./)).toBeTruthy();
       expect(screen.getByText(/Processing data/)).toBeTruthy();
     });
 
-    it('should use "Reading/Read" for readNote tool', () => {
-      render(
-        <ToolCallBanner
-          {...defaultProps}
-          toolName="readNote"
-          displayName="MyNote.md"
-          isExecuting={true}
-          result={null}
-        />
-      );
-      expect(screen.getByText(/Reading MyNote.md/)).toBeTruthy();
-    });
-
-    it('should use "Read" for readNote tool with result', () => {
-      render(
-        <ToolCallBanner
-          {...defaultProps}
-          toolName="readNote"
-          displayName="MyNote.md"
-          isExecuting={false}
-          result="Note content"
-        />
-      );
-      expect(screen.getByText(/Read MyNote.md/)).toBeTruthy();
-    });
-  });
-
-  describe("result formatting", () => {
-    it("should format and display result in collapsible content", () => {
+    it("announces a finished call as 'Called <tool>' and expands to show its result", () => {
       render(<ToolCallBanner {...defaultProps} isExecuting={false} result="Success result" />);
 
-      const content = screen.getByTestId("collapsible-content");
-      expect(content).toBeTruthy();
-      expect(content.textContent).toContain("Success result");
+      expect(screen.getByText(/Called Test Tool/)).toBeTruthy();
+      expect(screen.queryByText("Success result")).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: /Called Test Tool/ }));
+
+      expect(screen.getByText("Success result")).toBeTruthy();
     });
 
-    it("should handle very long results with truncation message", () => {
-      const longResult = "a".repeat(6000);
-      render(<ToolCallBanner {...defaultProps} isExecuting={false} result={longResult} />);
+    it("treats a call as finished once a result exists even if the executing flag is still set", () => {
+      render(<ToolCallBanner {...defaultProps} isExecuting={true} result="Success" />);
 
-      const content = screen.getByTestId("collapsible-content");
-      expect(content.textContent).toMatch(/returned 6,000 characters.*preserved in chat history/);
+      expect(screen.getByText(/Called Test Tool/)).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: /Called Test Tool/ }));
+      expect(screen.getByText("Success")).toBeTruthy();
     });
 
-    it("should not show result while executing", () => {
+    it("cannot be expanded while the call is still running", () => {
       render(<ToolCallBanner {...defaultProps} isExecuting={true} result={null} />);
 
-      const content = screen.getByTestId("collapsible-content");
-      expect(content.textContent).toContain("No result available");
-    });
-  });
+      fireEvent.click(screen.getByRole("button", { name: /Calling Test Tool/ }));
 
-  describe("accept/reject buttons", () => {
-    it("should not show accept/reject buttons when executing", () => {
+      expect(screen.queryByText("No result available")).toBeNull();
+    });
+
+    it("cannot be expanded when a finished call returned an empty result", () => {
+      render(<ToolCallBanner {...defaultProps} isExecuting={false} result="" />);
+
+      fireEvent.click(screen.getByRole("button", { name: /Called Test Tool/ }));
+
+      expect(screen.queryByText("No result available")).toBeNull();
+    });
+
+    it.each([
+      { isExecuting: true, result: null, expected: "Reading MyNote.md" },
+      { isExecuting: false, result: "Note content", expected: "Read MyNote.md" },
+    ])("uses read wording for readNote ($expected)", ({ isExecuting, result, expected }) => {
+      render(
+        <ToolCallBanner
+          {...defaultProps}
+          toolName="readNote"
+          displayName="MyNote.md"
+          isExecuting={isExecuting}
+          result={result}
+        />
+      );
+
+      expect(screen.getByText(expected)).toBeTruthy();
+    });
+
+    it("replaces an oversized result with a character-count notice when expanded", () => {
+      render(<ToolCallBanner {...defaultProps} isExecuting={false} result={"a".repeat(6000)} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /Called Test Tool/ }));
+
+      expect(screen.getByText(/returned 6,000 characters.*preserved in chat history/)).toBeTruthy();
+    });
+
+    it("offers Accept and Reject once the call has a result and forwards each click without expanding", () => {
       const onAccept = jest.fn();
       const onReject = jest.fn();
+      const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+      render(
+        <ToolCallBanner
+          {...defaultProps}
+          isExecuting={true}
+          result="Success"
+          onAccept={onAccept}
+          onReject={onReject}
+        />
+      );
 
+      fireEvent.click(screen.getByTitle("Accept"));
+      fireEvent.click(screen.getByTitle("Reject"));
+
+      expect(onAccept).toHaveBeenCalledTimes(1);
+      expect(onReject).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText("Success")).toBeNull();
+      consoleError.mockRestore();
+    });
+
+    it("hides Accept and Reject while the call is still running", () => {
       render(
         <ToolCallBanner
           {...defaultProps}
           isExecuting={true}
           result={null}
-          onAccept={onAccept}
-          onReject={onReject}
+          onAccept={jest.fn()}
+          onReject={jest.fn()}
         />
       );
 
       expect(screen.queryByTitle("Accept")).toBeNull();
       expect(screen.queryByTitle("Reject")).toBeNull();
-    });
-
-    it("should show accept/reject buttons when not executing with handlers", () => {
-      const onAccept = jest.fn();
-      const onReject = jest.fn();
-
-      render(
-        <ToolCallBanner
-          {...defaultProps}
-          isExecuting={false}
-          result="Success"
-          onAccept={onAccept}
-          onReject={onReject}
-        />
-      );
-
-      expect(screen.getByTitle("Accept")).toBeTruthy();
-      expect(screen.getByTitle("Reject")).toBeTruthy();
-    });
-
-    it("should not show buttons when executing=true but has result (actuallyExecuting=false)", () => {
-      const onAccept = jest.fn();
-      const onReject = jest.fn();
-
-      render(
-        <ToolCallBanner
-          {...defaultProps}
-          isExecuting={true}
-          result="Success"
-          onAccept={onAccept}
-          onReject={onReject}
-        />
-      );
-
-      expect(screen.getByTitle("Accept")).toBeTruthy();
-      expect(screen.getByTitle("Reject")).toBeTruthy();
     });
   });
 });

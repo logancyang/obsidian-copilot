@@ -50,14 +50,16 @@ function Harness({ app }: { app: App }) {
 }
 
 describe("useChatFileDrop", () => {
-  it("clears the overlay when a drop lands in an inner zone that stops bubbling", () => {
-    const { getByTestId } = render(<Harness app={{} as App} />);
-    const overlay = getByTestId("overlay");
+  describe("useChatFileDrop()", () => {
+    it("clears the overlay when a drop lands in an inner zone that stops bubbling", () => {
+      const { getByTestId } = render(<Harness app={{} as App} />);
+      const overlay = getByTestId("overlay");
 
-    dispatchDrag("dragOver", getByTestId("overlay"), [{ kind: "file" }]);
-    expect(overlay.textContent).toBe("active");
+      dispatchDrag("dragOver", getByTestId("overlay"), [{ kind: "file" }]);
+      expect(overlay.textContent).toBe("active");
 
-    dispatchDrag("drop", getByTestId("inner-zone"), [{ kind: "file" }]);
-    expect(overlay.textContent).toBe("idle");
+      dispatchDrag("drop", getByTestId("inner-zone"), [{ kind: "file" }]);
+      expect(overlay.textContent).toBe("idle");
+    });
   });
 });

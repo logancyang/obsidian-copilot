@@ -139,20 +139,22 @@ describe("OpencodeInstallModal", () => {
     setOpencodeSettings(undefined);
   });
 
-  describe("constructor()", () => {
-    it("uses the reusable full-bleed frame for https://github.com/Brevilabs/obsidian-copilot-private/issues/317", () => {
-      const { manager } = makeManager();
-      const modal = new OpencodeInstallModal(new App(), manager, {
-        platform: "darwin",
-        arch: "arm64",
-      });
+  describe("OpencodeInstallModal", () => {
+    describe("constructor()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/317 uses the reusable full-bleed modal frame", () => {
+        const { manager } = makeManager();
+        const modal = new OpencodeInstallModal(new App(), manager, {
+          platform: "darwin",
+          arch: "arm64",
+        });
 
-      expect(modal.modalEl.className).toBe("modal copilot-modal-full-bleed");
+        expect(modal.modalEl.className).toBe("modal copilot-modal-full-bleed");
+      });
     });
   });
 
   describe("OpencodeConfigContainer()", () => {
-    it("opens on the managed source when nothing was ever configured", () => {
+    it("opens on the managed source with a download action when nothing is configured", () => {
       const { manager } = makeManager();
       renderContainer(manager);
 
@@ -193,7 +195,7 @@ describe("OpencodeInstallModal", () => {
       expect(getSettings().agentMode.backends?.opencode?.binaryPath).toBe(EXISTING_BINARY_PATH);
     });
 
-    it("renders the manager's shared install progress label and percent", async () => {
+    it("shows the manager's install progress and confirms with a notice when the install completes", async () => {
       const { manager, publish, installDeferred } = makeManager();
       renderContainer(manager);
 
@@ -215,7 +217,7 @@ describe("OpencodeInstallModal", () => {
       expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();
     });
 
-    it("cancels through the manager so closing the dialog cannot kill the run", async () => {
+    it("cancels through the manager and does not cancel when the dialog unmounts", async () => {
       const { manager, cancelCurrentOperation, publish, installDeferred } = makeManager();
       const { unmount } = renderContainer(manager);
 
@@ -235,7 +237,7 @@ describe("OpencodeInstallModal", () => {
       expect(cancelCurrentOperation).not.toHaveBeenCalled();
     });
 
-    it("surfaces an install failure and keeps the retry available", async () => {
+    it("shows an install failure and keeps the download action available", async () => {
       const { manager, publish, installDeferred } = makeManager();
       renderContainer(manager);
 

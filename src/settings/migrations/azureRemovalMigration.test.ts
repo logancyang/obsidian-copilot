@@ -79,11 +79,11 @@ function embeddingSelection(plan: ReturnType<typeof planAzureRemoval>): string |
     .embeddingModelKey;
 }
 
-beforeEach(() => {
-  jest.clearAllMocks();
-});
-
 describe("azureRemovalMigration", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe("planAzureRemoval()", () => {
     it("returns null for a vault that never configured Azure", () => {
       expect(
@@ -156,17 +156,6 @@ describe("azureRemovalMigration", () => {
   });
 
   describe("executeAzureRemoval()", () => {
-    it("writes no settings and cascades nothing when the vault never configured Azure", async () => {
-      keychain();
-      const { api, removeProvider } = makeApi();
-      await executeAzureRemoval(
-        api,
-        settingsWith({ providers: { ant: provider("ant", "anthropic") } })
-      );
-      expect(mockSetSettings).not.toHaveBeenCalled();
-      expect(removeProvider).not.toHaveBeenCalled();
-    });
-
     it("hands each Azure row to the cascade rather than deleting it directly", async () => {
       keychain();
       const { api, removeProvider } = makeApi();

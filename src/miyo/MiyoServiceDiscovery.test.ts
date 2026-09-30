@@ -108,182 +108,214 @@ describe("MiyoServiceDiscovery", () => {
     (window as { require?: NodeRequireShape }).require = originalRequire;
   });
 
-  it("resolves macOS service.json path", async () => {
-    const { nodeRequire, modules } = createMockNodeRequire("darwin", "/Users/test", {
-      host: "127.0.0.1",
-      port: 8742,
-      pid: 999,
-    });
-    (window as { require?: NodeRequireShape }).require = nodeRequire;
-
-    const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({ forceRefresh: true });
-
-    expect(baseUrl).toBe("http://127.0.0.1:8742");
-    expect(modules.readFile).toHaveBeenCalledWith(
-      "/Users/test/Library/Application Support/Miyo/service.json",
-      "utf8"
-    );
-  });
-
-  it("resolves Windows service.json path", async () => {
-    const { nodeRequire, modules } = createMockNodeRequire("win32", "C:/Users/test", {
-      host: "127.0.0.1",
-      port: 8742,
-      pid: 999,
-    });
-    (window as { require?: NodeRequireShape }).require = nodeRequire;
-
-    const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({ forceRefresh: true });
-
-    expect(baseUrl).toBe("http://127.0.0.1:8742");
-    expect(modules.readFile).toHaveBeenCalledWith(
-      "C:/Users/test/AppData/Local/Miyo/service.json",
-      "utf8"
-    );
-  });
-
-  it("resolves Linux service.json path", async () => {
-    const { nodeRequire, modules } = createMockNodeRequire("linux", "/home/test", {
-      host: "127.0.0.1",
-      port: 8742,
-      pid: 999,
-    });
-    (window as { require?: NodeRequireShape }).require = nodeRequire;
-
-    const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({ forceRefresh: true });
-
-    expect(baseUrl).toBe("http://127.0.0.1:8742");
-    expect(modules.readFile).toHaveBeenCalledWith("/home/test/.config/Miyo/service.json", "utf8");
-  });
-
-  it("returns null for unsupported platforms", async () => {
-    const { nodeRequire, modules } = createMockNodeRequire("freebsd", "/home/test", {
-      host: "127.0.0.1",
-      port: 8742,
-      pid: 999,
-    });
-    (window as { require?: NodeRequireShape }).require = nodeRequire;
-
-    const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({ forceRefresh: true });
-
-    expect(baseUrl).toBeNull();
-    expect(modules.readFile).not.toHaveBeenCalled();
-  });
-
-  it("falls back to localhost:8742 when service.json is missing", async () => {
-    const missingFileError = Object.assign(new Error("not found"), { code: "ENOENT" });
-    const { nodeRequire, modules } = createMockNodeRequire(
-      "linux",
-      "/home/test",
-      {
+  describe("resolveBaseUrl()", () => {
+    it("returns the normalized override URL without touching the service file", async () => {
+      const { nodeRequire, modules } = createMockNodeRequire("linux", "/home/test", {
         host: "127.0.0.1",
         port: 8742,
         pid: 999,
-      },
-      { readFileError: missingFileError }
-    );
-    (window as { require?: NodeRequireShape }).require = nodeRequire;
+      });
+      (window as { require?: NodeRequireShape }).require = nodeRequire;
 
-    const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({ forceRefresh: true });
+      const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({
+        overrideUrl: " http://192.168.1.10:8742/ ",
+      });
 
-    expect(baseUrl).toBe("http://127.0.0.1:8742");
-    expect(modules.readFile).toHaveBeenCalledWith("/home/test/.config/Miyo/service.json", "utf8");
-  });
+      expect(baseUrl).toBe("http://192.168.1.10:8742");
+      expect(modules.readFile).not.toHaveBeenCalled();
+    });
 
-  it("does not cache localhost fallback when discovery file appears later", async () => {
-    const missingFileError = Object.assign(new Error("not found"), { code: "ENOENT" });
-    const discoveredConfig: MiyoServiceConfig = {
-      host: "127.0.0.1",
-      port: 9000,
-      pid: 999,
-    };
-    const { nodeRequire, modules } = createMockNodeRequire(
-      "linux",
-      "/home/test",
-      discoveredConfig,
-      {
-        readFileByPath: {
-          "/home/test/.config/Miyo/service.json": [
-            missingFileError,
-            JSON.stringify(discoveredConfig),
-          ],
-        },
-      }
-    );
-    (window as { require?: NodeRequireShape }).require = nodeRequire;
-
-    const discovery = MiyoServiceDiscovery.getInstance();
-    const firstBaseUrl = await discovery.resolveBaseUrl();
-    const secondBaseUrl = await discovery.resolveBaseUrl();
-
-    expect(firstBaseUrl).toBe("http://127.0.0.1:8742");
-    expect(secondBaseUrl).toBe("http://127.0.0.1:9000");
-    expect(modules.readFile).toHaveBeenCalledTimes(2);
-  });
-
-  it("re-reads the service file after invalidateLocalDiscovery so a restarted Miyo is found on its new port (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
-    const { nodeRequire, modules } = createMockNodeRequire(
-      "linux",
-      "/home/test",
-      { host: "127.0.0.1", port: 8742, pid: 999 },
-      {
-        readFileByPath: {
-          "/home/test/.config/Miyo/service.json": [
-            JSON.stringify({ host: "127.0.0.1", port: 8742, pid: 999 }),
-            JSON.stringify({ host: "127.0.0.1", port: 9100, pid: 1000 }),
-          ],
-        },
-      }
-    );
-    (window as { require?: NodeRequireShape }).require = nodeRequire;
-
-    const discovery = MiyoServiceDiscovery.getInstance();
-    const firstBaseUrl = await discovery.resolveBaseUrl();
-    const cachedBaseUrl = await discovery.resolveBaseUrl();
-    discovery.invalidateLocalDiscovery();
-    const rediscoveredBaseUrl = await discovery.resolveBaseUrl();
-
-    expect(firstBaseUrl).toBe("http://127.0.0.1:8742");
-    expect(cachedBaseUrl).toBe("http://127.0.0.1:8742");
-    expect(rediscoveredBaseUrl).toBe("http://127.0.0.1:9100");
-    expect(modules.readFile).toHaveBeenCalledTimes(2);
-  });
-
-  it("checks Roaming path on Windows when Local path is missing", async () => {
-    const missingFileError = Object.assign(new Error("not found"), { code: "ENOENT" });
-    const { nodeRequire, modules } = createMockNodeRequire(
-      "win32",
-      "C:/Users/test",
-      {
+    it("resolves macOS service.json path", async () => {
+      const { nodeRequire, modules } = createMockNodeRequire("darwin", "/Users/test", {
         host: "127.0.0.1",
-        port: 9999,
+        port: 8742,
         pid: 999,
-      },
-      {
-        readFileByPath: {
-          "C:/Users/test/AppData/Local/Miyo/service.json": missingFileError,
-          "C:/Users/test/AppData/Roaming/Miyo/service.json": JSON.stringify({
-            host: "127.0.0.1",
-            port: 8742,
-            pid: 999,
-          }),
+      });
+      (window as { require?: NodeRequireShape }).require = nodeRequire;
+
+      const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({
+        forceRefresh: true,
+      });
+
+      expect(baseUrl).toBe("http://127.0.0.1:8742");
+      expect(modules.readFile).toHaveBeenCalledWith(
+        "/Users/test/Library/Application Support/Miyo/service.json",
+        "utf8"
+      );
+    });
+
+    it("resolves Windows service.json path", async () => {
+      const { nodeRequire, modules } = createMockNodeRequire("win32", "C:/Users/test", {
+        host: "127.0.0.1",
+        port: 8742,
+        pid: 999,
+      });
+      (window as { require?: NodeRequireShape }).require = nodeRequire;
+
+      const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({
+        forceRefresh: true,
+      });
+
+      expect(baseUrl).toBe("http://127.0.0.1:8742");
+      expect(modules.readFile).toHaveBeenCalledWith(
+        "C:/Users/test/AppData/Local/Miyo/service.json",
+        "utf8"
+      );
+    });
+
+    it("resolves Linux service.json path", async () => {
+      const { nodeRequire, modules } = createMockNodeRequire("linux", "/home/test", {
+        host: "127.0.0.1",
+        port: 8742,
+        pid: 999,
+      });
+      (window as { require?: NodeRequireShape }).require = nodeRequire;
+
+      const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({
+        forceRefresh: true,
+      });
+
+      expect(baseUrl).toBe("http://127.0.0.1:8742");
+      expect(modules.readFile).toHaveBeenCalledWith("/home/test/.config/Miyo/service.json", "utf8");
+    });
+
+    it("returns null for unsupported platforms", async () => {
+      const { nodeRequire, modules } = createMockNodeRequire("freebsd", "/home/test", {
+        host: "127.0.0.1",
+        port: 8742,
+        pid: 999,
+      });
+      (window as { require?: NodeRequireShape }).require = nodeRequire;
+
+      const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({
+        forceRefresh: true,
+      });
+
+      expect(baseUrl).toBeNull();
+      expect(modules.readFile).not.toHaveBeenCalled();
+    });
+
+    it("falls back to localhost:8742 when service.json is missing", async () => {
+      const missingFileError = Object.assign(new Error("not found"), { code: "ENOENT" });
+      const { nodeRequire, modules } = createMockNodeRequire(
+        "linux",
+        "/home/test",
+        {
+          host: "127.0.0.1",
+          port: 8742,
+          pid: 999,
         },
-      }
-    );
-    (window as { require?: NodeRequireShape }).require = nodeRequire;
+        { readFileError: missingFileError }
+      );
+      (window as { require?: NodeRequireShape }).require = nodeRequire;
 
-    const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({ forceRefresh: true });
+      const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({
+        forceRefresh: true,
+      });
 
-    expect(baseUrl).toBe("http://127.0.0.1:8742");
-    expect(modules.readFile).toHaveBeenNthCalledWith(
-      1,
-      "C:/Users/test/AppData/Local/Miyo/service.json",
-      "utf8"
-    );
-    expect(modules.readFile).toHaveBeenNthCalledWith(
-      2,
-      "C:/Users/test/AppData/Roaming/Miyo/service.json",
-      "utf8"
-    );
+      expect(baseUrl).toBe("http://127.0.0.1:8742");
+      expect(modules.readFile).toHaveBeenCalledWith("/home/test/.config/Miyo/service.json", "utf8");
+    });
+
+    it("does not cache localhost fallback when discovery file appears later", async () => {
+      const missingFileError = Object.assign(new Error("not found"), { code: "ENOENT" });
+      const discoveredConfig: MiyoServiceConfig = {
+        host: "127.0.0.1",
+        port: 9000,
+        pid: 999,
+      };
+      const { nodeRequire, modules } = createMockNodeRequire(
+        "linux",
+        "/home/test",
+        discoveredConfig,
+        {
+          readFileByPath: {
+            "/home/test/.config/Miyo/service.json": [
+              missingFileError,
+              JSON.stringify(discoveredConfig),
+            ],
+          },
+        }
+      );
+      (window as { require?: NodeRequireShape }).require = nodeRequire;
+
+      const discovery = MiyoServiceDiscovery.getInstance();
+      const firstBaseUrl = await discovery.resolveBaseUrl();
+      const secondBaseUrl = await discovery.resolveBaseUrl();
+
+      expect(firstBaseUrl).toBe("http://127.0.0.1:8742");
+      expect(secondBaseUrl).toBe("http://127.0.0.1:9000");
+      expect(modules.readFile).toHaveBeenCalledTimes(2);
+    });
+
+    it("checks Roaming path on Windows when Local path is missing", async () => {
+      const missingFileError = Object.assign(new Error("not found"), { code: "ENOENT" });
+      const { nodeRequire, modules } = createMockNodeRequire(
+        "win32",
+        "C:/Users/test",
+        {
+          host: "127.0.0.1",
+          port: 9999,
+          pid: 999,
+        },
+        {
+          readFileByPath: {
+            "C:/Users/test/AppData/Local/Miyo/service.json": missingFileError,
+            "C:/Users/test/AppData/Roaming/Miyo/service.json": JSON.stringify({
+              host: "127.0.0.1",
+              port: 8742,
+              pid: 999,
+            }),
+          },
+        }
+      );
+      (window as { require?: NodeRequireShape }).require = nodeRequire;
+
+      const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({
+        forceRefresh: true,
+      });
+
+      expect(baseUrl).toBe("http://127.0.0.1:8742");
+      expect(modules.readFile).toHaveBeenNthCalledWith(
+        1,
+        "C:/Users/test/AppData/Local/Miyo/service.json",
+        "utf8"
+      );
+      expect(modules.readFile).toHaveBeenNthCalledWith(
+        2,
+        "C:/Users/test/AppData/Roaming/Miyo/service.json",
+        "utf8"
+      );
+    });
+  });
+
+  describe("invalidateLocalDiscovery()", () => {
+    it("re-reads the service file so a restarted Miyo is found on its new port (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
+      const { nodeRequire, modules } = createMockNodeRequire(
+        "linux",
+        "/home/test",
+        { host: "127.0.0.1", port: 8742, pid: 999 },
+        {
+          readFileByPath: {
+            "/home/test/.config/Miyo/service.json": [
+              JSON.stringify({ host: "127.0.0.1", port: 8742, pid: 999 }),
+              JSON.stringify({ host: "127.0.0.1", port: 9100, pid: 1000 }),
+            ],
+          },
+        }
+      );
+      (window as { require?: NodeRequireShape }).require = nodeRequire;
+
+      const discovery = MiyoServiceDiscovery.getInstance();
+      const firstBaseUrl = await discovery.resolveBaseUrl();
+      const cachedBaseUrl = await discovery.resolveBaseUrl();
+      discovery.invalidateLocalDiscovery();
+      const rediscoveredBaseUrl = await discovery.resolveBaseUrl();
+
+      expect(firstBaseUrl).toBe("http://127.0.0.1:8742");
+      expect(cachedBaseUrl).toBe("http://127.0.0.1:8742");
+      expect(rediscoveredBaseUrl).toBe("http://127.0.0.1:9100");
+      expect(modules.readFile).toHaveBeenCalledTimes(2);
+    });
   });
 });

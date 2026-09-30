@@ -17,14 +17,6 @@ jest.mock("obsidian", () => {
   };
 });
 
-jest.mock("@/utils/hash", () => ({
-  md5: jest.fn((value: string) => {
-    let sum = 0;
-    for (let i = 0; i < value.length; i++) sum += value.charCodeAt(i);
-    return sum.toString(16).padStart(32, "0");
-  }),
-}));
-
 jest.mock("@/settings/model", () => {
   const actual = jest.requireActual<object>("@/settings/model");
   return {
@@ -37,46 +29,6 @@ jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
   logError: jest.fn(),
-}));
-
-jest.mock("@/services/settingsSecretTransforms", () => ({
-  MODEL_SECRET_FIELDS: ["apiKey"] as const,
-  isSensitiveKey: jest.fn((key: string) => {
-    const lower = key.toLowerCase();
-    const normalized = lower.replace(/[_-]/g, "");
-    return (
-      normalized.includes("apikey") ||
-      lower.endsWith("token") ||
-      lower.endsWith("accesstoken") ||
-      lower.endsWith("secret") ||
-      lower.endsWith("password") ||
-      lower.endsWith("licensekey")
-    );
-  }),
-  TOP_LEVEL_SECRET_FIELDS: ["openAIApiKey"] as const,
-  stripKeychainFields: jest.fn((settings: Record<string, unknown>) => {
-    const out = { ...settings };
-    for (const key of Object.keys(out)) {
-      const lower = key.toLowerCase();
-      const normalized = lower.replace(/[_-]/g, "");
-      const isSensitive =
-        normalized.includes("apikey") ||
-        lower.endsWith("token") ||
-        lower.endsWith("accesstoken") ||
-        lower.endsWith("secret") ||
-        lower.endsWith("password") ||
-        lower.endsWith("licensekey");
-      if (isSensitive) out[key] = "";
-    }
-    if (Array.isArray(out.activeModels)) {
-      out.activeModels = (out.activeModels as Array<Record<string, unknown>>).map((m) => ({
-        ...m,
-        apiKey: "",
-      }));
-    }
-    return out;
-  }),
-  cleanupLegacyFields: jest.fn((settings: Record<string, unknown>) => ({ ...settings })),
 }));
 
 import { FileSystemAdapter, Notice, type App } from "obsidian";
@@ -141,21 +93,18 @@ beforeEach(() => {
 
 describe("keychainService", () => {
   describe("isSecretKey()", () => {
-    it.each(["openAIApiKey", "googleApiKey", "sessionToken", "plusLicenseKey", "myPassword"])(
-      "returns true for %s",
-      (key) => {
-        expect(isSecretKey(key)).toBe(true);
-      }
-    );
+    it.each(["openAIApiKey", "plusLicenseKey"])("returns true for the secret setting %s", (key) => {
+      expect(isSecretKey(key)).toBe(true);
+    });
 
-    it.each(["temperature", "defaultModelKey", "userId"])("returns false for %s", (key) => {
+    it.each(["temperature", "defaultModelKey"])("returns false for the plain setting %s", (key) => {
       expect(isSecretKey(key)).toBe(false);
     });
   });
 
   describe("KeychainService", () => {
     describe("getVaultId()", () => {
-      it("produces a deterministic 8-char hex ID from desktop vault path", () => {
+      it("derives an 8-character hex ID from the desktop vault path", () => {
         const service = KeychainService.getInstance(makeApp({ basePath: "/Users/test/MyVault" }));
         const id = service.getVaultId();
 
@@ -163,7 +112,7 @@ describe("keychainService", () => {
         expect(/^[0-9a-f]{8}$/.test(id)).toBe(true);
       });
 
-      it("produces a stable ID across multiple calls", () => {
+      it("returns the same ID on every call", () => {
         const service = KeychainService.getInstance(makeApp({ basePath: "/Users/test/MyVault" }));
         expect(service.getVaultId()).toBe(service.getVaultId());
       });
@@ -386,7 +335,7 @@ describe("keychainService", () => {
         );
       });
 
-      it("handles saveData failure gracefully — keychain NOT cleared", async () => {
+      it("leaves the keychain untouched and tells the user when saving data.json fails", async () => {
         const secretStorage = makeSecretStorage();
         const service = KeychainService.getInstance(makeApp({ secretStorage }));
         secretStorage.listSecrets.mockReturnValue([]);

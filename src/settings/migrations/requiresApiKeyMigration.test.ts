@@ -18,51 +18,55 @@ function backfilledFlag(overrides: Partial<Provider>): boolean | undefined {
   return next?.p1.requiresApiKey;
 }
 
-describe("planRequiresApiKeyBackfill", () => {
-  it("treats catalog-backed BYOK as key-requiring", () => {
-    expect(backfilledFlag({ origin: { kind: "byok", catalogProviderId: "anthropic" } })).toBe(true);
-  });
-
-  it("treats a self-hosted catalog-less BYOK as keyless", () => {
-    expect(backfilledFlag({ baseUrl: "http://localhost:11434/v1" })).toBe(false);
-    expect(backfilledFlag({ baseUrl: "http://192.168.1.9:1234/v1" })).toBe(false);
-  });
-
-  it("requires a key for a catalog-less BYOK pointed at a public host", () => {
-    expect(backfilledFlag({ baseUrl: "https://proxy.example/v1" })).toBe(true);
-  });
-
-  it("defaults a catalog-less BYOK with no base URL to key-requiring", () => {
-    expect(backfilledFlag({ baseUrl: undefined })).toBe(true);
-  });
-
-  it("treats agent-owned and Plus providers as keyless (auth managed elsewhere)", () => {
-    expect(backfilledFlag({ origin: { kind: "agent", agentType: "opencode" } })).toBe(false);
-    expect(backfilledFlag({ origin: { kind: "copilot-plus" } })).toBe(false);
-  });
-
-  it("never overwrites an already-explicit flag", () => {
-    const next = planRequiresApiKeyBackfill({
-      p1: provider({
-        requiresApiKey: false,
-        origin: { kind: "byok", catalogProviderId: "openai" },
-      }),
+describe("requiresApiKeyMigration", () => {
+  describe("planRequiresApiKeyBackfill()", () => {
+    it("treats catalog-backed BYOK as key-requiring", () => {
+      expect(backfilledFlag({ origin: { kind: "byok", catalogProviderId: "anthropic" } })).toBe(
+        true
+      );
     });
-    expect(next).toBeNull();
-  });
 
-  it("returns null when there is nothing to backfill (referential stability)", () => {
-    expect(planRequiresApiKeyBackfill({})).toBeNull();
-    expect(planRequiresApiKeyBackfill({ p1: provider({ requiresApiKey: true }) })).toBeNull();
-  });
-
-  it("backfills only flagless rows, leaving flagged rows untouched", () => {
-    const flagged = provider({ providerId: "p2", requiresApiKey: true });
-    const next = planRequiresApiKeyBackfill({
-      p1: provider({ origin: { kind: "byok", catalogProviderId: "anthropic" } }),
-      p2: flagged,
+    it("treats a self-hosted catalog-less BYOK as keyless", () => {
+      expect(backfilledFlag({ baseUrl: "http://localhost:11434/v1" })).toBe(false);
+      expect(backfilledFlag({ baseUrl: "http://192.168.1.9:1234/v1" })).toBe(false);
     });
-    expect(next?.p1.requiresApiKey).toBe(true);
-    expect(next?.p2).toBe(flagged);
+
+    it("requires a key for a catalog-less BYOK pointed at a public host", () => {
+      expect(backfilledFlag({ baseUrl: "https://proxy.example/v1" })).toBe(true);
+    });
+
+    it("defaults a catalog-less BYOK with no base URL to key-requiring", () => {
+      expect(backfilledFlag({ baseUrl: undefined })).toBe(true);
+    });
+
+    it("treats agent-owned and Plus providers as keyless (auth managed elsewhere)", () => {
+      expect(backfilledFlag({ origin: { kind: "agent", agentType: "opencode" } })).toBe(false);
+      expect(backfilledFlag({ origin: { kind: "copilot-plus" } })).toBe(false);
+    });
+
+    it("never overwrites an already-explicit flag", () => {
+      const next = planRequiresApiKeyBackfill({
+        p1: provider({
+          requiresApiKey: false,
+          origin: { kind: "byok", catalogProviderId: "openai" },
+        }),
+      });
+      expect(next).toBeNull();
+    });
+
+    it("returns null when there is nothing to backfill (referential stability)", () => {
+      expect(planRequiresApiKeyBackfill({})).toBeNull();
+      expect(planRequiresApiKeyBackfill({ p1: provider({ requiresApiKey: true }) })).toBeNull();
+    });
+
+    it("backfills only flagless rows, leaving flagged rows untouched", () => {
+      const flagged = provider({ providerId: "p2", requiresApiKey: true });
+      const next = planRequiresApiKeyBackfill({
+        p1: provider({ origin: { kind: "byok", catalogProviderId: "anthropic" } }),
+        p2: flagged,
+      });
+      expect(next?.p1.requiresApiKey).toBe(true);
+      expect(next?.p2).toBe(flagged);
+    });
   });
 });

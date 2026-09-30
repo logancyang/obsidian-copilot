@@ -51,132 +51,134 @@ function controllableSource() {
   };
 }
 
-describe("guardSdkStreamStall", () => {
-  it("yields every message unchanged and never trips on a clean stream", async () => {
-    async function* source(): AsyncGenerator<SDKMessage> {
-      yield streamEvent("message_start");
-      yield streamEvent("content_block_delta");
-      yield streamEvent("message_stop");
-      yield resultMessage();
-    }
-    const abortController = new AbortController();
-    const onStall = jest.fn();
+describe("sdkStreamStallGuard", () => {
+  describe("guardSdkStreamStall()", () => {
+    it("yields every message unchanged and never aborts on a clean stream", async () => {
+      async function* source(): AsyncGenerator<SDKMessage> {
+        yield streamEvent("message_start");
+        yield streamEvent("content_block_delta");
+        yield streamEvent("message_stop");
+        yield resultMessage();
+      }
+      const abortController = new AbortController();
+      const onStall = jest.fn();
 
-    const seen = await collect(guardSdkStreamStall(source(), { abortController, onStall }));
+      const seen = await collect(guardSdkStreamStall(source(), { abortController, onStall }));
 
-    expect(seen).toEqual([
-      "stream:message_start",
-      "stream:content_block_delta",
-      "stream:message_stop",
-      "result",
-    ]);
-    expect(onStall).not.toHaveBeenCalled();
-    expect(abortController.signal.aborted).toBe(false);
-  });
-
-  it("aborts and throws the stall error when a message stalls mid-stream", async () => {
-    const abortController = new AbortController();
-    const onStall = jest.fn();
-    async function* source(): AsyncGenerator<SDKMessage> {
-      yield streamEvent("message_start");
-      yield streamEvent("content_block_delta");
-      await new Promise<void>((resolve) => {
-        abortController.signal.addEventListener("abort", () => resolve(), { once: true });
-      });
-    }
-
-    jest.useFakeTimers();
-    try {
-      const run = collect(
-        guardSdkStreamStall(source(), { abortController, timeoutMs: 1_000, onStall })
-      );
-      const assertion = expect(run).rejects.toThrow(SDK_STREAM_STALL_MESSAGE);
-      await jest.advanceTimersByTimeAsync(1_500);
-      await assertion;
-    } finally {
-      jest.useRealTimers();
-    }
-    expect(onStall).toHaveBeenCalledWith(1_000);
-    expect(abortController.signal.aborted).toBe(true);
-  });
-
-  it("does not start timing until the first content event arrives", async () => {
-    const abortController = new AbortController();
-    const onStall = jest.fn();
-    const src = controllableSource();
-
-    jest.useFakeTimers();
-    try {
-      const run = collect(
-        guardSdkStreamStall(src.iterable, { abortController, timeoutMs: 1_000, onStall })
-      );
-
-      src.push(streamEvent("message_start"));
-      await jest.advanceTimersByTimeAsync(5_000);
-      expect(onStall).not.toHaveBeenCalled();
-      expect(abortController.signal.aborted).toBe(false);
-
-      src.push(streamEvent("content_block_delta"));
-      await jest.advanceTimersByTimeAsync(0);
-      src.push(streamEvent("message_stop"));
-      src.push(resultMessage());
-      src.finish();
-      await expect(run).resolves.toEqual([
+      expect(seen).toEqual([
         "stream:message_start",
         "stream:content_block_delta",
         "stream:message_stop",
         "result",
       ]);
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
-  it("does not trip during a long quiet gap between messages", async () => {
-    const abortController = new AbortController();
-    const onStall = jest.fn();
-    const src = controllableSource();
-
-    jest.useFakeTimers();
-    try {
-      const run = collect(
-        guardSdkStreamStall(src.iterable, { abortController, timeoutMs: 1_000, onStall })
-      );
-
-      src.push(streamEvent("message_start"));
-      src.push(streamEvent("content_block_delta"));
-      src.push(streamEvent("message_stop"));
-      await jest.advanceTimersByTimeAsync(0);
-
-      await jest.advanceTimersByTimeAsync(5_000);
       expect(onStall).not.toHaveBeenCalled();
       expect(abortController.signal.aborted).toBe(false);
+    });
 
-      src.push(resultMessage());
-      src.finish();
-      await expect(run).resolves.toEqual([
-        "stream:message_start",
-        "stream:content_block_delta",
-        "stream:message_stop",
-        "result",
-      ]);
-    } finally {
-      jest.useRealTimers();
-    }
-  });
+    it("aborts the controller, reports the timeout, and throws the stall error when a started message goes quiet", async () => {
+      const abortController = new AbortController();
+      const onStall = jest.fn();
+      async function* source(): AsyncGenerator<SDKMessage> {
+        yield streamEvent("message_start");
+        yield streamEvent("content_block_delta");
+        await new Promise<void>((resolve) => {
+          abortController.signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+      }
 
-  it("re-throws a real source error unchanged instead of a stall", async () => {
-    const abortController = new AbortController();
-    const onStall = jest.fn();
-    async function* source(): AsyncGenerator<SDKMessage> {
-      yield streamEvent("message_start");
-      throw new Error("network down");
-    }
+      jest.useFakeTimers();
+      try {
+        const run = collect(
+          guardSdkStreamStall(source(), { abortController, timeoutMs: 1_000, onStall })
+        );
+        const assertion = expect(run).rejects.toThrow(SDK_STREAM_STALL_MESSAGE);
+        await jest.advanceTimersByTimeAsync(1_500);
+        await assertion;
+      } finally {
+        jest.useRealTimers();
+      }
+      expect(onStall).toHaveBeenCalledWith(1_000);
+      expect(abortController.signal.aborted).toBe(true);
+    });
 
-    await expect(
-      collect(guardSdkStreamStall(source(), { abortController, onStall }))
-    ).rejects.toThrow("network down");
-    expect(onStall).not.toHaveBeenCalled();
-    expect(abortController.signal.aborted).toBe(false);
+    it("does not start the timeout before the first content block event arrives", async () => {
+      const abortController = new AbortController();
+      const onStall = jest.fn();
+      const src = controllableSource();
+
+      jest.useFakeTimers();
+      try {
+        const run = collect(
+          guardSdkStreamStall(src.iterable, { abortController, timeoutMs: 1_000, onStall })
+        );
+
+        src.push(streamEvent("message_start"));
+        await jest.advanceTimersByTimeAsync(5_000);
+        expect(onStall).not.toHaveBeenCalled();
+        expect(abortController.signal.aborted).toBe(false);
+
+        src.push(streamEvent("content_block_delta"));
+        await jest.advanceTimersByTimeAsync(0);
+        src.push(streamEvent("message_stop"));
+        src.push(resultMessage());
+        src.finish();
+        await expect(run).resolves.toEqual([
+          "stream:message_start",
+          "stream:content_block_delta",
+          "stream:message_stop",
+          "result",
+        ]);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("does not abort during a long quiet gap after a message completes", async () => {
+      const abortController = new AbortController();
+      const onStall = jest.fn();
+      const src = controllableSource();
+
+      jest.useFakeTimers();
+      try {
+        const run = collect(
+          guardSdkStreamStall(src.iterable, { abortController, timeoutMs: 1_000, onStall })
+        );
+
+        src.push(streamEvent("message_start"));
+        src.push(streamEvent("content_block_delta"));
+        src.push(streamEvent("message_stop"));
+        await jest.advanceTimersByTimeAsync(0);
+
+        await jest.advanceTimersByTimeAsync(5_000);
+        expect(onStall).not.toHaveBeenCalled();
+        expect(abortController.signal.aborted).toBe(false);
+
+        src.push(resultMessage());
+        src.finish();
+        await expect(run).resolves.toEqual([
+          "stream:message_start",
+          "stream:content_block_delta",
+          "stream:message_stop",
+          "result",
+        ]);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("rethrows a source error unchanged rather than reporting a stall", async () => {
+      const abortController = new AbortController();
+      const onStall = jest.fn();
+      async function* source(): AsyncGenerator<SDKMessage> {
+        yield streamEvent("message_start");
+        throw new Error("network down");
+      }
+
+      await expect(
+        collect(guardSdkStreamStall(source(), { abortController, onStall }))
+      ).rejects.toThrow("network down");
+      expect(onStall).not.toHaveBeenCalled();
+      expect(abortController.signal.aborted).toBe(false);
+    });
   });
 });

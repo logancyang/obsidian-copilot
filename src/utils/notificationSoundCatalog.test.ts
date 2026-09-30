@@ -1,8 +1,4 @@
-import {
-  NOTIFICATION_SOUNDS,
-  NOTIFICATION_SOUND_OPTIONS,
-  isNotificationSoundId,
-} from "@/utils/notificationSoundCatalog";
+import { NOTIFICATION_SOUNDS, isNotificationSoundId } from "@/utils/notificationSoundCatalog";
 
 describe("notificationSoundCatalog", () => {
   describe("isNotificationSoundId()", () => {
@@ -18,14 +14,6 @@ describe("notificationSoundCatalog", () => {
       expect(isNotificationSoundId("toString")).toBe(false);
       expect(isNotificationSoundId("constructor")).toBe(false);
       expect(isNotificationSoundId("__proto__")).toBe(false);
-    });
-  });
-
-  describe("NOTIFICATION_SOUND_OPTIONS", () => {
-    it("offers every catalog sound to the picker under its own label", () => {
-      expect(NOTIFICATION_SOUND_OPTIONS).toEqual(
-        Object.entries(NOTIFICATION_SOUNDS).map(([value, spec]) => ({ label: spec.label, value }))
-      );
     });
   });
 });

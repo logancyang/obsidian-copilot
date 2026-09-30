@@ -31,8 +31,8 @@ jest.mock("@/components/chat-components/useChatModelPicker", () => ({
   }),
 }));
 jest.mock("@/hooks/useResolvedChatBackendModel", () => ({
-  useResolvedChatBackendModel: (_app: unknown, key: keyof typeof mockModels, fallback: boolean) =>
-    mockModels[key] ?? (fallback === false ? null : mockModels.quick),
+  useResolvedChatBackendModel: (_app: unknown, key: keyof typeof mockModels) =>
+    mockModels[key] ?? null,
 }));
 jest.mock("@/hooks/use-streaming-chat-session", () => ({
   useStreamingChatSession: ({

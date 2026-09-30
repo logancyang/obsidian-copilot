@@ -4,9 +4,9 @@ import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompat
 
 const CURRENT_PACKAGE_NAME = "@agentclientprotocol/codex-acp";
 const CURRENT_PACKAGE_ENTRY = "dist/index.js";
-// Model selection requires config options validated with the bundled adapter.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/550
-export const CODEX_MIN_VERSION = "1.13.0";
+// Earlier adapters run Default's read-only mode with workspace writes that skip approval.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/618
+export const CODEX_MIN_VERSION = "2.0.0";
 
 export interface CodexAcpInvocation {
   command: string;

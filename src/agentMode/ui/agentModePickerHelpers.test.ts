@@ -40,122 +40,123 @@ function makeManager(opts: {
     applyMode: opts.applyMode ?? jest.fn().mockResolvedValue(undefined),
   } as unknown as AgentSessionManager;
 }
+describe("agentModePickerHelpers", () => {
+  describe("buildAgentModePicker()", () => {
+    it("returns null when manager is null", () => {
+      expect(buildAgentModePicker({ manager: null })).toBeNull();
+    });
 
-describe("buildAgentModePicker", () => {
-  it("returns null when manager is null", () => {
-    expect(buildAgentModePicker({ manager: null })).toBeNull();
-  });
+    it("returns null when there is no active backend", () => {
+      expect(
+        buildAgentModePicker({
+          manager: makeManager({ backendId: null, state: null }),
+        })
+      ).toBeNull();
+    });
 
-  it("returns null when there is no active backend", () => {
-    expect(
-      buildAgentModePicker({
-        manager: makeManager({ backendId: null, state: null }),
-      })
-    ).toBeNull();
-  });
+    it("returns null when the active backend has no mode state", () => {
+      expect(
+        buildAgentModePicker({
+          manager: makeManager({
+            backendId: "codex",
+            state: { model: null, mode: null },
+          }),
+        })
+      ).toBeNull();
+    });
 
-  it("returns null when the active backend has no mode state", () => {
-    expect(
-      buildAgentModePicker({
+    it("returns null while the active session is starting", () => {
+      expect(
+        buildAgentModePicker({
+          manager: makeManager({ backendId: "codex", state: null }),
+        })
+      ).toBeNull();
+    });
+
+    it("disabled mirrors canSwitchMode() === false", () => {
+      const picker = buildAgentModePicker({
         manager: makeManager({
           backendId: "codex",
-          state: { model: null, mode: null },
+          state: {
+            model: null,
+            mode: {
+              current: "plan",
+              options: [{ value: "plan", label: "Plan" }],
+              apply: { plan: { kind: "setMode", nativeId: "plan" } },
+            },
+          },
+          canSwitchMode: false,
         }),
-      })
-    ).toBeNull();
-  });
-
-  it("returns null while the active session is starting", () => {
-    expect(
-      buildAgentModePicker({
-        manager: makeManager({ backendId: "codex", state: null }),
-      })
-    ).toBeNull();
-  });
-
-  it("disabled mirrors canSwitchMode() === false", () => {
-    const picker = buildAgentModePicker({
-      manager: makeManager({
-        backendId: "codex",
-        state: {
-          model: null,
-          mode: {
-            current: "plan",
-            options: [{ value: "plan", label: "Plan" }],
-            apply: { plan: { kind: "setMode", nativeId: "plan" } },
-          },
-        },
-        canSwitchMode: false,
-      }),
+      });
+      expect(picker?.disabled).toBe(true);
     });
-    expect(picker?.disabled).toBe(true);
-  });
 
-  it("disabled is false when canSwitchMode returns true or null", () => {
-    const state: BackendState = {
-      model: null,
-      mode: {
-        current: "plan",
-        options: [{ value: "plan", label: "Plan" }],
-        apply: { plan: { kind: "setMode", nativeId: "plan" } },
-      },
-    };
-    expect(
-      buildAgentModePicker({
-        manager: makeManager({ backendId: "codex", state, canSwitchMode: true }),
-      })?.disabled
-    ).toBe(false);
-    expect(
-      buildAgentModePicker({
-        manager: makeManager({ backendId: "codex", state, canSwitchMode: null }),
-      })?.disabled
-    ).toBe(false);
-  });
-
-  it("onChange dispatches manager.applyMode with the canonical mode and per-option spec", () => {
-    const applyMode = jest.fn().mockResolvedValue(undefined);
-    const spec = { kind: "setMode" as const, nativeId: "plan" };
-    const picker = buildAgentModePicker({
-      manager: makeManager({
-        backendId: "codex",
-        state: {
-          model: null,
-          mode: {
-            current: "default",
-            options: [
-              { value: "default", label: "Default" },
-              { value: "plan", label: "Plan" },
-            ],
-            apply: { plan: spec },
-          },
+    it("disabled is false when canSwitchMode returns true or null", () => {
+      const state: BackendState = {
+        model: null,
+        mode: {
+          current: "plan",
+          options: [{ value: "plan", label: "Plan" }],
+          apply: { plan: { kind: "setMode", nativeId: "plan" } },
         },
-        applyMode,
-      }),
+      };
+      expect(
+        buildAgentModePicker({
+          manager: makeManager({ backendId: "codex", state, canSwitchMode: true }),
+        })?.disabled
+      ).toBe(false);
+      expect(
+        buildAgentModePicker({
+          manager: makeManager({ backendId: "codex", state, canSwitchMode: null }),
+        })?.disabled
+      ).toBe(false);
     });
-    picker?.onChange("plan");
-    expect(applyMode).toHaveBeenCalledWith("codex", "plan", spec);
-  });
 
-  it("onChange ignores selections without an apply spec", () => {
-    const applyMode = jest.fn().mockResolvedValue(undefined);
-    const picker = buildAgentModePicker({
-      manager: makeManager({
-        backendId: "codex",
-        state: {
-          model: null,
-          mode: {
-            current: "default",
-            options: [
-              { value: "default", label: "Default" },
-              { value: "plan", label: "Plan" },
-            ],
-            apply: {},
+    it("onChange dispatches manager.applyMode with the canonical mode and per-option spec", () => {
+      const applyMode = jest.fn().mockResolvedValue(undefined);
+      const spec = { kind: "setMode" as const, nativeId: "plan" };
+      const picker = buildAgentModePicker({
+        manager: makeManager({
+          backendId: "codex",
+          state: {
+            model: null,
+            mode: {
+              current: "default",
+              options: [
+                { value: "default", label: "Default" },
+                { value: "plan", label: "Plan" },
+              ],
+              apply: { plan: spec },
+            },
           },
-        },
-        applyMode,
-      }),
+          applyMode,
+        }),
+      });
+      picker?.onChange("plan");
+      expect(applyMode).toHaveBeenCalledWith("codex", "plan", spec);
     });
-    picker?.onChange("plan");
-    expect(applyMode).not.toHaveBeenCalled();
+
+    it("onChange ignores selections without an apply spec", () => {
+      const applyMode = jest.fn().mockResolvedValue(undefined);
+      const picker = buildAgentModePicker({
+        manager: makeManager({
+          backendId: "codex",
+          state: {
+            model: null,
+            mode: {
+              current: "default",
+              options: [
+                { value: "default", label: "Default" },
+                { value: "plan", label: "Plan" },
+              ],
+              apply: {},
+            },
+          },
+          applyMode,
+        }),
+      });
+      picker?.onChange("plan");
+      expect(applyMode).not.toHaveBeenCalled();
+    });
   });
 });

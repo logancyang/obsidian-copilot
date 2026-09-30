@@ -1,22 +1,17 @@
 import { App, Vault } from "obsidian";
 import { ProjectConfig } from "@/aiParams";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
+import {
+  getCachedProjectRecords,
+  isPendingFileWrite,
+  updateCachedProjectRecords,
+  upsertCachedProjectRecord,
+} from "@/projects/state";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
 jest.mock("@/settings/model", () => ({
-  getSettings: jest.fn(() => ({ projectsFolder: "copilot-projects", projectList: [] })),
+  getSettings: jest.fn(() => ({ copilotFolder: "vault-copilot" })),
   updateSetting: jest.fn(),
-}));
-
-jest.mock("@/projects/state", () => ({
-  addPendingFileWrite: jest.fn(),
-  removePendingFileWrite: jest.fn(),
-  isPendingFileWrite: jest.fn(() => false),
-  upsertCachedProjectRecord: jest.fn(),
-  deleteCachedProjectRecordById: jest.fn(),
-  updateCachedProjectRecords: jest.fn(),
-  getCachedProjectRecords: jest.fn(() => []),
-  getCachedProjectRecordById: jest.fn(() => undefined),
 }));
 
 jest.mock("@/logger", () => ({
@@ -25,35 +20,14 @@ jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
 }));
 
-jest.mock("@/projects/projectUtils", () => ({
-  sanitizeVaultPathSegment: jest.fn((s: string) => s.replace(/[/\\]/g, "_")),
-  fetchAllProjects: jest.fn(async () => []),
-  loadAllProjects: jest.fn(async () => []),
-  writeProjectFrontmatter: jest.fn(async () => {}),
-  getProjectsFolder: jest.fn(() => "copilot-projects"),
-  getProjectFolderPath: jest.fn((name: string) => `copilot-projects/${name}`),
-  getProjectConfigFilePath: jest.fn((name: string) => `copilot-projects/${name}/project.md`),
-}));
-
 jest.mock("@/utils", () => ({
+  ...jest.requireActual<typeof import("@/utils")>("@/utils"),
   ensureFolderExists: jest.fn(async () => {}),
-}));
-
-jest.mock("@/utils/recentUsageManager", () => ({
-  RecentUsageManager: jest.fn().mockImplementation(() => ({
-    touch: jest.fn(),
-    shouldPersist: jest.fn(() => null),
-    markPersisted: jest.fn(),
-    getLastTouchedAt: jest.fn(() => null),
-    getRecentItems: jest.fn(() => []),
-  })),
 }));
 
 jest.mock("@/projects/projectMigration", () => ({
   ensureProjectsMigratedIfNeeded: jest.fn(async () => {}),
 }));
-
-import { getCachedProjectRecords, getCachedProjectRecordById } from "@/projects/state";
 
 function makeConfig(
   overrides: { id: string; name: string } & Partial<ProjectConfig>
@@ -69,65 +43,131 @@ function makeConfig(
   };
 }
 
-function makeMockVault(): jest.Mocked<Vault> {
-  return {
-    create: jest.fn(async (path: string) => mockTFile({ path })),
-    getAbstractFileByPath: jest.fn(() => null),
-    adapter: { exists: jest.fn(async () => false) },
-  } as unknown as jest.Mocked<Vault>;
+function seedProject(config: ProjectConfig, folderName: string): void {
+  upsertCachedProjectRecord({
+    project: config,
+    filePath: `vault-copilot/projects/${folderName}/project.md`,
+    folderName,
+  });
 }
 
-function makeMockApp(vault: Vault): App {
-  return {
+interface TestVault {
+  app: App;
+  vault: jest.Mocked<Vault>;
+  frontmatter: Record<string, unknown>;
+}
+
+function makeTestVault(options: { existingPaths?: string[] } = {}): TestVault {
+  const frontmatter: Record<string, unknown> = {};
+  const vault = {
+    create: jest.fn(async (path: string) => mockTFile({ path })),
+    getAbstractFileByPath: jest.fn(() => null),
+    adapter: {
+      exists: jest.fn(async (path: string) => options.existingPaths?.includes(path) ?? false),
+    },
+  } as unknown as jest.Mocked<Vault>;
+  const app = {
     vault,
-    fileManager: { trashFile: jest.fn(async () => {}) },
+    fileManager: {
+      processFrontMatter: jest.fn(
+        async (_file: unknown, update: (value: Record<string, unknown>) => void) =>
+          update(frontmatter)
+      ),
+      trashFile: jest.fn(async () => {}),
+    },
   } as unknown as App;
+  return { app, vault, frontmatter };
 }
 
 function resetSingleton() {
   (ProjectFileManager as unknown as Record<string, unknown>)["instance"] = undefined;
 }
 
-describe("ProjectFileManager.createProject", () => {
-  let vault: jest.Mocked<Vault>;
-
+describe("ProjectFileManager", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetSingleton();
-    vault = makeMockVault();
-    (getCachedProjectRecords as jest.Mock).mockReturnValue([]);
-    (getCachedProjectRecordById as jest.Mock).mockReturnValue(undefined);
+    updateCachedProjectRecords([]);
   });
 
-  it("rejects duplicate project names (case-insensitive)", async () => {
-    (getCachedProjectRecords as jest.Mock).mockReturnValue([
-      {
-        project: makeConfig({ id: "existing", name: "My Project" }),
-        filePath: "copilot-projects/existing/project.md",
-        folderName: "existing",
-      },
-    ]);
+  describe("createProject()", () => {
+    it("creates project.md in a folder named after the project and caches the new record", async () => {
+      const { app, vault, frontmatter } = makeTestVault();
+      const manager = ProjectFileManager.getInstance(app);
 
-    const manager = ProjectFileManager.getInstance(makeMockApp(vault));
+      const record = await manager.createProject(
+        makeConfig({ id: "p1", name: "My Project", systemPrompt: "Cite every source." })
+      );
 
-    await expect(
-      manager.createProject(makeConfig({ id: "new-project", name: "my project" }))
-    ).rejects.toThrow(/already exists/i);
-  });
+      const filePath = "vault-copilot/projects/My Project/project.md";
+      expect(vault.create).toHaveBeenCalledWith(filePath, "Cite every source.");
+      expect(frontmatter).toMatchObject({
+        "copilot-project-id": "p1",
+        "copilot-project-name": "My Project",
+      });
+      expect(record).toMatchObject({ filePath, folderName: "My Project" });
+      expect(getCachedProjectRecords()).toEqual([record]);
+      expect(isPendingFileWrite(filePath)).toBe(false);
+    });
 
-  it("rejects empty project id", async () => {
-    const manager = ProjectFileManager.getInstance(makeMockApp(vault));
+    it("names the project folder after its id when the name is empty", async () => {
+      const { app } = makeTestVault();
+      const manager = ProjectFileManager.getInstance(app);
 
-    await expect(manager.createProject(makeConfig({ id: "", name: "Valid Name" }))).rejects.toThrow(
-      /cannot be empty/i
-    );
-  });
+      const record = await manager.createProject(makeConfig({ id: "p1", name: "" }));
 
-  it("rejects whitespace-only project id", async () => {
-    const manager = ProjectFileManager.getInstance(makeMockApp(vault));
+      expect(record.folderName).toBe("p1");
+    });
 
-    await expect(
-      manager.createProject(makeConfig({ id: "   ", name: "Valid Name" }))
-    ).rejects.toThrow(/cannot be empty/i);
+    it("rejects a project whose name matches an existing project case-insensitively", async () => {
+      seedProject(makeConfig({ id: "existing", name: "My Project" }), "existing");
+      const manager = ProjectFileManager.getInstance(makeTestVault().app);
+
+      await expect(
+        manager.createProject(makeConfig({ id: "new-project", name: "my project" }))
+      ).rejects.toThrow(/already exists/i);
+      expect(getCachedProjectRecords()).toHaveLength(1);
+    });
+
+    it("rejects a project whose id is already in use", async () => {
+      seedProject(makeConfig({ id: "p1", name: "First" }), "First");
+      const manager = ProjectFileManager.getInstance(makeTestVault().app);
+
+      await expect(manager.createProject(makeConfig({ id: "p1", name: "Second" }))).rejects.toThrow(
+        "Project id already exists: p1"
+      );
+    });
+
+    it.each([[""], ["   "]])("rejects the blank project id %j", async (id) => {
+      const manager = ProjectFileManager.getInstance(makeTestVault().app);
+
+      await expect(manager.createProject(makeConfig({ id, name: "Valid Name" }))).rejects.toThrow(
+        /cannot be empty/i
+      );
+    });
+
+    it("rejects a name whose sanitized folder collides with another project's folder", async () => {
+      seedProject(makeConfig({ id: "first", name: "a/b" }), "a_b");
+      const { app, vault } = makeTestVault();
+      const manager = ProjectFileManager.getInstance(app);
+
+      await expect(
+        manager.createProject(makeConfig({ id: "second", name: "a|b" }))
+      ).rejects.toThrow(/Folder name collision/);
+      expect(vault.create).not.toHaveBeenCalled();
+    });
+
+    it("refuses to overwrite a project.md that already exists on disk", async () => {
+      const filePath = "vault-copilot/projects/My Project/project.md";
+      const { app, vault } = makeTestVault({ existingPaths: [filePath] });
+      const manager = ProjectFileManager.getInstance(app);
+
+      await expect(
+        manager.createProject(makeConfig({ id: "p1", name: "My Project" }))
+      ).rejects.toThrow(/already exists/i);
+      expect(vault.create).not.toHaveBeenCalled();
+      expect(getCachedProjectRecords()).toEqual([]);
+      expect(isPendingFileWrite(filePath)).toBe(false);
+    });
   });
 });

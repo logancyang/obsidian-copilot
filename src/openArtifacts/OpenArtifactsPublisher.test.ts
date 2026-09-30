@@ -770,7 +770,9 @@ describe("OpenArtifactsPublisher", () => {
         });
         expect(harness.client.update).toHaveBeenCalledTimes(1);
       });
+    });
 
+    describe("dispose()", () => {
       it("disposes open modals and prevents stale callbacks after plugin teardown", async () => {
         const harness = createHarness();
         await harness.publisher.open(harness.file);

@@ -64,67 +64,15 @@ describe("SkillLoadIssues", () => {
       restoreContentHeight = undefined;
     });
 
-    it(`shows every file path, reason, and rejected line for ${ISSUE_URL}`, () => {
-      const order: string[] = [];
-      render(
-        <SkillLoadIssuesModalContent
-          issues={[
-            makeIssue({
-              onFixWithAgent: () => order.push("fix"),
-              onOpen: () => order.push("open"),
-              onReveal: () => order.push("reveal"),
-            }),
-            makeIssue({
-              location: ".claude/skills/without-fix/SKILL.md",
-              offendingText: "description: [unfinished",
-            }),
-          ]}
-          onFixAll={() => order.push("fix-all")}
-          onClose={() => order.push("close")}
-        />
-      );
-
-      expect(screen.getByText(makeIssue().location)).not.toBeNull();
-      expect(screen.getByText(makeIssue().location).tagName).toBe("DIV");
-      expect(screen.getByText(makeIssue().offendingText as string)).not.toBeNull();
-      expect(screen.getByText(".claude/skills/without-fix/SKILL.md")).not.toBeNull();
-      expect(screen.getAllByText(makeIssue().reason)).toHaveLength(2);
-      expect(screen.queryByText("Current")).toBeNull();
-      expect(screen.queryByText("Change to")).toBeNull();
-      const fixAllButton = screen.getByRole("button", { name: "Fix All with Agent" });
-      const fixButton = screen.getAllByRole("button", { name: "Fix with Agent" })[0];
-      const openButton = screen.getAllByRole("button", { name: "Open SKILL.md" })[0];
-      const revealButton = screen.getAllByRole("button", { name: "Show in folder" })[0];
-      expect(fixAllButton.classList.contains("tw-bg-interactive-accent")).toBe(true);
-      expect(fixButton.classList.contains("tw-bg-secondary")).toBe(true);
-      expect(fixButton.classList.contains("tw-bg-interactive-accent")).toBe(false);
-      expect(openButton.classList.contains("tw-bg-transparent")).toBe(true);
-      expect(openButton.classList.contains("tw-text-faint")).toBe(true);
-      expect(revealButton.classList.contains("tw-bg-transparent")).toBe(true);
-      expect(revealButton.classList.contains("tw-text-faint")).toBe(true);
-
-      fireEvent.click(fixButton);
-      fireEvent.click(openButton);
-      fireEvent.click(revealButton);
-      fireEvent.click(fixAllButton);
-      expect(order).toEqual([
-        "close",
-        "fix",
-        "close",
-        "open",
-        "close",
-        "reveal",
-        "close",
-        "fix-all",
-      ]);
-    });
-
-    it(`keeps each explanation attached to its own file for ${ISSUE_URL}`, () => {
+    it(`lists each rejected skill's file path, reason, and rejected line in its own article for ${ISSUE_URL}`, () => {
       render(
         <SkillLoadIssuesModalContent
           issues={[
             makeIssue(),
-            makeIssue({ location: ".claude/skills/second/SKILL.md" }),
+            makeIssue({
+              location: ".claude/skills/without-fix/SKILL.md",
+              offendingText: "description: [unfinished",
+            }),
             makeIssue({
               location: ".claude/skills/third/SKILL.md",
               reason: "Missing name.",
@@ -136,9 +84,47 @@ describe("SkillLoadIssues", () => {
         />
       );
 
+      expect(screen.getAllByRole("article")).toHaveLength(3);
+      expect(screen.getByText(makeIssue().location)).not.toBeNull();
+      expect(screen.getByText(makeIssue().offendingText as string)).not.toBeNull();
+      expect(screen.getByText(".claude/skills/without-fix/SKILL.md")).not.toBeNull();
+      expect(screen.getByText("description: [unfinished")).not.toBeNull();
       expect(screen.getAllByText(makeIssue().reason)).toHaveLength(2);
       expect(screen.getByText("Missing name.")).not.toBeNull();
-      expect(screen.getAllByRole("article")).toHaveLength(3);
+    });
+
+    it(`closes the modal before running a row action or Fix All for ${ISSUE_URL}`, () => {
+      const order: string[] = [];
+      render(
+        <SkillLoadIssuesModalContent
+          issues={[
+            makeIssue({
+              onFixWithAgent: () => order.push("fix"),
+              onOpen: () => order.push("open"),
+              onReveal: () => order.push("reveal"),
+            }),
+            makeIssue({ location: ".claude/skills/second/SKILL.md" }),
+          ]}
+          onFixAll={() => order.push("fix-all")}
+          onClose={() => order.push("close")}
+        />
+      );
+
+      fireEvent.click(screen.getAllByRole("button", { name: "Fix with Agent" })[0]);
+      fireEvent.click(screen.getAllByRole("button", { name: "Open SKILL.md" })[0]);
+      fireEvent.click(screen.getAllByRole("button", { name: "Show in folder" })[0]);
+      fireEvent.click(screen.getByRole("button", { name: "Fix All with Agent" }));
+
+      expect(order).toEqual([
+        "close",
+        "fix",
+        "close",
+        "open",
+        "close",
+        "reveal",
+        "close",
+        "fix-all",
+      ]);
     });
 
     it(`collapses an overflowing rejected description until Show more is selected for ${ISSUE_URL}`, () => {

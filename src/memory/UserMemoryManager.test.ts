@@ -29,14 +29,7 @@ import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { AIMessageChunk } from "@langchain/core/messages";
 import { mockTFile } from "@/__tests__/mockObsidian";
-
-type UserMemoryManagerInternal = {
-  updateMemory: (messages: ChatMessage[], chatModel?: BaseChatModel) => Promise<void>;
-  extractJsonFromResponse: (content: string) => string;
-  parseExistingConversations: (content: string) => string[];
-};
-const asInternal = (m: UserMemoryManager): UserMemoryManagerInternal =>
-  m as unknown as UserMemoryManagerInternal;
+import { waitFor } from "@testing-library/react";
 
 const createMockTFile = (path: string): TFile => {
   const name = path.split("/").pop() || "";
@@ -47,6 +40,8 @@ const createMockTFile = (path: string): TFile => {
     extension: path.split(".").pop() || "",
   });
 };
+
+const RECENT_PATH = "copilot/memory/Recent Conversations.md";
 
 describe("UserMemoryManager", () => {
   let userMemoryManager: UserMemoryManager;
@@ -78,7 +73,7 @@ describe("UserMemoryManager", () => {
       vault: mockVault,
     } as unknown as jest.Mocked<App>;
 
-    (ensureFolderExists as jest.Mock).mockClear();
+    (ensureFolderExists as jest.Mock).mockReset().mockResolvedValue(undefined);
 
     mockChatModel = {
       invoke: jest.fn(),
@@ -88,7 +83,7 @@ describe("UserMemoryManager", () => {
     userMemoryManager = new UserMemoryManager(mockApp);
   });
 
-  describe("addRecentConversation", () => {
+  describe("addRecentConversation()", () => {
     const createMockMessage = (
       id: string,
       message: string,
@@ -101,157 +96,232 @@ describe("UserMemoryManager", () => {
       isVisible: true,
     });
 
-    it("should skip memory update when memory is disabled", () => {
+    const messages = [createMockMessage("1", "How do I create a daily note template?")];
+
+    function replyWith(content: string): void {
+      mockChatModel.invoke.mockResolvedValueOnce(new AIMessageChunk({ content }));
+    }
+
+    function existingRecentFile(content: string): TFile {
+      const file = createMockTFile(RECENT_PATH);
+      mockVault.getAbstractFileByPath.mockReturnValue(file);
+      mockVault.read.mockResolvedValue(content);
+      return file;
+    }
+
+    async function writtenContent(): Promise<string> {
+      await waitFor(() =>
+        expect(mockVault.modify.mock.calls.length + mockVault.create.mock.calls.length).toBe(1)
+      );
+      const call = mockVault.modify.mock.calls[0] ?? mockVault.create.mock.calls[0];
+      return call[1];
+    }
+
+    it("appends a titled, timestamped summary after the existing conversations", async () => {
+      existingRecentFile(`## Previous Conversation
+**Time:** 2024-01-01 09:00
+**Summary:** User asked about plugin installation.
+
+## Another Conversation
+**Time:** 2024-01-01 10:00
+**Summary:** User inquired about linking notes.
+`);
+      replyWith(
+        JSON.stringify({
+          title: "Daily Note Template Setup",
+          summary: "User asked about creating daily note templates with automatic date formatting.",
+        })
+      );
+
+      userMemoryManager.addRecentConversation(messages, mockChatModel);
+
+      const content = await writtenContent();
+      expect(content).toMatch(
+        /^## Previous Conversation\n[\s\S]*## Another Conversation\n[\s\S]*\n\n## Daily Note Template Setup\n\*\*Time:\*\* \d{4}-\d{2}-\d{2} \d{2}:\d{2}\n\*\*Summary:\*\* User asked about creating daily note templates with automatic date formatting\.\n$/
+      );
+      expect(mockChatModel.invoke).toHaveBeenCalledTimes(1);
+    });
+
+    it("creates the Recent Conversations file when none exists", async () => {
+      mockVault.getAbstractFileByPath.mockReturnValue(null);
+      replyWith(JSON.stringify({ title: "First Chat", summary: "A first summary." }));
+
+      userMemoryManager.addRecentConversation(messages, mockChatModel);
+
+      await waitFor(() =>
+        expect(mockVault.create).toHaveBeenCalledWith(RECENT_PATH, expect.any(String))
+      );
+      expect(ensureFolderExists).toHaveBeenCalledWith(mockVault, "copilot/memory");
+      expect(mockVault.create.mock.calls[0][1]).toContain("## First Chat\n");
+    });
+
+    it("replaces the file content when the existing file is blank", async () => {
+      existingRecentFile("  \n");
+      replyWith(JSON.stringify({ title: "First Chat", summary: "A first summary." }));
+
+      userMemoryManager.addRecentConversation(messages, mockChatModel);
+
+      const content = await writtenContent();
+      expect(content.startsWith("## First Chat\n")).toBe(true);
+    });
+
+    it.each([
+      ["a json code fence", '```json\n{"title": "Fenced", "summary": "From a fence"}\n```'],
+      ["an unmarked code fence", '```\n{"title": "Fenced", "summary": "From a fence"}\n```'],
+      [
+        "surrounding prose",
+        'Here you go: {"title": "Fenced", "summary": "From a fence"} hope it helps',
+      ],
+    ])("reads the title and summary from a model reply wrapped in %s", async (_label, reply) => {
+      mockVault.getAbstractFileByPath.mockReturnValue(null);
+      replyWith(reply);
+
+      userMemoryManager.addRecentConversation(messages, mockChatModel);
+
+      const content = await writtenContent();
+      expect(content).toContain("## Fenced\n");
+      expect(content).toContain("**Summary:** From a fence\n");
+    });
+
+    it("falls back to an untitled entry and logs when the model reply is not JSON", async () => {
+      mockVault.getAbstractFileByPath.mockReturnValue(null);
+      replyWith("Invalid JSON response");
+
+      userMemoryManager.addRecentConversation(messages, mockChatModel);
+
+      const content = await writtenContent();
+      expect(content).toContain("## Untitled Conversation");
+      expect(content).toContain("**Summary:** Summary generation failed");
+      expect(logError).toHaveBeenCalledWith(
+        "[UserMemoryManager] Failed to parse LLM response as JSON:",
+        expect.any(Error)
+      );
+    });
+
+    it("keeps each existing conversation as its own trimmed section and drops text before the first section", async () => {
+      existingRecentFile(`Intro text that is not a conversation.
+
+  ## First Conversation  
+**Time:** 2024-01-01 09:00
+**Summary:** Multi-line summary:
+- point one
+- point two  
+
+## Second Conversation
+**Time:** 2024-01-01 10:00
+**Summary:** Short.
+`);
+      replyWith(JSON.stringify({ title: "Third", summary: "Third summary." }));
+
+      userMemoryManager.addRecentConversation(messages, mockChatModel);
+
+      const content = await writtenContent();
+      expect(content).not.toContain("Intro text");
+      expect(content).toContain(
+        "## First Conversation  \n**Time:** 2024-01-01 09:00\n**Summary:** Multi-line summary:\n- point one\n- point two\n\n## Second Conversation"
+      );
+    });
+
+    it("drops the oldest conversations once maxRecentConversations is exceeded", async () => {
+      mockSettings.maxRecentConversations = 2;
+      existingRecentFile(`## Oldest
+**Time:** 2024-01-01 09:00
+**Summary:** One.
+
+## Middle
+**Time:** 2024-01-01 10:00
+**Summary:** Two.
+`);
+      replyWith(JSON.stringify({ title: "Newest", summary: "Three." }));
+
+      userMemoryManager.addRecentConversation(messages, mockChatModel);
+
+      const content = await writtenContent();
+      expect(content).not.toContain("## Oldest");
+      expect(content).toContain("## Middle");
+      expect(content).toContain("## Newest");
+    });
+
+    it("writes the summary to the memory root that is current when the model returns", async () => {
+      mockVault.getAbstractFileByPath.mockReturnValue(null);
+      mockChatModel.invoke.mockImplementation(async () => {
+        mockedMemoryFolder.mockReturnValue("moved/memory");
+        return new AIMessageChunk({ content: '{"summary":"s","topics":[],"insights":[]}' });
+      });
+
+      userMemoryManager.addRecentConversation(messages, mockChatModel);
+
+      await waitFor(() =>
+        expect(mockVault.create).toHaveBeenCalledWith(
+          "moved/memory/Recent Conversations.md",
+          expect.any(String)
+        )
+      );
+      expect(ensureFolderExists).toHaveBeenCalledWith(mockVault, "moved/memory");
+    });
+
+    it("skips the update and warns when recent conversations are disabled", () => {
       mockSettings.enableRecentConversations = false;
-      const messages = [createMockMessage("1", "test message")];
 
       userMemoryManager.addRecentConversation(messages, mockChatModel);
 
       expect(logWarn).toHaveBeenCalledWith(
         "[UserMemoryManager] Recent history referencing is disabled, skipping analysis"
       );
+      expect(mockChatModel.invoke).not.toHaveBeenCalled();
     });
 
-    it("should skip memory update when no messages provided", () => {
+    it("skips the update and warns when there are no messages", () => {
       userMemoryManager.addRecentConversation([], mockChatModel);
 
       expect(logWarn).toHaveBeenCalledWith(
         "[UserMemoryManager] No messages to analyze for user memory"
       );
-    });
-
-    it("should complete end-to-end memory update with new simple format", async () => {
-      const messages = [
-        createMockMessage(
-          "1",
-          "How do I create a daily note template in Obsidian with automatic date formatting?"
-        ),
-        createMockMessage(
-          "2",
-          "I can help you create a daily note template with automatic date formatting...",
-          "ai"
-        ),
-        createMockMessage(
-          "3",
-          "That's perfect! Can you also show me how to add tags automatically?"
-        ),
-        createMockMessage("4", "Certainly! You can add automatic tags to your template...", "ai"),
-      ];
-
-      const existingMemoryContent = `## Previous Conversation
-**Time:** 2024-01-01 09:00
-**Summary:** User asked about plugin installation and learned that plugins enhance Obsidian functionality.
-
-## Another Conversation
-**Time:** 2024-01-01 10:00
-**Summary:** User inquired about linking notes and discovered that backlinks create knowledge connections.
-`;
-
-      const mockMemoryFile = createMockTFile("copilot/memory/Recent Conversations.md");
-
-      (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
-
-      mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
-
-      mockVault.read.mockResolvedValue(existingMemoryContent);
-
-      const mockResponse = new AIMessageChunk({
-        content: JSON.stringify({
-          title: "Daily Note Template Setup",
-          summary:
-            "User asked about creating daily note templates with automatic date formatting and tagging. Learned how to use template variables for dates and automatic tag insertion.",
-        }),
-      });
-      mockChatModel.invoke.mockResolvedValueOnce(mockResponse);
-
-      await asInternal(userMemoryManager).updateMemory(messages, mockChatModel);
-
-      const modifyCall = mockVault.modify.mock.calls[0];
-      const actualContent = modifyCall[1];
-
-      expect(actualContent).toContain("## Daily Note Template Setup");
-      expect(actualContent).toMatch(/\*\*Time:\*\* \d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
-      expect(actualContent).toContain(
-        "**Summary:** User asked about creating daily note templates"
-      );
-
-      expect(actualContent).toContain("## Previous Conversation");
-      expect(actualContent).toContain("## Another Conversation");
-
-      expect(mockChatModel.invoke).toHaveBeenCalledTimes(1);
-
-      expect(mockChatModel.invoke).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({
-            content: expect.stringContaining("generate both a title and a summary") as unknown,
-          }),
-        ])
-      );
-    });
-
-    it("should handle LLM JSON parsing errors gracefully", async () => {
-      const messages = [createMockMessage("1", "test message")];
-      const mockMemoryFile = createMockTFile("copilot/memory/Recent Conversations.md");
-
-      (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
-      mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
-      mockVault.read.mockResolvedValue("");
-
-      const mockResponse = new AIMessageChunk({ content: "Invalid JSON response" });
-      mockChatModel.invoke.mockResolvedValueOnce(mockResponse);
-
-      await asInternal(userMemoryManager).updateMemory(messages, mockChatModel);
-
-      const modifyCall = mockVault.modify.mock.calls[0];
-      const actualContent = modifyCall[1];
-
-      expect(actualContent).toContain("## Untitled Conversation");
-      expect(actualContent).toContain("**Summary:** Summary generation failed");
-      expect(logError).toHaveBeenCalledWith(
-        "[UserMemoryManager] Failed to parse LLM response as JSON:",
-        expect.any(Error)
-      );
+      expect(mockChatModel.invoke).not.toHaveBeenCalled();
     });
   });
 
-  describe("updateMemory", () => {
-    it("writes the summary to the root that is current when the model returns", async () => {
-      mockedMemoryFolder.mockReturnValue("copilot/memory");
-      const model = {
-        invoke: jest.fn(async () => {
-          mockedMemoryFolder.mockReturnValue("moved/memory");
-          return new AIMessageChunk({ content: '{"summary":"s","topics":[],"insights":[]}' });
-        }),
-      } as unknown as BaseChatModel;
-      (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(null);
+  describe("updateSavedMemory()", () => {
+    it("creates the Saved Memories file from the model's merged list", async () => {
+      mockVault.getAbstractFileByPath.mockReturnValue(null);
+      const merged = "- The user prefers concise responses";
+      mockChatModel.invoke.mockResolvedValue(new AIMessageChunk({ content: merged }));
 
-      await asInternal(userMemoryManager).updateMemory(
-        [
-          { id: "1", message: "hi", sender: "user", isVisible: true, timestamp: null },
-        ] as ChatMessage[],
-        model
+      const result = await userMemoryManager.updateSavedMemory(
+        "I prefer concise responses",
+        mockChatModel
       );
 
-      expect(ensureFolderExists).toHaveBeenCalledWith(mockVault, "moved/memory");
-      expect(mockVault.create).toHaveBeenCalledWith(
-        "moved/memory/Recent Conversations.md",
-        expect.any(String)
-      );
+      expect(ensureFolderExists).toHaveBeenCalledWith(mockVault, "copilot/memory");
+      expect(mockVault.create).toHaveBeenCalledWith("copilot/memory/Saved Memories.md", merged);
+      expect(result).toEqual({ content: merged, filePath: "copilot/memory/Saved Memories.md" });
     });
-  });
 
-  describe("updateSavedMemory", () => {
+    it("overwrites an existing Saved Memories file with the model's merged list", async () => {
+      const file = createMockTFile("copilot/memory/Saved Memories.md");
+      mockVault.getAbstractFileByPath.mockReturnValue(file);
+      mockVault.read.mockResolvedValue("- Previous memory content\n- Another important fact\n");
+      const merged =
+        "- Previous memory content\n- Another important fact\n- New important information";
+      mockChatModel.invoke.mockResolvedValue(new AIMessageChunk({ content: merged }));
+
+      const result = await userMemoryManager.updateSavedMemory(
+        "New important information",
+        mockChatModel
+      );
+
+      expect(mockVault.modify).toHaveBeenCalledWith(file, merged);
+      expect(result).toEqual({ content: merged, filePath: "copilot/memory/Saved Memories.md" });
+    });
+
     it("reports the path it wrote, not one re-resolved after the root moved", async () => {
-      mockedMemoryFolder.mockReturnValue("copilot/memory");
-      (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(null);
-      const model = {
-        invoke: jest.fn(async () => {
-          mockedMemoryFolder.mockReturnValue("moved/memory");
-          return new AIMessageChunk({ content: "- remembered" });
-        }),
-      } as unknown as BaseChatModel;
+      mockVault.getAbstractFileByPath.mockReturnValue(null);
+      mockChatModel.invoke.mockImplementation(async () => {
+        mockedMemoryFolder.mockReturnValue("moved/memory");
+        return new AIMessageChunk({ content: "- remembered" });
+      });
 
-      const result = await userMemoryManager.updateSavedMemory("remember this", model);
+      const result = await userMemoryManager.updateSavedMemory("remember this", mockChatModel);
 
       expect(result.filePath).toBe("copilot/memory/Saved Memories.md");
       expect(mockVault.create).toHaveBeenCalledWith(
@@ -259,216 +329,39 @@ describe("UserMemoryManager", () => {
         expect.any(String)
       );
     });
-  });
 
-  describe("extractJsonFromResponse", () => {
-    it("should extract JSON from markdown code blocks with json language tag", () => {
-      const content = `Here's the response:
+    it("returns an error without calling the model when saved memory is disabled", async () => {
+      mockSettings.enableSavedMemory = false;
 
-\`\`\`json
-{
-  "title": "Test Title",
-  "summary": "Test Summary"
-}
-\`\`\`
-
-That's the JSON data.`;
-
-      const result = asInternal(userMemoryManager).extractJsonFromResponse(content);
-      expect(result).toBe('{\n  "title": "Test Title",\n  "summary": "Test Summary"\n}');
-    });
-
-    it("should extract JSON from unmarked code blocks", () => {
-      const content = `\`\`\`
-{
-  "title": "Unmarked Block",
-  "summary": "No language specified"
-}
-\`\`\``;
-
-      const result = asInternal(userMemoryManager).extractJsonFromResponse(content);
-      expect(result).toBe(
-        '{\n  "title": "Unmarked Block",\n  "summary": "No language specified"\n}'
+      const result = await userMemoryManager.updateSavedMemory(
+        "Test memory content",
+        mockChatModel
       );
+
+      expect(result).toEqual({ error: "Saved memory is disabled, skipping save" });
+      expect(mockChatModel.invoke).not.toHaveBeenCalled();
     });
 
-    it("should extract JSON object when no code blocks present", () => {
-      const content = `Some text before {"title": "Inline JSON", "summary": "Direct JSON"} and after`;
+    it("returns an error when no content is provided", async () => {
+      const result = await userMemoryManager.updateSavedMemory("", mockChatModel);
 
-      const result = asInternal(userMemoryManager).extractJsonFromResponse(content);
-      expect(result).toBe('{"title": "Inline JSON", "summary": "Direct JSON"}');
+      expect(result).toEqual({ error: "No content provided for saved memory" });
     });
 
-    it("should return original content when no JSON patterns found", () => {
-      const content = "No JSON here, just plain text";
+    it("returns the error message when the memory folder cannot be created", async () => {
+      (ensureFolderExists as jest.Mock).mockRejectedValue(new Error("Folder creation failed"));
 
-      const result = asInternal(userMemoryManager).extractJsonFromResponse(content);
-      expect(result).toBe(content);
-    });
+      const result = await userMemoryManager.updateSavedMemory("Test content", mockChatModel);
 
-    it("should handle multiline JSON in code blocks", () => {
-      const content = `\`\`\`json
-{
-  "title": "Multi-line Test",
-  "summary": "This is a test with\\nmultiple lines and special characters: äöü"
-}
-\`\`\``;
-
-      const result = asInternal(userMemoryManager).extractJsonFromResponse(content);
-      expect(result).toContain('"title": "Multi-line Test"');
-      expect(result).toContain("special characters: äöü");
+      expect(result).toEqual({ error: "Error saving memory: Folder creation failed" });
     });
   });
 
-  describe("parseExistingConversations", () => {
-    it("should return empty array for empty string", () => {
-      const result = asInternal(userMemoryManager).parseExistingConversations("");
-      expect(result).toEqual([]);
-    });
-
-    it("should return empty array for content with no H2 sections", () => {
-      const content = `This is some content without H2 headers.
-It has multiple lines but no conversations.
-# This is H1, not H2
-### This is H3, not H2`;
-
-      const result = asInternal(userMemoryManager).parseExistingConversations(content);
-      expect(result).toEqual([]);
-    });
-
-    it("should extract single conversation section", () => {
-      const content = `## Daily Note Template Setup
-**Time:** 2024-01-01 10:00
-**Summary:** User asked about creating daily note templates with automatic date formatting.`;
-
-      const result = asInternal(userMemoryManager).parseExistingConversations(content);
-      expect(result).toEqual([
-        `## Daily Note Template Setup
-**Time:** 2024-01-01 10:00
-**Summary:** User asked about creating daily note templates with automatic date formatting.`,
-      ]);
-    });
-
-    it("should extract multiple conversation sections", () => {
-      const content = `## First Conversation
-**Time:** 2024-01-01 09:00
-**Summary:** User asked about plugin installation.
-
-## Second Conversation
-**Time:** 2024-01-01 10:00
-**Summary:** User inquired about linking notes.
-
-## Third Conversation
-**Time:** 2024-01-01 11:00
-**Summary:** User learned about backlinks.`;
-
-      const result = asInternal(userMemoryManager).parseExistingConversations(content);
-      expect(result).toEqual([
-        `## First Conversation
-**Time:** 2024-01-01 09:00
-**Summary:** User asked about plugin installation.`,
-        `## Second Conversation
-**Time:** 2024-01-01 10:00
-**Summary:** User inquired about linking notes.`,
-        `## Third Conversation
-**Time:** 2024-01-01 11:00
-**Summary:** User learned about backlinks.`,
-      ]);
-    });
-
-    it("should ignore content before the first H2 section", () => {
-      const content = `This is some introductory text that should be ignored.
-It might contain important information, but it's before the first conversation.
-
-## First Conversation
-**Time:** 2024-01-01 09:00
-**Summary:** This conversation should be included.
-
-## Second Conversation
-**Time:** 2024-01-01 10:00
-**Summary:** This conversation should also be included.`;
-
-      const result = asInternal(userMemoryManager).parseExistingConversations(content);
-      expect(result).toEqual([
-        `## First Conversation
-**Time:** 2024-01-01 09:00
-**Summary:** This conversation should be included.`,
-        `## Second Conversation
-**Time:** 2024-01-01 10:00
-**Summary:** This conversation should also be included.`,
-      ]);
-    });
-
-    it("should handle conversations with extra whitespace and trim them", () => {
-      const content = `  ## First Conversation  
-**Time:** 2024-01-01 09:00
-**Summary:** User asked about plugin installation.  
-
-  ## Second Conversation  
-**Time:** 2024-01-01 10:00
-**Summary:** User inquired about linking notes.  `;
-
-      const result = asInternal(userMemoryManager).parseExistingConversations(content);
-      expect(result).toEqual([
-        `## First Conversation  
-**Time:** 2024-01-01 09:00
-**Summary:** User asked about plugin installation.`,
-        `## Second Conversation  
-**Time:** 2024-01-01 10:00
-**Summary:** User inquired about linking notes.`,
-      ]);
-    });
-
-    it("should handle conversation sections with complex multi-line content", () => {
-      const content = `## Complex Conversation
-**Time:** 2024-01-01 09:00
-**Summary:** User asked about multiple topics including:
-- How to create templates
-- How to use variables
-- How to set up automation
-
-The conversation covered advanced features and included code examples.
-
-## Another Conversation
-**Time:** 2024-01-01 10:00
-**Summary:** Short summary.`;
-
-      const result = asInternal(userMemoryManager).parseExistingConversations(content);
-      expect(result).toEqual([
-        `## Complex Conversation
-**Time:** 2024-01-01 09:00
-**Summary:** User asked about multiple topics including:
-- How to create templates
-- How to use variables
-- How to set up automation
-
-The conversation covered advanced features and included code examples.`,
-        `## Another Conversation
-**Time:** 2024-01-01 10:00
-**Summary:** Short summary.`,
-      ]);
-    });
-
-    it("should handle conversation at end of file without trailing newlines", () => {
-      const content = `## Only Conversation
-**Time:** 2024-01-01 09:00
-**Summary:** This is the only conversation and it's at the end.`;
-
-      const result = asInternal(userMemoryManager).parseExistingConversations(content);
-      expect(result).toEqual([
-        `## Only Conversation
-**Time:** 2024-01-01 09:00
-**Summary:** This is the only conversation and it's at the end.`,
-      ]);
-    });
-  });
-
-  describe("getUserMemoryPrompt", () => {
-    it("should return memory prompt when recent conversations exist", async () => {
-      const mockFile = createMockTFile("copilot/memory/Recent Conversations.md");
+  describe("getUserMemoryPrompt()", () => {
+    it("wraps the recent conversations in a memory prompt when they exist", async () => {
+      const mockFile = createMockTFile(RECENT_PATH);
       const mockContent =
         "## Test Conversation\n**Time:** 2024-01-01 10:00\n**Summary:** Test summary";
-
       mockVault.getAbstractFileByPath.mockReturnValue(mockFile);
       mockVault.read.mockResolvedValue(mockContent);
 
@@ -479,17 +372,14 @@ The conversation covered advanced features and included code examples.`,
       expect(result).toContain("</recent_conversations>");
     });
 
-    it("should return null when no memory content exists", async () => {
+    it("returns null when no memory content exists", async () => {
       mockVault.getAbstractFileByPath.mockReturnValue(null);
 
-      const result = await userMemoryManager.getUserMemoryPrompt();
-
-      expect(result).toBeNull();
+      expect(await userMemoryManager.getUserMemoryPrompt()).toBeNull();
     });
 
-    it("should handle errors and return null", async () => {
-      const mockFile = createMockTFile("copilot/memory/Recent Conversations.md");
-      mockVault.getAbstractFileByPath.mockReturnValue(mockFile);
+    it("returns null and logs when reading the memory file fails", async () => {
+      mockVault.getAbstractFileByPath.mockReturnValue(createMockTFile(RECENT_PATH));
       mockVault.read.mockRejectedValue(new Error("Read error"));
 
       const result = await userMemoryManager.getUserMemoryPrompt();
@@ -499,115 +389,6 @@ The conversation covered advanced features and included code examples.`,
         "[UserMemoryManager] Error reading memory files:",
         expect.any(Error)
       );
-    });
-  });
-
-  describe("addSavedMemory", () => {
-    it("should skip saving when saved memory is disabled", async () => {
-      mockSettings.enableSavedMemory = false;
-
-      const result = await userMemoryManager.updateSavedMemory(
-        "Test memory content",
-        mockChatModel
-      );
-
-      expect(result).toEqual({ error: "Saved memory is disabled, skipping save" });
-    });
-
-    it("should skip saving when no content provided", async () => {
-      mockSettings.enableSavedMemory = true;
-
-      const result = await userMemoryManager.updateSavedMemory("", mockChatModel);
-
-      expect(result).toEqual({ error: "No content provided for saved memory" });
-    });
-
-    it("should save memory content to Saved Memories file", async () => {
-      mockSettings.enableSavedMemory = true;
-
-      (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
-
-      mockVault.getAbstractFileByPath.mockReturnValue(null);
-
-      const mockNewFile = createMockTFile("copilot/memory/Saved Memories.md");
-      mockVault.create.mockResolvedValue(mockNewFile);
-
-      const llmMergedContent = `- The user prefers concise responses`;
-      (mockChatModel.invoke as jest.Mock).mockResolvedValue(
-        new AIMessageChunk({ content: llmMergedContent })
-      );
-
-      const result = await userMemoryManager.updateSavedMemory(
-        "I prefer concise responses",
-        mockChatModel
-      );
-
-      expect(ensureFolderExists).toHaveBeenCalledWith(mockVault, "copilot/memory");
-
-      expect(mockVault.create).toHaveBeenCalledWith(
-        "copilot/memory/Saved Memories.md",
-        expect.stringContaining("- The user prefers concise responses")
-      );
-
-      const createdContent = mockVault.create.mock.calls[0][1];
-      expect(createdContent).not.toContain("**");
-
-      expect(result).toEqual({
-        content: llmMergedContent,
-        filePath: "copilot/memory/Saved Memories.md",
-      });
-    });
-
-    it("should append to existing Saved Memories file", async () => {
-      mockSettings.enableSavedMemory = true;
-
-      const existingContent = `- Previous memory content
-- Another important fact
-`;
-
-      const mockMemoryFile = createMockTFile("copilot/memory/Saved Memories.md");
-
-      (ensureFolderExists as jest.Mock).mockResolvedValue(undefined);
-
-      mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
-      mockVault.read.mockResolvedValue(existingContent);
-
-      const mergedContent = `- Previous memory content\n- Another important fact\n- New important information`;
-      (mockChatModel.invoke as jest.Mock).mockResolvedValue(
-        new AIMessageChunk({ content: mergedContent })
-      );
-
-      const result = await userMemoryManager.updateSavedMemory(
-        "New important information",
-        mockChatModel
-      );
-
-      expect(mockVault.modify).toHaveBeenCalledWith(
-        mockMemoryFile,
-        expect.stringContaining("- Previous memory content")
-      );
-      expect(mockVault.modify).toHaveBeenCalledWith(
-        mockMemoryFile,
-        expect.stringContaining("- New important information")
-      );
-
-      const modifiedContent = mockVault.modify.mock.calls[0][1];
-      expect(modifiedContent).not.toContain("**");
-
-      expect(result).toEqual({
-        content: mergedContent,
-        filePath: "copilot/memory/Saved Memories.md",
-      });
-    });
-
-    it("should handle errors during save operation", async () => {
-      mockSettings.enableSavedMemory = true;
-
-      (ensureFolderExists as jest.Mock).mockRejectedValue(new Error("Folder creation failed"));
-
-      const result = await userMemoryManager.updateSavedMemory("Test content", mockChatModel);
-
-      expect(result).toEqual({ error: "Error saving memory: Folder creation failed" });
     });
   });
 });

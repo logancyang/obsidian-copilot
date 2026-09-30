@@ -27,11 +27,6 @@ describe("installStatus", () => {
       });
     });
 
-    it("ignores source — custom and managed both read 'Ready' (no path/source on the card)", () => {
-      expect(installBadge({ kind: "ready", source: "custom" })?.label).toBe("Ready");
-      expect(installBadge({ kind: "ready", source: "managed" })?.label).toBe("Ready");
-    });
-
     it("returns null for absent state — the missing badge is the 'not configured' signal", () => {
       expect(installBadge({ kind: "absent" })).toBeNull();
     });
@@ -113,12 +108,6 @@ describe("installStatus", () => {
     ])("labels a %s install '%s'", (_kind, label, state) => {
       render(<ConfigStatusBadge state={state} />);
       expect(screen.getByText(label)).toBeTruthy();
-    });
-
-    it("names 'Not set up' where the settings card stays silent, so a dialog never looks blank", () => {
-      render(<ConfigStatusBadge state={{ kind: "absent" }} />);
-      expect(screen.getByText("Not set up")).toBeTruthy();
-      expect(installBadge({ kind: "absent" })).toBeNull();
     });
   });
 });

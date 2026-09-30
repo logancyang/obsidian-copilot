@@ -16,33 +16,27 @@ describe("AssistantResponseFooter", () => {
         timestamp: "2026/08/07 20:31:10",
       });
 
-      const footer = container.firstElementChild;
-      const actions = screen.getByText("Actions");
-
       expect(screen.getByText("Worked for 24s")).toBeTruthy();
       expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
-      expect(actions.parentElement?.classList.contains("tw-ml-auto")).toBe(true);
-      expect(footer?.classList.contains("tw-min-w-0")).toBe(true);
+      expect(screen.getByText("Actions")).toBeTruthy();
+      expect(container.querySelector("[data-response-footer-leading]")).not.toBeNull();
     });
 
-    it("shows a truncating timestamp when leading metadata is absent", () => {
+    it("shows the timestamp when leading metadata is absent", () => {
       const { container } = renderFooter({
         timestamp: "2026/08/07 20:31:10",
         actions: undefined,
       });
 
-      expect(screen.getByText("2026/08/07 20:31:10").classList.contains("tw-truncate")).toBe(true);
+      expect(screen.getByText("2026/08/07 20:31:10")).toBeTruthy();
       expect(container.querySelector("[data-response-footer-leading]")).toBeNull();
       expect(container.querySelector("[data-response-footer-actions]")).toBeNull();
     });
 
-    it("right-aligns actions when the footer has no metadata", () => {
+    it("shows only the actions when the footer has no metadata", () => {
       const { container } = renderFooter({ leading: null });
 
-      expect(screen.getByText("Actions").parentElement?.classList.contains("tw-ml-auto")).toBe(
-        true
-      );
-      expect(screen.queryByText("Worked for 24s")).toBeNull();
+      expect(screen.getByText("Actions")).toBeTruthy();
       expect(container.querySelector("[data-response-footer-leading]")).toBeNull();
     });
   });
