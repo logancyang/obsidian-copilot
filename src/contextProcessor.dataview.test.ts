@@ -1,14 +1,19 @@
 import { ContextProcessor } from "@/contextProcessor";
 import { DATAVIEW_BLOCK_TAG } from "@/constants";
 
-function getPlugins(): Record<string, unknown> {
-  return (window.app as unknown as { plugins: { plugins: Record<string, unknown> } }).plugins
-    .plugins;
-}
+jest.mock("@/logger");
 
 function setPlugins(plugins: Record<string, unknown>): void {
   (window.app as unknown as { plugins: { plugins: Record<string, unknown> } }).plugins.plugins =
     plugins;
+}
+
+function installDataview(query: jest.Mock): void {
+  setPlugins({ dataview: { api: { query } } });
+}
+
+function installDataviewResult(value: unknown): void {
+  installDataview(jest.fn().mockResolvedValue({ successful: true, value }));
 }
 
 window.app = {
@@ -17,416 +22,239 @@ window.app = {
   },
 } as unknown as typeof window.app;
 
-describe("ContextProcessor - Dataview Integration", () => {
-  let contextProcessor: ContextProcessor;
-  let originalConsoleError: typeof console.error;
+describe("contextProcessor", () => {
+  describe("ContextProcessor", () => {
+    let contextProcessor: ContextProcessor;
 
-  beforeEach(() => {
-    contextProcessor = ContextProcessor.getInstance(window.app);
-    setPlugins({});
-    originalConsoleError = console.error;
-    console.error = jest.fn();
-  });
-
-  afterEach(() => {
-    console.error = originalConsoleError;
-  });
-
-  describe("processDataviewBlocks - Plugin Availability", () => {
-    it("should return content unchanged when Dataview plugin is not installed", async () => {
-      const content = "```dataview\nLIST\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-      expect(result).toBe(content);
-    });
-
-    it("should return content unchanged when Dataview API is not available", async () => {
-      getPlugins().dataview = {};
-      const content = "```dataview\nLIST\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-      expect(result).toBe(content);
-    });
-  });
-
-  describe("processDataviewBlocks - Regex Pattern Matching", () => {
     beforeEach(() => {
-      getPlugins().dataview = {
-        api: {
-          query: jest.fn().mockResolvedValue({
-            successful: true,
-            value: {
-              type: "list",
-              values: [{ path: "note1.md" }, { path: "note2.md" }],
-            },
-          }),
-        },
-      };
+      contextProcessor = ContextProcessor.getInstance(window.app);
+      setPlugins({});
     });
 
-    it("should match dataview blocks with exact newline", async () => {
-      const content = "```dataview\nLIST\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-      expect(result).toContain(`<${DATAVIEW_BLOCK_TAG}>`);
-      expect(result).toContain("<query_type>dataview</query_type>");
-    });
+    describe("processDataviewBlocks()", () => {
+      it("replaces a dataview block with its original query and executed result", async () => {
+        installDataviewResult({ type: "list", values: [{ path: "note1.md" }] });
 
-    it("should match dataview blocks with trailing spaces", async () => {
-      const content = "```dataview  \nLIST\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-      expect(result).toContain(`<${DATAVIEW_BLOCK_TAG}>`);
-      expect(result).toContain("<query_type>dataview</query_type>");
-    });
+        const result = await contextProcessor.processDataviewBlocks(
+          '```dataview\nLIST WHERE contains(tags, "#project")\n```',
+          "test.md"
+        );
 
-    it("should match dataview blocks with tabs", async () => {
-      const content = "```dataview\t\nLIST\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-      expect(result).toContain(`<${DATAVIEW_BLOCK_TAG}>`);
-      expect(result).toContain("<query_type>dataview</query_type>");
-    });
+        expect(result).toContain(`<${DATAVIEW_BLOCK_TAG}>`);
+        expect(result).toContain("<query_type>dataview</query_type>");
+        expect(result).toContain(
+          '<original_query>\nLIST WHERE contains(tags, "#project")\n</original_query>'
+        );
+        expect(result).toContain("<executed_result>\n- [[note1.md]]\n</executed_result>");
+      });
 
-    it("should match dataview blocks with Windows CRLF line endings", async () => {
-      const content = "```dataview\r\nLIST\r\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-      expect(result).toContain(`<${DATAVIEW_BLOCK_TAG}>`);
-      expect(result).toContain("<query_type>dataview</query_type>");
-    });
+      it.each([
+        ["trailing spaces after the fence", "```dataview  \nLIST\n```"],
+        ["a tab after the fence", "```dataview\t\nLIST\n```"],
+        ["Windows CRLF line endings", "```dataview\r\nLIST\r\n```"],
+      ])("matches a dataview block with %s", async (_label, content) => {
+        installDataviewResult({ type: "list", values: [{ path: "note1.md" }] });
 
-    it("should match dataviewjs blocks", async () => {
-      const content = "```dataviewjs\ndv.list()\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-      expect(result).toContain(`<${DATAVIEW_BLOCK_TAG}>`);
-      expect(result).toContain("<query_type>dataviewjs</query_type>");
-    });
-  });
+        const result = await contextProcessor.processDataviewBlocks(content, "test.md");
 
-  describe("processDataviewBlocks - Multiple Blocks", () => {
-    beforeEach(() => {
-      getPlugins().dataview = {
-        api: {
-          query: jest
-            .fn()
-            .mockResolvedValueOnce({
-              successful: true,
-              value: {
-                type: "list",
-                values: [{ path: "note1.md" }],
-              },
-            })
-            .mockResolvedValueOnce({
-              successful: true,
-              value: {
-                type: "list",
-                values: [{ path: "note2.md" }],
-              },
-            }),
-        },
-      };
-    });
+        expect(result).toContain("<query_type>dataview</query_type>");
+        expect(result).toContain("[[note1.md]]");
+      });
 
-    it("should process multiple different dataview blocks", async () => {
-      const content = `
-# First Query
-\`\`\`dataview
-LIST WHERE tag = "#project"
-\`\`\`
-
-# Second Query
-\`\`\`dataview
-TABLE file.name
-\`\`\`
-`;
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-
-      const blockMatches = result.match(new RegExp(`<${DATAVIEW_BLOCK_TAG}>`, "g"));
-      expect(blockMatches).toHaveLength(2);
-    });
-
-    it("should process multiple identical dataview blocks correctly", async () => {
-      const content = `
-# First Instance
-\`\`\`dataview
-LIST
-\`\`\`
-
-# Second Instance
-\`\`\`dataview
-LIST
-\`\`\`
-`;
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-
-      const blockMatches = result.match(new RegExp(`<${DATAVIEW_BLOCK_TAG}>`, "g"));
-      expect(blockMatches).toHaveLength(2);
-
-      expect(result).toContain("[[note1.md]]");
-      expect(result).toContain("[[note2.md]]");
-    });
-  });
-
-  describe("processDataviewBlocks - Query Execution", () => {
-    it("should include both original query and executed results", async () => {
-      getPlugins().dataview = {
-        api: {
-          query: jest.fn().mockResolvedValue({
-            successful: true,
-            value: {
-              type: "list",
-              values: [{ path: "note1.md" }],
-            },
-          }),
-        },
-      };
-
-      const content = '```dataview\nLIST WHERE contains(tags, "#project")\n```';
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-
-      expect(result).toContain("<original_query>");
-      expect(result).toContain('LIST WHERE contains(tags, "#project")');
-      expect(result).toContain("<executed_result>");
-      expect(result).toContain("[[note1.md]]");
-    });
-
-    it("should handle query timeout gracefully", async () => {
-      getPlugins().dataview = {
-        api: {
-          query: jest.fn().mockImplementation(
-            () =>
-              new Promise((resolve) => {
-                window.setTimeout(resolve, 10000);
-              })
-          ),
-        },
-      };
-
-      const content = "```dataview\nLIST\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-
-      expect(result).toContain("<error>Query timeout</error>");
-    }, 10000);
-
-    it("should handle query execution errors", async () => {
-      getPlugins().dataview = {
-        api: {
-          query: jest.fn().mockResolvedValue({
-            successful: false,
-            error: "Invalid syntax",
-          }),
-        },
-      };
-
-      const content = "```dataview\nINVALID QUERY\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-
-      expect(result).toContain("<error>Invalid syntax</error>");
-    });
-
-    it("should handle dataviewjs with unsupported message", async () => {
-      getPlugins().dataview = {
-        api: {
-          query: jest.fn(),
-        },
-      };
-
-      const content = "```dataviewjs\ndv.pages()\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-
-      expect(result).toContain("DataviewJS execution not yet supported");
-    });
-  });
-
-  describe("processDataviewBlocks - Result Formatting", () => {
-    it("should format LIST results correctly", async () => {
-      getPlugins().dataview = {
-        api: {
-          query: jest.fn().mockResolvedValue({
-            successful: true,
-            value: {
-              type: "list",
-              values: [{ path: "note1.md" }, { path: "note2.md" }, { path: "note3.md" }],
-            },
-          }),
-        },
-      };
-
-      const content = "```dataview\nLIST\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-
-      expect(result).toContain("- [[note1.md]]");
-      expect(result).toContain("- [[note2.md]]");
-      expect(result).toContain("- [[note3.md]]");
-    });
-
-    it("should format TABLE results correctly", async () => {
-      getPlugins().dataview = {
-        api: {
-          query: jest.fn().mockResolvedValue({
-            successful: true,
-            value: {
-              type: "table",
-              headers: ["File", "Size"],
-              values: [
-                [{ path: "note1.md" }, 100],
-                [{ path: "note2.md" }, 200],
-              ],
-            },
-          }),
-        },
-      };
-
-      const content = "```dataview\nTABLE file.size\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-
-      expect(result).toContain("| File | Size |");
-      expect(result).toContain("| --- | --- |");
-      expect(result).toContain("| [[note1.md]] | 100 |");
-      expect(result).toContain("| [[note2.md]] | 200 |");
-    });
-
-    it("should format TASK results correctly", async () => {
-      getPlugins().dataview = {
-        api: {
-          query: jest.fn().mockResolvedValue({
-            successful: true,
-            value: {
-              type: "task",
-              values: [
-                { text: "Task 1", completed: false },
-                { text: "Task 2", completed: true },
-              ],
-            },
-          }),
-        },
-      };
-
-      const content = "```dataview\nTASK\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-
-      expect(result).toContain("- [ ] Task 1");
-      expect(result).toContain("- [x] Task 2");
-    });
-
-    it("should handle empty results", async () => {
-      getPlugins().dataview = {
-        api: {
-          query: jest.fn().mockResolvedValue({
-            successful: true,
-            value: {
-              type: "list",
-              values: [],
-            },
-          }),
-        },
-      };
-
-      const content = "```dataview\nLIST WHERE false\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-
-      expect(result).toContain("<executed_result>\nNo results\n</executed_result>");
-    });
-
-    it("should handle null values gracefully", async () => {
-      getPlugins().dataview = {
-        api: {
-          query: jest.fn().mockResolvedValue({
-            successful: true,
-            value: {
-              type: "list",
-              values: [null, { path: "note1.md" }, undefined],
-            },
-          }),
-        },
-      };
-
-      const content = "```dataview\nLIST\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-
-      expect(result).toContain("- ");
-      expect(result).toContain("- [[note1.md]]");
-    });
-
-    it("should handle arrays in values", async () => {
-      getPlugins().dataview = {
-        api: {
-          query: jest.fn().mockResolvedValue({
-            successful: true,
-            value: {
-              type: "list",
-              values: [[{ path: "note1.md" }, { path: "note2.md" }]],
-            },
-          }),
-        },
-      };
-
-      const content = "```dataview\nLIST\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-
-      expect(result).toContain("[[note1.md]], [[note2.md]]");
-    });
-  });
-
-  describe("processDataviewBlocks - Edge Cases", () => {
-    beforeEach(() => {
-      getPlugins().dataview = {
-        api: {
-          query: jest.fn().mockResolvedValue({
-            successful: true,
-            value: {
-              type: "list",
-              values: [],
-            },
-          }),
-        },
-      };
-    });
-
-    it("should not process non-dataview code blocks", async () => {
-      const content = "```javascript\nconst x = 1;\n```";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-      expect(result).toBe(content);
-      expect(result).not.toContain(`<${DATAVIEW_BLOCK_TAG}>`);
-    });
-
-    it("should handle content with no dataview blocks", async () => {
-      const content = "Just some regular markdown content.";
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-      expect(result).toBe(content);
-    });
-
-    it("should preserve surrounding content", async () => {
-      const content = `
-# Before
-
-Some text before
-
-\`\`\`dataview
-LIST
-\`\`\`
-
-Some text after
-
-# After
-`;
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
-
-      expect(result).toContain("# Before");
-      expect(result).toContain("Some text before");
-      expect(result).toContain("Some text after");
-      expect(result).toContain("# After");
-      expect(result).toContain(`<${DATAVIEW_BLOCK_TAG}>`);
-    });
-
-    it("should handle multiline queries", async () => {
-      const content = `\`\`\`dataview
+      it("keeps multi-line queries intact in the original query", async () => {
+        installDataviewResult({ type: "list", values: [] });
+        const content = `\`\`\`dataview
 LIST
 WHERE contains(tags, "#project")
   AND file.mtime > date(today) - dur(7 days)
 SORT file.mtime DESC
 \`\`\``;
-      const result = await contextProcessor.processDataviewBlocks(content, "test.md");
 
-      expect(result).toContain("<original_query>");
-      expect(result).toContain('WHERE contains(tags, "#project")');
-      expect(result).toContain("AND file.mtime > date(today) - dur(7 days)");
-      expect(result).toContain("SORT file.mtime DESC");
+        const result = await contextProcessor.processDataviewBlocks(content, "test.md");
+
+        expect(result).toContain(
+          '<original_query>\nLIST\nWHERE contains(tags, "#project")\n  AND file.mtime > date(today) - dur(7 days)\nSORT file.mtime DESC\n</original_query>'
+        );
+      });
+
+      it("processes every dataview block in the note and keeps the surrounding text", async () => {
+        installDataview(
+          jest
+            .fn()
+            .mockResolvedValueOnce({
+              successful: true,
+              value: { type: "list", values: [{ path: "note1.md" }] },
+            })
+            .mockResolvedValueOnce({
+              successful: true,
+              value: { type: "list", values: [{ path: "note2.md" }] },
+            })
+        );
+        const content =
+          "# Before\n\n```dataview\nLIST\n```\n\nMiddle text\n\n```dataview\nLIST\n```\n\n# After\n";
+
+        const result = await contextProcessor.processDataviewBlocks(content, "test.md");
+
+        expect(result.match(new RegExp(`<${DATAVIEW_BLOCK_TAG}>`, "g"))).toHaveLength(2);
+        expect(result).toContain("[[note1.md]]");
+        expect(result).toContain("[[note2.md]]");
+        expect(result).toContain("# Before");
+        expect(result).toContain("Middle text");
+        expect(result).toContain("# After");
+      });
+
+      it("formats LIST results as a bullet list of links", async () => {
+        installDataviewResult({
+          type: "list",
+          values: [{ path: "note1.md" }, { path: "note2.md" }, { path: "note3.md" }],
+        });
+
+        const result = await contextProcessor.processDataviewBlocks(
+          "```dataview\nLIST\n```",
+          "test.md"
+        );
+
+        expect(result).toContain("- [[note1.md]]\n- [[note2.md]]\n- [[note3.md]]");
+      });
+
+      it("formats TABLE results as a Markdown table", async () => {
+        installDataviewResult({
+          type: "table",
+          headers: ["File", "Size"],
+          values: [
+            [{ path: "note1.md" }, 100],
+            [{ path: "note2.md" }, 200],
+          ],
+        });
+
+        const result = await contextProcessor.processDataviewBlocks(
+          "```dataview\nTABLE file.size\n```",
+          "test.md"
+        );
+
+        expect(result).toContain(
+          "| File | Size |\n| --- | --- |\n| [[note1.md]] | 100 |\n| [[note2.md]] | 200 |"
+        );
+      });
+
+      it("formats TASK results as checkbox items reflecting completion", async () => {
+        installDataviewResult({
+          type: "task",
+          values: [
+            { text: "Task 1", completed: false },
+            { text: "Task 2", completed: true },
+          ],
+        });
+
+        const result = await contextProcessor.processDataviewBlocks(
+          "```dataview\nTASK\n```",
+          "test.md"
+        );
+
+        expect(result).toContain("- [ ] Task 1\n- [x] Task 2");
+      });
+
+      it("renders nested arrays of links as a comma-separated list item", async () => {
+        installDataviewResult({
+          type: "list",
+          values: [[{ path: "note1.md" }, { path: "note2.md" }]],
+        });
+
+        const result = await contextProcessor.processDataviewBlocks(
+          "```dataview\nLIST\n```",
+          "test.md"
+        );
+
+        expect(result).toContain("- [[note1.md]], [[note2.md]]");
+      });
+
+      it("renders null and undefined list values as empty items", async () => {
+        installDataviewResult({ type: "list", values: [null, { path: "note1.md" }, undefined] });
+
+        const result = await contextProcessor.processDataviewBlocks(
+          "```dataview\nLIST\n```",
+          "test.md"
+        );
+
+        expect(result).toContain("<executed_result>\n- \n- [[note1.md]]\n- \n</executed_result>");
+      });
+
+      it("reports No results when the query returns no rows", async () => {
+        installDataviewResult({ type: "list", values: [] });
+
+        const result = await contextProcessor.processDataviewBlocks(
+          "```dataview\nLIST WHERE false\n```",
+          "test.md"
+        );
+
+        expect(result).toContain("<executed_result>\nNo results\n</executed_result>");
+      });
+
+      it("reports the Dataview error message when the query fails", async () => {
+        installDataview(
+          jest.fn().mockResolvedValue({ successful: false, error: "Invalid syntax" })
+        );
+
+        const result = await contextProcessor.processDataviewBlocks(
+          "```dataview\nINVALID QUERY\n```",
+          "test.md"
+        );
+
+        expect(result).toContain("<error>Invalid syntax</error>");
+        expect(result).toContain("<original_query>\nINVALID QUERY\n</original_query>");
+      });
+
+      it("reports a timeout when the query takes longer than five seconds", async () => {
+        jest.useFakeTimers();
+        try {
+          installDataview(jest.fn().mockReturnValue(new Promise(() => {})));
+
+          const pending = contextProcessor.processDataviewBlocks(
+            "```dataview\nLIST\n```",
+            "test.md"
+          );
+          await jest.advanceTimersByTimeAsync(5000);
+
+          expect(await pending).toContain("<error>Query timeout</error>");
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it("keeps dataviewjs blocks and marks their execution as unsupported without running a query", async () => {
+        const query = jest.fn();
+        installDataview(query);
+
+        const result = await contextProcessor.processDataviewBlocks(
+          "```dataviewjs\ndv.pages()\n```",
+          "test.md"
+        );
+
+        expect(result).toContain("<query_type>dataviewjs</query_type>");
+        expect(result).toContain("<original_query>\ndv.pages()\n</original_query>");
+        expect(result).toContain("DataviewJS execution not yet supported");
+        expect(query).not.toHaveBeenCalled();
+      });
+
+      it("returns the content unchanged when the Dataview plugin is not installed", async () => {
+        const content = "```dataview\nLIST\n```";
+
+        expect(await contextProcessor.processDataviewBlocks(content, "test.md")).toBe(content);
+      });
+
+      it("returns the content unchanged when the Dataview plugin exposes no API", async () => {
+        setPlugins({ dataview: {} });
+        const content = "```dataview\nLIST\n```";
+
+        expect(await contextProcessor.processDataviewBlocks(content, "test.md")).toBe(content);
+      });
+
+      it("leaves non-dataview code blocks and plain text untouched", async () => {
+        installDataviewResult({ type: "list", values: [] });
+        const content = "Intro\n```javascript\nconst x = 1;\n```";
+
+        expect(await contextProcessor.processDataviewBlocks(content, "test.md")).toBe(content);
+      });
     });
   });
 });

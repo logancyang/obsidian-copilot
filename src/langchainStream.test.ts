@@ -8,40 +8,42 @@ import { getAIResponse } from "@/langchainStream";
 import type ChainManager from "@/LLMProviders/chainManager";
 import { ChatMessage } from "@/types/message";
 
-describe("getAIResponse onboarding errors", () => {
-  it("surfaces missing API key as an AI error message without throwing", async () => {
-    const addMessage = jest.fn();
-    const updateCurrentAiMessage = jest.fn();
-    const updateShouldAbort = jest.fn();
+describe("langchainStream", () => {
+  describe("getAIResponse()", () => {
+    it("adds an AI error message instead of throwing when the chain fails with a missing API key", async () => {
+      const addMessage = jest.fn();
+      const updateCurrentAiMessage = jest.fn();
+      const updateShouldAbort = jest.fn();
 
-    const chainManager = {
-      runChain: jest.fn(async () => {
-        throw new MissingApiKeyError("API key is not configured for the selected model.");
-      }),
-    } as unknown as ChainManager;
+      const chainManager = {
+        runChain: jest.fn(async () => {
+          throw new MissingApiKeyError("API key is not configured for the selected model.");
+        }),
+      } as unknown as ChainManager;
 
-    const userMessage: ChatMessage = {
-      id: "user-1",
-      message: "hello",
-      sender: "user",
-      timestamp: null,
-      isVisible: true,
-    };
+      const userMessage: ChatMessage = {
+        id: "user-1",
+        message: "hello",
+        sender: "user",
+        timestamp: null,
+        isVisible: true,
+      };
 
-    await getAIResponse(
-      userMessage,
-      chainManager,
-      addMessage,
-      updateCurrentAiMessage,
-      updateShouldAbort
-    );
+      await getAIResponse(
+        userMessage,
+        chainManager,
+        addMessage,
+        updateCurrentAiMessage,
+        updateShouldAbort
+      );
 
-    expect(chainManager.runChain).toHaveBeenCalledTimes(1);
-    expect(addMessage).toHaveBeenCalledTimes(1);
+      expect(chainManager.runChain).toHaveBeenCalledTimes(1);
+      expect(addMessage).toHaveBeenCalledTimes(1);
 
-    const errorMessage = addMessage.mock.calls[0][0] as ChatMessage;
-    expect(errorMessage.sender).toBe(AI_SENDER);
-    expect(errorMessage.isErrorMessage).toBe(true);
-    expect(errorMessage.message).toContain("API key");
+      const errorMessage = addMessage.mock.calls[0][0] as ChatMessage;
+      expect(errorMessage.sender).toBe(AI_SENDER);
+      expect(errorMessage.isErrorMessage).toBe(true);
+      expect(errorMessage.message).toContain("API key");
+    });
   });
 });
