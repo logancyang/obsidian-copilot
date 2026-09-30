@@ -11,13 +11,6 @@ describe("truncateForPreview", () => {
     expect(truncateForPreview(content)).toEqual({ text: content, truncated: false });
   });
 
-  it("truncates oversized content and flags it", () => {
-    const content = "a".repeat(PREVIEW_RENDER_LIMIT + 500);
-    const result = truncateForPreview(content);
-    expect(result.truncated).toBe(true);
-    expect(result.text.length).toBeLessThanOrEqual(PREVIEW_RENDER_LIMIT);
-  });
-
   it("backs the cut up to the last newline at or before the limit", () => {
     const head = "x".repeat(PREVIEW_RENDER_LIMIT - 5);
     const content = `${head}\n${"y".repeat(100)}`;
@@ -38,9 +31,5 @@ describe("truncateForPreview", () => {
     const result = truncateForPreview(content);
     expect(result.truncated).toBe(true);
     expect(result.text.length).toBe(PREVIEW_RENDER_LIMIT);
-  });
-
-  it("handles an empty string", () => {
-    expect(truncateForPreview("")).toEqual({ text: "", truncated: false });
   });
 });

@@ -1,25 +1,7 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
 import { fileToHistoryItem } from "@/utils/chatHistoryUtils";
-import type { RecentUsageManager } from "@/utils/recentUsageManager";
+import { RecentUsageManager } from "@/utils/recentUsageManager";
 import type { App, TFile } from "obsidian";
-
-jest.mock("obsidian", () => ({ App: jest.fn(), TFile: jest.fn() }));
-jest.mock("@/utils", () => ({
-  formatDateTime: jest.fn(() => ({ display: "2026/01/01 12:00:00", fileName: "20260101_120000" })),
-}));
-jest.mock("@/projects/projectPaths", () => ({
-  sanitizeVaultPathSegment: jest.fn((s: string) => s),
-}));
-jest.mock("@/projects/state", () => ({
-  getCachedProjectRecords: jest.fn(() => []),
-}));
-jest.mock("@/utils/vaultAdapterUtils", () => ({
-  readFrontmatterViaAdapter: jest.fn().mockResolvedValue(null),
-}));
-
-const lastAccessedStub = {
-  getEffectiveLastUsedAt: (_path: string, persisted?: number | null) => persisted ?? 0,
-} as unknown as RecentUsageManager<string>;
 
 function makeApp(frontmatter: Record<string, unknown>) {
   return {
@@ -37,28 +19,50 @@ function makeFile(): TFile {
   } as unknown as TFile;
 }
 
-describe("fileToHistoryItem projectId extraction", () => {
-  it("extracts a string projectId from frontmatter", () => {
-    const app = makeApp({ epoch: 1735732800000, projectId: "proj-123" });
-    const item = fileToHistoryItem(app, makeFile(), lastAccessedStub);
-    expect(item.projectId).toBe("proj-123");
-  });
+describe("chatHistoryUtils", () => {
+  describe("fileToHistoryItem()", () => {
+    it("builds a history item from the note path and its frontmatter topic, epoch, last access and backend", () => {
+      const app = makeApp({
+        epoch: 1735732800000,
+        topic: "Planning",
+        lastAccessedAt: 1735732900000,
+        backendId: " codex ",
+      });
 
-  it("coerces a numeric projectId (unquoted YAML) to a string", () => {
-    const app = makeApp({ epoch: 1735732800000, projectId: 123 });
-    const item = fileToHistoryItem(app, makeFile(), lastAccessedStub);
-    expect(item.projectId).toBe("123");
-  });
+      const item = fileToHistoryItem(app, makeFile(), new RecentUsageManager<string>());
 
-  it("leaves projectId undefined when absent (no GLOBAL_SCOPE default in this layer)", () => {
-    const app = makeApp({ epoch: 1735732800000 });
-    const item = fileToHistoryItem(app, makeFile(), lastAccessedStub);
-    expect(item.projectId).toBeUndefined();
-  });
+      expect(item).toEqual({
+        id: "test-folder/agent__chat.md",
+        title: "Planning",
+        createdAt: new Date(1735732800000),
+        lastAccessedAt: new Date(1735732900000),
+        backendId: "codex",
+        projectId: undefined,
+      });
+    });
 
-  it("treats a blank projectId as undefined", () => {
-    const app = makeApp({ epoch: 1735732800000, projectId: "   " });
-    const item = fileToHistoryItem(app, makeFile(), lastAccessedStub);
-    expect(item.projectId).toBeUndefined();
+    it("extracts a string projectId from frontmatter", () => {
+      const app = makeApp({ epoch: 1735732800000, projectId: "proj-123" });
+      const item = fileToHistoryItem(app, makeFile(), new RecentUsageManager<string>());
+      expect(item.projectId).toBe("proj-123");
+    });
+
+    it("coerces a numeric projectId (unquoted YAML) to a string", () => {
+      const app = makeApp({ epoch: 1735732800000, projectId: 123 });
+      const item = fileToHistoryItem(app, makeFile(), new RecentUsageManager<string>());
+      expect(item.projectId).toBe("123");
+    });
+
+    it("leaves projectId undefined when absent (no GLOBAL_SCOPE default in this layer)", () => {
+      const app = makeApp({ epoch: 1735732800000 });
+      const item = fileToHistoryItem(app, makeFile(), new RecentUsageManager<string>());
+      expect(item.projectId).toBeUndefined();
+    });
+
+    it("treats a blank projectId as undefined", () => {
+      const app = makeApp({ epoch: 1735732800000, projectId: "   " });
+      const item = fileToHistoryItem(app, makeFile(), new RecentUsageManager<string>());
+      expect(item.projectId).toBeUndefined();
+    });
   });
 });

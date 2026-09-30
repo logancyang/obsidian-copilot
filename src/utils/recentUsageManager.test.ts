@@ -1,7 +1,7 @@
 import { isSortStrategy, RecentUsageManager, sortByStrategy } from "./recentUsageManager";
 
 describe("recentUsageManager", () => {
-  describe("isSortStrategy", () => {
+  describe("isSortStrategy()", () => {
     it("returns true for valid strategies", () => {
       expect(isSortStrategy("recent")).toBe(true);
       expect(isSortStrategy("created")).toBe(true);
@@ -18,7 +18,7 @@ describe("recentUsageManager", () => {
     });
   });
 
-  describe("sortByStrategy", () => {
+  describe("sortByStrategy()", () => {
     interface TestItem {
       name: string;
       createdAt: number;
@@ -91,8 +91,8 @@ describe("recentUsageManager", () => {
   });
 
   describe("RecentUsageManager", () => {
-    describe("touch and shouldPersist", () => {
-      it("touch always returns current timestamp and updates memory", () => {
+    describe("touch()", () => {
+      it("returns the current timestamp and remembers it on every touch", () => {
         let currentTime = 1000;
         const manager = new RecentUsageManager({
           nowMs: () => currentTime,
@@ -108,7 +108,25 @@ describe("recentUsageManager", () => {
         expect(manager.getLastTouchedAt("key1")).toBe(2000);
       });
 
-      it("shouldPersist returns timestamp on first touch", () => {
+      it("increments the revision and notifies subscribers until they unsubscribe", () => {
+        const manager = new RecentUsageManager({ nowMs: () => 1000 });
+        const listener = jest.fn();
+        const unsubscribe = manager.subscribe(listener);
+
+        const initialRevision = manager.getRevision();
+        manager.touch("key1");
+
+        expect(manager.getRevision()).toBe(initialRevision + 1);
+        expect(listener).toHaveBeenCalledTimes(1);
+
+        unsubscribe();
+        manager.touch("key1");
+        expect(listener).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe("shouldPersist()", () => {
+      it("returns the touch timestamp on the first touch", () => {
         const currentTime = 1000;
         const manager = new RecentUsageManager({
           nowMs: () => currentTime,
@@ -120,7 +138,7 @@ describe("recentUsageManager", () => {
         expect(result).toBe(1000);
       });
 
-      it("shouldPersist returns null when throttled (within minIntervalMs)", () => {
+      it("returns null when the last persist is within minIntervalMs", () => {
         let currentTime = 1000;
         const manager = new RecentUsageManager({
           nowMs: () => currentTime,
@@ -138,7 +156,7 @@ describe("recentUsageManager", () => {
         expect(result).toBeNull();
       });
 
-      it("shouldPersist returns timestamp after throttle period", () => {
+      it("returns the new touch timestamp once minIntervalMs has passed", () => {
         let currentTime = 1000;
         const manager = new RecentUsageManager({
           nowMs: () => currentTime,
@@ -156,7 +174,7 @@ describe("recentUsageManager", () => {
         expect(result).toBe(35000);
       });
 
-      it("shouldPersist considers persisted value for throttling", () => {
+      it("throttles against a persisted value from a previous session", () => {
         const currentTime = 50000;
         const manager = new RecentUsageManager({
           nowMs: () => currentTime,
@@ -167,39 +185,8 @@ describe("recentUsageManager", () => {
         const result = manager.shouldPersist("key1", 40000);
         expect(result).toBeNull();
       });
-    });
 
-    describe("revision and subscribe", () => {
-      it("increments revision and notifies subscribers on touch", () => {
-        const manager = new RecentUsageManager({ nowMs: () => 1000 });
-        const listener = jest.fn();
-        const unsubscribe = manager.subscribe(listener);
-
-        const initialRevision = manager.getRevision();
-        manager.touch("key1");
-
-        expect(manager.getRevision()).toBe(initialRevision + 1);
-        expect(listener).toHaveBeenCalledTimes(1);
-
-        unsubscribe();
-        manager.touch("key1");
-        expect(listener).toHaveBeenCalledTimes(1);
-      });
-
-      it("increments revision on clear", () => {
-        const manager = new RecentUsageManager({ nowMs: () => 1000 });
-        const listener = jest.fn();
-        manager.subscribe(listener);
-
-        manager.touch("key1");
-        const revisionAfterTouch = manager.getRevision();
-
-        manager.clear("key1");
-        expect(manager.getRevision()).toBe(revisionAfterTouch + 1);
-        expect(listener).toHaveBeenCalledTimes(2);
-      });
-
-      it("does not increment revision on shouldPersist or markPersisted", () => {
+      it("leaves the revision unchanged when checking or recording persistence", () => {
         const manager = new RecentUsageManager({ nowMs: () => 1000 });
         manager.touch("key1");
         const revisionAfterTouch = manager.getRevision();
@@ -212,7 +199,7 @@ describe("recentUsageManager", () => {
       });
     });
 
-    describe("getEffectiveLastUsedAt", () => {
+    describe("getEffectiveLastUsedAt()", () => {
       it("returns memory value when it is more recent", () => {
         const currentTime = 5000;
         const manager = new RecentUsageManager({
@@ -237,8 +224,8 @@ describe("recentUsageManager", () => {
       });
     });
 
-    describe("clear", () => {
-      it("clears specific key", () => {
+    describe("clear()", () => {
+      it("forgets only the given key", () => {
         const currentTime = 1000;
         const manager = new RecentUsageManager({
           nowMs: () => currentTime,
@@ -252,7 +239,7 @@ describe("recentUsageManager", () => {
         expect(manager.getLastTouchedAt("key2")).toBe(1000);
       });
 
-      it("clears all keys when no argument", () => {
+      it("forgets every key when called without one", () => {
         const currentTime = 1000;
         const manager = new RecentUsageManager({
           nowMs: () => currentTime,
@@ -264,6 +251,19 @@ describe("recentUsageManager", () => {
 
         expect(manager.getLastTouchedAt("key1")).toBeNull();
         expect(manager.getLastTouchedAt("key2")).toBeNull();
+      });
+
+      it("increments the revision and notifies subscribers", () => {
+        const manager = new RecentUsageManager({ nowMs: () => 1000 });
+        const listener = jest.fn();
+        manager.subscribe(listener);
+
+        manager.touch("key1");
+        const revisionAfterTouch = manager.getRevision();
+
+        manager.clear("key1");
+        expect(manager.getRevision()).toBe(revisionAfterTouch + 1);
+        expect(listener).toHaveBeenCalledTimes(2);
       });
     });
   });

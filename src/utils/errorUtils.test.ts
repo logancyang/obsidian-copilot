@@ -1,36 +1,27 @@
 import { errCode } from "./errorUtils";
 
-describe("errCode", () => {
-  it("extracts a string code from an error-like object", () => {
-    expect(errCode({ code: "ENOENT" })).toBe("ENOENT");
-  });
+describe("errorUtils", () => {
+  describe("errCode()", () => {
+    it.each([
+      ["an error-like object", { code: "ENOENT" }, "ENOENT"],
+      [
+        "an Error carrying a code property",
+        Object.assign(new Error("boom"), { code: "EACCES" }),
+        "EACCES",
+      ],
+    ])("returns the string code of %s", (_label, error, code) => {
+      expect(errCode(error)).toBe(code);
+    });
 
-  it("extracts code from a real Error subclass with a code property", () => {
-    const err = Object.assign(new Error("boom"), { code: "EACCES" });
-    expect(errCode(err)).toBe("EACCES");
-  });
-
-  it("returns null when code is missing", () => {
-    expect(errCode({ message: "no code here" })).toBeNull();
-  });
-
-  it("returns null when code is not a string", () => {
-    expect(errCode({ code: 42 })).toBeNull();
-  });
-
-  it("returns null for null", () => {
-    expect(errCode(null)).toBeNull();
-  });
-
-  it("returns null for undefined", () => {
-    expect(errCode(undefined)).toBeNull();
-  });
-
-  it("returns null for a string error", () => {
-    expect(errCode("ENOENT")).toBeNull();
-  });
-
-  it("returns null for a number", () => {
-    expect(errCode(42)).toBeNull();
+    it.each([
+      ["an object without a code", { message: "no code here" }],
+      ["an object whose code is not a string", { code: 42 }],
+      ["null", null],
+      ["undefined", undefined],
+      ["a string", "ENOENT"],
+      ["a number", 42],
+    ])("returns null for %s", (_label, error) => {
+      expect(errCode(error)).toBeNull();
+    });
   });
 });

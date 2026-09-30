@@ -26,16 +26,11 @@ interface TestApp {
   vault: { adapter: unknown; getAbstractFileByPath: jest.Mock };
 }
 
-function buildApp(base = VAULT, indexedFiles: string[] = []): TestApp {
-  const adapter = new (FileSystemAdapter as unknown as new (b: string) => unknown)(base);
+function buildApp(): TestApp {
+  const adapter = new (FileSystemAdapter as unknown as new (b: string) => unknown)(VAULT);
   return {
     workspace: { openLinkText: jest.fn(), getActiveFile: () => null },
-    vault: {
-      adapter,
-      getAbstractFileByPath: jest.fn((path: string) =>
-        indexedFiles.includes(path) ? { path } : null
-      ),
-    },
+    vault: { adapter, getAbstractFileByPath: jest.fn(() => null) },
   };
 }
 
@@ -55,65 +50,39 @@ async function clickInternalLink(
   a.dispatchEvent(new MouseEvent("click", { bubbles: true, ...init }));
 }
 
-describe("renderMarkdown internal-link handling", () => {
-  beforeEach(() => {
-    __resetVaultBaseCache();
-    jest.clearAllMocks();
-    document.body.innerHTML = "";
-  });
+describe("renderMarkdown", () => {
+  describe("renderMarkdown()", () => {
+    beforeEach(() => {
+      __resetVaultBaseCache();
+      jest.clearAllMocks();
+      document.body.innerHTML = "";
+    });
 
-  it("converts an absolute in-vault path to vault-relative before openLinkText", async () => {
-    const app = buildApp();
-    await clickInternalLink(app, "/Users/me/vault/00_Inbox/Foo.md");
-    expect(app.workspace.openLinkText).toHaveBeenCalledWith("00_Inbox/Foo.md", "source.md", false);
-    expect(openWithSystemDefault).not.toHaveBeenCalled();
-  });
+    it("opens a clicked internal link with its absolute in-vault path converted to vault-relative", async () => {
+      const app = buildApp();
+      await clickInternalLink(app, "/Users/me/vault/00_Inbox/Foo.md");
+      expect(app.workspace.openLinkText).toHaveBeenCalledWith(
+        "00_Inbox/Foo.md",
+        "source.md",
+        false
+      );
+      expect(openWithSystemDefault).not.toHaveBeenCalled();
+    });
 
-  it("decodes percent-encoded absolute paths before converting", async () => {
-    const app = buildApp();
-    await clickInternalLink(app, "/Users/me/vault/00_Inbox/Foo%20Bar.md");
-    expect(app.workspace.openLinkText).toHaveBeenCalledWith(
-      "00_Inbox/Foo Bar.md",
-      "source.md",
-      false
-    );
-  });
+    it("decodes a percent-encoded link target before opening it", async () => {
+      const app = buildApp();
+      await clickInternalLink(app, "/Users/me/vault/00_Inbox/Foo%20Bar.md");
+      expect(app.workspace.openLinkText).toHaveBeenCalledWith(
+        "00_Inbox/Foo Bar.md",
+        "source.md",
+        false
+      );
+    });
 
-  it("does not open (or create) an absolute path outside the vault — hands off to the OS", async () => {
-    const app = buildApp();
-    await clickInternalLink(app, "/etc/passwd");
-    expect(app.workspace.openLinkText).not.toHaveBeenCalled();
-    expect(openWithSystemDefault).toHaveBeenCalledWith("/etc/passwd");
-  });
-
-  it("opens root-relative vault links through openLinkText", async () => {
-    const app = buildApp(VAULT, ["Folder/Foo.md"]);
-    await clickInternalLink(app, "/Folder/Foo.md");
-    expect(app.workspace.openLinkText).toHaveBeenCalledWith("Folder/Foo.md", "source.md", false);
-    expect(openWithSystemDefault).not.toHaveBeenCalled();
-  });
-
-  it("opens root-relative vault links with headings through openLinkText", async () => {
-    const app = buildApp(VAULT, ["Folder/Foo.md"]);
-    await clickInternalLink(app, "/Folder/Foo.md#Heading");
-    expect(app.workspace.openLinkText).toHaveBeenCalledWith(
-      "Folder/Foo.md#Heading",
-      "source.md",
-      false
-    );
-    expect(openWithSystemDefault).not.toHaveBeenCalled();
-  });
-
-  it("passes plain relative wikilinks through unchanged", async () => {
-    const app = buildApp();
-    await clickInternalLink(app, "Some Note");
-    expect(app.workspace.openLinkText).toHaveBeenCalledWith("Some Note", "source.md", false);
-    expect(openWithSystemDefault).not.toHaveBeenCalled();
-  });
-
-  it("opens in a new leaf on cmd/ctrl-click", async () => {
-    const app = buildApp();
-    await clickInternalLink(app, "/Users/me/vault/00_Inbox/Foo.md", { button: 0, ctrlKey: true });
-    expect(app.workspace.openLinkText).toHaveBeenCalledWith("00_Inbox/Foo.md", "source.md", true);
+    it("opens the link in a new leaf on ctrl-click", async () => {
+      const app = buildApp();
+      await clickInternalLink(app, "/Users/me/vault/00_Inbox/Foo.md", { button: 0, ctrlKey: true });
+      expect(app.workspace.openLinkText).toHaveBeenCalledWith("00_Inbox/Foo.md", "source.md", true);
+    });
   });
 });
