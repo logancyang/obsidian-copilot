@@ -61,6 +61,7 @@ jest.mock("./effortOption", () => ({
 
 import {
   ClaudeSdkBackendProcess,
+  type ClaudeSdkBackendProcessOptions,
   enforceForegroundToolUse,
   promptInputToAnthropicContent,
 } from "./ClaudeSdkBackendProcess";
@@ -131,7 +132,7 @@ function makeControlledQuery() {
 }
 
 async function flushMicrotasks(): Promise<void> {
-  for (let i = 0; i < 5; i++) await Promise.resolve();
+  for (let i = 0; i < 20; i++) await Promise.resolve();
 }
 
 function streamEvent(event: object): SDKMessage {
@@ -209,6 +210,65 @@ function getPromptQueryCalls(): unknown[][] {
     const opts = (c[0] as { options?: { cwd?: unknown } } | undefined)?.options;
     return opts?.cwd !== undefined;
   });
+}
+
+function makeProc(extra: Partial<ClaudeSdkBackendProcessOptions> = {}): ClaudeSdkBackendProcess {
+  return new ClaudeSdkBackendProcess({
+    pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+    app: { vault: {} } as unknown as import("obsidian").App,
+    clientVersion: "1.2.3",
+    descriptor: fakeDescriptor(),
+    ...extra,
+  });
+}
+
+const USAGE_METHOD = "usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET";
+
+const WEEKLY_21_PERCENT = {
+  rate_limits_available: true,
+  rate_limits: { seven_day: { utilization: 21 } },
+};
+
+async function promptReportingPlanUsage(
+  proc: ClaudeSdkBackendProcess,
+  sessionId: string,
+  usage: () => Promise<unknown>
+): Promise<void> {
+  queryMock.mockImplementationOnce(() =>
+    Object.assign(makeQuery([resultMessage()]), { [USAGE_METHOD]: usage })
+  );
+  await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+  await flushMicrotasks();
+}
+
+function planUsageUpdates(events: SessionEvent[]): SessionEvent["update"][] {
+  return events.map((e) => e.update).filter((u) => u.sessionUpdate === "plan_usage_update");
+}
+
+function registerCollector(proc: ClaudeSdkBackendProcess, sessionId: string): SessionEvent[] {
+  const events: SessionEvent[] = [];
+  proc.registerSessionHandler(sessionId, (e) => events.push(e));
+  return events;
+}
+
+function errorResultMessage(errors: string[]): SDKMessage {
+  return {
+    type: "result",
+    subtype: "error_during_execution",
+    duration_ms: 1,
+    duration_api_ms: 1,
+    is_error: true,
+    num_turns: 1,
+    stop_reason: null,
+    total_cost_usd: 0,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    usage: {} as any,
+    modelUsage: {},
+    permission_denials: [],
+    errors,
+    uuid: "uuid-e" as `${string}-${string}-${string}-${string}-${string}`,
+    session_id: "irrelevant",
+  };
 }
 
 describe("ClaudeSdkBackendProcess", () => {
@@ -292,905 +352,6 @@ describe("ClaudeSdkBackendProcess", () => {
     });
   });
 
-  describe("closeSession()", () => {
-    function makeBackend() {
-      return new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        app: { vault: {} } as unknown as import("obsidian").App,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-    }
-
-    it("terminates only the closing session's active query https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
-      const backend = makeBackend();
-      const first = await backend.newSession({ cwd: "/vault" });
-      const sibling = await backend.newSession({ cwd: "/vault" });
-      const a = makeControlledQuery();
-      const b = makeControlledQuery();
-      const closeA = jest.fn(a.finish);
-      const closeB = jest.fn(b.finish);
-      queryMock
-        .mockReset()
-        .mockReturnValueOnce(Object.assign(a.query, { close: closeA }))
-        .mockReturnValueOnce(Object.assign(b.query, { close: closeB }));
-      const pendingA = backend.prompt({ sessionId: first.sessionId, prompt: [] });
-      const pendingB = backend.prompt({ sessionId: sibling.sessionId, prompt: [] });
-      await flushMicrotasks();
-      await backend.closeSession({ sessionId: first.sessionId });
-      expect(closeA).toHaveBeenCalledTimes(1);
-      expect(closeB).not.toHaveBeenCalled();
-      b.finish();
-      await Promise.all([pendingA, pendingB]);
-      await expect(backend.prompt({ sessionId: first.sessionId, prompt: [] })).rejects.toThrow(
-        "Unknown session"
-      );
-    });
-  });
-
-  describe("prompt()", () => {
-    beforeEach(() => {
-      queryMock.mockReset();
-      createSdkMcpServerMock.mockClear();
-    });
-
-    it("does not start a query when its session closes during environment preparation https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
-      let finishEnvironment!: (env: Record<string, string>) => void;
-      const environment = new Promise<Record<string, string>>((resolve) => {
-        finishEnvironment = resolve;
-      });
-      const backend = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        app: { vault: {} } as unknown as import("obsidian").App,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-        getManagedEnv: () => environment,
-      });
-      const { sessionId } = await backend.newSession({ cwd: "/vault" });
-      queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-      const pending = backend.prompt({ sessionId, prompt: [] });
-      await flushMicrotasks();
-      await backend.closeSession({ sessionId });
-      finishEnvironment({});
-      await expect(pending).resolves.toEqual({ stopReason: "cancelled" });
-      expect(getPromptQueryCalls()).toHaveLength(0);
-    });
-
-    it("translates SDK text deltas to agent_message_chunk and resolves with end_turn", async () => {
-      queryMock.mockImplementation(() =>
-        makeQuery([
-          streamEvent({ type: "message_start", message: {} }),
-          streamEvent({
-            type: "content_block_delta",
-            index: 0,
-            delta: { type: "text_delta", text: "hello" },
-          }),
-          resultMessage(),
-        ])
-      );
-
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-
-      const { sessionId, state } = await proc.newSession({ cwd: "/vault" });
-      expect(sessionId).toBeTruthy();
-      expect(state.model?.current.baseModelId).toBe("claude-fake-pro");
-
-      const events: SessionEvent[] = [];
-      proc.registerSessionHandler(sessionId, (e) => events.push(e));
-
-      const resp = await proc.prompt({
-        sessionId,
-        prompt: [{ type: "text", text: "hi" }],
-      });
-      expect(resp.stopReason).toBe("end_turn");
-
-      const chunks = events.filter((u) => u.update.sessionUpdate === "agent_message_chunk");
-      expect(chunks).toHaveLength(1);
-      const chunk = chunks[0].update;
-      if (chunk.sessionUpdate === "agent_message_chunk" && chunk.content.type === "text") {
-        expect(chunk.content.text).toBe("hello");
-      } else {
-        throw new Error("expected agent_message_chunk text update");
-      }
-
-      const promptCalls = getPromptQueryCalls();
-      expect(promptCalls).toHaveLength(1);
-      const call = promptCalls[0][0] as { options: Record<string, unknown> };
-      expect(call.options.pathToClaudeCodeExecutable).toBe("/usr/local/bin/claude");
-      expect(call.options.mcpServers).toBeUndefined();
-      expect(call.options.allowedTools).toEqual(["Read", "Write", "Edit", "Glob", "Grep", "LS"]);
-      expect(call.options.disallowedTools).toEqual(["TaskOutput", "Workflow", "Monitor"]);
-      expect(call.options.hooks).toEqual({
-        PreToolUse: [{ hooks: [enforceForegroundToolUse] }],
-      });
-      expect((call.options.hooks as Record<string, unknown>).Stop).toBeUndefined();
-      expect(call.options.sessionId).toBe(sessionId);
-      expect(call.options.resume).toBeUndefined();
-      expect(call.options.systemPrompt).toEqual({
-        type: "preset",
-        preset: "claude_code",
-        excludeDynamicSections: true,
-        append: undefined,
-      });
-    });
-
-    it("rejects with Claude's reset message when a success-shaped result reports usage exhaustion", async () => {
-      queryMock.mockImplementation(() => makeQuery(usageLimitMessages()));
-
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      proc.registerSessionHandler(sessionId, () => {});
-
-      await expect(
-        proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] })
-      ).rejects.toThrow(new Error(USAGE_LIMIT_MESSAGE));
-    });
-
-    it("preserves background task identity across prompt queries", async () => {
-      queryMock
-        .mockImplementationOnce(() =>
-          makeQuery([
-            streamEvent({
-              type: "content_block_start",
-              index: 0,
-              content_block: { type: "tool_use", id: "tu-launch", name: "Agent", input: {} },
-            }),
-            {
-              type: "user",
-              tool_use_result: {
-                isAsync: true,
-                status: "async_launched",
-                agentId: "task-a",
-              },
-              message: {
-                content: [
-                  {
-                    type: "tool_result",
-                    tool_use_id: "tu-launch",
-                    content: "Async agent launched successfully.",
-                  },
-                ],
-              },
-              parent_tool_use_id: null,
-              session_id: "irrelevant",
-            } as unknown as SDKMessage,
-            resultMessage(),
-          ])
-        )
-        .mockImplementationOnce(() =>
-          makeQuery([
-            {
-              type: "system",
-              subtype: "task_notification",
-              task_id: "task-a",
-              status: "completed",
-              summary: "late report",
-            } as unknown as SDKMessage,
-            resultMessage(),
-          ])
-        );
-
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      const events: SessionEvent[] = [];
-      proc.registerSessionHandler(sessionId, (event) => events.push(event));
-
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "start" }] });
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "continue" }] });
-
-      expect(events).toContainEqual({
-        sessionId,
-        update: {
-          sessionUpdate: "tool_call_update",
-          toolCallId: "tu-launch",
-          status: "completed",
-          content: [{ type: "content", content: { type: "text", text: "late report" } }],
-        },
-      });
-    });
-
-    it("forwards the composed system prompt via systemPrompt append on the claude_code preset", async () => {
-      queryMock.mockImplementation(() =>
-        makeQuery([streamEvent({ type: "message_start", message: {} }), resultMessage()])
-      );
-
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-        getSystemPromptAppend: () => "DO THIS THING WITH SKILLS",
-      });
-
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-      const calls = getPromptQueryCalls();
-      const opts = (calls[0][0] as { options: Record<string, unknown> }).options;
-      expect(opts.systemPrompt).toEqual({
-        type: "preset",
-        preset: "claude_code",
-        excludeDynamicSections: true,
-        append: "DO THIS THING WITH SKILLS",
-      });
-    });
-
-    it("captures the system prompt at newSession time and ignores later setting changes mid-session", async () => {
-      queryMock.mockImplementation(() =>
-        makeQuery([streamEvent({ type: "message_start", message: {} }), resultMessage()])
-      );
-
-      let current = "FIRST DIRECTIVE";
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-        getSystemPromptAppend: () => current,
-      });
-
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      current = "SECOND DIRECTIVE";
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-      const opts = (getPromptQueryCalls()[0][0] as { options: Record<string, unknown> }).options;
-      expect(opts.systemPrompt).toEqual({
-        type: "preset",
-        preset: "claude_code",
-        excludeDynamicSections: true,
-        append: "FIRST DIRECTIVE",
-      });
-    });
-
-    it("buffers events emitted before a session handler is registered and replays them", async () => {
-      queryMock.mockImplementation(() =>
-        makeQuery([
-          streamEvent({ type: "message_start", message: {} }),
-          streamEvent({
-            type: "content_block_delta",
-            index: 0,
-            delta: { type: "text_delta", text: "buffered" },
-          }),
-          resultMessage(),
-        ])
-      );
-
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      const promptPromise = proc.prompt({
-        sessionId,
-        prompt: [{ type: "text", text: "hi" }],
-      });
-
-      const seen: SessionEvent[] = [];
-      proc.registerSessionHandler(sessionId, (e) => seen.push(e));
-      await promptPromise;
-
-      const chunks = seen.filter((u) => u.update.sessionUpdate === "agent_message_chunk");
-      expect(chunks.length).toBeGreaterThan(0);
-    });
-
-    it("passes resume on the second prompt for the same session", async () => {
-      queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      proc.registerSessionHandler(sessionId, () => {});
-
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "2" }] });
-
-      const promptCalls = getPromptQueryCalls();
-      expect(promptCalls).toHaveLength(2);
-      const second = promptCalls[1][0] as { options: Record<string, unknown> };
-      expect(second.options.resume).toBe(sessionId);
-      expect(second.options.sessionId).toBeUndefined();
-    });
-
-    it("keeps concurrent query actions bound to their owning sessions after either query finishes for https://github.com/logancyang/obsidian-copilot/issues/2948", async () => {
-      const queryA = makeControlledQuery();
-      const queryB = makeControlledQuery();
-      queryMock.mockReturnValueOnce(queryA.query).mockReturnValueOnce(queryB.query);
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-      const { sessionId: sessionA } = await proc.newSession({ cwd: "/vault/a" });
-      const { sessionId: sessionB } = await proc.newSession({ cwd: "/vault/b" });
-      proc.registerSessionHandler(sessionA, () => {});
-      proc.registerSessionHandler(sessionB, () => {});
-      const permissionPrompter = jest.fn(async () => ({
-        outcome: { outcome: "selected" as const, optionId: "allow_once" },
-      }));
-      const questionPrompter = jest.fn(async () => ({ "Continue?": "Yes" }));
-      proc.setPermissionPrompter(permissionPrompter);
-      proc.setAskUserQuestionPrompter(questionPrompter);
-
-      const turnA = proc.prompt({ sessionId: sessionA, prompt: [{ type: "text", text: "A" }] });
-      const turnB = proc.prompt({ sessionId: sessionB, prompt: [{ type: "text", text: "B" }] });
-      await flushMicrotasks();
-      expect(getPromptQueryCalls()).toHaveLength(2);
-      const [callA, callB] = getPromptQueryCalls().map(
-        (call) => (call[0] as { options: { canUseTool: CanUseTool } }).options.canUseTool
-      );
-
-      await callA("Edit", { file_path: "/vault/a/note.md" }, {
-        signal: new AbortController().signal,
-        toolUseID: "tool-a",
-      } as never);
-      expect(permissionPrompter).toHaveBeenLastCalledWith(
-        expect.objectContaining({ sessionId: sessionA })
-      );
-
-      queryA.finish();
-      await turnA;
-      await callB(
-        "AskUserQuestion",
-        { questions: [{ question: "Continue?", options: [{ label: "Yes" }] }] },
-        { signal: new AbortController().signal, toolUseID: "tool-b" } as never
-      );
-      expect(questionPrompter).toHaveBeenLastCalledWith(
-        expect.objectContaining({ sessionId: sessionB, requestId: "tool-b" })
-      );
-
-      queryB.finish();
-      await turnB;
-    });
-
-    describe("authentication", () => {
-      function makeAuthCheckedProcess(checkAuth: jest.Mock) {
-        return new ClaudeSdkBackendProcess({
-          pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          app: { vault: {} } as any,
-          clientVersion: "1.2.3",
-          descriptor: fakeDescriptor(),
-          checkAuth,
-        });
-      }
-
-      it("rejects with AuthRequiredError and never spawns query when not signed in", async () => {
-        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-        const checkAuth = jest.fn().mockResolvedValue(false);
-        const proc = makeAuthCheckedProcess(checkAuth);
-
-        const { sessionId } = await proc.newSession({ cwd: "/vault" });
-        proc.registerSessionHandler(sessionId, () => {});
-
-        await expect(
-          proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] })
-        ).rejects.toBeInstanceOf(AuthRequiredError);
-        expect(getPromptQueryCalls()).toHaveLength(0);
-      });
-
-      it("checks auth only once across turns once signed in (cached)", async () => {
-        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-        const checkAuth = jest.fn().mockResolvedValue(true);
-        const proc = makeAuthCheckedProcess(checkAuth);
-
-        const { sessionId } = await proc.newSession({ cwd: "/vault" });
-        proc.registerSessionHandler(sessionId, () => {});
-
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "2" }] });
-
-        expect(checkAuth).toHaveBeenCalledTimes(1);
-        expect(getPromptQueryCalls()).toHaveLength(2);
-      });
-
-      it("re-checks auth on the next turn when a turn ends non-success with no errors", async () => {
-        const checkAuth = jest.fn().mockResolvedValue(true);
-        const proc = makeAuthCheckedProcess(checkAuth);
-
-        const { sessionId } = await proc.newSession({ cwd: "/vault" });
-        proc.registerSessionHandler(sessionId, () => {});
-
-        queryMock.mockImplementationOnce(() => makeQuery([errorResultMessage([])]));
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
-        expect(checkAuth).toHaveBeenCalledTimes(1);
-
-        queryMock.mockImplementationOnce(() => makeQuery([resultMessage()]));
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "2" }] });
-        expect(checkAuth).toHaveBeenCalledTimes(2);
-      });
-    });
-
-    describe("stream stall watchdog", () => {
-      function makeProcess() {
-        return new ClaudeSdkBackendProcess({
-          pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          app: { vault: {} } as any,
-          clientVersion: "1.2.3",
-          descriptor: fakeDescriptor(),
-        });
-      }
-
-      function makeStallingQuery(arg: unknown) {
-        const { options } = arg as { options: { abortController: AbortController } };
-        const { signal } = options.abortController;
-        const iter = (async function* () {
-          yield streamEvent({ type: "message_start", message: {} });
-          yield streamEvent({
-            type: "content_block_delta",
-            index: 0,
-            delta: { type: "text_delta", text: "Draf" },
-          });
-          await new Promise<void>((resolve) => {
-            if (signal.aborted) resolve();
-            else signal.addEventListener("abort", () => resolve(), { once: true });
-          });
-        })();
-        return Object.assign(iter, {
-          interrupt: jest.fn().mockResolvedValue(undefined),
-          setModel: jest.fn().mockResolvedValue(undefined),
-          setPermissionMode: jest.fn().mockResolvedValue(undefined),
-        });
-      }
-
-      it("aborts the turn and rejects when the stream stalls mid-message", async () => {
-        queryMock.mockImplementation((arg: unknown) => makeStallingQuery(arg));
-        const proc = makeProcess();
-        const { sessionId } = await proc.newSession({ cwd: "/vault" });
-        proc.registerSessionHandler(sessionId, () => {});
-
-        jest.useFakeTimers();
-        try {
-          const turn = proc.prompt({ sessionId, prompt: [{ type: "text", text: "draft a plan" }] });
-          const assertion = expect(turn).rejects.toThrow(/stalled/i);
-          await jest.advanceTimersByTimeAsync(61_000);
-          await assertion;
-        } finally {
-          jest.useRealTimers();
-        }
-        const call = getPromptQueryCalls()[0][0] as {
-          options: { abortController: AbortController };
-        };
-        expect(call.options.abortController.signal.aborted).toBe(true);
-      });
-
-      it("passes an abort controller to query() and never fires while the stream is healthy", async () => {
-        queryMock.mockImplementation(() =>
-          makeQuery([
-            streamEvent({ type: "message_start", message: {} }),
-            streamEvent({
-              type: "content_block_delta",
-              index: 0,
-              delta: { type: "text_delta", text: "ok" },
-            }),
-            streamEvent({ type: "message_stop" }),
-            resultMessage(),
-          ])
-        );
-        const proc = makeProcess();
-        const { sessionId } = await proc.newSession({ cwd: "/vault" });
-        proc.registerSessionHandler(sessionId, () => {});
-
-        const resp = await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-        expect(resp.stopReason).toBe("end_turn");
-        const call = getPromptQueryCalls()[0][0] as { options: { abortController?: unknown } };
-        expect(call.options.abortController).toBeInstanceOf(AbortController);
-      });
-    });
-  });
-
-  describe("newSession()", () => {
-    beforeEach(() => {
-      queryMock.mockReset();
-      createSdkMcpServerMock.mockClear();
-    });
-
-    it("returns BackendState with current model + effort options from the cached catalog", async () => {
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-
-      const resp = await proc.newSession({ cwd: "/vault" });
-      expect(resp.state.model?.current.baseModelId).toBe("claude-fake-pro");
-      const ids = resp.state.model?.availableModels.map((m) => m.baseModelId);
-      expect(ids).toContain("claude-fake-pro");
-      expect(ids).toContain("claude-fake-mini");
-      const pro = resp.state.model?.availableModels.find(
-        (m) => m.baseModelId === "claude-fake-pro"
-      );
-      expect(pro?.effortOptions.map((o) => o.value)).toEqual(["low", "medium", "high"]);
-      expect(pro?.description).toBe("test");
-    });
-
-    it("honors persisted default model when it appears in the catalog", async () => {
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-        getDefaultModelId: () => "claude-fake-mini",
-      });
-
-      const resp = await proc.newSession({ cwd: "/vault" });
-      expect(resp.state.model?.current.baseModelId).toBe("claude-fake-mini");
-      const miniEffort = resp.state.model?.availableModels.find(
-        (m) => m.baseModelId === "claude-fake-mini"
-      )?.effortOptions;
-      expect(miniEffort).toEqual([]);
-    });
-
-    it("falls back to catalog default when the default model is gone", async () => {
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-        getDefaultModelId: () => "claude-removed-by-cli-upgrade",
-      });
-
-      const resp = await proc.newSession({ cwd: "/vault" });
-      expect(resp.state.model?.current.baseModelId).toBe("claude-fake-pro");
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 sends the initialized model and lowest effort on the first prompt", async () => {
-      queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      proc.registerSessionHandler(sessionId, () => {});
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-      const promptCalls = getPromptQueryCalls();
-      expect(promptCalls).toHaveLength(1);
-      const call = promptCalls[0][0] as { options: { model?: string; effort?: string } };
-      expect(call.options.model).toBe("claude-fake-pro");
-      expect(call.options.effort).toBe("low");
-    });
-
-    it("setSessionConfigOption('effort', …) clamps + persists the level on the session", async () => {
-      queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      proc.registerSessionHandler(sessionId, () => {});
-      const stateAfter = await proc.setSessionConfigOption({
-        sessionId,
-        configId: "effort",
-        value: "high",
-      });
-      expect(stateAfter.model?.current.effort).toBe("high");
-
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-      const promptCalls = getPromptQueryCalls();
-      expect(promptCalls).toHaveLength(1);
-      const call = promptCalls[0][0] as { options: { effort?: string } };
-      expect(call.options.effort).toBe("high");
-    });
-
-    it("disables thinking when the extended-thinking toggle is off", async () => {
-      queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-        getEnableThinking: () => false,
-      });
-
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      proc.registerSessionHandler(sessionId, () => {});
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-      const call = getPromptQueryCalls()[0][0] as { options: { thinking?: unknown } };
-      expect(call.options.thinking).toEqual({ type: "disabled" });
-    });
-
-    it("requests summarized adaptive thinking when the toggle is on", async () => {
-      queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-        getEnableThinking: () => true,
-      });
-
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      proc.registerSessionHandler(sessionId, () => {});
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-      const call = getPromptQueryCalls()[0][0] as { options: { thinking?: unknown } };
-      expect(call.options.thinking).toEqual({ type: "adaptive", display: "summarized" });
-    });
-
-    it("does not open a session when Claude Code is unsupported", async () => {
-      const checkCompatibility = jest
-        .fn()
-        .mockRejectedValue(new Error("Claude Code 2.1.205 is not supported"));
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-        checkCompatibility,
-      });
-
-      await expect(proc.newSession({ cwd: "/vault" })).rejects.toThrow(
-        "Claude Code 2.1.205 is not supported"
-      );
-      expect(queryMock).not.toHaveBeenCalled();
-    });
-
-    it("shares a successful compatibility check across sessions", async () => {
-      const checkCompatibility = jest.fn().mockResolvedValue(undefined);
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-        checkCompatibility,
-      });
-
-      await Promise.all([
-        proc.newSession({ cwd: "/vault-a" }),
-        proc.newSession({ cwd: "/vault-b" }),
-      ]);
-
-      expect(checkCompatibility).toHaveBeenCalledTimes(1);
-    });
-
-    it("retries compatibility after a failed check", async () => {
-      const checkCompatibility = jest
-        .fn()
-        .mockRejectedValueOnce(new Error("upgrade required"))
-        .mockResolvedValueOnce(undefined);
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-        checkCompatibility,
-      });
-
-      await expect(proc.newSession({ cwd: "/vault" })).rejects.toThrow("upgrade required");
-      await expect(proc.newSession({ cwd: "/vault" })).resolves.toBeDefined();
-      expect(checkCompatibility).toHaveBeenCalledTimes(2);
-    });
-
-    it("threads the backend's env overrides into the probe on a cold cache", async () => {
-      (getCachedSdkCatalog as jest.Mock).mockReturnValue(undefined);
-      const initializationResult = jest.fn().mockResolvedValue({ models: FAKE_CATALOG });
-      queryMock.mockReturnValue({
-        initializationResult,
-        interrupt: jest.fn().mockResolvedValue(undefined),
-      });
-
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-        getEnvOverrides: () => ({ ANTHROPIC_MODEL: "claude-fable-5" }),
-      });
-
-      await proc.newSession({ cwd: "/vault" });
-
-      const probeCall = queryMock.mock.calls[0][0] as {
-        options: { pathToClaudeCodeExecutable: string; env?: Record<string, string> };
-      };
-      expect(probeCall.options.pathToClaudeCodeExecutable).toBe("/usr/local/bin/claude");
-      expect(probeCall.options.env?.ANTHROPIC_MODEL).toBe("claude-fable-5");
-      expect(probeCall.options.env).toEqual({ ...process.env, ANTHROPIC_MODEL: "claude-fable-5" });
-    });
-  });
-
-  function errorResultMessage(errors: string[]): SDKMessage {
-    return {
-      type: "result",
-      subtype: "error_during_execution",
-      duration_ms: 1,
-      duration_api_ms: 1,
-      is_error: true,
-      num_turns: 1,
-      stop_reason: null,
-      total_cost_usd: 0,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      usage: {} as any,
-      modelUsage: {},
-      permission_denials: [],
-      errors,
-      uuid: "uuid-e" as `${string}-${string}-${string}-${string}-${string}`,
-      session_id: "irrelevant",
-    };
-  }
-
-  describe("setSessionMode()", () => {
-    beforeEach(() => {
-      queryMock.mockReset();
-      createSdkMcpServerMock.mockClear();
-    });
-
-    function makeProcess(): ClaudeSdkBackendProcess {
-      return new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-    }
-
-    it.each(["default", "plan", "acceptEdits", "auto", "bypassPermissions"])(
-      "carries the %s permission mode into the next turn",
-      async (modeId) => {
-        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-        const proc = makeProcess();
-
-        const { sessionId } = await proc.newSession({ cwd: "/vault" });
-        proc.registerSessionHandler(sessionId, () => {});
-        await proc.setSessionMode({ sessionId, modeId });
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-        const call = getPromptQueryCalls()[0][0] as { options: { permissionMode?: string } };
-        expect(call.options.permissionMode).toBe(modeId);
-      }
-    );
-
-    it("rejects a permission mode the SDK does not define", async () => {
-      const proc = makeProcess();
-
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-
-      await expect(proc.setSessionMode({ sessionId, modeId: "dontAsk" })).rejects.toThrow(
-        "Unsupported mode dontAsk"
-      );
-    });
-  });
-
-  describe("supportsAdditionalDirectories()", () => {
-    beforeEach(() => {
-      queryMock.mockReset();
-      createSdkMcpServerMock.mockClear();
-    });
-
-    function makeProc() {
-      return new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-    }
-
-    it("reports support for additionalDirectories (stable SDK option)", () => {
-      expect(makeProc().supportsAdditionalDirectories()).toBe(true);
-    });
-
-    it("forwards captured additionalDirectories into options on every turn", async () => {
-      queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-      const proc = makeProc();
-
-      const { sessionId } = await proc.newSession({
-        cwd: "/vault",
-        additionalDirectories: ["/abs/context-a", "/abs/context-b"],
-      });
-      proc.registerSessionHandler(sessionId, () => {});
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-      const call = getPromptQueryCalls()[0][0] as { options: { additionalDirectories?: string[] } };
-      expect(call.options.additionalDirectories).toEqual(["/abs/context-a", "/abs/context-b"]);
-    });
-
-    it("omits additionalDirectories from options when none were captured", async () => {
-      queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-      const proc = makeProc();
-
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      proc.registerSessionHandler(sessionId, () => {});
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-      const call = getPromptQueryCalls()[0][0] as { options: { additionalDirectories?: string[] } };
-      expect(call.options.additionalDirectories).toBeUndefined();
-    });
-  });
-
-  describe("sessionExistsLocally()", () => {
-    const cwd = "/vault";
-    const projectDir = cwd.replace(/[^a-zA-Z0-9]/g, "-");
-    let configDir: string;
-
-    beforeEach(async () => {
-      configDir = await mkdtemp(path.join(os.tmpdir(), "claude-config-"));
-    });
-    afterEach(async () => {
-      await rm(configDir, { recursive: true, force: true });
-    });
-
-    function makeProc(): ClaudeSdkBackendProcess {
-      return new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-        getEnvOverrides: () => ({ CLAUDE_CONFIG_DIR: configDir }),
-      });
-    }
-
-    it("returns true when this device has the session transcript on disk", async () => {
-      const sessionId = "11111111-2222-3333-4444-555555555555";
-      const dir = path.join(configDir, "projects", projectDir);
-      await mkdir(dir, { recursive: true });
-      await writeFile(path.join(dir, `${sessionId}.jsonl`), "{}\n");
-
-      await expect(makeProc().sessionExistsLocally({ sessionId, cwd })).resolves.toBe(true);
-    });
-
-    it("returns false for a session whose transcript never synced to this device", async () => {
-      await expect(
-        makeProc().sessionExistsLocally({ sessionId: "absent-session-id", cwd })
-      ).resolves.toBe(false);
-    });
-  });
-
   describe("enforceForegroundToolUse()", () => {
     const invoke = (toolName: string, toolInput: unknown) =>
       enforceForegroundToolUse(
@@ -1256,166 +417,782 @@ describe("ClaudeSdkBackendProcess", () => {
     });
   });
 
-  describe("plan usage", () => {
-    it("replays the last known caps to a newly attached session", async () => {
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-
-      const planUsage = {
-        windows: [{ id: "seven_day", label: "Weekly", percent: 21 }],
-        updatedAt: 1,
-      };
-      (proc as unknown as { lastPlanUsage: unknown }).lastPlanUsage = planUsage;
-
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      const events: SessionEvent[] = [];
-      proc.registerSessionHandler(sessionId, (e) => events.push(e));
-
-      expect(events).toContainEqual({
-        sessionId,
-        update: { sessionUpdate: "plan_usage_update", planUsage },
-      });
+  describe("ClaudeSdkBackendProcess", () => {
+    beforeEach(() => {
+      queryMock.mockReset();
+      createSdkMcpServerMock.mockClear();
     });
 
-    it("sends no caps to a new session before any have been read", async () => {
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
+    describe("newSession()", () => {
+      it("returns BackendState with current model + effort options from the cached catalog", async () => {
+        const proc = makeProc();
 
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      const events: SessionEvent[] = [];
-      proc.registerSessionHandler(sessionId, (e) => events.push(e));
-
-      expect(events.some((e) => e.update.sessionUpdate === "plan_usage_update")).toBe(false);
-    });
-
-    it("does not replay a window whose reset has already passed (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-
-      (proc as unknown as { lastPlanUsage: unknown }).lastPlanUsage = {
-        windows: [
-          { id: "five_hour", label: "5h", percent: 88, resetsAt: Date.now() - 1_000 },
-          { id: "seven_day", label: "Weekly", percent: 21, resetsAt: Date.now() + 60_000 },
-        ],
-        updatedAt: 1,
-      };
-
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      const events: SessionEvent[] = [];
-      proc.registerSessionHandler(sessionId, (e) => events.push(e));
-
-      const replayed = events.find((e) => e.update.sessionUpdate === "plan_usage_update");
-      expect(replayed?.update).toMatchObject({
-        planUsage: { windows: [{ id: "seven_day" }] },
-      });
-    });
-
-    it("publishes a reading to every live session, not only the one that took the turn", async () => {
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-
-      const first = await proc.newSession({ cwd: "/vault" });
-      const second = await proc.newSession({ cwd: "/vault" });
-      const firstEvents: SessionEvent[] = [];
-      const secondEvents: SessionEvent[] = [];
-      proc.registerSessionHandler(first.sessionId, (e) => firstEvents.push(e));
-      proc.registerSessionHandler(second.sessionId, (e) => secondEvents.push(e));
-
-      await (
-        proc as unknown as { refreshPlanUsage: (q: unknown) => Promise<void> }
-      ).refreshPlanUsage({
-        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () =>
-          Promise.resolve({
-            rate_limits_available: true,
-            rate_limits: { seven_day: { utilization: 21 } },
-          }),
-      });
-
-      for (const events of [firstEvents, secondEvents]) {
-        expect(events.filter((e) => e.update.sessionUpdate === "plan_usage_update")).toHaveLength(
-          1
+        const resp = await proc.newSession({ cwd: "/vault" });
+        expect(resp.state.model?.current.baseModelId).toBe("claude-fake-pro");
+        const ids = resp.state.model?.availableModels.map((m) => m.baseModelId);
+        expect(ids).toContain("claude-fake-pro");
+        expect(ids).toContain("claude-fake-mini");
+        const pro = resp.state.model?.availableModels.find(
+          (m) => m.baseModelId === "claude-fake-pro"
         );
+        expect(pro?.effortOptions.map((o) => o.value)).toEqual(["low", "medium", "high"]);
+        expect(pro?.description).toBe("test");
+      });
+
+      it("honors persisted default model when it appears in the catalog", async () => {
+        const proc = makeProc({ getDefaultModelId: () => "claude-fake-mini" });
+
+        const resp = await proc.newSession({ cwd: "/vault" });
+        expect(resp.state.model?.current.baseModelId).toBe("claude-fake-mini");
+        const miniEffort = resp.state.model?.availableModels.find(
+          (m) => m.baseModelId === "claude-fake-mini"
+        )?.effortOptions;
+        expect(miniEffort).toEqual([]);
+      });
+
+      it("falls back to catalog default when the default model is gone", async () => {
+        const proc = makeProc({ getDefaultModelId: () => "claude-removed-by-cli-upgrade" });
+
+        const resp = await proc.newSession({ cwd: "/vault" });
+        expect(resp.state.model?.current.baseModelId).toBe("claude-fake-pro");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 sends the initialized model and lowest effort on the first prompt", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProc();
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        proc.registerSessionHandler(sessionId, () => {});
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const promptCalls = getPromptQueryCalls();
+        expect(promptCalls).toHaveLength(1);
+        const call = promptCalls[0][0] as { options: { model?: string; effort?: string } };
+        expect(call.options.model).toBe("claude-fake-pro");
+        expect(call.options.effort).toBe("low");
+      });
+
+      it("does not open a session when Claude Code is unsupported", async () => {
+        const checkCompatibility = jest
+          .fn()
+          .mockRejectedValue(new Error("Claude Code 2.1.205 is not supported"));
+        const proc = makeProc({ checkCompatibility });
+
+        await expect(proc.newSession({ cwd: "/vault" })).rejects.toThrow(
+          "Claude Code 2.1.205 is not supported"
+        );
+        expect(queryMock).not.toHaveBeenCalled();
+      });
+
+      it("shares a successful compatibility check across sessions", async () => {
+        const checkCompatibility = jest.fn().mockResolvedValue(undefined);
+        const proc = makeProc({ checkCompatibility });
+
+        await Promise.all([
+          proc.newSession({ cwd: "/vault-a" }),
+          proc.newSession({ cwd: "/vault-b" }),
+        ]);
+
+        expect(checkCompatibility).toHaveBeenCalledTimes(1);
+      });
+
+      it("retries compatibility after a failed check", async () => {
+        const checkCompatibility = jest
+          .fn()
+          .mockRejectedValueOnce(new Error("upgrade required"))
+          .mockResolvedValueOnce(undefined);
+        const proc = makeProc({ checkCompatibility });
+
+        await expect(proc.newSession({ cwd: "/vault" })).rejects.toThrow("upgrade required");
+        await expect(proc.newSession({ cwd: "/vault" })).resolves.toBeDefined();
+        expect(checkCompatibility).toHaveBeenCalledTimes(2);
+      });
+
+      it("threads the backend's env overrides into the probe on a cold cache", async () => {
+        (getCachedSdkCatalog as jest.Mock).mockReturnValue(undefined);
+        const initializationResult = jest.fn().mockResolvedValue({ models: FAKE_CATALOG });
+        queryMock.mockReturnValue({
+          initializationResult,
+          interrupt: jest.fn().mockResolvedValue(undefined),
+        });
+
+        const proc = makeProc({ getEnvOverrides: () => ({ ANTHROPIC_MODEL: "claude-fable-5" }) });
+
+        await proc.newSession({ cwd: "/vault" });
+
+        const probeCall = queryMock.mock.calls[0][0] as {
+          options: { pathToClaudeCodeExecutable: string; env?: Record<string, string> };
+        };
+        expect(probeCall.options.env).toEqual({
+          ...process.env,
+          ANTHROPIC_MODEL: "claude-fable-5",
+        });
+      });
+    });
+
+    describe("prompt()", () => {
+      it("emits SDK text deltas as agent_message_chunk events and resolves with end_turn", async () => {
+        queryMock.mockImplementation(() =>
+          makeQuery([
+            streamEvent({ type: "message_start", message: {} }),
+            streamEvent({
+              type: "content_block_delta",
+              index: 0,
+              delta: { type: "text_delta", text: "hello" },
+            }),
+            resultMessage(),
+          ])
+        );
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        const events = registerCollector(proc, sessionId);
+
+        const resp = await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        expect(resp.stopReason).toBe("end_turn");
+        expect(events.map((e) => e.update)).toEqual([
+          { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "hello" } },
+        ]);
+      });
+
+      it("starts the first query with the claude_code preset, tool allow and deny lists, the foreground hook, and a fresh session id", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const promptCalls = getPromptQueryCalls();
+        expect(promptCalls).toHaveLength(1);
+        const { options } = promptCalls[0][0] as { options: Record<string, unknown> };
+        expect(options.pathToClaudeCodeExecutable).toBe("/usr/local/bin/claude");
+        expect(options.mcpServers).toBeUndefined();
+        expect(options.allowedTools).toEqual(["Read", "Write", "Edit", "Glob", "Grep", "LS"]);
+        expect(options.disallowedTools).toEqual(["TaskOutput", "Workflow", "Monitor"]);
+        expect(options.hooks).toEqual({ PreToolUse: [{ hooks: [enforceForegroundToolUse] }] });
+        expect(options.sessionId).toBe(sessionId);
+        expect(options.resume).toBeUndefined();
+        expect(options.systemPrompt).toEqual({
+          type: "preset",
+          preset: "claude_code",
+          excludeDynamicSections: true,
+          append: undefined,
+        });
+      });
+
+      it("forwards the composed system prompt via systemPrompt append on the claude_code preset", async () => {
+        queryMock.mockImplementation(() =>
+          makeQuery([streamEvent({ type: "message_start", message: {} }), resultMessage()])
+        );
+
+        const proc = makeProc({ getSystemPromptAppend: () => "DO THIS THING WITH SKILLS" });
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const calls = getPromptQueryCalls();
+        const opts = (calls[0][0] as { options: Record<string, unknown> }).options;
+        expect(opts.systemPrompt).toEqual({
+          type: "preset",
+          preset: "claude_code",
+          excludeDynamicSections: true,
+          append: "DO THIS THING WITH SKILLS",
+        });
+      });
+
+      it("captures the system prompt at newSession time and ignores later setting changes mid-session", async () => {
+        queryMock.mockImplementation(() =>
+          makeQuery([streamEvent({ type: "message_start", message: {} }), resultMessage()])
+        );
+
+        let current = "FIRST DIRECTIVE";
+        const proc = makeProc({ getSystemPromptAppend: () => current });
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        current = "SECOND DIRECTIVE";
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const opts = (getPromptQueryCalls()[0][0] as { options: Record<string, unknown> }).options;
+        expect(opts.systemPrompt).toEqual({
+          type: "preset",
+          preset: "claude_code",
+          excludeDynamicSections: true,
+          append: "FIRST DIRECTIVE",
+        });
+      });
+
+      it("passes resume on the second prompt for the same session", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+
+        const proc = makeProc();
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        proc.registerSessionHandler(sessionId, () => {});
+
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "2" }] });
+
+        const promptCalls = getPromptQueryCalls();
+        expect(promptCalls).toHaveLength(2);
+        const second = promptCalls[1][0] as { options: Record<string, unknown> };
+        expect(second.options.resume).toBe(sessionId);
+        expect(second.options.sessionId).toBeUndefined();
+      });
+
+      it("disables thinking when the extended-thinking toggle is off", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProc({ getEnableThinking: () => false });
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        proc.registerSessionHandler(sessionId, () => {});
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const call = getPromptQueryCalls()[0][0] as { options: { thinking?: unknown } };
+        expect(call.options.thinking).toEqual({ type: "disabled" });
+      });
+
+      it("requests summarized adaptive thinking when the toggle is on", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProc({ getEnableThinking: () => true });
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        proc.registerSessionHandler(sessionId, () => {});
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const call = getPromptQueryCalls()[0][0] as { options: { thinking?: unknown } };
+        expect(call.options.thinking).toEqual({ type: "adaptive", display: "summarized" });
+      });
+
+      it("preserves background task identity across prompt queries", async () => {
+        queryMock
+          .mockImplementationOnce(() =>
+            makeQuery([
+              streamEvent({
+                type: "content_block_start",
+                index: 0,
+                content_block: { type: "tool_use", id: "tu-launch", name: "Agent", input: {} },
+              }),
+              {
+                type: "user",
+                tool_use_result: {
+                  isAsync: true,
+                  status: "async_launched",
+                  agentId: "task-a",
+                },
+                message: {
+                  content: [
+                    {
+                      type: "tool_result",
+                      tool_use_id: "tu-launch",
+                      content: "Async agent launched successfully.",
+                    },
+                  ],
+                },
+                parent_tool_use_id: null,
+                session_id: "irrelevant",
+              } as unknown as SDKMessage,
+              resultMessage(),
+            ])
+          )
+          .mockImplementationOnce(() =>
+            makeQuery([
+              {
+                type: "system",
+                subtype: "task_notification",
+                task_id: "task-a",
+                status: "completed",
+                summary: "late report",
+              } as unknown as SDKMessage,
+              resultMessage(),
+            ])
+          );
+
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        const events: SessionEvent[] = [];
+        proc.registerSessionHandler(sessionId, (event) => events.push(event));
+
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "start" }] });
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "continue" }] });
+
+        expect(events).toContainEqual({
+          sessionId,
+          update: {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "tu-launch",
+            status: "completed",
+            content: [{ type: "content", content: { type: "text", text: "late report" } }],
+          },
+        });
+      });
+
+      it("keeps concurrent query actions bound to their owning sessions after either query finishes for https://github.com/logancyang/obsidian-copilot/issues/2948", async () => {
+        const queryA = makeControlledQuery();
+        const queryB = makeControlledQuery();
+        queryMock.mockReturnValueOnce(queryA.query).mockReturnValueOnce(queryB.query);
+        const proc = makeProc();
+        const { sessionId: sessionA } = await proc.newSession({ cwd: "/vault/a" });
+        const { sessionId: sessionB } = await proc.newSession({ cwd: "/vault/b" });
+        proc.registerSessionHandler(sessionA, () => {});
+        proc.registerSessionHandler(sessionB, () => {});
+        const permissionPrompter = jest.fn(async () => ({
+          outcome: { outcome: "selected" as const, optionId: "allow_once" },
+        }));
+        const questionPrompter = jest.fn(async () => ({ "Continue?": "Yes" }));
+        proc.setPermissionPrompter(permissionPrompter);
+        proc.setAskUserQuestionPrompter(questionPrompter);
+
+        const turnA = proc.prompt({ sessionId: sessionA, prompt: [{ type: "text", text: "A" }] });
+        const turnB = proc.prompt({ sessionId: sessionB, prompt: [{ type: "text", text: "B" }] });
+        await flushMicrotasks();
+        expect(getPromptQueryCalls()).toHaveLength(2);
+        const [callA, callB] = getPromptQueryCalls().map(
+          (call) => (call[0] as { options: { canUseTool: CanUseTool } }).options.canUseTool
+        );
+
+        await callA("Edit", { file_path: "/vault/a/note.md" }, {
+          signal: new AbortController().signal,
+          toolUseID: "tool-a",
+        } as never);
+        expect(permissionPrompter).toHaveBeenLastCalledWith(
+          expect.objectContaining({ sessionId: sessionA })
+        );
+
+        queryA.finish();
+        await turnA;
+        await callB(
+          "AskUserQuestion",
+          { questions: [{ question: "Continue?", options: [{ label: "Yes" }] }] },
+          { signal: new AbortController().signal, toolUseID: "tool-b" } as never
+        );
+        expect(questionPrompter).toHaveBeenLastCalledWith(
+          expect.objectContaining({ sessionId: sessionB, requestId: "tool-b" })
+        );
+
+        queryB.finish();
+        await turnB;
+      });
+
+      it("rejects with Claude's reset message when a success-shaped result reports usage exhaustion", async () => {
+        queryMock.mockImplementation(() => makeQuery(usageLimitMessages()));
+
+        const proc = makeProc();
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        proc.registerSessionHandler(sessionId, () => {});
+
+        await expect(
+          proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] })
+        ).rejects.toThrow(new Error(USAGE_LIMIT_MESSAGE));
+      });
+
+      it("does not start a query when its session closes during environment preparation https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+        let finishEnvironment!: (env: Record<string, string>) => void;
+        const environment = new Promise<Record<string, string>>((resolve) => {
+          finishEnvironment = resolve;
+        });
+        const backend = makeProc({ getManagedEnv: () => environment });
+        const { sessionId } = await backend.newSession({ cwd: "/vault" });
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const pending = backend.prompt({ sessionId, prompt: [] });
+        await flushMicrotasks();
+        await backend.closeSession({ sessionId });
+        finishEnvironment({});
+        await expect(pending).resolves.toEqual({ stopReason: "cancelled" });
+        expect(getPromptQueryCalls()).toHaveLength(0);
+      });
+
+      describe("authentication", () => {
+        it("rejects with AuthRequiredError and never spawns query when not signed in", async () => {
+          queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+          const checkAuth = jest.fn().mockResolvedValue(false);
+          const proc = makeProc({ checkAuth });
+
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          proc.registerSessionHandler(sessionId, () => {});
+
+          await expect(
+            proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] })
+          ).rejects.toBeInstanceOf(AuthRequiredError);
+          expect(getPromptQueryCalls()).toHaveLength(0);
+        });
+
+        it("checks auth only once across turns once signed in (cached)", async () => {
+          queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+          const checkAuth = jest.fn().mockResolvedValue(true);
+          const proc = makeProc({ checkAuth });
+
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          proc.registerSessionHandler(sessionId, () => {});
+
+          await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
+          await proc.prompt({ sessionId, prompt: [{ type: "text", text: "2" }] });
+
+          expect(checkAuth).toHaveBeenCalledTimes(1);
+          expect(getPromptQueryCalls()).toHaveLength(2);
+        });
+
+        it("re-checks auth on the next turn when a turn ends non-success with no errors", async () => {
+          const checkAuth = jest.fn().mockResolvedValue(true);
+          const proc = makeProc({ checkAuth });
+
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          proc.registerSessionHandler(sessionId, () => {});
+
+          queryMock.mockImplementationOnce(() => makeQuery([errorResultMessage([])]));
+          await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
+          expect(checkAuth).toHaveBeenCalledTimes(1);
+
+          queryMock.mockImplementationOnce(() => makeQuery([resultMessage()]));
+          await proc.prompt({ sessionId, prompt: [{ type: "text", text: "2" }] });
+          expect(checkAuth).toHaveBeenCalledTimes(2);
+        });
+      });
+
+      describe("stream stall watchdog", () => {
+        function makeStallingQuery(arg: unknown) {
+          const { options } = arg as { options: { abortController: AbortController } };
+          const { signal } = options.abortController;
+          const iter = (async function* () {
+            yield streamEvent({ type: "message_start", message: {} });
+            yield streamEvent({
+              type: "content_block_delta",
+              index: 0,
+              delta: { type: "text_delta", text: "Draf" },
+            });
+            await new Promise<void>((resolve) => {
+              if (signal.aborted) resolve();
+              else signal.addEventListener("abort", () => resolve(), { once: true });
+            });
+          })();
+          return Object.assign(iter, {
+            interrupt: jest.fn().mockResolvedValue(undefined),
+            setModel: jest.fn().mockResolvedValue(undefined),
+            setPermissionMode: jest.fn().mockResolvedValue(undefined),
+          });
+        }
+
+        it("aborts the turn and rejects when the stream stalls mid-message", async () => {
+          queryMock.mockImplementation((arg: unknown) => makeStallingQuery(arg));
+          const proc = makeProc();
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          proc.registerSessionHandler(sessionId, () => {});
+
+          jest.useFakeTimers();
+          try {
+            const turn = proc.prompt({
+              sessionId,
+              prompt: [{ type: "text", text: "draft a plan" }],
+            });
+            const assertion = expect(turn).rejects.toThrow(/stalled/i);
+            await jest.advanceTimersByTimeAsync(61_000);
+            await assertion;
+          } finally {
+            jest.useRealTimers();
+          }
+          const call = getPromptQueryCalls()[0][0] as {
+            options: { abortController: AbortController };
+          };
+          expect(call.options.abortController.signal.aborted).toBe(true);
+        });
+      });
+
+      describe("plan usage", () => {
+        it("publishes a reading to every live session, not only the one that took the turn", async () => {
+          const proc = makeProc();
+          const first = await proc.newSession({ cwd: "/vault" });
+          const second = await proc.newSession({ cwd: "/vault" });
+          const firstEvents = registerCollector(proc, first.sessionId);
+          const secondEvents = registerCollector(proc, second.sessionId);
+
+          await promptReportingPlanUsage(proc, first.sessionId, async () => WEEKLY_21_PERCENT);
+
+          for (const events of [firstEvents, secondEvents]) {
+            expect(planUsageUpdates(events)).toMatchObject([
+              {
+                sessionUpdate: "plan_usage_update",
+                planUsage: { windows: [{ id: "seven_day", percent: 21 }] },
+              },
+            ]);
+          }
+        });
+
+        it("clears the meters when the account turns out not to be metered by plan caps (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
+          const proc = makeProc();
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          const events = registerCollector(proc, sessionId);
+          await promptReportingPlanUsage(proc, sessionId, async () => WEEKLY_21_PERCENT);
+
+          await promptReportingPlanUsage(proc, sessionId, async () => ({
+            rate_limits_available: false,
+          }));
+
+          expect(planUsageUpdates(events).at(-1)).toEqual({
+            sessionUpdate: "plan_usage_update",
+            planUsage: null,
+          });
+        });
+
+        it("keeps showing the last good reading when the usage call fails", async () => {
+          const proc = makeProc();
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          const events = registerCollector(proc, sessionId);
+          await promptReportingPlanUsage(proc, sessionId, async () => WEEKLY_21_PERCENT);
+          const publishedBefore = planUsageUpdates(events).length;
+
+          await promptReportingPlanUsage(proc, sessionId, () =>
+            Promise.reject(new Error("transport closed"))
+          );
+
+          expect(planUsageUpdates(events)).toHaveLength(publishedBefore);
+          const later = await proc.newSession({ cwd: "/vault" });
+          expect(planUsageUpdates(registerCollector(proc, later.sessionId))).toMatchObject([
+            { planUsage: { windows: [{ id: "seven_day", percent: 21 }] } },
+          ]);
+        });
+      });
+    });
+
+    describe("registerSessionHandler()", () => {
+      it("buffers events emitted before a session handler is registered and replays them", async () => {
+        queryMock.mockImplementation(() =>
+          makeQuery([
+            streamEvent({ type: "message_start", message: {} }),
+            streamEvent({
+              type: "content_block_delta",
+              index: 0,
+              delta: { type: "text_delta", text: "buffered" },
+            }),
+            resultMessage(),
+          ])
+        );
+
+        const proc = makeProc();
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        const promptPromise = proc.prompt({
+          sessionId,
+          prompt: [{ type: "text", text: "hi" }],
+        });
+
+        const seen: SessionEvent[] = [];
+        proc.registerSessionHandler(sessionId, (e) => seen.push(e));
+        await promptPromise;
+
+        expect(seen.map((e) => e.update)).toContainEqual({
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "buffered" },
+        });
+      });
+
+      it("replays the last read plan caps to a session registered afterwards", async () => {
+        const proc = makeProc();
+        const first = await proc.newSession({ cwd: "/vault" });
+        registerCollector(proc, first.sessionId);
+        await promptReportingPlanUsage(proc, first.sessionId, async () => WEEKLY_21_PERCENT);
+        const second = await proc.newSession({ cwd: "/vault" });
+
+        const events = registerCollector(proc, second.sessionId);
+
+        expect(planUsageUpdates(events)).toMatchObject([
+          {
+            sessionUpdate: "plan_usage_update",
+            planUsage: { windows: [{ id: "seven_day", label: "Weekly", percent: 21 }] },
+          },
+        ]);
+      });
+
+      it("sends no plan caps to a session registered before any were read", async () => {
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+        const events = registerCollector(proc, sessionId);
+
+        expect(planUsageUpdates(events)).toEqual([]);
+      });
+
+      it("does not replay a plan window whose reset has already passed (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
+        const proc = makeProc();
+        const first = await proc.newSession({ cwd: "/vault" });
+        registerCollector(proc, first.sessionId);
+        await promptReportingPlanUsage(proc, first.sessionId, async () => ({
+          rate_limits_available: true,
+          rate_limits: {
+            five_hour: {
+              utilization: 88,
+              resets_at: new Date(Date.now() - 60_000).toISOString(),
+            },
+            seven_day: {
+              utilization: 21,
+              resets_at: new Date(Date.now() + 3_600_000).toISOString(),
+            },
+          },
+        }));
+        const second = await proc.newSession({ cwd: "/vault" });
+
+        const events = registerCollector(proc, second.sessionId);
+
+        expect(planUsageUpdates(events)).toMatchObject([
+          { planUsage: { windows: [{ id: "seven_day" }] } },
+        ]);
+      });
+    });
+
+    describe("setSessionConfigOption()", () => {
+      it("sets the effort level on the session state and sends it with the next prompt", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProc();
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        proc.registerSessionHandler(sessionId, () => {});
+        const stateAfter = await proc.setSessionConfigOption({
+          sessionId,
+          configId: "effort",
+          value: "high",
+        });
+        expect(stateAfter.model?.current.effort).toBe("high");
+
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+        const promptCalls = getPromptQueryCalls();
+        expect(promptCalls).toHaveLength(1);
+        const call = promptCalls[0][0] as { options: { effort?: string } };
+        expect(call.options.effort).toBe("high");
+      });
+
+      it("rejects an effort level the session's model does not support", async () => {
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+        await expect(
+          proc.setSessionConfigOption({ sessionId, configId: "effort", value: "max" })
+        ).rejects.toThrow("Effort 'max' not supported by claude-fake-pro");
+      });
+    });
+
+    describe("setSessionMode()", () => {
+      it.each(["default", "plan", "acceptEdits", "auto", "bypassPermissions"])(
+        "carries the %s permission mode into the next turn",
+        async (modeId) => {
+          queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+          const proc = makeProc();
+
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          proc.registerSessionHandler(sessionId, () => {});
+          await proc.setSessionMode({ sessionId, modeId });
+          await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+          const call = getPromptQueryCalls()[0][0] as { options: { permissionMode?: string } };
+          expect(call.options.permissionMode).toBe(modeId);
+        }
+      );
+
+      it("rejects a permission mode the SDK does not define", async () => {
+        const proc = makeProc();
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+        await expect(proc.setSessionMode({ sessionId, modeId: "dontAsk" })).rejects.toThrow(
+          "Unsupported mode dontAsk"
+        );
+      });
+    });
+
+    describe("closeSession()", () => {
+      it("terminates only the closing session's active query https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+        const backend = makeProc();
+        const first = await backend.newSession({ cwd: "/vault" });
+        const sibling = await backend.newSession({ cwd: "/vault" });
+        const a = makeControlledQuery();
+        const b = makeControlledQuery();
+        const closeA = jest.fn(a.finish);
+        const closeB = jest.fn(b.finish);
+        queryMock
+          .mockReset()
+          .mockReturnValueOnce(Object.assign(a.query, { close: closeA }))
+          .mockReturnValueOnce(Object.assign(b.query, { close: closeB }));
+        const pendingA = backend.prompt({ sessionId: first.sessionId, prompt: [] });
+        const pendingB = backend.prompt({ sessionId: sibling.sessionId, prompt: [] });
+        await flushMicrotasks();
+        await backend.closeSession({ sessionId: first.sessionId });
+        expect(closeA).toHaveBeenCalledTimes(1);
+        expect(closeB).not.toHaveBeenCalled();
+        b.finish();
+        await Promise.all([pendingA, pendingB]);
+        await expect(backend.prompt({ sessionId: first.sessionId, prompt: [] })).rejects.toThrow(
+          "Unknown session"
+        );
+      });
+    });
+
+    describe("supportsAdditionalDirectories()", () => {
+      it("reports support for additionalDirectories (stable SDK option)", () => {
+        expect(makeProc().supportsAdditionalDirectories()).toBe(true);
+      });
+
+      it("forwards captured additionalDirectories into options on every turn", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProc();
+
+        const { sessionId } = await proc.newSession({
+          cwd: "/vault",
+          additionalDirectories: ["/abs/context-a", "/abs/context-b"],
+        });
+        proc.registerSessionHandler(sessionId, () => {});
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const call = getPromptQueryCalls()[0][0] as {
+          options: { additionalDirectories?: string[] };
+        };
+        expect(call.options.additionalDirectories).toEqual(["/abs/context-a", "/abs/context-b"]);
+      });
+
+      it("omits additionalDirectories from options when none were captured", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProc();
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        proc.registerSessionHandler(sessionId, () => {});
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const call = getPromptQueryCalls()[0][0] as {
+          options: { additionalDirectories?: string[] };
+        };
+        expect(call.options.additionalDirectories).toBeUndefined();
+      });
+    });
+
+    describe("sessionExistsLocally()", () => {
+      const cwd = "/vault";
+      const projectDir = cwd.replace(/[^a-zA-Z0-9]/g, "-");
+      let configDir: string;
+
+      beforeEach(async () => {
+        configDir = await mkdtemp(path.join(os.tmpdir(), "claude-config-"));
+      });
+      afterEach(async () => {
+        await rm(configDir, { recursive: true, force: true });
+      });
+
+      function makeProcWithConfigDir(): ClaudeSdkBackendProcess {
+        return makeProc({ getEnvOverrides: () => ({ CLAUDE_CONFIG_DIR: configDir }) });
       }
-    });
 
-    it("clears the meters when the account turns out not to be metered by plan caps (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-      (proc as unknown as { lastPlanUsage: unknown }).lastPlanUsage = {
-        windows: [{ id: "seven_day", label: "Weekly", percent: 21 }],
-        updatedAt: 1,
-      };
+      it("returns true when this device has the session transcript on disk", async () => {
+        const sessionId = "11111111-2222-3333-4444-555555555555";
+        const dir = path.join(configDir, "projects", projectDir);
+        await mkdir(dir, { recursive: true });
+        await writeFile(path.join(dir, `${sessionId}.jsonl`), "{}\n");
 
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      const events: SessionEvent[] = [];
-      proc.registerSessionHandler(sessionId, (e) => events.push(e));
-
-      await (
-        proc as unknown as { refreshPlanUsage: (q: unknown) => Promise<void> }
-      ).refreshPlanUsage({
-        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () =>
-          Promise.resolve({ rate_limits_available: false }),
+        await expect(
+          makeProcWithConfigDir().sessionExistsLocally({ sessionId, cwd })
+        ).resolves.toBe(true);
       });
 
-      expect(events.at(-1)?.update).toEqual({
-        sessionUpdate: "plan_usage_update",
-        planUsage: null,
+      it("returns false for a session whose transcript never synced to this device", async () => {
+        await expect(
+          makeProcWithConfigDir().sessionExistsLocally({ sessionId: "absent-session-id", cwd })
+        ).resolves.toBe(false);
       });
-    });
-
-    it("keeps the last good reading when the usage call fails", async () => {
-      const proc = new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-      });
-      const planUsage = {
-        windows: [{ id: "seven_day", label: "Weekly", percent: 21 }],
-        updatedAt: 1,
-      };
-      (proc as unknown as { lastPlanUsage: unknown }).lastPlanUsage = planUsage;
-
-      const { sessionId } = await proc.newSession({ cwd: "/vault" });
-      const events: SessionEvent[] = [];
-      proc.registerSessionHandler(sessionId, (e) => events.push(e));
-      events.length = 0;
-
-      await (
-        proc as unknown as { refreshPlanUsage: (q: unknown) => Promise<void> }
-      ).refreshPlanUsage({
-        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () =>
-          Promise.reject(new Error("transport closed")),
-      });
-
-      expect(events).toHaveLength(0);
-      expect((proc as unknown as { lastPlanUsage: unknown }).lastPlanUsage).toBe(planUsage);
     });
   });
 });
