@@ -28,8 +28,8 @@ jest.mock("./codexVersion", () => {
     __esModule: true,
     inspectCodexAcpPackage: (path: string) => ({
       entryPath: jest.mocked(resolveSupportedCodexAcpEntry)(path),
-      version: "1.13.0",
-      runtimeVersion: "1.13.0",
+      version: "2.0.0",
+      runtimeVersion: "2.0.0",
     }),
     resolveSupportedCodexAcpEntry: jest
       .fn()
@@ -72,12 +72,12 @@ describe("CodexBackend", () => {
         const minimum = jest.replaceProperty<{ CODEX_MIN_VERSION: string }, "CODEX_MIN_VERSION">(
           codexVersion,
           "CODEX_MIN_VERSION",
-          "1.14.0"
+          "2.1.0"
         );
         try {
           await expect(
             new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" })
-          ).rejects.toThrow("1.13.0");
+          ).rejects.toThrow("2.0.0");
         } finally {
           minimum.restore();
         }
@@ -343,7 +343,7 @@ describe("CodexBackend", () => {
         }
       );
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/551 starts Codex with the approval preset that permits workspace edits", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/618 starts Codex in the read-only mode that asks before workspace edits", async () => {
         const backend = new CodexBackend();
         const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
         expect(desc.env.INITIAL_AGENT_MODE).toBe("read-only");

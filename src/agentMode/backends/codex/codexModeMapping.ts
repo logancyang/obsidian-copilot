@@ -17,9 +17,9 @@ export function buildCodexModeMapping(): ModeMapping {
   };
 }
 
-// ACP's "read-only" ID still allows workspace edits; it selects the approval
-// preset. Planning is Codex's separate collaboration workflow.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+// ACP's "read-only" mode asks before each workspace edit, matching Default on
+// other agents. Planning is Codex's separate collaboration workflow.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/618
 const CURRENT_MODE: Record<string, CopilotMode> = {
   "read-only/default": "default",
   "agent/plan": "plan",

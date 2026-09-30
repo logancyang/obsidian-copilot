@@ -26,7 +26,7 @@ function collaboration(value: "default" | "plan"): BackendConfigOption {
   };
 }
 
-const availableModes = ["read-only", "agent", "agent-full-access"];
+const availableModes = ["read-only", "workspace-write", "agent", "agent-full-access"];
 
 describe("codexModeMapping", () => {
   describe("buildCodexModeMapping()", () => {
