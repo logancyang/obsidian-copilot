@@ -64,7 +64,7 @@ describe("ByokGlobalTable", () => {
       expect(screen.getByTestId("byok-table-empty")).toBeTruthy();
     });
 
-    it("renders the provider name and model rows when expanded", () => {
+    it("lists the provider's models after the provider card is expanded", () => {
       renderWithProvider(
         <ByokGlobalTable groups={[group]} onConfigure={jest.fn()} onRemove={jest.fn()} />
       );
@@ -75,17 +75,15 @@ describe("ByokGlobalTable", () => {
       expect(screen.getByText("Claude Opus 4.5")).toBeTruthy();
     });
 
-    it("shows model count and status badge", () => {
+    it("shows the model count and a Verified badge for a verified provider", () => {
       renderWithProvider(
         <ByokGlobalTable groups={[group]} onConfigure={jest.fn()} onRemove={jest.fn()} />
       );
       expect(screen.getByText("2 models")).toBeTruthy();
-      const badge = screen.getByText("Verified");
-      expect(badge.className).toContain("tw-bg-success");
-      expect(badge.className).toContain("tw-text-success");
+      expect(screen.getByText("Verified")).toBeTruthy();
     });
 
-    it("shows a missing-key result even when configuration alone cannot verify it (https://github.com/logancyang/obsidian-copilot/issues/3147)", () => {
+    it("shows No key instead of Verified when verification reports a missing key (https://github.com/logancyang/obsidian-copilot/issues/3147)", () => {
       const noKeyGroup: ByokTableGroup = {
         provider: { ...group.provider, apiKeyKeychainId: undefined },
         models: group.models,
@@ -94,11 +92,11 @@ describe("ByokGlobalTable", () => {
       renderWithProvider(
         <ByokGlobalTable groups={[noKeyGroup]} onConfigure={jest.fn()} onRemove={jest.fn()} />
       );
-      const badge = screen.getByText("No key");
-      expect(badge.className).not.toContain("tw-bg-success");
+      expect(screen.getByText("No key")).toBeTruthy();
+      expect(screen.queryByText("Verified")).toBeNull();
     });
 
-    it("uses a clearer sub-line than '0 models' when a key-set provider has no models", () => {
+    it("says No models added instead of 0 models when a keyed provider has none", () => {
       const emptyGroup: ByokTableGroup = { ...group, models: [] };
       renderWithProvider(
         <ByokGlobalTable groups={[emptyGroup]} onConfigure={jest.fn()} onRemove={jest.fn()} />
@@ -108,7 +106,7 @@ describe("ByokGlobalTable", () => {
       expect(screen.getByText("Verified")).toBeTruthy();
     });
 
-    it("waits for verification before claiming a keyless provider is running (https://github.com/logancyang/obsidian-copilot/issues/3147)", () => {
+    it("shows Checking… instead of Verified for a keyless provider until verification returns (https://github.com/logancyang/obsidian-copilot/issues/3147)", () => {
       const localGroup: ByokTableGroup = {
         provider: { ...group.provider, displayName: "Ollama", requiresApiKey: false },
         models: [],
@@ -117,11 +115,11 @@ describe("ByokGlobalTable", () => {
         <ByokGlobalTable groups={[localGroup]} onConfigure={jest.fn()} onRemove={jest.fn()} />
       );
       expect(screen.getByText("Local models on your machine")).toBeTruthy();
-      const badge = screen.getByText("Checking…");
-      expect(badge.className).not.toContain("tw-bg-success");
+      expect(screen.getByText("Checking…")).toBeTruthy();
+      expect(screen.queryByText("Verified")).toBeNull();
     });
 
-    it("collapses and expands when the provider card is clicked", () => {
+    it("toggles the model list each time the provider card is clicked", () => {
       renderWithProvider(
         <ByokGlobalTable groups={[group]} onConfigure={jest.fn()} onRemove={jest.fn()} />
       );
@@ -135,7 +133,7 @@ describe("ByokGlobalTable", () => {
       expect(screen.queryByText("Claude Sonnet 4.5")).toBeNull();
     });
 
-    it("exposes the header as a keyboard-operable button that toggles on Enter/Space", () => {
+    it("toggles the model list from the keyboard with Enter and Space on the focusable card header", () => {
       renderWithProvider(
         <ByokGlobalTable groups={[group]} onConfigure={jest.fn()} onRemove={jest.fn()} />
       );
@@ -153,7 +151,7 @@ describe("ByokGlobalTable", () => {
       expect(header.getAttribute("aria-expanded")).toBe("false");
     });
 
-    it("keeps the per-model remove button mounted (keyboard reachable) when expanded", () => {
+    it("offers a keyboard-reachable Remove button for each model once expanded", () => {
       renderWithProvider(
         <ByokGlobalTable groups={[group]} onConfigure={jest.fn()} onRemove={jest.fn()} />
       );

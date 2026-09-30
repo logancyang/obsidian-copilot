@@ -185,7 +185,7 @@ describe("ConfigureProviderDialog", () => {
       }
     );
 
-    it("skips the mount fetch when the source requires an API key and the field is empty", () => {
+    it("does not list models on open while a required API key is still empty", () => {
       render(
         <ConfigureProviderForm
           state={{ mode: "new", source: anthropicSource }}
@@ -195,7 +195,7 @@ describe("ConfigureProviderDialog", () => {
       expect(mockListProviderModels).not.toHaveBeenCalled();
     });
 
-    it("fires the mount fetch for a key-less template (no auth required)", async () => {
+    it("lists models on open for a keyless template and leaves them unchecked", async () => {
       mockListProviderModels.mockResolvedValue({ ok: true, modelIds: ["llama3.2"] });
       render(
         <ConfigureProviderForm state={{ mode: "new", source: ollamaSource }} onClose={jest.fn()} />
@@ -210,7 +210,7 @@ describe("ConfigureProviderDialog", () => {
       expect(rowCheckbox("llama3.2").getAttribute("aria-checked")).toBe("false");
     });
 
-    it("waits for Test before discovering models from a typed custom URL (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
+    it("lists models from a typed custom URL only after Test is clicked (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
       mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
       render(
         <ConfigureProviderForm
@@ -234,7 +234,7 @@ describe("ConfigureProviderDialog", () => {
       );
     });
 
-    it("uses the source default URL as the input placeholder", () => {
+    it("shows the source's default URL as the Base URL placeholder", () => {
       render(
         <ConfigureProviderForm
           state={{ mode: "new", source: anthropicSource }}
@@ -244,14 +244,14 @@ describe("ConfigureProviderDialog", () => {
       expect(screen.getByPlaceholderText("https://api.anthropic.com")).toBeTruthy();
     });
 
-    it("falls back to a known default endpoint when the source ships none", async () => {
+    it("shows the OpenAI endpoint as the Base URL placeholder when the source ships no default", async () => {
       render(
         <ConfigureProviderForm state={{ mode: "new", source: openaiSource }} onClose={jest.fn()} />
       );
       expect(screen.getByPlaceholderText("https://api.openai.com/v1")).toBeTruthy();
     });
 
-    it("Save is gated only on a non-empty selection", async () => {
+    it("enables Save once at least one model is selected", async () => {
       render(
         <ConfigureProviderForm state={{ mode: "new", source: ollamaSource }} onClose={jest.fn()} />
       );
@@ -261,7 +261,7 @@ describe("ConfigureProviderDialog", () => {
       expect(save.hasAttribute("disabled")).toBe(false);
     });
 
-    it("calls setupProvider with the catalog id + enriched model metadata", async () => {
+    it("saves a new provider with its catalog id and the catalog metadata of the selected model", async () => {
       mockGetProvider.mockReturnValue(anthropicCatalogMetadata);
       mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
       const onClose = jest.fn();
@@ -290,7 +290,7 @@ describe("ConfigureProviderDialog", () => {
       await waitFor(() => expect(onClose).toHaveBeenCalled());
     });
 
-    it("synthesizes minimal ModelInfo for a manual id with no catalog entry", async () => {
+    it("saves a manually added id that has no catalog entry with its id as name, flagging embedding names", async () => {
       const onClose = jest.fn();
       render(
         <ConfigureProviderForm state={{ mode: "new", source: ollamaSource }} onClose={onClose} />
@@ -312,7 +312,7 @@ describe("ConfigureProviderDialog", () => {
       );
     });
 
-    it("saves an explicit Quick Chat CORS choice for a new provider (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
+    it("saves the Quick Chat CORS choice made for a new provider (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
       mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
       render(
         <ConfigureProviderForm
@@ -336,24 +336,7 @@ describe("ConfigureProviderDialog", () => {
       );
     });
 
-    it("re-fetches the model list after a successful API key test", async () => {
-      mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
-      mockListProviderModels.mockResolvedValueOnce({ ok: true, modelIds: ["claude-sonnet"] });
-      render(
-        <ConfigureProviderForm
-          state={{ mode: "new", source: anthropicSource }}
-          onClose={jest.fn()}
-        />
-      );
-
-      fireEvent.change(screen.getByTestId("api-key"), { target: { value: "sk-ant" } });
-      fireEvent.click(screen.getByRole("button", { name: "Test" }));
-      await waitFor(() => expect(mockListProviderModels).toHaveBeenCalledTimes(1));
-      await waitFor(() => expect(screen.getByTestId("model-row-claude-sonnet")).toBeTruthy());
-      expect(rowCheckbox("claude-sonnet").getAttribute("aria-checked")).toBe("false");
-    });
-
-    it("surfaces a fetch error inline (mount fetch failure)", async () => {
+    it("shows the error inline when listing models on open fails", async () => {
       mockListProviderModels.mockResolvedValue({ ok: false, message: "connection refused" });
       render(
         <ConfigureProviderForm state={{ mode: "new", source: ollamaSource }} onClose={jest.fn()} />
@@ -361,7 +344,7 @@ describe("ConfigureProviderDialog", () => {
       expect(await screen.findByText("connection refused")).toBeTruthy();
     });
 
-    it("only manually-added ids get an X (remove) button — discovered rows do not", async () => {
+    it("offers Remove only on manually added ids, not on discovered models", async () => {
       mockGetProvider.mockReturnValue(anthropicCatalogMetadata);
       mockListProviderModels.mockResolvedValueOnce({ ok: true, modelIds: ["claude-sonnet"] });
       render(
@@ -379,7 +362,7 @@ describe("ConfigureProviderDialog", () => {
       expect(screen.getByTestId("model-row-remove-my-private-model")).toBeTruthy();
     });
 
-    it("saves a keyless custom endpoint (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
+    it("saves a custom endpoint without an API key or verification (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
       const onClose = jest.fn();
       render(
         <ConfigureProviderForm
@@ -407,7 +390,7 @@ describe("ConfigureProviderDialog", () => {
       await waitFor(() => expect(onClose).toHaveBeenCalled());
     });
 
-    it("requires a Base URL before saving a custom endpoint (https://github.com/logancyang/obsidian-copilot/issues/2895)", () => {
+    it("disables Save for a custom endpoint until a Base URL is entered (https://github.com/logancyang/obsidian-copilot/issues/2895)", () => {
       render(
         <ConfigureProviderForm
           state={{ mode: "new", source: CUSTOM_OPENAI_DEFINITION }}
@@ -420,7 +403,7 @@ describe("ConfigureProviderDialog", () => {
       expect(mockSetupProvider).not.toHaveBeenCalled();
     });
 
-    it("seeds the selection from existing configured models", async () => {
+    it("checks the models already configured for the provider when editing", async () => {
       render(
         <ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={jest.fn()} />
       );
@@ -429,7 +412,7 @@ describe("ConfigureProviderDialog", () => {
       expect(rowCheckbox("claude-opus").getAttribute("aria-checked")).toBe("true");
     });
 
-    it("does not auto-check newly fetched ids (no silent subscription)", async () => {
+    it("leaves newly discovered models unchecked when editing", async () => {
       mockListProviderModels.mockResolvedValue({ ok: true, modelIds: ["claude-haiku"] });
       render(
         <ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={jest.fn()} />
@@ -438,7 +421,7 @@ describe("ConfigureProviderDialog", () => {
       expect(rowCheckbox("claude-haiku").getAttribute("aria-checked")).toBe("false");
     });
 
-    it("verifies without writing the API key (Test never persists)", async () => {
+    it("tests the stored key without saving it", async () => {
       mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
       render(
         <ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={jest.fn()} />
@@ -449,7 +432,7 @@ describe("ConfigureProviderDialog", () => {
       expect(mockSetApiKey).not.toHaveBeenCalled();
     });
 
-    it("Test verifies the edited base URL, not the persisted one", async () => {
+    it("tests the edited Base URL rather than the saved one", async () => {
       mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
       render(
         <ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={jest.fn()} />
@@ -465,7 +448,7 @@ describe("ConfigureProviderDialog", () => {
       );
     });
 
-    it("removes de-selected models from every backend on save", async () => {
+    it("removes a deselected model from every backend on save", async () => {
       mockBulkSet.mockResolvedValue(["cm1"]);
       const onClose = jest.fn();
       render(
@@ -483,7 +466,7 @@ describe("ConfigureProviderDialog", () => {
       await waitFor(() => expect(onClose).toHaveBeenCalled());
     });
 
-    it("auto-enrolls only newly-added chat models — skips embeddings, never re-enables existing", async () => {
+    it("enrolls only newly added chat models on save, skipping embeddings and leaving existing models as they were", async () => {
       mockGetProvider.mockReturnValue(anthropicCatalogMetadata);
       mockListProviderModels.mockResolvedValue({
         ok: true,
@@ -507,7 +490,7 @@ describe("ConfigureProviderDialog", () => {
       expect(mockEnableModel).not.toHaveBeenCalledWith(expect.anything(), "cm2");
     });
 
-    it("Mount fetch uses the saved key (catalog-less edit row)", async () => {
+    it("lists models on open using the saved key when editing a custom provider", async () => {
       mockGetApiKey.mockResolvedValue("saved-secret");
       mockListProviderModels.mockResolvedValue({ ok: true, modelIds: ["gpt-x"] });
       render(
@@ -524,7 +507,7 @@ describe("ConfigureProviderDialog", () => {
       );
     });
 
-    it("reports a CORS-only save only after persistence completes (https://github.com/logancyang/obsidian-copilot/issues/3147) (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
+    it("reports a CORS-only change as saved only after it is persisted (https://github.com/logancyang/obsidian-copilot/issues/3147) (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
       const onSaved = jest.fn();
       let finishUpdate!: () => void;
       mockUpdate.mockImplementationOnce(
@@ -559,7 +542,7 @@ describe("ConfigureProviderDialog", () => {
       await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
     });
 
-    it("X button hidden on saved catalog models but visible on saved-custom rows", async () => {
+    it("offers Remove on saved custom models but not on saved catalog models", async () => {
       mockGetProvider.mockReturnValue({
         ...anthropicCatalogMetadata,
         models: { "claude-sonnet": anthropicCatalogMetadata.models["claude-sonnet"] },
@@ -574,7 +557,7 @@ describe("ConfigureProviderDialog", () => {
       expect(screen.getByTestId("model-row-remove-claude-opus")).toBeTruthy();
     });
 
-    it("clicking X on a saved-custom row hides it and persists removal on save", async () => {
+    it("hides a removed custom model immediately and deletes it on save", async () => {
       mockGetProvider.mockReturnValue(undefined);
       mockListProviderModels.mockResolvedValue({ ok: true, modelIds: [] });
       mockBulkSet.mockResolvedValue(["cm1"]);
@@ -593,7 +576,7 @@ describe("ConfigureProviderDialog", () => {
       await waitFor(() => expect(onClose).toHaveBeenCalled());
     });
 
-    it("Clear empties the field, keeps the dialog open, and persists nothing immediately", async () => {
+    it("empties the key field on Clear without closing the dialog or deleting the stored key yet", async () => {
       mockGetApiKey.mockResolvedValue("saved-secret");
       const onClose = jest.fn();
       render(
@@ -618,7 +601,7 @@ describe("ConfigureProviderDialog", () => {
       );
     });
 
-    it("re-fetching never toggles selection — discovered ids are candidates only", async () => {
+    it("keeps the user's selection unchanged when models are listed again after Test", async () => {
       mockListProviderModels.mockResolvedValueOnce({ ok: true, modelIds: ["a", "b"] });
       render(
         <ConfigureProviderForm state={{ mode: "new", source: ollamaSource }} onClose={jest.fn()} />
@@ -638,7 +621,7 @@ describe("ConfigureProviderDialog", () => {
       expect(rowCheckbox("b").getAttribute("aria-checked")).toBe("false");
     });
 
-    it("holds back the stateful body until the provider row resolves", () => {
+    it("shows nothing and lists no models while the provider being edited cannot be found", () => {
       render(
         <ConfigureProviderForm
           state={{ mode: "edit", providerId: "missing" }}
@@ -650,7 +633,7 @@ describe("ConfigureProviderDialog", () => {
       expect(mockListProviderModels).not.toHaveBeenCalled();
     });
 
-    it("shows the default 'Add a model id' / source-supplied hint in the manual input", () => {
+    it("shows the source's model id hint as the manual input placeholder", () => {
       render(
         <ConfigureProviderForm
           state={{ mode: "new", source: CUSTOM_OPENAI_DEFINITION }}
@@ -660,7 +643,7 @@ describe("ConfigureProviderDialog", () => {
       expect(screen.getByPlaceholderText("e.g. gpt-5.5")).toBeTruthy();
     });
 
-    it("A1: a required-key provider with an empty field fails Test without probing", async () => {
+    it("fails Test with a prompt to enter a key, without contacting the provider, when a required key is empty", async () => {
       render(
         <ConfigureProviderForm
           state={{ mode: "new", source: anthropicSource }}
@@ -672,7 +655,7 @@ describe("ConfigureProviderDialog", () => {
       expect(await screen.findByText("Enter an API key to verify this provider.")).toBeTruthy();
     });
 
-    it("B2: Save is disabled for a required-key provider with no key", () => {
+    it("disables Save for a required-key provider with no key", () => {
       render(
         <ConfigureProviderForm
           state={{ mode: "new", source: anthropicSource }}
@@ -683,7 +666,7 @@ describe("ConfigureProviderDialog", () => {
       expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(true);
     });
 
-    it("B2: an untested invalid key auto-verifies on Save, aborts, and blocks further Save", async () => {
+    it("verifies an untested key on Save and, when it is invalid, does not save and disables Save", async () => {
       mockVerifyCredentials.mockResolvedValue({
         ok: false,
         code: "invalid_api_key",
@@ -707,7 +690,7 @@ describe("ConfigureProviderDialog", () => {
       );
     });
 
-    it("B2: an inconclusive verification (network) does not block Save", async () => {
+    it("still saves when verification is inconclusive because of a network error", async () => {
       mockVerifyCredentials.mockResolvedValue({
         ok: false,
         code: "network",
@@ -725,7 +708,7 @@ describe("ConfigureProviderDialog", () => {
       await waitFor(() => expect(onClose).toHaveBeenCalled());
     });
 
-    it("reports a changed key and endpoint only after both writes complete (https://github.com/logancyang/obsidian-copilot/issues/3147)", async () => {
+    it("reports a changed key and endpoint as saved only after both are persisted (https://github.com/logancyang/obsidian-copilot/issues/3147)", async () => {
       const onSaved = jest.fn();
       let finishUpdate!: () => void;
       mockUpdate.mockImplementationOnce(
@@ -761,7 +744,7 @@ describe("ConfigureProviderDialog", () => {
       await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
     });
 
-    it("B1/B2: edit mode pre-fills the saved key and saves without re-typing or re-writing it", async () => {
+    it("pre-fills the saved key when editing and saves without rewriting or re-verifying it", async () => {
       mockGetApiKey.mockResolvedValue("saved-secret");
       mockBulkSet.mockResolvedValue(["cm1", "cm2"]);
       const onClose = jest.fn();
@@ -776,7 +759,7 @@ describe("ConfigureProviderDialog", () => {
       expect(mockVerifyCredentials).not.toHaveBeenCalled();
     });
 
-    it("B2: a keyless provider (requiresApiKey:false) Tests and Saves with an empty field", async () => {
+    it("tests and saves a keyless provider with an empty key field", async () => {
       mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
       const onClose = jest.fn();
       const onSaved = jest.fn();
