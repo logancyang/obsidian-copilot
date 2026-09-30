@@ -220,6 +220,29 @@ describe("ToolPermissionCard", () => {
       expect(onResolve).toHaveBeenLastCalledWith(TOOL_CALL_ID, "approved-execpolicy-amendment");
     });
 
+    it("shows an option's description above its quoted code in one tooltip https://github.com/Brevilabs/obsidian-copilot-private/issues/618", async () => {
+      render(
+        <ToolPermissionCard
+          request={makeRequest([
+            {
+              optionId: "rule",
+              name: "Always allow `git status`",
+              description: "Adds a rule to your Codex config",
+              kind: "allow_always",
+            },
+          ])}
+          onResolve={jest.fn()}
+        />
+      );
+
+      fireEvent.pointerMove(screen.getByRole("button", { name: "Always allow…" }), {
+        pointerType: "mouse",
+      });
+      expect((await screen.findByRole("tooltip")).textContent).toBe(
+        "Adds a rule to your Codex config\ngit status"
+      );
+    });
+
     it("numbers options whose labels differ only in quoted code https://github.com/Brevilabs/obsidian-copilot-private/issues/618", () => {
       render(
         <ToolPermissionCard
