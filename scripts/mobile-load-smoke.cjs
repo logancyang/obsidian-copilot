@@ -29,6 +29,8 @@ const contextCacheConsumerFiles = [
   "src/utils/cacheFileOpener.ts",
 ];
 
+const protocolEntry = "src/agentMode/protocol/index.ts";
+
 const nodeModuleIds = new Set([
   "async_hooks",
   "buffer",
@@ -103,6 +105,7 @@ function checkAgentModeImportBoundaries() {
 
     for (const match of source.matchAll(staticAgentModeImport)) {
       const statement = match[0];
+      if (/from\s+["']@\/agentMode\/protocol(?:\/[^"']*)?["']/.test(statement)) continue;
       if (!isTypeOnlyImport(statement)) {
         fail(`${relativePath}: value import from Agent Mode is on the mobile load path.`);
       }
@@ -133,6 +136,62 @@ function checkContextCacheImportBoundaries() {
         );
       }
     }
+  }
+}
+
+function checkProtocolBundle() {
+  const { buildSync } = require("esbuild");
+  let result;
+  try {
+    result = buildSync({
+      entryPoints: [path.join(repoRoot, protocolEntry)],
+      bundle: true,
+      write: false,
+      metafile: true,
+      platform: "browser",
+      format: "cjs",
+      target: "es2020",
+      external: ["react", "obsidian"],
+      logLevel: "silent",
+      tsconfig: path.join(repoRoot, "tsconfig.json"),
+    });
+  } catch (error) {
+    fail(`${protocolEntry} does not bundle for a browser platform: ${formatError(error)}`);
+    return;
+  }
+
+  const protocolDir = "src/agentMode/protocol/";
+  const outsiders = Object.keys(result.metafile.inputs).filter(
+    (input) => !input.startsWith(protocolDir) && !input.startsWith("node_modules/")
+  );
+  if (outsiders.length > 0) {
+    fail(`${protocolEntry} reaches outside the protocol layer: ${outsiders.join(", ")}`);
+    return;
+  }
+
+  const module = { exports: {} };
+  const react = {
+    useCallback: (fn) => fn,
+    useRef: (value) => ({ current: value }),
+    useSyncExternalStore() {},
+  };
+  try {
+    vm.runInNewContext(result.outputFiles[0].text, {
+      module,
+      exports: module.exports,
+      require(id) {
+        if (id === "react") return react;
+        if (nodeModuleIds.has(id) || id === "obsidian") return createPoisonModule(id);
+        throw new Error(`mobile-load-smoke: unexpected protocol external '${id}'.`);
+      },
+    });
+  } catch (error) {
+    fail(`${protocolEntry} failed to evaluate without Node or Obsidian: ${formatError(error)}`);
+    return;
+  }
+  for (const name of ["SessionClient", "applyTranscriptOp", "applyHostOp", "applySessionOp"]) {
+    if (typeof module.exports[name] !== "function")
+      fail(`${protocolEntry} does not export ${name}.`);
   }
 }
 
@@ -384,6 +443,7 @@ function runBundleEvaluationSmoke() {
 
 checkAgentModeImportBoundaries();
 checkContextCacheImportBoundaries();
+checkProtocolBundle();
 runBundleEvaluationSmoke();
 
 if (failures.length > 0) {

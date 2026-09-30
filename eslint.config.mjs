@@ -515,6 +515,7 @@ export default [
         { type: "backend", pattern: "src/agentMode/backends/*", capture: ["name"] },
         { type: "ui", pattern: "src/agentMode/ui" },
         { type: "skills", pattern: "src/agentMode/skills" },
+        { type: "protocol", pattern: "src/agentMode/protocol" },
         { type: "modelmgmt", pattern: "src/modelManagement" },
         { type: "host", pattern: "src/**" },
       ],
@@ -525,7 +526,14 @@ export default [
         {
           default: "disallow",
           rules: [
-            { from: { type: "session" }, allow: { to: { type: ["session", "host"] } } },
+            {
+              from: { type: "session" },
+              allow: { to: { type: ["session", "protocol", "host"] } },
+            },
+            {
+              from: { type: "protocol" },
+              allow: { to: { type: ["protocol", "session", "host"] } },
+            },
             { from: { type: "acp" }, allow: { to: { type: ["acp", "session", "host"] } } },
             { from: { type: "sdk" }, allow: { to: { type: ["sdk", "session", "host"] } } },
             {
@@ -540,7 +548,7 @@ export default [
             {
               from: { type: "ui" },
               allow: {
-                to: { type: ["ui", "session", "registry", "skills", "host"] },
+                to: { type: ["ui", "session", "protocol", "registry", "skills", "host"] },
               },
             },
             {
@@ -551,7 +559,17 @@ export default [
               from: { type: "barrel" },
               allow: {
                 to: {
-                  type: ["acp", "session", "sdk", "backend", "registry", "ui", "skills", "host"],
+                  type: [
+                    "acp",
+                    "session",
+                    "sdk",
+                    "backend",
+                    "registry",
+                    "ui",
+                    "skills",
+                    "protocol",
+                    "host",
+                  ],
                 },
               },
             },
@@ -561,6 +579,82 @@ export default [
               allow: { to: { type: ["host", "barrel", "modelmgmt"] } },
             },
           ],
+        },
+      ],
+    },
+  },
+
+  {
+    files: ["src/agentMode/protocol/**/*.{ts,tsx}"],
+    ignores: ["src/agentMode/protocol/**/*.test.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/consistent-type-imports": "error",
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "electron",
+              allowTypeImports: true,
+              message: "The protocol layer runs on the phone, which has no Electron.",
+            },
+            {
+              name: "obsidian",
+              allowTypeImports: true,
+              message: "The protocol layer must load without the obsidian runtime.",
+            },
+          ],
+          patterns: [
+            {
+              regex: "^@/(?!agentMode/protocol(?:/|$)).*",
+              allowTypeImports: true,
+              message:
+                "src/agentMode/protocol is the only agent code the phone loads. It may import " +
+                "values only from itself; type-only imports from the rest of the plugin are " +
+                "erased at build time. Move shared logic into the protocol layer or pass it in.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
+    files: [
+      "src/agentMode/protocol/apply.ts",
+      "src/agentMode/protocol/applyTranscript.ts",
+      "src/agentMode/protocol/SessionClient.ts",
+      "src/agentMode/protocol/selectors.ts",
+    ],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "Platform",
+          property: "isDesktopApp",
+          message: "Use isDesktopRuntime() from @/utils/desktopRuntime instead.",
+        },
+        ...["Date.now", "performance.now", "Math.random"].map((name) => {
+          const [object, property] = name.split(".");
+          return {
+            object,
+            property,
+            message:
+              "Reducers, the client and selectors must be deterministic: the host chooses " +
+              "clock readings and ids and carries them in the operation.",
+          };
+        }),
+        { object: "crypto", message: "Reducers, the client and selectors must be deterministic." },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        ...restrictedSourceImports,
+        restrictedZodSourceImport,
+        restrictedBrowserStorage,
+        ...restrictedConsoleCalls,
+        {
+          selector: "NewExpression[callee.name='Date']",
+          message: "Reducers, the client and selectors must be deterministic.",
         },
       ],
     },

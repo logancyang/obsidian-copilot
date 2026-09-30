@@ -1,8 +1,9 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import { AgentMessagePart } from "@/agentMode/session/types";
+import { AgentChatMessage, AgentMessagePart } from "@/agentMode/session/types";
 import { serializeFanoutComposite, type FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import { formatDateTime } from "@/utils";
-import { AgentMessageStore } from "./AgentMessageStore";
+import { applyTranscriptOp } from "@/agentMode/protocol/applyTranscript";
+import { AgentMessageStore, type AgentTranscriptOp } from "./AgentMessageStore";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -26,21 +27,6 @@ describe("AgentMessageStore", () => {
         codex: { backendId: "codex", status: "done", text: "codex answer" },
       },
       summary: { status: "done", text: summaryText },
-    });
-
-    describe("appendDisplayText()", () => {
-      it("accumulates streaming chunks", () => {
-        const store = new AgentMessageStore();
-        const id = store.addMessage(placeholder());
-        store.appendDisplayText(id, "Hello, ");
-        store.appendDisplayText(id, "world.");
-        expect(store.getMessage(id)?.message).toBe("Hello, world.");
-      });
-
-      it("returns false for an unknown message", () => {
-        const store = new AgentMessageStore();
-        expect(store.appendDisplayText("missing", "x")).toBe(false);
-      });
     });
 
     describe("appendAgentText()", () => {
@@ -467,17 +453,6 @@ describe("AgentMessageStore", () => {
       });
     });
 
-    describe("truncateAfterMessageId()", () => {
-      it("drops everything after the target", () => {
-        const store = new AgentMessageStore();
-        const a = store.addMessage(placeholder());
-        store.addMessage(placeholder());
-        store.addMessage(placeholder());
-        store.truncateAfterMessageId(a);
-        expect(store.getDisplayMessages()).toHaveLength(1);
-      });
-    });
-
     describe("getDisplayMessages()", () => {
       it("includes structured message parts", () => {
         const store = new AgentMessageStore();
@@ -531,7 +506,7 @@ describe("AgentMessageStore", () => {
         const id = store.addMessage(placeholder());
 
         const v0 = store.getDisplayMessages()[0];
-        store.appendDisplayText(id, "x");
+        store.appendAgentText(id, "x");
         const v1 = store.getDisplayMessages()[0];
         expect(v1).not.toBe(v0);
 
@@ -561,20 +536,95 @@ describe("AgentMessageStore", () => {
         const after = store.getDisplayMessages()[0];
         expect(after).toBe(before);
       });
+    });
 
-      it("drops cached views for deleted and truncated messages", () => {
+    describe("onOp()", () => {
+      it("emits exactly one op per effective mutation and none for a no-op", () => {
+        const store = new AgentMessageStore({ now: () => 5_000, newId: () => "m1" });
+        const ops: AgentTranscriptOp[] = [];
+        store.onOp((op) => ops.push(op));
+
+        const id = store.addMessage(placeholder());
+        store.appendAgentText(id, "hi");
+        store.appendAgentText("missing", "ignored");
+        const part: AgentMessagePart = {
+          kind: "tool_call",
+          id: "t",
+          title: "x",
+          status: "pending",
+        };
+        store.upsertAgentPart(id, part);
+        store.upsertAgentPart(id, { ...part });
+        store.markTurnComplete(id, "end_turn", 40);
+        store.markTurnComplete(id, "end_turn", 40);
+
+        expect(ops.map((op) => op.t)).toEqual([
+          "msg.add",
+          "msg.appendText",
+          "msg.upsertPart",
+          "msg.turnComplete",
+        ]);
+        expect(ops[1]).toEqual({ t: "msg.appendText", id: "m1", text: "hi", atMs: 5_000 });
+      });
+
+      it("replaying the emitted ops from an empty transcript reproduces the store state", () => {
+        const clock = { t: 1_000 };
+        const store = new AgentMessageStore({ now: () => (clock.t += 10) });
+        const ops: AgentTranscriptOp[] = [];
+        store.onOp((op) => ops.push(op));
+
+        const id = store.addMessage(placeholder());
+        store.appendAgentThought(id, "thinking");
+        store.appendAgentText(id, "answer");
+        store.upsertAgentPart(id, { kind: "plan", entries: [] });
+        store.setFanout(id, liveTurn());
+        store.markMessageError(id, "boom", 90);
+        store.markTurnComplete(id, "end_turn", 100);
+        store.extendTurnDuration(id, 250);
+        store.loadMessages([...store.getMessages()]);
+
+        let replica: readonly AgentChatMessage[] = [];
+        for (const op of ops) replica = applyTranscriptOp(replica, op);
+        expect(replica).toEqual(store.getMessages());
+      });
+
+      it("stops delivering ops after the returned unsubscribe runs", () => {
         const store = new AgentMessageStore();
-        const a = store.addMessage(placeholder());
-        const b = store.addMessage(placeholder());
-        store.getDisplayMessages();
+        const listener = jest.fn();
+        const stop = store.onOp(listener);
+        store.addMessage(placeholder());
+        stop();
+        store.addMessage(placeholder());
+        expect(listener).toHaveBeenCalledTimes(1);
+      });
 
-        store.deleteMessage(b);
-        expect(store.getDisplayMessages().map((m) => m.id)).toEqual([a]);
+      it("keeps mutating the transcript when a listener throws", () => {
+        const store = new AgentMessageStore();
+        store.onOp(() => {
+          throw new Error("host bug");
+        });
+        const id = store.addMessage(placeholder());
+        expect(store.appendAgentText(id, "still applied")).toBe(true);
+        expect(store.getMessage(id)?.message).toBe("still applied");
+      });
+    });
 
-        const c = store.addMessage(placeholder());
-        store.truncateAfterMessageId(a);
-        expect(store.getDisplayMessages().map((m) => m.id)).toEqual([a]);
-        expect(store.getMessage(c)).toBeUndefined();
+    describe("addMessage()", () => {
+      it("stamps the injected id and clock reading on a message that carries neither", () => {
+        const store = new AgentMessageStore({ now: () => 86_400_000, newId: () => "generated" });
+        const id = store.addMessage({ ...placeholder(), timestamp: null });
+        expect(id).toBe("generated");
+        expect(store.getMessage(id)?.timestamp?.epoch).toBe(86_400_000);
+      });
+    });
+
+    describe("getMessages()", () => {
+      it("includes messages hidden from the display list", () => {
+        const store = new AgentMessageStore();
+        store.addMessage({ ...placeholder(), isVisible: false });
+        store.addMessage(placeholder());
+        expect(store.getMessages()).toHaveLength(2);
+        expect(store.getDisplayMessages()).toHaveLength(1);
       });
     });
 

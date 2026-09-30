@@ -1,9 +1,9 @@
 import type { EffortOption } from "@/lib/model-effort";
 import type React from "react";
 import type { ModelCapability } from "@/constants";
-import type { FormattedDateTime, MessageContext } from "@/types/message";
-import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
+import type { MessageContext } from "@/types/message";
 import type { PlanUsage } from "@/agentMode/session/planUsage";
+import type { MessageOf } from "@/agentMode/protocol/state";
 
 export type { PlanUsage, UsageWindow } from "@/agentMode/session/planUsage";
 import type { ProjectScopeId } from "./scope";
@@ -457,19 +457,6 @@ export type AgentMessagePart =
       entries: AgentPlanEntry[];
     };
 
-export interface AgentChatMessage {
-  id: string;
-  sender: string;
-  timestamp: FormattedDateTime | null;
-  isVisible: boolean;
-  isErrorMessage?: boolean;
-  message: string;
-  parts?: AgentMessagePart[];
-  context?: MessageContext;
-  content?: unknown[];
-  turnStopReason?: StopReason;
-  turnDurationMs?: number;
-  fanout?: FanoutTurn;
-}
+export type AgentChatMessage = MessageOf<MessageContext>;
 
 export type NewAgentChatMessage = Omit<AgentChatMessage, "id"> & { id?: string };

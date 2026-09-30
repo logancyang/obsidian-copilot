@@ -73,22 +73,6 @@ export class AgentChatUIState implements AgentChatBackend {
     await this.session.cancel();
   }
 
-  async deleteMessage(id: string): Promise<boolean> {
-    const status = this.session.getStatus();
-    if (status === "running" || status === "awaiting_permission") {
-      logWarn("[AgentChatUIState] delete refused while turn is in flight");
-      return false;
-    }
-    const ok = this.session.store.deleteMessage(id);
-    if (ok) this.notifyListeners();
-    return ok;
-  }
-
-  clearMessages(): void {
-    this.session.store.clear();
-    this.notifyListeners();
-  }
-
   getMessages(): AgentChatMessage[] {
     return this.session.store.getDisplayMessages();
   }
