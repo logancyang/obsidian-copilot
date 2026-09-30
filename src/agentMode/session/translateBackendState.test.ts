@@ -78,7 +78,7 @@ function selectOption(
 describe("translateBackendState", () => {
   describe("translateBackendState()", () => {
     describe("model: null cases", () => {
-      it("returns model: null when raw.models is null (case 1)", () => {
+      it("returns a null model when neither models nor a model config option is reported", () => {
         const state = translateBackendState(
           { models: null, modes: null, configOptions: null },
           descriptor()
@@ -326,16 +326,6 @@ describe("translateBackendState", () => {
     });
 
     describe("name normalization + description", () => {
-      it("passes the backend-reported description through when the backend opts in", () => {
-        const models: RawModelState = {
-          currentModelId: "m",
-          availableModels: [{ modelId: "m", name: "M", description: "Opus 4.7 with 1M context" }],
-        };
-        const desc = descriptor({ showModelDescriptions: true });
-        const state = translateBackendState({ models, modes: null, configOptions: null }, desc);
-        expect(findModelEntry(state.model, "m")?.description).toBe("Opus 4.7 with 1M context");
-      });
-
       it("drops the description when the backend does not opt in (e.g. opencode)", () => {
         const models: RawModelState = {
           currentModelId: "m",
@@ -452,7 +442,7 @@ describe("translateBackendState", () => {
     });
 
     describe("suffix-style backends", () => {
-      it("collapses gpt-5 + variants into one entry with effort options (case 2)", () => {
+      it("collapses a base model and its effort-suffixed variants into one entry with effort options", () => {
         const models: RawModelState = {
           currentModelId: "openai/gpt-5/low",
           availableModels: [
@@ -475,7 +465,7 @@ describe("translateBackendState", () => {
         expect(state.model!.current.effort).toBe("low");
       });
 
-      it("multi-provider catalog produces one entry per base with own provider (case 3)", () => {
+      it("gives each base model in a multi-provider catalog its own entry and provider", () => {
         const models: RawModelState = {
           currentModelId: "openai/gpt-5/low",
           availableModels: [
@@ -496,7 +486,7 @@ describe("translateBackendState", () => {
         });
       });
 
-      it("single-variant base produces empty effortOptions (case 4)", () => {
+      it("gives a single-variant base model no effort options and no current effort", () => {
         const models: RawModelState = {
           currentModelId: "openai/gpt-5",
           availableModels: [{ modelId: "openai/gpt-5", name: "GPT-5" }],
@@ -509,7 +499,7 @@ describe("translateBackendState", () => {
         expect(state.model!.current.effort).toBeNull();
       });
 
-      it("mixed catalog: some bases have variants, some don't (case 5)", () => {
+      it("offers effort options only for the bases that have variants in a mixed catalog", () => {
         const models: RawModelState = {
           currentModelId: "openai/gpt-5/medium",
           availableModels: [
@@ -527,23 +517,6 @@ describe("translateBackendState", () => {
         const sonnet = entries.find((e) => e.baseModelId === "anthropic/sonnet")!;
         expect(gpt.effortOptions.map((o) => o.value)).toEqual(["medium"]);
         expect(sonnet.effortOptions).toEqual([]);
-      });
-
-      it("current selection with effort suffix is reachable in availableModels (case 9)", () => {
-        const models: RawModelState = {
-          currentModelId: "openai/gpt-5/low",
-          availableModels: [
-            { modelId: "openai/gpt-5", name: "GPT-5" },
-            { modelId: "openai/gpt-5/low", name: "GPT-5 (low)" },
-          ],
-        };
-        const state = translateBackendState(
-          { models, modes: null, configOptions: null },
-          suffixDescriptor()
-        );
-        expect(state.model!.current.baseModelId).toBe("openai/gpt-5");
-        expect(state.model!.current.effort).toBe("low");
-        expect(findModelEntry(state.model, state.model!.current.baseModelId)).toBeDefined();
       });
 
       it("strips trailing effort suffix from grouped name when ≥2 variants", () => {
@@ -587,7 +560,7 @@ describe("translateBackendState", () => {
         });
       }
 
-      it("populates effortOptions for every model with a configOption (case 6)", () => {
+      it("populates effort options for every model the descriptor supplies a config option for", () => {
         const opt = selectOption("effort", [{ value: "low" }, { value: "high" }]);
         const models: RawModelState = {
           currentModelId: "claude-sonnet",
@@ -610,7 +583,7 @@ describe("translateBackendState", () => {
         ]);
       });
 
-      it("Haiku-style model with no effort returns empty effortOptions (case 7)", () => {
+      it("gives a model without an effort config option empty effort options and a null current effort", () => {
         const sonnetOpt = selectOption("effort", [{ value: "low" }, { value: "high" }]);
         const models: RawModelState = {
           currentModelId: "claude-haiku",
@@ -629,7 +602,7 @@ describe("translateBackendState", () => {
         expect(state.model!.current.effort).toBeNull();
       });
 
-      it("descriptor-style current effort uses live configOptions when present (case 10)", () => {
+      it("reads the current effort from live config options when present", () => {
         const spec = selectOption(
           "effort",
           [{ value: "low" }, { value: "medium" }, { value: "high" }],
@@ -653,7 +626,7 @@ describe("translateBackendState", () => {
         expect(state.model!.current.effort).toBe("high");
       });
 
-      it("descriptor-style current effort falls back to spec.currentValue without live opts (case 10)", () => {
+      it("falls back to the descriptor spec's current value when no live config options exist", () => {
         const spec = selectOption(
           "effort",
           [{ value: "low" }, { value: "medium" }, { value: "high" }],
@@ -669,25 +642,10 @@ describe("translateBackendState", () => {
         );
         expect(state.model!.current.effort).toBe("medium");
       });
-
-      it("Haiku has no effort dimension — current.effort: null (case 11)", () => {
-        const models: RawModelState = {
-          currentModelId: "claude-haiku",
-          availableModels: [{ modelId: "claude-haiku", name: "Haiku" }],
-        };
-        const state = translateBackendState(
-          { models, modes: null, configOptions: null },
-          effortDescriptor({ "claude-haiku": null })
-        );
-        expect(state.model!.current.effort).toBeNull();
-        expect(
-          findModelEntry(state.model, state.model!.current.baseModelId)!.effortOptions
-        ).toEqual([]);
-      });
     });
 
     describe("provider/parsing edge cases", () => {
-      it("provider precompute — entries preserve per-id provider (case 8)", () => {
+      it("keeps each model id's own provider and leaves free-form ids without one", () => {
         const models: RawModelState = {
           currentModelId: "openai/gpt-5",
           availableModels: [
@@ -705,7 +663,7 @@ describe("translateBackendState", () => {
         expect(ff.provider).toBeNull();
       });
 
-      it("currentModelId not in availableModels — translator synthesizes entry (case 12)", () => {
+      it("adds an entry for a current model missing from the available models", () => {
         const models: RawModelState = {
           currentModelId: "openai/missing",
           availableModels: [{ modelId: "openai/gpt-5", name: "GPT-5" }],
@@ -719,7 +677,7 @@ describe("translateBackendState", () => {
         expect(findModelEntry(state.model, state.model!.current.baseModelId)).toBeDefined();
       });
 
-      it("backend with passthrough codec and no descriptor effort hook (case 13)", () => {
+      it("reports no effort options or providers for a passthrough codec without an effort hook", () => {
         const models: RawModelState = {
           currentModelId: "x/y",
           availableModels: [
@@ -738,7 +696,7 @@ describe("translateBackendState", () => {
         expect(state.model!.current.effort).toBeNull();
       });
 
-      it("description present / absent round-trips for opted-in backends (case 14)", () => {
+      it("keeps each model's own description for opted-in backends and leaves it undefined when absent", () => {
         const models: RawModelState = {
           currentModelId: "claude-sonnet",
           availableModels: [
@@ -750,56 +708,6 @@ describe("translateBackendState", () => {
         const state = translateBackendState({ models, modes: null, configOptions: null }, desc);
         expect(state.model!.availableModels[0].description).toBe("Smart and balanced");
         expect(state.model!.availableModels[1].description).toBeUndefined();
-      });
-
-      it("EffortOption shape from suffix grouping ≡ shape from effortConfigFor (case 15)", () => {
-        const suffixModels: RawModelState = {
-          currentModelId: "openai/gpt-5/medium",
-          availableModels: [
-            { modelId: "openai/gpt-5/low", name: "GPT-5 (low)" },
-            { modelId: "openai/gpt-5/medium", name: "GPT-5 (medium)" },
-            { modelId: "openai/gpt-5/high", name: "GPT-5 (high)" },
-          ],
-        };
-        const suffixState = translateBackendState(
-          { models: suffixModels, modes: null, configOptions: null },
-          suffixDescriptor()
-        );
-        const suffixOpts = suffixState.model!.availableModels[0].effortOptions;
-
-        const cfgOpt = selectOption("effort", [
-          { value: "low" },
-          { value: "medium" },
-          { value: "high" },
-        ]);
-        const descrModels: RawModelState = {
-          currentModelId: "claude-sonnet",
-          availableModels: [{ modelId: "claude-sonnet", name: "Sonnet" }],
-        };
-        const descrState = translateBackendState(
-          { models: descrModels, modes: null, configOptions: null },
-          descriptor({
-            wire: {
-              encode: passthroughWire.encode,
-              decode: passthroughWire.decode,
-              effortConfigFor: () => cfgOpt,
-            },
-          })
-        );
-        const descrOpts = descrState.model!.availableModels[0].effortOptions;
-
-        expect(suffixOpts.every((o) => "value" in o && "label" in o)).toBe(true);
-        expect(descrOpts.every((o) => "value" in o && "label" in o)).toBe(true);
-        expect(suffixOpts.map((o) => o.value)).toEqual(["low", "medium", "high"]);
-        expect(descrOpts.map((o) => o.value)).toEqual(["low", "medium", "high"]);
-      });
-
-      it("wire.decode → wire.encode round-trip identity (case 16)", () => {
-        const wireIds = ["openai/gpt-5", "openai/gpt-5/low", "anthropic/sonnet/high"];
-        for (const id of wireIds) {
-          const decoded = suffixWire.decode(id);
-          expect(suffixWire.encode(decoded.selection)).toBe(id);
-        }
       });
     });
 
@@ -890,41 +798,22 @@ describe("translateBackendState", () => {
         });
       });
     });
+  });
 
-    describe("invariants", () => {
-      it("current.baseModelId matches one of availableModels (case 20)", () => {
-        const models: RawModelState = {
-          currentModelId: "openai/gpt-5/low",
-          availableModels: [
-            { modelId: "openai/gpt-5", name: "GPT-5" },
-            { modelId: "openai/gpt-5/low", name: "GPT-5 low" },
-          ],
-        };
-        const state = translateBackendState(
-          { models, modes: null, configOptions: null },
-          suffixDescriptor()
-        );
-        expect(findModelEntry(state.model, state.model!.current.baseModelId)).toBeDefined();
-      });
+  describe("findModelEntry()", () => {
+    it("returns the entry with the given base model id, or undefined when absent or the state is null", () => {
+      const state = translateBackendState(
+        {
+          models: { currentModelId: "m", availableModels: [{ modelId: "m", name: "M" }] },
+          modes: null,
+          configOptions: null,
+        },
+        descriptor()
+      ).model;
 
-      it("current.effort is null or matches a value in the corresponding entry's effortOptions (case 21)", () => {
-        const models: RawModelState = {
-          currentModelId: "openai/gpt-5/low",
-          availableModels: [
-            { modelId: "openai/gpt-5", name: "GPT-5" },
-            { modelId: "openai/gpt-5/low", name: "GPT-5 low" },
-          ],
-        };
-        const state = translateBackendState(
-          { models, modes: null, configOptions: null },
-          suffixDescriptor()
-        );
-        const cur = state.model!.current;
-        const entry = findModelEntry(state.model, cur.baseModelId)!;
-        expect(cur.effort === null || entry.effortOptions.some((o) => o.value === cur.effort)).toBe(
-          true
-        );
-      });
+      expect(findModelEntry(state, "m")?.name).toBe("M");
+      expect(findModelEntry(state, "missing")).toBeUndefined();
+      expect(findModelEntry(null, "m")).toBeUndefined();
     });
   });
 

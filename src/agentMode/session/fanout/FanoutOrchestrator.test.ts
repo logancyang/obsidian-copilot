@@ -19,6 +19,11 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
+jest.mock("./fanoutTypes", () => ({
+  ...jest.requireActual("./fanoutTypes"),
+  FANOUT_TRAILING_CHUNK_GRACE_MS: 5,
+}));
+
 jest.mock("@/agentMode/sdk/effortOption", () => ({
   ...jest.requireActual("@/agentMode/sdk/effortOption"),
   getCachedSdkCatalog: () => [
@@ -182,6 +187,162 @@ describe("FanoutOrchestrator", () => {
 
   describe("FanoutOrchestrator", () => {
     describe("run()", () => {
+      it("streams each agent's answer into its own slot and marks them done", async () => {
+        const { host, procs, readOnlyRegistered, readOnlyUnregistered, excludedFromHistory } =
+          makeHost({
+            claude: { sessionId: "s-claude" },
+            codex: { sessionId: "s-codex" },
+          });
+        const orchestrator = new FanoutOrchestrator(host);
+        const controller = new AbortController();
+        const snapshots: string[] = [];
+
+        const runPromise = orchestrator.run(
+          runInput(["claude", "codex"], {
+            prompt: [{ type: "text", text: "review this" }],
+            signal: controller.signal,
+            onChange: (turn) => snapshots.push(JSON.stringify(turn.answers)),
+          })
+        );
+
+        await flush();
+        procs.get("claude")!.emit(textChunk("s-claude", "Claude says hi"));
+        procs.get("codex")!.emit(textChunk("s-codex", "Codex says hi"));
+        procs.get("claude")!.resolvePrompt();
+        procs.get("codex")!.resolvePrompt();
+        await flushPastGrace();
+        procs.get("claude")!.emit(textChunk("s-claude", "summary"));
+        procs.get("claude")!.resolvePrompt();
+
+        const turn = await runPromise;
+        expect(turn.answers.claude).toEqual({
+          backendId: "claude",
+          status: "done",
+          text: "Claude says hi",
+        });
+        expect(turn.answers.codex).toEqual({
+          backendId: "codex",
+          status: "done",
+          text: "Codex says hi",
+        });
+        expect(turn.summary.status).toBe("done");
+        expect(turn.summary.text).toBe("summary");
+        expect(readOnlyRegistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
+        expect(readOnlyUnregistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
+        expect(excludedFromHistory.map((e) => e.sessionId).sort()).toEqual([
+          "s-claude",
+          "s-claude",
+          "s-codex",
+        ]);
+        expect(snapshots.length).toBeGreaterThan(1);
+      });
+
+      it("isolates a failed agent as an error slot while others complete", async () => {
+        const { host, procs } = makeHost({
+          claude: { sessionId: "s-claude" },
+          codex: { sessionId: "s-codex" },
+        });
+        const orchestrator = new FanoutOrchestrator(host);
+        const controller = new AbortController();
+
+        const runPromise = orchestrator.run(
+          runInput(["claude", "codex"], { signal: controller.signal })
+        );
+
+        await flush();
+        procs.get("claude")!.emit(textChunk("s-claude", "ok"));
+        procs.get("claude")!.resolvePrompt();
+        procs.get("codex")!.rejectPrompt(new Error("backend boom"));
+        await flushPastGrace();
+        procs.get("claude")!.resolvePrompt();
+
+        const turn = await runPromise;
+        expect(turn.answers.claude.status).toBe("done");
+        expect(turn.answers.codex.status).toBe("error");
+        expect(turn.answers.codex.error).toContain("backend boom");
+        const summaryCall = (procs.get("claude")!.proc.prompt as jest.Mock).mock.calls[1][0];
+        const text = summaryCall.prompt[0].text as string;
+        expect(text).toContain("the original question");
+        expect(text).toContain("CLAUDE");
+        expect(text).not.toContain("CODEX");
+      });
+
+      it("applies the read-only sandbox id (never plan) only for backends that advertise one", async () => {
+        const { host, procs } = makeHost({
+          codex: { sessionId: "s-codex", readOnlyModeId: "read-only" },
+          opencode: { sessionId: "s-opencode" },
+        });
+        const orchestrator = new FanoutOrchestrator(host);
+        const controller = new AbortController();
+
+        const runPromise = orchestrator.run(
+          runInput(["codex", "opencode"], { signal: controller.signal })
+        );
+        await flush();
+        procs.get("codex")!.resolvePrompt();
+        procs.get("opencode")!.resolvePrompt();
+        await flushPastGrace();
+        procs.get("codex")!.resolvePrompt();
+        await runPromise;
+
+        expect(procs.get("codex")!.setSessionMode).toHaveBeenCalledWith({
+          sessionId: "s-codex",
+          modeId: "read-only",
+        });
+        expect(procs.get("codex")!.setSessionMode).not.toHaveBeenCalledWith({
+          sessionId: "s-codex",
+          modeId: "plan",
+        });
+        expect(procs.get("opencode")!.setSessionMode).not.toHaveBeenCalled();
+      });
+
+      it("cancels EVERY in-flight sub-session and lands each slot terminal-cancelled on abort", async () => {
+        const { host, procs } = makeHost({
+          claude: { sessionId: "s-claude" },
+          codex: { sessionId: "s-codex" },
+        });
+        const orchestrator = new FanoutOrchestrator(host);
+        const controller = new AbortController();
+        const runPromise = orchestrator.run(
+          runInput(["claude", "codex"], { signal: controller.signal })
+        );
+
+        await flush();
+        controller.abort();
+        procs.get("claude")!.resolvePrompt();
+        procs.get("codex")!.resolvePrompt();
+        const turn = await runPromise;
+
+        expect(procs.get("claude")!.cancel).toHaveBeenCalledWith({ sessionId: "s-claude" });
+        expect(procs.get("codex")!.cancel).toHaveBeenCalledWith({ sessionId: "s-codex" });
+        expect(turn.answers.claude.status).toBe("cancelled");
+        expect(turn.answers.codex.status).toBe("cancelled");
+        expect(procs.get("claude")!.promptCount()).toBe(1);
+        expect(turn.summary.status).toBe("pending");
+      });
+
+      it("lands a brief all-failed note (no fabricated summary) when zero agents succeed", async () => {
+        const { host, procs } = makeHost({
+          claude: { sessionId: "s-claude" },
+          codex: { sessionId: "s-codex" },
+        });
+        const orchestrator = new FanoutOrchestrator(host);
+        const controller = new AbortController();
+        const runPromise = orchestrator.run(
+          runInput(["claude", "codex"], { signal: controller.signal })
+        );
+
+        await flush();
+        procs.get("claude")!.rejectPrompt(new Error("boom-a"));
+        procs.get("codex")!.rejectPrompt(new Error("boom-b"));
+        const turn = await runPromise;
+
+        expect(turn.summary.status).toBe("done");
+        expect(turn.summary.text).toBe(FANOUT_ALL_FAILED_SUMMARY);
+        expect(procs.get("claude")!.promptCount()).toBe(1);
+        expect(procs.get("codex")!.promptCount()).toBe(1);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 returns one mentioned agent's answer without dispatching a summary", async () => {
         const { host, procs } = makeHost({
           claude: { sessionId: "s-claude" },
@@ -459,162 +620,6 @@ describe("FanoutOrchestrator", () => {
           configId: effortOption!.id,
           value: "high",
         });
-      });
-
-      it("streams each agent's answer into its own slot and marks them done", async () => {
-        const { host, procs, readOnlyRegistered, readOnlyUnregistered, excludedFromHistory } =
-          makeHost({
-            claude: { sessionId: "s-claude" },
-            codex: { sessionId: "s-codex" },
-          });
-        const orchestrator = new FanoutOrchestrator(host);
-        const controller = new AbortController();
-        const snapshots: string[] = [];
-
-        const runPromise = orchestrator.run(
-          runInput(["claude", "codex"], {
-            prompt: [{ type: "text", text: "review this" }],
-            signal: controller.signal,
-            onChange: (turn) => snapshots.push(JSON.stringify(turn.answers)),
-          })
-        );
-
-        await flush();
-        procs.get("claude")!.emit(textChunk("s-claude", "Claude says hi"));
-        procs.get("codex")!.emit(textChunk("s-codex", "Codex says hi"));
-        procs.get("claude")!.resolvePrompt();
-        procs.get("codex")!.resolvePrompt();
-        await flushPastGrace();
-        procs.get("claude")!.emit(textChunk("s-claude", "summary"));
-        procs.get("claude")!.resolvePrompt();
-
-        const turn = await runPromise;
-        expect(turn.answers.claude).toEqual({
-          backendId: "claude",
-          status: "done",
-          text: "Claude says hi",
-        });
-        expect(turn.answers.codex).toEqual({
-          backendId: "codex",
-          status: "done",
-          text: "Codex says hi",
-        });
-        expect(turn.summary.status).toBe("done");
-        expect(turn.summary.text).toBe("summary");
-        expect(readOnlyRegistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
-        expect(readOnlyUnregistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
-        expect(excludedFromHistory.map((e) => e.sessionId).sort()).toEqual([
-          "s-claude",
-          "s-claude",
-          "s-codex",
-        ]);
-        expect(snapshots.length).toBeGreaterThan(1);
-      });
-
-      it("isolates a failed agent as an error slot while others complete", async () => {
-        const { host, procs } = makeHost({
-          claude: { sessionId: "s-claude" },
-          codex: { sessionId: "s-codex" },
-        });
-        const orchestrator = new FanoutOrchestrator(host);
-        const controller = new AbortController();
-
-        const runPromise = orchestrator.run(
-          runInput(["claude", "codex"], { signal: controller.signal })
-        );
-
-        await flush();
-        procs.get("claude")!.emit(textChunk("s-claude", "ok"));
-        procs.get("claude")!.resolvePrompt();
-        procs.get("codex")!.rejectPrompt(new Error("backend boom"));
-        await flushPastGrace();
-        procs.get("claude")!.resolvePrompt();
-
-        const turn = await runPromise;
-        expect(turn.answers.claude.status).toBe("done");
-        expect(turn.answers.codex.status).toBe("error");
-        expect(turn.answers.codex.error).toContain("backend boom");
-        const summaryCall = (procs.get("claude")!.proc.prompt as jest.Mock).mock.calls[1][0];
-        const text = summaryCall.prompt[0].text as string;
-        expect(text).toContain("the original question");
-        expect(text).toContain("CLAUDE");
-        expect(text).not.toContain("CODEX");
-      });
-
-      it("applies the read-only sandbox id (never plan) only for backends that advertise one", async () => {
-        const { host, procs } = makeHost({
-          codex: { sessionId: "s-codex", readOnlyModeId: "read-only" },
-          opencode: { sessionId: "s-opencode" },
-        });
-        const orchestrator = new FanoutOrchestrator(host);
-        const controller = new AbortController();
-
-        const runPromise = orchestrator.run(
-          runInput(["codex", "opencode"], { signal: controller.signal })
-        );
-        await flush();
-        procs.get("codex")!.resolvePrompt();
-        procs.get("opencode")!.resolvePrompt();
-        await flushPastGrace();
-        procs.get("codex")!.resolvePrompt();
-        await runPromise;
-
-        expect(procs.get("codex")!.setSessionMode).toHaveBeenCalledWith({
-          sessionId: "s-codex",
-          modeId: "read-only",
-        });
-        expect(procs.get("codex")!.setSessionMode).not.toHaveBeenCalledWith({
-          sessionId: "s-codex",
-          modeId: "plan",
-        });
-        expect(procs.get("opencode")!.setSessionMode).not.toHaveBeenCalled();
-      });
-
-      it("cancels EVERY in-flight sub-session and lands each slot terminal-cancelled on abort", async () => {
-        const { host, procs } = makeHost({
-          claude: { sessionId: "s-claude" },
-          codex: { sessionId: "s-codex" },
-        });
-        const orchestrator = new FanoutOrchestrator(host);
-        const controller = new AbortController();
-        const runPromise = orchestrator.run(
-          runInput(["claude", "codex"], { signal: controller.signal })
-        );
-
-        await flush();
-        controller.abort();
-        procs.get("claude")!.resolvePrompt();
-        procs.get("codex")!.resolvePrompt();
-        const turn = await runPromise;
-
-        expect(procs.get("claude")!.cancel).toHaveBeenCalledWith({ sessionId: "s-claude" });
-        expect(procs.get("codex")!.cancel).toHaveBeenCalledWith({ sessionId: "s-codex" });
-        expect(turn.answers.claude.status).toBe("cancelled");
-        expect(turn.answers.codex.status).toBe("cancelled");
-        expect(procs.get("claude")!.promptCount()).toBe(1);
-        expect(turn.summary.status).toBe("pending");
-      });
-
-      it("lands a brief all-failed note (no fabricated summary) when zero agents succeed", async () => {
-        const { host, procs } = makeHost({
-          claude: { sessionId: "s-claude" },
-          codex: { sessionId: "s-codex" },
-        });
-        const orchestrator = new FanoutOrchestrator(host);
-        const controller = new AbortController();
-        const runPromise = orchestrator.run(
-          runInput(["claude", "codex"], { signal: controller.signal })
-        );
-
-        await flush();
-        procs.get("claude")!.rejectPrompt(new Error("boom-a"));
-        procs.get("codex")!.rejectPrompt(new Error("boom-b"));
-        const turn = await runPromise;
-
-        expect(turn.summary.status).toBe("done");
-        expect(turn.summary.text).toBe(FANOUT_ALL_FAILED_SUMMARY);
-        expect(procs.get("claude")!.promptCount()).toBe(1);
-        expect(procs.get("codex")!.promptCount()).toBe(1);
       });
     });
   });

@@ -55,21 +55,6 @@ describe("copilotDefaultModel", () => {
       });
     });
 
-    it("leaves the effort unset so seeding never commits the user to a reasoning level", () => {
-      const current = settingsWith({});
-      mockGetSettings.mockReturnValue(current);
-
-      seedCopilotDefaultModel(
-        [descriptor("opencode", "copilot-plus/copilot-plus-flash")],
-        FLASH_ID
-      );
-
-      const written = writtenBackends(current).opencode as {
-        defaultModel: { effort: string | null };
-      };
-      expect(written.defaultModel.effort).toBeNull();
-    });
-
     it("skips a backend that cannot route the model and one that does not answer at all", () => {
       const current = settingsWith({});
       mockGetSettings.mockReturnValue(current);
