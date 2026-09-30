@@ -44,7 +44,9 @@ jest.mock("@/context/ChatInputContext", () => ({
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/components/chat-components/ChatControls", () => ({
   ChatControls: ({ onCopyChatLink }: { onCopyChatLink?: () => void }) => (
-    <button onClick={onCopyChatLink}>Copy chat link</button>
+    <button disabled={!onCopyChatLink} onClick={onCopyChatLink}>
+      Copy chat link
+    </button>
   ),
 }));
 jest.mock("@/components/chat-components/ui/AgentModeBanner", () => ({
@@ -177,6 +179,18 @@ describe("Chat", () => {
 
       await expect(copyChatLink.mock.results[0].value).resolves.toBe("conversations/chat.md");
       expect(chatUIState.saveChat).toHaveBeenCalledTimes(1);
+    });
+
+    it("disables copying while a reply is streaming so the saved note is not missing it https://github.com/Brevilabs/obsidian-copilot-private/issues/601", async () => {
+      const { chatUIState } = renderChat();
+      chatUIState.sendMessage.mockReturnValue(new Promise(() => {}));
+      fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Question" } });
+
+      fireEvent.click(screen.getByText("Send"));
+
+      await waitFor(() =>
+        expect(screen.getByText("Copy chat link")).toHaveProperty("disabled", true)
+      );
     });
   });
 });

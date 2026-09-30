@@ -583,9 +583,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const handleCopyChatLink = () =>
     plugin.copyChatLink(async () => {
       // A native session link only opens on this device: https://github.com/Brevilabs/obsidian-copilot-private/issues/601
-      return (
-        manager.getSessionSourcePath(sessionId) || ((await manager.saveActiveSession())?.path ?? "")
-      );
+      return (await manager.saveActiveSession())?.path ?? "";
     });
 
   return (

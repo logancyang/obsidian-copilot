@@ -1218,11 +1218,8 @@ export default class CopilotPlugin extends Plugin {
   async copyChatLink(resolveNotePath: () => Promise<string>): Promise<void> {
     try {
       const path = await resolveNotePath();
-      const id = path ? await getSavedChatDeepLinkId(this.app, path) : null;
-      if (!id) {
-        new Notice("Save this chat before copying a link.");
-        return;
-      }
+      const id = path && (await getSavedChatDeepLinkId(this.app, path));
+      if (!id) throw new Error(`No saved chat note to link: "${path}"`);
       await navigator.clipboard.writeText(buildChatDeepLink(this.app.vault.getName(), id));
       new Notice("Chat link copied.");
     } catch (error) {

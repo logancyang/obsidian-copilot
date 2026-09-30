@@ -132,29 +132,30 @@ describe("main", () => {
         );
       });
 
-      it("tells the user to save and copies nothing when the chat has no id even after saving https://github.com/Brevilabs/obsidian-copilot-private/issues/601", async () => {
-        const plugin = createPluginUnderTest([]);
-        const writeText = jest.fn().mockResolvedValue(undefined);
-        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+      it.each([
+        ["returns no note", async () => ""],
+        [
+          "throws",
+          async () => {
+            throw new Error("disk full");
+          },
+        ],
+      ])(
+        "reports a failure and copies nothing when saving the chat %s https://github.com/Brevilabs/obsidian-copilot-private/issues/601",
+        async (_, resolveNotePath) => {
+          const plugin = createPluginUnderTest([]);
+          const writeText = jest.fn().mockResolvedValue(undefined);
+          Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: { writeText },
+          });
 
-        await plugin.copyChatLink(async () => "");
+          await plugin.copyChatLink(resolveNotePath);
 
-        expect(writeText).not.toHaveBeenCalled();
-        expect(Notice).toHaveBeenCalledWith("Save this chat before copying a link.");
-      });
-
-      it("reports a failure and copies nothing when saving the chat throws https://github.com/Brevilabs/obsidian-copilot-private/issues/601", async () => {
-        const plugin = createPluginUnderTest([]);
-        const writeText = jest.fn().mockResolvedValue(undefined);
-        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
-
-        await plugin.copyChatLink(async () => {
-          throw new Error("disk full");
-        });
-
-        expect(writeText).not.toHaveBeenCalled();
-        expect(Notice).toHaveBeenCalledWith("Could not copy chat link.");
-      });
+          expect(writeText).not.toHaveBeenCalled();
+          expect(Notice).toHaveBeenCalledWith("Could not copy chat link.");
+        }
+      );
     });
 
     describe("openChatDeepLink()", () => {

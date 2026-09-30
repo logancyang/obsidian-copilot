@@ -689,7 +689,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           onDelete={safeAsyncHandler(handleDelete)}
         />
         <ChatControls
-          onCopyChatLink={chatHistory.length > 0 ? handleCopyChatLink : undefined}
+          onCopyChatLink={chatHistory.length > 0 && !loading ? handleCopyChatLink : undefined}
           onNewChat={() => void handleNewChat()}
           onSaveAsNote={() => handleSaveAsNote()}
           onLoadHistory={() => void handleLoadChatHistory()}
