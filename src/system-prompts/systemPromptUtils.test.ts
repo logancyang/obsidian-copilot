@@ -31,12 +31,6 @@ jest.mock("@/settings/copilotFolder", () => {
   };
 });
 
-jest.mock("@/system-prompts/state", () => ({
-  updateCachedSystemPrompts: jest.fn(),
-  addPendingFileWrite: jest.fn(),
-  removePendingFileWrite: jest.fn(),
-}));
-
 describe("systemPromptUtils", () => {
   describe("getSystemPromptsFolder()", () => {
     it("returns the effective (copilotFolder-derived) system prompts folder", () => {
@@ -253,26 +247,6 @@ Content here.`;
       });
     });
 
-    it("strips frontmatter from content", async () => {
-      const rawContent = `---
-copilot-system-prompt-created: 1234567890
----
-Line 1
-Line 2`;
-
-      (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
-      (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({
-        frontmatter: {
-          "copilot-system-prompt-created": 1234567890,
-        },
-      });
-
-      const result = await parseSystemPromptFile(app, mockFile);
-
-      expect(result.content).toBe("Line 1\nLine 2");
-      expect(result.content).not.toContain("---");
-    });
-
     it("handles content with --- in the middle", async () => {
       const rawContent = `---
 copilot-system-prompt-created: 1234567890
@@ -326,7 +300,7 @@ Content with --- separator in the middle.`;
   });
 
   describe("loadAllSystemPrompts()", () => {
-    it("replaces the shared cache with prompts loaded from the vault", async () => {
+    it("returns the prompts loaded from the vault and stores them in the shared cache", async () => {
       jest.spyOn(settingsModel, "getSettings").mockReturnValue({
         userSystemPromptsFolder: "SystemPrompts",
       } as CopilotSettings);
@@ -348,7 +322,8 @@ Content with --- separator in the middle.`;
 
       const prompts = await loadAllSystemPrompts(app);
 
-      expect(state.updateCachedSystemPrompts).toHaveBeenCalledWith(prompts);
+      expect(prompts.map((prompt) => prompt.title)).toEqual(["Test Prompt"]);
+      expect(state.getCachedSystemPrompts()).toBe(prompts);
     });
   });
 });

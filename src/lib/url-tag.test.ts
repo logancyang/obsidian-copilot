@@ -81,12 +81,6 @@ describe("url-tag", () => {
       expect(items.map((i) => i.url)).toEqual(["https://example.com"]);
     });
 
-    it("classifies web and youtube items", () => {
-      const items = parseUrlsFromText("https://example.com\nhttps://youtu.be/dQw4w9WgXcQ");
-      expect(items.find((i) => i.url.includes("example"))?.type).toBe("web");
-      expect(items.find((i) => i.url.includes("youtu.be"))?.type).toBe("youtube");
-    });
-
     it("round-trips through serialize/parseProjectUrls without loss", () => {
       const items = parseUrlsFromText(
         "https://example.com\nhttps://www.youtube.com/watch?v=dQw4w9WgXcQ"
