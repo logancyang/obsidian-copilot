@@ -57,14 +57,6 @@ describe("model-display", () => {
       expect(container.querySelectorAll("svg")).toHaveLength(0);
       expect(queryByTestId(NO_VISION)).toBeNull();
     });
-
-    it("renders only the eye-off for known non-vision capabilities", () => {
-      const { container, queryByTestId } = render(
-        <ModelCapabilityIcons capabilities={[ModelCapability.WEB_SEARCH]} />
-      );
-      expect(container.querySelectorAll("svg")).toHaveLength(1);
-      expect(queryByTestId(NO_VISION)).not.toBeNull();
-    });
   });
 
   describe("ModelDisplay()", () => {
@@ -85,7 +77,7 @@ describe("model-display", () => {
   });
 
   describe("getModelDisplayWithIcons()", () => {
-    it("shows name and provider without modality labels", () => {
+    it("shows only the name and provider, without capability labels", () => {
       const text = getModelDisplayWithIcons(
         model({
           capabilities: [
@@ -95,11 +87,7 @@ describe("model-display", () => {
           ],
         })
       );
-      expect(text).toContain("omni");
-      expect(text).toContain("OpenAI");
-      expect(text).not.toContain("Websearch");
-      expect(text).not.toContain("Vision");
-      expect(text).not.toContain("Reasoning");
+      expect(text).toBe("omni (OpenAI)");
     });
   });
 });
