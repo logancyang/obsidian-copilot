@@ -125,6 +125,10 @@ describe("AgentChatPersistenceManager", () => {
     manager = new AgentChatPersistenceManager(app as unknown as App);
   });
 
+  afterEach(() => {
+    (readFrontmatterViaAdapter as jest.Mock).mockResolvedValue(null);
+  });
+
   describe("saveSession()", () => {
     it("preserves organizer links after native rehydration, reopening and later deletion (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
       const message = {
@@ -221,124 +225,97 @@ describe("AgentChatPersistenceManager", () => {
       expect(app.vault.modify).not.toHaveBeenCalled();
       expect(app.vault.adapter.write).not.toHaveBeenCalled();
     });
-  });
 
-  it("round-trips messages, backendId, and label", async () => {
-    const messages = [makeMessage(USER_SENDER, "hello world"), makeMessage(AI_SENDER, "hi back")];
-    const saved = await manager.saveSession(messages, "claude", { label: "My chat" });
-    expect(saved).not.toBeNull();
+    it("round-trips messages, backendId, and label", async () => {
+      const messages = [makeMessage(USER_SENDER, "hello world"), makeMessage(AI_SENDER, "hi back")];
+      const saved = await manager.saveSession(messages, "claude", { label: "My chat" });
+      expect(saved).not.toBeNull();
 
-    const file = app.files.get(saved!.path)!;
-    const loaded = await manager.loadFile(file as unknown as TFile);
-    expect(loaded.backendId).toBe("claude");
-    expect(loaded.label).toBe("My chat");
-    expect(loaded.messages).toHaveLength(2);
-    expect(loaded.messages[0].sender).toBe(USER_SENDER);
-    expect(loaded.messages[0].message).toBe("hello world");
-    expect(loaded.messages[1].sender).toBe(AI_SENDER);
-    expect(loaded.messages[1].message).toBe("hi back");
-  });
-
-  it("writes under the folder captured at entry, not one a mid-save root change swaps in", async () => {
-    const folderMock = jest.mocked(getEffectiveConversationsFolder);
-    folderMock.mockReturnValueOnce("old-folder");
-
-    const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {});
-
-    expect(saved).not.toBeNull();
-    expect(saved!.path.startsWith("old-folder/")).toBe(true);
-    expect(saved!.path).not.toContain("test-folder");
-  });
-
-  it("writes the built-in conversation tag independent of the persisted setting", async () => {
-    (getSettings as jest.Mock).mockReturnValueOnce({
-      defaultSaveFolder: "test-folder",
-      defaultConversationTag: "user-custom-tag",
-      defaultConversationNoteName: "{$date}_{$time}__{$topic}",
+      const file = app.files.get(saved!.path)!;
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.backendId).toBe("claude");
+      expect(loaded.label).toBe("My chat");
+      expect(loaded.messages).toHaveLength(2);
+      expect(loaded.messages[0].sender).toBe(USER_SENDER);
+      expect(loaded.messages[0].message).toBe("hello world");
+      expect(loaded.messages[1].sender).toBe(AI_SENDER);
+      expect(loaded.messages[1].message).toBe("hi back");
     });
-    const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {});
-    const contents = app.files.get(saved!.path)!.contents!;
-    expect(contents).toContain("tags:\n  - copilot-conversation");
-    expect(contents).not.toContain("user-custom-tag");
-  });
 
-  it("serializes a mid-stream fan-out turn so an interrupted autosave isn't blank", async () => {
-    const fanoutMsg: AgentChatMessage = {
-      id: "msg-2",
-      sender: AI_SENDER,
-      message: "",
-      isVisible: true,
-      timestamp: { epoch: 2, display: "2026/01/01 12:00:00", fileName: "20260101_120000" },
-      fanout: {
-        answers: {
-          opencode: { backendId: "opencode", status: "running", text: "partial opencode answer" },
+    it("writes under the folder captured at entry, not one a mid-save root change swaps in", async () => {
+      const folderMock = jest.mocked(getEffectiveConversationsFolder);
+      folderMock.mockReturnValueOnce("old-folder");
+
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {});
+
+      expect(saved).not.toBeNull();
+      expect(saved!.path.startsWith("old-folder/")).toBe(true);
+      expect(saved!.path).not.toContain("test-folder");
+    });
+
+    it("writes the built-in conversation tag independent of the persisted setting", async () => {
+      (getSettings as jest.Mock).mockReturnValueOnce({
+        defaultSaveFolder: "test-folder",
+        defaultConversationTag: "user-custom-tag",
+        defaultConversationNoteName: "{$date}_{$time}__{$topic}",
+      });
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {});
+      const contents = app.files.get(saved!.path)!.contents!;
+      expect(contents).toContain("tags:\n  - copilot-conversation");
+      expect(contents).not.toContain("user-custom-tag");
+    });
+
+    it("serializes a mid-stream fan-out turn so an interrupted autosave isn't blank", async () => {
+      const fanoutMsg: AgentChatMessage = {
+        id: "msg-2",
+        sender: AI_SENDER,
+        message: "",
+        isVisible: true,
+        timestamp: { epoch: 2, display: "2026/01/01 12:00:00", fileName: "20260101_120000" },
+        fanout: {
+          answers: {
+            opencode: { backendId: "opencode", status: "running", text: "partial opencode answer" },
+          },
+          summary: { status: "streaming", text: "" },
         },
-        summary: { status: "streaming", text: "" },
-      },
-    };
-    const saved = await manager.saveSession(
-      [makeMessage(USER_SENDER, "q"), fanoutMsg],
-      "claude",
-      {}
-    );
-    const file = app.files.get(saved!.path)!;
-    const loaded = await manager.loadFile(file as unknown as TFile);
-    expect(loaded.messages[1].message).toContain("partial opencode answer");
-  });
-
-  it("escapes and round-trips a label containing quotes and backslashes", async () => {
-    const tricky = 'has "quotes" and \\backslashes\\';
-    const messages = [makeMessage(USER_SENDER, "hi")];
-    const saved = await manager.saveSession(messages, "opencode", { label: tricky });
-    expect(saved).not.toBeNull();
-    const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
-    expect(loaded.label).toBe(tricky);
-  });
-
-  it("strips control characters from labels so they can't break frontmatter", async () => {
-    const messages = [makeMessage(USER_SENDER, "hi")];
-    const saved = await manager.saveSession(messages, "opencode", {
-      label: "first\nsecond\rthird",
+      };
+      const saved = await manager.saveSession(
+        [makeMessage(USER_SENDER, "q"), fanoutMsg],
+        "claude",
+        {}
+      );
+      const file = app.files.get(saved!.path)!;
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.messages[1].message).toContain("partial opencode answer");
     });
-    const raw = app.files.get(saved!.path)!.contents!;
-    const labelLines = raw.split("\n").filter((l) => l.startsWith("agentLabel:"));
-    expect(labelLines).toHaveLength(1);
-    const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
-    expect(loaded.label).toBe("first second third");
-  });
 
-  it("throws on missing backendId instead of silently defaulting", async () => {
-    const path = "test-folder/agent__broken.md";
-    await app.vault.adapter.write(
-      path,
-      ["---", "epoch: 1735732800000", "mode: agent", "---", "", "**user**: hi"].join("\n")
-    );
-    await expect(
-      manager.loadFile({ path, basename: "agent__broken" } as unknown as TFile)
-    ).rejects.toThrow(/Missing backendId/);
-  });
+    it("escapes and round-trips a label containing quotes and backslashes", async () => {
+      const tricky = 'has "quotes" and \\backslashes\\';
+      const messages = [makeMessage(USER_SENDER, "hi")];
+      const saved = await manager.saveSession(messages, "opencode", { label: tricky });
+      expect(saved).not.toBeNull();
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.label).toBe(tricky);
+    });
 
-  it("assigns deterministic ids that depend only on message timestamp", async () => {
-    const messages = [
-      makeMessage(USER_SENDER, "first", 1700000000000),
-      makeMessage(AI_SENDER, "second", 1700000000001),
-    ];
-    const saved = await manager.saveSession(messages, "claude");
-    const file = app.files.get(saved!.path)!;
+    it("strips control characters from labels so they can't break frontmatter", async () => {
+      const messages = [makeMessage(USER_SENDER, "hi")];
+      const saved = await manager.saveSession(messages, "opencode", {
+        label: "first\nsecond\rthird",
+      });
+      const raw = app.files.get(saved!.path)!.contents!;
+      const labelLines = raw.split("\n").filter((l) => l.startsWith("agentLabel:"));
+      expect(labelLines).toHaveLength(1);
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.label).toBe("first second third");
+    });
 
-    const loadedA = await manager.loadFile(file as unknown as TFile);
-    const loadedB = await manager.loadFile(file as unknown as TFile);
-    expect(loadedA.messages.map((m) => m.id)).toEqual(loadedB.messages.map((m) => m.id));
-    expect(loadedA.messages[0].id.startsWith("loaded-0-")).toBe(true);
-  });
+    it("returns null when given zero messages instead of writing an empty file", async () => {
+      const result = await manager.saveSession([], "opencode");
+      expect(result).toBeNull();
+      expect(app.files.size).toBe(0);
+    });
 
-  it("returns null when given zero messages instead of writing an empty file", async () => {
-    const result = await manager.saveSession([], "opencode");
-    expect(result).toBeNull();
-    expect(app.files.size).toBe(0);
-  });
-
-  describe("projectId scope round-trip", () => {
     it("round-trips a real projectId for a project-scoped chat", async () => {
       const messages = [makeMessage(USER_SENDER, "hi")];
       const saved = await manager.saveSession(messages, "claude", { projectId: "proj-123" });
@@ -351,35 +328,23 @@ describe("AgentChatPersistenceManager", () => {
       expect(loaded.projectId).toBe("proj-123");
     });
 
-    it("defaults an unscoped chat to GLOBAL_SCOPE and writes no projectId (hard contract)", async () => {
-      const messages = [makeMessage(USER_SENDER, "hi")];
-      const saved = await manager.saveSession(messages, "claude");
-      const raw = app.files.get(saved!.path)!.contents!;
-      expect(raw).not.toContain("projectId:");
+    it.each([
+      ["omitted", undefined],
+      ["GLOBAL_SCOPE", GLOBAL_SCOPE],
+      ["blank", "   "],
+    ])(
+      "writes no projectId frontmatter and loads as GLOBAL_SCOPE when projectId is %s",
+      async (_label, projectId) => {
+        const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+          projectId,
+        });
+        const raw = app.files.get(saved!.path)!.contents!;
+        expect(raw).not.toContain("projectId:");
 
-      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
-      expect(loaded.projectId).toBe(GLOBAL_SCOPE);
-    });
-
-    it("treats an explicit GLOBAL_SCOPE like an unscoped chat (no projectId frontmatter)", async () => {
-      const messages = [makeMessage(USER_SENDER, "hi")];
-      const saved = await manager.saveSession(messages, "claude", { projectId: GLOBAL_SCOPE });
-      const raw = app.files.get(saved!.path)!.contents!;
-      expect(raw).not.toContain("projectId:");
-
-      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
-      expect(loaded.projectId).toBe(GLOBAL_SCOPE);
-    });
-
-    it("treats a blank projectId option like an unscoped chat", async () => {
-      const messages = [makeMessage(USER_SENDER, "hi")];
-      const saved = await manager.saveSession(messages, "claude", { projectId: "   " });
-      const raw = app.files.get(saved!.path)!.contents!;
-      expect(raw).not.toContain("projectId:");
-
-      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
-      expect(loaded.projectId).toBe(GLOBAL_SCOPE);
-    });
+        const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+        expect(loaded.projectId).toBe(GLOBAL_SCOPE);
+      }
+    );
 
     it("normalizes a padded projectId option before writing frontmatter", async () => {
       const messages = [makeMessage(USER_SENDER, "hi")];
@@ -390,30 +355,6 @@ describe("AgentChatPersistenceManager", () => {
 
       const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
       expect(loaded.projectId).toBe("proj-123");
-    });
-
-    it("maps a legacy agent__ chat with no projectId frontmatter to GLOBAL_SCOPE", async () => {
-      const path = "test-folder/agent__legacy.md";
-      await app.vault.adapter.write(
-        path,
-        [
-          "---",
-          "epoch: 1735732800000",
-          "mode: agent",
-          "backendId: claude",
-          "---",
-          "",
-          "**user**: hi",
-        ].join("\n")
-      );
-      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
-      expect(loaded.projectId).toBe(GLOBAL_SCOPE);
-    });
-  });
-
-  describe("usage frontmatter", () => {
-    afterEach(() => {
-      (readFrontmatterViaAdapter as jest.Mock).mockResolvedValue(null);
     });
 
     it("round-trips a SessionUsage snapshot through save/load", async () => {
@@ -464,6 +405,51 @@ describe("AgentChatPersistenceManager", () => {
       expect(raw).not.toContain("usage:");
       const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
       expect(loaded.usage).toBeUndefined();
+    });
+  });
+
+  describe("loadFile()", () => {
+    it("throws on missing backendId instead of silently defaulting", async () => {
+      const path = "test-folder/agent__broken.md";
+      await app.vault.adapter.write(
+        path,
+        ["---", "epoch: 1735732800000", "mode: agent", "---", "", "**user**: hi"].join("\n")
+      );
+      await expect(
+        manager.loadFile({ path, basename: "agent__broken" } as unknown as TFile)
+      ).rejects.toThrow(/Missing backendId/);
+    });
+
+    it("assigns deterministic ids that depend only on message timestamp", async () => {
+      const messages = [
+        makeMessage(USER_SENDER, "first", 1700000000000),
+        makeMessage(AI_SENDER, "second", 1700000000001),
+      ];
+      const saved = await manager.saveSession(messages, "claude");
+      const file = app.files.get(saved!.path)!;
+
+      const loadedA = await manager.loadFile(file as unknown as TFile);
+      const loadedB = await manager.loadFile(file as unknown as TFile);
+      expect(loadedA.messages.map((m) => m.id)).toEqual(loadedB.messages.map((m) => m.id));
+      expect(loadedA.messages[0].id.startsWith("loaded-0-")).toBe(true);
+    });
+
+    it("maps a legacy agent__ chat with no projectId frontmatter to GLOBAL_SCOPE", async () => {
+      const path = "test-folder/agent__legacy.md";
+      await app.vault.adapter.write(
+        path,
+        [
+          "---",
+          "epoch: 1735732800000",
+          "mode: agent",
+          "backendId: claude",
+          "---",
+          "",
+          "**user**: hi",
+        ].join("\n")
+      );
+      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
+      expect(loaded.projectId).toBe(GLOBAL_SCOPE);
     });
 
     it("ignores malformed usage JSON instead of failing the load", async () => {

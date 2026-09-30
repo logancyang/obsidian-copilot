@@ -105,6 +105,31 @@ function buildDescriptor(makeProc: () => MockProcHandle): {
 
 describe("AgentModelPreloader", () => {
   describe("preload()", () => {
+    it("retains the probe subprocess after a successful preload and hands it to the manager", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+
+      await preloader.preload("claude-sdk");
+
+      expect(procHandle.start).toHaveBeenCalledTimes(1);
+      expect(procHandle.shutdown).not.toHaveBeenCalled();
+
+      expect(preloader.getCachedModelCatalog("claude-sdk")?.availableModels?.[0].baseModelId).toBe(
+        "claude-sonnet"
+      );
+
+      const warm = preloader.takeWarm("claude-sdk");
+      expect(warm).not.toBeNull();
+      expect(warm?.proc).toBe(procHandle.proc);
+      expect(warm).not.toHaveProperty("state");
+
+      expect(preloader.takeWarm("claude-sdk")).toBeNull();
+
+      expect(preloader.getCachedModelCatalog("claude-sdk")?.availableModels?.[0].baseModelId).toBe(
+        "claude-sonnet"
+      );
+    });
+
     it("waits for installation before inspecting and probing the selected binary (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", async () => {
       const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
       let finish!: () => void;
@@ -125,6 +150,7 @@ describe("AgentModelPreloader", () => {
       expect(procHandle.start).toHaveBeenCalledTimes(1);
       expect(preloader.takeWarm(descriptor.id)?.proc).toBe(procHandle.proc);
     });
+
     it("does not start a process when disposed during installation (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", async () => {
       const { descriptor } = buildDescriptor(() => makeMockProc());
       let finish!: () => void;
@@ -197,7 +223,60 @@ describe("AgentModelPreloader", () => {
       expect(preloader.takeWarm(descriptor.id)).toBeNull();
       expect(preloader.getCachedModelCatalog(descriptor.id)).toBeNull();
     });
+
+    it("drops the warm entry when the probe subprocess exits before adoption", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+      descriptor.prefetchEffortCatalog = jest.fn(async () => ({
+        "claude-sonnet": [{ label: "High", value: "high" }],
+      }));
+      descriptor.getEnabledModelEntries = jest.fn(() => [
+        {
+          baseModelId: "claude-sonnet",
+          name: "Claude Sonnet",
+          provider: "anthropic",
+          credentialState: "ok",
+        },
+      ]);
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+
+      await preloader.preload("claude-sdk");
+      expect(preloader.takeWarm("claude-sdk")).not.toBeNull();
+      await preloader.preload("claude-sdk");
+      expect(preloader.getEffortCatalog("claude-sdk")).not.toBeNull();
+      procHandle.emitExit();
+
+      expect(preloader.takeWarm("claude-sdk")).toBeNull();
+      expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
+      expect(preloader.getEffortCatalog("claude-sdk")).toBeNull();
+    });
+
+    it("shuts down the probe proc when the agent reports no usable state", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() =>
+        makeMockProc({ newSessionState: { model: null, mode: null } })
+      );
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+
+      await preloader.preload("claude-sdk");
+
+      expect(procHandle.shutdown).toHaveBeenCalledTimes(1);
+      expect(preloader.takeWarm("claude-sdk")).toBeNull();
+    });
+
+    it("shuts down the probe proc when newSession throws", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() => {
+        const handle = makeMockProc();
+        handle.newSession.mockRejectedValueOnce(new Error("agent unreachable"));
+        return handle;
+      });
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+
+      await preloader.preload("claude-sdk");
+
+      expect(procHandle.shutdown).toHaveBeenCalledTimes(1);
+      expect(preloader.takeWarm("claude-sdk")).toBeNull();
+    });
   });
+
   describe("getCachedModelCatalog()", () => {
     it("exposes only the discovered model catalog from a full probe state", async () => {
       const probeState: BackendState = {
@@ -249,143 +328,72 @@ describe("AgentModelPreloader", () => {
     });
   });
 
-  it("retains the probe subprocess after a successful preload and hands it to the manager", async () => {
-    const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
-    const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+  describe("refresh()", () => {
+    it("re-probes a warm backend against current settings", async () => {
+      const { descriptor } = buildDescriptor(() => makeMockProc());
+      const create = descriptor.createBackendProcess as jest.Mock;
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
 
-    await preloader.preload("claude-sdk");
+      await preloader.preload("claude-sdk");
+      expect(create).toHaveBeenCalledTimes(1);
 
-    expect(procHandle.start).toHaveBeenCalledTimes(1);
-    expect(procHandle.shutdown).not.toHaveBeenCalled();
-
-    expect(preloader.getCachedModelCatalog("claude-sdk")?.availableModels?.[0].baseModelId).toBe(
-      "claude-sonnet"
-    );
-
-    const warm = preloader.takeWarm("claude-sdk");
-    expect(warm).not.toBeNull();
-    expect(warm?.proc).toBe(procHandle.proc);
-    expect(warm).not.toHaveProperty("state");
-
-    expect(preloader.takeWarm("claude-sdk")).toBeNull();
-
-    expect(preloader.getCachedModelCatalog("claude-sdk")?.availableModels?.[0].baseModelId).toBe(
-      "claude-sonnet"
-    );
-  });
-
-  it("shuts down a still-warm proc on dispose so the subprocess does not leak", async () => {
-    const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
-    const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
-
-    await preloader.preload("claude-sdk");
-    expect(procHandle.shutdown).not.toHaveBeenCalled();
-
-    preloader.shutdown();
-    await waitFor(() => expect(procHandle.shutdown).toHaveBeenCalledTimes(1));
-    expect(preloader.takeWarm("claude-sdk")).toBeNull();
-    expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
-  });
-
-  it("drops the warm entry when the probe subprocess exits before adoption", async () => {
-    const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
-    descriptor.prefetchEffortCatalog = jest.fn(async () => ({
-      "claude-sonnet": [{ label: "High", value: "high" }],
-    }));
-    descriptor.getEnabledModelEntries = jest.fn(() => [
-      {
-        baseModelId: "claude-sonnet",
-        name: "Claude Sonnet",
-        provider: "anthropic",
-        credentialState: "ok",
-      },
-    ]);
-    const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
-
-    await preloader.preload("claude-sdk");
-    expect(preloader.takeWarm("claude-sdk")).not.toBeNull();
-    await preloader.preload("claude-sdk");
-    expect(preloader.getEffortCatalog("claude-sdk")).not.toBeNull();
-    procHandle.emitExit();
-
-    expect(preloader.takeWarm("claude-sdk")).toBeNull();
-    expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
-    expect(preloader.getEffortCatalog("claude-sdk")).toBeNull();
-  });
-
-  it("shuts down the probe proc when the agent reports no usable state", async () => {
-    const { descriptor, procHandle } = buildDescriptor(() =>
-      makeMockProc({ newSessionState: { model: null, mode: null } })
-    );
-    const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
-
-    await preloader.preload("claude-sdk");
-
-    expect(procHandle.shutdown).toHaveBeenCalledTimes(1);
-    expect(preloader.takeWarm("claude-sdk")).toBeNull();
-  });
-
-  it("shuts down the probe proc when newSession throws", async () => {
-    const { descriptor, procHandle } = buildDescriptor(() => {
-      const handle = makeMockProc();
-      handle.newSession.mockRejectedValueOnce(new Error("agent unreachable"));
-      return handle;
+      await preloader.refresh("claude-sdk");
+      expect(create).toHaveBeenCalledTimes(2);
     });
-    const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
 
-    await preloader.preload("claude-sdk");
+    it("returns null when nothing is warm or in flight", async () => {
+      const { descriptor } = buildDescriptor(() => makeMockProc());
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
 
-    expect(procHandle.shutdown).toHaveBeenCalledTimes(1);
-    expect(preloader.takeWarm("claude-sdk")).toBeNull();
+      expect(preloader.refresh("claude-sdk")).toBeNull();
+    });
+
+    it("coalesces a burst of refreshes into a single trailing re-probe", async () => {
+      const { descriptor } = buildDescriptor(() => makeMockProc());
+      const create = descriptor.createBackendProcess as jest.Mock;
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+
+      await preloader.preload("claude-sdk");
+      expect(create).toHaveBeenCalledTimes(1);
+
+      const chain = preloader.refresh("claude-sdk");
+      expect(chain).not.toBeNull();
+      void preloader.refresh("claude-sdk");
+      void preloader.refresh("claude-sdk");
+      await chain;
+
+      expect(create).toHaveBeenCalledTimes(3);
+    });
   });
 
-  it("refresh re-probes a warm backend against current settings", async () => {
-    const { descriptor } = buildDescriptor(() => makeMockProc());
-    const create = descriptor.createBackendProcess as jest.Mock;
-    const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+  describe("clearCached()", () => {
+    it("shuts down and drops a still-warm proc", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
 
-    await preloader.preload("claude-sdk");
-    expect(create).toHaveBeenCalledTimes(1);
+      await preloader.preload("claude-sdk");
+      expect(preloader.getCachedModelCatalog("claude-sdk")).not.toBeNull();
 
-    await preloader.refresh("claude-sdk");
-    expect(create).toHaveBeenCalledTimes(2);
+      preloader.clearCached("claude-sdk");
+
+      await waitFor(() => expect(procHandle.shutdown).toHaveBeenCalledTimes(1));
+      expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
+      expect(preloader.takeWarm("claude-sdk")).toBeNull();
+    });
   });
 
-  it("refresh returns null when nothing is warm or in flight", async () => {
-    const { descriptor } = buildDescriptor(() => makeMockProc());
-    const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+  describe("shutdown()", () => {
+    it("shuts down a still-warm proc so the subprocess does not leak", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
 
-    expect(preloader.refresh("claude-sdk")).toBeNull();
-  });
+      await preloader.preload("claude-sdk");
+      expect(procHandle.shutdown).not.toHaveBeenCalled();
 
-  it("coalesces a burst of refreshes into a single trailing re-probe", async () => {
-    const { descriptor } = buildDescriptor(() => makeMockProc());
-    const create = descriptor.createBackendProcess as jest.Mock;
-    const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
-
-    await preloader.preload("claude-sdk");
-    expect(create).toHaveBeenCalledTimes(1);
-
-    const chain = preloader.refresh("claude-sdk");
-    expect(chain).not.toBeNull();
-    void preloader.refresh("claude-sdk");
-    void preloader.refresh("claude-sdk");
-    await chain;
-
-    expect(create).toHaveBeenCalledTimes(3);
-  });
-
-  it("clearCached shuts down and drops a still-warm proc", async () => {
-    const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
-    const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
-
-    await preloader.preload("claude-sdk");
-    expect(preloader.getCachedModelCatalog("claude-sdk")).not.toBeNull();
-
-    preloader.clearCached("claude-sdk");
-
-    await waitFor(() => expect(procHandle.shutdown).toHaveBeenCalledTimes(1));
-    expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
-    expect(preloader.takeWarm("claude-sdk")).toBeNull();
+      preloader.shutdown();
+      await waitFor(() => expect(procHandle.shutdown).toHaveBeenCalledTimes(1));
+      expect(preloader.takeWarm("claude-sdk")).toBeNull();
+      expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
+    });
   });
 });

@@ -21,112 +21,110 @@ describe("AgentInputDraftStore", () => {
     mockAutoAddActiveContent = false;
   });
 
-  describe("AgentInputDraftStore", () => {
-    describe("get()", () => {
-      it("returns nothing for a chat input that has never been written", () => {
-        const { store } = buildStore();
+  describe("get()", () => {
+    it("returns nothing for a chat input that has never been written", () => {
+      const { store } = buildStore();
 
-        expect(store.get("a")).toBeUndefined();
+      expect(store.get("a")).toBeUndefined();
+    });
+  });
+
+  describe("update()", () => {
+    it("seeds a first write from the include-active-note setting", () => {
+      mockAutoAddActiveContent = true;
+      const { store } = buildStore();
+
+      store.update("a", (draft) => ({ ...draft, input: "hello" }));
+
+      expect(store.get("a")).toEqual({
+        input: "hello",
+        images: [],
+        contextNotes: [],
+        includeActiveNote: true,
+        includeActiveWebTab: false,
+        loading: false,
+        queue: [],
       });
     });
 
-    describe("update()", () => {
-      it("seeds a first write from the include-active-note setting", () => {
-        mockAutoAddActiveContent = true;
-        const { store } = buildStore();
+    it("notifies subscribers only when the draft changes", () => {
+      const { store } = buildStore();
+      const listener = jest.fn();
+      store.subscribe(listener);
 
-        store.update("a", (draft) => ({ ...draft, input: "hello" }));
+      store.update("a", (draft) => ({ ...draft, input: "hello" }));
+      store.update("a", (draft) => draft);
 
-        expect(store.get("a")).toEqual({
-          input: "hello",
-          images: [],
-          contextNotes: [],
-          includeActiveNote: true,
-          includeActiveWebTab: false,
-          loading: false,
-          queue: [],
-        });
-      });
-
-      it("notifies subscribers only when the draft changes", () => {
-        const { store } = buildStore();
-        const listener = jest.fn();
-        store.subscribe(listener);
-
-        store.update("a", (draft) => ({ ...draft, input: "hello" }));
-        store.update("a", (draft) => draft);
-
-        expect(listener).toHaveBeenCalledTimes(1);
-      });
-
-      it("drops a write to a chat input the manager no longer owns", () => {
-        const { store } = buildStore({ live: [] });
-
-        store.update("a", (draft) => ({ ...draft, input: "late turn result" }));
-
-        expect(store.get("a")).toBeUndefined();
-      });
+      expect(listener).toHaveBeenCalledTimes(1);
     });
 
-    describe("addContextNote()", () => {
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 appends a note once, keeping existing attachments", () => {
-        const { store } = buildStore();
-        const existing = file("Existing.md");
-        const clicked = file("Clicked.md");
-        store.update("a", (draft) => ({ ...draft, contextNotes: [existing] }));
+    it("drops a write to a chat input the manager no longer owns", () => {
+      const { store } = buildStore({ live: [] });
 
-        store.addContextNote("a", clicked);
-        store.addContextNote("a", clicked);
+      store.update("a", (draft) => ({ ...draft, input: "late turn result" }));
 
-        expect(store.get("a")?.contextNotes).toEqual([existing, clicked]);
-      });
+      expect(store.get("a")).toBeUndefined();
+    });
+  });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 replaces the dynamic Active Note badge when the added note is the active note", () => {
-        mockAutoAddActiveContent = true;
-        const clicked = file("Clicked.md");
-        const { store } = buildStore({ activeFile: clicked });
+  describe("addContextNote()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 appends a note once, keeping existing attachments", () => {
+      const { store } = buildStore();
+      const existing = file("Existing.md");
+      const clicked = file("Clicked.md");
+      store.update("a", (draft) => ({ ...draft, contextNotes: [existing] }));
 
-        store.addContextNote("a", clicked);
+      store.addContextNote("a", clicked);
+      store.addContextNote("a", clicked);
 
-        expect(store.get("a")?.includeActiveNote).toBe(false);
-        expect(store.get("a")?.contextNotes).toEqual([clicked]);
-      });
-
-      it("keeps the Active Note badge when the added note is a different note", () => {
-        mockAutoAddActiveContent = true;
-        const { store } = buildStore({ activeFile: file("Open.md") });
-
-        store.addContextNote("a", file("Other.md"));
-
-        expect(store.get("a")?.includeActiveNote).toBe(true);
-      });
+      expect(store.get("a")?.contextNotes).toEqual([existing, clicked]);
     });
 
-    describe("prune()", () => {
-      it("drops drafts for chat inputs that are no longer live and keeps the rest", () => {
-        const { store, liveIds } = buildStore({ live: ["a", "b"] });
-        store.update("a", (draft) => ({ ...draft, input: "a text" }));
-        store.update("b", (draft) => ({ ...draft, input: "b text" }));
-        liveIds.delete("a");
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 replaces the dynamic Active Note badge when the added note is the active note", () => {
+      mockAutoAddActiveContent = true;
+      const clicked = file("Clicked.md");
+      const { store } = buildStore({ activeFile: clicked });
 
-        store.prune();
+      store.addContextNote("a", clicked);
 
-        expect(store.get("a")).toBeUndefined();
-        expect(store.get("b")?.input).toBe("b text");
-      });
+      expect(store.get("a")?.includeActiveNote).toBe(false);
+      expect(store.get("a")?.contextNotes).toEqual([clicked]);
     });
 
-    describe("subscribe()", () => {
-      it("stops notifying after the returned unsubscribe runs", () => {
-        const { store } = buildStore();
-        const listener = jest.fn();
-        const unsubscribe = store.subscribe(listener);
+    it("keeps the Active Note badge when the added note is a different note", () => {
+      mockAutoAddActiveContent = true;
+      const { store } = buildStore({ activeFile: file("Open.md") });
 
-        unsubscribe();
-        store.update("a", (draft) => ({ ...draft, input: "hello" }));
+      store.addContextNote("a", file("Other.md"));
 
-        expect(listener).not.toHaveBeenCalled();
-      });
+      expect(store.get("a")?.includeActiveNote).toBe(true);
+    });
+  });
+
+  describe("prune()", () => {
+    it("drops drafts for chat inputs that are no longer live and keeps the rest", () => {
+      const { store, liveIds } = buildStore({ live: ["a", "b"] });
+      store.update("a", (draft) => ({ ...draft, input: "a text" }));
+      store.update("b", (draft) => ({ ...draft, input: "b text" }));
+      liveIds.delete("a");
+
+      store.prune();
+
+      expect(store.get("a")).toBeUndefined();
+      expect(store.get("b")?.input).toBe("b text");
+    });
+  });
+
+  describe("subscribe()", () => {
+    it("stops notifying after the returned unsubscribe runs", () => {
+      const { store } = buildStore();
+      const listener = jest.fn();
+      const unsubscribe = store.subscribe(listener);
+
+      unsubscribe();
+      store.update("a", (draft) => ({ ...draft, input: "hello" }));
+
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 });
