@@ -183,7 +183,58 @@ describe("ToolPermissionCard", () => {
         textContent: unbrokenLabel,
       });
       expect(button.firstElementChild?.classList.contains("tw-min-w-0")).toBe(true);
-      expect(button.firstElementChild?.classList.contains("tw-break-all")).toBe(true);
+      expect(button.firstElementChild?.classList.contains("tw-break-words")).toBe(true);
+    });
+
+    it("labels an option that quotes a command prefix with its prose and shows the prefix on hover https://github.com/Brevilabs/obsidian-copilot-private/issues/618", async () => {
+      const onResolve = jest.fn();
+      const prefix = 'python3 -c \'from pathlib import Path; Path("note.md").write_text("hi")\'';
+      render(
+        <ToolPermissionCard
+          request={makeRequest([
+            { optionId: "approved", name: "Yes, proceed", kind: "allow_once" },
+            {
+              optionId: "approved-execpolicy-amendment",
+              name: `Yes, and don't ask again for commands that start with \`${prefix}\``,
+              kind: "allow_always",
+            },
+            {
+              optionId: "abort",
+              name: "No, and tell Codex what to do differently",
+              kind: "reject_once",
+            },
+          ])}
+          onResolve={onResolve}
+        />
+      );
+
+      expect(screen.queryByText(prefix)).toBeNull();
+      const button = screen.getByRole("button", {
+        name: "Yes, and don't ask again for commands that start with…",
+      });
+
+      fireEvent.pointerMove(button, { pointerType: "mouse" });
+      expect((await screen.findByRole("tooltip")).textContent).toBe(prefix);
+
+      fireEvent.click(button);
+      expect(onResolve).toHaveBeenLastCalledWith(TOOL_CALL_ID, "approved-execpolicy-amendment");
+    });
+
+    it("numbers options whose labels differ only in quoted code https://github.com/Brevilabs/obsidian-copilot-private/issues/618", () => {
+      render(
+        <ToolPermissionCard
+          request={makeRequest([
+            { optionId: "git", name: "Always allow `git status`", kind: "allow_always" },
+            { optionId: "npm", name: "Always allow `npm test`", kind: "allow_always" },
+          ])}
+          onResolve={jest.fn()}
+        />
+      );
+
+      expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+        "Always allow… 1",
+        "Always allow… 2",
+      ]);
     });
   });
 });

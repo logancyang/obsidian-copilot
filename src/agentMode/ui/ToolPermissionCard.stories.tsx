@@ -73,3 +73,34 @@ export const WebSearchQuery: StoryObj<ToolPermissionCardProps> = {
     },
   },
 };
+
+const codexCommand =
+  'python3 -c \'from pathlib import Path; p = Path("/Users/me/Vault/launch-brief.md"); p.write_text("Review on Friday")\'';
+
+export const CodexCommandPrefix: StoryObj<ToolPermissionCardProps> = {
+  args: {
+    toolName: codexCommand,
+    request: {
+      ...request,
+      toolCall: {
+        ...request.toolCall,
+        title: "Run command",
+        kind: "execute",
+        rawInput: { command: codexCommand },
+      },
+      options: [
+        { optionId: "approved", name: "Yes, proceed", kind: "allow_once" },
+        {
+          optionId: "approved-execpolicy-amendment",
+          name: `Yes, and don't ask again for commands that start with \`${codexCommand}\``,
+          kind: "allow_always",
+        },
+        {
+          optionId: "abort",
+          name: "No, and tell Codex what to do differently",
+          kind: "reject_once",
+        },
+      ],
+    },
+  },
+};
