@@ -1,3 +1,4 @@
+import type { App } from "obsidian";
 import { ToolManager } from "@/tools/toolManager";
 import { createGetTagListTool, enforceSizeLimit } from "./TagTools";
 
@@ -17,232 +18,138 @@ interface TagPayload {
   tags: TagEntry[];
 }
 
-interface MockApp {
-  metadataCache: {
-    getTags: jest.Mock;
-    getFrontmatterTags: jest.Mock;
-  };
-}
-
-const getMockApp = (): MockApp => (window as unknown as { app: MockApp }).app;
-const setMockApp = (value: MockApp | undefined): void => {
-  (window as unknown as { app: MockApp | undefined }).app = value;
+const parsePayload = (result: string): TagPayload => {
+  const startIndex = result.indexOf('{"');
+  const endIndex = result.lastIndexOf("}");
+  return JSON.parse(result.slice(startIndex, endIndex + 1)) as TagPayload;
 };
 
 describe("TagTools", () => {
-  const originalApp = getMockApp();
+  describe("createGetTagListTool()", () => {
+    let inlineAndFrontmatterTags: Record<string, number>;
+    let frontmatterTags: Record<string, number>;
 
-  const parsePayload = (result: string): TagPayload => {
-    const startIndex = result.indexOf('{"');
-    const endIndex = result.lastIndexOf("}");
-
-    expect(startIndex).toBeGreaterThanOrEqual(0);
-    expect(endIndex).toBeGreaterThan(startIndex);
-
-    const jsonSegment = result.slice(startIndex, endIndex + 1);
-    try {
-      return JSON.parse(jsonSegment) as TagPayload;
-    } catch (error) {
-      console.error("Failed to parse tag tool payload:", jsonSegment);
-      throw error;
-    }
-  };
-
-  beforeEach(() => {
-    setMockApp({
-      metadataCache: {
-        getTags: jest.fn().mockReturnValue({
-          "#project": 5,
-          "#daily": 4,
-          "#idea": 1,
-        }),
-        getFrontmatterTags: jest.fn().mockReturnValue({
-          "#project": 3,
-          "#daily": 2,
-        }),
-      },
-    });
-  });
-
-  afterEach(() => {
-    setMockApp(originalApp);
-    jest.clearAllMocks();
-  });
-
-  it("returns combined tag statistics by default", async () => {
-    const tool = createGetTagListTool(
-      getMockApp() as unknown as Parameters<typeof createGetTagListTool>[0]
-    );
-    const result = (await ToolManager.callTool(tool, {})) as string;
-
-    const payload = parsePayload(result);
-
-    expect(getMockApp().metadataCache.getTags).toHaveBeenCalled();
-    expect(getMockApp().metadataCache.getFrontmatterTags).toHaveBeenCalled();
-    expect(payload.totalUniqueTags).toBe(3);
-    expect(payload.returnedTagCount).toBe(3);
-    expect(payload.totalOccurrences).toBe(10);
-    expect(payload.truncated).toBe(false);
-    expect(payload.includedSources).toEqual(["frontmatter", "inline"]);
-    expect(payload.tags).toEqual([
-      {
-        tag: "#project",
-        occurrences: 5,
-        frontmatterOccurrences: 3,
-        inlineOccurrences: 2,
-      },
-      {
-        tag: "#daily",
-        occurrences: 4,
-        frontmatterOccurrences: 2,
-        inlineOccurrences: 2,
-      },
-      {
-        tag: "#idea",
-        occurrences: 1,
-        frontmatterOccurrences: 0,
-        inlineOccurrences: 1,
-      },
-    ]);
-  });
-
-  it("supports frontmatter-only mode", async () => {
-    const tool = createGetTagListTool(
-      getMockApp() as unknown as Parameters<typeof createGetTagListTool>[0]
-    );
-    const result = (await ToolManager.callTool(tool, { includeInline: false })) as string;
-
-    const payload = parsePayload(result);
-
-    expect(getMockApp().metadataCache.getTags).not.toHaveBeenCalled();
-    expect(getMockApp().metadataCache.getFrontmatterTags).toHaveBeenCalled();
-    expect(payload.totalUniqueTags).toBe(2);
-    expect(payload.includedSources).toEqual(["frontmatter"]);
-    expect(payload.tags).toEqual([
-      {
-        tag: "#project",
-        occurrences: 3,
-        frontmatterOccurrences: 3,
-        inlineOccurrences: 0,
-      },
-      {
-        tag: "#daily",
-        occurrences: 2,
-        frontmatterOccurrences: 2,
-        inlineOccurrences: 0,
-      },
-    ]);
-  });
-
-  it("limits entries when maxEntries is provided", async () => {
-    const tool = createGetTagListTool(
-      getMockApp() as unknown as Parameters<typeof createGetTagListTool>[0]
-    );
-    const result = (await ToolManager.callTool(tool, { maxEntries: 2 })) as string;
-
-    const payload = parsePayload(result);
-
-    expect(payload.totalUniqueTags).toBe(3);
-    expect(payload.returnedTagCount).toBe(2);
-    expect(payload.truncated).toBe(true);
-    expect(payload.tags).toHaveLength(2);
-    expect(payload.tags[0].tag).toBe("#project");
-    expect(payload.tags[1].tag).toBe("#daily");
-  });
-
-  it("handles empty vault gracefully", async () => {
-    getMockApp().metadataCache.getTags.mockReturnValue({});
-    getMockApp().metadataCache.getFrontmatterTags.mockReturnValue({});
-
-    const tool = createGetTagListTool(
-      getMockApp() as unknown as Parameters<typeof createGetTagListTool>[0]
-    );
-    const result = (await ToolManager.callTool(tool, {})) as string;
-
-    const payload = parsePayload(result);
-
-    expect(payload.totalUniqueTags).toBe(0);
-    expect(payload.tags).toEqual([]);
-    expect(payload.totalOccurrences).toBe(0);
-  });
-
-  it("normalizes malformed tags correctly", async () => {
-    getMockApp().metadataCache.getTags.mockReturnValue({
-      project: 5,
-      "##Weird/Tag": 4,
-    });
-    getMockApp().metadataCache.getFrontmatterTags.mockReturnValue({
-      "  #Project ": 3,
-      "##Weird/Tag": 1,
-    });
-
-    const tool = createGetTagListTool(
-      getMockApp() as unknown as Parameters<typeof createGetTagListTool>[0]
-    );
-    const result = (await ToolManager.callTool(tool, {})) as string;
-
-    const payload = parsePayload(result);
-
-    expect(payload.tags).toEqual([
-      {
-        tag: "#project",
-        occurrences: 5,
-        frontmatterOccurrences: 3,
-        inlineOccurrences: 2,
-      },
-      {
-        tag: "#weird/tag",
-        occurrences: 4,
-        frontmatterOccurrences: 1,
-        inlineOccurrences: 3,
-      },
-    ]);
-  });
-
-  it("falls back when inline counts omit frontmatter occurrences", async () => {
-    getMockApp().metadataCache.getTags.mockReturnValue({
-      "#project": 1,
-    });
-    getMockApp().metadataCache.getFrontmatterTags.mockReturnValue({
-      "#project": 3,
-    });
-
-    const tool = createGetTagListTool(
-      getMockApp() as unknown as Parameters<typeof createGetTagListTool>[0]
-    );
-    const result = (await ToolManager.callTool(tool, {})) as string;
-
-    const payload = parsePayload(result);
-
-    expect(payload.tags).toEqual([
-      {
-        tag: "#project",
-        occurrences: 4,
-        frontmatterOccurrences: 3,
-        inlineOccurrences: 1,
-      },
-    ]);
-  });
-
-  it("enforces size limits when payload is too large", () => {
-    const payload = {
-      totalUniqueTags: 6000,
-      returnedTagCount: 6000,
-      totalOccurrences: 6000,
-      includedSources: ["frontmatter", "inline"] as Array<"frontmatter" | "inline">,
-      truncated: false,
-      tags: Array.from({ length: 6000 }).map((_, index) => ({
-        tag: `#tag${index}`,
-        occurrences: 1,
-        frontmatterOccurrences: 0,
-        inlineOccurrences: 1,
-      })),
+    const callTool = async (args: Record<string, unknown> = {}): Promise<TagPayload> => {
+      const app = {
+        metadataCache: {
+          getTags: () => inlineAndFrontmatterTags,
+          getFrontmatterTags: () => frontmatterTags,
+        },
+      } as unknown as App;
+      const result = (await ToolManager.callTool(createGetTagListTool(app), args)) as string;
+      return parsePayload(result);
     };
 
-    const bounded = enforceSizeLimit(payload);
+    beforeEach(() => {
+      inlineAndFrontmatterTags = { "#project": 5, "#daily": 4, "#idea": 1 };
+      frontmatterTags = { "#project": 3, "#daily": 2 };
+    });
 
-    expect(bounded.truncated).toBe(true);
-    expect(bounded.tags.length).toBeLessThan(payload.tags.length);
-    expect(bounded.returnedTagCount).toBe(bounded.tags.length);
+    it("returns frontmatter and inline counts per tag, most frequent first", async () => {
+      const payload = await callTool();
+
+      expect(payload.totalUniqueTags).toBe(3);
+      expect(payload.returnedTagCount).toBe(3);
+      expect(payload.totalOccurrences).toBe(10);
+      expect(payload.truncated).toBe(false);
+      expect(payload.includedSources).toEqual(["frontmatter", "inline"]);
+      expect(payload.tags).toEqual([
+        { tag: "#project", occurrences: 5, frontmatterOccurrences: 3, inlineOccurrences: 2 },
+        { tag: "#daily", occurrences: 4, frontmatterOccurrences: 2, inlineOccurrences: 2 },
+        { tag: "#idea", occurrences: 1, frontmatterOccurrences: 0, inlineOccurrences: 1 },
+      ]);
+    });
+
+    it("counts only frontmatter tags when includeInline is false", async () => {
+      const payload = await callTool({ includeInline: false });
+
+      expect(payload.totalUniqueTags).toBe(2);
+      expect(payload.includedSources).toEqual(["frontmatter"]);
+      expect(payload.tags).toEqual([
+        { tag: "#project", occurrences: 3, frontmatterOccurrences: 3, inlineOccurrences: 0 },
+        { tag: "#daily", occurrences: 2, frontmatterOccurrences: 2, inlineOccurrences: 0 },
+      ]);
+    });
+
+    it("keeps only the top maxEntries tags and marks the result truncated", async () => {
+      const payload = await callTool({ maxEntries: 2 });
+
+      expect(payload.totalUniqueTags).toBe(3);
+      expect(payload.returnedTagCount).toBe(2);
+      expect(payload.truncated).toBe(true);
+      expect(payload.tags.map((entry) => entry.tag)).toEqual(["#project", "#daily"]);
+    });
+
+    it("reports zero tags for a vault without any", async () => {
+      inlineAndFrontmatterTags = {};
+      frontmatterTags = {};
+
+      const payload = await callTool();
+
+      expect(payload.totalUniqueTags).toBe(0);
+      expect(payload.tags).toEqual([]);
+      expect(payload.totalOccurrences).toBe(0);
+    });
+
+    it("merges tags that differ only by case, padding or leading hashes", async () => {
+      inlineAndFrontmatterTags = { project: 5, "##Weird/Tag": 4 };
+      frontmatterTags = { "  #Project ": 3, "##Weird/Tag": 1 };
+
+      const payload = await callTool();
+
+      expect(payload.tags).toEqual([
+        { tag: "#project", occurrences: 5, frontmatterOccurrences: 3, inlineOccurrences: 2 },
+        { tag: "#weird/tag", occurrences: 4, frontmatterOccurrences: 1, inlineOccurrences: 3 },
+      ]);
+    });
+
+    it("adds frontmatter occurrences on top of the inline count when the inline total omits them", async () => {
+      inlineAndFrontmatterTags = { "#project": 1 };
+      frontmatterTags = { "#project": 3 };
+
+      const payload = await callTool();
+
+      expect(payload.tags).toEqual([
+        { tag: "#project", occurrences: 4, frontmatterOccurrences: 3, inlineOccurrences: 1 },
+      ]);
+    });
+  });
+
+  describe("enforceSizeLimit()", () => {
+    it("returns a payload under the size limit unchanged", () => {
+      const payload = {
+        totalUniqueTags: 1,
+        returnedTagCount: 1,
+        totalOccurrences: 1,
+        includedSources: ["frontmatter", "inline"] as Array<"frontmatter" | "inline">,
+        truncated: false,
+        tags: [{ tag: "#a", occurrences: 1, frontmatterOccurrences: 0, inlineOccurrences: 1 }],
+      };
+
+      expect(enforceSizeLimit(payload)).toEqual(payload);
+    });
+
+    it("drops tags until the serialized payload fits and marks it truncated", () => {
+      const payload = {
+        totalUniqueTags: 6000,
+        returnedTagCount: 6000,
+        totalOccurrences: 6000,
+        includedSources: ["frontmatter", "inline"] as Array<"frontmatter" | "inline">,
+        truncated: false,
+        tags: Array.from({ length: 6000 }).map((_, index) => ({
+          tag: `#tag${index}`,
+          occurrences: 1,
+          frontmatterOccurrences: 0,
+          inlineOccurrences: 1,
+        })),
+      };
+
+      const bounded = enforceSizeLimit(payload);
+
+      expect(bounded.truncated).toBe(true);
+      expect(bounded.tags.length).toBeLessThan(payload.tags.length);
+      expect(bounded.returnedTagCount).toBe(bounded.tags.length);
+      expect(JSON.stringify(bounded).length).toBeLessThanOrEqual(500_000);
+    });
   });
 });

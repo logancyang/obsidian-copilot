@@ -5,23 +5,19 @@ import { createWriteFileTool, createEditFileTool } from "./ComposerTools";
 
 const mockApp = {} as unknown as App;
 
-const toolFactories = [
-  { name: "readNote", create: createReadNoteTool },
-  { name: "writeFile", create: createWriteFileTool },
-  { name: "editFile", create: createEditFileTool },
-];
-
-describe("tool schemas are JSON-Schema serializable for tool binding", () => {
-  test.each(toolFactories)(
-    "$name schema serializes via LangChain toJsonSchema without throwing",
-    ({ create }) => {
-      const tool = create(mockApp);
-      expect(() => toJsonSchema(tool.schema)).not.toThrow();
-    }
-  );
+describe("toolSchemas", () => {
+  describe("createReadNoteTool()", () => {
+    it("produces a schema that LangChain serializes to JSON Schema for tool binding", () => {
+      expect(() => toJsonSchema(createReadNoteTool(mockApp).schema)).not.toThrow();
+    });
+  });
 
   describe("createWriteFileTool()", () => {
-    it("preserves arbitrary object content", () => {
+    it("produces a schema that LangChain serializes to JSON Schema for tool binding", () => {
+      expect(() => toJsonSchema(createWriteFileTool(mockApp).schema)).not.toThrow();
+    });
+
+    it("keeps arbitrary object content intact when parsing arguments", () => {
       const tool = createWriteFileTool(mockApp);
       const content = {
         nodes: [{ id: "node-1", type: "text", text: "Hello" }],
@@ -32,6 +28,12 @@ describe("tool schemas are JSON-Schema serializable for tool binding", () => {
         path: "canvas/example.canvas",
         content,
       });
+    });
+  });
+
+  describe("createEditFileTool()", () => {
+    it("produces a schema that LangChain serializes to JSON Schema for tool binding", () => {
+      expect(() => toJsonSchema(createEditFileTool(mockApp).schema)).not.toThrow();
     });
   });
 });
