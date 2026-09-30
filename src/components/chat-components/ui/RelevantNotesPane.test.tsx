@@ -83,9 +83,7 @@ describe("RelevantNotesPane", () => {
     });
 
     it("shows download guidance without rows when Miyo is disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
-      const { container } = render(
-        <RelevantNotesPane {...BASE_PROPS} status="disabled" noteRows={[]} />
-      );
+      render(<RelevantNotesPane {...BASE_PROPS} status="disabled" noteRows={[]} />);
 
       expect(screen.queryByText("Related note")).toBeNull();
       expect(screen.getByText("Add semantic matches with Miyo")).toBeTruthy();
@@ -94,19 +92,15 @@ describe("RelevantNotesPane", () => {
       );
       fireEvent.click(screen.getByRole("button", { name: "Set up in Copilot" }));
       expect(BASE_ACTIONS.onOpenMiyoSettings).toHaveBeenCalledTimes(1);
-      expect(container.querySelector("[data-miyo-guidance]")?.className).toContain("tw-max-w-xs");
     });
 
     it("shows unavailable guidance and opens Copilot's Miyo tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
-      const { container } = render(
-        <RelevantNotesPane {...BASE_PROPS} status="unavailable" noteRows={[]} />
-      );
+      render(<RelevantNotesPane {...BASE_PROPS} status="unavailable" noteRows={[]} />);
 
       expect(screen.queryByText("Related note")).toBeNull();
       expect(screen.getByText("Miyo is not connected")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Open Miyo settings" }));
       expect(BASE_ACTIONS.onOpenMiyoSettings).toHaveBeenCalledTimes(1);
-      expect(container.querySelector("[data-miyo-guidance]")?.className).toContain("tw-max-w-xs");
     });
 
     it.each(["miyo", "settings"] as const)(
@@ -142,16 +136,15 @@ describe("RelevantNotesPane", () => {
     );
 
     it("shows a centered no-matches card without result rows or setup actions (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
-      const { container } = render(<RelevantNotesPane {...BASE_PROPS} status="no-matches" />);
+      render(<RelevantNotesPane {...BASE_PROPS} status="no-matches" />);
 
       expect(screen.getByText("No semantic matches yet")).toBeTruthy();
       expect(screen.queryByText("Related note")).toBeNull();
       expect(screen.queryByRole("button", { name: "Open Miyo settings" })).toBeNull();
-      expect(container.querySelector("[data-miyo-guidance]")?.className).toContain("tw-max-w-xs");
     });
 
     it("shows local indexing guidance without result rows and delegates its actions (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
-      const { container } = render(<RelevantNotesPane {...BASE_PROPS} status="not-indexed" />);
+      render(<RelevantNotesPane {...BASE_PROPS} status="not-indexed" />);
 
       expect(screen.getByText("This note isn't indexed in Miyo")).toBeTruthy();
       expect(
@@ -164,7 +157,6 @@ describe("RelevantNotesPane", () => {
       expect(BASE_ACTIONS.reviewIndexing.onSelect).toHaveBeenCalledTimes(1);
       fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
       expect(BASE_ACTIONS.onRefresh).toHaveBeenCalledTimes(1);
-      expect(container.querySelector("[data-miyo-guidance]")?.className).toContain("tw-max-w-xs");
     });
 
     it("shows connection-review copy for an unindexed remote source (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {

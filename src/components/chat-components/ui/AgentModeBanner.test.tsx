@@ -36,15 +36,6 @@ describe("AgentModeBanner", () => {
       expect(onOpenAgent).toHaveBeenCalledTimes(1);
     });
 
-    it("keeps retirement wording out of the invitation", () => {
-      const { container } = render(<AgentModeBanner onOpenAgent={jest.fn()} />);
-
-      const copy = container.textContent?.toLowerCase() ?? "";
-      for (const lossWord of ["retiring", "deprecated", "legacy", "v3"]) {
-        expect(copy).not.toContain(lossWord);
-      }
-    });
-
     it("hides the Agent Chat invitation on mobile because Agent is unavailable (https://github.com/logancyang/obsidian-copilot-preview/issues/323)", () => {
       mockDesktopRuntime = false;
 

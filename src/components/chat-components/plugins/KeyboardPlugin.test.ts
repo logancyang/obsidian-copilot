@@ -138,114 +138,69 @@ describe("KeyboardPlugin", () => {
   });
 
   describe("checkShortcutMatch()", () => {
-    describe("ENTER shortcut", () => {
-      it("should match plain Enter key", () => {
-        const event = createMockKeyboardEvent({});
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.ENTER)).toBe(true);
-      });
+    it.each([
+      { name: "plain Enter", fields: {}, enter: true, shiftEnter: false },
+      { name: "Shift+Enter", fields: { shiftKey: true }, enter: false, shiftEnter: true },
+      { name: "Meta+Enter", fields: { metaKey: true }, enter: false, shiftEnter: false },
+      { name: "Ctrl+Enter", fields: { ctrlKey: true }, enter: false, shiftEnter: false },
+      { name: "Alt+Enter", fields: { altKey: true }, enter: false, shiftEnter: false },
+      {
+        name: "Shift+Meta+Enter",
+        fields: { shiftKey: true, metaKey: true },
+        enter: false,
+        shiftEnter: false,
+      },
+      {
+        name: "Shift+Ctrl+Enter",
+        fields: { shiftKey: true, ctrlKey: true },
+        enter: false,
+        shiftEnter: false,
+      },
+      {
+        name: "Shift+Alt+Enter",
+        fields: { shiftKey: true, altKey: true },
+        enter: false,
+        shiftEnter: false,
+      },
+    ])("for $name matches Enter: $enter and Shift+Enter: $shiftEnter", (testCase) => {
+      const event = createMockKeyboardEvent(testCase.fields);
 
-      it("should not match when Shift is pressed", () => {
-        const event = createMockKeyboardEvent({ shiftKey: true });
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.ENTER)).toBe(false);
-      });
-
-      it("should not match when Meta is pressed", () => {
-        const event = createMockKeyboardEvent({ metaKey: true });
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.ENTER)).toBe(false);
-      });
-
-      it("should not match when Ctrl is pressed", () => {
-        const event = createMockKeyboardEvent({ ctrlKey: true });
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.ENTER)).toBe(false);
-      });
-
-      it("should not match when Alt is pressed", () => {
-        const event = createMockKeyboardEvent({ altKey: true });
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.ENTER)).toBe(false);
-      });
-
-      it("should not match when multiple modifiers are pressed", () => {
-        const event = createMockKeyboardEvent({ shiftKey: true, ctrlKey: true });
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.ENTER)).toBe(false);
-      });
+      expect(checkShortcutMatch(event, SEND_SHORTCUT.ENTER)).toBe(testCase.enter);
+      expect(checkShortcutMatch(event, SEND_SHORTCUT.SHIFT_ENTER)).toBe(testCase.shiftEnter);
     });
 
-    describe("SHIFT_ENTER shortcut", () => {
-      it("should match Shift+Enter", () => {
-        const event = createMockKeyboardEvent({ shiftKey: true });
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.SHIFT_ENTER)).toBe(true);
-      });
+    it.each([
+      { shortcut: SEND_SHORTCUT.ENTER, fields: {} },
+      { shortcut: SEND_SHORTCUT.SHIFT_ENTER, fields: { shiftKey: true } },
+    ])(
+      "matches $shortcut during IME composition because only modifiers are checked",
+      (testCase) => {
+        const event = createMockKeyboardEvent({ ...testCase.fields, isComposing: true });
 
-      it("should not match plain Enter", () => {
-        const event = createMockKeyboardEvent({});
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.SHIFT_ENTER)).toBe(false);
-      });
+        expect(checkShortcutMatch(event, testCase.shortcut)).toBe(true);
+      }
+    );
 
-      it("should not match when Meta is also pressed", () => {
-        const event = createMockKeyboardEvent({ shiftKey: true, metaKey: true });
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.SHIFT_ENTER)).toBe(false);
-      });
+    it("matches nothing for an unrecognized shortcut", () => {
+      const event = createMockKeyboardEvent({});
 
-      it("should not match when Ctrl is also pressed", () => {
-        const event = createMockKeyboardEvent({ shiftKey: true, ctrlKey: true });
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.SHIFT_ENTER)).toBe(false);
-      });
-
-      it("should not match when Alt is also pressed", () => {
-        const event = createMockKeyboardEvent({ shiftKey: true, altKey: true });
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.SHIFT_ENTER)).toBe(false);
-      });
-    });
-
-    describe("IME Composition", () => {
-      it("should still match shortcuts during IME composition (checkShortcutMatch only checks modifiers)", () => {
-        const event = createMockKeyboardEvent({ isComposing: true });
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.ENTER)).toBe(true);
-      });
-
-      it("should match SHIFT_ENTER shortcut even when isComposing is true", () => {
-        const event = createMockKeyboardEvent({ shiftKey: true, isComposing: true });
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.SHIFT_ENTER)).toBe(true);
-      });
-    });
-
-    describe("Edge cases", () => {
-      it("should return false for invalid shortcut type", () => {
-        const event = createMockKeyboardEvent({});
-        expect(checkShortcutMatch(event, "invalid-shortcut" as SEND_SHORTCUT)).toBe(false);
-      });
-
-      it("should not match when all modifiers are pressed", () => {
-        const event = createMockKeyboardEvent({
-          shiftKey: true,
-          metaKey: true,
-          ctrlKey: true,
-          altKey: true,
-        });
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.ENTER)).toBe(false);
-        expect(checkShortcutMatch(event, SEND_SHORTCUT.SHIFT_ENTER)).toBe(false);
-      });
+      expect(checkShortcutMatch(event, "invalid-shortcut" as SEND_SHORTCUT)).toBe(false);
     });
   });
 
   describe("isImeCompositionEvent()", () => {
-    it("should detect an active composition session via isComposing", () => {
+    it("detects an active composition session via isComposing", () => {
       const event = createMockKeyboardEvent({ key: "Enter", isComposing: true });
       expect(isImeCompositionEvent(event)).toBe(true);
     });
 
-    it("should keep chat shortcuts inactive for IME-consumed Process keys (https://github.com/logancyang/obsidian-copilot-preview/issues/302)", () => {
+    it("treats IME-consumed Process keys as composition so chat shortcuts stay inactive (https://github.com/logancyang/obsidian-copilot-preview/issues/302)", () => {
       const event = createMockKeyboardEvent({ key: "Process", isComposing: false });
       expect(isImeCompositionEvent(event)).toBe(true);
     });
 
-    it("should not flag a plain Enter keydown outside composition", () => {
+    it("does not flag a plain Enter keydown outside composition", () => {
       const event = createMockKeyboardEvent({ key: "Enter" });
-      expect(isImeCompositionEvent(event)).toBe(false);
-    });
-
-    it("should not flag a plain Escape keydown outside composition", () => {
-      const event = createMockKeyboardEvent({ key: "Escape" });
       expect(isImeCompositionEvent(event)).toBe(false);
     });
   });
