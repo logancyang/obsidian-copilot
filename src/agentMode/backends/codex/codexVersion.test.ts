@@ -140,8 +140,8 @@ describe("codexVersion", () => {
     );
   });
   describe("resolveSupportedCodexAcpEntry()", () => {
-    it.each(["0.0.45", "1.13.0", "2.0.0-beta.1"])(
-      "rejects adapter %s whose read-only mode edits without approval https://github.com/Brevilabs/obsidian-copilot-private/issues/618",
+    it.each(["0.0.44", "0.0.45", "0.0.45-beta.1", "1.13.0", "2.0.0-beta.1"])(
+      "rejects adapter %s below the supported minimum https://github.com/Brevilabs/obsidian-copilot-private/issues/618 https://github.com/logancyang/obsidian-copilot/issues/2967",
       (version) => {
         expect(() =>
           resolveSupportedCodexAcpEntry(
@@ -184,26 +184,6 @@ describe("codexVersion", () => {
 
       expect(() =>
         resolveSupportedCodexAcpEntry("/usr/local/bin/codex-acp", "darwin", packageFileSystem)
-      ).toThrow("not supported");
-    });
-
-    it("https://github.com/logancyang/obsidian-copilot/issues/2967 rejects an adapter without bundled CLI authentication", () => {
-      expect(() =>
-        resolveSupportedCodexAcpEntry(
-          "/usr/local/bin/codex-acp",
-          "darwin",
-          packageFs(UNIX_ENTRY, metadata("0.0.44"))
-        )
-      ).toThrow("0.0.44 is not supported");
-    });
-
-    it("https://github.com/logancyang/obsidian-copilot/issues/2967 rejects a prerelease at the bundled CLI authentication minimum", () => {
-      expect(() =>
-        resolveSupportedCodexAcpEntry(
-          "/usr/local/bin/codex-acp",
-          "darwin",
-          packageFs(UNIX_ENTRY, metadata("0.0.45-beta.1"))
-        )
       ).toThrow("not supported");
     });
 
