@@ -11,7 +11,7 @@ import {
 import type { Skill } from "./types";
 
 describe("vaultEventExpectations", () => {
-  describe("absToVaultRel", () => {
+  describe("absToVaultRel()", () => {
     it("strips a vault-root prefix", () => {
       expect(absToVaultRel("/vault/copilot/skills/foo", "/vault")).toBe("copilot/skills/foo");
     });
@@ -29,7 +29,7 @@ describe("vaultEventExpectations", () => {
     });
   });
 
-  describe("matchExpectation", () => {
+  describe("matchExpectation()", () => {
     it("matches an exact path expectation by path equality only", () => {
       const exp: Expectation = { kind: "exists", vaultRelPath: "copilot/skills/foo/SKILL.md" };
       expect(matchExpectation(exp, "copilot/skills/foo/SKILL.md")).toBe(true);
@@ -45,7 +45,7 @@ describe("vaultEventExpectations", () => {
     });
   });
 
-  describe("buildToggleExpectations", () => {
+  describe("buildToggleExpectations()", () => {
     it("on enable, expects the symlink to exist and SKILL.md to be modified", () => {
       const skill = makeSkill();
       const exps = buildToggleExpectations(skill, true, "/vault/.claude/skills", "/vault");
@@ -65,7 +65,7 @@ describe("vaultEventExpectations", () => {
     });
   });
 
-  describe("buildDeleteExpectations", () => {
+  describe("buildDeleteExpectations()", () => {
     it("expects the subtree to be gone and each link to be missing", () => {
       const skill = makeSkill();
       const exps = buildDeleteExpectations(
@@ -81,7 +81,7 @@ describe("vaultEventExpectations", () => {
     });
   });
 
-  describe("buildUpdatePropertiesExpectations", () => {
+  describe("buildUpdatePropertiesExpectations()", () => {
     it("expects one modify event on the canonical SKILL.md", () => {
       const skill = makeSkill();
       const exps = buildUpdatePropertiesExpectations(skill, "/vault");
@@ -89,7 +89,7 @@ describe("vaultEventExpectations", () => {
     });
   });
 
-  describe("buildRenameExpectations", () => {
+  describe("buildRenameExpectations()", () => {
     it("expects the old subtree to vanish and the new one to appear", () => {
       const skill = makeSkill();
       const exps = buildRenameExpectations(
@@ -108,7 +108,7 @@ describe("vaultEventExpectations", () => {
     });
   });
 
-  describe("buildReconcileExpectations", () => {
+  describe("buildReconcileExpectations()", () => {
     it("turns created/removedOrphans into exists/missing expectations", () => {
       const exps = buildReconcileExpectations(
         {

@@ -75,13 +75,40 @@ function renderRow(onRevealInVault: () => void) {
   return { ...utils, containerRef };
 }
 
+const mirroredSkill: Skill = {
+  name: "writing-helper",
+  description: "Helps with writing.",
+  filePath: "/vault/.claude/skills/writing-helper/SKILL.md",
+  dirPath: "/vault/.claude/skills/writing-helper",
+  body: "",
+  enabledAgents: [],
+  location: { kind: "project", agentDirs: ["claude", "codex"] },
+};
+
+function renderMirroredRow() {
+  const containerRef: React.RefObject<HTMLDivElement> = { current: null };
+  return render(
+    <AppContext.Provider value={{} as App}>
+      <div ref={containerRef} />
+      <SkillRow
+        skill={mirroredSkill}
+        agents={[]}
+        agentDirsProjectRel={{ claude: ".claude/skills", codex: ".codex/skills" }}
+        onRevealInVault={() => {}}
+        containerRef={containerRef}
+      />
+    </AppContext.Provider>
+  );
+}
+
 describe("SkillRow", () => {
-  describe("overflow menu", () => {
+  describe("SkillRow()", () => {
     afterEach(() => {
       activeDocument.body.removeAttribute(SCROLL_LOCK_ATTR);
+      lastMigrateModalOptions = null;
     });
 
-    it("does not engage a body scroll lock when the menu opens", () => {
+    it("lists Reveal in vault in the overflow menu without engaging a body scroll lock", () => {
       renderRow(() => {});
 
       openMenu();
@@ -99,40 +126,8 @@ describe("SkillRow", () => {
 
       expect(onRevealInVault).toHaveBeenCalledTimes(1);
     });
-  });
 
-  describe("migrate-to-shared-folder confirmation", () => {
-    const mirroredSkill: Skill = {
-      name: "writing-helper",
-      description: "Helps with writing.",
-      filePath: "/vault/.claude/skills/writing-helper/SKILL.md",
-      dirPath: "/vault/.claude/skills/writing-helper",
-      body: "",
-      enabledAgents: [],
-      location: { kind: "project", agentDirs: ["claude", "codex"] },
-    };
-
-    function renderMirroredRow() {
-      const containerRef: React.RefObject<HTMLDivElement> = { current: null };
-      return render(
-        <AppContext.Provider value={{} as App}>
-          <div ref={containerRef} />
-          <SkillRow
-            skill={mirroredSkill}
-            agents={[]}
-            agentDirsProjectRel={{ claude: ".claude/skills", codex: ".codex/skills" }}
-            onRevealInVault={() => {}}
-            containerRef={containerRef}
-          />
-        </AppContext.Provider>
-      );
-    }
-
-    afterEach(() => {
-      lastMigrateModalOptions = null;
-    });
-
-    it("targets the folder derived from the Copilot root, not the retired skills field", () => {
+    it("confirms migration into the folder derived from the Copilot root, not the retired skills field", () => {
       getEffectiveSkillsFolder.mockReturnValue("team/copilot/skills");
       renderMirroredRow();
 

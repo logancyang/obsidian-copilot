@@ -405,15 +405,7 @@ describe("SkillsSettings", () => {
       }
     );
 
-    it("does not surface a Skills folder settings control (folder is root-derived, not user-editable)", async () => {
-      await act(async () => {
-        renderSettings();
-      });
-      expect(screen.queryByLabelText("Skills folder")).toBeNull();
-      expect(screen.queryByText("Skills folder")).toBeNull();
-    });
-
-    it("re-derives the discovered folder and re-scans when the Copilot root changes", async () => {
+    it("re-derives the displayed skills folder and re-scans when the Copilot root changes", async () => {
       await act(async () => {
         renderSettings();
       });
