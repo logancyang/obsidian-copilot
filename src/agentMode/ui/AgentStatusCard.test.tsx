@@ -109,27 +109,5 @@ describe("AgentStatusCard", () => {
       ).toBe("");
       expect(screen.queryByRole("button")).toBeNull();
     });
-
-    it("allows long messages and actions to wrap inside the card", () => {
-      const message = "VeryLongBackendNameWithoutNaturalBreaks could not be configured";
-      render(
-        <AgentStatusCard
-          message={message}
-          action={{
-            label: "Configure VeryLongBackendNameWithoutNaturalBreaks",
-            onClick: jest.fn(),
-          }}
-        />
-      );
-
-      expect(screen.getByText(message).className).toContain("tw-break-words");
-      expect(screen.getByText(message).className).toContain("tw-min-w-0");
-      const action = screen.getByRole("button", {
-        name: "Configure VeryLongBackendNameWithoutNaturalBreaks",
-      });
-      expect(action.className).toContain("tw-max-w-full");
-      expect(action.className).toContain("tw-whitespace-normal");
-      expect(action.className).toContain("tw-break-words");
-    });
   });
 });

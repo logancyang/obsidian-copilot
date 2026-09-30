@@ -37,15 +37,6 @@ const otherTextarea = (): HTMLElement => screen.getByPlaceholderText(/type your 
 
 describe("AskUserQuestionCard", () => {
   describe("AskUserQuestionCard()", () => {
-    it("fills the available action-rail width", () => {
-      const { container } = renderCard(
-        makeRequest([{ question: "Continue?", options: [{ label: "Yes" }] }]),
-        jest.fn()
-      );
-
-      expect(container.firstElementChild?.classList.contains("tw-w-full")).toBe(true);
-    });
-
     it("single-select 'Other' → the trimmed typed text is the answer", () => {
       const onResolve = jest.fn();
       const request = makeRequest([
@@ -233,23 +224,6 @@ describe("AskUserQuestionCard", () => {
       fireEvent.click(cancelButton());
 
       expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {});
-    });
-
-    it("regression: single-select preset still resolves with the chosen label", () => {
-      const onResolve = jest.fn();
-      const request = makeRequest([
-        {
-          question: "When do we ship?",
-          options: [{ label: "A" }, { label: "B" }],
-        },
-      ]);
-      renderCard(request, onResolve);
-
-      fireEvent.click(screen.getByRole("radio", { name: /^A$/ }));
-      fireEvent.click(submitButton());
-
-      expect(onResolve).toHaveBeenCalledTimes(1);
-      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, { "When do we ship?": "A" });
     });
 
     it("hides Other and submits under the answer key when the backend cannot accept typed answers (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", () => {

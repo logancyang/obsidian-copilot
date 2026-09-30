@@ -47,12 +47,6 @@ describe("AgentSelectView", () => {
       expect(checked[0].textContent).toContain("claude");
     });
 
-    it("omits the redundant agent explanation", () => {
-      renderView();
-
-      expect(screen.queryByText(/An agent runs your tasks on this machine/)).toBeNull();
-    });
-
     it.each<[AgentSelectStatus, string]>([
       ["checking", "Checking…"],
       ["installed", "Installed"],

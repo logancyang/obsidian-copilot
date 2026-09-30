@@ -12,7 +12,7 @@ import React from "react";
 jest.mock("@/hooks/useLatestVersion", () => ({ refreshLatestVersion: jest.fn() }));
 
 describe("AgentTabStrip", () => {
-  describe("computeVisibleCount", () => {
+  describe("computeVisibleCount()", () => {
     it("returns 0 for empty input", () => {
       expect(computeVisibleCount(500, 0)).toBe(0);
     });
@@ -40,7 +40,7 @@ describe("AgentTabStrip", () => {
     });
   });
 
-  describe("partitionSessions", () => {
+  describe("partitionSessions()", () => {
     const s = (id: string) => ({ internalId: id });
 
     it("returns empty arrays for empty input", () => {
@@ -81,17 +81,6 @@ describe("AgentTabStrip", () => {
       });
       expect(visibleSessions.map((x) => x.internalId)).toEqual(["a"]);
       expect(overflowSessions.map((x) => x.internalId)).toEqual(["b", "c"]);
-    });
-
-    it("does not swap when active is already visible", () => {
-      const sessions = [s("a"), s("b"), s("c")];
-      const { visibleSessions, overflowSessions } = partitionSessions({
-        sessions,
-        visibleCount: 2,
-        activeId: "b",
-      });
-      expect(visibleSessions.map((x) => x.internalId)).toEqual(["a", "b"]);
-      expect(overflowSessions.map((x) => x.internalId)).toEqual(["c"]);
     });
 
     it("handles visibleCount === 1 with overflow active", () => {

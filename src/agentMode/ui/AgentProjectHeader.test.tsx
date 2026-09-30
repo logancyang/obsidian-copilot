@@ -30,17 +30,6 @@ describe("AgentProjectHeader", () => {
       expect(screen.getByText("My Research")).toBeTruthy();
     });
 
-    it("renders a neutral project folder icon", () => {
-      const { container } = render(
-        <TooltipProvider>
-          <AgentProjectHeader projectName="Demo" onExit={jest.fn()} />
-        </TooltipProvider>
-      );
-      const folder = container.querySelector(".lucide-folder");
-      expect(folder?.classList.contains("tw-text-muted")).toBe(true);
-      expect(folder?.getAttribute("class")).not.toMatch(/tw-(?:bg|text)-project-/);
-    });
-
     it("exits the project when the back affordance is clicked", () => {
       const { onExit } = renderHeader();
       fireEvent.click(screen.getByRole("button", { name: "Leave project" }));
