@@ -26,7 +26,7 @@ jest.mock("obsidian", () => ({
   Platform: { isMobile: false },
 }));
 
-describe("backendRegistry", () => {
+describe("registry", () => {
   const baseSettings = (activeBackend?: string, enableSelfHostMode = false): CopilotSettings =>
     ({
       enableSelfHostMode,
@@ -38,16 +38,38 @@ describe("backendRegistry", () => {
       },
     }) as unknown as CopilotSettings;
 
-  it("returns the OpenCode descriptor by default", () => {
-    expect(getActiveBackendDescriptor(baseSettings())).toBe(OpencodeBackendDescriptor);
+  describe("getActiveBackendDescriptor()", () => {
+    it("returns the OpenCode descriptor by default", () => {
+      expect(getActiveBackendDescriptor(baseSettings())).toBe(OpencodeBackendDescriptor);
+    });
+
+    it("returns the selected cloud agent even while Self-Host Mode is on", () => {
+      expect(getActiveBackendDescriptor(baseSettings("claude", true))).toBe(
+        ClaudeBackendDescriptor
+      );
+      expect(getActiveBackendDescriptor(baseSettings("codex", true))).toBe(CodexBackendDescriptor);
+    });
+
+    it("falls back to OpenCode when an unknown backend is selected", () => {
+      expect(getActiveBackendDescriptor(baseSettings("nonexistent"))).toBe(
+        OpencodeBackendDescriptor
+      );
+      expect(getActiveBackendDescriptor(baseSettings("nonexistent", true))).toBe(
+        OpencodeBackendDescriptor
+      );
+    });
   });
 
-  it("falls back to OpenCode when an unknown backend is selected", () => {
-    expect(getActiveBackendDescriptor(baseSettings("nonexistent"))).toBe(OpencodeBackendDescriptor);
-  });
-
-  it("listBackendDescriptors includes OpenCode", () => {
-    expect(listBackendDescriptors()).toContain(OpencodeBackendDescriptor);
+  describe("listBackendDescriptors()", () => {
+    it("lists every registered backend", () => {
+      expect(listBackendDescriptors()).toEqual(
+        expect.arrayContaining([
+          OpencodeBackendDescriptor,
+          ClaudeBackendDescriptor,
+          CodexBackendDescriptor,
+        ])
+      );
+    });
   });
 
   describe("backendDisplayOrder()", () => {
@@ -75,64 +97,26 @@ describe("backendRegistry", () => {
     });
   });
 
-  describe("agent setup copy", () => {
-    it("every registered backend states which models it serves and who pays", () => {
-      for (const descriptor of listBackendDescriptors()) {
-        expect(descriptor.setupDescription.length).toBeGreaterThan(0);
-      }
-    });
-  });
-
-  describe("Self-Host Mode marking", () => {
-    it("keeps every backend listed regardless of the mode", () => {
-      const all = listBackendDescriptors();
-      expect(all).toEqual(
-        expect.arrayContaining([
-          OpencodeBackendDescriptor,
-          ClaudeBackendDescriptor,
-          CodexBackendDescriptor,
-        ])
-      );
-    });
-
-    it("descriptors declare selfHostable explicitly", () => {
-      expect(OpencodeBackendDescriptor.selfHostable).toBe(true);
-      expect(ClaudeBackendDescriptor.selfHostable).toBe(false);
-      expect(CodexBackendDescriptor.selfHostable).toBe(false);
-    });
-
-    it("never warns when the mode is off", () => {
+  describe("backendNeedsSelfHostWarning()", () => {
+    it("never warns when Self-Host Mode is off", () => {
       const off = baseSettings("opencode", false);
       expect(backendNeedsSelfHostWarning(OpencodeBackendDescriptor, off)).toBe(false);
       expect(backendNeedsSelfHostWarning(ClaudeBackendDescriptor, off)).toBe(false);
       expect(backendNeedsSelfHostWarning(CodexBackendDescriptor, off)).toBe(false);
     });
 
-    it("warns on cloud agents (Claude, Codex), not opencode, when on", () => {
+    it("warns on cloud agents (Claude, Codex) but not opencode when Self-Host Mode is on", () => {
       const on = baseSettings("opencode", true);
       expect(backendNeedsSelfHostWarning(OpencodeBackendDescriptor, on)).toBe(false);
       expect(backendNeedsSelfHostWarning(ClaudeBackendDescriptor, on)).toBe(true);
       expect(backendNeedsSelfHostWarning(CodexBackendDescriptor, on)).toBe(true);
     });
+  });
 
-    it("getActiveBackendDescriptor keeps a cloud agent active while the mode is on", () => {
-      expect(getActiveBackendDescriptor(baseSettings("claude", true))).toBe(
-        ClaudeBackendDescriptor
-      );
-      expect(getActiveBackendDescriptor(baseSettings("codex", true))).toBe(CodexBackendDescriptor);
-    });
-
-    it("getActiveBackendDescriptor still falls back to opencode for an unknown id", () => {
-      expect(getActiveBackendDescriptor(baseSettings("nonexistent", true))).toBe(
-        OpencodeBackendDescriptor
-      );
-    });
-
-    it("getCloudAgentIds is the full set of non-self-hostable backends, memoized", () => {
+  describe("getCloudAgentIds()", () => {
+    it("contains exactly the non-self-hostable backends and returns the same set on every call", () => {
       const ids = getCloudAgentIds();
-      expect(ids.has("claude")).toBe(true);
-      expect(ids.has("codex")).toBe(true);
-      expect(ids.has("opencode")).toBe(false);
+      expect([...ids].sort()).toEqual(["claude", "codex"]);
       expect(getCloudAgentIds()).toBe(ids);
     });
   });

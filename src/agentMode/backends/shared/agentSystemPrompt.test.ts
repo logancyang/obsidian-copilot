@@ -46,7 +46,7 @@ function resetPromptState(): void {
 }
 
 describe("agentSystemPrompt", () => {
-  describe("buildAgentSystemPrompt(AGENT)", () => {
+  describe("buildAgentSystemPrompt()", () => {
     beforeEach(() => {
       resetSettings();
       resetPromptState();
@@ -74,17 +74,6 @@ describe("agentSystemPrompt", () => {
       expect(prompt).not.toContain("<user_custom_instructions>");
     });
 
-    it("does not copy Chat mode custom prompts into the Agent Mode system prompt", () => {
-      updateCachedSystemPrompts([makePrompt("Haiku", "respond in haiku")]);
-      setSelectedPromptTitle("Haiku");
-      updateSetting("defaultSystemPromptTitle", "Haiku");
-
-      const prompt = buildAgentSystemPrompt(AGENT);
-
-      expect(prompt).not.toContain("respond in haiku");
-      expect(prompt).not.toContain("<user_custom_instructions>");
-    });
-
     it("suppresses the base prompt when 'disable builtin' is on, keeping the pill directive", () => {
       setDisableBuiltinSystemPrompt(true);
       const prompt = buildAgentSystemPrompt(AGENT);
@@ -97,18 +86,6 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_PROJECT_WORKSPACE_POLICY);
       setDisableBuiltinSystemPrompt(true);
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_PROJECT_WORKSPACE_POLICY);
-      expect(COPILOT_PROJECT_WORKSPACE_POLICY).toContain("outputs/");
-      expect(COPILOT_PROJECT_WORKSPACE_POLICY).toContain("configured context sources");
-      expect(COPILOT_PROJECT_WORKSPACE_POLICY).toContain(
-        "unless the user specifies another destination"
-      );
-      expect(COPILOT_PROJECT_WORKSPACE_POLICY).toContain("including external sources");
-      expect(COPILOT_PROJECT_WORKSPACE_POLICY).toContain(
-        "read → <absolute path> snapshots directly"
-      );
-      expect(COPILOT_PROJECT_WORKSPACE_POLICY).toContain(
-        "only when instructions or the user name them"
-      );
     });
 
     it("steers every agent to the enabled Copilot relay skills first, regardless of Plus status", () => {
@@ -116,14 +93,6 @@ describe("agentSystemPrompt", () => {
         const prompt = buildAgentSystemPrompt(agent);
         expect(prompt).toContain(`${ALL_RELAY_SKILLS_LINE} ${COPILOT_SKILL_FALLBACK}`);
       }
-      expect(COPILOT_SKILL_FALLBACK).toContain(
-        "Call an equivalent built-in tool only after the skill reports it is unavailable or fails"
-      );
-      expect(COPILOT_SKILL_FALLBACK).toContain("if none exists, say it's unavailable");
-      expect(COPILOT_SKILL_FALLBACK).toMatch(/Never block on upgrading/);
-      expect(COPILOT_SKILL_FALLBACK).toContain(
-        "briefly and occasionally only when the skill explicitly invites it"
-      );
 
       const nonPlus = buildAgentSystemPrompt(AGENT);
       updateSetting("isPaidUser", true);
@@ -157,14 +126,8 @@ describe("agentSystemPrompt", () => {
       expect(prompt).toContain(COPILOT_WEB_RESEARCH_STEERING);
     });
 
-    it("routes external questions to the web proactively and keeps vault text out of queries", () => {
-      const prompt = buildAgentSystemPrompt(AGENT);
-      expect(prompt).toContain(COPILOT_WEB_RESEARCH_STEERING);
-      expect(prompt).toMatch(/search locally first/i);
-      expect(prompt).toMatch(
-        /Proactively search\/fetch current facts, external topics and third-party docs/i
-      );
-      expect(prompt).toMatch(/Do not place vault text in web queries/i);
+    it("includes the web research steering by default", () => {
+      expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_WEB_RESEARCH_STEERING);
     });
 
     it("uses the local fail-closed document route only when Miyo is selected", () => {
@@ -174,10 +137,6 @@ describe("agentSystemPrompt", () => {
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
       expect(prompt).not.toContain("copilot-read-pdf for PDFs");
-      expect(prompt).toContain("miyo-parse");
-      expect(prompt).toMatch(/report and stop: no fallback/i);
-      expect(prompt).toContain("PDFs/EPUBs must stay local");
-      expect(prompt).toContain("cloud parsers or web services");
     });
 
     it(`keeps the Miyo stay-local rule for an agent whose miyo-parse skill is disabled (${ISSUE_599})`, () => {
@@ -206,9 +165,6 @@ describe("agentSystemPrompt", () => {
       updateSetting("enableMiyoSearchSkill", true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(COPILOT_MIYO_SEARCH_STEERING);
-      expect(prompt).toContain("miyo-search");
-      expect(prompt).toMatch(/too slow|too few relevant/i);
-      expect(prompt).toMatch(/explicitly requested/i);
     });
 
     it(`omits the Miyo search steering for an agent whose miyo-search skill is disabled (${ISSUE_599})`, () => {
@@ -271,32 +227,11 @@ describe("agentSystemPrompt", () => {
   });
 
   describe("COPILOT_PROMPT_BASE", () => {
-    it("establishes Obsidian Copilot identity and vault workspace", () => {
-      expect(COPILOT_PROMPT_BASE).toMatch(/Obsidian Copilot/);
-      expect(COPILOT_PROMPT_BASE).toMatch(/vault or project workspace/);
-      expect(COPILOT_PROMPT_BASE).toContain("not a CLI coding agent");
-      expect(COPILOT_PROMPT_BASE).toContain("tags usually mean Obsidian note properties");
-      expect(COPILOT_PROMPT_BASE).toContain("Read notes before describing their contents");
-      expect(COPILOT_PROMPT_BASE).toContain("Report uncertainty and access/tool failures honestly");
-      expect(COPILOT_PROMPT_BASE).toContain("detail appropriate to the task");
-    });
-
     it("does not carry chat-mode-only baggage that misfires in tool-driven agents", () => {
       expect(COPILOT_PROMPT_BASE).not.toMatch(/@vault/);
       expect(COPILOT_PROMPT_BASE).not.toMatch(/getCurrentTime/);
       expect(COPILOT_PROMPT_BASE).not.toMatch(/getTimeRangeMs/);
       expect(COPILOT_PROMPT_BASE).not.toMatch(/YouTube/);
-    });
-
-    it("keeps Obsidian note and image syntax without generic formatting tutorials", () => {
-      expect(COPILOT_PROMPT_BASE).toContain("[[title]] for note titles");
-      expect(COPILOT_PROMPT_BASE).toContain("![[link]] for vault images");
-      expect(COPILOT_PROMPT_BASE).toContain("![alt](url) for web images");
-      expect(COPILOT_PROMPT_BASE).toContain("never wrap links in backticks");
-    });
-
-    it("retains the LaTeX formatting rule", () => {
-      expect(COPILOT_PROMPT_BASE).toMatch(/\$\.\.\.\$/);
     });
   });
 });

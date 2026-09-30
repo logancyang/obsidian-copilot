@@ -2,13 +2,13 @@ import { signOutFromClaude } from "./claudeAuth";
 jest.mock("./claudeAuth", () => ({ signOutFromClaude: jest.fn() }));
 
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import type { BackendState, InstallState } from "@/agentMode/session/types";
+import type { BackendState } from "@/agentMode/session/types";
 import { resetSettings, setSettings, type CopilotSettings } from "@/settings/model";
 import { MIYO_SEARCH_FOLDER_ENV, MIYO_SEARCH_SCOPE_ENV } from "@/builtinSkills/builtinSkills";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { FileSystemAdapter, type App } from "obsidian";
 import { resolveClaudeBinary } from "./claudeBinaryResolver";
-import { claudeCompatibilityStore } from "./claudeCompatibilityStore";
+import { probeClaudeVersion } from "./claudeVersion";
 import {
   ClaudeBackendDescriptor,
   getClaudeInstallState,
@@ -23,26 +23,15 @@ jest.mock("./claudeBinaryResolver", () => ({
   resolveClaudeBinary: jest.fn(),
 }));
 
-jest.mock("./claudeCompatibilityStore", () => ({
-  claudeCompatibilityStore: {
-    get: jest.fn(),
-    refresh: jest.fn(),
-    subscribe: jest.fn(),
-  },
+jest.mock("./claudeVersion", () => ({
+  ...jest.requireActual("./claudeVersion"),
+  probeClaudeVersion: jest.fn(),
 }));
 
 const mockResolveClaudeBinary = resolveClaudeBinary as jest.MockedFunction<
   typeof resolveClaudeBinary
 >;
-const mockGetCompatibility = claudeCompatibilityStore.get as jest.MockedFunction<
-  typeof claudeCompatibilityStore.get
->;
-const mockRefreshCompatibility = claudeCompatibilityStore.refresh as jest.MockedFunction<
-  typeof claudeCompatibilityStore.refresh
->;
-const mockSubscribeCompatibility = claudeCompatibilityStore.subscribe as jest.MockedFunction<
-  typeof claudeCompatibilityStore.subscribe
->;
+const mockProbeClaudeVersion = probeClaudeVersion as jest.MockedFunction<typeof probeClaudeVersion>;
 
 function settingsWithClaudeRuntime(options: {
   path?: string;
@@ -60,7 +49,7 @@ function settingsWithClaudeRuntime(options: {
   } as unknown as CopilotSettings;
 }
 
-describe("claude descriptor", () => {
+describe("descriptor", () => {
   beforeEach(() => {
     jest.resetAllMocks();
   });
@@ -196,78 +185,111 @@ describe("claude descriptor", () => {
   });
 
   describe("getClaudeInstallState()", () => {
-    it("returns absent without consulting compatibility state when no executable resolves", () => {
+    it("returns a stable absent state when no executable resolves", () => {
       mockResolveClaudeBinary.mockReturnValue(null);
 
       const first = getClaudeInstallState(settingsWithClaudeRuntime({}));
 
       expect(first).toEqual({ kind: "absent" });
       expect(getClaudeInstallState(settingsWithClaudeRuntime({}))).toBe(first);
-      expect(mockGetCompatibility).not.toHaveBeenCalled();
     });
 
-    it("reads compatibility state using the custom executable and sorted environment identity", () => {
-      const readyState: InstallState = { kind: "ready", source: "custom" };
-      mockResolveClaudeBinary.mockReturnValue("/custom/bin/claude");
-      mockGetCompatibility.mockReturnValue(readyState);
+    it("reports checking for an executable that has not been probed yet", () => {
+      mockResolveClaudeBinary.mockReturnValue("/unprobed/claude");
 
-      const result = getClaudeInstallState(
+      expect(
+        getClaudeInstallState(settingsWithClaudeRuntime({ path: "/unprobed/claude" }))
+      ).toEqual({ kind: "checking", source: "custom" });
+    });
+
+    it("returns the probed state regardless of the order of environment overrides", async () => {
+      mockResolveClaudeBinary.mockReturnValue("/ordered/claude");
+      mockProbeClaudeVersion.mockResolvedValue({ kind: "supported", version: "2.1.206" });
+      await refreshClaudeInstallState(
         settingsWithClaudeRuntime({
-          path: "/custom/bin/claude",
+          path: "/ordered/claude",
           envOverrides: { ZED: "last", ALPHA: "first" },
         })
       );
 
-      expect(result).toBe(readyState);
-      expect(mockGetCompatibility).toHaveBeenCalledWith({
-        cacheKey: 'custom\u0000/custom/bin/claude\u0000[["ALPHA","first"],["ZED","last"]]',
-        path: "/custom/bin/claude",
-        source: "custom",
-        env: expect.objectContaining({ ALPHA: "first", ZED: "last" }),
-      });
+      expect(
+        getClaudeInstallState(
+          settingsWithClaudeRuntime({
+            path: "/ordered/claude",
+            envOverrides: { ALPHA: "first", ZED: "last" },
+          })
+        )
+      ).toEqual({ kind: "ready", source: "custom" });
+    });
+
+    it("reports checking again when the environment overrides change for the same executable", async () => {
+      mockResolveClaudeBinary.mockReturnValue("/env-keyed/claude");
+      mockProbeClaudeVersion.mockResolvedValue({ kind: "supported", version: "2.1.206" });
+      await refreshClaudeInstallState(
+        settingsWithClaudeRuntime({ path: "/env-keyed/claude", envOverrides: { PROFILE: "a" } })
+      );
+
+      expect(
+        getClaudeInstallState(
+          settingsWithClaudeRuntime({ path: "/env-keyed/claude", envOverrides: { PROFILE: "b" } })
+        )
+      ).toEqual({ kind: "checking", source: "custom" });
     });
   });
 
   describe("refreshClaudeInstallState()", () => {
-    it("does not refresh compatibility state when no executable resolves", async () => {
+    it("returns absent without probing when no executable resolves", async () => {
       mockResolveClaudeBinary.mockReturnValue(null);
 
       await expect(refreshClaudeInstallState(settingsWithClaudeRuntime({}), true)).resolves.toEqual(
-        {
-          kind: "absent",
-        }
+        { kind: "absent" }
       );
-      expect(mockRefreshCompatibility).not.toHaveBeenCalled();
+      expect(mockProbeClaudeVersion).not.toHaveBeenCalled();
     });
 
-    it("forces a refresh for the managed executable and returns its new state", async () => {
-      const readyState: InstallState = { kind: "ready", source: "managed" };
+    it("probes the managed executable and publishes a ready state for a supported version", async () => {
       mockResolveClaudeBinary.mockReturnValue("/managed/bin/claude");
-      mockRefreshCompatibility.mockResolvedValue(readyState);
+      mockProbeClaudeVersion.mockResolvedValue({ kind: "supported", version: "2.1.206" });
+      const settings = settingsWithClaudeRuntime({});
 
-      const result = await refreshClaudeInstallState(settingsWithClaudeRuntime({}), true);
+      await expect(refreshClaudeInstallState(settings, true)).resolves.toEqual({
+        kind: "ready",
+        source: "managed",
+      });
+      expect(getClaudeInstallState(settings)).toEqual({ kind: "ready", source: "managed" });
+    });
 
-      expect(result).toBe(readyState);
-      expect(mockRefreshCompatibility).toHaveBeenCalledWith(
-        {
-          cacheKey: "managed\u0000/managed/bin/claude\u0000[]",
-          path: "/managed/bin/claude",
-          source: "managed",
-          env: process.env,
-        },
-        { force: true }
-      );
+    it("reuses the cached state unless a forced refresh is requested", async () => {
+      mockResolveClaudeBinary.mockReturnValue("/forced/claude");
+      mockProbeClaudeVersion.mockResolvedValue({ kind: "supported", version: "2.1.206" });
+      const settings = settingsWithClaudeRuntime({ path: "/forced/claude" });
+
+      await refreshClaudeInstallState(settings);
+      await refreshClaudeInstallState(settings);
+      expect(mockProbeClaudeVersion).toHaveBeenCalledTimes(1);
+
+      await refreshClaudeInstallState(settings, true);
+      expect(mockProbeClaudeVersion).toHaveBeenCalledTimes(2);
     });
   });
 
   describe("subscribeClaudeInstallState()", () => {
-    it("subscribes to compatibility changes and returns the matching unsubscribe function", () => {
+    it("notifies the listener of install state changes until it unsubscribes", async () => {
+      mockResolveClaudeBinary.mockReturnValue("/subscribed/claude");
+      mockProbeClaudeVersion.mockResolvedValue({ kind: "supported", version: "2.1.206" });
       const listener = jest.fn();
-      const unsubscribe = jest.fn();
-      mockSubscribeCompatibility.mockReturnValue(unsubscribe);
+      const unsubscribe = subscribeClaudeInstallState(listener);
 
-      expect(subscribeClaudeInstallState(listener)).toBe(unsubscribe);
-      expect(mockSubscribeCompatibility).toHaveBeenCalledWith(listener);
+      await refreshClaudeInstallState(settingsWithClaudeRuntime({ path: "/subscribed/claude" }));
+      expect(listener).toHaveBeenCalled();
+
+      listener.mockClear();
+      unsubscribe();
+      await refreshClaudeInstallState(
+        settingsWithClaudeRuntime({ path: "/subscribed/claude" }),
+        true
+      );
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 
