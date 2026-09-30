@@ -41,109 +41,114 @@ function turn(
   for (const a of answers) map[a.backendId] = a;
   return { answers: map, summary: { status: summaryStatus, text: summaryText } };
 }
-
-describe("agentStateForStatus", () => {
-  it("maps each slot status to its display state", () => {
-    expect(agentStateForStatus("running")).toBe("streaming");
-    expect(agentStateForStatus("done")).toBe("answer");
-    expect(agentStateForStatus("error")).toBe("error");
-    expect(agentStateForStatus("cancelled")).toBe("cancelled");
-  });
-});
-
-describe("agentStateForAnswer", () => {
-  it("maps a done slot with text to answer, but a done slot with no text to empty", () => {
-    expect(agentStateForAnswer(answer("opencode", "done", "hi"))).toBe("answer");
-    expect(agentStateForAnswer(answer("opencode", "done", "   "))).toBe("empty");
-  });
-  it("defers to the raw status for non-done slots", () => {
-    expect(agentStateForAnswer(answer("opencode", "running", ""))).toBe("streaming");
-    expect(agentStateForAnswer(answer("opencode", "error", "", "x"))).toBe("error");
-  });
-});
-
-describe("buildFanoutOptions", () => {
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 omits Summary when exactly one agent answered", () => {
-    const options = buildFanoutOptions(turn([answer("claude", "done", "Claude answer")]));
-
-    expect(options.map((option) => option.value)).toEqual(["claude"]);
+describe("fanoutDropdown", () => {
+  describe("agentStateForStatus()", () => {
+    it("maps each slot status to its display state", () => {
+      expect(agentStateForStatus("running")).toBe("streaming");
+      expect(agentStateForStatus("done")).toBe("answer");
+      expect(agentStateForStatus("error")).toBe("error");
+      expect(agentStateForStatus("cancelled")).toBe("cancelled");
+    });
   });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 preserves Summary for a saved one-agent turn that already has one", () => {
-    const options = buildFanoutOptions(
-      turn([answer("claude", "done", "Claude answer")], "Existing summary")
-    );
-
-    expect(options.map((option) => option.value)).toEqual([FANOUT_SUMMARY_OPTION, "claude"]);
+  describe("agentStateForAnswer()", () => {
+    it("maps a done slot with text to answer, but a done slot with no text to empty", () => {
+      expect(agentStateForAnswer(answer("opencode", "done", "hi"))).toBe("answer");
+      expect(agentStateForAnswer(answer("opencode", "done", "   "))).toBe("empty");
+    });
+    it("defers to the raw status for non-done slots", () => {
+      expect(agentStateForAnswer(answer("opencode", "running", ""))).toBe("streaming");
+      expect(agentStateForAnswer(answer("opencode", "error", "", "x"))).toBe("error");
+    });
   });
 
-  it("lists the summary first then each agent in slot order, resolving name/icon and live state", () => {
-    const t = turn([
-      answer("opencode", "done", "main answer"),
-      answer("claude", "running"),
-      answer("codex", "error", "", "boom"),
-    ]);
-    const options = buildFanoutOptions(t);
+  describe("buildFanoutOptions()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 omits Summary when exactly one agent answered", () => {
+      const options = buildFanoutOptions(turn([answer("claude", "done", "Claude answer")]));
 
-    expect(options.map((o) => o.value)).toEqual([
-      FANOUT_SUMMARY_OPTION,
-      "opencode",
-      "claude",
-      "codex",
-    ]);
-    expect(options[0].label).toBe("Summary");
-    expect(options[0].Icon).toBeUndefined();
-    const claude = options.find((o) => o.value === "claude");
-    expect(claude?.label).toBe("Claude");
-    expect(claude?.Icon).toBeDefined();
-    expect(claude?.state).toBe("streaming");
-    expect(options.find((o) => o.value === "opencode")?.state).toBe("answer");
-    expect(options.find((o) => o.value === "codex")?.state).toBe("error");
+      expect(options.map((option) => option.value)).toEqual(["claude"]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 preserves Summary for a saved one-agent turn that already has one", () => {
+      const options = buildFanoutOptions(
+        turn([answer("claude", "done", "Claude answer")], "Existing summary")
+      );
+
+      expect(options.map((option) => option.value)).toEqual([FANOUT_SUMMARY_OPTION, "claude"]);
+    });
+
+    it("lists the summary first then each agent in slot order, resolving name/icon and live state", () => {
+      const t = turn([
+        answer("opencode", "done", "main answer"),
+        answer("claude", "running"),
+        answer("codex", "error", "", "boom"),
+      ]);
+      const options = buildFanoutOptions(t);
+
+      expect(options.map((o) => o.value)).toEqual([
+        FANOUT_SUMMARY_OPTION,
+        "opencode",
+        "claude",
+        "codex",
+      ]);
+      expect(options[0].label).toBe("Summary");
+      expect(options[0].Icon).toBeUndefined();
+      const claude = options.find((o) => o.value === "claude");
+      expect(claude?.label).toBe("Claude");
+      expect(claude?.Icon).toBeDefined();
+      expect(claude?.state).toBe("streaming");
+      expect(options.find((o) => o.value === "opencode")?.state).toBe("answer");
+      expect(options.find((o) => o.value === "codex")?.state).toBe("error");
+    });
+
+    it("falls back to the backend id when the registry has no entry", () => {
+      const options = buildFanoutOptions(turn([answer("mystery", "done", "x")]));
+      const entry = options.find((o) => o.value === "mystery");
+      expect(entry?.label).toBe("mystery");
+      expect(entry?.Icon).toBeUndefined();
+    });
   });
 
-  it("falls back to the backend id when the registry has no entry", () => {
-    const options = buildFanoutOptions(turn([answer("mystery", "done", "x")]));
-    const entry = options.find((o) => o.value === "mystery");
-    expect(entry?.label).toBe("mystery");
-    expect(entry?.Icon).toBeUndefined();
-  });
-});
+  describe("defaultFanoutOption()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 selects the sole mentioned agent directly", () => {
+      const t = turn([answer("claude", "done", "Claude answer")]);
 
-describe("defaultFanoutOption", () => {
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 selects the sole mentioned agent directly", () => {
-    const t = turn([answer("claude", "done", "Claude answer")]);
+      expect(defaultFanoutOption(t)).toBe("claude");
+    });
 
-    expect(defaultFanoutOption(t)).toBe("claude");
-  });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 defaults to an existing summary in a saved one-agent turn", () => {
+      const t = turn([answer("claude", "done", "Claude answer")], "Existing summary");
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 defaults to an existing summary in a saved one-agent turn", () => {
-    const t = turn([answer("claude", "done", "Claude answer")], "Existing summary");
+      expect(defaultFanoutOption(t)).toBe(FANOUT_SUMMARY_OPTION);
+    });
 
-    expect(defaultFanoutOption(t)).toBe(FANOUT_SUMMARY_OPTION);
+    it("defaults to the summary (summary-first, D8)", () => {
+      const t = turn([answer("opencode", "done", "a"), answer("claude", "done", "b")]);
+      expect(defaultFanoutOption(t)).toBe(FANOUT_SUMMARY_OPTION);
+    });
   });
 
-  it("defaults to the summary (summary-first, D8)", () => {
-    const t = turn([answer("opencode", "done", "a"), answer("claude", "done", "b")]);
-    expect(defaultFanoutOption(t)).toBe(FANOUT_SUMMARY_OPTION);
+  describe("selectedAnswer()", () => {
+    it("returns null for the summary value and the agent's slot for an agent value", () => {
+      const t = turn([answer("opencode", "done", "a")]);
+      expect(selectedAnswer(t, FANOUT_SUMMARY_OPTION)).toBeNull();
+      expect(selectedAnswer(t, "opencode")?.text).toBe("a");
+      expect(selectedAnswer(t, "ghost")).toBeNull();
+    });
   });
-});
 
-describe("selectedAnswer", () => {
-  it("returns null for the summary value and the agent's slot for an agent value", () => {
-    const t = turn([answer("opencode", "done", "a")]);
-    expect(selectedAnswer(t, FANOUT_SUMMARY_OPTION)).toBeNull();
-    expect(selectedAnswer(t, "opencode")?.text).toBe("a");
-    expect(selectedAnswer(t, "ghost")).toBeNull();
-  });
-});
-
-describe("summaryDisplayState", () => {
-  it("is cancelled when pending but every agent is terminal (turn aborted before summary)", () => {
-    const t = turn([answer("opencode", "cancelled"), answer("claude", "done", "b")], "", "pending");
-    expect(summaryDisplayState(t)).toBe("cancelled");
-  });
-  it("is unavailable when done with no text (summary generation failed)", () => {
-    const t = turn([answer("opencode", "done", "a")], "", "done");
-    expect(summaryDisplayState(t)).toBe("unavailable");
+  describe("summaryDisplayState()", () => {
+    it("is cancelled when pending but every agent is terminal (turn aborted before summary)", () => {
+      const t = turn(
+        [answer("opencode", "cancelled"), answer("claude", "done", "b")],
+        "",
+        "pending"
+      );
+      expect(summaryDisplayState(t)).toBe("cancelled");
+    });
+    it("is unavailable when done with no text (summary generation failed)", () => {
+      const t = turn([answer("opencode", "done", "a")], "", "done");
+      expect(summaryDisplayState(t)).toBe("unavailable");
+    });
   });
 });

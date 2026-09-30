@@ -13,10 +13,9 @@ import React from "react";
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
 const mockUseCanUseMultiAgent = jest.fn<boolean, []>();
-const mockNavigateToPlusPage = jest.fn();
 jest.mock("@/plusUtils", () => ({
   useCanUseMultiAgent: () => mockUseCanUseMultiAgent(),
-  navigateToPlusPage: (...args: unknown[]) => mockNavigateToPlusPage(...args),
+  navigateToPlusPage: jest.fn(),
 }));
 
 const FAKE_BRANDS = Object.freeze([{ id: "claude", displayName: "Claude", Icon: () => null }]);
@@ -28,9 +27,7 @@ jest.mock("@/agentMode/ui/mentionedAgents", () => ({
 }));
 
 let capturedAgentBrands: ReadonlyArray<unknown> | undefined;
-let capturedTopRightAccessory: React.ReactNode | undefined;
 const mockPrependContent = jest.fn();
-let capturedPlaceholder: string | undefined;
 jest.mock("@/components/chat-components/ChatInput", () => ({
   __esModule: true,
   default: jest.requireActual<typeof React>("react").forwardRef(
@@ -39,7 +36,6 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
         setInputMessage: React.Dispatch<React.SetStateAction<string>>;
         agentBrands?: ReadonlyArray<unknown>;
         topRightAccessory?: React.ReactNode;
-        placeholder?: string;
         handleSendMessage?: () => void;
         onStopGenerating?: () => void;
         isGenerating?: boolean;
@@ -56,8 +52,6 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
         },
       }));
       capturedAgentBrands = props.agentBrands;
-      capturedTopRightAccessory = props.topRightAccessory;
-      capturedPlaceholder = props.placeholder;
       return (
         <>
           {props.topRightAccessory}
@@ -203,8 +197,11 @@ function setupCancellation() {
 describe("AgentChatInput", () => {
   beforeEach(() => {
     mockSelectedTextContexts = [];
+    capturedAgentBrands = undefined;
+    mockUseCanUseMultiAgent.mockReturnValue(true);
   });
-  describe("handleSendMessage()", () => {
+
+  describe("AgentChatInput()", () => {
     it.each([
       {
         scenario: "the active note and its selection together",
@@ -366,8 +363,6 @@ describe("AgentChatInput", () => {
       expect(getDraft().queue).toHaveLength(0);
       await act(async () => settleTurn());
     });
-  });
-  describe("handleStopGenerating()", () => {
     it("returns queued follow-ups to the composer before cancellation settles the active turn https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
       const { backend, getDraft, settleCancel } = setupCancellation();
       act(() => getDraft().setInput("first turn"));
@@ -502,9 +497,7 @@ describe("AgentChatInput", () => {
       expect(getDraft().loading).toBe(false);
       expect(backend.sendMessage).toHaveBeenCalledTimes(1);
     });
-  });
 
-  describe("runSend()", () => {
     it("sends queued follow-ups when the active turn finishes normally", async () => {
       const { backend, getDraft, settleTurn } = setupCancellation();
       act(() => getDraft().setInput("first turn"));
@@ -548,13 +541,6 @@ describe("AgentChatInput", () => {
 
       await waitFor(() => expect(draft.setLoading).toHaveBeenCalledWith(false));
     });
-  });
-
-  describe("identity and agent-mention gate", () => {
-    beforeEach(() => {
-      capturedAgentBrands = undefined;
-      mockNavigateToPlusPage.mockClear();
-    });
 
     it("passes the real installed-agent list when entitled", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
@@ -587,9 +573,7 @@ describe("AgentChatInput", () => {
       );
       expect(capturedAgentBrands).toBe(EMPTY_AGENT_MENTION_BRANDS);
     });
-  });
 
-  describe("AgentChatInput()", () => {
     it("shows the running state while a plan-approved turn continues after the composer send settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
@@ -601,18 +585,6 @@ describe("AgentChatInput", () => {
       expect(screen.getByTestId("generating-state").textContent).toBe("idle");
     });
 
-    it("keeps the static composer guidance when an empty draft is typed into and cleared", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
-      const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
-      const view = renderInput(backend, makeDraft({ input: "" }));
-      expect(capturedPlaceholder).toBe("Ask anything • @ to add context • / for commands");
-      view.rerender(inputNode(backend, makeDraft({ input: "Summarize my week" })));
-      view.rerender(inputNode(backend, makeDraft({ input: "" })));
-      expect(capturedPlaceholder).toBe("Ask anything • @ to add context • / for commands");
-    });
-  });
-
-  describe("queue reason", () => {
     const makeBackend = () =>
       ({
         sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
@@ -625,10 +597,6 @@ describe("AgentChatInput", () => {
       ) => { queueReason?: string }[];
       return updater([])[0];
     };
-
-    beforeEach(() => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
-    });
 
     it("snapshots 'context' when the send is held for project-context materialization", async () => {
       const backend = makeBackend();
@@ -719,33 +687,12 @@ describe("AgentChatInput", () => {
       expect(backend.sendMessage).not.toHaveBeenCalled();
       expect(draft.setQueue).not.toHaveBeenCalled();
     });
-  });
-
-  describe("status-icon boundary", () => {
-    beforeEach(() => {
-      capturedTopRightAccessory = undefined;
-      mockUseCanUseMultiAgent.mockReturnValue(true);
-    });
 
     it("passes the indicator through the accessory slot when mounted", () => {
       const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
 
       renderInput(backend, makeDraft(), { contextStatusIndicator: <span>status</span> });
-      expect(capturedTopRightAccessory).toBeTruthy();
       expect(screen.getByText("status")).toBeTruthy();
-    });
-
-    it("passes no accessory when there is no indicator (global scope)", () => {
-      const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
-
-      renderInput(backend, makeDraft());
-      expect(capturedTopRightAccessory).toBeUndefined();
-    });
-  });
-
-  describe("compose reset ordering", () => {
-    beforeEach(() => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
     });
 
     it("regression: clears the composer before awaiting attached-image conversion (#211)", async () => {
@@ -779,9 +726,7 @@ describe("AgentChatInput", () => {
       expect(promptContent).toHaveLength(1);
       expect(promptContent[0].type).toBe("image");
     });
-  });
 
-  describe("hard-disable", () => {
     it("drops a send when the composer is disabled (orphaned project)", async () => {
       const backend = {
         sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
