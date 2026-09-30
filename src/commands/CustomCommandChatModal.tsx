@@ -1,4 +1,3 @@
-import { useModelKey } from "@/aiParams";
 import { processCommandPrompt } from "@/commands/customCommandUtils";
 import { MenuCommandModal, type ContentState } from "@/components/command-ui";
 import { useApp } from "@/context";
@@ -30,8 +29,6 @@ import {
 import { ABORT_REASON } from "@/constants";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
-export type ModelSelectionScope = "quick-command" | "custom-command";
-
 export interface ModalBehaviorConfig {
   autoExecuteOnOpen: boolean;
   hideContentAreaOnIdle: boolean;
@@ -39,7 +36,6 @@ export interface ModalBehaviorConfig {
   commandLabel: string;
   commandIcon?: React.ReactNode | null;
   showIncludeNoteContext?: boolean;
-  modelSelectionScope?: ModelSelectionScope;
 }
 
 function resolveBehaviorConfig(
@@ -68,7 +64,7 @@ interface CustomCommandChatModalContentProps {
   behaviorConfig?: Partial<ModalBehaviorConfig>;
 }
 
-function CustomCommandChatModalContent({
+export function CustomCommandChatModalContent({
   originalText,
   command,
   onInsert,
@@ -122,27 +118,9 @@ function CustomCommandChatModalContent({
   const [isLoading, setIsLoading] = useState(behavior.autoExecuteOnOpen);
   const [followUpValue, setFollowUpValue] = useState("");
 
-  const [globalModelKey] = useModelKey();
   const settings = useSettingsValue();
-  const modelSelectionScope = behavior.modelSelectionScope ?? "custom-command";
-
-  const initialModelKey = useMemo(() => {
-    if (modelSelectionScope === "quick-command") {
-      return settings.quickCommandModelKey ?? globalModelKey;
-    }
-    return command.modelKey || globalModelKey;
-  }, [modelSelectionScope, settings.quickCommandModelKey, command.modelKey, globalModelKey]);
-
-  const [userSelectedModelKey, setUserSelectedModelKey] = useState(initialModelKey);
-
-  const handleModelChange = useCallback(
-    (newModelKey: string) => {
-      setUserSelectedModelKey(newModelKey);
-      if (modelSelectionScope === "quick-command") {
-        updateSetting("quickCommandModelKey", newModelKey);
-      }
-    },
-    [modelSelectionScope]
+  const [userSelectedModelKey, setUserSelectedModelKey] = useState(
+    () => command.modelKey || settings.quickCommandModelKey
   );
 
   const [includeNoteContext, setIncludeNoteContext] = useState(
@@ -154,11 +132,12 @@ function CustomCommandChatModalContent({
     updateSetting("quickCommandIncludeNoteContext", checked);
   }, []);
 
-  const resolvedModel = useResolvedChatBackendModel(app, userSelectedModelKey);
+  const resolvedModel = useResolvedChatBackendModel(app, userSelectedModelKey, false);
 
   const chatPicker = useChatModelPicker({
     value: userSelectedModelKey,
-    onChange: handleModelChange,
+    onChange: setUserSelectedModelKey,
+    fallbackToFirst: false,
   });
 
   const {
@@ -210,9 +189,13 @@ function CustomCommandChatModalContent({
   useEffect(() => {
     if (!behavior.autoExecuteOnOpen) return;
     if (didAutoExecuteRef.current) return;
+    // Keep the original command pending until the user selects a usable model. https://github.com/Brevilabs/obsidian-copilot-private/issues/616
+    if (!resolvedModel) {
+      setIsLoading(false);
+      return;
+    }
     didAutoExecuteRef.current = true;
-
-    let cancelled = false;
+    setIsLoading(true);
 
     async function generateInitialResponse() {
       try {
@@ -223,29 +206,29 @@ function CustomCommandChatModalContent({
           return prompt;
         });
 
-        if (!cancelled && result) {
+        if (isMountedRef.current && result) {
           setFinalText(result);
           lastInputPromptRef.current = "";
         }
       } catch (error) {
         logError("Error in initial response:", error);
       } finally {
-        if (!cancelled) {
+        if (isMountedRef.current) {
           setIsLoading(false);
         }
       }
     }
 
     void generateInitialResponse();
-
-    return () => {
-      cancelled = true;
-      stopStreaming(ABORT_REASON.UNMOUNT);
-    };
-  }, [app, behavior.autoExecuteOnOpen, command.content, originalText, runTurn, stopStreaming]);
+  }, [app, behavior.autoExecuteOnOpen, command.content, originalText, runTurn, resolvedModel]);
 
   const handleFollowUpSubmit = async () => {
     if (!followUpValue.trim()) return;
+    // Preserve the instruction while the user repairs an unavailable selection. https://github.com/Brevilabs/obsidian-copilot-private/issues/616
+    if (!resolvedModel) {
+      new Notice("Select a model to continue.");
+      return;
+    }
 
     if (followUpSubmitLockRef.current) return;
     if (isLoading || isStreaming) return;

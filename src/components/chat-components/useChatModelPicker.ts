@@ -31,10 +31,11 @@ const EMPTY_ENTRY: ModelSelectorEntry = {
 const EMPTY_ENTRY_KEY = getModelKeyFromModel(EMPTY_ENTRY);
 
 export function useChatModelPicker(params: {
-  value: string;
+  value: string | undefined;
+  fallbackToFirst?: boolean;
   onChange: (configuredModelId: string) => void;
 }): ChatModelPickerOverride {
-  const { value, onChange } = params;
+  const { value, onChange, fallbackToFirst = true } = params;
   const entries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
   const settings = useSettingsValue();
 
@@ -73,12 +74,13 @@ export function useChatModelPicker(params: {
   }, [entries]);
 
   const resolvedValue = React.useMemo(() => {
-    const resolvedId = resolveChatModelSelectionId(entries, value);
+    const resolvedId = resolveChatModelSelectionId(entries, value, fallbackToFirst);
     const current = resolvedId ? idToModelKey.get(resolvedId) : undefined;
     if (current) return current;
-    const first = models[0];
+    // Leave the picker unselected when a command needs an explicit choice. https://github.com/Brevilabs/obsidian-copilot-private/issues/616
+    const first = fallbackToFirst ? models[0] : undefined;
     return first ? getModelKeyFromModel(first) : "";
-  }, [entries, value, idToModelKey, models]);
+  }, [entries, value, idToModelKey, models, fallbackToFirst]);
 
   const displayModels = React.useMemo(() => {
     if (!models.some((m) => m._needsSelfHostWarning)) return models;

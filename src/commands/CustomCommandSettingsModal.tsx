@@ -7,9 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import React, { useState } from "react";
 import { Root } from "react-dom/client";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
-import { cn } from "@/lib/utils";
-import { ChevronDown } from "lucide-react";
-import { logError } from "@/logger";
+import { CommandModelSelect } from "@/commands/ui/CommandModelSelect";
 import { CustomPromptSyntaxInstruction } from "@/components/CustomPromptSyntaxInstruction";
 import { CustomCommand } from "@/commands/type";
 import { validateCommandName } from "@/commands/customCommandUtils";
@@ -31,7 +29,7 @@ function CustomCommandSettingsModalContent({
   onConfirm: (command: CustomCommand) => void;
   onCancel: () => void;
 }) {
-  const { options: activeModels, resolveSelectionId } = useChatBackendModelOptions();
+  const { options: activeModels, resolveSelectionId } = useChatBackendModelOptions(false);
   const [command, setCommand] = useState(() => ({
     ...initialCommand,
     modelKey: initialCommand.modelKey
@@ -97,51 +95,11 @@ function CustomCommandSettingsModalContent({
         {errors.content && <div className="tw-text-sm tw-text-error">{errors.content}</div>}
       </div>
 
-      <div className="tw-flex tw-flex-col tw-gap-2">
-        <Label htmlFor="modelKey">Model (Optional)</Label>
-        <div className="tw-group tw-relative tw-w-full">
-          <select
-            value={command.modelKey}
-            onChange={(e) => {
-              const value = e.target.value;
-              if (!value) {
-                handleUpdate("modelKey", "");
-                return;
-              }
-              const selectedModel = activeModels.find((m) => m.value === value);
-              if (!selectedModel) {
-                logError(`Model ${value} not found`);
-                handleUpdate("modelKey", "");
-                return;
-              }
-              handleUpdate("modelKey", e.target.value);
-            }}
-            className={cn(
-              "tw-w-full tw-appearance-none",
-              "tw-flex tw-h-9 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-dropdown tw-px-3 tw-py-1 tw-pr-8",
-              "tw-text-sm !tw-shadow tw-transition-colors",
-              "focus:tw-outline-none focus:tw-ring-1 focus:tw-ring-ring",
-              "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",
-              "hover:tw-bg-interactive-hover hover:tw-text-normal"
-            )}
-          >
-            <option value="">Inherit from chat model</option>
-            {activeModels.map((option) => (
-              <option key={option.value} value={option.value.toString()}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <div
-            className={cn(
-              "tw-pointer-events-none tw-absolute tw-inset-y-0 tw-right-0 tw-flex tw-items-center tw-pr-2",
-              "tw-transition-colors group-hover:[&>svg]:tw-text-normal"
-            )}
-          >
-            <ChevronDown className="tw-size-4" />
-          </div>
-        </div>
-      </div>
+      <CommandModelSelect
+        value={command.modelKey || ""}
+        options={activeModels}
+        onChange={(value) => handleUpdate("modelKey", value)}
+      />
 
       <div className="tw-flex tw-items-center tw-gap-2">
         <Checkbox

@@ -96,5 +96,10 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
     }
   }
 
+  // Preserve the old default once, without keeping commands tied to chat. https://github.com/Brevilabs/obsidian-copilot-private/issues/616
+  if (fromVersion < 15 && !getSettings().quickCommandModelKey) {
+    setSettings({ quickCommandModelKey: getSettings().defaultModelKey || undefined });
+  }
+
   setSettings({ settingsVersion: CURRENT_SETTINGS_VERSION });
 }

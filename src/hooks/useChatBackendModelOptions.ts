@@ -13,7 +13,7 @@ export interface ChatBackendModelOptions {
   resolveSelectionId: (selection: string | undefined) => string | undefined;
 }
 
-export function useChatBackendModelOptions(): ChatBackendModelOptions {
+export function useChatBackendModelOptions(fallbackToFirst = true): ChatBackendModelOptions {
   const entries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
   const options = useMemo(() => {
     const result: ChatBackendModelOption[] = [];
@@ -28,8 +28,9 @@ export function useChatBackendModelOptions(): ChatBackendModelOptions {
   }, [entries]);
 
   const resolveSelectionId = useCallback(
-    (selection: string | undefined) => resolveChatModelSelectionId(entries, selection),
-    [entries]
+    (selection: string | undefined) =>
+      resolveChatModelSelectionId(entries, selection, fallbackToFirst),
+    [entries, fallbackToFirst]
   );
 
   return { options, resolveSelectionId };

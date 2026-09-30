@@ -13,11 +13,12 @@ import { settingsStore } from "@/settings/model";
 
 export function useResolvedChatBackendModel(
   app: App,
-  configuredModelId: string | undefined
+  configuredModelId: string | undefined,
+  fallbackToFirst = true
 ): CustomModel | null {
   const entries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
   return useMemo(() => {
-    const target = findChatBackendEntry(entries, configuredModelId);
+    const target = findChatBackendEntry(entries, configuredModelId, fallbackToFirst);
     if (!target) return null;
     const apiKey = target.provider.apiKeyKeychainId
       ? KeychainService.getInstance(app).getSecretById(target.provider.apiKeyKeychainId)
@@ -27,5 +28,5 @@ export function useResolvedChatBackendModel(
       configuredModel: target.configuredModel,
       apiKey,
     });
-  }, [entries, configuredModelId, app]);
+  }, [entries, configuredModelId, app, fallbackToFirst]);
 }

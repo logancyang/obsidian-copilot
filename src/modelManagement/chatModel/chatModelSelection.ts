@@ -42,22 +42,25 @@ export function isChatModelSelectionForEntry(
 
 export function findChatBackendEntry(
   entries: readonly EnabledBackendEntry[],
-  preferredSelection: string | undefined
+  preferredSelection: string | undefined,
+  fallbackToFirst = true
 ): ResolvedChatBackendEntry | undefined {
   const okEntries = entries.filter(
     (entry): entry is ResolvedChatBackendEntry => entry.state === "ok"
   );
-  if (!preferredSelection) return okEntries[0];
+  // Commands must ask for a model instead of silently changing providers. https://github.com/Brevilabs/obsidian-copilot-private/issues/616
+  const fallback = fallbackToFirst ? okEntries[0] : undefined;
+  if (!preferredSelection) return fallback;
 
   return (
-    okEntries.find((entry) => isChatModelSelectionForEntry(entry, preferredSelection)) ??
-    okEntries[0]
+    okEntries.find((entry) => isChatModelSelectionForEntry(entry, preferredSelection)) ?? fallback
   );
 }
 
 export function resolveChatModelSelectionId(
   entries: readonly EnabledBackendEntry[],
-  selection: string | undefined
+  selection: string | undefined,
+  fallbackToFirst = true
 ): string | undefined {
-  return findChatBackendEntry(entries, selection)?.configuredModelId;
+  return findChatBackendEntry(entries, selection, fallbackToFirst)?.configuredModelId;
 }
