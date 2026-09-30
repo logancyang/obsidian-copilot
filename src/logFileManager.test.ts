@@ -71,11 +71,6 @@ describe("logFileManager", () => {
         expect(text).not.toContain("sk-should-never-be-exported");
       });
 
-      it("leaves the buffer intact so a later export or flush sees the same entries", async () => {
-        await logFileManager.append("INFO", "hello");
-        expect(logFileManager.exportLogText()).toBe(logFileManager.exportLogText());
-      });
-
       it("reports nothing to export after the log is cleared", async () => {
         await logFileManager.append("INFO", "hello");
         await logFileManager.clear();

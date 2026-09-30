@@ -47,80 +47,82 @@ function plusClaims(overrides: Partial<EntitlementClaims> = {}): Record<string, 
   };
 }
 
-describe("verifyEntitlement", () => {
-  let keyPair: CryptoKeyPair;
-  let publicKeys: Record<string, JsonWebKey>;
+describe("verify", () => {
+  describe("verifyEntitlement()", () => {
+    let keyPair: CryptoKeyPair;
+    let publicKeys: Record<string, JsonWebKey>;
 
-  beforeAll(async () => {
-    keyPair = await subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
-      "sign",
-      "verify",
-    ]);
-    publicKeys = { [KID]: await subtle.exportKey("jwk", keyPair.publicKey) };
-  });
-
-  it("returns claims for a valid, correctly-signed token", async () => {
-    const token = await signToken(keyPair.privateKey, plusClaims());
-    const claims = await verify(token, { publicKeys, expectedUserId: USER_ID });
-    expect(claims).not.toBeNull();
-    expect(claims?.tier).toBe("plus");
-    expect(claims?.features).toContain("multi_agent");
-  });
-
-  it("returns Lite claims without the multi_agent feature", async () => {
-    const token = await signToken(
-      keyPair.privateKey,
-      plusClaims({ plan: "lite", tier: "lite", features: [] })
-    );
-    const claims = await verify(token, { publicKeys });
-    expect(claims?.tier).toBe("lite");
-    expect(claims?.features).not.toContain("multi_agent");
-  });
-
-  it("rejects an expired token", async () => {
-    const token = await signToken(
-      keyPair.privateKey,
-      plusClaims({ exp: Math.floor(Date.UTC(2020, 0, 1) / 1000) })
-    );
-    expect(await verify(token, { publicKeys })).toBeNull();
-  });
-
-  it("rejects a token whose user_id does not match the local user", async () => {
-    const token = await signToken(keyPair.privateKey, plusClaims());
-    expect(await verify(token, { publicKeys, expectedUserId: "someone-else" })).toBeNull();
-  });
-
-  it("rejects a token signed by an unknown key (kid not in the trust set)", async () => {
-    const otherPair = await subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
-      "sign",
-      "verify",
-    ]);
-    const token = await signToken(otherPair.privateKey, plusClaims());
-    expect(await verify(token, { publicKeys })).toBeNull();
-  });
-
-  it("rejects a token whose payload was tampered with after signing", async () => {
-    const token = await signToken(keyPair.privateKey, plusClaims({ tier: "lite", features: [] }));
-    const [header, , signature] = token.split(".");
-    const forgedPayload = base64UrlEncode(
-      JSON.stringify(plusClaims({ tier: "pro", features: ["multi_agent"] }))
-    );
-    const forged = `${header}.${forgedPayload}.${signature}`;
-    expect(await verify(forged, { publicKeys })).toBeNull();
-  });
-
-  it("rejects a non-ES256 algorithm", async () => {
-    const token = await signToken(keyPair.privateKey, plusClaims(), {
-      alg: "none",
-      typ: "JWT",
-      kid: KID,
+    beforeAll(async () => {
+      keyPair = await subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+        "sign",
+        "verify",
+      ]);
+      publicKeys = { [KID]: await subtle.exportKey("jwk", keyPair.publicKey) };
     });
-    expect(await verify(token, { publicKeys })).toBeNull();
-  });
 
-  it("rejects malformed tokens and the empty string", async () => {
-    expect(await verify("", { publicKeys })).toBeNull();
-    expect(await verify("not-a-jwt", { publicKeys })).toBeNull();
-    expect(await verify("only.two", { publicKeys })).toBeNull();
+    it("returns claims for a valid, correctly-signed token", async () => {
+      const token = await signToken(keyPair.privateKey, plusClaims());
+      const claims = await verify(token, { publicKeys, expectedUserId: USER_ID });
+      expect(claims).not.toBeNull();
+      expect(claims?.tier).toBe("plus");
+      expect(claims?.features).toContain("multi_agent");
+    });
+
+    it("returns Lite claims without the multi_agent feature", async () => {
+      const token = await signToken(
+        keyPair.privateKey,
+        plusClaims({ plan: "lite", tier: "lite", features: [] })
+      );
+      const claims = await verify(token, { publicKeys });
+      expect(claims?.tier).toBe("lite");
+      expect(claims?.features).not.toContain("multi_agent");
+    });
+
+    it("rejects an expired token", async () => {
+      const token = await signToken(
+        keyPair.privateKey,
+        plusClaims({ exp: Math.floor(Date.UTC(2020, 0, 1) / 1000) })
+      );
+      expect(await verify(token, { publicKeys })).toBeNull();
+    });
+
+    it("rejects a token whose user_id does not match the local user", async () => {
+      const token = await signToken(keyPair.privateKey, plusClaims());
+      expect(await verify(token, { publicKeys, expectedUserId: "someone-else" })).toBeNull();
+    });
+
+    it("rejects a token signed by an unknown key (kid not in the trust set)", async () => {
+      const otherPair = await subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+        "sign",
+        "verify",
+      ]);
+      const token = await signToken(otherPair.privateKey, plusClaims());
+      expect(await verify(token, { publicKeys })).toBeNull();
+    });
+
+    it("rejects a token whose payload was tampered with after signing", async () => {
+      const token = await signToken(keyPair.privateKey, plusClaims({ tier: "lite", features: [] }));
+      const [header, , signature] = token.split(".");
+      const forgedPayload = base64UrlEncode(
+        JSON.stringify(plusClaims({ tier: "pro", features: ["multi_agent"] }))
+      );
+      const forged = `${header}.${forgedPayload}.${signature}`;
+      expect(await verify(forged, { publicKeys })).toBeNull();
+    });
+
+    it("rejects a non-ES256 algorithm", async () => {
+      const token = await signToken(keyPair.privateKey, plusClaims(), {
+        alg: "none",
+        typ: "JWT",
+        kid: KID,
+      });
+      expect(await verify(token, { publicKeys })).toBeNull();
+    });
+
+    it("rejects malformed tokens and the empty string", async () => {
+      expect(await verify("", { publicKeys })).toBeNull();
+      expect(await verify("not-a-jwt", { publicKeys })).toBeNull();
+      expect(await verify("only.two", { publicKeys })).toBeNull();
+    });
   });
 });

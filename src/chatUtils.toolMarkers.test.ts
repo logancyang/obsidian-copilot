@@ -22,34 +22,36 @@ class MockMemoryManager {
   }
 }
 
-describe("updateChatMemory with tool call markers", () => {
-  it("should save AI outputs containing encoded tool markers without modification", async () => {
-    const messages: ChatMessage[] = [
-      {
-        id: "1",
-        sender: USER_SENDER,
-        message: "find my piano notes",
-        isVisible: true,
-        timestamp: null,
-      },
-      {
-        id: "2",
-        sender: AI_SENDER,
-        message:
-          "<!--TOOL_CALL_START:localSearch-1:localSearch:Vault search:🔍::false--><!--TOOL_CALL_END:localSearch-1:ENC:%5B%7B%22title%22%3A%22Lesson%201%22%7D%5D-->\nHere are the results...",
-        isVisible: true,
-        timestamp: null,
-      },
-    ];
+describe("chatUtils", () => {
+  describe("updateChatMemory()", () => {
+    it("saves an AI reply containing encoded tool-call markers verbatim as the output for its user turn", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          sender: USER_SENDER,
+          message: "find my piano notes",
+          isVisible: true,
+          timestamp: null,
+        },
+        {
+          id: "2",
+          sender: AI_SENDER,
+          message:
+            "<!--TOOL_CALL_START:localSearch-1:localSearch:Vault search:🔍::false--><!--TOOL_CALL_END:localSearch-1:ENC:%5B%7B%22title%22%3A%22Lesson%201%22%7D%5D-->\nHere are the results...",
+          isVisible: true,
+          timestamp: null,
+        },
+      ];
 
-    const memoryManager = new MockMemoryManager();
-    await updateChatMemory(messages, memoryManager as never);
+      const memoryManager = new MockMemoryManager();
+      await updateChatMemory(messages, memoryManager as never);
 
-    expect(memoryManager.getMemory().saved).toHaveLength(1);
-    expect(memoryManager.getMemory().saved[0].input).toBe("find my piano notes");
-    expect(memoryManager.getMemory().saved[0].output).toContain("<!--TOOL_CALL_START:");
-    expect(memoryManager.getMemory().saved[0].output).toContain(
-      "ENC:%5B%7B%22title%22%3A%22Lesson%201%22%7D%5D"
-    );
+      expect(memoryManager.getMemory().saved).toHaveLength(1);
+      expect(memoryManager.getMemory().saved[0].input).toBe("find my piano notes");
+      expect(memoryManager.getMemory().saved[0].output).toContain("<!--TOOL_CALL_START:");
+      expect(memoryManager.getMemory().saved[0].output).toContain(
+        "ENC:%5B%7B%22title%22%3A%22Lesson%201%22%7D%5D"
+      );
+    });
   });
 });

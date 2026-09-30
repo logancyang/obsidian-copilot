@@ -1,62 +1,9 @@
 import { cleanMessageForCopy } from "./utils";
 
-describe("cleanMessageForCopy", () => {
-  it("should remove Think blocks", () => {
-    const input = "Before text\n<think>This is my thought process</think>\nAfter text";
-    const expected = "Before text\n\nAfter text";
-    expect(cleanMessageForCopy(input)).toBe(expected);
-  });
-
-  it("should remove writeFile blocks wrapped in XML codeblocks", () => {
-    const input = `Some text before
-\`\`\`xml
-<writeFile>
-<path>test.md</path>
-<content>File content here</content>
-</writeFile>
-\`\`\`
-Some text after`;
-    const expected = "Some text before\n\nSome text after";
-    expect(cleanMessageForCopy(input)).toBe(expected);
-  });
-
-  it("should remove standalone writeFile blocks", () => {
-    const input = `Text before
-<writeFile>
-<path>test.md</path>
-<content>File content</content>
-</writeFile>
-Text after`;
-    const expected = "Text before\n\nText after";
-    expect(cleanMessageForCopy(input)).toBe(expected);
-  });
-
-  it("should remove tool call markers", () => {
-    const input =
-      "Before\n<!--TOOL_CALL_START:123:localSearch:Local Search:🔍::true-->Searching...<!--TOOL_CALL_END:123:Found 5 results-->\nAfter";
-    const expected = "Before\n\nAfter";
-    expect(cleanMessageForCopy(input)).toBe(expected);
-  });
-
-  it("should handle multiple blocks in one message", () => {
-    const input = `Start of message
-<think>First thought</think>
-Middle part
-<writeFile><path>file.md</path><content>content</content></writeFile>
-<!--TOOL_CALL_START:456:webSearch:Web Search:🌐::false-->Searching web<!--TOOL_CALL_END:456:Results-->
-End of message`;
-    const expected = "Start of message\n\nMiddle part\n\nEnd of message";
-    expect(cleanMessageForCopy(input)).toBe(expected);
-  });
-
-  it("should clean up multiple consecutive newlines", () => {
-    const input = `Text\n\n\n\n\nMore text`;
-    const expected = "Text\n\nMore text";
-    expect(cleanMessageForCopy(input)).toBe(expected);
-  });
-
-  it("should preserve normal content", () => {
-    const input = `# Heading
+describe("utils", () => {
+  describe("cleanMessageForCopy()", () => {
+    it("preserves normal Markdown content", () => {
+      const input = `# Heading
 This is a normal message with:
 - Bullet points
 - Code blocks: \`const x = 1;\`
@@ -69,61 +16,75 @@ function test() {
 \`\`\`
 
 More content here.`;
-    expect(cleanMessageForCopy(input)).toBe(input);
-  });
+      expect(cleanMessageForCopy(input)).toBe(input);
+    });
 
-  it("should handle nested think blocks", () => {
-    const input =
-      "Before\n<think>Outer thought <think>Inner thought</think> back to outer</think>\nAfter";
-    const expected = "Before\n back to outer</think>\nAfter";
-    expect(cleanMessageForCopy(input)).toBe(expected);
-  });
+    it("removes multi-line think blocks", () => {
+      const input = "Start\n<think>\nLine 1 of thought\nLine 2 of thought\n</think>\nEnd";
+      expect(cleanMessageForCopy(input)).toBe("Start\n\nEnd");
+    });
 
-  it("should handle multiline content in blocks", () => {
-    const input = `Start
-<think>
-Line 1 of thought
-Line 2 of thought
-Line 3 of thought
-</think>
-End`;
-    const expected = "Start\n\nEnd";
-    expect(cleanMessageForCopy(input)).toBe(expected);
-  });
+    it("removes writeFile blocks wrapped in an xml code fence", () => {
+      const input = `Some text before
+\`\`\`xml
+<writeFile>
+<path>test.md</path>
+<content>File content here</content>
+</writeFile>
+\`\`\`
+Some text after`;
+      expect(cleanMessageForCopy(input)).toBe("Some text before\n\nSome text after");
+    });
 
-  it("should trim leading and trailing whitespace", () => {
-    const input = "\n\n  Content with spaces  \n\n";
-    const expected = "Content with spaces";
-    expect(cleanMessageForCopy(input)).toBe(expected);
-  });
+    it("removes standalone writeFile blocks", () => {
+      const input = `Text before
+<writeFile>
+<path>test.md</path>
+<content>File content</content>
+</writeFile>
+Text after`;
+      expect(cleanMessageForCopy(input)).toBe("Text before\n\nText after");
+    });
 
-  it("should handle empty message", () => {
-    expect(cleanMessageForCopy("")).toBe("");
-  });
+    it("removes tool call markers together with the text they wrap", () => {
+      const input =
+        "Before\n<!--TOOL_CALL_START:123:localSearch:Local Search:🔍::true-->Searching...<!--TOOL_CALL_END:123:Found 5 results-->\nAfter";
+      expect(cleanMessageForCopy(input)).toBe("Before\n\nAfter");
+    });
 
-  it("should handle message with only blocks to remove", () => {
-    const input = "<think>Only a thought</think>";
-    const expected = "";
-    expect(cleanMessageForCopy(input)).toBe(expected);
-  });
-
-  it("should remove agent reasoning blocks", () => {
-    const input = `<!--AGENT_REASONING:complete:12:["Searching notes","Read 3 notes","Analyzing content"]-->Here is my response based on the analysis.`;
-    const expected = "Here is my response based on the analysis.";
-    expect(cleanMessageForCopy(input)).toBe(expected);
-  });
-
-  it("should remove agent reasoning blocks with surrounding content", () => {
-    const input = `Some intro text
+    it("removes agent reasoning markers and keeps the surrounding text", () => {
+      const input = `Some intro text
 <!--AGENT_REASONING:collapsed:5:["Searching notes"]-->
 Here is the actual response.`;
-    const expected = "Some intro text\n\nHere is the actual response.";
-    expect(cleanMessageForCopy(input)).toBe(expected);
-  });
+      expect(cleanMessageForCopy(input)).toBe("Some intro text\n\nHere is the actual response.");
+    });
 
-  it("should handle agent reasoning blocks whose step summaries contain -->", () => {
-    const input = `<!--AGENT_REASONING:complete:8:["Step with --> inside"]-->Actual response.`;
-    const expected = "Actual response.";
-    expect(cleanMessageForCopy(input)).toBe(expected);
+    it("removes agent reasoning markers whose step summaries contain -->", () => {
+      const input = `<!--AGENT_REASONING:complete:8:["Step with --> inside"]-->Actual response.`;
+      expect(cleanMessageForCopy(input)).toBe("Actual response.");
+    });
+
+    it("removes every kind of block when several appear in one message", () => {
+      const input = `Start of message
+<think>First thought</think>
+Middle part
+<writeFile><path>file.md</path><content>content</content></writeFile>
+<!--TOOL_CALL_START:456:webSearch:Web Search:🌐::false-->Searching web<!--TOOL_CALL_END:456:Results-->
+End of message`;
+      expect(cleanMessageForCopy(input)).toBe("Start of message\n\nMiddle part\n\nEnd of message");
+    });
+
+    it("collapses runs of blank lines to a single blank line", () => {
+      expect(cleanMessageForCopy("Text\n\n\n\n\nMore text")).toBe("Text\n\nMore text");
+    });
+
+    it("trims leading and trailing whitespace", () => {
+      expect(cleanMessageForCopy("\n\n  Content with spaces  \n\n")).toBe("Content with spaces");
+    });
+
+    it("returns an empty string for an empty message or one made only of removable blocks", () => {
+      expect(cleanMessageForCopy("")).toBe("");
+      expect(cleanMessageForCopy("<think>Only a thought</think>")).toBe("");
+    });
   });
 });

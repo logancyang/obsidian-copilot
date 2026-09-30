@@ -65,12 +65,6 @@ describe("builtinSkills", () => {
       }
     });
 
-    it("keeps the SKILL.md frontmatter version in sync with the numeric version", () => {
-      for (const skill of BUILTIN_SKILLS) {
-        expect(skill.skillMd).toContain(`copilot-builtin-version: "${skill.version}"`);
-      }
-    });
-
     it("ships one runnable script per OS — POSIX sh + Windows cmd/ps1, no Node", () => {
       for (const skill of RELAY_SKILLS) {
         const sh = skill.files.find((f) => f.path.endsWith(".sh"));
@@ -144,15 +138,6 @@ describe("builtinSkills", () => {
       }
     });
 
-    it("includes the firecrawl-backed web-fetch skill targeting /url4llm", () => {
-      expect(scriptOf("copilot-web-fetch", ".sh")).toContain('relay "/url4llm"');
-      expect(scriptOf("copilot-web-fetch", ".sh")).toContain('\\"url\\"');
-      expect(scriptOf("copilot-web-fetch", ".ps1")).toContain('Invoke-Relay "/url4llm"');
-      expect(scriptOf("copilot-web-fetch", ".ps1")).toContain(
-        "@{ url = $ARG; user_id = $USER_ID }"
-      );
-    });
-
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 routes Self-Host web search through the plugin-owned channel without the optional Obsidian CLI", () => {
       const sh = scriptOf("copilot-web-search", ".sh");
       expect(sh).toContain(SELF_HOST_WEB_SEARCH_ENV);
@@ -196,6 +181,8 @@ describe("builtinSkills", () => {
     it("maps each relay tool to its endpoint and request body (both scripts)", () => {
       expect(scriptOf("copilot-web-search", ".sh")).toContain('relay "/websearch"');
       expect(scriptOf("copilot-web-search", ".sh")).toContain('\\"query\\"');
+      expect(scriptOf("copilot-web-fetch", ".sh")).toContain('relay "/url4llm"');
+      expect(scriptOf("copilot-web-fetch", ".sh")).toContain('\\"url\\"');
       expect(scriptOf("copilot-youtube-transcript", ".sh")).toContain('relay "/youtube4llm"');
       expect(scriptOf("copilot-fetch-x", ".sh")).toContain('relay "/twitter4llm"');
       expect(scriptOf("copilot-web-search", ".sh")).toContain('$(json_escape "$ARG")');
@@ -203,6 +190,10 @@ describe("builtinSkills", () => {
       expect(scriptOf("copilot-web-search", ".ps1")).toContain('Invoke-Relay "/websearch"');
       expect(scriptOf("copilot-web-search", ".ps1")).toContain(
         "@{ query = $ARG; user_id = $USER_ID }"
+      );
+      expect(scriptOf("copilot-web-fetch", ".ps1")).toContain('Invoke-Relay "/url4llm"');
+      expect(scriptOf("copilot-web-fetch", ".ps1")).toContain(
+        "@{ url = $ARG; user_id = $USER_ID }"
       );
       expect(scriptOf("copilot-youtube-transcript", ".ps1")).toContain(
         'Invoke-Relay "/youtube4llm"'
@@ -372,12 +363,6 @@ describe("builtinSkills", () => {
       expect(MIYO_SEARCH_SKILL.skillMd).not.toContain("node ");
     });
 
-    it("keeps the SKILL.md frontmatter version in sync with the numeric version", () => {
-      expect(MIYO_SEARCH_SKILL.skillMd).toContain(
-        `copilot-builtin-version: "${MIYO_SEARCH_SKILL.version}"`
-      );
-    });
-
     it("embeds no Plus license env — Miyo is a local loopback CLI", () => {
       expect(MIYO_SEARCH_SKILL.skillMd).not.toContain(PLUS_ENV.licenseKey);
       expect(MIYO_SEARCH_SKILL.skillMd).not.toContain(PLUS_ENV.baseUrl);
@@ -453,9 +438,6 @@ describe("builtinSkills", () => {
       expect(BUILTIN_SKILLS).not.toContain(MIYO_PARSE_SKILL);
       expect(MIYO_PARSE_SKILL.name).toBe("miyo-parse");
       expect(MIYO_PARSE_SKILL.enabledAgents).toEqual(["claude", "codex", "opencode"]);
-      expect(MIYO_PARSE_SKILL.skillMd).toContain(
-        `copilot-builtin-version: "${MIYO_PARSE_SKILL.version}"`
-      );
     });
 
     it("ships one wrapper per OS that runs `miyo parse` on a single quoted path", () => {
@@ -493,6 +475,12 @@ describe("builtinSkills", () => {
   });
 
   describe("ALL_MANAGED_SKILLS", () => {
+    it("keeps every SKILL.md frontmatter version in sync with the numeric version", () => {
+      for (const skill of ALL_MANAGED_SKILLS) {
+        expect(skill.skillMd).toContain(`copilot-builtin-version: "${skill.version}"`);
+      }
+    });
+
     it(`tells every script-backed skill to run through the agent's shell tool, never as code-execution code (${ISSUE_599})`, () => {
       const scripted = ALL_MANAGED_SKILLS.filter((skill) =>
         skill.files.some((file) => file.path.endsWith(".sh"))

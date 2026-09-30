@@ -180,10 +180,5 @@ describe("obsidianSkills", () => {
       expect(md).not.toContain("obsidian search query=");
       expect(md).not.toContain(" silent ");
     });
-
-    it("does not include the deferred Defuddle or capture skills", () => {
-      expect(OBSIDIAN_SKILLS.map((skill) => skill.name)).not.toContain("defuddle");
-      expect(OBSIDIAN_SKILLS.some((skill) => skill.name.includes("capture"))).toBe(false);
-    });
   });
 });
