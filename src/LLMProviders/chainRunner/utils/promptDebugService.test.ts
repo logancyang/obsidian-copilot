@@ -1,89 +1,79 @@
-import { generatePromptDebugReportForAgent, resolveBasePrompt } from "./promptDebugService";
 import type ChainManager from "@/LLMProviders/chainManager";
-import { ModelAdapter, PromptSection } from "./modelAdapter";
 import { mockTFile } from "@/__tests__/mockObsidian";
-import { PromptDebugReport } from "./toolPromptDebugger";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { ModelAdapterFactory } from "./modelAdapter";
+import { generatePromptDebugReportForAgent, resolveBasePrompt } from "./promptDebugService";
 
-const createAdapter = () => ({
-  buildSystemPromptSections: jest.fn(
-    (
-      basePrompt: string,
-      toolDescriptions: string,
-      toolNames?: string[],
-      toolMetadata?: unknown[]
-    ): PromptSection[] => [
-      {
-        id: "system",
-        label: "System",
-        source: "test",
-        content: `${basePrompt}::${toolDescriptions}::${toolNames?.join(",") || ""}::${
-          toolMetadata?.length ?? 0
-        }`,
-      },
-    ]
-  ),
-  enhanceUserMessage: jest.fn((message: string) => `${message} (enhanced)`),
-  constructor: { name: "TestAdapter" },
-});
+jest.mock("@/logger");
 
-const createChainContext = (history: unknown[] = []): ChainManager => {
-  const memory = {
-    loadMemoryVariables: jest.fn().mockResolvedValue({ history }),
-  };
+function gptAdapter() {
+  return ModelAdapterFactory.createAdapter({ modelName: "gpt-4" } as unknown as BaseChatModel);
+}
 
+function createChainContext(history: unknown[] = []): ChainManager {
   return {
     memoryManager: {
-      getMemory: () => memory,
-    },
-    userMemoryManager: {
-      getUserMemoryPrompt: jest.fn().mockResolvedValue(null),
+      getMemory: () => ({ loadMemoryVariables: jest.fn().mockResolvedValue({ history }) }),
     },
   } as unknown as ChainManager;
-};
+}
 
 describe("promptDebugService", () => {
-  it("builds prompt debug report with annotated sections", async () => {
-    const adapter = createAdapter();
-    const chainManager = createChainContext([{ type: "human", content: "hello" }]);
-
-    const report: PromptDebugReport = await generatePromptDebugReportForAgent({
-      chainManager,
-      adapter: adapter as unknown as ModelAdapter,
-      basePrompt: "BasePrompt",
-      toolDescriptions: "<tool></tool>",
-      toolNames: ["localSearch"],
-      toolMetadata: [
-        {
-          id: "localSearch",
-          displayName: "Vault Search",
-          description: "Search",
-          category: "search",
+  describe("generatePromptDebugReportForAgent()", () => {
+    it("reports the system prompt, restored history and original and adapter-enhanced user message in order", async () => {
+      const report = await generatePromptDebugReportForAgent({
+        chainManager: createChainContext([
+          { type: "human", content: "hello" },
+          { type: "ai", content: "hi" },
+        ]),
+        adapter: gptAdapter(),
+        basePrompt: "BasePrompt",
+        toolDescriptions: "<tool>localSearch</tool>",
+        toolNames: ["localSearch"],
+        toolMetadata: [],
+        userMessage: {
+          message: "search my notes",
+          originalMessage: "search my notes",
+          sender: "user",
+          timestamp: null,
+          isVisible: true,
         },
-      ],
-      userMessage: {
-        message: "search my notes",
-        originalMessage: "search my notes",
-        sender: "user",
-        timestamp: null,
-        isVisible: true,
-      },
+      });
+
+      const sectionIds = report.sections.map((section) => section.id);
+      expect(sectionIds[0]).toBe("base-system-prompt");
+      expect(sectionIds.slice(-3)).toEqual([
+        "chat-history",
+        "user-original-message",
+        "user-enhanced-message",
+      ]);
+      expect(report.systemPrompt).toContain("BasePrompt");
+      expect(report.systemPrompt).toContain("<tool>localSearch</tool>");
+      const enhanced = report.sections[report.sections.length - 1];
+      expect(enhanced.content).toBe("search my notes\n\nREMINDER: Call the localSearch tool now.");
+      expect(report.annotatedPrompt).toContain("1. USER\nhello\n\n2. ASSISTANT\nhi");
     });
 
-    expect(adapter.buildSystemPromptSections).toHaveBeenCalledWith(
-      "BasePrompt",
-      "<tool></tool>",
-      ["localSearch"],
-      expect.any(Array)
-    );
-    expect(adapter.enhanceUserMessage).toHaveBeenCalledWith("search my notes", true);
-    expect(report.sections.map((section) => section.id)).toEqual([
-      "system",
-      "chat-history",
-      "user-original-message",
-      "user-enhanced-message",
-    ]);
-    expect(report.annotatedPrompt).toContain("[Section: System | Source: test]");
-    expect(report.systemPrompt).toBeDefined();
+    it("uses the original message, not the enhanced chat text, for the original-message section", async () => {
+      const report = await generatePromptDebugReportForAgent({
+        chainManager: createChainContext(),
+        adapter: gptAdapter(),
+        basePrompt: "BasePrompt",
+        toolDescriptions: "",
+        toolNames: [],
+        toolMetadata: [],
+        userMessage: {
+          message: "fix the typo\n\n<note_context>...</note_context>",
+          originalMessage: "fix the typo",
+          sender: "user",
+          timestamp: null,
+          isVisible: true,
+        },
+      });
+
+      const original = report.sections.find((section) => section.id === "user-original-message");
+      expect(original?.content).toBe("fix the typo");
+    });
   });
 
   describe("resolveBasePrompt()", () => {

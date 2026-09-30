@@ -7,7 +7,7 @@ import {
 } from "./cicPromptUtils";
 
 describe("cicPromptUtils", () => {
-  describe("buildLocalSearchInnerContent", () => {
+  describe("buildLocalSearchInnerContent()", () => {
     it("orders intro text before documents and trims whitespace", () => {
       const intro = "\nIntro block\n";
       const documents = "\n<document>Doc</document>\n";
@@ -22,7 +22,7 @@ describe("cicPromptUtils", () => {
     });
   });
 
-  describe("wrapLocalSearchPayload", () => {
+  describe("wrapLocalSearchPayload()", () => {
     it("wraps content with localSearch tag and preserves time range", () => {
       const content = "<guidance>Rules</guidance>\n\n<document>Doc</document>";
 
@@ -38,7 +38,7 @@ describe("cicPromptUtils", () => {
     });
   });
 
-  describe("renderCiCMessage", () => {
+  describe("renderCiCMessage()", () => {
     it("places context before question", () => {
       const combined = renderCiCMessage("context block", "What?");
 
@@ -50,7 +50,7 @@ describe("cicPromptUtils", () => {
     });
   });
 
-  describe("ensureCiCOrderingWithQuestion", () => {
+  describe("ensureCiCOrderingWithQuestion()", () => {
     it("appends the trimmed question with [User query]: label after the payload when missing", () => {
       const payload = "<localSearch>\n<context/>\n</localSearch>";
       const question = "  What did I do last week?  ";
@@ -74,7 +74,7 @@ describe("cicPromptUtils", () => {
     });
   });
 
-  describe("injectGuidanceBeforeUserQuery", () => {
+  describe("injectGuidanceBeforeUserQuery()", () => {
     const guidance = "<guidance>\nRules\n</guidance>";
 
     it("places guidance before user query label when present", () => {

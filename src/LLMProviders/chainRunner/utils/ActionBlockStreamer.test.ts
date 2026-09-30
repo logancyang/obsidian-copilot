@@ -1,218 +1,164 @@
-import { ActionBlockStreamer } from "./ActionBlockStreamer";
 import { ToolManager } from "@/tools/toolManager";
-import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
-
-jest.mock("@/tools/toolManager");
-jest.mock("@/tools/ToolResultFormatter");
-
-const MockedToolManager = ToolManager as jest.Mocked<typeof ToolManager>;
-const MockedToolResultFormatter = ToolResultFormatter as jest.Mocked<typeof ToolResultFormatter>;
+import { ActionBlockStreamer } from "./ActionBlockStreamer";
 
 describe("ActionBlockStreamer", () => {
-  let writeFileTool: unknown;
-  let streamer: ActionBlockStreamer;
+  describe("processChunk()", () => {
+    let writeFileCall: jest.Mock;
+    let streamer: ActionBlockStreamer;
 
-  beforeEach(() => {
-    writeFileTool = { name: "writeFile" };
-    MockedToolManager.callTool.mockClear();
+    beforeEach(() => {
+      writeFileCall = jest.fn();
+      streamer = new ActionBlockStreamer(ToolManager, { name: "writeFile", call: writeFileCall });
+    });
 
-    MockedToolResultFormatter.format = jest.fn((_toolName, result) => result);
-
-    streamer = new ActionBlockStreamer(MockedToolManager, writeFileTool);
-  });
-
-  async function processChunks(chunks: { content: string | null }[]): Promise<unknown[]> {
-    const outputContents: unknown[] = [];
-    for (const chunk of chunks) {
-      for await (const result of streamer.processChunk(chunk)) {
-        outputContents.push(result.content);
+    async function processChunks(chunks: { content: string | null }[]): Promise<unknown[]> {
+      const outputContents: unknown[] = [];
+      for (const chunk of chunks) {
+        for await (const result of streamer.processChunk(chunk)) {
+          outputContents.push(result.content);
+        }
       }
+      return outputContents;
     }
-    return outputContents;
-  }
 
-  it("should pass through chunks without writeFile tags unchanged", async () => {
-    const chunks = [{ content: "Hello " }, { content: "world, this is " }, { content: "a test." }];
-    const output = await processChunks(chunks);
+    it("passes chunks without writeFile tags through unchanged and calls no tool", async () => {
+      const output = await processChunks([
+        { content: "Hello " },
+        { content: "world, this is " },
+        { content: "a test." },
+      ]);
 
-    expect(output).toEqual(["Hello ", "world, this is ", "a test."]);
-
-    expect(MockedToolManager.callTool).not.toHaveBeenCalled();
-  });
-
-  it("should handle a complete writeFile block in a single chunk", async () => {
-    MockedToolManager.callTool.mockResolvedValue("File written successfully.");
-    const chunks = [
-      {
-        content:
-          "Some text before <writeFile><path>file.txt</path><content>content</content></writeFile> and some text after.",
-      },
-    ];
-    const output = await processChunks(chunks);
-
-    expect(output).toEqual([
-      "Some text before <writeFile><path>file.txt</path><content>content</content></writeFile> and some text after.",
-      "\nFile written successfully.\n",
-    ]);
-
-    expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeFileTool, {
-      path: "file.txt",
-      content: "content",
+      expect(output).toEqual(["Hello ", "world, this is ", "a test."]);
+      expect(writeFileCall).not.toHaveBeenCalled();
     });
-  });
 
-  it("should handle a complete xml-wrapped writeFile block", async () => {
-    MockedToolManager.callTool.mockResolvedValue("XML file written.");
-    const chunks = [
-      {
-        content:
-          "```xml\n<writeFile><path>file.xml</path><content>xml content</content></writeFile>\n```",
-      },
-    ];
-    const output = await processChunks(chunks);
+    it("runs writeFile for a complete block in one chunk and yields the result after the chunk", async () => {
+      writeFileCall.mockResolvedValue("File written successfully.");
+      const content =
+        "Some text before <writeFile><path>file.txt</path><content>content</content></writeFile> and some text after.";
 
-    expect(output).toEqual([
-      "```xml\n<writeFile><path>file.xml</path><content>xml content</content></writeFile>\n```",
-      "\nXML file written.\n",
-    ]);
+      const output = await processChunks([{ content }]);
 
-    expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeFileTool, {
-      path: "file.xml",
-      content: "xml content",
+      expect(output).toEqual([content, "\nFile written successfully.\n"]);
+      expect(writeFileCall).toHaveBeenCalledWith({ path: "file.txt", content: "content" });
     });
-  });
 
-  it("should handle a writeFile block split across multiple chunks", async () => {
-    MockedToolManager.callTool.mockResolvedValue("Split file written.");
-    const chunks = [
-      { content: "Here is a file <writeFile><path>split.txt</path>" },
-      { content: "<content>split content</content>" },
-      { content: "</writeFile> That was it." },
-    ];
-    const output = await processChunks(chunks);
+    it("runs writeFile for a block wrapped in a code fence", async () => {
+      writeFileCall.mockResolvedValue("XML file written.");
+      const content =
+        "```xml\n<writeFile><path>file.xml</path><content>xml content</content></writeFile>\n```";
 
-    expect(output).toEqual([
-      "Here is a file <writeFile><path>split.txt</path>",
-      "<content>split content</content>",
-      "</writeFile> That was it.",
-      "\nSplit file written.\n",
-    ]);
+      const output = await processChunks([{ content }]);
 
-    expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeFileTool, {
-      path: "split.txt",
-      content: "split content",
+      expect(output).toEqual([content, "\nXML file written.\n"]);
+      expect(writeFileCall).toHaveBeenCalledWith({ path: "file.xml", content: "xml content" });
     });
-  });
 
-  it("should handle multiple writeFile blocks in the stream", async () => {
-    MockedToolManager.callTool
-      .mockResolvedValueOnce("File 1 written.")
-      .mockResolvedValueOnce("File 2 written.");
-    const chunks = [
-      {
-        content:
-          "<writeFile><path>f1.txt</path><content>c1</content></writeFile>Some text<writeFile><path>f2.txt</path><content>c2</content></writeFile>",
-      },
-    ];
-    const output = await processChunks(chunks);
+    it("runs writeFile once the closing tag arrives in a later chunk", async () => {
+      writeFileCall.mockResolvedValue("Split file written.");
 
-    expect(output).toEqual([
-      "<writeFile><path>f1.txt</path><content>c1</content></writeFile>Some text<writeFile><path>f2.txt</path><content>c2</content></writeFile>",
-      "\nFile 1 written.\n",
-      "\nFile 2 written.\n",
-    ]);
+      const output = await processChunks([
+        { content: "Here is a file <writeFile><path>split.txt</path>" },
+        { content: "<content>split content</content>" },
+        { content: "</writeFile> That was it." },
+      ]);
 
-    expect(MockedToolManager.callTool).toHaveBeenCalledTimes(2);
-    expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeFileTool, {
-      path: "f1.txt",
-      content: "c1",
+      expect(output).toEqual([
+        "Here is a file <writeFile><path>split.txt</path>",
+        "<content>split content</content>",
+        "</writeFile> That was it.",
+        "\nSplit file written.\n",
+      ]);
+      expect(writeFileCall).toHaveBeenCalledTimes(1);
+      expect(writeFileCall).toHaveBeenCalledWith({ path: "split.txt", content: "split content" });
     });
-    expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeFileTool, {
-      path: "f2.txt",
-      content: "c2",
+
+    it("runs writeFile once per block, in order, when one chunk holds several blocks", async () => {
+      writeFileCall
+        .mockResolvedValueOnce("File 1 written.")
+        .mockResolvedValueOnce("File 2 written.");
+      const content =
+        "<writeFile><path>f1.txt</path><content>c1</content></writeFile>Some text<writeFile><path>f2.txt</path><content>c2</content></writeFile>";
+
+      const output = await processChunks([{ content }]);
+
+      expect(output).toEqual([content, "\nFile 1 written.\n", "\nFile 2 written.\n"]);
+      expect(writeFileCall.mock.calls).toEqual([
+        [{ path: "f1.txt", content: "c1" }],
+        [{ path: "f2.txt", content: "c2" }],
+      ]);
     });
-  });
 
-  it("should handle unclosed tags without calling tools", async () => {
-    const chunks = [
-      { content: "Starting... <writeFile><path>unclosed.txt</path>" },
-      { content: "<content>this will not be closed" },
-    ];
-    const output = await processChunks(chunks);
+    it("yields the formatted status when the tool reports that the file change was accepted", async () => {
+      writeFileCall.mockResolvedValue(JSON.stringify({ result: "accepted" }));
 
-    expect(output).toEqual([
-      "Starting... <writeFile><path>unclosed.txt</path>",
-      "<content>this will not be closed",
-    ]);
+      const output = await processChunks([
+        { content: "<writeFile><path>a.md</path><content>x</content></writeFile>" },
+      ]);
 
-    expect(MockedToolManager.callTool).not.toHaveBeenCalled();
-  });
-
-  it("should handle tool call errors gracefully", async () => {
-    MockedToolManager.callTool.mockRejectedValue(new Error("Tool error"));
-    const chunks = [
-      {
-        content: "<writeFile><path>error.txt</path><content>content</content></writeFile>",
-      },
-    ];
-    const output = await processChunks(chunks);
-
-    expect(output).toEqual([
-      "<writeFile><path>error.txt</path><content>content</content></writeFile>",
-      "\nError: Tool error\n",
-    ]);
-
-    expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeFileTool, {
-      path: "error.txt",
-      content: "content",
+      expect(output[1]).toBe("\n✅ File change: accepted\n");
     });
-  });
 
-  it("should handle chunks with different content types", async () => {
-    const chunks: { content: string | null }[] = [
-      { content: "Hello" },
-      { content: null },
-      { content: "" },
-      { content: " World" },
-    ];
-    const output = await processChunks(chunks);
+    it("trims whitespace around the path and content", async () => {
+      writeFileCall.mockResolvedValue("ok");
 
-    expect(output).toEqual(["Hello", null, "", " World"]);
-  });
+      await processChunks([
+        {
+          content:
+            "<writeFile><path>  spaced.txt  </path><content>  content with spaces  </content></writeFile>",
+        },
+      ]);
 
-  it("should handle whitespace in path and content", async () => {
-    MockedToolManager.callTool.mockResolvedValue("Whitespace handled.");
-    const chunks = [
-      {
-        content:
-          "<writeFile><path>  spaced.txt  </path><content>  content with spaces  </content></writeFile>",
-      },
-    ];
-    await processChunks(chunks);
-
-    expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeFileTool, {
-      path: "spaced.txt",
-      content: "content with spaces",
+      expect(writeFileCall).toHaveBeenCalledWith({
+        path: "spaced.txt",
+        content: "content with spaces",
+      });
     });
-  });
 
-  it("should handle malformed blocks gracefully", async () => {
-    MockedToolManager.callTool.mockResolvedValue("Malformed handled.");
-    const chunks = [
-      {
-        content: "<writeFile><path>missing-content.txt</path></writeFile>",
-      },
-    ];
-    const output = await processChunks(chunks);
+    it("passes through null and empty chunk content unchanged", async () => {
+      const output = await processChunks([
+        { content: "Hello" },
+        { content: null },
+        { content: "" },
+        { content: " World" },
+      ]);
 
-    expect(output).toEqual([
-      "<writeFile><path>missing-content.txt</path></writeFile>",
-      "\nMalformed handled.\n",
-    ]);
+      expect(output).toEqual(["Hello", null, "", " World"]);
+    });
 
-    expect(MockedToolManager.callTool).toHaveBeenCalledWith(writeFileTool, {
-      path: "missing-content.txt",
-      content: undefined,
+    it("calls writeFile with undefined content when the block has no content tag", async () => {
+      writeFileCall.mockResolvedValue("Malformed handled.");
+      const content = "<writeFile><path>missing-content.txt</path></writeFile>";
+
+      const output = await processChunks([{ content }]);
+
+      expect(output).toEqual([content, "\nMalformed handled.\n"]);
+      expect(writeFileCall).toHaveBeenCalledWith({
+        path: "missing-content.txt",
+        content: undefined,
+      });
+    });
+
+    it("calls no tool while a block stays unclosed", async () => {
+      const output = await processChunks([
+        { content: "Starting... <writeFile><path>unclosed.txt</path>" },
+        { content: "<content>this will not be closed" },
+      ]);
+
+      expect(output).toEqual([
+        "Starting... <writeFile><path>unclosed.txt</path>",
+        "<content>this will not be closed",
+      ]);
+      expect(writeFileCall).not.toHaveBeenCalled();
+    });
+
+    it("yields the tool's error message instead of throwing when writeFile fails", async () => {
+      writeFileCall.mockRejectedValue(new Error("Tool error"));
+      const content = "<writeFile><path>error.txt</path><content>content</content></writeFile>";
+
+      const output = await processChunks([{ content }]);
+
+      expect(output).toEqual([content, "\nError: Tool error\n"]);
     });
   });
 });

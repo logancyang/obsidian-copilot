@@ -11,6 +11,9 @@ jest.mock("@/logger", () => ({
 import {
   formatSearchResultsForLLM,
   formatSearchResultStringForLLM,
+  formatQualitySummary,
+  formatSplitSearchResultsForLLM,
+  generateQualitySummary,
   extractSourcesFromSearchResults,
   formatMetadataOnlyDocuments,
   isFilterOnlyResults,
@@ -19,19 +22,19 @@ import {
 } from "./searchResultUtils";
 
 describe("searchResultUtils", () => {
-  describe("formatSearchResultsForLLM", () => {
-    it("should return empty string for non-array input", () => {
+  describe("formatSearchResultsForLLM()", () => {
+    it("returns an empty string for non-array input", () => {
       expect(formatSearchResultsForLLM(null)).toBe("");
       expect(formatSearchResultsForLLM(undefined)).toBe("");
       expect(formatSearchResultsForLLM("string")).toBe("");
       expect(formatSearchResultsForLLM({})).toBe("");
     });
 
-    it("should return 'No relevant documents found.' for empty array", () => {
+    it("returns the no-documents message for an empty array", () => {
       expect(formatSearchResultsForLLM([])).toBe("No relevant documents found.");
     });
 
-    it("should filter out documents with includeInContext=false", () => {
+    it("leaves out documents marked includeInContext=false", () => {
       const documents = [
         { title: "Doc1", content: "Content 1", includeInContext: true },
         { title: "Doc2", content: "Content 2", includeInContext: false },
@@ -44,7 +47,7 @@ describe("searchResultUtils", () => {
       expect(result).toContain("Doc3");
     });
 
-    it("should format single document with all metadata", () => {
+    it("formats a document with its id, title, path, modified time and content", () => {
       const documents = [
         {
           title: "Test Document",
@@ -62,7 +65,7 @@ describe("searchResultUtils", () => {
       expect(result).toContain(`<content>\nThis is the content\n</content>\n</document>`);
     });
 
-    it("should handle missing optional fields gracefully", () => {
+    it("omits the path and modified time when the document has neither", () => {
       const documents = [
         {
           title: "Test Document",
@@ -75,7 +78,7 @@ describe("searchResultUtils", () => {
       expect(result).toContain(`<content>\nThis is the content\n</content>\n</document>`);
     });
 
-    it("should not include path if it equals title", () => {
+    it("omits the path when it equals the title", () => {
       const documents = [
         {
           title: "document.md",
@@ -88,7 +91,7 @@ describe("searchResultUtils", () => {
       expect(result).not.toContain("<path>");
     });
 
-    it("should handle invalid mtime gracefully", () => {
+    it("omits the modified time when mtime is not a valid date", () => {
       const documents = [
         {
           title: "Test",
@@ -101,7 +104,7 @@ describe("searchResultUtils", () => {
       expect(result).not.toContain("<modified>");
     });
 
-    it("should format multiple documents separated by double newlines", () => {
+    it("separates multiple documents with a blank line", () => {
       const documents = [
         { title: "Doc1", content: "Content 1" },
         { title: "Doc2", content: "Content 2" },
@@ -114,7 +117,7 @@ describe("searchResultUtils", () => {
       expect(docs[1]).toContain("Doc2");
     });
 
-    it("should handle documents with empty content", () => {
+    it("still lists documents whose content is empty, null or missing", () => {
       const documents = [
         { title: "Empty Doc", content: "" },
         { title: "Null Doc", content: null },
@@ -127,7 +130,7 @@ describe("searchResultUtils", () => {
       expect(result).toContain("Undefined Doc");
     });
 
-    it("should use 'Untitled' for missing title", () => {
+    it("titles a document without a title Untitled", () => {
       const documents = [{ content: "Content without title" }];
 
       const result = formatSearchResultsForLLM(documents);
@@ -135,8 +138,8 @@ describe("searchResultUtils", () => {
     });
   });
 
-  describe("formatSearchResultStringForLLM", () => {
-    it("should parse and format valid JSON string", () => {
+  describe("formatSearchResultStringForLLM()", () => {
+    it("formats the documents in a valid JSON string", () => {
       const documents = [{ title: "Test", content: "Content" }];
       const jsonString = JSON.stringify(documents);
 
@@ -145,30 +148,30 @@ describe("searchResultUtils", () => {
       expect(result).toContain("Content");
     });
 
-    it("should return error message for invalid JSON", () => {
+    it("returns an error message for invalid JSON", () => {
       const result = formatSearchResultStringForLLM("invalid json");
       expect(result).toBe("Error processing search results.");
     });
 
-    it("should return error message for non-array JSON", () => {
+    it("returns an invalid-format message for JSON that is not an array", () => {
       const result = formatSearchResultStringForLLM(JSON.stringify({ not: "array" }));
       expect(result).toBe("Invalid search results format.");
     });
 
-    it("should handle empty array JSON string", () => {
+    it("returns the no-documents message for an empty JSON array", () => {
       const result = formatSearchResultStringForLLM(JSON.stringify([]));
       expect(result).toBe("No relevant documents found.");
     });
   });
 
-  describe("extractSourcesFromSearchResults", () => {
-    it("should return empty array for non-array input", () => {
+  describe("extractSourcesFromSearchResults()", () => {
+    it("returns an empty array for non-array input", () => {
       expect(extractSourcesFromSearchResults(null)).toEqual([]);
       expect(extractSourcesFromSearchResults(undefined)).toEqual([]);
       expect(extractSourcesFromSearchResults("string")).toEqual([]);
     });
 
-    it("should extract sources with all fields", () => {
+    it("extracts title, path, score and explanation from each document", () => {
       const documents = [
         {
           title: "Document 1",
@@ -189,7 +192,7 @@ describe("searchResultUtils", () => {
       });
     });
 
-    it("should prefer rerank_score over score", () => {
+    it("scores a source by rerank_score when it has both scores", () => {
       const documents = [
         {
           title: "Test",
@@ -202,7 +205,7 @@ describe("searchResultUtils", () => {
       expect(sources[0].score).toBe(0.8);
     });
 
-    it("should fallback to score when rerank_score is not available", () => {
+    it("scores a source by score when it has no rerank_score", () => {
       const documents = [
         {
           title: "Test",
@@ -214,7 +217,7 @@ describe("searchResultUtils", () => {
       expect(sources[0].score).toBe(0.5);
     });
 
-    it("should handle missing title by using path", () => {
+    it("titles a source by its path when it has no title", () => {
       const documents = [
         {
           path: "path/to/document.md",
@@ -227,7 +230,7 @@ describe("searchResultUtils", () => {
       expect(sources[0].path).toBe("path/to/document.md");
     });
 
-    it("should handle missing path by using title", () => {
+    it("gives a source its title as path when it has no path", () => {
       const documents = [
         {
           title: "Document Title",
@@ -240,7 +243,7 @@ describe("searchResultUtils", () => {
       expect(sources[0].path).toBe("Document Title");
     });
 
-    it("should use 'Untitled' when both title and path are missing", () => {
+    it("titles a source Untitled with an empty path when it has neither title nor path", () => {
       const documents = [
         {
           score: 0.7,
@@ -252,7 +255,7 @@ describe("searchResultUtils", () => {
       expect(sources[0].path).toBe("");
     });
 
-    it("should default score to 0 when missing", () => {
+    it("scores a source 0 when it has no score", () => {
       const documents = [
         {
           title: "Test",
@@ -263,7 +266,7 @@ describe("searchResultUtils", () => {
       expect(sources[0].score).toBe(0);
     });
 
-    it("should preserve null explanation or set to null if missing", () => {
+    it("keeps a given explanation and uses null when there is none", () => {
       const documents = [
         { title: "With Explanation", explanation: { data: "test" } },
         { title: "Without Explanation" },
@@ -274,7 +277,7 @@ describe("searchResultUtils", () => {
       expect(sources[1].explanation).toBeNull();
     });
 
-    it("should process multiple documents", () => {
+    it("returns one source per document in order", () => {
       const documents = [
         { title: "Doc1", score: 0.9 },
         { title: "Doc2", score: 0.8 },
@@ -287,17 +290,74 @@ describe("searchResultUtils", () => {
     });
   });
 
-  describe("formatMetadataOnlyDocuments", () => {
-    it("should return empty string for empty array", () => {
+  describe("generateQualitySummary()", () => {
+    it("counts high (0.7 and up), medium (0.3 and up) and low scores and averages them, preferring rerank_score", () => {
+      const summary = generateQualitySummary([
+        { score: 0.9 },
+        { score: 0.1, rerank_score: 0.7 },
+        { score: 0.5 },
+        { score: 0.2 },
+      ]);
+
+      expect(summary).toMatchObject({ high: 2, medium: 1, low: 1, total: 4 });
+      expect(summary.averageScore).toBeCloseTo(0.575, 5);
+    });
+
+    it("returns an all-zero summary for no results", () => {
+      expect(generateQualitySummary([])).toEqual({
+        high: 0,
+        medium: 0,
+        low: 0,
+        total: 0,
+        averageScore: 0,
+      });
+    });
+  });
+
+  describe("formatQualitySummary()", () => {
+    it("lists only the non-empty relevance buckets", () => {
+      expect(
+        formatQualitySummary({ high: 2, medium: 0, low: 1, total: 3, averageScore: 0.5 })
+      ).toBe("[Relevance: 2 high, 1 low]");
+    });
+
+    it("reports no results when every bucket is empty", () => {
+      expect(formatQualitySummary({ high: 0, medium: 0, low: 0, total: 0, averageScore: 0 })).toBe(
+        "[Relevance: no results]"
+      );
+    });
+  });
+
+  describe("formatSplitSearchResultsForLLM()", () => {
+    it("puts filter documents in filterResults with their match type and search documents in searchResults, numbering ids across both", () => {
+      const result = formatSplitSearchResultsForLLM(
+        [{ title: "Daily", path: "daily.md", content: "Filtered", source: "tag-match" }],
+        [{ title: "Found", path: "found.md", content: "Searched" }]
+      );
+
+      expect(result).toContain("<filterResults>");
+      expect(result).toContain("<id>1</id>\n<title>Daily</title>\n<path>daily.md</path>");
+      expect(result).toContain("<matchType>tag-match</matchType>");
+      expect(result).toContain("<searchResults>");
+      expect(result).toContain("<id>2</id>\n<title>Found</title>\n<path>found.md</path>");
+    });
+
+    it("returns the no-documents message when both lists are empty", () => {
+      expect(formatSplitSearchResultsForLLM([], [])).toBe("No relevant documents found.");
+    });
+  });
+
+  describe("formatMetadataOnlyDocuments()", () => {
+    it("returns an empty string for an empty array", () => {
       expect(formatMetadataOnlyDocuments([])).toBe("");
     });
 
-    it("should return empty string for non-array input", () => {
+    it("returns an empty string for non-array input", () => {
       expect(formatMetadataOnlyDocuments(null)).toBe("");
       expect(formatMetadataOnlyDocuments(undefined)).toBe("");
     });
 
-    it("should include correct count attribute", () => {
+    it("states the document count", () => {
       const docs = [
         { title: "Doc1", content: "Content 1" },
         { title: "Doc2", content: "Content 2" },
@@ -307,7 +367,7 @@ describe("searchResultUtils", () => {
       expect(result).toContain('count="3"');
     });
 
-    it("should include the note attribute", () => {
+    it("tells the model to call readNote for full content", () => {
       const docs = [{ title: "Doc1", content: "Content" }];
       const result = formatMetadataOnlyDocuments(docs);
       expect(result).toContain(
@@ -315,7 +375,7 @@ describe("searchResultUtils", () => {
       );
     });
 
-    it("should format document with title, path, mtime, and snippet", () => {
+    it("lists each document's title, path, modified time and content snippet", () => {
       const docs = [
         {
           title: "My Note",
@@ -331,7 +391,7 @@ describe("searchResultUtils", () => {
       expect(result).toContain("<snippet>This is the note content</snippet>");
     });
 
-    it("should truncate content to 300 chars for snippet by default", () => {
+    it("cuts the snippet to 300 characters by default", () => {
       const longContent = "a".repeat(400);
       const docs = [{ title: "Doc", content: longContent }];
       const result = formatMetadataOnlyDocuments(docs);
@@ -339,7 +399,7 @@ describe("searchResultUtils", () => {
       expect(result).not.toContain("a".repeat(301));
     });
 
-    it("should respect custom snippetLength parameter", () => {
+    it("cuts the snippet to a custom snippetLength", () => {
       const longContent = "b".repeat(200);
       const docs = [{ title: "Doc", content: longContent }];
       const result = formatMetadataOnlyDocuments(docs, 100);
@@ -347,113 +407,95 @@ describe("searchResultUtils", () => {
       expect(result).not.toContain("b".repeat(101));
     });
 
-    it("should omit path when missing", () => {
+    it("omits the path when the document has none", () => {
       const docs = [{ title: "Doc", content: "Content" }];
       const result = formatMetadataOnlyDocuments(docs);
       expect(result).not.toContain("<path>");
     });
 
-    it("should omit modified when mtime is missing", () => {
+    it("omits the modified time when mtime is missing", () => {
       const docs = [{ title: "Doc", content: "Content" }];
       const result = formatMetadataOnlyDocuments(docs);
       expect(result).not.toContain("<modified>");
     });
 
-    it("should omit snippet when content is empty", () => {
+    it("omits the snippet when content is empty", () => {
       const docs = [{ title: "Doc", content: "" }];
       const result = formatMetadataOnlyDocuments(docs);
       expect(result).not.toContain("<snippet>");
     });
 
-    it("should use Untitled for missing title", () => {
+    it("titles a document without a title Untitled", () => {
       const docs = [{ content: "Content" }];
       const result = formatMetadataOnlyDocuments(docs);
       expect(result).toContain("<title>Untitled</title>");
     });
 
-    it("should wrap output in additionalMatches element", () => {
+    it("wraps the output in an additionalMatches element", () => {
       const docs = [{ title: "Doc", content: "Content" }];
       const result = formatMetadataOnlyDocuments(docs);
       expect(result).toMatch(/^<additionalMatches /);
       expect(result).toMatch(/<\/additionalMatches>$/);
     });
-
-    it("should format multiple documents as file elements", () => {
-      const docs = [
-        { title: "Doc1", content: "Content 1" },
-        { title: "Doc2", content: "Content 2" },
-      ];
-      const result = formatMetadataOnlyDocuments(docs);
-      expect(result).toContain("<title>Doc1</title>");
-      expect(result).toContain("<title>Doc2</title>");
-    });
   });
 
-  describe("isFilterOnlyResults", () => {
-    it("should return false for empty array", () => {
+  describe("isFilterOnlyResults()", () => {
+    it("returns false for an empty array", () => {
       expect(isFilterOnlyResults([])).toBe(false);
     });
 
-    it("should return false for non-array input", () => {
+    it("returns false for non-array input", () => {
       expect(isFilterOnlyResults(null as unknown as Array<{ source?: string }>)).toBe(false);
       expect(isFilterOnlyResults(undefined as unknown as Array<{ source?: string }>)).toBe(false);
     });
 
-    it("should return true when all docs have filter sources", () => {
+    it("returns true when every document comes from a filter source", () => {
       const docs = [{ source: "time-filtered" }, { source: "tag-match" }];
       expect(isFilterOnlyResults(docs)).toBe(true);
     });
 
-    it("should return false for title-match docs (they get full content)", () => {
+    it("returns false for title-match documents because they carry full content", () => {
       const docs = [{ source: "title-match" }];
       expect(isFilterOnlyResults(docs)).toBe(false);
     });
 
-    it("should return false when title-match is mixed with other filter sources", () => {
+    it("returns false when a title-match document is mixed with filter documents", () => {
       const docs = [{ source: "tag-match" }, { source: "title-match" }];
       expect(isFilterOnlyResults(docs)).toBe(false);
     });
 
-    it("should return false when any doc has a non-filter source", () => {
+    it("returns false when any document has a non-filter source", () => {
       const docs = [{ source: "time-filtered" }, { source: "semantic" }];
       expect(isFilterOnlyResults(docs)).toBe(false);
     });
 
-    it("should return false when any doc has no source", () => {
+    it("returns false when any document has no source", () => {
       const docs = [{ source: "tag-match" }, {}];
       expect(isFilterOnlyResults(docs)).toBe(false);
     });
-
-    it("should return true for single tag-match doc", () => {
-      expect(isFilterOnlyResults([{ source: "tag-match" }])).toBe(true);
-    });
   });
 
-  describe("isTimeDominantResults", () => {
-    it("should return false for empty array", () => {
+  describe("isTimeDominantResults()", () => {
+    it("returns false for an empty array", () => {
       expect(isTimeDominantResults([])).toBe(false);
     });
 
-    it("should return false for non-array input", () => {
+    it("returns false for non-array input", () => {
       expect(isTimeDominantResults(null as unknown as Array<{ source?: string }>)).toBe(false);
       expect(isTimeDominantResults(undefined as unknown as Array<{ source?: string }>)).toBe(false);
     });
 
-    it("should return true when at least one doc has source time-filtered", () => {
+    it("returns true when at least one document is time-filtered", () => {
       const docs = [{ source: "tag-match" }, { source: "time-filtered" }];
       expect(isTimeDominantResults(docs)).toBe(true);
     });
 
-    it("should return false when no docs have source time-filtered", () => {
+    it("returns false when no document is time-filtered", () => {
       const docs = [{ source: "tag-match" }, { source: "title-match" }];
       expect(isTimeDominantResults(docs)).toBe(false);
     });
 
-    it("should return true for single time-filtered doc", () => {
-      expect(isTimeDominantResults([{ source: "time-filtered" }])).toBe(true);
-    });
-
-    it("should return false when source is undefined", () => {
+    it("returns false when the document has no source", () => {
       expect(isTimeDominantResults([{}])).toBe(false);
     });
   });

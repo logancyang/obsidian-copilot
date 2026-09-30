@@ -1,8 +1,14 @@
-import { processRawChatHistory, processedMessagesToTextOnly } from "./chatHistoryUtils";
+import {
+  loadAndAddChatHistory,
+  processRawChatHistory,
+  processedMessagesToTextOnly,
+} from "./chatHistoryUtils";
+
+jest.mock("@/logger");
 
 describe("chatHistoryUtils", () => {
-  describe("processRawChatHistory", () => {
-    it("should process BaseMessage objects correctly", () => {
+  describe("processRawChatHistory()", () => {
+    it("maps human and ai LangChain messages to user and assistant turns", () => {
       const rawHistory = [
         {
           type: "human",
@@ -22,7 +28,7 @@ describe("chatHistoryUtils", () => {
       ]);
     });
 
-    it("should handle multimodal content in BaseMessage objects", () => {
+    it("keeps multimodal content arrays as they are", () => {
       const multimodalContent = [
         { type: "text", text: "What is this?" },
         { type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } },
@@ -47,7 +53,7 @@ describe("chatHistoryUtils", () => {
       ]);
     });
 
-    it("should skip system messages", () => {
+    it("drops system messages", () => {
       const rawHistory = [
         {
           type: "system",
@@ -64,7 +70,7 @@ describe("chatHistoryUtils", () => {
       expect(result).toEqual([{ role: "user", content: "Hello" }]);
     });
 
-    it("should handle legacy message formats", () => {
+    it("maps legacy role and sender fields to user and assistant turns", () => {
       const rawHistory = [
         {
           role: "human",
@@ -94,7 +100,7 @@ describe("chatHistoryUtils", () => {
       ]);
     });
 
-    it("should handle null and undefined messages", () => {
+    it("skips null, undefined, empty and content-less entries", () => {
       const rawHistory = [
         null,
         undefined,
@@ -111,7 +117,7 @@ describe("chatHistoryUtils", () => {
       expect(result).toEqual([{ role: "user", content: "Hello" }]);
     });
 
-    it("should handle messages with unknown types", () => {
+    it("drops messages whose type or role is unknown", () => {
       const rawHistory = [
         {
           type: "unknown",
@@ -129,8 +135,8 @@ describe("chatHistoryUtils", () => {
     });
   });
 
-  describe("processedMessagesToTextOnly", () => {
-    it("should handle string content", () => {
+  describe("processedMessagesToTextOnly()", () => {
+    it("keeps string content as it is", () => {
       const processedMessages = [
         { role: "user" as const, content: "Hello" },
         { role: "assistant" as const, content: "Hi there!" },
@@ -144,7 +150,7 @@ describe("chatHistoryUtils", () => {
       ]);
     });
 
-    it("should extract text from multimodal content", () => {
+    it("reduces multimodal content to its text part", () => {
       const processedMessages = [
         {
           role: "user" as const,
@@ -167,7 +173,7 @@ describe("chatHistoryUtils", () => {
       ]);
     });
 
-    it("should handle multiple text parts in multimodal content", () => {
+    it("joins several text parts with a space and drops the images between them", () => {
       const processedMessages = [
         {
           role: "user" as const,
@@ -184,7 +190,7 @@ describe("chatHistoryUtils", () => {
       expect(result).toEqual([{ role: "user", content: "First part. Second part." }]);
     });
 
-    it("should handle image-only content", () => {
+    it("replaces image-only content with an [Image content] placeholder", () => {
       const processedMessages = [
         {
           role: "user" as const,
@@ -195,6 +201,41 @@ describe("chatHistoryUtils", () => {
       const result = processedMessagesToTextOnly(processedMessages);
 
       expect(result).toEqual([{ role: "user", content: "[Image content]" }]);
+    });
+  });
+  describe("loadAndAddChatHistory()", () => {
+    it("appends the processed memory history to the messages and returns it", async () => {
+      const memory = {
+        loadMemoryVariables: jest.fn().mockResolvedValue({
+          history: [
+            { type: "human", content: "Hello" },
+            { type: "ai", content: "Hi there!" },
+          ],
+        }),
+      };
+      const messages = [{ role: "system", content: "You are helpful" }];
+
+      const history = await loadAndAddChatHistory(memory, messages);
+
+      expect(history).toEqual([
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: "Hi there!" },
+      ]);
+      expect(messages).toEqual([
+        { role: "system", content: "You are helpful" },
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: "Hi there!" },
+      ]);
+    });
+
+    it("leaves the messages untouched when memory has no history", async () => {
+      const memory = { loadMemoryVariables: jest.fn().mockResolvedValue({}) };
+      const messages = [{ role: "system", content: "You are helpful" }];
+
+      const history = await loadAndAddChatHistory(memory, messages);
+
+      expect(history).toEqual([]);
+      expect(messages).toEqual([{ role: "system", content: "You are helpful" }]);
     });
   });
 });
