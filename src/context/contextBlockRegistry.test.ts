@@ -8,7 +8,7 @@ import {
 
 describe("contextBlockRegistry", () => {
   describe("CONTEXT_BLOCK_TYPES", () => {
-    it("should have all expected block types registered", () => {
+    it("registers every context block tag the prompt builders emit", () => {
       const tags = CONTEXT_BLOCK_TYPES.map((bt) => bt.tag);
       expect(tags).toContain("note_context");
       expect(tags).toContain("active_note");
@@ -20,48 +20,54 @@ describe("contextBlockRegistry", () => {
     });
   });
 
-  describe("getSourceType", () => {
-    it("should return correct source type for note blocks", () => {
+  describe("getSourceType()", () => {
+    it("classifies note-producing tags as note", () => {
       expect(getSourceType("note_context")).toBe("note");
       expect(getSourceType("active_note")).toBe("note");
       expect(getSourceType("embedded_note")).toBe("note");
     });
 
-    it("should return correct source type for URL blocks", () => {
+    it("classifies web and tweet tags as url", () => {
       expect(getSourceType("url_content")).toBe("url");
       expect(getSourceType("web_tab_context")).toBe("url");
       expect(getSourceType("twitter_content")).toBe("url");
     });
 
-    it("should return correct source type for YouTube blocks", () => {
+    it("classifies the YouTube tag as youtube", () => {
       expect(getSourceType("youtube_video_context")).toBe("youtube");
     });
 
-    it("should return unknown for unregistered tags", () => {
+    it("returns pdf and selected_text for their registered tags", () => {
+      expect(getSourceType("embedded_pdf")).toBe("pdf");
+      expect(getSourceType("selected_text")).toBe("selected_text");
+      expect(getSourceType("web_selected_text")).toBe("selected_text");
+    });
+
+    it("returns unknown for an unregistered tag", () => {
       expect(getSourceType("random_tag")).toBe("unknown");
     });
   });
 
-  describe("isRecoverable", () => {
-    it("should return true for recoverable types", () => {
+  describe("isRecoverable()", () => {
+    it("marks note, URL, YouTube, and tweet blocks as recoverable", () => {
       expect(isRecoverable("note_context")).toBe(true);
       expect(isRecoverable("url_content")).toBe(true);
       expect(isRecoverable("youtube_video_context")).toBe(true);
       expect(isRecoverable("twitter_content")).toBe(true);
     });
 
-    it("should return false for non-recoverable types", () => {
+    it("marks selected-text blocks as not recoverable", () => {
       expect(isRecoverable("selected_text")).toBe(false);
       expect(isRecoverable("web_selected_text")).toBe(false);
     });
 
-    it("should return false for unknown types", () => {
+    it("treats an unregistered tag as not recoverable", () => {
       expect(isRecoverable("unknown_type")).toBe(false);
     });
   });
 
-  describe("extractSourceFromBlock", () => {
-    it("should extract path from note blocks", () => {
+  describe("extractSourceFromBlock()", () => {
+    it("extracts the path from a note block", () => {
       const xml = `<note_context>
 <title>My Note</title>
 <path>folder/my-note.md</path>
@@ -70,7 +76,7 @@ describe("contextBlockRegistry", () => {
       expect(extractSourceFromBlock(xml, "note_context")).toBe("folder/my-note.md");
     });
 
-    it("should extract URL from url_content blocks", () => {
+    it("extracts the URL from a url_content block", () => {
       const xml = `<url_content>
 <url>https://example.com/page</url>
 <content>Content</content>
@@ -78,7 +84,7 @@ describe("contextBlockRegistry", () => {
       expect(extractSourceFromBlock(xml, "url_content")).toBe("https://example.com/page");
     });
 
-    it("should extract name from PDF blocks", () => {
+    it("extracts the name from a PDF block", () => {
       const xml = `<embedded_pdf>
 <name>document.pdf</name>
 <content>PDF content</content>
@@ -86,7 +92,7 @@ describe("contextBlockRegistry", () => {
       expect(extractSourceFromBlock(xml, "embedded_pdf")).toBe("document.pdf");
     });
 
-    it("should extract URL from twitter_content blocks", () => {
+    it("extracts the URL from a twitter_content block", () => {
       const xml = `<twitter_content>
 <url>https://x.com/user/status/123</url>
 <content>Tweet</content>
@@ -94,14 +100,14 @@ describe("contextBlockRegistry", () => {
       expect(extractSourceFromBlock(xml, "twitter_content")).toBe("https://x.com/user/status/123");
     });
 
-    it("should return empty string for blocks without source extractor", () => {
+    it("returns an empty string for a block type with no source extractor", () => {
       const xml = `<selected_text><content>Just text</content></selected_text>`;
       expect(extractSourceFromBlock(xml, "selected_text")).toBe("");
     });
   });
 
-  describe("extractContentFromBlock", () => {
-    it("should extract content from content tags", () => {
+  describe("extractContentFromBlock()", () => {
+    it("returns the text inside the content tag", () => {
       const xml = `<note_context>
 <title>Title</title>
 <content>This is the content</content>
@@ -109,20 +115,9 @@ describe("contextBlockRegistry", () => {
       expect(extractContentFromBlock(xml)).toBe("This is the content");
     });
 
-    it("should return whole block if no content tags", () => {
+    it("returns the whole block when it has no content tag", () => {
       const xml = "<note>Plain text</note>";
       expect(extractContentFromBlock(xml)).toBe(xml);
-    });
-  });
-
-  describe("tag alignment", () => {
-    it("should have all URL-producing tags registered (prevents tag mismatch bugs)", () => {
-      const registeredTags = new Set(CONTEXT_BLOCK_TYPES.map((bt) => bt.tag));
-      const urlProducerTags = ["url_content", "youtube_video_context", "twitter_content"];
-
-      for (const tag of urlProducerTags) {
-        expect(registeredTags.has(tag)).toBe(true);
-      }
     });
   });
 });
