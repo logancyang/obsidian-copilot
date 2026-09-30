@@ -25,9 +25,7 @@ Skills can be shared with opencode, Claude, and Codex. Commands stay inside Copi
 
 Choose **Default model** to use **Default quick command model** from **Settings → Copilot → Command**. A command-specific model applies to editor and command-palette runs. A slash run uses the model selected for that Quick Chat or Agent Chat.
 
-If a command’s selected model or the shared default is unavailable, choose a model in the popup to continue. Copilot does not substitute your chat model or another enabled model. A saved command waiting for a model runs its original prompt after you select one; Quick Ask keeps your unsent question.
-
-When upgrading, Copilot preserves your existing quick-command default. If none was set, it copies your saved legacy chat default once. Saved commands set to **Default model** now follow that quick-command default, so their model can change if you previously used different defaults. Slash commands still use their chat’s selected model.
+If a saved command’s selected model or the shared default is unavailable, configure it in **Settings → Copilot → Command**, then rerun the command. Copilot does not substitute your chat model or another enabled model, and changing the popup picker does not retry the original command. Quick Ask and Quick Command keep your unsent input while you choose a model.
 
 Use **Generate Default** for a starter set. You can edit, duplicate, delete, or drag commands to reorder them. **Custom Prompts Sort Strategy** controls their order in the slash menu.
 

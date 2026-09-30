@@ -272,13 +272,13 @@ Custom commands are reusable prompt files loaded from `<Copilot folder>/copilot-
 
 ### Command-wide controls
 
-| Control                          | Default                           | What it does                                                                                                                                                                     |
-| -------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Default quick command model**  | **Select Model** until configured | Shared by Quick Ask, Quick Command, and saved commands set to **Default model**. Choose from enabled Quick Chat models. If unavailable, select a model in the popup to continue. |
-| **Custom Prompt Templating**     | On                                | Resolves variables such as active note, folder, tag, and selected text. Turn it off when prompt braces should remain literal.                                                    |
-| **Custom Prompts Sort Strategy** | **Recency**                       | **Recency** sorts by last use, **Alphabetical** sorts by name, and **Manual** uses the saved drag order.                                                                         |
-| **Generate Default**             | Not applicable                    | After confirmation, adds Copilot's starter command files to the custom-prompts folder. It does not replace the folder setting because that folder derives from the Copilot root. |
-| **Add Cmd**                      | Not applicable                    | Opens the command editor with a blank command.                                                                                                                                   |
+| Control                          | Default          | What it does                                                                                                                                                                                             |
+| -------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Default quick command model**  | **Select Model** | Shared by Quick Ask, Quick Command, and saved commands set to **Default model**. Choose from enabled Quick Chat models. If a saved command has no usable model, configure it here and rerun the command. |
+| **Custom Prompt Templating**     | On               | Resolves variables such as active note, folder, tag, and selected text. Turn it off when prompt braces should remain literal.                                                                            |
+| **Custom Prompts Sort Strategy** | **Recency**      | **Recency** sorts by last use, **Alphabetical** sorts by name, and **Manual** uses the saved drag order.                                                                                                 |
+| **Generate Default**             | Not applicable   | After confirmation, adds Copilot's starter command files to the custom-prompts folder. It does not replace the folder setting because that folder derives from the Copilot root.                         |
+| **Add Cmd**                      | Not applicable   | Opens the command editor with a blank command.                                                                                                                                                           |
 
 ### Command list and editor
 

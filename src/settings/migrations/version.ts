@@ -1,1 +1,1 @@
-export const CURRENT_SETTINGS_VERSION = 15;
+export const CURRENT_SETTINGS_VERSION = 14;

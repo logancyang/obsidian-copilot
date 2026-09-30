@@ -151,7 +151,7 @@ export function CustomCommandChatModalContent({
     systemPrompt: systemPrompt || "",
     excludeThinking: true,
     onNoModel: () => {
-      new Notice("No active model is configured. Please configure a model in Copilot settings.");
+      new Notice("Configure a model in Settings → Copilot → Command, then rerun the command.");
       setIsLoading(false);
     },
     onNonAbortError: (error) => {
@@ -189,13 +189,7 @@ export function CustomCommandChatModalContent({
   useEffect(() => {
     if (!behavior.autoExecuteOnOpen) return;
     if (didAutoExecuteRef.current) return;
-    // Keep the original command pending until the user selects a usable model. https://github.com/Brevilabs/obsidian-copilot-private/issues/616
-    if (!resolvedModel) {
-      setIsLoading(false);
-      return;
-    }
     didAutoExecuteRef.current = true;
-    setIsLoading(true);
 
     async function generateInitialResponse() {
       try {
@@ -220,7 +214,7 @@ export function CustomCommandChatModalContent({
     }
 
     void generateInitialResponse();
-  }, [app, behavior.autoExecuteOnOpen, command.content, originalText, runTurn, resolvedModel]);
+  }, [app, behavior.autoExecuteOnOpen, command.content, originalText, runTurn]);
 
   const handleFollowUpSubmit = async () => {
     if (!followUpValue.trim()) return;

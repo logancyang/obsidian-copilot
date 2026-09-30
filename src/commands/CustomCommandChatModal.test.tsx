@@ -1,4 +1,5 @@
 import React from "react";
+import { Notice } from "obsidian";
 import type { MenuCommandModal } from "@/components/command-ui";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CustomCommandChatModalContent } from "./CustomCommandChatModal";
@@ -34,10 +35,21 @@ jest.mock("@/hooks/useResolvedChatBackendModel", () => ({
     mockModels[key] ?? (fallback === false ? null : mockModels.quick),
 }));
 jest.mock("@/hooks/use-streaming-chat-session", () => ({
-  useStreamingChatSession: ({ model }: { model: { name: string } | null }) => {
+  useStreamingChatSession: ({
+    model,
+    onNoModel,
+  }: {
+    model: { name: string } | null;
+    onNoModel: () => void;
+  }) => {
+    const onNoModelRef = React.useRef(onNoModel);
+    onNoModelRef.current = onNoModel;
     const runTurn = React.useCallback(
       async (getPrompt: (ctx: unknown) => Promise<string>) => {
-        if (!model) return null;
+        if (!model) {
+          onNoModelRef.current();
+          return null;
+        }
         const prompt = await getPrompt({ signal: new AbortController().signal, isFirstTurn: true });
         mockTurns.push({ model: model.name, prompt });
         return `Answer from ${model.name}`;
@@ -122,20 +134,25 @@ describe("CustomCommandChatModal", () => {
       await screen.findByText("Answer from quick");
       expect(mockTurns[0].model).toBe("quick");
     });
-    it("waits on a removed explicit model and runs the original command once after selection (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)", async () => {
-      renderCommand("removed");
-      expect(screen.getByText("idle")).not.toBeNull();
-      expect(processCommandPrompt).not.toHaveBeenCalled();
-      expect(mockTurns).toEqual([]);
-      fireEvent.click(screen.getByText("Choose model"));
-      await screen.findByText("Answer from picked");
-      expect(mockTurns).toEqual([
-        { model: "picked", prompt: "Rewrite clearly: Selected sentence" },
-      ]);
-      fireEvent.click(screen.getByText("Choose model"));
-      expect(mockTurns).toHaveLength(1);
-      expect(updateSetting).not.toHaveBeenCalled();
-    });
+    it.each(["removed", ""])(
+      "asks for settings configuration when selection %s is unavailable and does not resume after a popup choice (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)",
+      async (modelKey) => {
+        mockSettings.quickCommandModelKey = "";
+        renderCommand(modelKey);
+        await waitFor(() =>
+          expect(Notice).toHaveBeenCalledWith(
+            "Configure a model in Settings → Copilot → Command, then rerun the command."
+          )
+        );
+        expect(screen.getByText("idle")).not.toBeNull();
+        expect(processCommandPrompt).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByText("Choose model"));
+        await waitFor(() => expect(screen.getByText("idle")).not.toBeNull());
+        expect(mockTurns).toEqual([]);
+        expect(processCommandPrompt).not.toHaveBeenCalled();
+        expect(updateSetting).not.toHaveBeenCalled();
+      }
+    );
     it("preserves a quick-command draft until a model is selected and keeps that choice local (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)", async () => {
       mockSettings.quickCommandModelKey = "";
       renderCommand("", false);
