@@ -383,8 +383,7 @@ describe("ManagedBinaryManager", () => {
           binaryVersion: "1.2.3",
         };
         manager.settings = selected;
-        manager.subscribeBeforeManagedRemoval(async (binaryPath) => {
-          expect(binaryPath).toBe(selected.binaryPath);
+        manager.subscribeBeforeManagedRemoval(async () => {
           throw new Error("Cannot stop runtime");
         });
         await expect(manager.uninstall()).rejects.toThrow("Cannot stop runtime");

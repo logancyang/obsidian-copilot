@@ -26,7 +26,6 @@ export class AgentModelPreloader {
   private readonly listeners = new Set<() => void>();
   private readonly warmExitUnsubs = new Map<BackendId, () => void>();
   private readonly probing = new Map<BackendId, BackendProcess>();
-  private readonly closing = new Map<BackendId, { proc: BackendProcess; done: Promise<void> }>();
   private disposed = false;
 
   constructor(
@@ -44,8 +43,9 @@ export class AgentModelPreloader {
     return this.effortCatalog.get(backendId) ?? null;
   }
 
-  clearCached(backendId: BackendId): void {
-    if (this.disposed) return;
+  clearCached(backendId: BackendId): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    let closed = Promise.resolve();
     let changed = false;
     if (this.modelCatalogCache.delete(backendId)) changed = true;
     if (this.effortCatalog.delete(backendId)) changed = true;
@@ -54,14 +54,14 @@ export class AgentModelPreloader {
       this.warm.delete(backendId);
       this.warmExitUnsubs.get(backendId)?.();
       this.warmExitUnsubs.delete(backendId);
-      const closed = warm.proc.shutdown();
-      this.closing.set(backendId, { proc: warm.proc, done: closed });
+      closed = warm.proc.shutdown();
       void closed.catch((e) => {
         logWarn(`[AgentMode] preload clearCached: shutdown of warm ${backendId} failed`, e);
       });
       changed = true;
     }
     if (changed) this.notify();
+    return closed;
   }
 
   /**
@@ -70,15 +70,9 @@ export class AgentModelPreloader {
    * @param backendId - Backend whose owned probe processes must exit.
    */
   async stopBackend(backendId: BackendId): Promise<void> {
-    const previous = this.closing.get(backendId);
-    // Retain failed owners for retry. https://github.com/Brevilabs/obsidian-copilot-private/issues/620
-    if (previous) await previous.done.catch(() => previous.proc.shutdown());
     await this.probing.get(backendId)?.shutdown();
     await this.inflight.get(backendId);
-    this.clearCached(backendId);
-    const closing = this.closing.get(backendId);
-    if (closing !== previous) await closing?.done;
-    this.closing.delete(backendId);
+    await this.clearCached(backendId);
   }
 
   takeWarm(backendId: BackendId): WarmBackend | null {
@@ -112,7 +106,7 @@ export class AgentModelPreloader {
       return existing;
     }
     if (this.getCachedModelCatalog(backendId) === null) return null;
-    this.clearCached(backendId);
+    void this.clearCached(backendId);
     return this.startProbeChain(backendId);
   }
 
@@ -130,7 +124,7 @@ export class AgentModelPreloader {
     let round = 0;
     do {
       this.pendingRefresh.delete(backendId);
-      if (round > 0) this.clearCached(backendId);
+      if (round > 0) void this.clearCached(backendId);
       round += 1;
       await this.runProbe(backendId);
     } while (this.pendingRefresh.has(backendId) && !this.disposed);
@@ -179,7 +173,6 @@ export class AgentModelPreloader {
       logWarn(`[AgentMode] preload skipped: unknown backend ${backendId}`);
       return;
     }
-    await this.closing.get(backendId)?.done;
     await this.beforeBackendStart?.(backendId);
     if (this.disposed || descriptor.getInstallState(getSettings()).kind !== "ready") return;
 

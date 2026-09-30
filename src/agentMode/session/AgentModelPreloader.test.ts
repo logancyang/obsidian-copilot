@@ -105,41 +105,6 @@ function buildDescriptor(makeProc: () => MockProcHandle): {
 
 describe("AgentModelPreloader", () => {
   describe("stopBackend()", () => {
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 waits for an already closing warm process before allowing removal", async () => {
-      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
-      await preloader.preload(descriptor.id);
-      let release!: () => void;
-      procHandle.shutdown.mockImplementationOnce(
-        () =>
-          new Promise<void>((resolve) => {
-            release = resolve;
-          })
-      );
-      preloader.clearCached(descriptor.id);
-      let stopped = false;
-      const stopping = preloader.stopBackend(descriptor.id).then(() => {
-        stopped = true;
-      });
-      await Promise.resolve();
-      expect(stopped).toBe(false);
-      release();
-      await stopping;
-      expect(preloader.takeWarm(descriptor.id)).toBeNull();
-      expect(procHandle.shutdown).toHaveBeenCalledTimes(1);
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 retains a failed warm owner and stops it on retry", async () => {
-      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
-      await preloader.preload(descriptor.id);
-      procHandle.shutdown.mockRejectedValueOnce(new Error("stop failed"));
-      await expect(preloader.stopBackend(descriptor.id)).rejects.toThrow("stop failed");
-      await preloader.stopBackend(descriptor.id);
-      expect(procHandle.shutdown).toHaveBeenCalledTimes(2);
-      expect(preloader.takeWarm(descriptor.id)).toBeNull();
-    });
-
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 stops a process that is still discovering models and prevents caching it after uninstall", async () => {
       const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
       const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
@@ -434,9 +399,9 @@ describe("AgentModelPreloader", () => {
       await preloader.preload("claude-sdk");
       expect(preloader.getCachedModelCatalog("claude-sdk")).not.toBeNull();
 
-      preloader.clearCached("claude-sdk");
+      await preloader.clearCached("claude-sdk");
 
-      await waitFor(() => expect(procHandle.shutdown).toHaveBeenCalledTimes(1));
+      expect(procHandle.shutdown).toHaveBeenCalledTimes(1);
       expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
       expect(preloader.takeWarm("claude-sdk")).toBeNull();
     });

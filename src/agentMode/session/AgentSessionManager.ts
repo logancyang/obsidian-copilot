@@ -2751,7 +2751,7 @@ export class AgentSessionManager {
       if (this.backends.get(backendId) === proc) {
         this.backends.delete(backendId);
       }
-      this.preloader.clearCached(backendId);
+      void this.preloader.clearCached(backendId);
       new Notice(`${this.resolveDescriptor(backendId).displayName} refreshed.`);
       if (!this.disposed && this.isBackendInstalled(backendId)) {
         const probe = this.preloader.preload(backendId);

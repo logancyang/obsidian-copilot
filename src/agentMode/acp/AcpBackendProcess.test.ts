@@ -1594,28 +1594,6 @@ describe("AcpBackendProcess", () => {
     });
 
     describe("shutdown()", () => {
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 prevents a pending startup from spawning after shutdown", async () => {
-        let release!: (value: Awaited<ReturnType<AcpBackend["buildSpawnDescriptor"]>>) => void;
-        const spawn = new Promise<Awaited<ReturnType<AcpBackend["buildSpawnDescriptor"]>>>(
-          (resolve) => {
-            release = resolve;
-          }
-        );
-        const backend = new AcpBackendProcess(
-          buildApp(),
-          buildStubBackend({ buildSpawnDescriptor: () => spawn }),
-          "1.0",
-          buildStubDescriptor()
-        );
-        const before = jest.mocked(AcpProcessManager).mock.calls.length;
-        const starting = backend.start();
-        const rejected = expect(starting).rejects.toThrow("shut down during startup");
-        await backend.shutdown();
-        release({ command: "/adapter", args: [], env: {} });
-        await rejected;
-        expect(jest.mocked(AcpProcessManager).mock.calls).toHaveLength(before);
-      });
-
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 reports failed shutdown and retries the same owned process", async () => {
         const backend = new AcpBackendProcess(
           buildApp(),

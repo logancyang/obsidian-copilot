@@ -5,12 +5,21 @@ jest.mock("@/utils/desktopRuntime", () => ({
 }));
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/620";
 const child = { pid: 23456 } as import("node:child_process").ChildProcess;
+async function onPlatform<T>(platform: NodeJS.Platform, run: () => Promise<T>): Promise<T> {
+  const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+  Object.defineProperty(process, "platform", { value: platform });
+  try {
+    return await run();
+  } finally {
+    Object.defineProperty(process, "platform", original);
+  }
+}
 describe("terminateProcessTree", () => {
   describe("terminateProcessTree()", () => {
     afterEach(() => jest.restoreAllMocks());
     it(`signals only the owned POSIX process group: ${ISSUE}`, async () => {
       const kill = jest.spyOn(process, "kill").mockReturnValue(true);
-      await terminateProcessTree(child, "SIGKILL", "darwin");
+      await onPlatform("darwin", () => terminateProcessTree(child, "SIGKILL"));
       expect(kill).toHaveBeenCalledWith(-23456, "SIGKILL");
     });
     it(`awaits termination of only the owned Windows PID tree: ${ISSUE}`, async () => {
@@ -26,7 +35,7 @@ describe("terminateProcessTree", () => {
         }
       );
       let stopped = false;
-      const stopping = terminateProcessTree(child, "SIGTERM", "win32").then(() => {
+      const stopping = onPlatform("win32", () => terminateProcessTree(child)).then(() => {
         stopped = true;
       });
       await Promise.resolve();
@@ -52,7 +61,7 @@ describe("terminateProcessTree", () => {
           callback(new Error("Access denied"));
         }
       );
-      await expect(terminateProcessTree(child, "SIGTERM", "win32")).rejects.toThrow(
+      await expect(onPlatform("win32", () => terminateProcessTree(child))).rejects.toThrow(
         "Access denied"
       );
     });

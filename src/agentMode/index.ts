@@ -339,8 +339,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     const managedInstall = descriptor.managedInstall;
     if (managedInstall?.subscribeBeforeManagedRemoval) {
       plugin.register(
-        managedInstall.subscribeBeforeManagedRemoval(plugin, async (binaryPath) => {
-          if (binaryPath) await descriptor.auth?.stop?.(binaryPath);
+        managedInstall.subscribeBeforeManagedRemoval(plugin, async () => {
           await seedManagedBuiltins();
           // A binary being removed cannot keep serving a busy chat. Reuse restart
           // recovery so conversations and drafts survive before files are reclaimed.

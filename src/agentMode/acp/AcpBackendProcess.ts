@@ -97,7 +97,6 @@ interface SessionWireState {
 
 export class AcpBackendProcess implements BackendProcess {
   private process: AcpProcessManager | null = null;
-  private shutdownGeneration = 0;
   private connection: ClientConnection | null = null;
   private readonly domainHandlers = new Map<SessionId, DomainSessionUpdateHandler>();
   private readonly pendingUpdates = new Map<SessionId, SessionNotification[]>();
@@ -134,15 +133,11 @@ export class AcpBackendProcess implements BackendProcess {
     if (!(adapter instanceof FileSystemAdapter)) {
       throw new Error("Agent Mode requires desktop Obsidian (FileSystemAdapter).");
     }
-    const generation = this.shutdownGeneration;
     const descriptor = await this.backend.buildSpawnDescriptor({
       vaultBasePath: adapter.getBasePath(),
       vaultName: this.app.vault.getName(),
     });
 
-    // Removal can win while spawn configuration is still resolving.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
-    if (generation !== this.shutdownGeneration) throw new Error("Backend shut down during startup");
     const procOpts: AcpProcessManagerOptions = {
       command: descriptor.command,
       args: descriptor.args,
@@ -611,7 +606,6 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async shutdown(): Promise<void> {
-    this.shutdownGeneration += 1;
     this.connection = null;
     this.domainHandlers.clear();
     this.pendingUpdates.clear();

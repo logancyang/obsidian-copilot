@@ -43,7 +43,7 @@ export abstract class ManagedBinaryManager<
   private operation: AbortController | null = null;
   private runtimeState: ManagedInstallRuntimeState = { kind: "idle" };
   private readonly subscribers = new Set<() => void>();
-  private readonly removalHandlers = new Set<(binaryPath?: string) => Promise<void>>();
+  private readonly removalHandlers = new Set<() => Promise<void>>();
 
   constructor(private readonly displayName: string) {}
 
@@ -52,7 +52,7 @@ export abstract class ManagedBinaryManager<
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/620
    * @param handler - Stops execution of the previous managed binary before deletion.
    */
-  subscribeBeforeManagedRemoval(handler: (binaryPath?: string) => Promise<void>): () => void {
+  subscribeBeforeManagedRemoval(handler: () => Promise<void>): () => void {
     this.removalHandlers.add(handler);
     return () => {
       this.removalHandlers.delete(handler);
@@ -293,7 +293,7 @@ export abstract class ManagedBinaryManager<
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
       this.clearBinarySettings();
       try {
-        await this.beforeManagedRemoval(previous.binaryPath);
+        await this.beforeManagedRemoval();
         await this.removeManagedDownloads();
       } catch (error) {
         this.updateBinarySettings(previous);
@@ -314,7 +314,6 @@ export abstract class ManagedBinaryManager<
     const error = await validateExecutableFile(binaryPath);
     if (error) throw new Error(error);
     const installed = await this.validateCustomBinary(binaryPath);
-    const previous = this.readBinarySettings();
     this.updateBinarySettings({
       binaryPath: installed.path,
       binaryVersion: installed.version,
@@ -324,9 +323,7 @@ export abstract class ManagedBinaryManager<
       // Refresh owners before reclaiming files; a settings notification alone
       // neither waits for process exit nor interrupts a busy managed runtime.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
-      await this.beforeManagedRemoval(
-        previous.binarySource === "managed" ? previous.binaryPath : undefined
-      );
+      await this.beforeManagedRemoval();
       await this.removeManagedDownloads();
     } catch (error) {
       throw new Error(
@@ -335,8 +332,8 @@ export abstract class ManagedBinaryManager<
     }
   }
 
-  private async beforeManagedRemoval(binaryPath?: string): Promise<void> {
-    await Promise.all(Array.from(this.removalHandlers, (stop) => stop(binaryPath)));
+  private async beforeManagedRemoval(): Promise<void> {
+    await Promise.all(Array.from(this.removalHandlers, (stop) => stop()));
   }
 
   private async removeManagedDownloads(): Promise<void> {

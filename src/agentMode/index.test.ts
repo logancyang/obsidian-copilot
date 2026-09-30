@@ -93,11 +93,10 @@ let mockSettings: CopilotSettings;
 let mockRuntime: BuiltinSkillRuntime;
 const mockStates: Record<string, InstallState> = {};
 const mockInstallListeners: Record<string, () => void> = {};
-const mockRemovalListeners: Record<string, (binaryPath?: string) => Promise<void>> = {};
+const mockRemovalListeners: Record<string, () => Promise<void>> = {};
 let mockConfiguring = false;
 const mockDescriptors = ["claude", "opencode"].map((id) => ({
   id,
-  auth: { stop: jest.fn(async (_binaryPath: string) => {}) },
   onPluginLoad: jest.fn(async (_plugin: CopilotPlugin) => {}),
   skillsProjectDir: `.${id}/skills`,
   restartOnProviderConfigChange: id === "opencode",
@@ -110,10 +109,7 @@ const mockDescriptors = ["claude", "opencode"].map((id) => ({
     id === "opencode"
       ? {
           getState: () => (mockConfiguring ? { kind: "running" } : { kind: "idle" }),
-          subscribeBeforeManagedRemoval: (
-            _plugin: unknown,
-            listener: (binaryPath?: string) => Promise<void>
-          ) => {
+          subscribeBeforeManagedRemoval: (_plugin: unknown, listener: () => Promise<void>) => {
             mockRemovalListeners[id] = listener;
             return () => {
               delete mockRemovalListeners[id];
@@ -217,26 +213,6 @@ describe("agentMode", () => {
         deferWhileBusy: false,
       });
       expect(cleaned).toBe(true);
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 waits for the previous binary's auth owner before immediate uninstall teardown", async () => {
-      createAgentSessionManager({} as App, plugin);
-      await mockManager.registerPreload.mock.calls[0][1];
-      mockStates.opencode = { kind: "absent" };
-      mockConfiguring = true;
-      mockInstallListeners.opencode();
-      expect(mockManager.onInstallStateChanged).not.toHaveBeenCalled();
-      const release = deferred();
-      mockDescriptors[1].auth.stop.mockImplementationOnce(() => release.promise);
-      const stopping = mockRemovalListeners.opencode("/managed/adapter");
-      await Promise.resolve();
-      expect(mockDescriptors[1].auth.stop).toHaveBeenCalledWith("/managed/adapter");
-      expect(mockManager.onInstallStateChanged).not.toHaveBeenCalled();
-      release.resolve();
-      await stopping;
-      expect(mockManager.onInstallStateChanged).toHaveBeenCalledWith("opencode", {
-        deferWhileBusy: false,
-      });
     });
 
     it("waits for each backend upgrade before preloading while other agents remain usable (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", async () => {

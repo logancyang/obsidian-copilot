@@ -4,15 +4,13 @@ import { requireNodeModule } from "@/utils/desktopRuntime";
  * Signals an owned tree; await close before deletion. https://github.com/Brevilabs/obsidian-copilot-private/issues/620
  * @param child - Owned child, spawned in a separate process group on POSIX platforms.
  * @param signal - Termination signal, or forced termination after the grace period.
- * @param platform - Operating system performing termination.
  */
 export async function terminateProcessTree(
   child: import("node:child_process").ChildProcess,
-  signal: NodeJS.Signals = "SIGTERM",
-  platform = process.platform
+  signal: NodeJS.Signals = "SIGTERM"
 ): Promise<void> {
   if (!child.pid) return;
-  if (platform !== "win32") {
+  if (process.platform !== "win32") {
     process.kill(-child.pid, signal);
     return;
   }
