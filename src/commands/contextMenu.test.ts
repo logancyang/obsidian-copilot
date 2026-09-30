@@ -1,6 +1,7 @@
-import * as contextMenuModule from "@/commands/contextMenu";
 import { registerContextMenu } from "@/commands/contextMenu";
-import { COMMAND_IDS, COMMAND_NAMES } from "@/constants";
+import { getCachedCustomCommands } from "@/commands/state";
+import type { CustomCommand } from "@/commands/type";
+import { COMMAND_IDS } from "@/constants";
 import type { App, Menu } from "obsidian";
 
 jest.mock("@/commands/state", () => ({
@@ -49,13 +50,32 @@ class TestMenu {
   }
 }
 
+function customCommand(title: string, order: number, showInContextMenu: boolean): CustomCommand {
+  return {
+    title,
+    content: "",
+    modelKey: "",
+    showInContextMenu,
+    showInSlashMenu: false,
+    order,
+    lastUsedMs: 0,
+  };
+}
+
 function findItem(menu: TestMenu, title: string): TestMenuItem | undefined {
   return menu.items.find((item) => item.title === title);
 }
 
 describe("contextMenu", () => {
   describe("registerContextMenu()", () => {
-    it("omits publishing from the editor context submenu", () => {
+    it("lists Quick Ask, the quick command trigger, then custom commands marked for the context menu by order", () => {
+      jest
+        .mocked(getCachedCustomCommands)
+        .mockReturnValue([
+          customCommand("Second", 2, true),
+          customCommand("Hidden", 0, false),
+          customCommand("First", 1, true),
+        ]);
       const menu = new TestMenu();
       const app = {
         commands: { executeCommandById: jest.fn() },
@@ -64,13 +84,26 @@ describe("contextMenu", () => {
       registerContextMenu(menu as unknown as Menu, app);
 
       const copilotMenu = findItem(menu, "Copilot")?.submenu;
-      expect(
-        findItem(copilotMenu!, COMMAND_NAMES[COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS])
-      ).toBeUndefined();
+      expect(copilotMenu?.items.map((item) => item.title)).toEqual([
+        "Quick Ask",
+        "Trigger quick command",
+        "First",
+        "Second",
+      ]);
     });
 
-    it("does not expose a file-menu publishing registration", () => {
-      expect(contextMenuModule).not.toHaveProperty("registerOpenArtifactsFileMenu");
+    it("executes the Copilot command behind the clicked submenu item", () => {
+      jest.mocked(getCachedCustomCommands).mockReturnValue([]);
+      const executeCommandById = jest.fn();
+      const menu = new TestMenu();
+
+      registerContextMenu(
+        menu as unknown as Menu,
+        { commands: { executeCommandById } } as unknown as App
+      );
+
+      findItem(findItem(menu, "Copilot")!.submenu!, "Quick Ask")?.click?.();
+      expect(executeCommandById).toHaveBeenCalledWith(`copilot:${COMMAND_IDS.TRIGGER_QUICK_ASK}`);
     });
   });
 });

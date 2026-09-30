@@ -40,7 +40,7 @@ describe("useAgentsFileDraft", () => {
       expect(result.current[0]).toBeNull();
     });
 
-    it("keeps edits local, leaving the file untouched until the host saves", async () => {
+    it("reports the edited text after the setter is called", async () => {
       mockReadAgentsFile.mockResolvedValue("Old rules");
       const { result } = renderHook(() => useAgentsFileDraft(app, ""));
       await waitFor(() => expect(result.current[0]).toBe("Old rules"));
