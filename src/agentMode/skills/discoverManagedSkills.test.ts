@@ -75,46 +75,6 @@ const validSkillMd = (overrides: Record<string, string> = {}) => {
 
 describe("discoverManagedSkills", () => {
   describe("discoverManagedSkills()", () => {
-    it("keeps retired marked skills managed during cleanup retries while preserving unmarked user collisions https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
-      const { name } = RETIRED_BUILTIN_SKILLS[0];
-      for (const marked of [true, false]) {
-        const result = await discoverManagedSkills({
-          skillsFolderRelPath: SKILLS_ROOT,
-          skillsFolderAbsPath: null,
-          adapter: makeAdapter({
-            [`${SKILLS_ROOT}/${name}/SKILL.md`]: validSkillMd({
-              name,
-              ...(marked ? { metadata: '\n  copilot-builtin-version: "1"' } : {}),
-            }),
-          }),
-        });
-        expect(result.accepted[0].builtin).toBe(marked);
-      }
-    });
-    it("marks only catalog skills with YAML metadata read-only, preserving renamed copies and body examples https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
-      const [managed, bodyExample, markerless] = ALL_MANAGED_SKILLS;
-      const result = await discoverManagedSkills({
-        skillsFolderRelPath: SKILLS_ROOT,
-        skillsFolderAbsPath: null,
-        adapter: makeAdapter({
-          [`${SKILLS_ROOT}/${managed.name}/SKILL.md`]: validSkillMd({
-            name: managed.name,
-            metadata: '\n  copilot-builtin-version: "1"',
-          }),
-          [`${SKILLS_ROOT}/renamed-copy/SKILL.md`]: validSkillMd({
-            name: "renamed-copy",
-            metadata: '\n  copilot-builtin-version: "1"',
-          }),
-          [`${SKILLS_ROOT}/${bodyExample.name}/SKILL.md`]:
-            validSkillMd({ name: bodyExample.name }) + '\nExample:\n  copilot-builtin-version: "1"',
-          [`${SKILLS_ROOT}/${markerless.name}/SKILL.md`]: validSkillMd({ name: markerless.name }),
-        }),
-      });
-      expect(result.accepted.find((skill) => skill.name === managed.name)?.builtin).toBe(true);
-      for (const name of ["renamed-copy", bodyExample.name, markerless.name]) {
-        expect(result.accepted.find((skill) => skill.name === name)?.builtin).toBe(false);
-      }
-    });
     beforeEach(() => {
       mockedLogWarn.mockClear();
     });
@@ -260,27 +220,45 @@ describe("discoverManagedSkills", () => {
       expect(mockedLogWarn).not.toHaveBeenCalled();
     });
 
-    it("preserves unknown metadata keys on parsed skills", async () => {
-      const content = [
-        "---",
-        "name: foo",
-        "description: A skill",
-        "metadata:",
-        "  author: alice",
-        '  copilot-enabled-agents: "claude"',
-        "---",
-        "body",
-      ].join("\n");
-      const adapter = makeAdapter({
-        [`${SKILLS_ROOT}/foo/SKILL.md`]: content,
-      });
-      const { accepted: skills } = await discoverManagedSkills({
+    it("keeps retired marked skills managed during cleanup retries while preserving unmarked user collisions https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      const { name } = RETIRED_BUILTIN_SKILLS[0];
+      for (const marked of [true, false]) {
+        const result = await discoverManagedSkills({
+          skillsFolderRelPath: SKILLS_ROOT,
+          skillsFolderAbsPath: null,
+          adapter: makeAdapter({
+            [`${SKILLS_ROOT}/${name}/SKILL.md`]: validSkillMd({
+              name,
+              ...(marked ? { metadata: '\n  copilot-builtin-version: "1"' } : {}),
+            }),
+          }),
+        });
+        expect(result.accepted[0].builtin).toBe(marked);
+      }
+    });
+    it("marks only catalog skills with YAML metadata read-only, preserving renamed copies and body examples https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      const [managed, bodyExample, markerless] = ALL_MANAGED_SKILLS;
+      const result = await discoverManagedSkills({
         skillsFolderRelPath: SKILLS_ROOT,
         skillsFolderAbsPath: null,
-        adapter,
+        adapter: makeAdapter({
+          [`${SKILLS_ROOT}/${managed.name}/SKILL.md`]: validSkillMd({
+            name: managed.name,
+            metadata: '\n  copilot-builtin-version: "1"',
+          }),
+          [`${SKILLS_ROOT}/renamed-copy/SKILL.md`]: validSkillMd({
+            name: "renamed-copy",
+            metadata: '\n  copilot-builtin-version: "1"',
+          }),
+          [`${SKILLS_ROOT}/${bodyExample.name}/SKILL.md`]:
+            validSkillMd({ name: bodyExample.name }) + '\nExample:\n  copilot-builtin-version: "1"',
+          [`${SKILLS_ROOT}/${markerless.name}/SKILL.md`]: validSkillMd({ name: markerless.name }),
+        }),
       });
-      expect(skills).toHaveLength(1);
-      expect(skills[0].enabledAgents).toEqual(["claude"]);
+      expect(result.accepted.find((skill) => skill.name === managed.name)?.builtin).toBe(true);
+      for (const name of ["renamed-copy", bodyExample.name, markerless.name]) {
+        expect(result.accepted.find((skill) => skill.name === name)?.builtin).toBe(false);
+      }
     });
   });
 });

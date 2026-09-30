@@ -45,83 +45,85 @@ function makeFs(files: Record<string, string>, symlinks: ReadonlyArray<string> =
   };
 }
 
-describe("computeDirHash", () => {
-  it("returns the same hash for identical directory contents", async () => {
-    const fsA = makeFs({
-      "/a/SKILL.md": "---\nname: foo\n---\nbody",
-      "/a/templates/note.md": "template",
+describe("dirHash", () => {
+  describe("computeDirHash()", () => {
+    it("returns the same hash for identical directory contents", async () => {
+      const fsA = makeFs({
+        "/a/SKILL.md": "---\nname: foo\n---\nbody",
+        "/a/templates/note.md": "template",
+      });
+      const fsB = makeFs({
+        "/b/SKILL.md": "---\nname: foo\n---\nbody",
+        "/b/templates/note.md": "template",
+      });
+      const ha = await computeDirHash("/a", fsA);
+      const hb = await computeDirHash("/b", fsB);
+      expect(ha).toBe(hb);
     });
-    const fsB = makeFs({
-      "/b/SKILL.md": "---\nname: foo\n---\nbody",
-      "/b/templates/note.md": "template",
-    });
-    const ha = await computeDirHash("/a", fsA);
-    const hb = await computeDirHash("/b", fsB);
-    expect(ha).toBe(hb);
-  });
 
-  it("returns different hashes when SKILL.md content differs", async () => {
-    const fsA = makeFs({ "/a/SKILL.md": "body a" });
-    const fsB = makeFs({ "/b/SKILL.md": "body b" });
-    const ha = await computeDirHash("/a", fsA);
-    const hb = await computeDirHash("/b", fsB);
-    expect(ha).not.toBe(hb);
-  });
+    it("returns different hashes when SKILL.md content differs", async () => {
+      const fsA = makeFs({ "/a/SKILL.md": "body a" });
+      const fsB = makeFs({ "/b/SKILL.md": "body b" });
+      const ha = await computeDirHash("/a", fsA);
+      const hb = await computeDirHash("/b", fsB);
+      expect(ha).not.toBe(hb);
+    });
 
-  it("returns different hashes when supporting files differ", async () => {
-    const fsA = makeFs({
-      "/a/SKILL.md": "same",
-      "/a/extra.md": "alpha",
+    it("returns different hashes when supporting files differ", async () => {
+      const fsA = makeFs({
+        "/a/SKILL.md": "same",
+        "/a/extra.md": "alpha",
+      });
+      const fsB = makeFs({
+        "/b/SKILL.md": "same",
+        "/b/extra.md": "beta",
+      });
+      expect(await computeDirHash("/a", fsA)).not.toBe(await computeDirHash("/b", fsB));
     });
-    const fsB = makeFs({
-      "/b/SKILL.md": "same",
-      "/b/extra.md": "beta",
-    });
-    expect(await computeDirHash("/a", fsA)).not.toBe(await computeDirHash("/b", fsB));
-  });
 
-  it("is invariant under list() ordering", async () => {
-    const baseFs = makeFs({
-      "/a/SKILL.md": "x",
-      "/a/extra-1.md": "one",
-      "/a/extra-2.md": "two",
+    it("is invariant under list() ordering", async () => {
+      const baseFs = makeFs({
+        "/a/SKILL.md": "x",
+        "/a/extra-1.md": "one",
+        "/a/extra-2.md": "two",
+      });
+      const reverseFs: DirHashFs = {
+        isDirectory: baseFs.isDirectory.bind(baseFs),
+        isSymlink: baseFs.isSymlink.bind(baseFs),
+        list: async (p) => (await baseFs.list(p)).slice().reverse(),
+        readFile: baseFs.readFile.bind(baseFs),
+      };
+      expect(await computeDirHash("/a", baseFs)).toBe(await computeDirHash("/a", reverseFs));
     });
-    const reverseFs: DirHashFs = {
-      isDirectory: baseFs.isDirectory.bind(baseFs),
-      isSymlink: baseFs.isSymlink.bind(baseFs),
-      list: async (p) => (await baseFs.list(p)).slice().reverse(),
-      readFile: baseFs.readFile.bind(baseFs),
-    };
-    expect(await computeDirHash("/a", baseFs)).toBe(await computeDirHash("/a", reverseFs));
-  });
 
-  it("ignores symlinks under the skill dir", async () => {
-    const fsA = makeFs({ "/a/SKILL.md": "same" });
-    const fsB = makeFs({ "/b/SKILL.md": "same" }, ["/b/dangling"]);
-    expect(await computeDirHash("/a", fsA)).toBe(await computeDirHash("/b", fsB));
-  });
+    it("ignores symlinks under the skill dir", async () => {
+      const fsA = makeFs({ "/a/SKILL.md": "same" });
+      const fsB = makeFs({ "/b/SKILL.md": "same" }, ["/b/dangling"]);
+      expect(await computeDirHash("/a", fsA)).toBe(await computeDirHash("/b", fsB));
+    });
 
-  it("includes nested subdirectories in the hash", async () => {
-    const fsA = makeFs({
-      "/a/SKILL.md": "x",
-      "/a/refs/note.md": "nested",
+    it("includes nested subdirectories in the hash", async () => {
+      const fsA = makeFs({
+        "/a/SKILL.md": "x",
+        "/a/refs/note.md": "nested",
+      });
+      const fsB = makeFs({
+        "/b/SKILL.md": "x",
+        "/b/refs/note.md": "different",
+      });
+      expect(await computeDirHash("/a", fsA)).not.toBe(await computeDirHash("/b", fsB));
     });
-    const fsB = makeFs({
-      "/b/SKILL.md": "x",
-      "/b/refs/note.md": "different",
-    });
-    expect(await computeDirHash("/a", fsA)).not.toBe(await computeDirHash("/b", fsB));
-  });
 
-  it("differentiates files with same content but different paths", async () => {
-    const fsA = makeFs({
-      "/a/SKILL.md": "same",
-      "/a/foo.md": "extra",
+    it("differentiates files with same content but different paths", async () => {
+      const fsA = makeFs({
+        "/a/SKILL.md": "same",
+        "/a/foo.md": "extra",
+      });
+      const fsB = makeFs({
+        "/b/SKILL.md": "same",
+        "/b/bar.md": "extra",
+      });
+      expect(await computeDirHash("/a", fsA)).not.toBe(await computeDirHash("/b", fsB));
     });
-    const fsB = makeFs({
-      "/b/SKILL.md": "same",
-      "/b/bar.md": "extra",
-    });
-    expect(await computeDirHash("/a", fsA)).not.toBe(await computeDirHash("/b", fsB));
   });
 });

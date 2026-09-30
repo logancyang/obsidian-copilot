@@ -73,32 +73,6 @@ const RENAMED_SCRIPT = "copilot/skills/openartifacts-publish/openartifacts-publi
 
 describe("seedBuiltinSkills", () => {
   describe("seedBuiltinSkills()", () => {
-    it.each(["web-search.sh", "SKILL.md"])(
-      "retries an upgrade interrupted at %s without stamping success and removes user additions https://github.com/logancyang/obsidian-copilot/issues/3022",
-      async (failedFile) => {
-        const fs = memFs({ [MD]: skill(1).skillMd, [SCRIPT]: "old script" });
-        const personal = `${FOLDER}/copilot-web-search/references/personal.md`;
-        fs.files.set(personal, "personal reference");
-        const write = fs.write;
-        fs.write = async (path, content) => {
-          if (path === `${FOLDER}/copilot-web-search/${failedFile}`) throw new Error("disk full");
-          await write(path, content);
-        };
-        expect(
-          await seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [skill(2)] })
-        ).toEqual({ seeded: [] });
-        expect(await inspectBuiltinSkill(FOLDER, "copilot-web-search", fs, 2)).toBe("absent");
-        expect(fs.files.has(personal)).toBe(false);
-        fs.write = write;
-        expect(
-          await seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [skill(2)] })
-        ).toEqual({ seeded: ["copilot-web-search"] });
-        expect(fs.files.get(MD)).toBe(skill(2).skillMd);
-        expect(fs.files.get(SCRIPT)).toBe("// script v2");
-        expect(fs.files.has(personal)).toBe(false);
-      }
-    );
-
     it("writes SKILL.md and scripts when the skill is missing", async () => {
       const fs = memFs();
       const { seeded } = await seedBuiltinSkills({
@@ -162,6 +136,32 @@ describe("seedBuiltinSkills", () => {
       expect(fs.files.get(MD)).toContain('copilot-builtin-version: "2"');
       expect(fs.files.get(MD)).toContain("copilot-enabled-agents: codex");
     });
+
+    it.each(["web-search.sh", "SKILL.md"])(
+      "retries an upgrade interrupted at %s without stamping success and removes user additions https://github.com/logancyang/obsidian-copilot/issues/3022",
+      async (failedFile) => {
+        const fs = memFs({ [MD]: skill(1).skillMd, [SCRIPT]: "old script" });
+        const personal = `${FOLDER}/copilot-web-search/references/personal.md`;
+        fs.files.set(personal, "personal reference");
+        const write = fs.write;
+        fs.write = async (path, content) => {
+          if (path === `${FOLDER}/copilot-web-search/${failedFile}`) throw new Error("disk full");
+          await write(path, content);
+        };
+        expect(
+          await seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [skill(2)] })
+        ).toEqual({ seeded: [] });
+        expect(await inspectBuiltinSkill(FOLDER, "copilot-web-search", fs, 2)).toBe("absent");
+        expect(fs.files.has(personal)).toBe(false);
+        fs.write = write;
+        expect(
+          await seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [skill(2)] })
+        ).toEqual({ seeded: ["copilot-web-search"] });
+        expect(fs.files.get(MD)).toBe(skill(2).skillMd);
+        expect(fs.files.get(SCRIPT)).toBe("// script v2");
+        expect(fs.files.has(personal)).toBe(false);
+      }
+    );
 
     it("retries an upgrade after folder cleanup fails without stamping success https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
       const fs = memFs({ [MD]: skill(1).skillMd, [SCRIPT]: "old script" });

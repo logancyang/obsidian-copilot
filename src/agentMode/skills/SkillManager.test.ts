@@ -64,14 +64,6 @@ jest.mock("./discoverProjectSkills", () => ({
   discoverProjectSkills: jest.fn(async () => ({ accepted: [], rejected: [] })),
 }));
 
-jest.mock("./mergeDiscovery", () => {
-  const actual = jest.requireActual("./mergeDiscovery");
-  return {
-    ...actual,
-    mergeDiscovery: jest.fn((canonical: unknown[]) => canonical),
-  };
-});
-
 jest.mock("./toggleAgent", () => ({
   runDeleteSkill: jest.fn(),
   runToggleAgent: jest.fn(),
@@ -322,7 +314,7 @@ describe("SkillManager", () => {
         expect(refreshSpy).toHaveBeenCalledTimes(1);
       });
 
-      it("safety timer schedules a reconcile when expectations were never satisfied", async () => {
+      it("schedules a reconcile after the safety timeout when expected vault events never arrive", async () => {
         jest.useFakeTimers();
         const app = makeApp();
         const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
@@ -402,7 +394,7 @@ describe("SkillManager", () => {
         expect(refreshSpy).toHaveBeenCalledTimes(1);
       });
 
-      it("renameSkill renames one row without full discovery or reconcile", async () => {
+      it("renames one row in place without rerunning discovery or reconcile", async () => {
         const app = makeApp();
         const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
         const skill = makeSkill();
@@ -435,7 +427,7 @@ describe("SkillManager", () => {
       });
     });
     describe("toggleAgent()", () => {
-      it("toggleAgent publishes an incremental update without full discovery or reconcile", async () => {
+      it("adds the agent to one row without rerunning discovery or reconcile", async () => {
         const app = makeApp();
         const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
         const skill = makeSkill({ enabledAgents: [] });
@@ -460,7 +452,7 @@ describe("SkillManager", () => {
       });
     });
     describe("updateProperties()", () => {
-      it("updateProperties publishes an incremental update without full discovery or reconcile", async () => {
+      it("updates one row in place without rerunning discovery or reconcile", async () => {
         const app = makeApp();
         const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
         const skill = makeSkill();
@@ -491,7 +483,7 @@ describe("SkillManager", () => {
       });
     });
     describe("deleteSkill()", () => {
-      it("deleteSkill removes one row without full discovery or reconcile", async () => {
+      it("removes one row without rerunning discovery or reconcile", async () => {
         const app = makeApp();
         const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
         const skill = makeSkill();
@@ -517,7 +509,7 @@ describe("SkillManager", () => {
       });
     });
     describe("saveProperties()", () => {
-      it("saveProperties emits one skill-set notification for rename plus patch", async () => {
+      it("applies a rename plus patch with a single skill-set notification", async () => {
         const app = makeApp();
         const manager = SkillManager.initialize(app, { opencode: ".opencode/skills" });
         const listener = jest.fn();
@@ -545,7 +537,7 @@ describe("SkillManager", () => {
         });
       });
 
-      it("saveProperties handles a description-only patch", async () => {
+      it("applies a description-only patch without renaming", async () => {
         const app = makeApp();
         const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
         const skill = makeSkill();
@@ -564,7 +556,7 @@ describe("SkillManager", () => {
         });
       });
 
-      it("saveProperties handles a rename-only update", async () => {
+      it("applies a rename with an empty patch", async () => {
         const app = makeApp();
         const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
         const skill = makeSkill();
@@ -588,7 +580,7 @@ describe("SkillManager", () => {
         });
       });
 
-      it("saveProperties returns collision without patching when rename collides", async () => {
+      it("returns a collision error without patching when the new name is taken", async () => {
         const app = makeApp();
         const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
         const skill = makeSkill();
@@ -608,7 +600,7 @@ describe("SkillManager", () => {
         expect(mockedRunUpdateProperties).not.toHaveBeenCalled();
       });
 
-      it("saveProperties closes successfully when rename reports EPERM but patch succeeds", async () => {
+      it("succeeds when the rename reports EPERM after mutating but the patch succeeds", async () => {
         const app = makeApp();
         const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
         const skill = makeSkill();
@@ -628,7 +620,7 @@ describe("SkillManager", () => {
         });
       });
 
-      it("saveProperties publishes the rename when the follow-up patch fails", async () => {
+      it("keeps the rename in the published row when the follow-up patch fails", async () => {
         const app = makeApp();
         const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
         const skill = makeSkill();
@@ -750,7 +742,13 @@ describe("SkillManager", () => {
     });
   });
   describe("computeSkillSetSignature()", () => {
-    it("computes different signatures for body and enabled-agent changes", () => {
+    it("is identical for equivalent skill sets", () => {
+      expect(computeSkillSetSignature([makeSkill()], "claude")).toBe(
+        computeSkillSetSignature([makeSkill()], "claude")
+      );
+    });
+
+    it("differs when a skill body or its enabled agents change", () => {
       const base = makeSkill({ enabledAgents: ["claude"] });
       const bodyChanged = makeSkill({ body: "new body", enabledAgents: ["claude"] });
       const enabledChanged = makeSkill({ enabledAgents: ["opencode"] });
