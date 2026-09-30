@@ -17,16 +17,8 @@ import {
   getEffectiveSystemPromptsFolder,
 } from "@/settings/copilotFolder";
 import type { CopilotSettings } from "@/settings/model";
-import { getSettings } from "@/settings/model";
+import { settingsAtom, settingsStore } from "@/settings/model";
 import { DEFAULT_SETTINGS } from "@/constants";
-
-jest.mock("obsidian", () => ({
-  normalizePath: (path: string) => path.replace(/\/+/g, "/").replace(/^\/|\/$/g, ""),
-}));
-
-jest.mock("@/settings/model", () => ({
-  getSettings: jest.fn(),
-}));
 
 jest.mock("@/utils", () => ({
   ensureFolderExists: jest.fn().mockResolvedValue(undefined),
@@ -36,7 +28,9 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
 }));
 
-const mockedGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
+function setGlobalRoot(copilotFolder: string): void {
+  settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder });
+}
 
 function settingsWithRoot(copilotFolder: string): CopilotSettings {
   return { copilotFolder } as CopilotSettings;
@@ -48,6 +42,7 @@ describe("copilotFolder", () => {
       expect(deriveConversationsFolder(settingsWithRoot("copilot"))).toBe(
         "copilot/copilot-conversations"
       );
+      expect(deriveConversationsFolder(DEFAULT_SETTINGS)).toBe(DEFAULT_SETTINGS.defaultSaveFolder);
     });
 
     it("re-roots the conversations folder under a custom root", () => {
@@ -82,6 +77,9 @@ describe("copilotFolder", () => {
       expect(deriveCustomPromptsFolder(settingsWithRoot("copilot"))).toBe(
         "copilot/copilot-custom-prompts"
       );
+      expect(deriveCustomPromptsFolder(DEFAULT_SETTINGS)).toBe(
+        DEFAULT_SETTINGS.customPromptsFolder
+      );
     });
 
     it("re-roots the custom-prompts folder under a custom root", () => {
@@ -94,6 +92,9 @@ describe("copilotFolder", () => {
   describe("deriveSystemPromptsFolder()", () => {
     it("derives the historical default system-prompts path for the default root", () => {
       expect(deriveSystemPromptsFolder(settingsWithRoot("copilot"))).toBe("copilot/system-prompts");
+      expect(deriveSystemPromptsFolder(DEFAULT_SETTINGS)).toBe(
+        DEFAULT_SETTINGS.userSystemPromptsFolder
+      );
     });
 
     it("re-roots the system-prompts folder under a custom root", () => {
@@ -104,6 +105,7 @@ describe("copilotFolder", () => {
   describe("deriveSkillsFolder()", () => {
     it("derives the historical default skills path for the default root", () => {
       expect(deriveSkillsFolder(settingsWithRoot("copilot"))).toBe("copilot/skills");
+      expect(deriveSkillsFolder(DEFAULT_SETTINGS)).toBe(DEFAULT_SETTINGS.agentMode.skills.folder);
     });
 
     it("re-roots the skills folder under a custom root", () => {
@@ -114,6 +116,7 @@ describe("copilotFolder", () => {
   describe("deriveMemoryFolder()", () => {
     it("derives the historical default memory path for the default root", () => {
       expect(deriveMemoryFolder(settingsWithRoot("copilot"))).toBe("copilot/memory");
+      expect(deriveMemoryFolder(DEFAULT_SETTINGS)).toBe(DEFAULT_SETTINGS.memoryFolderName);
     });
 
     it("re-roots the memory folder under a custom root", () => {
@@ -124,6 +127,7 @@ describe("copilotFolder", () => {
   describe("deriveProjectsFolder()", () => {
     it("derives the historical default projects path for the default root", () => {
       expect(deriveProjectsFolder(settingsWithRoot("copilot"))).toBe("copilot/projects");
+      expect(deriveProjectsFolder(DEFAULT_SETTINGS)).toBe(DEFAULT_SETTINGS.projectsFolder);
     });
 
     it("re-roots the projects folder under a custom root", () => {
@@ -144,22 +148,26 @@ describe("copilotFolder", () => {
     });
   });
 
-  describe("getEffectiveCopilotFolder()", () => {
-    it("returns the configured root read from global settings", () => {
-      mockedGetSettings.mockReturnValue(settingsWithRoot("team/ai"));
-      expect(getEffectiveCopilotFolder()).toBe("team/ai");
-    });
-  });
-
-  describe("effective accessors read the live global root", () => {
-    it("derive every sub-folder from the current global copilotFolder", () => {
-      mockedGetSettings.mockReturnValue(settingsWithRoot("team/ai"));
-      expect(getEffectiveConversationsFolder()).toBe("team/ai/copilot-conversations");
-      expect(getEffectiveCustomPromptsFolder()).toBe("team/ai/copilot-custom-prompts");
-      expect(getEffectiveSystemPromptsFolder()).toBe("team/ai/system-prompts");
-      expect(getEffectiveSkillsFolder()).toBe("team/ai/skills");
-      expect(getEffectiveMemoryFolder()).toBe("team/ai/memory");
-      expect(getEffectiveProjectsFolder()).toBe("team/ai/projects");
+  describe.each([
+    ["getEffectiveCopilotFolder", getEffectiveCopilotFolder, "team/ai"],
+    [
+      "getEffectiveConversationsFolder",
+      getEffectiveConversationsFolder,
+      "team/ai/copilot-conversations",
+    ],
+    [
+      "getEffectiveCustomPromptsFolder",
+      getEffectiveCustomPromptsFolder,
+      "team/ai/copilot-custom-prompts",
+    ],
+    ["getEffectiveSystemPromptsFolder", getEffectiveSystemPromptsFolder, "team/ai/system-prompts"],
+    ["getEffectiveSkillsFolder", getEffectiveSkillsFolder, "team/ai/skills"],
+    ["getEffectiveMemoryFolder", getEffectiveMemoryFolder, "team/ai/memory"],
+    ["getEffectiveProjectsFolder", getEffectiveProjectsFolder, "team/ai/projects"],
+  ])("%s()", (_name, getEffective, expected) => {
+    it("derives the folder from the current global copilotFolder", () => {
+      setGlobalRoot("team/ai");
+      expect(getEffective()).toBe(expected);
     });
   });
 
@@ -193,34 +201,6 @@ describe("copilotFolder", () => {
         ensureCopilotSubfolders(fakeVault, settingsWithRoot("copilot"))
       ).resolves.toBeUndefined();
       expect(ensureFolderExists).toHaveBeenCalledTimes(6);
-    });
-  });
-
-  describe("byte-for-byte parity with the retired default sub-folders", () => {
-    const settings = DEFAULT_SETTINGS;
-
-    it("matches the default conversations folder", () => {
-      expect(deriveConversationsFolder(settings)).toBe(DEFAULT_SETTINGS.defaultSaveFolder);
-    });
-
-    it("matches the default custom-prompts folder", () => {
-      expect(deriveCustomPromptsFolder(settings)).toBe(DEFAULT_SETTINGS.customPromptsFolder);
-    });
-
-    it("matches the default system-prompts folder", () => {
-      expect(deriveSystemPromptsFolder(settings)).toBe(DEFAULT_SETTINGS.userSystemPromptsFolder);
-    });
-
-    it("matches the default skills folder", () => {
-      expect(deriveSkillsFolder(settings)).toBe(DEFAULT_SETTINGS.agentMode.skills.folder);
-    });
-
-    it("matches the default memory folder", () => {
-      expect(deriveMemoryFolder(settings)).toBe(DEFAULT_SETTINGS.memoryFolderName);
-    });
-
-    it("matches the default projects folder", () => {
-      expect(deriveProjectsFolder(settings)).toBe(DEFAULT_SETTINGS.projectsFolder);
     });
   });
 });

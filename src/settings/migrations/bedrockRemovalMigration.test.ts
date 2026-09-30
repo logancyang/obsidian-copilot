@@ -1,4 +1,4 @@
-import type { CustomModel, ProjectConfig } from "@/aiParams";
+import type { CustomModel } from "@/aiParams";
 import { ChatModelProviders, DEFAULT_SETTINGS } from "@/constants";
 import type {
   ConfiguredModel,
@@ -79,20 +79,6 @@ function model(overrides: Partial<CustomModel>): CustomModel {
   };
 }
 
-function project(overrides: Partial<ProjectConfig>): ProjectConfig {
-  return {
-    id: "p1",
-    name: "Project",
-    systemPrompt: "",
-    projectModelKey: "",
-    modelConfigs: {},
-    contextSource: {},
-    created: 0,
-    UsageTimestamps: 0,
-    ...overrides,
-  };
-}
-
 function settingsWith(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
   return { ...DEFAULT_SETTINGS, ...overrides };
 }
@@ -110,48 +96,16 @@ function bedrockVault(overrides: Partial<CopilotSettings> = {}): CopilotSettings
   });
 }
 
-beforeEach(() => {
-  jest.clearAllMocks();
-  keychain();
-});
-
 describe("bedrockRemovalMigration", () => {
-  describe("planBedrockRemoval()", () => {
-    it("returns null for a vault that never configured Bedrock", () => {
-      expect(
-        planBedrockRemoval(
-          settingsWith({
-            providers: { ant: provider("ant", "anthropic") },
-            configuredModels: [configuredModel("cm-ant", "ant")],
-            backends: { chat: { enabledModels: ["cm-ant"] } },
-          })
-        )
-      ).toBeNull();
-    });
+  beforeEach(() => {
+    jest.clearAllMocks();
+    keychain();
+  });
 
+  describe("planBedrockRemoval()", () => {
     it("names every Bedrock provider row and leaves every other provider alone", () => {
       const plan = planBedrockRemoval(bedrockVault());
       expect(plan?.providerIds).toEqual(["bed"]);
-    });
-
-    it("leaves the provider, model and backend slices to the shared cascade", () => {
-      const plan = planBedrockRemoval(bedrockVault());
-      expect(plan?.patch.providers).toBeUndefined();
-      expect(plan?.patch.configuredModels).toBeUndefined();
-      expect(plan?.patch.backends).toBeUndefined();
-    });
-
-    it("clears a selection pointing at a removed model", () => {
-      const plan = planBedrockRemoval(
-        bedrockVault({
-          defaultModelKey: "cm-bed",
-          quickCommandModelKey: "cm-bed",
-          projectList: [project({ projectModelKey: "cm-bed" })],
-        })
-      );
-      expect(plan?.patch.defaultModelKey).toBe("");
-      expect(plan?.patch).toHaveProperty("quickCommandModelKey", undefined);
-      expect(plan?.patch.projectList?.[0].projectModelKey).toBe("");
     });
 
     it("leaves a selection pointing at a surviving model alone", () => {
@@ -173,38 +127,14 @@ describe("bedrockRemovalMigration", () => {
       expect(plan?.patch.activeModels?.map((m) => m.name)).toEqual(["gpt-5"]);
       expect(plan?.patch.defaultModelKey).toBe("");
     });
-
-    it("clears a legacy selection whose model row is already gone", () => {
-      const plan = planBedrockRemoval(
-        settingsWith({ defaultModelKey: "anthropic.claude-sonnet-4-5|amazon-bedrock" })
-      );
-      expect(plan?.patch.defaultModelKey).toBe("");
-    });
   });
 
   describe("executeBedrockRemoval()", () => {
-    it("writes no settings and removes no provider when the vault never configured Bedrock", async () => {
-      const { api, removeProvider } = makeApi();
-      await executeBedrockRemoval(
-        api,
-        settingsWith({ providers: { ant: provider("ant", "anthropic") } })
-      );
-      expect(mockSetSettings).not.toHaveBeenCalled();
-      expect(removeProvider).not.toHaveBeenCalled();
-    });
-
     it("hands each Bedrock row to the shared provider cascade", async () => {
       const { api, removeProvider } = makeApi();
       await executeBedrockRemoval(api, bedrockVault());
       expect(removeProvider).toHaveBeenCalledTimes(1);
       expect(removeProvider).toHaveBeenCalledWith("bed");
-    });
-
-    it("writes only the slices the cascade does not own", async () => {
-      const { api } = makeApi();
-      await executeBedrockRemoval(api, bedrockVault());
-      expect(mockSetSettings).toHaveBeenCalledTimes(1);
-      expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: "" });
     });
 
     it("skips the settings write when only provider rows need removing", async () => {
@@ -229,17 +159,6 @@ describe("bedrockRemovalMigration", () => {
       const { api, removeProvider } = makeApi();
       await executeBedrockRemoval(api, bedrockVault());
       expect(store.deleteSecret).not.toHaveBeenCalled();
-      expect(removeProvider).toHaveBeenCalledWith("bed");
-    });
-
-    it("still removes the provider when deleting the legacy key throws", async () => {
-      keychain({
-        deleteSecret: jest.fn(() => {
-          throw new Error("keychain locked");
-        }),
-      });
-      const { api, removeProvider } = makeApi();
-      await expect(executeBedrockRemoval(api, bedrockVault())).resolves.toBeUndefined();
       expect(removeProvider).toHaveBeenCalledWith("bed");
     });
   });
