@@ -1,5 +1,16 @@
 # Release Notes
 
+# v4.0.13 - Maintenance update
+
+This is a maintenance release with no user-facing changes. It removes outdated internal code comments and adds a check that keeps new ones accurate, so future fixes and features land on a cleaner codebase. ([#3408](https://github.com/logancyang/obsidian-copilot/pull/3408), [#3411](https://github.com/logancyang/obsidian-copilot/pull/3411), @zeroliu)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.12 - OpenCode 2 in your vault
 
 [![Demo video: OpenCode 2 in Your Vault: Obsidian Copilot 4.0.12](https://github.com/user-attachments/assets/76f592d9-74ce-43cc-85f9-a8312fe16fc9)](https://www.youtube.com/shorts/IjjXVFNFO0k)
