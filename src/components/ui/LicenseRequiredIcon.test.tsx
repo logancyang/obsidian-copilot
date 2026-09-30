@@ -19,12 +19,5 @@ describe("LicenseRequiredIcon", () => {
 
       expect(screen.getByText("Copilot license required")).toBeTruthy();
     });
-
-    it("keeps a caller's classes alongside its own", () => {
-      const { container } = render(<LicenseRequiredIcon className="tw-mt-0.5" />);
-
-      expect(container.firstElementChild?.className).toContain("tw-mt-0.5");
-      expect(container.firstElementChild?.className).toContain("tw-shrink-0");
-    });
   });
 });

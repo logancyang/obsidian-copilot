@@ -30,7 +30,7 @@ describe("ProjectContextBadgeList", () => {
       expect(items[0]).toEqual({ pattern: "my-folder", type: "folder" });
     });
 
-    it("handles multiple patterns of the same type", () => {
+    it("keeps each type's patterns in input order, grouped by type", () => {
       const value = "folder-a,folder-b,%23tag1,%23tag2";
       const items = buildBadgeItems(value);
 
@@ -44,48 +44,18 @@ describe("ProjectContextBadgeList", () => {
   });
 
   describe("removePattern()", () => {
-    it("removes a folder pattern", () => {
-      const value = "folder-a,folder-b,%23tag1";
-      const result = removePattern(value, "folder-a", "folder");
-
-      expect(result).toContain("folder-b");
-      expect(result).toContain("%23tag1");
-      expect(result).not.toContain(encodeURIComponent("folder-a"));
-    });
-
-    it("removes a tag pattern", () => {
-      const value = "%23tag1,%23tag2,my-folder";
-      const result = removePattern(value, "#tag1", "tag");
-
-      expect(result).toContain("%23tag2");
-      expect(result).toContain("my-folder");
-      const remaining = decodeURIComponent(result);
-      expect(remaining).not.toContain("#tag1");
-    });
-
-    it("removes a note pattern", () => {
-      const value = "%5B%5Bnote%5D%5D,my-folder";
-      const result = removePattern(value, "[[note]]", "note");
-
-      expect(result).toContain("my-folder");
-      expect(result).not.toContain("%5B%5Bnote%5D%5D");
-    });
-
-    it("removes an extension pattern", () => {
-      const value = "*.pdf,my-folder";
-      const result = removePattern(value, "*.pdf", "extension");
-
-      expect(result).toContain("my-folder");
-      expect(result).not.toContain("*.pdf");
-    });
-
-    it("removes a property pattern", () => {
-      const value = "%5BTopics%3APhysics%5D,%23tag1";
-      const result = removePattern(value, "[Topics:Physics]", "property");
-
-      expect(result).toContain("%23tag1");
-      expect(decodeURIComponent(result)).not.toContain("[Topics:Physics]");
-    });
+    it.each([
+      ["folder", "folder-a", "folder-a,folder-b,%23tag1", "%23tag1,folder-b"],
+      ["tag", "#tag1", "%23tag1,%23tag2,my-folder", "%23tag2,my-folder"],
+      ["note", "[[note]]", "%5B%5Bnote%5D%5D,my-folder", "my-folder"],
+      ["extension", "*.pdf", "*.pdf,my-folder", "my-folder"],
+      ["property", "[Topics:Physics]", "%5BTopics%3APhysics%5D,%23tag1", "%23tag1"],
+    ] as const)(
+      "removes only the %s pattern and keeps the others",
+      (type, pattern, value, expected) => {
+        expect(removePattern(value, pattern, type)).toBe(expected);
+      }
+    );
 
     it("returns empty string when removing the last pattern", () => {
       const value = "my-folder";
@@ -94,7 +64,7 @@ describe("ProjectContextBadgeList", () => {
       expect(result).toBe("");
     });
 
-    it("handles undefined input", () => {
+    it("returns an empty string for undefined input", () => {
       const result = removePattern(undefined, "my-folder", "folder");
       expect(result).toBe("");
     });

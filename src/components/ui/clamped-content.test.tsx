@@ -52,14 +52,16 @@ describe("clamped-content", () => {
       expect(screen.getByTestId("clamped-content").getAttribute("style")).toBeNull();
     });
 
-    it("clips content taller than the CSS cap and offers Show more (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+    it("clips content taller than the caller's CSS cap without inline styles and offers Show more (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
       restoreContentHeight = stubContentDimensions(1000, 100);
 
       render(
         <ClampedContent collapsedClassName="tw-max-h-[5lh]">Very long message</ClampedContent>
       );
 
-      expect(screen.getByTestId("clamped-content").classList.contains("tw-max-h-[5lh]")).toBe(true);
+      const content = screen.getByTestId("clamped-content");
+      expect(content.classList.contains("tw-max-h-[5lh]")).toBe(true);
+      expect(content.getAttribute("style")).toBeNull();
       expect(screen.getByRole("button", { name: /show more/i }).getAttribute("aria-expanded")).toBe(
         "false"
       );
@@ -99,18 +101,6 @@ describe("clamped-content", () => {
       expect(screen.getByRole("button", { name: /show more/i }).getAttribute("aria-controls")).toBe(
         region.id
       );
-    });
-
-    it("uses the caller's CSS cap without writing inline styles (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
-      restoreContentHeight = stubContentDimensions(1000, 80);
-
-      render(
-        <ClampedContent collapsedClassName="tw-max-h-[4lh]">Very long message</ClampedContent>
-      );
-
-      const content = screen.getByTestId("clamped-content");
-      expect(content.classList.contains("tw-max-h-[4lh]")).toBe(true);
-      expect(content.getAttribute("style")).toBeNull();
     });
   });
 });

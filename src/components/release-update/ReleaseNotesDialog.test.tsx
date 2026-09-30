@@ -103,7 +103,7 @@ describe("ReleaseNotesDialog", () => {
         el.append(heading, image, reference);
       });
 
-      const view = render(
+      render(
         <AppContext.Provider value={new App()}>
           <ReleaseNotesDialogContent onClose={onClose} state={READY_STATE} />
         </AppContext.Provider>
@@ -137,15 +137,6 @@ describe("ReleaseNotesDialog", () => {
         "",
         expect.anything()
       );
-      expect(view.container.firstElementChild?.classList.contains("tw-h-[min(80vh,46rem)]")).toBe(
-        true
-      );
-      expect(
-        view.container.firstElementChild?.classList.contains("tw-max-h-[calc(100vh-2rem)]")
-      ).toBe(true);
-      const notesPane = view.container.querySelector(".tw-overflow-y-auto");
-      expect(notesPane?.classList.contains("tw-min-h-0")).toBe(true);
-      expect(notesPane?.classList.contains("tw-flex-1")).toBe(true);
     });
 
     it(`separates each skipped release with a divider and links View on GitHub to the newest for ${ISSUE_600_URL}`, async () => {

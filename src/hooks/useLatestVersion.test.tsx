@@ -8,8 +8,8 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 
 jest.mock("@/utils", () => ({
+  ...jest.requireActual<typeof import("@/utils")>("@/utils"),
   checkLatestVersion: jest.fn(),
-  isNewerVersion: jest.fn(() => true),
 }));
 
 const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/317";
