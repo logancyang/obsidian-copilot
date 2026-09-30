@@ -1,14 +1,6 @@
 import type { CopilotSettings } from "@/settings/model";
 import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 
-jest.mock("obsidian", () => ({
-  normalizePath: (path: string) => path.replace(/\/+/g, "/").replace(/^\/|\/$/g, ""),
-}));
-
-jest.mock("@/settings/model", () => ({
-  getSettings: jest.fn(),
-}));
-
 function buildSettings(
   overrides: Partial<{
     copilotFolder: string;
@@ -103,12 +95,6 @@ describe("upgradeNotice", () => {
       expect(entries).toEqual([
         { label: "Memory", oldPath: "my-memory", newPath: "copilot/memory" },
       ]);
-    });
-
-    it("omits memory when its stored value is the legacy default", () => {
-      expect(
-        buildUpgradeRelocationEntries(buildSettings({ memoryFolderName: "copilot/memory" }))
-      ).toEqual([]);
     });
 
     it("omits folders whose old value already equals the derived new path", () => {

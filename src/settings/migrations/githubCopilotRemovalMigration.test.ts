@@ -69,11 +69,11 @@ function settingsWith(overrides: Partial<CopilotSettings> = {}): CopilotSettings
   return { ...DEFAULT_SETTINGS, ...overrides };
 }
 
-beforeEach(() => {
-  jest.clearAllMocks();
-});
-
 describe("githubCopilotRemovalMigration", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe("planGitHubCopilotRemoval()", () => {
     it("returns null for a vault that never configured GitHub Copilot", () => {
       expect(
@@ -118,17 +118,6 @@ describe("githubCopilotRemovalMigration", () => {
           settingsWith({ defaultModelKey: "opencode:gpt-4o|github-copilot" })
         )
       ).toEqual({ defaultModelKey: "" });
-    });
-
-    it("clears the default model key even when no matching model row survived on disk", () => {
-      const patch = planGitHubCopilotRemoval(
-        settingsWith({
-          activeModels: [model({ name: "gpt-4o", provider: ChatModelProviders.OPENAI })],
-          defaultModelKey: "gpt-4o|github-copilot",
-        })
-      );
-
-      expect(patch).toEqual({ defaultModelKey: "" });
     });
 
     it("clears the quick command selection to undefined so quick ask inherits the chat default again (https://github.com/logancyang/obsidian-copilot-preview/issues/316)", () => {

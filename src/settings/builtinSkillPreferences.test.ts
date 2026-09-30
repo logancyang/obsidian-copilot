@@ -23,6 +23,12 @@ jest.mock("@/services/settingsPersistence", () => ({
 }));
 
 describe("builtinSkillPreferences", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS });
+    persist.mockResolvedValue(undefined);
+  });
+
   describe("saveBuiltinPreferences()", () => {
     it("merges concurrent updater saves instead of losing the first opt-out https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
       await Promise.all([
@@ -60,12 +66,6 @@ describe("builtinSkillPreferences", () => {
         disabled: true,
       });
     });
-    beforeEach(() => {
-      jest.clearAllMocks();
-      settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS });
-      persist.mockResolvedValue(undefined);
-    });
-
     it("activates opt-outs only after the durable transaction exits (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {
       const preferences = { "copilot-web-search": { disabled: true } };
       persist.mockImplementation(async (settings) => {
