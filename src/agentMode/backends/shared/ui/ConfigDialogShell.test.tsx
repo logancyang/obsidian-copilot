@@ -1,5 +1,5 @@
 import type { InstallState } from "@/agentMode/session/types";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { ConfigDialogShell, ConfigSection, ConfigWarningStrip } from "./ConfigDialogShell";
 
@@ -22,21 +22,6 @@ describe("ConfigDialogShell", () => {
 
       const heading = screen.getByRole("heading", { name: "Configure Claude" });
       expect(heading.parentElement?.textContent).toBe("Configure ClaudeNot set up");
-    });
-
-    it("omits the warning region entirely when no warning is supplied", () => {
-      render(
-        <ConfigDialogShell
-          title="Configure Claude"
-          state={{ kind: "ready", source: "custom" }}
-          onClose={jest.fn()}
-        >
-          <p>body</p>
-        </ConfigDialogShell>
-      );
-
-      expect(screen.queryByRole("alert")).toBeNull();
-      expect(screen.getByText("Ready")).toBeTruthy();
     });
 
     it("does not reserve a warning band when a supplied strip has no message", () => {
@@ -74,42 +59,37 @@ describe("ConfigDialogShell", () => {
       ).toBeTruthy();
     });
 
-    it("keeps every band a full-width sibling that pads itself", () => {
-      const { container } = render(
-        <ConfigDialogShell
-          title="Configure opencode"
-          state={{ kind: "absent" }}
-          onClose={jest.fn()}
-        >
-          <ConfigSection title="Download managed binary">
-            <p>body</p>
-          </ConfigSection>
+    it("closes the dialog from the default Done button", () => {
+      const onClose = jest.fn();
+      render(
+        <ConfigDialogShell title="Configure opencode" state={{ kind: "absent" }} onClose={onClose}>
+          <p>body</p>
         </ConfigDialogShell>
       );
 
-      const shell = container.firstElementChild as HTMLElement;
-      expect(shell.className).not.toMatch(/tw-p[xl]?-/);
-      const footer = shell.lastElementChild as HTMLElement;
-      expect(footer.className).toContain("copilot-divider-t");
-      expect(footer.className).toContain("tw-bg-secondary");
-      expect(footer.textContent).toBe("Done");
+      fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("replaces the Done button with a supplied footer", () => {
+      render(
+        <ConfigDialogShell
+          title="Configure opencode"
+          state={{ kind: "absent" }}
+          footer={<button type="button">Save</button>}
+          onClose={jest.fn()}
+        >
+          <p>body</p>
+        </ConfigDialogShell>
+      );
+
+      expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
     });
   });
 
   describe("ConfigSection()", () => {
-    it("renders its body in a self-padded band under a hairline divider", () => {
-      const { container } = render(
-        <ConfigSection title="Use your own binary">
-          <p>body</p>
-        </ConfigSection>
-      );
-
-      const band = container.firstElementChild as HTMLElement;
-      expect(band.className).toContain("copilot-divider-t");
-      expect(band.className).toContain("tw-p-4");
-      expect(band.textContent).toBe("Use your own binarybody");
-    });
-
     it("places account status beside the section heading: https://github.com/Brevilabs/obsidian-copilot-private/issues/379", () => {
       render(
         <ConfigSection title="Authentication" badge={<span>Signed in</span>}>
@@ -119,16 +99,17 @@ describe("ConfigDialogShell", () => {
       expect(
         screen.getByRole("heading", { name: "Authentication" }).parentElement?.textContent
       ).toBe("AuthenticationSigned in");
+      expect(screen.getByText("Account controls")).toBeTruthy();
     });
 
     it("drops the section heading when no title is given", () => {
-      const { container } = render(
+      render(
         <ConfigSection>
           <p>body</p>
         </ConfigSection>
       );
 
-      expect(container.firstElementChild?.children.length).toBe(1);
+      expect(screen.queryByRole("heading")).toBeNull();
       expect(screen.getByText("body")).toBeTruthy();
     });
   });

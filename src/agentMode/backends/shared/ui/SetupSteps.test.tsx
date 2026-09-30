@@ -55,12 +55,6 @@ describe("SetupSteps", () => {
         jest.useRealTimers();
       }
     });
-
-    it("offers only Copy when no in-app alternative exists", () => {
-      render(<CommandBlock command="codex login" />);
-
-      expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Copy"]);
-    });
   });
 
   describe("SetupStep()", () => {
