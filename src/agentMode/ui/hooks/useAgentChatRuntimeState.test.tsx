@@ -60,113 +60,100 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
 const msg = (id: string): AgentChatMessage => ({ id }) as unknown as AgentChatMessage;
 
 describe("useAgentChatRuntimeState", () => {
-  it("returns the backend's initial snapshot", () => {
-    const fake = makeFakeBackend({ messages: [msg("a")], isStarting: true });
-    const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
+  describe("useAgentChatRuntimeState()", () => {
+    it("returns the backend's initial snapshot", () => {
+      const fake = makeFakeBackend({ messages: [msg("a")], isStarting: true });
+      const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
 
-    expect(result.current.messages).toEqual([msg("a")]);
-    expect(result.current.isStarting).toBe(true);
-    expect(result.current.isTurnInFlight).toBe(false);
-    expect(result.current.hasPendingPlanPermission).toBe(false);
-    expect(result.current.currentPlan).toBeNull();
-    expect(result.current.pendingToolPermissions).toEqual([]);
-  });
-
-  it("shows an externally started plan implementation as running until the turn finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", () => {
-    const fake = makeFakeBackend();
-    const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
-
-    act(() => {
-      fake.state.isTurnInFlight = true;
-      fake.emit();
-    });
-    expect(result.current.isTurnInFlight).toBe(true);
-
-    act(() => {
-      fake.state.isTurnInFlight = false;
-      fake.emit();
-    });
-    expect(result.current.isTurnInFlight).toBe(false);
-  });
-
-  it("re-syncs every field when the backend notifies", () => {
-    const fake = makeFakeBackend();
-    const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
-
-    act(() => {
-      fake.state.messages = [msg("x"), msg("y")];
-      fake.state.isStarting = true;
-      fake.state.hasPendingPlanPermission = true;
-      fake.emit();
+      expect(result.current.messages).toEqual([msg("a")]);
+      expect(result.current.isStarting).toBe(true);
+      expect(result.current.isTurnInFlight).toBe(false);
+      expect(result.current.hasPendingPlanPermission).toBe(false);
+      expect(result.current.currentPlan).toBeNull();
+      expect(result.current.pendingToolPermissions).toEqual([]);
     });
 
-    expect(result.current.messages).toHaveLength(2);
-    expect(result.current.isStarting).toBe(true);
-    expect(result.current.hasPendingPlanPermission).toBe(true);
-  });
+    it("shows an externally started plan implementation as running until the turn finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", () => {
+      const fake = makeFakeBackend();
+      const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
 
-  it("imperatively syncs to the new backend when the backend prop changes", () => {
-    const first = makeFakeBackend({ messages: [msg("first")] });
-    const second = makeFakeBackend({ messages: [msg("second")], isStarting: true });
-
-    const { result, rerender } = renderHook(({ backend }) => useAgentChatRuntimeState(backend), {
-      initialProps: { backend: first.backend },
-    });
-    expect(result.current.messages).toEqual([msg("first")]);
-
-    rerender({ backend: second.backend });
-
-    expect(result.current.messages).toEqual([msg("second")]);
-    expect(result.current.isStarting).toBe(true);
-  });
-
-  it("never exposes the previous runtime snapshot after the backend prop changes", () => {
-    const first = makeFakeBackend({ isStarting: false });
-    const second = makeFakeBackend({ isStarting: true });
-    const snapshots: boolean[] = [];
-
-    function Probe({ backend }: { backend: AgentChatBackend }) {
-      const { isStarting } = useAgentChatRuntimeState(backend);
-      useEffect(() => {
-        snapshots.push(isStarting);
-      }, [isStarting]);
-      return null;
-    }
-
-    const { rerender } = render(<Probe backend={first.backend} />);
-    snapshots.length = 0;
-    rerender(<Probe backend={second.backend} />);
-
-    expect(snapshots).toEqual([true]);
-  });
-
-  it("unsubscribes from the previous backend on switch and unmount", () => {
-    const first = makeFakeBackend();
-    const second = makeFakeBackend();
-    const { rerender, unmount } = renderHook(({ backend }) => useAgentChatRuntimeState(backend), {
-      initialProps: { backend: first.backend },
-    });
-    expect(first.listenerCount()).toBe(1);
-
-    rerender({ backend: second.backend });
-    expect(first.listenerCount()).toBe(0);
-    expect(second.listenerCount()).toBe(1);
-
-    unmount();
-    expect(second.listenerCount()).toBe(0);
-  });
-
-  it("ignores notifications fired after unmount", () => {
-    const fake = makeFakeBackend();
-    const { result, unmount } = renderHook(() => useAgentChatRuntimeState(fake.backend));
-
-    unmount();
-    expect(() =>
       act(() => {
-        fake.state.messages = [msg("late")];
+        fake.state.isTurnInFlight = true;
         fake.emit();
-      })
-    ).not.toThrow();
-    expect(result.current.messages).toEqual([]);
+      });
+      expect(result.current.isTurnInFlight).toBe(true);
+
+      act(() => {
+        fake.state.isTurnInFlight = false;
+        fake.emit();
+      });
+      expect(result.current.isTurnInFlight).toBe(false);
+    });
+
+    it("re-syncs every field when the backend notifies", () => {
+      const fake = makeFakeBackend();
+      const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
+
+      act(() => {
+        fake.state.messages = [msg("x"), msg("y")];
+        fake.state.isStarting = true;
+        fake.state.hasPendingPlanPermission = true;
+        fake.emit();
+      });
+
+      expect(result.current.messages).toHaveLength(2);
+      expect(result.current.isStarting).toBe(true);
+      expect(result.current.hasPendingPlanPermission).toBe(true);
+    });
+
+    it("serves the new backend's state on the first render after the backend prop changes, never the previous backend's", () => {
+      const first = makeFakeBackend({ isStarting: false });
+      const second = makeFakeBackend({ isStarting: true });
+      const snapshots: boolean[] = [];
+
+      function Probe({ backend }: { backend: AgentChatBackend }) {
+        const { isStarting } = useAgentChatRuntimeState(backend);
+        useEffect(() => {
+          snapshots.push(isStarting);
+        }, [isStarting]);
+        return null;
+      }
+
+      const { rerender } = render(<Probe backend={first.backend} />);
+      snapshots.length = 0;
+      rerender(<Probe backend={second.backend} />);
+
+      expect(snapshots).toEqual([true]);
+    });
+
+    it("unsubscribes from the previous backend on switch and unmount", () => {
+      const first = makeFakeBackend();
+      const second = makeFakeBackend();
+      const { rerender, unmount } = renderHook(({ backend }) => useAgentChatRuntimeState(backend), {
+        initialProps: { backend: first.backend },
+      });
+      expect(first.listenerCount()).toBe(1);
+
+      rerender({ backend: second.backend });
+      expect(first.listenerCount()).toBe(0);
+      expect(second.listenerCount()).toBe(1);
+
+      unmount();
+      expect(second.listenerCount()).toBe(0);
+    });
+
+    it("ignores notifications fired after unmount", () => {
+      const fake = makeFakeBackend();
+      const { result, unmount } = renderHook(() => useAgentChatRuntimeState(fake.backend));
+
+      unmount();
+      expect(() =>
+        act(() => {
+          fake.state.messages = [msg("late")];
+          fake.emit();
+        })
+      ).not.toThrow();
+      expect(result.current.messages).toEqual([]);
+    });
   });
 });

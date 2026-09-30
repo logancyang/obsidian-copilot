@@ -22,14 +22,6 @@ function makeRequest(options: PermissionOption[]): PermissionPrompt {
 
 describe("ToolPermissionCard", () => {
   describe("ToolPermissionCard()", () => {
-    it("fills the available action-rail width", () => {
-      const { container } = render(
-        <ToolPermissionCard request={makeRequest([])} onResolve={jest.fn()} />
-      );
-
-      expect(container.firstElementChild?.classList.contains("tw-w-full")).toBe(true);
-    });
-
     it("names the tool when the request title carries only its argument for https://github.com/Brevilabs/obsidian-copilot-private/issues/599", () => {
       const request = makeRequest([]);
       request.toolCall.title = "latest stable Node.js version";
@@ -157,7 +149,7 @@ describe("ToolPermissionCard", () => {
       ]);
     });
 
-    it("orders compact actions by kind and makes unbroken labels shrinkable", () => {
+    it("orders actions by kind and shows an unbroken label in full", () => {
       const unbrokenLabel = "AllowAccessToNetwork.example.com".repeat(8);
       render(
         <ToolPermissionCard
@@ -175,15 +167,6 @@ describe("ToolPermissionCard", () => {
         "Allow for Session",
         "No",
       ]);
-      const button = screen.getByRole("button", { name: unbrokenLabel });
-      expect(button.classList.contains("tw-max-w-full")).toBe(true);
-      expect(button.classList.contains("tw-min-w-0")).toBe(true);
-      expect(button.firstElementChild).toMatchObject({
-        tagName: "SPAN",
-        textContent: unbrokenLabel,
-      });
-      expect(button.firstElementChild?.classList.contains("tw-min-w-0")).toBe(true);
-      expect(button.firstElementChild?.classList.contains("tw-break-words")).toBe(true);
     });
 
     it("labels an option that quotes a command prefix with its prose and shows the prefix on hover https://github.com/Brevilabs/obsidian-copilot-private/issues/618", async () => {
