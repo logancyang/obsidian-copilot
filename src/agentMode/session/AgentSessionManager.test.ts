@@ -2411,7 +2411,7 @@ describe("AgentSessionManager", () => {
         expect(preloader.preload).toHaveBeenCalledWith("opencode");
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 waits for the managed warm probe to refresh before custom cleanup", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 waits for the managed warm probe to refresh before custom cleanup", async () => {
         let finishProbe!: () => void;
         const probe = new Promise<void>((resolve) => {
           finishProbe = resolve;
@@ -2433,7 +2433,7 @@ describe("AgentSessionManager", () => {
         expect(preloader.preload).not.toHaveBeenCalled();
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 stops a busy managed runtime and rebuilds its chat with the same composer before custom cleanup", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 stops a busy managed runtime and rebuilds its chat with the same composer before custom cleanup", async () => {
         const { mgr } = buildInstallStateManager({ installState: { kind: "ready", source: "custom" } });
         const first = await mgr.createSession();
         getSessionTestHandle(first).setStatus("running");
@@ -2444,7 +2444,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()?.chatInputId).toBe(first.chatInputId);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 waits for an overlapping refresh before permitting custom binary cleanup", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 waits for an overlapping refresh before permitting custom binary cleanup", async () => {
         const { mgr } = buildInstallStateManager({ installState: { kind: "ready", source: "custom" } });
         const session = await mgr.createSession();
         let releaseShutdown!: () => void;

@@ -50,7 +50,7 @@ export abstract class ManagedBinaryManager<
 
   /**
    * Lets runtime owners finish switching away from managed files before cleanup.
-   * https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/620
    * @param handler - Refreshes the backend using the newly selected custom binary.
    */
   subscribeCustomSelection(handler: () => Promise<void>): () => void {
@@ -309,7 +309,7 @@ export abstract class ManagedBinaryManager<
     try {
       // Refresh owners before reclaiming files; a settings notification alone
       // neither waits for process exit nor interrupts a busy managed runtime.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
       await Promise.all(Array.from(this.customSelectionHandlers, (refresh) => refresh()));
       await this.removeManagedDownloads();
     } catch (error) {
@@ -350,7 +350,7 @@ export abstract class ManagedBinaryManager<
       }
       // Windows retains locks from native account probes and other vaults until
       // those executables exit, even after this vault's runtime has refreshed.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
       await stopWindowsProcessesInDirectory(await realPathOrMissing(dir));
       await fs.promises.rm(dir, { recursive: true, force: true });
     }

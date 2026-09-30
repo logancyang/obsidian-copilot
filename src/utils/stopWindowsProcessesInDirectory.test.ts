@@ -11,7 +11,7 @@ describe("stopWindowsProcessesInDirectory", () => {
     afterEach(() => jest.restoreAllMocks());
 
     (process.platform === "win32" ? it : it.skip)(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 releases an actual Windows executable lock while keeping a sibling directory process running",
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/620 releases an actual Windows executable lock while keeping a sibling directory process running",
       async () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), "managed-process-test-"));
         const directory = path.join(root, "O'Brien [managed]");
@@ -56,7 +56,7 @@ describe("stopWindowsProcessesInDirectory", () => {
       expect(exec).not.toHaveBeenCalled();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 waits for Windows process termination before allowing directory removal", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 waits for Windows process termination before allowing directory removal", async () => {
       let complete!: () => void;
       let launched!: () => void;
       const started = new Promise<void>((resolve) => {
@@ -81,7 +81,7 @@ describe("stopWindowsProcessesInDirectory", () => {
       expect(stopped).toBe(true);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 reports failed process termination instead of permitting deletion", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 reports failed process termination instead of permitting deletion", async () => {
       jest.spyOn(childProcess, "execFile").mockImplementation((...args: unknown[]) => {
         (args[args.length - 1] as (error: Error) => void)(new Error("access denied"));
         return {} as ChildProcess;

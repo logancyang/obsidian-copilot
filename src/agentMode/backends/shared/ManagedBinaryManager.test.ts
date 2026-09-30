@@ -387,7 +387,7 @@ describe("ManagedBinaryManager", () => {
     });
 
     describe("setCustomBinaryPath()", () => {
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 releases Windows executable locks before removing managed downloads", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 releases Windows executable locks before removing managed downloads", async () => {
         fs.mkdirSync(manager.getDataDir(), { recursive: true });
         let release!: () => void;
         let started!: () => void;
@@ -416,7 +416,7 @@ describe("ManagedBinaryManager", () => {
           stop.mockRestore();
         }
       });
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 waits for the selected custom runtime to replace the managed process before deleting downloads", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 waits for the selected custom runtime to replace the managed process before deleting downloads", async () => {
         fs.mkdirSync(manager.getDataDir(), { recursive: true });
         const managedPath = path.join(manager.getDataDir(), "agent");
         fs.writeFileSync(managedPath, "managed");

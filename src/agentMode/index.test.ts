@@ -190,7 +190,7 @@ describe("agentMode", () => {
       } as unknown as CopilotPlugin;
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 waits for an immediate runtime refresh before custom selection cleanup", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 waits for an immediate runtime refresh before custom selection cleanup", async () => {
       createAgentSessionManager({} as App, plugin);
       await mockManager.registerPreload.mock.calls[0][1];
       mockStates.opencode = { kind: "ready", source: "custom" };

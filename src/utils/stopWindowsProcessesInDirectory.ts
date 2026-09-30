@@ -2,7 +2,7 @@ import { requireNodeModule } from "@/utils/desktopRuntime";
 
 /**
  * Releases executable file locks before removing a Windows managed installation.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/620
  * Processes outside that directory are left running. Other platforms can unlink
  * running executables and require no process termination.
  * @param directory - Installation directory whose executable files will be removed.
@@ -14,7 +14,7 @@ export async function stopWindowsProcessesInDirectory(
 ): Promise<void> {
   // An open native executable prevents Windows unlink even when the custom
   // selection is already saved. Resolve process identity by directory, never name.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
   if (platform !== "win32") return;
   const { execFile } = requireNodeModule<typeof import("node:child_process")>("child_process");
   const script = `

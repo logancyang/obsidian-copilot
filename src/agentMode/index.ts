@@ -343,7 +343,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           await seedManagedBuiltins();
           // A binary being removed cannot keep serving a busy chat. Reuse restart
           // recovery so conversations and drafts survive before files are reclaimed.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
           await manager.onInstallStateChanged(descriptor.id, { deferWhileBusy: false });
         })
       );
@@ -355,7 +355,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       const installState = descriptor.getInstallState(getSettings());
       // Custom selection awaits its own refresh before deleting the old executable;
       // a second asynchronous refresh would race that deletion and session recovery.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
       if (
         managedInstall?.subscribeCustomSelection &&
         managedInstall.getState(plugin).kind === "running" &&

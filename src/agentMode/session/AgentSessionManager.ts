@@ -1610,7 +1610,7 @@ export class AgentSessionManager {
 
   /**
    * Refreshes runtime ownership after installation changes, including before cleanup.
-   * https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/620
    * @param backendId - Backend whose configured executable changed.
    * @param options - Whether a running turn may delay release of the old executable.
    */
@@ -1644,7 +1644,7 @@ export class AgentSessionManager {
     this.registerPreload(backendId, probe);
     // The warm process can hold the same executable lock as a live chat. A
     // completed refresh must release it before managed cleanup can proceed.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
     await probe;
     return true;
   }
@@ -2692,7 +2692,7 @@ export class AgentSessionManager {
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
       // Managed cleanup must wait for the queued refresh to release its executable,
       // including a refresh that was already running when the binary changed.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
       if (immediate) await inFlight;
       return;
     }
