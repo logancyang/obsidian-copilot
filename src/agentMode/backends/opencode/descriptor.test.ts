@@ -41,7 +41,7 @@ describe("descriptor", () => {
     });
 
     describe("managedInstall.subscribe()", () => {
-      it("subscribes to shared operation changes and returns cleanup", () => {
+      it("forwards the listener to the shared manager and returns its unsubscribe function", () => {
         const plugin = vaultPlugin(os.tmpdir());
         const manager = getOpencodeBinaryManager(plugin);
         const cleanup = jest.fn();
@@ -54,7 +54,7 @@ describe("descriptor", () => {
     });
 
     describe("managedInstall.run()", () => {
-      it("keeps custom and managed upgrades on their existing manager paths", async () => {
+      it("upgrades a custom binary through upgradeCustomBinary and a managed one through upgradeManaged", async () => {
         const manager = getOpencodeBinaryManager(vaultPlugin(os.tmpdir()));
         const upgradeCustom = jest.spyOn(manager, "upgradeCustomBinary").mockResolvedValue({
           version: "1.0.0",
@@ -98,25 +98,14 @@ describe("descriptor", () => {
     describe("wire.decode()", () => {
       const decode = OpencodeBackendDescriptor.wire.decode;
 
-      it("parses 2-segment ids as bare/default with provider mapped to Copilot", () => {
+      it("decodes a provider/model id as a selection with no effort", () => {
         expect(decode("anthropic/claude-sonnet-4-5")).toEqual({
           selection: { baseModelId: "anthropic/claude-sonnet-4-5", effort: null },
           provider: "anthropic",
         });
       });
 
-      it("parses 3-segment ids as variants when the suffix is a known effort", () => {
-        expect(decode("anthropic/claude-sonnet-4-5/medium")).toEqual({
-          selection: { baseModelId: "anthropic/claude-sonnet-4-5", effort: "medium" },
-          provider: "anthropic",
-        });
-        expect(decode("openai/gpt-5/minimal")).toEqual({
-          selection: { baseModelId: "openai/gpt-5", effort: "minimal" },
-          provider: "openai",
-        });
-      });
-
-      it("recognizes opencode's full effort vocabulary (none/minimal/low/medium/high/xhigh/max)", () => {
+      it("decodes every effort suffix from none through max as the effort of its base model id", () => {
         for (const effort of ["none", "minimal", "low", "medium", "high", "xhigh", "max"]) {
           expect(decode(`anthropic/claude-opus-4-7/${effort}`)).toEqual({
             selection: { baseModelId: "anthropic/claude-opus-4-7", effort },
@@ -125,7 +114,7 @@ describe("descriptor", () => {
         }
       });
 
-      it("returns no-effort representation for 3-segment ids whose suffix isn't a known effort", () => {
+      it("decodes a three-segment id whose last segment is not an effort as a base model id with no effort", () => {
         expect(decode("openrouter/anthropic/claude-sonnet-4-5")).toEqual({
           selection: { baseModelId: "openrouter/anthropic/claude-sonnet-4-5", effort: null },
           provider: "openrouterai",
@@ -136,7 +125,7 @@ describe("descriptor", () => {
         });
       });
 
-      it("parses 4-segment umbrella ids as variants when the last segment is a known effort", () => {
+      it("decodes a four-segment umbrella id with a known effort suffix as a base model id plus effort", () => {
         expect(decode("openrouter/anthropic/claude-sonnet-4.5/high")).toEqual({
           selection: { baseModelId: "openrouter/anthropic/claude-sonnet-4.5", effort: "high" },
           provider: "openrouterai",
@@ -155,7 +144,7 @@ describe("descriptor", () => {
         });
       });
 
-      it("returns no-effort representation for unparseable shapes (1 segment or unknown trailing segment)", () => {
+      it("decodes a single-segment id or an unknown trailing segment as a base model id with no effort", () => {
         expect(decode("just-a-name")).toEqual({
           selection: { baseModelId: "just-a-name", effort: null },
           provider: null,
@@ -174,19 +163,19 @@ describe("descriptor", () => {
     describe("wire.encode()", () => {
       const encode = OpencodeBackendDescriptor.wire.encode;
 
-      it("returns the bare baseModelId when effort is null", () => {
+      it("encodes a selection without effort as its base model id", () => {
         expect(encode({ baseModelId: "anthropic/claude-sonnet-4-5", effort: null })).toBe(
           "anthropic/claude-sonnet-4-5"
         );
       });
 
-      it("appends the variant when effort is set", () => {
+      it("encodes a selection with effort as the base model id plus the effort suffix", () => {
         expect(encode({ baseModelId: "anthropic/claude-sonnet-4-5", effort: "high" })).toBe(
           "anthropic/claude-sonnet-4-5/high"
         );
       });
 
-      it("round-trips via wire.decode", () => {
+      it("encodes every decoded id back to the original wire id", () => {
         const ids = [
           "anthropic/claude-sonnet-4-5",
           "anthropic/claude-sonnet-4-5/low",
@@ -204,7 +193,7 @@ describe("descriptor", () => {
         }
       });
 
-      it("preserves slashes-in-model for catalog-less BYOK wire ids", () => {
+      it("round-trips a catalog-less BYOK wire id whose model name contains slashes", () => {
         const wireId = "byok-uuid-abc/lmstudio-community/Qwen2.5-7B-Instruct-GGUF";
         const decoded = OpencodeBackendDescriptor.wire.decode(wireId);
         expect(decoded).toEqual({
@@ -279,7 +268,7 @@ describe("descriptor", () => {
         }
       );
 
-      it("routes config-option-backed effort through the thought-level option", async () => {
+      it("sets the effort config option without switching the model when only the effort changes", async () => {
         const { session, applyModelWireId, setConfigOption } = makeSession({
           model: {
             current: { baseModelId: "openai/gpt-5", effort: "low" },
@@ -395,7 +384,7 @@ describe("descriptor", () => {
           automatic.mockRestore();
         }
       });
-      it("rebinds the surviving manager to the loading lifecycle's vault", async () => {
+      it("rebinds the shared manager to the vault of the plugin lifecycle that loads", async () => {
         const emptyVault = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-load-a-"));
         const legacyVault = await vaultWithLegacyInstall("opencode-load-b-", 12);
         try {

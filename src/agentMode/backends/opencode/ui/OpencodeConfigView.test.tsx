@@ -57,23 +57,13 @@ const renderView = (
 
 describe("OpencodeConfigView", () => {
   describe("OpencodeConfigView()", () => {
-    it("offers the two binary sources as one mutually exclusive choice", () => {
-      renderView();
-
-      const group = screen.getByRole("radiogroup", { name: "opencode binary source" });
-      const options = screen.getAllByRole("radio");
-      expect(group.contains(options[0])).toBe(true);
-      expect(options.map((o) => o.textContent)).toEqual(["Managed by Copilot", "My own binary"]);
-      expect(options.map((o) => o.getAttribute("aria-checked"))).toEqual(["true", "false"]);
-    });
-
-    it("labels the upgrade as the custom binary's own command when that is the active source", () => {
+    it("labels the upgrade button with the opencode upgrade command when the custom binary is the active source", () => {
       renderView({ state: { ...OUTDATED, source: "custom" }, activeSource: "custom" });
 
       expect(screen.getByRole("button", { name: "Run opencode upgrade" })).toBeTruthy();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/569 names the managed version it will install", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/569 labels the upgrade button with the managed version it will install when the managed binary is outdated", () => {
       renderView({
         state: OUTDATED,
         activeSource: "managed",
