@@ -1,7 +1,6 @@
 import { PromptContextEnvelope } from "@/context/PromptContextTypes";
 import { logMarkdownBlock } from "@/logger";
 import {
-  __getLatestPromptPayloadSnapshotForTests,
   clearRecordedPromptPayload,
   flushRecordedPromptPayloadToLog,
   recordPromptPayload,
@@ -17,160 +16,165 @@ describe("promptPayloadRecorder", () => {
     clearRecordedPromptPayload();
   });
 
-  it("records messages and flushes them as markdown", async () => {
-    const messages = [
-      { role: "system", content: "hello" },
-      { role: "user", content: "world" },
-    ];
+  describe("flushRecordedPromptPayloadToLog()", () => {
+    it("logs the recorded messages as a markdown block headed by the model name", async () => {
+      const messages = [
+        { role: "system", content: "hello" },
+        { role: "user", content: "world" },
+      ];
 
-    recordPromptPayload({ messages, modelName: "gpt-test" });
-    expect(__getLatestPromptPayloadSnapshotForTests()).not.toBeNull();
+      recordPromptPayload({ messages, modelName: "gpt-test" });
+      await flushRecordedPromptPayloadToLog();
 
-    await flushRecordedPromptPayloadToLog();
+      expect(logMarkdownBlock).toHaveBeenCalledTimes(1);
+      const lines = (logMarkdownBlock as jest.Mock).mock.calls[0][0] as string[];
+      const output = lines.join("\n");
+      expect(lines[0]).toContain("Prompt");
+      expect(lines[0]).toContain("gpt-test");
+      expect(output).toContain("**Actual Messages Sent to LLM:**");
+      expect(output).toContain("```json");
+      expect(output).toContain('"role": "system"');
+    });
 
-    expect(logMarkdownBlock).toHaveBeenCalledTimes(1);
-    const lines = (logMarkdownBlock as jest.Mock).mock.calls[0][0] as string[];
-    const output = lines.join("\n");
-    expect(lines[0]).toContain("Prompt");
-    expect(lines[0]).toContain("gpt-test");
-    expect(output).toContain("**Actual Messages Sent to LLM:**");
-    expect(output).toContain("```json");
-    expect(output).toContain('"role": "system"');
-    expect(__getLatestPromptPayloadSnapshotForTests()).toBeNull();
+    it("logs a recording only once until a new payload is recorded", async () => {
+      recordPromptPayload({ messages: [{ role: "system", content: "hello" }] });
+
+      await flushRecordedPromptPayloadToLog();
+      await flushRecordedPromptPayloadToLog();
+
+      expect(logMarkdownBlock).toHaveBeenCalledTimes(1);
+    });
+
+    it("logs nothing when no payload was recorded", async () => {
+      await flushRecordedPromptPayloadToLog();
+
+      expect(logMarkdownBlock).not.toHaveBeenCalled();
+    });
+
+    it("adds the layered context view with cache layers and message ids when an envelope is recorded", async () => {
+      const messages = [
+        {
+          role: "system",
+          content:
+            "You are a helpful assistant.\n<user_custom_instructions>\nAnswer in English unless asked otherwise explicitly\n</user_custom_instructions>\n<note_context>\nPrevious note content\n</note_context>",
+        },
+        {
+          role: "user",
+          content: "<note_context>\nCurrent note content\n</note_context>\n\nWhat is this about?",
+        },
+      ];
+
+      const mockEnvelope: PromptContextEnvelope = {
+        version: 1,
+        conversationId: "conv-123",
+        messageId: "msg-456",
+        layers: [
+          {
+            id: "L1_SYSTEM",
+            label: "System Instructions",
+            text: "You are a helpful assistant.",
+            stable: true,
+            segments: [],
+            hash: "abc123def456",
+          },
+          {
+            id: "L2_PREVIOUS",
+            label: "Previous Turn Context",
+            text: "<note_context>\nPrevious note content\n</note_context>",
+            stable: true,
+            segments: [],
+            hash: "prev789xyz",
+          },
+          {
+            id: "L3_TURN",
+            label: "Current Turn Context",
+            text: "<note_context>\nCurrent note content\n</note_context>",
+            stable: false,
+            segments: [],
+            hash: "turn123abc",
+          },
+          {
+            id: "L4_STRIP",
+            label: "Conversation Strip",
+            text: "",
+            stable: false,
+            segments: [],
+            hash: "strip456",
+          },
+          {
+            id: "L5_USER",
+            label: "User Message",
+            text: "What is this about?",
+            stable: false,
+            segments: [],
+            hash: "user789def",
+          },
+        ],
+        serializedText: "System + Context + User",
+        layerHashes: {
+          L1_SYSTEM: "abc123def456",
+          L2_PREVIOUS: "prev789xyz",
+          L3_TURN: "turn123abc",
+          L4_STRIP: "strip456",
+          L5_USER: "user789def",
+        },
+        combinedHash: "combined123",
+      };
+
+      recordPromptPayload({ messages, modelName: "gpt-4", contextEnvelope: mockEnvelope });
+      await flushRecordedPromptPayloadToLog();
+
+      expect(logMarkdownBlock).toHaveBeenCalledTimes(1);
+      const lines = (logMarkdownBlock as jest.Mock).mock.calls[0][0] as string[];
+      const output = lines.join("\n");
+
+      expect(lines[0]).toContain("Prompt");
+      expect(lines[0]).toContain("gpt-4");
+
+      expect(output).toContain("**Actual Messages Sent to LLM:**");
+      expect(output).toContain("**Layered Context Metadata:**");
+
+      expect(output).toContain("```json");
+      expect(output).toContain('"role": "system"');
+      expect(output).toContain('"role": "user"');
+
+      expect(output).toContain("msg:msg-456");
+      expect(output).toContain("conv:conv-123");
+
+      expect(output).toContain("━━━ SYSTEM MESSAGE ━━━");
+      expect(output).toContain("━━━ USER MESSAGE ━━━");
+
+      expect(output).toContain("🔒 L1_SYSTEM");
+      expect(output).toContain("🔒 L2_PREVIOUS");
+      expect(output).toContain("⚡ L5_USER");
+
+      expect(output).toContain("You are a helpful assistant");
+      expect(output).toContain("What is this about?");
+
+      expect(output).toContain("abc123de");
+    });
+  });
+  describe("recordPromptPayload()", () => {
+    it("logs a circular message graph with a [Circular] marker instead of throwing", async () => {
+      const circular: { role: string; self?: unknown } = { role: "system" };
+      circular.self = circular;
+
+      expect(() => recordPromptPayload({ messages: [circular] })).not.toThrow();
+      await flushRecordedPromptPayloadToLog();
+
+      const lines = (logMarkdownBlock as jest.Mock).mock.calls[0][0] as string[];
+      expect(lines.join("\n")).toContain("[Circular]");
+    });
   });
 
-  it("does not flush twice without a new recording", async () => {
-    recordPromptPayload({ messages: [{ role: "system", content: "hello" }] });
+  describe("clearRecordedPromptPayload()", () => {
+    it("discards the recorded payload so a later flush logs nothing", async () => {
+      recordPromptPayload({ messages: [{ role: "system", content: "hello" }] });
+      clearRecordedPromptPayload();
 
-    await flushRecordedPromptPayloadToLog();
-    await flushRecordedPromptPayloadToLog();
+      await flushRecordedPromptPayloadToLog();
 
-    expect(logMarkdownBlock).toHaveBeenCalledTimes(1);
-  });
-
-  it("clears recorded payloads when requested", async () => {
-    recordPromptPayload({ messages: [{ role: "system", content: "hello" }] });
-    clearRecordedPromptPayload();
-
-    await flushRecordedPromptPayloadToLog();
-
-    expect(logMarkdownBlock).not.toHaveBeenCalled();
-  });
-
-  it("serializes circular message graphs without throwing", async () => {
-    const circular: { role: string; self?: unknown } = { role: "system" };
-    circular.self = circular;
-
-    expect(() => recordPromptPayload({ messages: [circular] })).not.toThrow();
-
-    await flushRecordedPromptPayloadToLog();
-
-    expect(logMarkdownBlock).toHaveBeenCalledTimes(1);
-    const lines = (logMarkdownBlock as jest.Mock).mock.calls[0][0] as string[];
-    const output = lines.join("\n");
-    expect(output).toContain("[Circular]");
-  });
-
-  it("formats layered context envelope when provided", async () => {
-    const messages = [
-      {
-        role: "system",
-        content:
-          "You are a helpful assistant.\n<user_custom_instructions>\nAnswer in English unless asked otherwise explicitly\n</user_custom_instructions>\n<note_context>\nPrevious note content\n</note_context>",
-      },
-      {
-        role: "user",
-        content: "<note_context>\nCurrent note content\n</note_context>\n\nWhat is this about?",
-      },
-    ];
-
-    const mockEnvelope: PromptContextEnvelope = {
-      version: 1,
-      conversationId: "conv-123",
-      messageId: "msg-456",
-      layers: [
-        {
-          id: "L1_SYSTEM",
-          label: "System Instructions",
-          text: "You are a helpful assistant.",
-          stable: true,
-          segments: [],
-          hash: "abc123def456",
-        },
-        {
-          id: "L2_PREVIOUS",
-          label: "Previous Turn Context",
-          text: "<note_context>\nPrevious note content\n</note_context>",
-          stable: true,
-          segments: [],
-          hash: "prev789xyz",
-        },
-        {
-          id: "L3_TURN",
-          label: "Current Turn Context",
-          text: "<note_context>\nCurrent note content\n</note_context>",
-          stable: false,
-          segments: [],
-          hash: "turn123abc",
-        },
-        {
-          id: "L4_STRIP",
-          label: "Conversation Strip",
-          text: "",
-          stable: false,
-          segments: [],
-          hash: "strip456",
-        },
-        {
-          id: "L5_USER",
-          label: "User Message",
-          text: "What is this about?",
-          stable: false,
-          segments: [],
-          hash: "user789def",
-        },
-      ],
-      serializedText: "System + Context + User",
-      layerHashes: {
-        L1_SYSTEM: "abc123def456",
-        L2_PREVIOUS: "prev789xyz",
-        L3_TURN: "turn123abc",
-        L4_STRIP: "strip456",
-        L5_USER: "user789def",
-      },
-      combinedHash: "combined123",
-    };
-
-    recordPromptPayload({ messages, modelName: "gpt-4", contextEnvelope: mockEnvelope });
-    await flushRecordedPromptPayloadToLog();
-
-    expect(logMarkdownBlock).toHaveBeenCalledTimes(1);
-    const lines = (logMarkdownBlock as jest.Mock).mock.calls[0][0] as string[];
-    const output = lines.join("\n");
-
-    expect(lines[0]).toContain("Prompt");
-    expect(lines[0]).toContain("gpt-4");
-
-    expect(output).toContain("**Actual Messages Sent to LLM:**");
-    expect(output).toContain("**Layered Context Metadata:**");
-
-    expect(output).toContain("```json");
-    expect(output).toContain('"role": "system"');
-    expect(output).toContain('"role": "user"');
-
-    expect(output).toContain("msg:msg-456");
-    expect(output).toContain("conv:conv-123");
-
-    expect(output).toContain("━━━ SYSTEM MESSAGE ━━━");
-    expect(output).toContain("━━━ USER MESSAGE ━━━");
-
-    expect(output).toContain("🔒 L1_SYSTEM");
-    expect(output).toContain("🔒 L2_PREVIOUS");
-    expect(output).toContain("⚡ L5_USER");
-
-    expect(output).toContain("You are a helpful assistant");
-    expect(output).toContain("What is this about?");
-
-    expect(output).toContain("abc123de");
+      expect(logMarkdownBlock).not.toHaveBeenCalled();
+    });
   });
 });
