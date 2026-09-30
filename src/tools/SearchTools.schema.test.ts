@@ -18,21 +18,7 @@ describe("SearchTools", () => {
   describe("createLocalSearchTool()", () => {
     const schema = createLocalSearchTool({} as App).schema;
 
-    it("reports unavailable instead of using keyword search when enabled Miyo cannot run on mobile (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
-      mockGetSettings.mockReturnValue({ enableMiyo: true });
-      mockIsMiyoActive.mockReturnValue(false);
-      const tool = createLocalSearchTool({} as App);
-      const invoke = tool.invoke.bind(tool) as (input: {
-        query: string;
-        salientTerms: string[];
-      }) => Promise<string>;
-
-      await expect(invoke({ query: "vault notes", salientTerms: [] })).rejects.toThrow(
-        "Miyo is unavailable. Configure a remote Miyo connection, then retry vault search."
-      );
-    });
-
-    it("accepts epoch time ranges", () => {
+    it("accepts a timeRange given as epoch-millisecond start and end", () => {
       const result = schema.safeParse({
         query: "meetings last week",
         salientTerms: ["meetings"],
@@ -45,13 +31,13 @@ describe("SearchTools", () => {
       expect(result.success).toBe(true);
     });
 
-    it("accepts an empty salient-terms list and omitted optional search metadata", () => {
+    it("accepts an empty salientTerms list when no timeRange is given", () => {
       expect(schema.safeParse({ query: "what did I do last week", salientTerms: [] }).success).toBe(
         true
       );
     });
 
-    it("accepts partial numeric time ranges for the tool handler to sanitize", () => {
+    it("accepts a timeRange with only a startTime", () => {
       expect(
         schema.safeParse({
           query: "notes since yesterday",
@@ -61,12 +47,12 @@ describe("SearchTools", () => {
       ).toBe(true);
     });
 
-    it("rejects empty queries and missing salient terms", () => {
+    it("rejects an empty query and a missing salientTerms list", () => {
       expect(schema.safeParse({ query: "", salientTerms: ["test"] }).success).toBe(false);
       expect(schema.safeParse({ query: "test query" }).success).toBe(false);
     });
 
-    it("rejects legacy TimeInfo objects", () => {
+    it("rejects a timeRange whose times are legacy { epoch } objects", () => {
       expect(
         schema.safeParse({
           query: "meetings last week",
@@ -78,12 +64,26 @@ describe("SearchTools", () => {
         }).success
       ).toBe(false);
     });
+
+    it("rejects with a Miyo-unavailable error instead of using keyword search when enabled Miyo cannot run on mobile (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
+      mockGetSettings.mockReturnValue({ enableMiyo: true });
+      mockIsMiyoActive.mockReturnValue(false);
+      const tool = createLocalSearchTool({} as App);
+      const invoke = tool.invoke.bind(tool) as (input: {
+        query: string;
+        salientTerms: string[];
+      }) => Promise<string>;
+
+      await expect(invoke({ query: "vault notes", salientTerms: [] })).rejects.toThrow(
+        "Miyo is unavailable. Configure a remote Miyo connection, then retry vault search."
+      );
+    });
   });
 
-  describe("webSearchTool schema", () => {
+  describe("webSearchTool", () => {
     const schema = webSearchTool.schema;
 
-    it("accepts user and assistant chat history entries", () => {
+    it("accepts user and assistant chatHistory entries and an empty history", () => {
       expect(
         schema.safeParse({
           query: "TypeScript tutorials",
@@ -98,7 +98,7 @@ describe("SearchTools", () => {
       );
     });
 
-    it("rejects empty queries and malformed chat history entries", () => {
+    it("rejects an empty query and chatHistory entries with an unknown role or missing content", () => {
       expect(schema.safeParse({ query: "", chatHistory: [] }).success).toBe(false);
       expect(
         schema.safeParse({

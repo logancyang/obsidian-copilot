@@ -74,106 +74,97 @@ describe("FileTreeTools", () => {
     (searchUtils.shouldIndexFile as jest.Mock).mockReturnValue(true);
   });
 
-  it("should generate correct file tree structure with files and extension counts", async () => {
-    const tree = buildFileTree(mockApp, root);
-
-    const expectedTree = {
-      vault: {
-        files: ["readme.md", "config.json", "text"],
-        subFolders: {
-          docs: {
-            files: ["readme.md"],
-            subFolders: {
-              projects: {
-                files: ["project1.md", "project2.md", "data.json"],
-                extensionCounts: { md: 2, json: 1 },
+  describe("buildFileTree()", () => {
+    it("lists each folder's files and rolls extension counts up through its subfolders", () => {
+      expect(buildFileTree(mockApp, root)).toEqual({
+        vault: {
+          files: ["readme.md", "config.json", "text"],
+          subFolders: {
+            docs: {
+              files: ["readme.md"],
+              subFolders: {
+                projects: {
+                  files: ["project1.md", "project2.md", "data.json"],
+                  extensionCounts: { md: 2, json: 1 },
+                },
+                notes: {
+                  files: ["note1.md", "note2.md", "image.png"],
+                  extensionCounts: { md: 2, png: 1 },
+                },
               },
-              notes: {
-                files: ["note1.md", "note2.md", "image.png"],
-                extensionCounts: { md: 2, png: 1 },
-              },
+              extensionCounts: { md: 5, json: 1, png: 1 },
             },
-            extensionCounts: { md: 5, json: 1, png: 1 },
           },
+          extensionCounts: { md: 6, json: 2, png: 1, unknown: 1 },
         },
-        extensionCounts: { md: 6, json: 2, png: 1, unknown: 1 },
-      },
-    };
+      });
+    });
 
-    expect(tree).toEqual(expectedTree);
+    it("omits file names but keeps extension counts when includeFiles is false", () => {
+      expect(buildFileTree(mockApp, root, false)).toEqual({
+        vault: {
+          subFolders: {
+            docs: {
+              subFolders: {
+                projects: { extensionCounts: { md: 2, json: 1 } },
+                notes: { extensionCounts: { md: 2, png: 1 } },
+              },
+              extensionCounts: { md: 5, json: 1, png: 1 },
+            },
+          },
+          extensionCounts: { md: 6, json: 2, png: 1, unknown: 1 },
+        },
+      });
+    });
 
-    const tool = createGetFileTreeTool(mockApp, root);
-    const result = (await ToolManager.callTool(tool, {})) as string;
+    it("leaves out files rejected by the index filter and drops folders left empty", () => {
+      (searchUtils.shouldIndexFile as jest.Mock).mockImplementation(
+        (_app: unknown, file: { path: string }) => !file.path.includes("projects")
+      );
 
-    const jsonPart = result.substring(result.indexOf("{"));
-    const treeFromTool = JSON.parse(jsonPart) as typeof expectedTree;
+      expect(buildFileTree(mockApp, root)).toEqual({
+        vault: {
+          files: ["readme.md", "config.json", "text"],
+          subFolders: {
+            docs: {
+              files: ["readme.md"],
+              subFolders: {
+                notes: {
+                  files: ["note1.md", "note2.md", "image.png"],
+                  extensionCounts: { md: 2, png: 1 },
+                },
+              },
+              extensionCounts: { md: 3, png: 1 },
+            },
+          },
+          extensionCounts: { md: 4, png: 1, json: 1, unknown: 1 },
+        },
+      });
+    });
 
-    expect(treeFromTool).toEqual(expectedTree);
+    it("returns an empty tree when the index filter rejects every file", () => {
+      (searchUtils.shouldIndexFile as jest.Mock).mockReturnValue(false);
+
+      expect(buildFileTree(mockApp, root)).toEqual({});
+    });
   });
 
-  it("should handle size limit by rebuilding without files", async () => {
-    const tree = buildFileTree(mockApp, root, false);
+  describe("createGetFileTreeTool()", () => {
+    it("returns the full file tree as JSON after an explanatory prompt", async () => {
+      const tool = createGetFileTreeTool(mockApp, root);
 
-    const expectedTree = {
-      vault: {
-        subFolders: {
-          docs: {
-            subFolders: {
-              projects: {
-                extensionCounts: { md: 2, json: 1 },
-              },
-              notes: {
-                extensionCounts: { md: 2, png: 1 },
-              },
-            },
-            extensionCounts: { md: 5, json: 1, png: 1 },
-          },
-        },
-        extensionCounts: { md: 6, json: 2, png: 1, unknown: 1 },
-      },
-    };
+      const result = (await ToolManager.callTool(tool, {})) as string;
 
-    expect(tree).toEqual(expectedTree);
-  });
-
-  it("should exclude files based on patterns", async () => {
-    (searchUtils.shouldIndexFile as jest.Mock).mockImplementation(
-      (_app: unknown, file: { path: string }) => {
-        return !file.path.includes("projects");
-      }
-    );
-
-    const tree = buildFileTree(mockApp, root);
-
-    const expectedTree = {
-      vault: {
-        files: ["readme.md", "config.json", "text"],
-        subFolders: {
-          docs: {
-            files: ["readme.md"],
-            subFolders: {
-              notes: {
-                files: ["note1.md", "note2.md", "image.png"],
-                extensionCounts: { md: 2, png: 1 },
-              },
-            },
-            extensionCounts: { md: 3, png: 1 },
-          },
-        },
-        extensionCounts: { md: 4, png: 1, json: 1, unknown: 1 },
-      },
-    };
-
-    expect(tree).toEqual(expectedTree);
-  });
-
-  it("should handle empty folders after filtering", async () => {
-    (searchUtils.shouldIndexFile as jest.Mock).mockReturnValue(false);
-
-    const tree = buildFileTree(mockApp, root);
-
-    const expectedTree = {};
-
-    expect(tree).toEqual(expectedTree);
+      const tree = JSON.parse(result.substring(result.indexOf("{"))) as ReturnType<
+        typeof buildFileTree
+      >;
+      expect(tree.vault.files).toEqual(["readme.md", "config.json", "text"]);
+      expect(tree.vault.extensionCounts).toEqual({ md: 6, json: 2, png: 1, unknown: 1 });
+      expect(tree.vault.subFolders?.docs.subFolders?.notes.files).toEqual([
+        "note1.md",
+        "note2.md",
+        "image.png",
+      ]);
+    });
   });
 });
