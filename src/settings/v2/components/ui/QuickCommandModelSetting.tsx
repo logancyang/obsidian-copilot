@@ -19,7 +19,8 @@ export function QuickCommandModelSetting({
       description="Used by Quick Ask, Quick Command, and saved commands set to Default model."
       value={value ?? ""}
       onChange={onChange}
-      options={[{ label: "Select Model", value: "" }, ...options]}
+      options={options}
+      placeholder="Select Model"
     />
   );
 }

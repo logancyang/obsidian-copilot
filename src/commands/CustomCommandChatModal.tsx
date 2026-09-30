@@ -22,6 +22,7 @@ import { Root } from "react-dom/client";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { CustomCommand } from "@/commands/type";
 import { useSettingsValue, updateSetting } from "@/settings/model";
+import { openCopilotSettings } from "@/settings/openSettings";
 import {
   useStreamingChatSession,
   type StreamingChatTurnContext,
@@ -119,9 +120,9 @@ export function CustomCommandChatModalContent({
   const [followUpValue, setFollowUpValue] = useState("");
 
   const settings = useSettingsValue();
-  const [userSelectedModelKey, setUserSelectedModelKey] = useState(
-    () => command.modelKey || settings.quickCommandModelKey
-  );
+  const [pickedModelKey, setPickedModelKey] = useState<string>();
+  const userSelectedModelKey =
+    pickedModelKey ?? (command.modelKey || settings.quickCommandModelKey);
 
   const [includeNoteContext, setIncludeNoteContext] = useState(
     () => settings.quickCommandIncludeNoteContext
@@ -136,7 +137,7 @@ export function CustomCommandChatModalContent({
 
   const chatPicker = useChatModelPicker({
     value: userSelectedModelKey,
-    onChange: setUserSelectedModelKey,
+    onChange: setPickedModelKey,
     fallbackToFirst: false,
   });
 
@@ -145,6 +146,7 @@ export function CustomCommandChatModalContent({
     streamingText,
     runTurn,
     stop: stopStreaming,
+    reset: resetSession,
     getLatestStreamingText,
   } = useStreamingChatSession({
     model: resolvedModel,
@@ -184,18 +186,17 @@ export function CustomCommandChatModalContent({
     return { type: "idle" };
   }, [isLoading, isStreaming, streamingText, finalText]);
 
-  const didAutoExecuteRef = useRef(false);
+  const [firstInstruction, setFirstInstruction] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!behavior.autoExecuteOnOpen) return;
-    if (didAutoExecuteRef.current) return;
-    didAutoExecuteRef.current = true;
-
-    async function generateInitialResponse() {
+  const runPrompt = useCallback(
+    async (getPrompt: (ctx: StreamingChatTurnContext) => Promise<string>) => {
+      setFinalText("");
+      setEditedText("");
+      setIsLoading(true);
       try {
         const result = await runTurn(async (ctx: StreamingChatTurnContext) => {
           if (ctx.signal.aborted) return "";
-          const prompt = await processCommandPrompt(app, command.content, originalText);
+          const prompt = await getPrompt(ctx);
           lastInputPromptRef.current = prompt;
           return prompt;
         });
@@ -205,16 +206,37 @@ export function CustomCommandChatModalContent({
           lastInputPromptRef.current = "";
         }
       } catch (error) {
-        logError("Error in initial response:", error);
+        logError("Error running command prompt:", error);
+        if (isMountedRef.current) {
+          new Notice("Failed to send message. Please try again.");
+        }
       } finally {
         if (isMountedRef.current) {
           setIsLoading(false);
         }
       }
-    }
+    },
+    [runTurn]
+  );
 
-    void generateInitialResponse();
-  }, [app, behavior.autoExecuteOnOpen, command.content, originalText, runTurn]);
+  const buildFirstPrompt = (instruction: string) =>
+    processCommandPrompt(
+      app,
+      behavior.firstSubmitTransform
+        ? behavior.firstSubmitTransform(instruction, includeNoteContext)
+        : instruction,
+      originalText
+    );
+
+  const didAutoExecuteRef = useRef(false);
+
+  useEffect(() => {
+    if (!behavior.autoExecuteOnOpen) return;
+    if (didAutoExecuteRef.current) return;
+    didAutoExecuteRef.current = true;
+
+    void runPrompt(() => processCommandPrompt(app, command.content, originalText));
+  }, [app, behavior.autoExecuteOnOpen, command.content, originalText, runPrompt]);
 
   const handleFollowUpSubmit = async () => {
     if (!followUpValue.trim()) return;
@@ -231,46 +253,24 @@ export function CustomCommandChatModalContent({
 
     const inputValue = followUpValue;
     setFollowUpValue("");
-    setFinalText("");
-    setEditedText("");
 
     try {
-      setIsLoading(true);
-
-      const result = await runTurn(async (ctx: StreamingChatTurnContext) => {
-        if (ctx.signal.aborted) return "";
-
-        const isFirstTurn = ctx.isFirstTurn;
-
-        let rawInput = inputValue;
-        if (isFirstTurn && behavior.firstSubmitTransform) {
-          rawInput = behavior.firstSubmitTransform(rawInput, includeNoteContext);
-        }
-
-        const prompt = await processCommandPrompt(app, rawInput, originalText, !isFirstTurn);
-        lastInputPromptRef.current = prompt;
-        return prompt;
+      await runPrompt(async (ctx) => {
+        if (!ctx.isFirstTurn) return processCommandPrompt(app, inputValue, originalText, true);
+        setFirstInstruction(inputValue);
+        return buildFirstPrompt(inputValue);
       });
-
-      if (!isMountedRef.current) return;
-
-      if (result) {
-        setFinalText(result);
-        lastInputPromptRef.current = "";
-      }
-    } catch (error) {
-      if (!(error instanceof Error && error.name === "AbortError")) {
-        logError("Error in follow-up submit:", error);
-        if (isMountedRef.current) {
-          new Notice("Failed to send message. Please try again.");
-        }
-      }
     } finally {
-      if (isMountedRef.current) {
-        setIsLoading(false);
-      }
       followUpSubmitLockRef.current = false;
     }
+  };
+
+  const runAgainInstruction = behavior.autoExecuteOnOpen ? command.content : firstInstruction;
+
+  const handleRunAgain = () => {
+    if (runAgainInstruction === null || isLoading || isStreaming) return;
+    resetSession();
+    void runPrompt(() => buildFirstPrompt(runAgainInstruction));
   };
 
   const handleStop = useCallback(() => {
@@ -321,7 +321,10 @@ export function CustomCommandChatModalContent({
       selectedModel={chatPicker.value}
       onSelectModel={chatPicker.onChange}
       models={chatPicker.models}
+      needsModel={!resolvedModel}
+      onOpenModelSettings={(ownerWindow) => openCopilotSettings(app, ownerWindow, "command")}
       onStop={handleStop}
+      onRunAgain={runAgainInstruction === null ? undefined : handleRunAgain}
       onCopy={safeAsyncHandler(handleCopy)}
       onInsert={handleInsert}
       onReplace={handleReplace}
