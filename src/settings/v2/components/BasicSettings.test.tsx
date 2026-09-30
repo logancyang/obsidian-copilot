@@ -53,12 +53,6 @@ jest.mock("@/settings/copilotRootChange", () => ({
   findCopilotRootFileConflict: (...a: unknown[]) => findCopilotRootFileConflict(...a),
 }));
 
-jest.mock("@/miyo/miyoUtils", () => ({
-  isLocalMiyoUrl: () => true,
-  getMiyoCustomUrl: () => "",
-}));
-jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/abs/vault" }));
-
 let capturedOnConfirm: (() => void) | null = null;
 let capturedConfirmButtonText = "";
 const modalCtor = jest.fn((onConfirm: () => void, confirmButtonText: string) => {
@@ -81,274 +75,258 @@ jest.mock("@/components/modals/ConfirmModal", () => ({
 }));
 
 describe("BasicSettings", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    capturedOnConfirm = null;
-    capturedConfirmButtonText = "";
-    settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
-    copilotRootContainsNotes.mockReturnValue(false);
-    findCopilotRootFileConflict.mockReturnValue(null);
-    systemPrompts.mockReturnValue([]);
-    isDesktopRuntime.mockReturnValue(true);
-  });
-
-  it("puts the Agents section above General so setup comes before preferences", async () => {
-    render(<BasicSettings />);
-    const agents = await screen.findByTestId("agents-section");
-    const general = screen.getByText("General");
-    expect(agents.compareDocumentPosition(general) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  it("shows Quick Chat settings beside the desktop agent notice on mobile (https://github.com/Brevilabs/obsidian-copilot-private/issues/373)", async () => {
-    isDesktopRuntime.mockReturnValue(false);
-    render(<BasicSettings />);
-    expect(screen.getByText("Agent settings are available on desktop.")).not.toBeNull();
-    expect(screen.queryByTestId("agents-section")).toBeNull();
-    expect(screen.getByText("Quick Chat models")).not.toBeNull();
-    expect(screen.getByText("General")).not.toBeNull();
-  });
-
-  it("hides the filename template behind a collapsed Advanced disclosure", () => {
-    render(<BasicSettings />);
-    expect(screen.getByRole("button", { name: "Advanced" })).not.toBeNull();
-    expect(screen.queryByText("Conversation Filename Template")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-    expect(screen.getByText("Conversation Filename Template")).not.toBeNull();
-  });
-
-  it("keeps the template reachable when autosave is off", () => {
-    settingsStore.set(settingsAtom, {
-      ...DEFAULT_SETTINGS,
-      copilotFolder: "copilot",
-      autosaveChat: false,
+  describe("BasicSettings()", () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      capturedOnConfirm = null;
+      capturedConfirmButtonText = "";
+      settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
+      copilotRootContainsNotes.mockReturnValue(false);
+      findCopilotRootFileConflict.mockReturnValue(null);
+      systemPrompts.mockReturnValue([]);
+      isDesktopRuntime.mockReturnValue(true);
     });
-    render(<BasicSettings />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-    expect(screen.getByText("Conversation Filename Template")).not.toBeNull();
-  });
-
-  it("binds the Copilot folder input to the persisted root", () => {
-    render(<BasicSettings />);
-    expect(screen.getByLabelText<HTMLInputElement>("Copilot folder").value).toBe("copilot");
-  });
-
-  it("no longer renders the retired conversation folder and tag inputs", () => {
-    render(<BasicSettings />);
-    expect(screen.queryByText("Default Conversation Folder Name")).toBeNull();
-    expect(screen.queryByText("Default Conversation Tag")).toBeNull();
-  });
-
-  it("rejects an invalid root on Apply without opening the confirm modal", () => {
-    render(<BasicSettings />);
-    fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "../escape" } });
-    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
-    expect(Notice).toHaveBeenCalledTimes(1);
-    expect(modalCtor).not.toHaveBeenCalled();
-    expect(applyCopilotRootChange).not.toHaveBeenCalled();
-  });
-
-  it("rejects a root inside the vault's active config directory", () => {
-    render(<BasicSettings />);
-    fireEvent.change(screen.getByLabelText("Copilot folder"), {
-      target: { value: ".vault-config/plugins" },
+    it("puts the Agents section above General so setup comes before preferences", async () => {
+      render(<BasicSettings />);
+      const agents = await screen.findByTestId("agents-section");
+      const general = screen.getByText("General");
+      expect(
+        agents.compareDocumentPosition(general) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
     });
-    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
 
-    expect(Notice).toHaveBeenCalledTimes(1);
-    expect(modalCtor).not.toHaveBeenCalled();
-    expect(applyCopilotRootChange).not.toHaveBeenCalled();
-  });
-
-  it("rejects a root whose path is occupied by an existing file without opening the confirm modal", () => {
-    findCopilotRootFileConflict.mockReturnValue("ai.txt");
-    render(<BasicSettings />);
-    fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai.txt" } });
-    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
-    expect(Notice).toHaveBeenCalledTimes(1);
-    expect(modalCtor).not.toHaveBeenCalled();
-    expect(applyCopilotRootChange).not.toHaveBeenCalled();
-  });
-
-  it("opens a warning confirmation for a root that already contains Markdown", () => {
-    copilotRootContainsNotes.mockReturnValue(true);
-    render(<BasicSettings />);
-    fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "existing" } });
-    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
-
-    expect(modalCtor).toHaveBeenCalledTimes(1);
-    expect(capturedConfirmButtonText).toBe("Use folder");
-    expect(applyCopilotRootChange).not.toHaveBeenCalled();
-
-    capturedOnConfirm?.();
-    expect(applyCopilotRootChange).toHaveBeenCalledWith(expect.anything(), "existing");
-  });
-
-  it("still warns when the non-empty folder is a previously used Copilot root", () => {
-    settingsStore.set(settingsAtom, {
-      ...DEFAULT_SETTINGS,
-      copilotFolder: "copilot",
-      copilotRootHistory: ["copilot", "old-root"],
+    it("shows Quick Chat settings beside the desktop agent notice on mobile (https://github.com/Brevilabs/obsidian-copilot-private/issues/373)", async () => {
+      isDesktopRuntime.mockReturnValue(false);
+      render(<BasicSettings />);
+      expect(screen.getByText("Agent settings are available on desktop.")).not.toBeNull();
+      expect(screen.queryByTestId("agents-section")).toBeNull();
+      expect(screen.getByText("Quick Chat models")).not.toBeNull();
+      expect(screen.getByText("General")).not.toBeNull();
     });
-    copilotRootContainsNotes.mockReturnValue(true);
-    render(<BasicSettings />);
-    fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "old-root" } });
-    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
 
-    expect(copilotRootContainsNotes).toHaveBeenCalledWith(expect.anything(), "old-root");
-    expect(modalCtor).toHaveBeenCalledTimes(1);
-    expect(capturedConfirmButtonText).toBe("Use folder");
-  });
+    it("hides the filename template behind a collapsed Advanced disclosure", () => {
+      render(<BasicSettings />);
+      expect(screen.getByRole("button", { name: "Advanced" })).not.toBeNull();
+      expect(screen.queryByText("Conversation Filename Template")).toBeNull();
 
-  it("opens the confirm modal for a valid new root and applies the change on confirm", () => {
-    render(<BasicSettings />);
-    fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai" } });
-    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
-    expect(modalCtor).toHaveBeenCalledTimes(1);
-    expect(capturedConfirmButtonText).toBe("Change folder");
-    expect(applyCopilotRootChange).not.toHaveBeenCalled();
-
-    capturedOnConfirm?.();
-    expect(applyCopilotRootChange).toHaveBeenCalledWith(expect.anything(), "ai");
-  });
-
-  it("changes the Copilot folder without prompting about Miyo", async () => {
-    render(<BasicSettings />);
-    fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai" } });
-    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
-
-    capturedOnConfirm?.();
-
-    await waitFor(() =>
-      expect(applyCopilotRootChange).toHaveBeenCalledWith(expect.anything(), "ai")
-    );
-    const noticeTexts = (Notice as unknown as jest.Mock).mock.calls.map((call) => String(call[0]));
-    expect(noticeTexts.some((text) => text.includes("Miyo"))).toBe(false);
-  });
-
-  it("does nothing when Apply is pressed with the current root unchanged", () => {
-    render(<BasicSettings />);
-    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
-    expect(modalCtor).not.toHaveBeenCalled();
-    expect(applyCopilotRootChange).not.toHaveBeenCalled();
-  });
-
-  it("opens a blank vault AGENTS.md, never seeded from a Chat prompt", async () => {
-    render(<BasicSettings />);
-    fireEvent.click(await screen.findByRole("button", { name: /Open AGENTS.md/ }));
-    await waitFor(() =>
-      expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "", true)
-    );
-  });
-
-  it("lands a pending edit before opening the file, so the open cannot race the save", async () => {
-    render(<BasicSettings />);
-    const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
-    fireEvent.change(editor, { target: { value: "Always cite." } });
-
-    fireEvent.click(screen.getByRole("button", { name: /Open AGENTS.md/ }));
-
-    await waitFor(() =>
-      expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "", true)
-    );
-    expect(writeAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "Always cite.");
-    expect(writeAgentsFile.mock.invocationCallOrder[0]).toBeLessThan(
-      openAgentsFile.mock.invocationCallOrder[0]
-    );
-  });
-
-  it("shows what the vault AGENTS.md already says, so editing starts from the real file", async () => {
-    readAgentsFile.mockResolvedValue("Cite every source.");
-    render(<BasicSettings />);
-    const editor = await screen.findByRole<HTMLTextAreaElement>("textbox", {
-      name: "Custom vault instructions",
+      fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+      expect(screen.getByText("Conversation Filename Template")).not.toBeNull();
     });
-    expect(editor.value).toBe("Cite every source.");
-    expect(readAgentsFile).toHaveBeenCalledWith(expect.anything(), "");
-  });
 
-  it("saves an edit back to the vault AGENTS.md once typing settles", async () => {
-    jest.useFakeTimers();
-    try {
+    it("keeps the template reachable when autosave is off", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "copilot",
+        autosaveChat: false,
+      });
+      render(<BasicSettings />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+      expect(screen.getByText("Conversation Filename Template")).not.toBeNull();
+    });
+
+    it("binds the Copilot folder input to the persisted root", () => {
+      render(<BasicSettings />);
+      expect(screen.getByLabelText<HTMLInputElement>("Copilot folder").value).toBe("copilot");
+    });
+
+    it("rejects an invalid root on Apply without opening the confirm modal", () => {
+      render(<BasicSettings />);
+      fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "../escape" } });
+      fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+      expect(Notice).toHaveBeenCalledTimes(1);
+      expect(modalCtor).not.toHaveBeenCalled();
+      expect(applyCopilotRootChange).not.toHaveBeenCalled();
+    });
+
+    it("rejects a root inside the vault's active config directory", () => {
+      render(<BasicSettings />);
+      fireEvent.change(screen.getByLabelText("Copilot folder"), {
+        target: { value: ".vault-config/plugins" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+
+      expect(Notice).toHaveBeenCalledTimes(1);
+      expect(modalCtor).not.toHaveBeenCalled();
+      expect(applyCopilotRootChange).not.toHaveBeenCalled();
+    });
+
+    it("rejects a root whose path is occupied by an existing file without opening the confirm modal", () => {
+      findCopilotRootFileConflict.mockReturnValue("ai.txt");
+      render(<BasicSettings />);
+      fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai.txt" } });
+      fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+      expect(Notice).toHaveBeenCalledTimes(1);
+      expect(modalCtor).not.toHaveBeenCalled();
+      expect(applyCopilotRootChange).not.toHaveBeenCalled();
+    });
+
+    it("opens a warning confirmation for a root that already contains Markdown", () => {
+      copilotRootContainsNotes.mockReturnValue(true);
+      render(<BasicSettings />);
+      fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "existing" } });
+      fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+
+      expect(modalCtor).toHaveBeenCalledTimes(1);
+      expect(capturedConfirmButtonText).toBe("Use folder");
+      expect(applyCopilotRootChange).not.toHaveBeenCalled();
+
+      capturedOnConfirm?.();
+      expect(applyCopilotRootChange).toHaveBeenCalledWith(expect.anything(), "existing");
+    });
+
+    it("still warns when the non-empty folder is a previously used Copilot root", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "copilot",
+        copilotRootHistory: ["copilot", "old-root"],
+      });
+      copilotRootContainsNotes.mockReturnValue(true);
+      render(<BasicSettings />);
+      fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "old-root" } });
+      fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+
+      expect(copilotRootContainsNotes).toHaveBeenCalledWith(expect.anything(), "old-root");
+      expect(modalCtor).toHaveBeenCalledTimes(1);
+      expect(capturedConfirmButtonText).toBe("Use folder");
+    });
+
+    it("opens the confirm modal for a valid new root and applies the change on confirm", () => {
+      render(<BasicSettings />);
+      fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai" } });
+      fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+      expect(modalCtor).toHaveBeenCalledTimes(1);
+      expect(capturedConfirmButtonText).toBe("Change folder");
+      expect(applyCopilotRootChange).not.toHaveBeenCalled();
+
+      capturedOnConfirm?.();
+      expect(applyCopilotRootChange).toHaveBeenCalledWith(expect.anything(), "ai");
+    });
+
+    it("does nothing when Apply is pressed with the current root unchanged", () => {
+      render(<BasicSettings />);
+      fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+      expect(modalCtor).not.toHaveBeenCalled();
+      expect(applyCopilotRootChange).not.toHaveBeenCalled();
+    });
+
+    it("opens a blank vault AGENTS.md, never seeded from a Chat prompt", async () => {
+      render(<BasicSettings />);
+      fireEvent.click(await screen.findByRole("button", { name: /Open AGENTS.md/ }));
+      await waitFor(() =>
+        expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "", true)
+      );
+    });
+
+    it("lands a pending edit before opening the file, so the open cannot race the save", async () => {
       render(<BasicSettings />);
       const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
       fireEvent.change(editor, { target: { value: "Always cite." } });
 
-      expect(writeAgentsFile).not.toHaveBeenCalled();
-      await act(async () => {
-        jest.advanceTimersByTime(1000);
-      });
+      fireEvent.click(screen.getByRole("button", { name: /Open AGENTS.md/ }));
 
-      expect(writeAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "Always cite.");
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
-  it("queues instruction writes so a slow save cannot land after — and overwrite — a newer one", async () => {
-    jest.useFakeTimers();
-    try {
-      let settleFirst!: () => void;
-      writeAgentsFile.mockImplementationOnce(
-        () =>
-          new Promise<void>((resolve) => {
-            settleFirst = resolve;
-          })
+      await waitFor(() =>
+        expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "", true)
       );
+      expect(writeAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "Always cite.");
+      expect(writeAgentsFile.mock.invocationCallOrder[0]).toBeLessThan(
+        openAgentsFile.mock.invocationCallOrder[0]
+      );
+    });
+
+    it("shows what the vault AGENTS.md already says, so editing starts from the real file", async () => {
+      readAgentsFile.mockResolvedValue("Cite every source.");
       render(<BasicSettings />);
-      const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
-
-      fireEvent.change(editor, { target: { value: "First" } });
-      await act(async () => {
-        jest.advanceTimersByTime(1000);
+      const editor = await screen.findByRole<HTMLTextAreaElement>("textbox", {
+        name: "Custom vault instructions",
       });
-      expect(writeAgentsFile).toHaveBeenCalledTimes(1);
+      expect(editor.value).toBe("Cite every source.");
+      expect(readAgentsFile).toHaveBeenCalledWith(expect.anything(), "");
+    });
 
-      fireEvent.change(editor, { target: { value: "Second" } });
-      await act(async () => {
-        jest.advanceTimersByTime(1000);
-      });
-      expect(writeAgentsFile).toHaveBeenCalledTimes(1);
+    it("saves an edit back to the vault AGENTS.md once typing settles", async () => {
+      jest.useFakeTimers();
+      try {
+        render(<BasicSettings />);
+        const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
+        fireEvent.change(editor, { target: { value: "Always cite." } });
 
-      settleFirst();
-      await act(async () => {
-        await Promise.resolve();
-      });
+        expect(writeAgentsFile).not.toHaveBeenCalled();
+        await act(async () => {
+          jest.advanceTimersByTime(1000);
+        });
 
-      expect(writeAgentsFile).toHaveBeenCalledTimes(2);
-      expect(writeAgentsFile).toHaveBeenLastCalledWith(expect.anything(), "", "Second");
-    } finally {
-      jest.useRealTimers();
-    }
-  });
+        expect(writeAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "Always cite.");
+      } finally {
+        jest.useRealTimers();
+      }
+    });
 
-  it("does not lose a pending edit when the tab closes mid-sentence", async () => {
-    jest.useFakeTimers();
-    try {
-      const { unmount } = render(<BasicSettings />);
-      const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
-      fireEvent.change(editor, { target: { value: "Half a thou" } });
-      unmount();
-      await act(async () => {
-        await Promise.resolve();
-      });
+    it("queues instruction writes so a slow save cannot land after — and overwrite — a newer one", async () => {
+      jest.useFakeTimers();
+      try {
+        let settleFirst!: () => void;
+        writeAgentsFile.mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              settleFirst = resolve;
+            })
+        );
+        render(<BasicSettings />);
+        const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
 
-      expect(writeAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "Half a thou");
-    } finally {
-      jest.useRealTimers();
-    }
-  });
+        fireEvent.change(editor, { target: { value: "First" } });
+        await act(async () => {
+          jest.advanceTimersByTime(1000);
+        });
+        expect(writeAgentsFile).toHaveBeenCalledTimes(1);
 
-  it("points a user who saved Chat prompts at the folder still holding them", () => {
-    systemPrompts.mockReturnValue([{ title: "Editor" }, { title: "Researcher" }]);
-    render(<BasicSettings />);
-    expect(screen.getByText(/2 saved system prompts are/)).toBeTruthy();
-    expect(screen.getByText("copilot/system-prompts")).toBeTruthy();
-  });
+        fireEvent.change(editor, { target: { value: "Second" } });
+        await act(async () => {
+          jest.advanceTimersByTime(1000);
+        });
+        expect(writeAgentsFile).toHaveBeenCalledTimes(1);
 
-  it("says nothing about Chat prompts to a user who never saved one", () => {
-    render(<BasicSettings />);
-    expect(screen.queryByText(/saved system prompt/)).toBeNull();
+        settleFirst();
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        expect(writeAgentsFile).toHaveBeenCalledTimes(2);
+        expect(writeAgentsFile).toHaveBeenLastCalledWith(expect.anything(), "", "Second");
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("does not lose a pending edit when the tab closes mid-sentence", async () => {
+      jest.useFakeTimers();
+      try {
+        const { unmount } = render(<BasicSettings />);
+        const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
+        fireEvent.change(editor, { target: { value: "Half a thou" } });
+        unmount();
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        expect(writeAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "Half a thou");
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("points a user who saved Chat prompts at the folder still holding them", () => {
+      systemPrompts.mockReturnValue([{ title: "Editor" }, { title: "Researcher" }]);
+      render(<BasicSettings />);
+      expect(screen.getByText(/2 saved system prompts are/)).toBeTruthy();
+      expect(screen.getByText("copilot/system-prompts")).toBeTruthy();
+    });
+
+    it("says nothing about Chat prompts to a user who never saved one", () => {
+      render(<BasicSettings />);
+      expect(screen.queryByText(/saved system prompt/)).toBeNull();
+    });
   });
 });
