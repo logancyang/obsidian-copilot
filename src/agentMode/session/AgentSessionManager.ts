@@ -219,7 +219,7 @@ export class AgentSessionManager {
     BackendId,
     { reason: string; immediate: boolean }
   >();
-  private readonly restartingBackends = new Set<BackendId>();
+  private readonly restartingBackends = new Map<BackendId, Promise<void>>();
   /**
    * Backends running with spawn config the user has since changed. Applying it restarts the
    * backend and closes every session, so it waits for the user's Reload.
@@ -1608,7 +1608,16 @@ export class AgentSessionManager {
     return Array.from(this.sessions.values()).some((s) => s.backendId === backendId);
   }
 
-  async onInstallStateChanged(backendId: BackendId): Promise<void> {
+  /**
+   * Refreshes runtime ownership after installation changes, including before cleanup.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+   * @param backendId - Backend whose configured executable changed.
+   * @param options - Whether a running turn may delay release of the old executable.
+   */
+  async onInstallStateChanged(
+    backendId: BackendId,
+    options?: { deferWhileBusy?: boolean }
+  ): Promise<void> {
     if (this.disposed) return;
     const installState = this.opts.resolveDescriptor(backendId)?.getInstallState(getSettings());
     if (installState?.kind === "checking") return;
@@ -1620,19 +1629,23 @@ export class AgentSessionManager {
       }
       return;
     }
-    const refreshed = await this.restartBackend(backendId, "binary path changed");
+    const refreshed = await this.restartBackend(backendId, "binary path changed", options);
     if (!refreshed) {
       this.registerPreload(backendId, this.preloader.preload(backendId));
     }
   }
 
-  private refreshWarmProbe(backendId: BackendId, reason: string): boolean {
+  private async refreshWarmProbe(backendId: BackendId, reason: string): Promise<boolean> {
     if (this.disposed) return false;
     if (!this.isBackendInstalled(backendId)) return false;
     const probe = this.preloader.refresh(backendId);
     if (!probe) return false;
     logInfo(`[AgentMode] refreshing warm ${backendId} probe: ${reason}`);
     this.registerPreload(backendId, probe);
+    // The warm process can hold the same executable lock as a live chat. A
+    // completed refresh must release it before managed cleanup can proceed.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+    await probe;
     return true;
   }
 
@@ -2667,7 +2680,8 @@ export class AgentSessionManager {
     reason: string,
     immediate = false
   ): Promise<void> {
-    if (this.restartingBackends.has(backendId)) {
+    const inFlight = this.restartingBackends.get(backendId);
+    if (inFlight) {
       const prev = this.pendingBackendRestarts.get(backendId);
       this.pendingBackendRestarts.set(backendId, {
         reason: prev ? `${prev.reason}; ${reason}` : reason,
@@ -2676,11 +2690,26 @@ export class AgentSessionManager {
       // A Search scope change queued behind another refresh must keep its
       // non-deferrable privacy semantics when the first refresh completes.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
+      // Managed cleanup must wait for the queued refresh to release its executable,
+      // including a refresh that was already running when the binary changed.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      if (immediate) await inFlight;
       return;
     }
     const proc = this.backends.get(backendId);
     if (!proc) return;
-    this.restartingBackends.add(backendId);
+    const restarting = Promise.resolve().then(() =>
+      this.performBackendRestart(backendId, reason, proc)
+    );
+    this.restartingBackends.set(backendId, restarting);
+    await restarting;
+  }
+
+  private async performBackendRestart(
+    backendId: BackendId,
+    reason: string,
+    proc: BackendProcess
+  ): Promise<void> {
     // Every restart rebuilds spawn config from current settings, so nothing is
     // held once one runs — including restarts this hold never asked for, such
     // as a tightened privacy boundary or a binary that changed underneath.

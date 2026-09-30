@@ -2411,6 +2411,69 @@ describe("AgentSessionManager", () => {
         expect(preloader.preload).toHaveBeenCalledWith("opencode");
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 waits for the managed warm probe to refresh before custom cleanup", async () => {
+        let finishProbe!: () => void;
+        const probe = new Promise<void>((resolve) => {
+          finishProbe = resolve;
+        });
+        const { mgr, preloader } = buildInstallStateManager({
+          installState: { kind: "ready", source: "custom" },
+          refreshResult: probe,
+        });
+        let refreshed = false;
+        const refreshing = mgr.onInstallStateChanged("opencode", { deferWhileBusy: false }).then(() => {
+          refreshed = true;
+        });
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+        const finishedBeforeProbe = refreshed;
+        finishProbe();
+        await refreshing;
+        expect(finishedBeforeProbe).toBe(false);
+        expect(preloader.refresh).toHaveBeenCalledWith("opencode");
+        expect(preloader.preload).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 stops a busy managed runtime and rebuilds its chat with the same composer before custom cleanup", async () => {
+        const { mgr } = buildInstallStateManager({ installState: { kind: "ready", source: "custom" } });
+        const first = await mgr.createSession();
+        getSessionTestHandle(first).setStatus("running");
+        await mgr.onInstallStateChanged("opencode", { deferWhileBusy: false });
+        expect(mockSessionCancel).toHaveBeenCalledWith();
+        expect(mockBackendShutdown).toHaveBeenCalled();
+        expect(mgr.getActiveSession()).not.toBe(first);
+        expect(mgr.getActiveSession()?.chatInputId).toBe(first.chatInputId);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 waits for an overlapping refresh before permitting custom binary cleanup", async () => {
+        const { mgr } = buildInstallStateManager({ installState: { kind: "ready", source: "custom" } });
+        const session = await mgr.createSession();
+        let releaseShutdown!: () => void;
+        const shutdownStarted = new Promise<void>((started) => {
+          mockBackendShutdown.mockImplementationOnce(
+            () =>
+              new Promise<undefined>((resolve) => {
+                releaseShutdown = () => resolve(undefined);
+                started();
+              })
+          );
+        });
+        const existingRefresh = mgr.restartBackend("opencode", "settings changed");
+        await shutdownStarted;
+        let refreshed = false;
+        const customRefresh = mgr
+          .onInstallStateChanged("opencode", { deferWhileBusy: false })
+          .then(() => {
+            refreshed = true;
+          });
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+        const finishedBeforeShutdown = refreshed;
+        releaseShutdown();
+        await Promise.all([existingRefresh, customRefresh]);
+        expect(finishedBeforeShutdown).toBe(false);
+        expect(mockBackendShutdown).toHaveBeenCalledTimes(2);
+        expect(mgr.getActiveSession()?.chatInputId).toBe(session.chatInputId);
+      });
+
       it("tears down and drops the warm probe when the binary is no longer available", async () => {
         const { mgr, preloader, setInstallState } = buildInstallStateManager({
           installState: { kind: "ready", source: "custom" },

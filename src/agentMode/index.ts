@@ -336,10 +336,33 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
   });
   for (const descriptor of listBackendDescriptors()) {
+    const managedInstall = descriptor.managedInstall;
+    if (managedInstall?.subscribeCustomSelection) {
+      plugin.register(
+        managedInstall.subscribeCustomSelection(plugin, async () => {
+          await seedManagedBuiltins();
+          // A binary being removed cannot keep serving a busy chat. Reuse restart
+          // recovery so conversations and drafts survive before files are reclaimed.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+          await manager.onInstallStateChanged(descriptor.id, { deferWhileBusy: false });
+        })
+      );
+    }
     descriptor.subscribeInstallState(plugin, () => {
       // Startup reads the final installation; reacting to intermediate writes would duplicate
       // probes. https://github.com/Brevilabs/obsidian-copilot-private/issues/530
       if (initializing.has(descriptor.id)) return;
+      const installState = descriptor.getInstallState(getSettings());
+      // Custom selection awaits its own refresh before deleting the old executable;
+      // a second asynchronous refresh would race that deletion and session recovery.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      if (
+        managedInstall?.subscribeCustomSelection &&
+        managedInstall.getState(plugin).kind === "running" &&
+        installState.kind === "ready" &&
+        installState.source === "custom"
+      )
+        return;
       // The first warm probe must see newly installed skills. https://github.com/logancyang/obsidian-copilot/issues/3022
       void seedManagedBuiltins()
         .then(() => manager.onInstallStateChanged(descriptor.id))

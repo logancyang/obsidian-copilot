@@ -11,6 +11,7 @@ import {
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as cleanup from "@/utils/stopWindowsProcessesInDirectory";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
@@ -372,7 +373,76 @@ describe("ManagedBinaryManager", () => {
         expect(manager.settings).toEqual(selected);
       });
     });
+    describe("subscribeCustomSelection()", () => {
+      it("notifies runtime owners with the validated selection and detaches them on unsubscribe", async () => {
+        const selections: string[] = [];
+        const unsubscribe = manager.subscribeCustomSelection(async () => {
+          selections.push(manager.settings.binaryPath!);
+        });
+        await manager.setCustomBinaryPath(customPath);
+        unsubscribe();
+        await manager.setCustomBinaryPath(customPath);
+        expect(selections).toEqual([customPath]);
+      });
+    });
+
     describe("setCustomBinaryPath()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 releases Windows executable locks before removing managed downloads", async () => {
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
+        let release!: () => void;
+        let started!: () => void;
+        const stopping = new Promise<void>((resolve) => {
+          started = resolve;
+        });
+        const stop = jest
+          .spyOn(cleanup, "stopWindowsProcessesInDirectory")
+          .mockImplementation(async () => {
+            started();
+            await new Promise<void>((resolve) => {
+              release = resolve;
+            });
+          });
+        try {
+          const selected = manager.setCustomBinaryPath(customPath);
+          expect(await Promise.race([stopping.then(() => true), selected.then(() => false)])).toBe(
+            true
+          );
+          expect(fs.existsSync(manager.getDataDir())).toBe(true);
+          release();
+          await selected;
+          expect(fs.existsSync(manager.getDataDir())).toBe(false);
+          expect(fs.existsSync(customPath)).toBe(true);
+        } finally {
+          stop.mockRestore();
+        }
+      });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 waits for the selected custom runtime to replace the managed process before deleting downloads", async () => {
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
+        const managedPath = path.join(manager.getDataDir(), "agent");
+        fs.writeFileSync(managedPath, "managed");
+        let release!: () => void;
+        let started!: () => void;
+        const refreshing = new Promise<void>((resolve) => {
+          started = resolve;
+        });
+        manager.subscribeCustomSelection(async () => {
+          expect(manager.settings.binaryPath).toBe(customPath);
+          started();
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        });
+        const selected = manager.setCustomBinaryPath(customPath);
+        expect(await Promise.race([refreshing.then(() => true), selected.then(() => false)])).toBe(
+          true
+        );
+        expect(fs.existsSync(managedPath)).toBe(true);
+        release();
+        await selected;
+        expect(fs.existsSync(managedPath)).toBe(false);
+        expect(manager.settings.binarySource).toBe("custom");
+        expect(manager.getRuntimeState()).toEqual({ kind: "idle" });
+      });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 validates and selects a custom executable before removing managed downloads", async () => {
         fs.mkdirSync(manager.getDataDir(), { recursive: true });
         manager.validate.mockImplementationOnce(async (binaryPath) => {

@@ -93,6 +93,8 @@ let mockSettings: CopilotSettings;
 let mockRuntime: BuiltinSkillRuntime;
 const mockStates: Record<string, InstallState> = {};
 const mockInstallListeners: Record<string, () => void> = {};
+const mockCustomSelectionListeners: Record<string, () => Promise<void>> = {};
+let mockConfiguring = false;
 const mockDescriptors = ["claude", "opencode"].map((id) => ({
   id,
   onPluginLoad: jest.fn(async (_plugin: CopilotPlugin) => {}),
@@ -103,6 +105,18 @@ const mockDescriptors = ["claude", "opencode"].map((id) => ({
   subscribeInstallState: (_plugin: unknown, listener: () => void) => {
     mockInstallListeners[id] = listener;
   },
+  managedInstall:
+    id === "opencode"
+      ? {
+          getState: () => (mockConfiguring ? { kind: "running" } : { kind: "idle" }),
+          subscribeCustomSelection: (_plugin: unknown, listener: () => Promise<void>) => {
+            mockCustomSelectionListeners[id] = listener;
+            return () => {
+              delete mockCustomSelectionListeners[id];
+            };
+          },
+        }
+      : undefined,
 }));
 const mockRefresh = jest.fn<Promise<unknown>, unknown[]>();
 const mockManager = {
@@ -110,7 +124,9 @@ const mockManager = {
   restartBackend: jest.fn(async (_id: string, _reason: string) => {}),
   noteSpawnConfigChanged: jest.fn(async (_id: string, _reason: string) => {}),
   registerPreload: jest.fn<void, [string, Promise<void>]>(),
-  onInstallStateChanged: jest.fn(async (_id: string) => {}),
+  onInstallStateChanged: jest.fn(
+    async (_id: string, _options?: { deferWhileBusy?: boolean }) => {}
+  ),
 };
 let plugin: CopilotPlugin;
 const reconcile = jest.mocked(reconcileBuiltinSkills);
@@ -155,6 +171,7 @@ describe("agentMode", () => {
   describe("createAgentSessionManager()", () => {
     beforeEach(() => {
       jest.clearAllMocks();
+      mockConfiguring = false;
       mockStates.claude = { kind: "ready", source: "custom" };
       mockStates.opencode = { kind: "absent" };
       reconcile.mockResolvedValue(undefined);
@@ -162,6 +179,7 @@ describe("agentMode", () => {
       mockSettingsSubscribers.length = 0;
       mockSettings = settingsWith({ reasoning: true });
       plugin = {
+        register: jest.fn(),
         modelManagement: {
           providerRegistry: { subscribe: jest.fn() },
           backendConfigRegistry: new BackendConfigRegistry(
@@ -170,6 +188,31 @@ describe("agentMode", () => {
           ),
         },
       } as unknown as CopilotPlugin;
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 waits for an immediate runtime refresh before custom selection cleanup", async () => {
+      createAgentSessionManager({} as App, plugin);
+      await mockManager.registerPreload.mock.calls[0][1];
+      mockStates.opencode = { kind: "ready", source: "custom" };
+      mockConfiguring = true;
+      mockInstallListeners.opencode();
+      expect(mockManager.onInstallStateChanged).not.toHaveBeenCalled();
+      expect(mockCustomSelectionListeners.opencode).toBeDefined();
+      const refresh = deferred();
+      mockManager.onInstallStateChanged.mockImplementationOnce(() => refresh.promise);
+      let cleaned = false;
+      const selection = mockCustomSelectionListeners.opencode().then(() => {
+        cleaned = true;
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(cleaned).toBe(false);
+      refresh.resolve();
+      await selection;
+      expect(mockManager.onInstallStateChanged).toHaveBeenCalledWith("opencode", {
+        deferWhileBusy: false,
+      });
+      expect(cleaned).toBe(true);
     });
 
     it("waits for each backend upgrade before preloading while other agents remain usable (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", async () => {

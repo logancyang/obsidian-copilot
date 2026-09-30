@@ -189,6 +189,8 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   managedInstall: {
     getState: () => codexBinaryManager.getActionState(),
     subscribe: (_plugin, onChange) => codexBinaryManager.subscribeRuntimeState(onChange),
+    subscribeCustomSelection: (_plugin, refresh) =>
+      codexBinaryManager.subscribeCustomSelection(refresh),
     run: async () => {
       await codexBinaryManager.install();
     },

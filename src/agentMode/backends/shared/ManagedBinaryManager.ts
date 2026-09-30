@@ -12,6 +12,7 @@ import type { ManagedInstallActionState } from "@/agentMode/session/types";
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { validateExecutableFile } from "@/utils/detectBinary";
+import { stopWindowsProcessesInDirectory } from "@/utils/stopWindowsProcessesInDirectory";
 
 const AUTOMATIC_UPDATE_RETRY_DELAY_MS = 24 * 60 * 60 * 1000;
 const IDLE_ACTION_STATE: ManagedInstallActionState = Object.freeze({ kind: "idle" });
@@ -43,8 +44,21 @@ export abstract class ManagedBinaryManager<
   private operation: AbortController | null = null;
   private runtimeState: ManagedInstallRuntimeState = { kind: "idle" };
   private readonly subscribers = new Set<() => void>();
+  private readonly customSelectionHandlers = new Set<() => Promise<void>>();
 
   constructor(private readonly displayName: string) {}
+
+  /**
+   * Lets runtime owners finish switching away from managed files before cleanup.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+   * @param handler - Refreshes the backend using the newly selected custom binary.
+   */
+  subscribeCustomSelection(handler: () => Promise<void>): () => void {
+    this.customSelectionHandlers.add(handler);
+    return () => {
+      this.customSelectionHandlers.delete(handler);
+    };
+  }
 
   readonly subscribeRuntimeState = (onChange: () => void): (() => void) => {
     this.subscribers.add(onChange);
@@ -293,6 +307,10 @@ export abstract class ManagedBinaryManager<
       binarySource: "custom",
     });
     try {
+      // Refresh owners before reclaiming files; a settings notification alone
+      // neither waits for process exit nor interrupts a busy managed runtime.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      await Promise.all(Array.from(this.customSelectionHandlers, (refresh) => refresh()));
       await this.removeManagedDownloads();
     } catch (error) {
       throw new Error(
@@ -330,6 +348,10 @@ export abstract class ManagedBinaryManager<
         )
           continue;
       }
+      // Windows retains locks from native account probes and other vaults until
+      // those executables exit, even after this vault's runtime has refreshed.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      await stopWindowsProcessesInDirectory(await realPathOrMissing(dir));
       await fs.promises.rm(dir, { recursive: true, force: true });
     }
   }

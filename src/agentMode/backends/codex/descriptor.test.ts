@@ -415,6 +415,26 @@ describe("descriptor", () => {
       );
     });
 
+    describe("managedInstall.subscribeCustomSelection()", () => {
+      it("registers an awaited runtime refresh and returns its cleanup", () => {
+        const manager = getCodexBinaryManager();
+        const cleanup = jest.fn();
+        const refresh = jest.fn(async () => {});
+        const subscribe = jest.spyOn(manager, "subscribeCustomSelection").mockReturnValue(cleanup);
+        try {
+          expect(
+            CodexBackendDescriptor.managedInstall?.subscribeCustomSelection?.(
+              {} as CopilotPlugin,
+              refresh
+            )
+          ).toBe(cleanup);
+          expect(subscribe).toHaveBeenCalledWith(refresh);
+        } finally {
+          subscribe.mockRestore();
+        }
+      });
+    });
+
     describe("managedInstall.run()", () => {
       it("routes the backend-neutral managed action to the Codex manager", async () => {
         const manager = getCodexBinaryManager();

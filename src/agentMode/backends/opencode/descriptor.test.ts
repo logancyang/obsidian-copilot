@@ -53,6 +53,24 @@ describe("descriptor", () => {
       });
     });
 
+    describe("managedInstall.subscribeCustomSelection()", () => {
+      it("registers an awaited runtime refresh and returns its cleanup", () => {
+        const plugin = vaultPlugin(os.tmpdir());
+        const manager = getOpencodeBinaryManager(plugin);
+        const cleanup = jest.fn();
+        const refresh = jest.fn(async () => {});
+        const subscribe = jest.spyOn(manager, "subscribeCustomSelection").mockReturnValue(cleanup);
+        try {
+          expect(
+            OpencodeBackendDescriptor.managedInstall?.subscribeCustomSelection?.(plugin, refresh)
+          ).toBe(cleanup);
+          expect(subscribe).toHaveBeenCalledWith(refresh);
+        } finally {
+          subscribe.mockRestore();
+        }
+      });
+    });
+
     describe("managedInstall.run()", () => {
       it("upgrades a custom binary through upgradeCustomBinary and a managed one through upgradeManaged", async () => {
         const manager = getOpencodeBinaryManager(vaultPlugin(os.tmpdir()));
