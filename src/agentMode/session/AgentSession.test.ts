@@ -4371,3 +4371,101 @@ describe("AgentSession.getCurrentTodoList", () => {
     expect(session.getCurrentTodoList()).toBeNull();
   });
 });
+
+describe("AgentSession turn journal", () => {
+  const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/607";
+
+  function setupJournaledSession() {
+    const mock = makeMockBackend();
+    const journal = { record: jest.fn(), clear: jest.fn() };
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      turnJournal: journal,
+    });
+    return { mock, journal, session };
+  }
+
+  it("records the prompt with its context, images and mentioned agents when a turn is sent", async () => {
+    const { mock, journal, session } = setupJournaledSession();
+    let finish!: (value: { stopReason: "end_turn" }) => void;
+    mock.prompt.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    const context = { notes: [], urls: ["https://example.com"] };
+    const images = [{ type: "image" as const, mimeType: "image/png", data: "aGVsbG8=" }];
+
+    const { turn } = session.sendPrompt("Summarize", context, images, ["claude"]);
+
+    expect(journal.record).toHaveBeenCalledWith(expect.stringContaining("opencode/acp-1"), {
+      text: "Summarize",
+      context,
+      promptContent: images,
+      mentionedAgents: ["claude"],
+    });
+    expect(journal.clear).not.toHaveBeenCalled();
+    finish({ stopReason: "end_turn" });
+    await turn;
+  });
+
+  it("clears the journal entry when the turn ends normally", async () => {
+    const { journal, session } = setupJournaledSession();
+
+    await session.sendPrompt("Hi").turn;
+
+    expect(journal.clear).toHaveBeenCalledWith(expect.stringContaining("opencode/acp-1"));
+  });
+
+  it("clears the journal entry when the turn fails", async () => {
+    const { mock, journal, session } = setupJournaledSession();
+    mock.prompt.mockRejectedValueOnce(new Error("agent crashed"));
+
+    await expect(session.sendPrompt("Hi").turn).rejects.toThrow("agent crashed");
+
+    expect(journal.clear).toHaveBeenCalledWith(expect.stringContaining("opencode/acp-1"));
+  });
+
+  it("clears the journal entry when the user cancels the turn", async () => {
+    const { mock, journal, session } = setupJournaledSession();
+    mock.prompt.mockImplementation(() => new Promise(() => undefined));
+
+    const { turn } = session.sendPrompt("Long task");
+    await session.cancel();
+    await turn;
+
+    expect(journal.clear).toHaveBeenCalledWith(expect.stringContaining("opencode/acp-1"));
+  });
+
+  it(`drops the interrupted marker as soon as a new prompt is sent (${ISSUE})`, async () => {
+    const { session } = setupJournaledSession();
+    session.setInterruptedTurn({ text: "old prompt" });
+
+    await session.sendPrompt("A different question").turn;
+
+    expect(session.getInterruptedTurn()).toBeNull();
+  });
+});
+
+describe("AgentSession interrupted turn", () => {
+  it("notifies subscribers when a turn is marked interrupted and when the mark is cleared", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    const onInterruptedTurnChanged = jest.fn();
+    session.subscribe({
+      onMessagesChanged: () => {},
+      onStatusChanged: () => {},
+      onInterruptedTurnChanged,
+    });
+
+    session.setInterruptedTurn({ text: "cut off" });
+    session.setInterruptedTurn(null);
+
+    expect(onInterruptedTurnChanged).toHaveBeenCalledTimes(2);
+    expect(session.getInterruptedTurn()).toBeNull();
+  });
+});

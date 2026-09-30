@@ -17,6 +17,8 @@ export interface AgentChatRuntimeState {
   currentTodoList: AgentTodoListEntry[] | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
+  hasInterruptedTurn: boolean;
+  canResumeInterruptedTurn: boolean;
 }
 
 interface BackendRuntimeSnapshot {
@@ -36,6 +38,8 @@ function readBackendRuntimeSnapshot(backend: AgentChatBackend): BackendRuntimeSn
       currentTodoList: backend.getCurrentTodoList(),
       pendingToolPermissions: backend.getPendingToolPermissions(),
       pendingAskUserQuestions: backend.getPendingAskUserQuestions(),
+      hasInterruptedTurn: backend.getInterruptedTurn() !== null,
+      canResumeInterruptedTurn: backend.canResumeInterruptedTurn(),
     },
   };
 }

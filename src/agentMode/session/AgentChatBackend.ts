@@ -1,3 +1,4 @@
+import type { RecordedPrompt } from "./InterruptedTurnJournal";
 import type { MessageContext } from "@/types/message";
 import type {
   AgentChatMessage,
@@ -29,6 +30,11 @@ export interface AgentChatBackend {
 
   isStarting(): boolean;
   isTurnInFlight(): boolean;
+
+  getInterruptedTurn(): RecordedPrompt | null;
+  canResumeInterruptedTurn(): boolean;
+  resumeInterruptedTurn(): void;
+  retryInterruptedTurn(): void;
 
   getBackendState(): BackendState | null;
   canSwitchModel(): boolean | null;

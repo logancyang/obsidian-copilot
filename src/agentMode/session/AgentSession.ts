@@ -1,6 +1,8 @@
 import { AI_SENDER, USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
+import type { RecordedPrompt, TurnJournalSink } from "@/agentMode/session/InterruptedTurnJournal";
+import { buildNativeChatId } from "@/utils/nativeChatId";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 import {
   AgentChatMessage,
@@ -114,6 +116,7 @@ export interface AgentSessionListener {
   onCurrentPlanChanged?(): void;
   onCurrentTodoListChanged?(): void;
   onNeedsAttentionChanged?(needsAttention: boolean): void;
+  onInterruptedTurnChanged?(): void;
 }
 
 export interface ProjectContextUpdates {
@@ -128,6 +131,7 @@ export interface ProjectContextUpdatesHooks {
 
 export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   backend: BackendProcess;
+  turnJournal?: TurnJournalSink;
   cwd: string;
   internalId: string;
   chatInputId?: string;
@@ -143,6 +147,7 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
 
 export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   backend: BackendProcess;
+  turnJournal?: TurnJournalSink;
   backendSessionId: SessionId;
   internalId: string;
   chatInputId?: string;
@@ -167,6 +172,8 @@ export class AgentSession {
   readonly ready: Promise<void>;
   private backendSessionId: SessionId | null = null;
   private readonly backend: BackendProcess;
+  private readonly turnJournal: TurnJournalSink | null;
+  private interruptedTurn: RecordedPrompt | null = null;
   private readonly cwd: string | null;
   private readonly contextReady: Promise<ContextMaterializationResult> | null;
   private projectContextBlock: string | null = null;
@@ -236,6 +243,7 @@ export class AgentSession {
 
   constructor(opts: AgentSessionStateOptions | AgentSessionStartOptions) {
     this.backend = opts.backend;
+    this.turnJournal = opts.turnJournal ?? null;
     this.internalId = opts.internalId;
     this.chatInputId = opts.chatInputId ?? uuidv4();
     this.backendId = opts.backendId;
@@ -280,6 +288,22 @@ export class AgentSession {
 
   getBackendSessionId(): SessionId | null {
     return this.backendSessionId;
+  }
+
+  getInterruptedTurn(): RecordedPrompt | null {
+    return this.interruptedTurn;
+  }
+
+  setInterruptedTurn(prompt: RecordedPrompt | null): void {
+    if (this.interruptedTurn === prompt) return;
+    this.interruptedTurn = prompt;
+    for (const l of this.listeners) {
+      try {
+        l.onInterruptedTurnChanged?.();
+      } catch (e) {
+        logWarn(`[AgentMode] interrupted-turn listener threw`, e);
+      }
+    }
   }
 
   private async initialize(opts: AgentSessionStartOptions): Promise<void> {
@@ -589,6 +613,13 @@ export class AgentSession {
     this.lastTurnError = false;
     this.recomputeStatusIfChanged();
 
+    this.setInterruptedTurn(null);
+    this.turnJournal?.record(buildNativeChatId(this.backendId, this.backendSessionId!), {
+      text: displayText,
+      context,
+      promptContent,
+      mentionedAgents,
+    });
     const turn = this.runTurn(displayText, userMessageId, context, turnStartedAtMs, promptContent);
     return { userMessageId, turn };
   }
@@ -751,6 +782,7 @@ export class AgentSession {
       if (this.placeholderId === placeholderId) this.placeholderId = null;
       throw err;
     } finally {
+      this.turnJournal?.clear(buildNativeChatId(this.backendId, sessionId));
       this.abortController = null;
       this.recomputeStatusIfChanged();
     }

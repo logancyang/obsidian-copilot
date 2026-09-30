@@ -94,6 +94,8 @@ function assistantMessage(
 const chatBackend = {
   resolveToolPermission: jest.fn(),
   resolveAskUserQuestion: jest.fn(),
+  resumeInterruptedTurn: jest.fn(),
+  retryInterruptedTurn: jest.fn(),
 } as unknown as AgentChatBackend;
 
 function permission(id: string): PermissionPrompt {
@@ -323,6 +325,50 @@ describe("AgentChatMessages", () => {
 
       expect(screen.getByTestId("chat-messages").textContent).toContain("Plan plan-1");
       expect(screen.queryByTestId("agent-action-rail")).toBeNull();
+    });
+
+    it("offers Resume and Retry under the last message when the turn was interrupted", () => {
+      renderMessages([assistantMessage("partial", 1_000)], false, {
+        hasInterruptedTurn: true,
+        canResumeInterruptedTurn: true,
+      });
+
+      expect(screen.getByRole("status").textContent).toContain("Interrupted");
+      fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+      expect(chatBackend.resumeInterruptedTurn).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      expect(chatBackend.retryInterruptedTurn).toHaveBeenCalledTimes(1);
+    });
+
+    it("offers only Retry when the interrupted turn cannot be resumed (https://github.com/Brevilabs/obsidian-copilot-private/issues/607)", () => {
+      renderMessages([assistantMessage("partial", 1_000)], false, { hasInterruptedTurn: true });
+
+      expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    });
+
+    it("shows no interrupted state for a chat whose turns finished normally", () => {
+      renderMessages([assistantMessage("done", 1_000)], false);
+
+      expect(screen.queryByText("Interrupted")).toBeNull();
+    });
+
+    it("hides the interrupted state while a new turn is running", () => {
+      renderMessages([assistantMessage("partial", 1_000)], true, { hasInterruptedTurn: true });
+
+      expect(screen.queryByText("Interrupted")).toBeNull();
+    });
+
+    it("keeps the chat usable and tells the user when Resume is refused", () => {
+      (chatBackend.resumeInterruptedTurn as jest.Mock).mockImplementationOnce(() => {
+        throw new Error("Session already has a turn in flight");
+      });
+      renderMessages([assistantMessage("partial", 1_000)], false, {
+        hasInterruptedTurn: true,
+        canResumeInterruptedTurn: true,
+      });
+
+      expect(() => fireEvent.click(screen.getByRole("button", { name: "Resume" }))).not.toThrow();
     });
   });
 });
