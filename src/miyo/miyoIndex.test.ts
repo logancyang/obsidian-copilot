@@ -5,6 +5,7 @@ import {
   requestMiyoIndexRefresh,
 } from "@/miyo/miyoIndex";
 import { getSettings } from "@/settings/model";
+import type { App } from "obsidian";
 
 const resolveBaseUrl = jest.fn();
 const scanFolder = jest.fn();
@@ -13,19 +14,22 @@ jest.mock("@/miyo/MiyoClient", () => ({
   MiyoClient: jest.fn().mockImplementation(() => ({ resolveBaseUrl, scanFolder })),
 }));
 
+jest.mock("@/miyo/miyoStatusStore", () => ({}));
+
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(),
 }));
 
-jest.mock("@/miyo/miyoUtils", () => ({
-  getMiyoCustomUrl: jest.fn(() => "http://miyo.test"),
-  getMiyoFolderName: jest.fn(() => "Test vault"),
-}));
+const app = { vault: { getName: () => "Test vault" } } as unknown as App;
 
 describe("miyoIndex", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (getSettings as jest.Mock).mockReturnValue({ plusLicenseKey: "license" });
+    (getSettings as jest.Mock).mockReturnValue({
+      plusLicenseKey: "license",
+      enableMiyo: true,
+      miyoServerUrl: "http://miyo.test",
+    });
     resolveBaseUrl.mockResolvedValue("http://resolved.test");
     scanFolder.mockResolvedValue(undefined);
   });
@@ -35,7 +39,7 @@ describe("miyoIndex", () => {
       const listener = jest.fn();
       const unsubscribe = onMiyoIndexChanged(listener);
 
-      await requestMiyoIndexRefresh({} as never);
+      await requestMiyoIndexRefresh(app);
 
       expect(MiyoClient).toHaveBeenCalledWith({ plusLicenseKey: "license" });
       expect(resolveBaseUrl).toHaveBeenCalledWith("http://miyo.test");
@@ -49,7 +53,7 @@ describe("miyoIndex", () => {
       const unsubscribe = onMiyoIndexChanged(listener);
       scanFolder.mockRejectedValue(new Error("offline"));
 
-      await expect(requestMiyoIndexRefresh({} as never)).rejects.toThrow("offline");
+      await expect(requestMiyoIndexRefresh(app)).rejects.toThrow("offline");
 
       expect(listener).not.toHaveBeenCalled();
       unsubscribe();
