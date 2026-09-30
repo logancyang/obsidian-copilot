@@ -1,325 +1,259 @@
 import { MessageRepository } from "./MessageRepository";
-import { ChatMessage, MessageContext, StoredMessage } from "@/types/message";
-import { formatDateTime, FormattedDateTime } from "@/utils";
+import { ChatMessage, MessageContext } from "@/types/message";
 import { mockTFile } from "@/__tests__/mockObsidian";
-
-jest.mock("@/utils", () => ({
-  formatDateTime: jest.fn(),
-}));
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
 }));
 
+function chatMessage(
+  overrides: Partial<ChatMessage> & Pick<ChatMessage, "message" | "sender">
+): ChatMessage {
+  return { timestamp: null, isVisible: true, ...overrides };
+}
+
 describe("MessageRepository", () => {
-  let messageRepo: MessageRepository;
-  let mockFormattedDateTime: FormattedDateTime;
+  describe("MessageRepository", () => {
+    let repo: MessageRepository;
 
-  beforeEach(() => {
-    messageRepo = new MessageRepository();
-    mockFormattedDateTime = {
-      fileName: "20231201_103000",
-      display: "2023-12-01 10:30:00",
-      epoch: 1701423000000,
-    };
-    (formatDateTime as jest.Mock).mockReturnValue(mockFormattedDateTime);
-  });
+    beforeEach(() => {
+      repo = new MessageRepository();
+    });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+    describe("addMessage()", () => {
+      it("stores display text, sender and a generated id for a string-based message", () => {
+        const id = repo.addMessage("Hello", "Hello", "user");
 
-  describe("addMessage", () => {
-    it("should add a message with basic properties", () => {
-      const messageId = messageRepo.addMessage("Hello", "Hello", "user");
-
-      expect(messageId).toBeDefined();
-      expect(messageId).toMatch(/^msg-\d+-\w+$/);
-
-      const message = messageRepo.getMessage(messageId);
-      expect(message).toEqual({
-        id: messageId,
-        message: "Hello",
-        originalMessage: "Hello",
-        sender: "user",
-        timestamp: mockFormattedDateTime,
-        isVisible: true,
-        context: undefined,
-        contextEnvelope: undefined,
-        isErrorMessage: false,
-        sources: undefined,
-        content: undefined,
+        expect(id).toMatch(/^msg-\d+-\w+$/);
+        expect(repo.getMessage(id)).toMatchObject({
+          id,
+          message: "Hello",
+          originalMessage: "Hello",
+          sender: "user",
+          isVisible: true,
+          isErrorMessage: false,
+          context: undefined,
+          contextEnvelope: undefined,
+        });
+        expect(repo.getMessage(id)?.timestamp?.epoch).toEqual(expect.any(Number));
       });
-    });
 
-    it("should add a message with context", () => {
-      const mockFile = mockTFile({ path: "test.md", basename: "test" });
-      const context: MessageContext = {
-        notes: [mockFile],
-        urls: ["https://example.com"],
-        selectedTextContexts: [],
-      };
+      it("keeps display text and processed text separate", () => {
+        const id = repo.addMessage("Hello", "Hello with context added", "user");
 
-      const messageId = messageRepo.addMessage("Hello", "Hello with context", "user", context);
-
-      const message = messageRepo.getMessage(messageId);
-      expect(message?.context).toEqual(context);
-      expect(message?.contextEnvelope).toBeUndefined();
-    });
-
-    it("should store both display and processed text", () => {
-      const messageId = messageRepo.addMessage("Hello", "Hello with context added", "user");
-
-      const displayMessage = messageRepo.getMessage(messageId);
-      expect(displayMessage?.message).toBe("Hello");
-      expect(displayMessage?.contextEnvelope).toBeUndefined();
-
-      const llmMessage = messageRepo.getLLMMessage(messageId);
-      expect(llmMessage?.message).toBe("Hello with context added");
-    });
-  });
-
-  describe("getDisplayMessages", () => {
-    it("should return only visible messages with display text", () => {
-      messageRepo.addMessage("Hello", "Hello", "user");
-      messageRepo.addMessage("Response", "Response", "AI");
-
-      const messages = messageRepo.getDisplayMessages();
-
-      expect(messages).toHaveLength(2);
-      expect(messages[0].message).toBe("Hello");
-      expect(messages[1].message).toBe("Response");
-      expect(messages[0].isVisible).toBe(true);
-      expect(messages[1].isVisible).toBe(true);
-      expect(messages[0].contextEnvelope).toBeUndefined();
-    });
-
-    it("should filter out invisible messages", () => {
-      messageRepo.addMessage("Hello", "Hello", "user");
-
-      const internalMessages = (messageRepo as unknown as { messages: StoredMessage[] }).messages;
-      internalMessages[0].isVisible = false;
-
-      const messages = messageRepo.getDisplayMessages();
-      expect(messages).toHaveLength(0);
-    });
-  });
-
-  describe("getLLMMessages", () => {
-    it("should return all messages with display text (for history, no context)", () => {
-      const id1 = messageRepo.addMessage("Hello", "Hello with context", "user");
-      messageRepo.addMessage("Response", "Response", "AI");
-
-      const messages = messageRepo.getLLMMessages();
-
-      expect(messages).toHaveLength(2);
-      expect(messages[0].message).toBe("Hello");
-      expect(messages[1].message).toBe("Response");
-      expect(messages[0].isVisible).toBe(false);
-      expect(messages[1].isVisible).toBe(false);
-
-      const fullMessage = messageRepo.getLLMMessage(id1);
-      expect(fullMessage?.message).toBe("Hello with context");
-    });
-  });
-
-  describe("editMessage", () => {
-    it("should update message text and mark for reprocessing", () => {
-      const messageId = messageRepo.addMessage("Hello", "Hello", "user");
-
-      const success = messageRepo.editMessage(messageId, "Hi there");
-
-      expect(success).toBe(true);
-
-      const message = messageRepo.getMessage(messageId);
-      expect(message?.message).toBe("Hi there");
-      expect(message?.originalMessage).toBe("Hi there");
-    });
-
-    it("should return false for non-existent message", () => {
-      const success = messageRepo.editMessage("non-existent", "New text");
-      expect(success).toBe(false);
-    });
-  });
-
-  describe("updateProcessedText", () => {
-    it("should update processed text for existing message", () => {
-      const messageId = messageRepo.addMessage("Hello", "Hello", "user");
-
-      const success = messageRepo.updateProcessedText(messageId, "Hello with context");
-
-      expect(success).toBe(true);
-
-      const llmMessage = messageRepo.getLLMMessage(messageId);
-      expect(llmMessage?.message).toBe("Hello with context");
-
-      const displayMessage = messageRepo.getMessage(messageId);
-      expect(displayMessage?.message).toBe("Hello");
-    });
-
-    it("should return false for non-existent message", () => {
-      const success = messageRepo.updateProcessedText("non-existent", "New text");
-      expect(success).toBe(false);
-    });
-  });
-
-  describe("truncateAfterMessageId", () => {
-    it("should remove all messages after specified message", () => {
-      const messageId1 = messageRepo.addMessage("First", "First", "user");
-      messageRepo.addMessage("Second", "Second", "AI");
-      messageRepo.addMessage("Third", "Third", "user");
-
-      messageRepo.truncateAfterMessageId(messageId1);
-
-      const messages = messageRepo.getDisplayMessages();
-      expect(messages).toHaveLength(1);
-      expect(messages[0].id).toBe(messageId1);
-    });
-
-    it("should do nothing if message ID not found", () => {
-      messageRepo.addMessage("First", "First", "user");
-      messageRepo.addMessage("Second", "Second", "AI");
-
-      messageRepo.truncateAfterMessageId("non-existent");
-
-      const messages = messageRepo.getDisplayMessages();
-      expect(messages).toHaveLength(2);
-    });
-  });
-
-  describe("deleteMessage", () => {
-    it("should remove message by ID", () => {
-      const messageId1 = messageRepo.addMessage("First", "First", "user");
-      const messageId2 = messageRepo.addMessage("Second", "Second", "AI");
-
-      const success = messageRepo.deleteMessage(messageId1);
-
-      expect(success).toBe(true);
-
-      const messages = messageRepo.getDisplayMessages();
-      expect(messages).toHaveLength(1);
-      expect(messages[0].id).toBe(messageId2);
-    });
-
-    it("should return false for non-existent message", () => {
-      const success = messageRepo.deleteMessage("non-existent");
-      expect(success).toBe(false);
-    });
-  });
-
-  describe("addMessage with ChatMessage object", () => {
-    it("should add message from ChatMessage object", () => {
-      const chatMessage: ChatMessage = {
-        id: "test-id",
-        message: "Test message",
-        sender: "user",
-        timestamp: mockFormattedDateTime,
-        isVisible: true,
-        context: {
-          notes: [],
-          urls: [],
-          selectedTextContexts: [],
-        },
-      };
-
-      const messageId = messageRepo.addMessage(chatMessage);
-
-      expect(messageId).toBe("test-id");
-
-      const retrievedMessage = messageRepo.getMessage("test-id");
-      expect(retrievedMessage?.message).toBe("Test message");
-      expect(retrievedMessage?.context).toEqual(chatMessage.context);
-    });
-
-    it("should generate ID if not provided", () => {
-      const chatMessage: ChatMessage = {
-        message: "Test message",
-        sender: "user",
-        timestamp: mockFormattedDateTime,
-        isVisible: true,
-      };
-
-      const messageId = messageRepo.addMessage(chatMessage);
-
-      expect(messageId).toBeDefined();
-      expect(messageId).toMatch(/^msg-\d+-\w+$/);
-    });
-  });
-
-  describe("clear", () => {
-    it("should remove all messages", () => {
-      messageRepo.addMessage("First", "First", "user");
-      messageRepo.addMessage("Second", "Second", "AI");
-
-      messageRepo.clear();
-
-      const messages = messageRepo.getDisplayMessages();
-      expect(messages).toHaveLength(0);
-    });
-  });
-
-  describe("getDebugInfo", () => {
-    it("should return debug information", () => {
-      messageRepo.addMessage("First", "First", "user");
-      messageRepo.addMessage("Second", "Second", "AI");
-
-      const debugInfo = messageRepo.getDebugInfo();
-
-      expect(debugInfo).toEqual({
-        totalMessages: 2,
-        visibleMessages: 2,
-        userMessages: 1,
-        aiMessages: 1,
+        expect(repo.getMessage(id)?.message).toBe("Hello");
+        expect(repo.getLLMMessage(id)?.message).toBe("Hello with context added");
       });
-    });
-  });
 
-  describe("Bug Prevention Tests", () => {
-    describe("Context Badge Bug Prevention", () => {
-      it("should preserve context when creating display messages", () => {
-        const mockFile = mockTFile({ path: "test.md", basename: "test" });
+      it("preserves the note context attached to the message", () => {
+        const note = mockTFile({ path: "test.md", basename: "test" });
         const context: MessageContext = {
-          notes: [mockFile],
+          notes: [note],
           urls: ["https://example.com"],
           selectedTextContexts: [],
         };
 
-        const messageId = messageRepo.addMessage("Hello", "Hello", "user", context);
+        const id = repo.addMessage("Hello", "Hello", "user", context);
 
-        const displayMessage = messageRepo.getMessage(messageId);
-        expect(displayMessage?.context).toBeDefined();
-        expect(displayMessage?.context?.notes).toHaveLength(1);
-        expect(displayMessage?.context?.notes[0]).toEqual(mockFile);
+        expect(repo.getMessage(id)?.context).toEqual(context);
+        expect(repo.getDisplayMessages()[0].context?.notes[0]).toEqual(note);
+      });
+
+      it("keeps the id and context of a ChatMessage object", () => {
+        const message = chatMessage({
+          id: "test-id",
+          message: "Test message",
+          sender: "user",
+          context: { notes: [], urls: [], selectedTextContexts: [] },
+        });
+
+        expect(repo.addMessage(message)).toBe("test-id");
+        expect(repo.getMessage("test-id")).toMatchObject({
+          message: "Test message",
+          context: message.context,
+        });
+      });
+
+      it("generates an id for a ChatMessage object without one", () => {
+        const id = repo.addMessage(chatMessage({ message: "Test message", sender: "user" }));
+
+        expect(id).toMatch(/^msg-\d+-\w+$/);
+      });
+
+      it("hides a ChatMessage object whose isVisible is false from display messages", () => {
+        repo.addMessage(chatMessage({ message: "Hidden", sender: "user", isVisible: false }));
+
+        expect(repo.getDisplayMessages()).toHaveLength(0);
+        expect(repo.getLLMMessages()).toHaveLength(1);
       });
     });
 
-    describe("Memory Synchronization Bug Prevention", () => {
-      it("should maintain consistent message count after truncation", () => {
-        const messageId1 = messageRepo.addMessage("First", "First", "user");
-        messageRepo.addMessage("Second", "Second", "AI");
-        messageRepo.addMessage("Third", "Third", "user");
+    describe("getDisplayMessages()", () => {
+      it("returns visible messages in insertion order with their display text", () => {
+        repo.addMessage("Hello", "Hello with context", "user");
+        repo.addMessage("Response", "Response", "AI");
 
-        expect(messageRepo.getLLMMessages()).toHaveLength(3);
+        const messages = repo.getDisplayMessages();
 
-        messageRepo.truncateAfterMessageId(messageId1);
+        expect(messages.map((m) => m.message)).toEqual(["Hello", "Response"]);
+        expect(messages.every((m) => m.isVisible)).toBe(true);
+      });
 
-        expect(messageRepo.getLLMMessages()).toHaveLength(1);
-        expect(messageRepo.getDisplayMessages()).toHaveLength(1);
+      it("omits invisible messages", () => {
+        repo.addMessage("Shown", "Shown", "user");
+        repo.addMessage(chatMessage({ message: "Hidden", sender: "AI", isVisible: false }));
+
+        expect(repo.getDisplayMessages().map((m) => m.message)).toEqual(["Shown"]);
       });
     });
 
-    describe("Edit Message Bug Prevention", () => {
-      it("should maintain message integrity after editing", () => {
-        const messageId = messageRepo.addMessage("Original", "Original", "user");
+    describe("getLLMMessages()", () => {
+      it("returns every message with display text and isVisible false", () => {
+        repo.addMessage("Hello", "Hello with context", "user");
+        repo.addMessage(chatMessage({ message: "Hidden", sender: "AI", isVisible: false }));
 
-        const success = messageRepo.editMessage(messageId, "Edited");
+        const messages = repo.getLLMMessages();
 
-        expect(success).toBe(true);
+        expect(messages.map((m) => m.message)).toEqual(["Hello", "Hidden"]);
+        expect(messages.every((m) => m.isVisible === false)).toBe(true);
+      });
+    });
 
-        const displayMessage = messageRepo.getMessage(messageId);
-        expect(displayMessage?.message).toBe("Edited");
-        expect(displayMessage?.id).toBe(messageId);
-        expect(displayMessage?.sender).toBe("user");
+    describe("editMessage()", () => {
+      it("updates the display text of a user message without changing its processed text", () => {
+        const id = repo.addMessage("Hello", "Hello with context", "user");
+
+        expect(repo.editMessage(id, "Hi there")).toBe(true);
+
+        expect(repo.getMessage(id)).toMatchObject({ message: "Hi there", sender: "user", id });
+        expect(repo.getLLMMessage(id)?.message).toBe("Hello with context");
+      });
+
+      it("updates both display and processed text of an AI message", () => {
+        const id = repo.addMessage("Answer", "Answer", "AI");
+
+        expect(repo.editMessage(id, "Better answer")).toBe(true);
+
+        expect(repo.getMessage(id)?.message).toBe("Better answer");
+        expect(repo.getLLMMessage(id)?.message).toBe("Better answer");
+      });
+
+      it("returns false for an unknown message id", () => {
+        expect(repo.editMessage("non-existent", "New text")).toBe(false);
+      });
+    });
+
+    describe("updateProcessedText()", () => {
+      it("replaces the LLM text and leaves the display text unchanged", () => {
+        const id = repo.addMessage("Hello", "Hello", "user");
+
+        expect(repo.updateProcessedText(id, "Hello with context")).toBe(true);
+
+        expect(repo.getLLMMessage(id)?.message).toBe("Hello with context");
+        expect(repo.getMessage(id)?.message).toBe("Hello");
+      });
+
+      it("returns false for an unknown message id", () => {
+        expect(repo.updateProcessedText("non-existent", "New text")).toBe(false);
+      });
+    });
+
+    describe("truncateAfterMessageId()", () => {
+      it("removes every message after the given one from both display and LLM views", () => {
+        const firstId = repo.addMessage("First", "First", "user");
+        repo.addMessage("Second", "Second", "AI");
+        repo.addMessage("Third", "Third", "user");
+
+        repo.truncateAfterMessageId(firstId);
+
+        expect(repo.getDisplayMessages().map((m) => m.id)).toEqual([firstId]);
+        expect(repo.getLLMMessages().map((m) => m.id)).toEqual([firstId]);
+      });
+
+      it("keeps all messages when the id is unknown", () => {
+        repo.addMessage("First", "First", "user");
+        repo.addMessage("Second", "Second", "AI");
+
+        repo.truncateAfterMessageId("non-existent");
+
+        expect(repo.getDisplayMessages()).toHaveLength(2);
+      });
+    });
+
+    describe("truncateAfter()", () => {
+      it("keeps messages up to and including the given index", () => {
+        repo.addMessage("First", "First", "user");
+        repo.addMessage("Second", "Second", "AI");
+        repo.addMessage("Third", "Third", "user");
+
+        repo.truncateAfter(1);
+
+        expect(repo.getDisplayMessages().map((m) => m.message)).toEqual(["First", "Second"]);
+      });
+    });
+
+    describe("deleteMessage()", () => {
+      it("removes only the message with the given id", () => {
+        const firstId = repo.addMessage("First", "First", "user");
+        const secondId = repo.addMessage("Second", "Second", "AI");
+
+        expect(repo.deleteMessage(firstId)).toBe(true);
+
+        expect(repo.getDisplayMessages().map((m) => m.id)).toEqual([secondId]);
+      });
+
+      it("returns false for an unknown message id", () => {
+        expect(repo.deleteMessage("non-existent")).toBe(false);
+      });
+    });
+
+    describe("clear()", () => {
+      it("removes all messages", () => {
+        repo.addMessage("First", "First", "user");
+        repo.addMessage("Second", "Second", "AI");
+
+        repo.clear();
+
+        expect(repo.getLLMMessages()).toEqual([]);
+      });
+    });
+
+    describe("loadMessages()", () => {
+      it("replaces existing messages with the loaded ones, preserving ids and text", () => {
+        repo.addMessage("Old", "Old", "user");
+
+        repo.loadMessages([
+          chatMessage({ id: "a", message: "Question", sender: "user" }),
+          chatMessage({ id: "b", message: "Answer", sender: "AI" }),
+        ]);
+
+        expect(repo.getDisplayMessages().map((m) => [m.id, m.message])).toEqual([
+          ["a", "Question"],
+          ["b", "Answer"],
+        ]);
+      });
+
+      it("generates ids and timestamps for loaded messages that lack them", () => {
+        repo.loadMessages([chatMessage({ message: "No id", sender: "user" })]);
+
+        const [loaded] = repo.getDisplayMessages();
+        expect(loaded.id).toMatch(/^msg-\d+-\w+$/);
+        expect(loaded.timestamp?.epoch).toEqual(expect.any(Number));
+      });
+    });
+
+    describe("getDebugInfo()", () => {
+      it("counts total, visible, user and AI messages", () => {
+        repo.addMessage("First", "First", "user");
+        repo.addMessage("Second", "Second", "AI");
+        repo.addMessage(chatMessage({ message: "Hidden", sender: "user", isVisible: false }));
+
+        expect(repo.getDebugInfo()).toEqual({
+          totalMessages: 3,
+          visibleMessages: 2,
+          userMessages: 2,
+          aiMessages: 1,
+        });
       });
     });
   });

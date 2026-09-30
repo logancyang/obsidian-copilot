@@ -7,16 +7,7 @@ import { mockTFile, mockTFolder } from "@/__tests__/mockObsidian";
 import { getSettings } from "@/settings/model";
 import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { ensureFolderExists } from "@/utils";
-
-const USER_SENDER = "user";
-const AI_SENDER = "ai";
-
-type PMInternal = {
-  formatChatContent: (messages: ChatMessage[]) => string;
-  parseChatContent: (content: string) => ChatMessage[];
-  generateNoteContent: (chatContent: string, epoch: number, modelKey: string) => string;
-};
-const asInternal = (pm: ChatPersistenceManager): PMInternal => pm as unknown as PMInternal;
+import { AI_SENDER, USER_SENDER } from "@/constants";
 
 jest.mock("obsidian", () => ({
   normalizePath: (path: string) => path,
@@ -40,62 +31,12 @@ jest.mock("@/settings/copilotFolder", () => ({
 }));
 jest.mock("@/aiParams", () => ({}));
 jest.mock("@/utils", () => ({
-  extractTextFromChunk: jest.fn((content: unknown): string => {
-    if (typeof content === "string") {
-      return content;
-    }
-    if (Array.isArray(content)) {
-      return (content as Array<{ type?: string; text?: string }>)
-        .filter((item) => item?.type === "text")
-        .map((item) => item?.text || "")
-        .join("");
-    }
-    if (content && typeof content === "object" && "text" in content) {
-      return String((content as { text?: string }).text ?? "");
-    }
-    if (typeof content === "number" || typeof content === "boolean") {
-      return String(content);
-    }
-    return "";
-  }),
-  formatDateTime: jest.fn((date) => ({
+  ...jest.requireActual<typeof import("@/utils")>("@/utils"),
+  formatDateTime: jest.fn(() => ({
     fileName: "20240923_221800",
     display: "2024/09/23 22:18:00",
   })),
   ensureFolderExists: jest.fn(async () => {}),
-  getUtf8ByteLength: jest.fn((str: string) => {
-    return new TextEncoder().encode(str).length;
-  }),
-  truncateToByteLimit: jest.fn((str: string, byteLimit: number) => {
-    if (byteLimit <= 0) {
-      return "";
-    }
-
-    const encoder = new TextEncoder();
-    const bytes = encoder.encode(str);
-    if (bytes.length <= byteLimit) {
-      return str;
-    }
-
-    let low = 0;
-    let high = str.length;
-    let result = "";
-
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2);
-      const candidate = str.substring(0, mid);
-      const candidateBytes = encoder.encode(candidate);
-
-      if (candidateBytes.length <= byteLimit) {
-        result = candidate;
-        low = mid + 1;
-      } else {
-        high = mid - 1;
-      }
-    }
-
-    return result;
-  }),
 }));
 
 type MockApp = {
@@ -125,211 +66,529 @@ type MockApp = {
 
 type MockMessageRepo = { getDisplayMessages: jest.Mock };
 
+const FIRST_EPOCH = 1695513480000;
+const FIRST_TIMESTAMP = {
+  epoch: FIRST_EPOCH,
+  display: "2024/09/23 22:18:00",
+  fileName: "2024_09_23_221800",
+};
+const EXISTING_NOTE_TOPIC_PATH = "test-folder/Conflict_message@20240923_221800.md";
+
+function chatMessage(
+  message: string,
+  sender: string = USER_SENDER,
+  overrides: Partial<ChatMessage> = {}
+): ChatMessage {
+  return { id: "1", message, sender, timestamp: FIRST_TIMESTAMP, isVisible: true, ...overrides };
+}
+
+function savedFrontmatter(content: string): string {
+  return content.slice(0, content.indexOf("\n---\n", 4));
+}
+
+const noteWithBody = (body: string) =>
+  `---\nepoch: ${FIRST_EPOCH}\nmodelKey: gpt-4\ntags:\n  - copilot-conversation\n---\n\n${body}`;
+
 describe("ChatPersistenceManager", () => {
-  let mockApp: MockApp;
-  let mockMessageRepo: MockMessageRepo;
-  let persistenceManager: ChatPersistenceManager;
+  describe("ChatPersistenceManager", () => {
+    let mockApp: MockApp;
+    let mockMessageRepo: MockMessageRepo;
+    let persistenceManager: ChatPersistenceManager;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
+    const createdPath = (callIndex = 0) => mockApp.vault.create.mock.calls[callIndex][0] as string;
+    const createdContent = (callIndex = 0) =>
+      mockApp.vault.create.mock.calls[callIndex][1] as string;
+    const basenameBytes = (path: string) =>
+      new TextEncoder().encode(path.split("/").pop() ?? "").length;
 
-    mockApp = {
-      vault: {
-        getAbstractFileByPath: jest.fn().mockReturnValue(null),
-        createFolder: jest.fn(),
-        createBinary: jest.fn(),
-        getConfig: jest.fn(() => "attachments"),
-        create: jest.fn(),
-        modify: jest.fn(),
-        process: jest.fn(async (file: TFile, update: (content: string) => string) => {
-          const current = (await mockApp.vault.adapter.read(file.path)) as string | undefined;
-          const next = update(current ?? "");
-          await mockApp.vault.modify(file, next);
-          return next;
-        }),
-        read: jest.fn(),
-        getMarkdownFiles: jest.fn().mockReturnValue([]),
-        adapter: {
-          exists: jest.fn().mockResolvedValue(false),
-          read: jest.fn().mockResolvedValue(""),
-          readBinary: jest.fn(),
-          mkdir: jest.fn(),
-          write: jest.fn().mockResolvedValue(undefined),
-          list: jest.fn().mockResolvedValue({ files: [], folders: [] }),
-          stat: jest.fn().mockResolvedValue({ ctime: Date.now(), mtime: Date.now(), size: 0 }),
-        },
-      },
-      metadataCache: {
-        getFileCache: jest.fn(),
-      },
-      fileManager: {
-        processFrontMatter: jest.fn(),
-        renameFile: jest.fn(),
-      },
+    const saveMessages = (messages: ChatMessage[], modelKey = "gpt-4") => {
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      return persistenceManager.saveChat(modelKey);
     };
 
-    mockMessageRepo = {
-      getDisplayMessages: jest.fn(),
+    const loadNote = (content: string) => {
+      mockApp.vault.read.mockResolvedValue(content);
+      return persistenceManager.loadChat(mockTFile({ path: "chat.md" }));
     };
 
-    persistenceManager = new ChatPersistenceManager(
-      mockApp as unknown as App,
-      mockMessageRepo as unknown as MessageRepository
-    );
-  });
+    beforeEach(() => {
+      jest.clearAllMocks();
 
-  describe("formatChatContent", () => {
-    it("should format messages in the correct format", () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "my name is logan, what's your name",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
+      mockApp = {
+        vault: {
+          getAbstractFileByPath: jest.fn().mockReturnValue(null),
+          createFolder: jest.fn(),
+          createBinary: jest.fn(),
+          getConfig: jest.fn(() => "attachments"),
+          create: jest.fn(),
+          modify: jest.fn(),
+          process: jest.fn(async (file: TFile, update: (content: string) => string) => {
+            const current = (await mockApp.vault.adapter.read(file.path)) as string | undefined;
+            const next = update(current ?? "");
+            await mockApp.vault.modify(file, next);
+            return next;
+          }),
+          read: jest.fn(),
+          getMarkdownFiles: jest.fn().mockReturnValue([]),
+          adapter: {
+            exists: jest.fn().mockResolvedValue(false),
+            read: jest.fn().mockResolvedValue(""),
+            readBinary: jest.fn(),
+            mkdir: jest.fn(),
+            write: jest.fn().mockResolvedValue(undefined),
+            list: jest.fn().mockResolvedValue({ files: [], folders: [] }),
+            stat: jest.fn().mockResolvedValue({ ctime: Date.now(), mtime: Date.now(), size: 0 }),
           },
-          isVisible: true,
         },
-        {
-          id: "2",
-          message:
-            "I don't have a name. I am a large language model. My purpose is to help users like you.",
-          sender: AI_SENDER,
-          timestamp: {
-            epoch: 1695513481000,
-            display: "2024/09/23 22:18:01",
-            fileName: "2024_09_23_221801",
-          },
-          isVisible: true,
+        metadataCache: {
+          getFileCache: jest.fn(),
         },
-        {
-          id: "3",
-          message: "what's my name",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695514580000,
-            display: "2024/09/23 22:56:20",
-            fileName: "2024_09_23_225620",
-          },
-          isVisible: true,
+        fileManager: {
+          processFrontMatter: jest.fn(),
+          renameFile: jest.fn(),
         },
-        {
-          id: "4",
-          message: "Your name is Logan.",
-          sender: AI_SENDER,
-          timestamp: {
-            epoch: 1695514580000,
-            display: "2024/09/23 22:56:20",
-            fileName: "2024_09_23_225620",
-          },
-          isVisible: true,
-        },
-      ];
+      };
 
-      const result = asInternal(persistenceManager).formatChatContent(messages);
+      mockMessageRepo = {
+        getDisplayMessages: jest.fn(),
+      };
 
-      const expected = `**user**: my name is logan, what's your name
+      persistenceManager = new ChatPersistenceManager(
+        mockApp as unknown as App,
+        mockMessageRepo as unknown as MessageRepository
+      );
+    });
+
+    describe("saveChat()", () => {
+      it("creates a note named after the first user message that transcribes every message with its timestamp", async () => {
+        const saved = await saveMessages([
+          chatMessage("my name is logan, what's your name"),
+          chatMessage("I don't have a name. I am a large language model.", AI_SENDER, {
+            timestamp: { ...FIRST_TIMESTAMP, display: "2024/09/23 22:18:01" },
+          }),
+          chatMessage("what's my name", USER_SENDER, {
+            timestamp: { ...FIRST_TIMESTAMP, display: "2024/09/23 22:56:20" },
+          }),
+        ]);
+
+        expect(saved?.path).toBe(
+          "test-folder/my_name_is_logan,_what's_your_name@20240923_221800.md"
+        );
+        const content = createdContent();
+        expect(savedFrontmatter(content)).toContain(`epoch: ${FIRST_EPOCH}`);
+        expect(savedFrontmatter(content)).toContain('modelKey: "gpt-4"');
+        expect(savedFrontmatter(content)).toContain("tags:\n  - copilot-conversation");
+        expect(savedFrontmatter(content)).not.toContain("topic:");
+        expect(savedFrontmatter(content)).not.toContain("lastAccessedAt:");
+        expect(
+          content.endsWith(
+            `**user**: my name is logan, what's your name
 [Timestamp: 2024/09/23 22:18:00]
 
-**ai**: I don't have a name. I am a large language model. My purpose is to help users like you.
+**ai**: I don't have a name. I am a large language model.
 [Timestamp: 2024/09/23 22:18:01]
 
 **user**: what's my name
-[Timestamp: 2024/09/23 22:56:20]
+[Timestamp: 2024/09/23 22:56:20]`
+          )
+        ).toBe(true);
+      });
 
-**ai**: Your name is Logan.
-[Timestamp: 2024/09/23 22:56:20]`;
+      it("writes Unknown time for messages without a timestamp", async () => {
+        await saveMessages([chatMessage("Hello", USER_SENDER, { timestamp: null })]);
 
-      expect(result).toBe(expected);
+        expect(createdContent()).toContain("**user**: Hello\n[Timestamp: Unknown time]");
+      });
+
+      it("does not write a note and shows a notice when there are no messages", async () => {
+        await saveMessages([]);
+
+        expect(mockApp.vault.create).not.toHaveBeenCalled();
+        expect(Notice).toHaveBeenCalledWith("No messages to save.");
+      });
+
+      it("returns the live created file so its renamed path remains observable https://github.com/Brevilabs/obsidian-copilot-private/issues/539", async () => {
+        const file = mockTFile({ path: "chat/Saved.md" });
+        mockApp.vault.create.mockResolvedValue(file);
+
+        const saved = await saveMessages([chatMessage("Hello")]);
+
+        expect(saved).toBe(file);
+        file.path = "archive/Saved.md";
+        expect(saved?.path).toBe(file.path);
+      });
+
+      it("returns no source when a write fails https://github.com/Brevilabs/obsidian-copilot-private/issues/539", async () => {
+        mockApp.vault.create.mockRejectedValue(new Error("write failed"));
+
+        expect(await saveMessages([chatMessage("Hello")])).toBeNull();
+        expect(Notice).toHaveBeenCalledWith(
+          "Failed to save chat as note. Check console for details."
+        );
+      });
+
+      it("writes under the folder captured at entry, not one a mid-save root change swaps in", async () => {
+        jest.mocked(getEffectiveConversationsFolder).mockReturnValueOnce("old-folder");
+
+        await saveMessages([chatMessage("Hello")]);
+
+        expect(createdPath().startsWith("old-folder/")).toBe(true);
+        expect(ensureFolderExists).toHaveBeenCalledWith(expect.anything(), "old-folder");
+      });
+
+      it("strips wiki link brackets and illegal characters from the filename", async () => {
+        await saveMessages([chatMessage("Check [[My Note]] and path [ref] :: test \\\u0000")]);
+
+        expect(createdPath()).toBe(
+          "test-folder/Check_My_Note_and_path_ref_test@20240923_221800.md"
+        );
+      });
+
+      it("names the note Untitled Chat when the first message sanitizes to nothing", async () => {
+        await saveMessages([chatMessage("[[]] [] {} :: :: \\")]);
+
+        expect(createdPath()).toBe("test-folder/Untitled_Chat@20240923_221800.md");
+      });
+
+      it.each([
+        [
+          "ASCII",
+          "This is a very long message that contains many many words and should be truncated to fit within the filesystem byte limit to prevent ENAMETOOLONG errors",
+        ],
+        [
+          "Cyrillic",
+          "используй словарь уже установленных терминов Словарь перевода Songs of Syx придерживайся правил перевода Правила перевода Songs of Syx сделай перевод для слова",
+        ],
+        ["emoji", "🚀 Launch the rocket 🌟 to the stars ✨ with amazing features 🎉🎊🎈"],
+        [
+          "mixed CJK, Cyrillic and Arabic",
+          "你好世界 こんにちは世界 안녕하세요 세계 Hello World Привет мир مرحبا بالعالم",
+        ],
+      ])("keeps a %s filename within 100 bytes", async (_script, text) => {
+        await saveMessages([chatMessage(text)]);
+
+        expect(basenameBytes(createdPath())).toBeLessThanOrEqual(100);
+        expect(createdPath().endsWith("@20240923_221800.md")).toBe(true);
+      });
+
+      it("falls back to a minimal chat-epoch filename when the filesystem rejects the name as too long", async () => {
+        mockApp.vault.create
+          .mockRejectedValueOnce(new Error("ENAMETOOLONG: name too long, open '/vault/x.md'"))
+          .mockImplementationOnce(async (path: string) => mockTFile({ path }));
+
+        await saveMessages([chatMessage("1) используй словарь уже установленных терминов")]);
+
+        expect(mockApp.vault.create).toHaveBeenCalledTimes(2);
+        expect(createdPath(0)).toContain("используй_словарь");
+        expect(createdPath(1)).toBe(`test-folder/chat-${FIRST_EPOCH}.md`);
+        expect(Notice).toHaveBeenCalledWith(expect.stringContaining(`chat-${FIRST_EPOCH}.md`));
+      });
+
+      it("updates the existing minimal-name note when a repeated save hits both the long-name limit and an existing fallback file", async () => {
+        const fallbackPath = `test-folder/chat-${FIRST_EPOCH}.md`;
+        const existingFallbackFile = mockTFile({
+          path: fallbackPath,
+          basename: `chat-${FIRST_EPOCH}`,
+        });
+        mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) =>
+          path === fallbackPath ? existingFallbackFile : null
+        );
+        mockApp.vault.create.mockImplementation(async (path: string) => {
+          throw new Error(
+            path.includes("используй") ? "ENAMETOOLONG: name too long" : "File already exists"
+          );
+        });
+
+        const saved = await saveMessages([chatMessage("1) используй словарь уже установленных")]);
+
+        expect(saved).toBe(existingFallbackFile);
+        expect(mockApp.vault.modify).toHaveBeenCalledWith(
+          existingFallbackFile,
+          expect.stringContaining("используй словарь")
+        );
+        expect(Notice).toHaveBeenCalledWith("Existing chat note found - updating it now.");
+      });
+
+      it("updates the note whose frontmatter epoch matches the first message, even when the epoch is stored as a string", async () => {
+        const existingFile = mockTFile({ path: "test-folder/Hello@20240923_221800.md" });
+        jest.spyOn(persistenceManager, "getChatHistoryFiles").mockResolvedValue([existingFile]);
+        mockApp.metadataCache.getFileCache.mockReturnValue({
+          frontmatter: { epoch: String(FIRST_EPOCH) },
+        });
+        mockApp.vault.getAbstractFileByPath.mockReturnValue(existingFile);
+
+        await saveMessages([chatMessage("Hello")]);
+
+        expect(mockApp.vault.modify).toHaveBeenCalledWith(
+          existingFile,
+          expect.stringContaining("**user**: Hello")
+        );
+        expect(mockApp.vault.create).not.toHaveBeenCalled();
+      });
+
+      it("keeps the existing note's lastAccessedAt and topic when updating it", async () => {
+        const existingFile = mockTFile({ path: "test-folder/Hello@20240923_221800.md" });
+        jest.spyOn(persistenceManager, "getChatHistoryFiles").mockResolvedValue([existingFile]);
+        mockApp.metadataCache.getFileCache.mockReturnValue({
+          frontmatter: {
+            epoch: FIRST_EPOCH,
+            topic: "Existing Topic",
+            lastAccessedAt: 1700000000000,
+          },
+        });
+        mockApp.vault.getAbstractFileByPath.mockReturnValue(existingFile);
+
+        await saveMessages([chatMessage("Hello")]);
+
+        const updated = mockApp.vault.modify.mock.calls[0][1] as string;
+        expect(updated).toContain("lastAccessedAt: 1700000000000");
+        expect(updated).toContain('topic: "Existing Topic"');
+      });
+
+      it("resolves a create conflict by updating the existing note and keeping its topic and lastAccessedAt", async () => {
+        const existingFile = mockTFile({
+          path: EXISTING_NOTE_TOPIC_PATH,
+          basename: "Conflict_message@20240923_221800",
+        });
+        mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) =>
+          path === EXISTING_NOTE_TOPIC_PATH ? existingFile : null
+        );
+        mockApp.vault.create.mockRejectedValue(new Error("File already exists"));
+        mockApp.metadataCache.getFileCache.mockReturnValue({
+          frontmatter: { topic: "Existing Conflict Topic", lastAccessedAt: 1700000000000 },
+        });
+
+        await saveMessages([chatMessage("Conflict message")]);
+
+        expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
+        const updated = mockApp.vault.modify.mock.calls[0][1] as string;
+        expect(mockApp.vault.modify.mock.calls[0][0]).toBe(existingFile);
+        expect(updated).toContain("**user**: Conflict message");
+        expect(updated).toContain("lastAccessedAt: 1700000000000");
+        expect(updated).toContain('topic: "Existing Conflict Topic"');
+        expect(Notice).toHaveBeenCalledWith("Existing chat note found - updating it now.");
+      });
+
+      it("writes through the adapter when the note exists on disk but not in the vault cache", async () => {
+        jest.spyOn(persistenceManager, "getChatHistoryFiles").mockResolvedValue([]);
+        mockApp.vault.adapter.exists.mockResolvedValue(true);
+
+        const saved = await saveMessages([chatMessage("Hello")]);
+
+        expect(mockApp.vault.adapter.write).toHaveBeenCalledWith(
+          expect.stringContaining("test-folder/"),
+          expect.stringContaining("**user**: Hello")
+        );
+        expect(saved?.path).toBe(mockApp.vault.adapter.write.mock.calls[0][0]);
+        expect(mockApp.vault.create).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        [
+          "special characters",
+          "[芥兰]Gemini-2.5-pro|3rd party",
+          '"[芥兰]Gemini-2.5-pro|3rd party"',
+        ],
+        ["slashes", "x-ai/grok-4-fast", '"x-ai/grok-4-fast"'],
+        ["pipes", "copilot-plus-flash|copilot-plus", '"copilot-plus-flash|copilot-plus"'],
+        ["embedded quotes", 'model"with"quotes|provider', '"model\\"with\\"quotes|provider"'],
+        [
+          "embedded backslashes",
+          "model\\with\\backslash|provider",
+          '"model\\\\with\\\\backslash|provider"',
+        ],
+      ])("writes a modelKey with %s as a quoted YAML string", async (_kind, modelKey, yaml) => {
+        await saveMessages([chatMessage("Test message")], modelKey);
+
+        expect(createdContent()).toContain(`modelKey: ${yaml}`);
+      });
+
+      it("writes the built-in conversation tag regardless of the persisted defaultConversationTag", async () => {
+        (getSettings as jest.Mock).mockReturnValue({
+          defaultSaveFolder: "test-folder",
+          defaultConversationTag: "user-custom-tag",
+          defaultConversationNoteName: "{$topic}@{$date}_{$time}",
+        });
+
+        await saveMessages([chatMessage("hi")]);
+
+        expect(createdContent()).toContain("tags:\n  - copilot-conversation");
+        expect(createdContent()).not.toContain("user-custom-tag");
+      });
+
+      it("applies an AI-generated topic from a structured model response to the note frontmatter", async () => {
+        const invoke = jest.fn().mockResolvedValue({
+          content: [
+            { type: "text", text: "Forecast Insights" },
+            { type: "tool_call", id: "ignored", name: "analysis" },
+          ],
+        });
+        const chainManager = {
+          chatModelManager: { getChatModel: jest.fn().mockReturnValue({ invoke }) },
+        } as unknown as ChainManager;
+        persistenceManager = new ChatPersistenceManager(
+          mockApp as unknown as App,
+          mockMessageRepo as unknown as MessageRepository,
+          chainManager
+        );
+        const mockFile = mockTFile({
+          path: "test-folder/Summarize_weather_data@20240923_221800.md",
+        });
+        mockApp.vault.create.mockResolvedValue(mockFile);
+        mockApp.vault.getAbstractFileByPath.mockReturnValue(mockFile);
+        const frontmatterState: Record<string, unknown> = {};
+        mockApp.fileManager.processFrontMatter.mockImplementation(
+          async (_file: TFile, updater: (frontmatter: Record<string, unknown>) => void) => {
+            updater(frontmatterState);
+          }
+        );
+
+        await saveMessages([
+          chatMessage("Summarize weather data"),
+          chatMessage("Here is the summary...", AI_SENDER, { id: "2" }),
+        ]);
+
+        expect(savedFrontmatter(createdContent())).not.toContain("topic:");
+        for (let i = 0; i < 12; i++) {
+          await Promise.resolve();
+        }
+        expect(invoke).toHaveBeenCalled();
+        expect(mockApp.fileManager.processFrontMatter).toHaveBeenCalledWith(
+          mockFile,
+          expect.any(Function)
+        );
+        expect(frontmatterState.topic).toBe("Forecast Insights");
+      });
+
+      it("preserves host links after reopening a saved upload and a legacy transcript (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+        const file = mockTFile({ path: "test-folder/existing.md" });
+        const message: ChatMessage = chatMessage("image", USER_SENDER, {
+          id: "image",
+          content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AQID" } }],
+        });
+        let disk = "";
+        mockApp.vault.create.mockImplementation(async (_path: string, content: string) => {
+          disk = content;
+          return file;
+        });
+        await saveMessages([message]);
+        const original = disk;
+        jest.spyOn(persistenceManager, "getChatHistoryFiles").mockResolvedValue([file]);
+        mockApp.metadataCache.getFileCache.mockReturnValue({
+          frontmatter: { epoch: message.timestamp!.epoch },
+        });
+        mockApp.vault.getAbstractFileByPath.mockReturnValue(file);
+        mockApp.vault.adapter.exists.mockResolvedValue(true);
+        mockApp.vault.adapter.read.mockImplementation(async () => disk);
+        mockApp.vault.read.mockImplementation(async () => disk);
+        mockApp.vault.modify.mockImplementation(async (_file: TFile, content: string) => {
+          disk = content;
+        });
+        for (const legacy of [false, true]) {
+          disk = legacy
+            ? original
+                .replace(/<!-- copilot-image:[\w-]+ -->\n/g, "")
+                .replace(/\n<!-- \/copilot-image -->/g, "")
+            : original.replace(/\n/g, "\r\n");
+          const loaded = await persistenceManager.loadChat(file);
+          expect(loaded[0].message).not.toContain("copilot-image:");
+          expect(loaded[0].timestamp?.epoch).toBe(message.timestamp!.epoch);
+          if (legacy) file.path = "test-folder/renamed-chat.md";
+          else loaded[0].message = loaded[0].message.replace("image", "edited text");
+          disk = disk.replace(/!\[\]\([^)]+\)/, "![[moved.png]]");
+          mockMessageRepo.getDisplayMessages.mockReturnValue(loaded);
+          await persistenceManager.saveChat("gpt-4");
+          expect(disk).toContain("![[moved.png]]");
+          await persistenceManager.saveChat("gpt-4");
+          expect(disk).toContain("![[moved.png]]");
+          if (legacy) {
+            loaded[0].message = loaded[0].message.replace(/!\[\]\([^)]+\)/, "![[intentional.png]]");
+            await persistenceManager.saveChat("gpt-4");
+            expect(disk).toContain("![[intentional.png]]");
+            disk = disk.replace("intentional.png", "organized-edit.png");
+            await persistenceManager.saveChat("gpt-4");
+            await persistenceManager.saveChat("gpt-4");
+            expect(disk).toContain("![[organized-edit.png]]");
+          }
+        }
+        expect(mockApp.vault.createBinary).toHaveBeenCalledTimes(1);
+      });
+
+      it("saves uploaded images with their message before context and timestamp metadata (https://github.com/logancyang/obsidian-copilot/issues/2900)", async () => {
+        const message = chatMessage("Look at this", USER_SENDER, {
+          id: "image",
+          context: { notes: [], urls: ["https://example.com"] },
+          content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AQID" } }],
+        });
+        mockApp.vault.createBinary.mockImplementation(async () => {
+          expect(mockApp.vault.create).not.toHaveBeenCalled();
+        });
+
+        await saveMessages([message]);
+
+        const imagePath = mockApp.vault.createBinary.mock.calls[0][0] as string;
+        expect(createdContent()).toContain(
+          `![](/${imagePath})\n<!-- /copilot-image -->\n[Context: URLs: https://example.com]\n[Timestamp:`
+        );
+        expect(message.message).toBe("Look at this");
+        const [reloaded] = await loadNote(createdContent());
+        expect(reloaded.message).toContain(`![](/${imagePath})`);
+      });
+
+      it("preserves an existing transcript when an uploaded image cannot be saved (https://github.com/logancyang/obsidian-copilot/issues/2900)", async () => {
+        const existingFile = mockTFile({ path: "test-folder/existing.md" });
+        jest.spyOn(persistenceManager, "getChatHistoryFiles").mockResolvedValue([existingFile]);
+        mockApp.metadataCache.getFileCache.mockReturnValue({ frontmatter: { epoch: FIRST_EPOCH } });
+        mockApp.vault.getAbstractFileByPath.mockReturnValue(existingFile);
+        mockApp.vault.createBinary.mockRejectedValueOnce(new Error("disk full"));
+
+        await saveMessages([
+          chatMessage("New image", USER_SENDER, {
+            id: "image",
+            content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AQID" } }],
+          }),
+        ]);
+
+        expect(mockApp.vault.modify).not.toHaveBeenCalled();
+        expect(mockApp.vault.create).not.toHaveBeenCalled();
+        expect(mockApp.vault.adapter.write).not.toHaveBeenCalled();
+        expect(Notice).toHaveBeenCalledWith(
+          "Failed to save chat as note. Check console for details."
+        );
+      });
     });
 
-    it("should handle messages without timestamps", () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Hello",
-          sender: USER_SENDER,
-          timestamp: null,
-          isVisible: true,
-        },
-      ];
-
-      const result = asInternal(persistenceManager).formatChatContent(messages);
-
-      expect(result).toBe(`**user**: Hello
-[Timestamp: Unknown time]`);
-    });
-  });
-
-  describe("parseChatContent", () => {
-    it("should parse standard format correctly", () => {
-      const content = `---
-epoch: 1695513480000
-modelKey: gpt-4
-tags:
-  - copilot-conversation
----
-
-**user**: my name is logan, what's your name
+    describe("loadChat()", () => {
+      it("parses user and AI messages with their display timestamps, including consecutive user messages", async () => {
+        const messages = await loadNote(
+          noteWithBody(`**user**: my name is logan, what's your name
 [Timestamp: 2024/09/23 22:18:00]
 
-**ai**: I don't have a name. I am a large language model. My purpose is to help users like you.
+**ai**: I don't have a name.
 [Timestamp: 2024/09/23 22:18:01]
 
 **user**: what is your creator
 [Timestamp: 2024/09/23 22:39:27]
 
 **user**: what's my name
-[Timestamp: 2024/09/23 22:56:20]
+[Timestamp: 2024/09/23 22:56:20]`)
+        );
 
-**ai**: Your name is Logan.
-[Timestamp: 2024/09/23 22:56:20]`;
+        expect(messages.map((m) => [m.sender, m.message])).toEqual([
+          [USER_SENDER, "my name is logan, what's your name"],
+          [AI_SENDER, "I don't have a name."],
+          [USER_SENDER, "what is your creator"],
+          [USER_SENDER, "what's my name"],
+        ]);
+        expect(messages[0]).toMatchObject({
+          isVisible: true,
+          timestamp: { display: "2024/09/23 22:18:00" },
+        });
+      });
 
-      const result = asInternal(persistenceManager).parseChatContent(content);
-
-      expect(result).toHaveLength(5);
-      expect(result[0]).toMatchObject({
-        message: "my name is logan, what's your name",
-        sender: USER_SENDER,
-        isVisible: true,
-        timestamp: {
-          display: "2024/09/23 22:18:00",
-        },
-      });
-      expect(result[1]).toMatchObject({
-        message:
-          "I don't have a name. I am a large language model. My purpose is to help users like you.",
-        sender: AI_SENDER,
-        isVisible: true,
-        timestamp: {
-          display: "2024/09/23 22:18:01",
-        },
-      });
-      expect(result[2]).toMatchObject({
-        message: "what is your creator",
-        sender: USER_SENDER,
-      });
-      expect(result[3]).toMatchObject({
-        message: "what's my name",
-        sender: USER_SENDER,
-      });
-      expect(result[4]).toMatchObject({
-        message: "Your name is Logan.",
-        sender: AI_SENDER,
-      });
-    });
-
-    it("should handle multi-line messages", () => {
-      const content = `---
-epoch: 1695513480000
-modelKey: gpt-4
-tags:
-  - copilot-conversation
----
-
-**user**: Can you write a haiku?
+      it("keeps the line breaks of a multi-line AI message", async () => {
+        const messages = await loadNote(
+          noteWithBody(`**user**: Can you write a haiku?
 [Timestamp: 2024/09/23 22:18:00]
 
 **ai**: Here's a haiku for you:
@@ -337,1567 +596,303 @@ tags:
 Autumn leaves falling
 Gentle breeze whispers secrets
 Nature's quiet song
-[Timestamp: 2024/09/23 22:18:01]`;
+[Timestamp: 2024/09/23 22:18:01]`)
+        );
 
-      const result = asInternal(persistenceManager).parseChatContent(content);
-
-      expect(result).toHaveLength(2);
-      expect(result[1].message).toBe(`Here's a haiku for you:
+        expect(messages[1].message).toBe(`Here's a haiku for you:
 
 Autumn leaves falling
 Gentle breeze whispers secrets
 Nature's quiet song`);
-    });
-
-    it("should handle messages without timestamps", () => {
-      const content = `**user**: Hello
-[Timestamp: Unknown time]
-
-**ai**: Hi there!
-[Timestamp: Unknown time]`;
-
-      const result = asInternal(persistenceManager).parseChatContent(content);
-
-      expect(result).toHaveLength(2);
-      expect(result[0].timestamp).toBeNull();
-      expect(result[1].timestamp).toBeNull();
-    });
-  });
-
-  describe("saveChat", () => {
-    it("returns the live created file so its renamed path remains observable https://github.com/Brevilabs/obsidian-copilot-private/issues/539", async () => {
-      const file = mockTFile({ path: "chat/Saved.md" });
-      mockMessageRepo.getDisplayMessages.mockReturnValue([
-        { id: "1", sender: USER_SENDER, message: "Hello", isVisible: true, timestamp: null },
-      ]);
-      mockApp.vault.create.mockResolvedValue(file);
-      const saved = await persistenceManager.saveChat("model");
-      expect(saved).toBe(file);
-      file.path = "archive/Saved.md";
-      expect(saved?.path).toBe(file.path);
-    });
-
-    it("returns no source when a write fails https://github.com/Brevilabs/obsidian-copilot-private/issues/539", async () => {
-      mockMessageRepo.getDisplayMessages.mockReturnValue([
-        { id: "1", sender: USER_SENDER, message: "Hello", isVisible: true, timestamp: null },
-      ]);
-      mockApp.vault.create.mockRejectedValue(new Error("write failed"));
-      expect(await persistenceManager.saveChat("model")).toBeNull();
-    });
-
-    it("preserves host links after reopening a saved upload and a legacy transcript (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
-      const file = mockTFile({ path: "test-folder/existing.md" });
-      const message: ChatMessage = {
-        id: "image",
-        sender: USER_SENDER,
-        message: "image",
-        isVisible: true,
-        timestamp: { epoch: 1695513480000, display: "2024/09/23 22:18:00", fileName: "" },
-        content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AQID" } }],
-      };
-      let disk = "";
-      mockMessageRepo.getDisplayMessages.mockReturnValue([message]);
-      mockApp.vault.create.mockImplementation(async (_path: string, content: string) => {
-        disk = content;
-        return file;
-      });
-      await persistenceManager.saveChat("gpt-4");
-      const original = disk;
-      jest.spyOn(persistenceManager, "getChatHistoryFiles").mockResolvedValue([file]);
-      mockApp.metadataCache.getFileCache.mockReturnValue({
-        frontmatter: { epoch: message.timestamp!.epoch },
-      });
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(file);
-      mockApp.vault.adapter.exists.mockResolvedValue(true);
-      mockApp.vault.adapter.read.mockImplementation(async () => disk);
-      mockApp.vault.read.mockImplementation(async () => disk);
-      mockApp.vault.modify.mockImplementation(async (_file: TFile, content: string) => {
-        disk = content;
-      });
-      for (const legacy of [false, true]) {
-        disk = legacy
-          ? original
-              .replace(/<!-- copilot-image:[\w-]+ -->\n/g, "")
-              .replace(/\n<!-- \/copilot-image -->/g, "")
-          : original.replace(/\n/g, "\r\n");
-        const loaded = await persistenceManager.loadChat(file);
-        expect(loaded[0].message).not.toContain("copilot-image:");
-        expect(loaded[0].timestamp?.epoch).toBe(message.timestamp!.epoch);
-        if (legacy) file.path = "test-folder/renamed-chat.md";
-        else loaded[0].message = loaded[0].message.replace("image", "edited text");
-        disk = disk.replace(/!\[\]\([^)]+\)/, "![[moved.png]]");
-        mockMessageRepo.getDisplayMessages.mockReturnValue(loaded);
-        await persistenceManager.saveChat("gpt-4");
-        expect(disk).toContain("![[moved.png]]");
-        await persistenceManager.saveChat("gpt-4");
-        expect(disk).toContain("![[moved.png]]");
-        if (legacy) {
-          loaded[0].message = loaded[0].message.replace(/!\[\]\([^)]+\)/, "![[intentional.png]]");
-          await persistenceManager.saveChat("gpt-4");
-          expect(disk).toContain("![[intentional.png]]");
-          disk = disk.replace("intentional.png", "organized-edit.png");
-          await persistenceManager.saveChat("gpt-4");
-          await persistenceManager.saveChat("gpt-4");
-          expect(disk).toContain("![[organized-edit.png]]");
-        }
-      }
-      expect(mockApp.vault.createBinary).toHaveBeenCalledTimes(1);
-    });
-
-    it("saves uploaded images with their message before context and timestamp metadata (https://github.com/logancyang/obsidian-copilot/issues/2900)", async () => {
-      const message: ChatMessage = {
-        id: "image",
-        sender: USER_SENDER,
-        message: "Look at this",
-        isVisible: true,
-        timestamp: {
-          epoch: 1695513480000,
-          display: "2024/09/23 22:18:00",
-          fileName: "2024_09_23_221800",
-        },
-        context: { notes: [], urls: ["https://example.com"] },
-        content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AQID" } }],
-      };
-      mockMessageRepo.getDisplayMessages.mockReturnValue([message]);
-      mockApp.vault.createBinary.mockImplementation(async () => {
-        expect(mockApp.vault.create).not.toHaveBeenCalled();
-      });
-      await persistenceManager.saveChat("gpt-4");
-      const imagePath = mockApp.vault.createBinary.mock.calls[0][0] as string;
-      const saved = mockApp.vault.create.mock.calls[0][1] as string;
-      expect(saved).toContain(
-        `![](/${imagePath})\n<!-- /copilot-image -->\n[Context: URLs: https://example.com]\n[Timestamp:`
-      );
-      expect(message.message).toBe("Look at this");
-      expect(asInternal(persistenceManager).parseChatContent(saved)[0].message).toContain(
-        `![](/${imagePath})`
-      );
-    });
-
-    it("preserves an existing transcript when an uploaded image cannot be saved (https://github.com/logancyang/obsidian-copilot/issues/2900)", async () => {
-      const existingFile = mockTFile({ path: "test-folder/existing.md" });
-      jest.spyOn(persistenceManager, "getChatHistoryFiles").mockResolvedValue([existingFile]);
-      mockApp.metadataCache.getFileCache.mockReturnValue({ frontmatter: { epoch: 1695513480000 } });
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(existingFile);
-      mockMessageRepo.getDisplayMessages.mockReturnValue([
-        {
-          id: "image",
-          sender: USER_SENDER,
-          message: "New image",
-          isVisible: true,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AQID" } }],
-        },
-      ]);
-      mockApp.vault.createBinary.mockRejectedValueOnce(new Error("disk full"));
-      await persistenceManager.saveChat("gpt-4");
-      expect(mockApp.vault.modify).not.toHaveBeenCalled();
-      expect(mockApp.vault.create).not.toHaveBeenCalled();
-      expect(mockApp.vault.adapter.write).not.toHaveBeenCalled();
-      expect(Notice).toHaveBeenCalledWith(
-        "Failed to save chat as note. Check console for details."
-      );
-    });
-
-    it("should save chat to a markdown file", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Hello",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      const saved = await persistenceManager.saveChat("gpt-4");
-      expect(saved?.path).toBe("test-folder/Hello@20240923_221800.md");
-
-      expect(mockApp.vault.create).toHaveBeenCalledWith(
-        "test-folder/Hello@20240923_221800.md",
-        expect.stringContaining("**user**: Hello")
-      );
-      const savedContent = mockApp.vault.create.mock.calls[0][1] as string;
-      expect(savedContent).not.toContain("topic:");
-    });
-
-    it("writes under the folder captured at entry, not one a mid-save root change swaps in", async () => {
-      const folderMock = jest.mocked(getEffectiveConversationsFolder);
-      folderMock.mockReturnValueOnce("old-folder");
-
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Hello",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getMarkdownFiles.mockReturnValue([]);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
-      mockApp.vault.adapter.exists.mockResolvedValue(false);
-
-      await persistenceManager.saveChat("gpt-4");
-
-      const createdPath = mockApp.vault.create.mock.calls[0][0] as string;
-      expect(createdPath.startsWith("old-folder/")).toBe(true);
-      expect(createdPath).not.toContain("test-folder");
-      expect(ensureFolderExists).toHaveBeenCalledWith(expect.anything(), "old-folder");
-    });
-
-    it("should use AI topic text from structured responses without object artifacts", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Summarize weather data",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-        {
-          id: "2",
-          message: "Here is the summary...",
-          sender: AI_SENDER,
-          timestamp: {
-            epoch: 1695513481000,
-            display: "2024/09/23 22:18:01",
-            fileName: "2024_09_23_221801",
-          },
-          isVisible: true,
-        },
-      ];
-
-      const invoke = jest.fn().mockResolvedValue({
-        content: [
-          { type: "text", text: "Forecast Insights" },
-          { type: "tool_call", id: "ignored", name: "analysis" },
-        ],
       });
 
-      const chainManager: ChainManager = {
-        chatModelManager: {
-          getChatModel: jest.fn().mockReturnValue({ invoke }),
-        },
-      } as unknown as ChainManager;
-
-      persistenceManager = new ChatPersistenceManager(
-        mockApp as unknown as App,
-        mockMessageRepo as unknown as MessageRepository,
-        chainManager
-      );
-      const mockFile = mockTFile({
-        path: "test-folder/Summarize_weather_data@20240923_221800.md",
-      });
-      mockApp.vault.create.mockResolvedValue(mockFile);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(mockFile);
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      const frontmatterState: Record<string, unknown> = {};
-      mockApp.fileManager.processFrontMatter.mockImplementation(
-        async (file: TFile, updater: (frontmatter: Record<string, unknown>) => void) => {
-          void file;
-          updater(frontmatterState);
-        }
-      );
-
-      await persistenceManager.saveChat("gpt-4");
-
-      expect(mockApp.vault.create).toHaveBeenCalledWith(
-        "test-folder/Summarize_weather_data@20240923_221800.md",
-        expect.stringContaining("Summarize weather data")
-      );
-      const savedContent = mockApp.vault.create.mock.calls[0][1] as string;
-      expect(savedContent).not.toContain("topic:");
-      await Promise.resolve();
-      await Promise.resolve();
-
-      for (let i = 0; i < 10; i++) {
-        await Promise.resolve();
-      }
-
-      expect(invoke).toHaveBeenCalled();
-      expect(mockApp.fileManager.processFrontMatter).toHaveBeenCalledWith(
-        mockFile,
-        expect.any(Function)
-      );
-      expect(frontmatterState.topic).toBe("Forecast Insights");
-    });
-
-    it("should not save when there are no messages", async () => {
-      mockMessageRepo.getDisplayMessages.mockReturnValue([]);
-
-      await persistenceManager.saveChat("gpt-4");
-
-      expect(mockApp.vault.create).not.toHaveBeenCalled();
-      expect(jest.mocked(Notice)).toHaveBeenCalled();
-    });
-
-    it("should sanitize wiki link brackets and illegal characters in filename", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Check [[My Note]] and path [ref] :: test \\\u0000",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      await persistenceManager.saveChat("gpt-4");
-
-      expect(mockApp.vault.create).toHaveBeenCalledWith(
-        "test-folder/Check_My_Note_and_path_ref_test@20240923_221800.md",
-        expect.any(String)
-      );
-    });
-
-    it("should fallback to 'Untitled Chat' when sanitized topic is empty", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "[[]] [] {} :: :: \\",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      await persistenceManager.saveChat("gpt-4");
-
-      expect(mockApp.vault.create).toHaveBeenCalledWith(
-        "test-folder/Untitled_Chat@20240923_221800.md",
-        expect.any(String)
-      );
-    });
-
-    it("should handle very long ASCII filenames by truncating to byte limit", async () => {
-      const longMessage =
-        "This is a very long message that contains many many words and should be truncated to fit within the filesystem byte limit to prevent ENAMETOOLONG errors";
-
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: longMessage,
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      await persistenceManager.saveChat("gpt-4");
-
-      const createdPath = mockApp.vault.create.mock.calls[0][0] as string;
-      const basename = createdPath.split("/").pop() || "";
-      const encoder = new TextEncoder();
-      const byteLength = encoder.encode(basename).length;
-
-      expect(byteLength).toBeLessThanOrEqual(100);
-    });
-
-    it("should handle Cyrillic text filenames by truncating to byte limit", async () => {
-      const cyrillicMessage =
-        "используй словарь уже установленных терминов Словарь перевода Songs of Syx придерживайся правил перевода Правила перевода Songs of Syx сделай перевод для слова";
-
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: cyrillicMessage,
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      await persistenceManager.saveChat("gpt-4");
-
-      const createdPath = mockApp.vault.create.mock.calls[0][0] as string;
-      const basename = createdPath.split("/").pop() || "";
-      const encoder = new TextEncoder();
-      const byteLength = encoder.encode(basename).length;
-
-      expect(byteLength).toBeLessThanOrEqual(100);
-      expect(basename.length).toBeGreaterThan(20);
-    });
-
-    it("should handle emoji filenames by truncating to byte limit", async () => {
-      const emojiMessage = "🚀 Launch the rocket 🌟 to the stars ✨ with amazing features 🎉🎊🎈";
-
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: emojiMessage,
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      await persistenceManager.saveChat("gpt-4");
-
-      const createdPath = mockApp.vault.create.mock.calls[0][0] as string;
-      const basename = createdPath.split("/").pop() || "";
-      const encoder = new TextEncoder();
-      const byteLength = encoder.encode(basename).length;
-
-      expect(byteLength).toBeLessThanOrEqual(100);
-    });
-
-    it("should handle mixed Unicode text (Chinese, Japanese, Korean) by truncating to byte limit", async () => {
-      const mixedUnicodeMessage =
-        "你好世界 こんにちは世界 안녕하세요 세계 Hello World Привет мир مرحبا بالعالم";
-
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: mixedUnicodeMessage,
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      await persistenceManager.saveChat("gpt-4");
-
-      const createdPath = mockApp.vault.create.mock.calls[0][0] as string;
-      const basename = createdPath.split("/").pop() || "";
-      const encoder = new TextEncoder();
-      const byteLength = encoder.encode(basename).length;
-
-      expect(byteLength).toBeLessThanOrEqual(100);
-    });
-
-    it("should fallback to minimal filename when ENAMETOOLONG error occurs", async () => {
-      const cyrillicMessage =
-        "1) используй словарь уже установленных терминов Словарь перевода Songs of Syx придерживайся правил перевода Правила перевода Songs of Syx сделай перевод для слова";
-
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: cyrillicMessage,
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1729873880000,
-            display: "2025/10/25 16:11:20",
-            fileName: "20251025_161120",
-          },
-          isVisible: true,
-        },
-      ];
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      let createCallCount = 0;
-      mockApp.vault.create.mockImplementation((path: string, content: string) => {
-        createCallCount++;
-        if (createCallCount === 1) {
-          const error = new Error(
-            "ENAMETOOLONG: name too long, open '/home/user/vault/copilot/copilot-conversations/1)_используй_словарь_уже_установленных_терминов_Словарь_перевода_Songs_of@20251025_161120.md'"
-          );
-          return Promise.reject(error);
-        } else {
-          return Promise.resolve(
-            mockTFile({
-              path,
-              basename: path.split("/").pop(),
-            })
-          );
-        }
-      });
-
-      await persistenceManager.saveChat("gpt-4");
-
-      expect(mockApp.vault.create).toHaveBeenCalledTimes(2);
-
-      const firstCallPath = mockApp.vault.create.mock.calls[0][0] as string;
-      expect(firstCallPath).toContain("используй_словарь");
-
-      const secondCallPath = mockApp.vault.create.mock.calls[1][0] as string;
-      expect(secondCallPath).toBe("test-folder/chat-1729873880000.md");
-
-      const fallbackBasename = secondCallPath.split("/").pop() || "";
-      const encoder = new TextEncoder();
-      const byteLength = encoder.encode(fallbackBasename).length;
-      expect(byteLength).toBeLessThan(30);
-
-      expect(jest.mocked(Notice)).toHaveBeenCalledWith(
-        expect.stringContaining("chat-1729873880000.md")
-      );
-    });
-
-    it("should handle repeated saves with fallback filename (conflict handling)", async () => {
-      const cyrillicMessage =
-        "1) используй словарь уже установленных терминов Словарь перевода Songs of Syx";
-
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: cyrillicMessage,
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1729873880000,
-            display: "2025/10/25 16:11:20",
-            fileName: "20251025_161120",
-          },
-          isVisible: true,
-        },
-      ];
-
-      const existingFallbackFile = mockTFile({
-        path: "test-folder/chat-1729873880000.md",
-        basename: "chat-1729873880000",
-      });
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
-        if (path === "test-folder/chat-1729873880000.md") {
-          return existingFallbackFile;
-        }
-        return null;
-      });
-
-      mockApp.vault.create.mockImplementation((path: string) => {
-        if (path.includes("используй")) {
-          return Promise.reject(new Error("ENAMETOOLONG: name too long"));
-        } else {
-          return Promise.reject(new Error("File already exists"));
-        }
-      });
-
-      const saved = await persistenceManager.saveChat("gpt-4");
-      expect(saved).toBe(existingFallbackFile);
-
-      expect(mockApp.vault.modify).toHaveBeenCalledWith(
-        existingFallbackFile,
-        expect.stringContaining("используй словарь")
-      );
-
-      expect(jest.mocked(Notice)).toHaveBeenCalledWith(
-        "Existing chat note found - updating it now."
-      );
-    });
-
-    it("should update existing file when epoch is stored as a string", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Hello",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      const existingFile = mockTFile({
-        path: "test-folder/Hello@20240923_221800.md",
-      });
-
-      const getFilesSpy = jest
-        .spyOn(persistenceManager, "getChatHistoryFiles")
-        .mockResolvedValue([existingFile]);
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.metadataCache.getFileCache.mockReturnValue({
-        frontmatter: { epoch: "1695513480000" },
-      });
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(existingFile);
-
-      await persistenceManager.saveChat("gpt-4");
-
-      expect(mockApp.vault.modify).toHaveBeenCalledWith(
-        existingFile,
-        expect.stringContaining("**user**: Hello")
-      );
-      expect(mockApp.vault.create).not.toHaveBeenCalled();
-
-      getFilesSpy.mockRestore();
-    });
-
-    it("should locate existing file by path when epoch frontmatter is missing", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Hello again",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      const existingFile = mockTFile({
-        path: "test-folder/Hello_again@20240923_221800.md",
-        basename: "Hello_again@20240923_221800",
-      });
-
-      const getFilesSpy = jest
-        .spyOn(persistenceManager, "getChatHistoryFiles")
-        .mockResolvedValue([]);
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-
-      mockApp.vault.create.mockRejectedValue(new Error("File already exists"));
-
-      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
-        if (path === "test-folder/Hello_again@20240923_221800.md") {
-          return existingFile;
-        }
-        return null;
-      });
-      mockApp.metadataCache.getFileCache.mockReturnValue({
-        frontmatter: { topic: "Existing Topic" },
-      });
-
-      await persistenceManager.saveChat("gpt-4");
-
-      expect(mockApp.vault.modify).toHaveBeenCalledWith(
-        existingFile,
-        expect.stringContaining("**user**: Hello again")
-      );
-      expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
-      expect(Notice).toHaveBeenCalledWith("Existing chat note found - updating it now.");
-
-      getFilesSpy.mockRestore();
-    });
-
-    it("should resolve create conflicts by updating the existing file", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Conflict message",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      const existingFile = mockTFile({
-        path: "test-folder/Conflict_message@20240923_221800.md",
-        basename: "Conflict_message@20240923_221800",
-      });
-
-      const getFilesSpy = jest
-        .spyOn(persistenceManager, "getChatHistoryFiles")
-        .mockResolvedValue([]);
-
-      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
-        if (path === "test-folder/Conflict_message@20240923_221800.md") {
-          return existingFile;
-        }
-        return null;
-      });
-
-      mockApp.vault.create.mockRejectedValue(new Error("File already exists"));
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.metadataCache.getFileCache.mockReturnValue({
-        frontmatter: { topic: "Existing Conflict Topic" },
-      });
-
-      await persistenceManager.saveChat("gpt-4");
-
-      expect(mockApp.vault.modify).toHaveBeenCalledWith(
-        existingFile,
-        expect.stringContaining("**user**: Conflict message")
-      );
-      expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
-      expect(Notice).toHaveBeenCalledWith("Existing chat note found - updating it now.");
-
-      getFilesSpy.mockRestore();
-    });
-  });
-
-  describe("hidden directory support", () => {
-    it("should save via adapter when file exists on disk but not in vault cache", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Hello",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      const getFilesSpy = jest
-        .spyOn(persistenceManager, "getChatHistoryFiles")
-        .mockResolvedValue([]);
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-
-      mockApp.vault.adapter.exists.mockResolvedValue(true);
-
-      const saved = await persistenceManager.saveChat("gpt-4");
-      expect(saved?.path).toBe(mockApp.vault.adapter.write.mock.calls[0][0]);
-
-      expect(mockApp.vault.adapter.write).toHaveBeenCalledWith(
-        expect.stringContaining("test-folder/"),
-        expect.stringContaining("**user**: Hello")
-      );
-      expect(mockApp.vault.create).not.toHaveBeenCalled();
-
-      getFilesSpy.mockRestore();
-    });
-  });
-
-  describe("loadChat()", () => {
-    it("keeps appended turns in the topic-renamed note after reload for https://github.com/logancyang/obsidian-copilot/issues/2886", async () => {
-      const display = "2024/09/23 22:18:00";
-      const epoch = new Date(display).getTime() + 865;
-      const firstMessage: ChatMessage = {
-        message: "testing1",
-        sender: USER_SENDER,
-        timestamp: { epoch, display, fileName: "20240923_221800" },
-        isVisible: true,
-      };
-      const file = mockTFile({ path: "test-folder/Generated_topic@20240923_221800.md" });
-      let savedContent = "";
-      mockApp.vault.create.mockImplementation(async (_path: string, content: string) => {
-        savedContent = content;
-        return file;
-      });
-      mockApp.vault.read.mockImplementation(async () => savedContent);
-      mockApp.vault.modify.mockImplementation(async (_file: TFile, content: string) => {
-        savedContent = content;
-      });
-      mockMessageRepo.getDisplayMessages.mockReturnValue([firstMessage]);
-      await persistenceManager.saveChat("gpt-4");
-      expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
-
-      mockApp.vault.getMarkdownFiles.mockReturnValue([file]);
-      const folder = mockTFolder({ path: "test-folder" });
-      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) =>
-        path === file.path ? file : path === folder.path ? folder : null
-      );
-      mockApp.metadataCache.getFileCache.mockReturnValue({
-        frontmatter: { epoch, topic: "Generated topic" },
-      });
-      const loaded = await persistenceManager.loadChat(file);
-      const appended = {
-        ...firstMessage,
-        message: "testing3",
-        timestamp: { ...firstMessage.timestamp!, epoch: epoch + 3000 },
-      };
-      mockMessageRepo.getDisplayMessages.mockReturnValue([...loaded, appended]);
-      await persistenceManager.saveChat("gpt-4");
-
-      expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
-      expect(mockApp.vault.modify).toHaveBeenCalledWith(
-        file,
-        expect.stringContaining("**user**: testing3")
-      );
-      expect(loaded[0].timestamp).toMatchObject({ epoch, display });
-      expect(savedContent).toContain(`epoch: ${epoch}`);
-      expect((await persistenceManager.loadChat(file)).map((message) => message.message)).toEqual([
-        "testing1",
-        "testing3",
-      ]);
-    });
-
-    it.each(["1788916607865", '"1788916607865"'])(
-      "restores numeric or quoted identity %s only on the first message for https://github.com/logancyang/obsidian-copilot/issues/2886",
-      async (epoch) => {
-        mockApp.vault.read.mockResolvedValue(
-          `---\nepoch: ${epoch}\n---\n\n**user**: testing1\n[Timestamp: 2026/09/08 18:16:47]\n\n**ai**: OK\n[Timestamp: 2026/09/08 18:16:48]`
+      it("loads messages marked Unknown time with a null timestamp", async () => {
+        const messages = await loadNote(
+          `**user**: Hello\n[Timestamp: Unknown time]\n\n**ai**: Hi there!\n[Timestamp: Unknown time]`
         );
-        const messages = await persistenceManager.loadChat(mockTFile({ path: "chat.md" }));
+
+        expect(messages.map((m) => m.timestamp)).toEqual([null, null]);
+      });
+
+      it("restores the contexts written by saveChat: notes, URLs, tags, folders and web tabs", async () => {
+        const noteFile = mockTFile({
+          basename: "typescript-guide.md",
+          path: "docs/typescript-guide.md",
+          extension: "md",
+          name: "typescript-guide.md",
+        });
+        mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) =>
+          path === "docs/typescript-guide.md" ? noteFile : null
+        );
+        await saveMessages([
+          chatMessage("What are the files about TypeScript?", USER_SENDER, {
+            context: {
+              notes: [noteFile],
+              urls: ["https://typescriptlang.org"],
+              tags: ["programming", "typescript"],
+              folders: ["docs/"],
+              webTabs: [
+                { url: "https://example.com/", title: "Example Domain", isLoaded: true },
+                { url: "https://lucide.dev/", title: "Lucide", isActive: true },
+              ],
+            },
+          }),
+          chatMessage("Here's what I found...", AI_SENDER),
+        ]);
+
+        const reloaded = await loadNote(createdContent());
+
+        expect(reloaded[0].context).toEqual({
+          notes: [noteFile],
+          urls: ["https://typescriptlang.org"],
+          tags: ["programming", "typescript"],
+          folders: ["docs/"],
+          webTabs: [{ url: "https://example.com/" }, { url: "https://lucide.dev/" }],
+        });
+        expect(reloaded[1].context).toBeUndefined();
+      });
+
+      it("resolves a legacy basename-only note reference to the single matching vault note", async () => {
+        const file = mockTFile({
+          basename: "typescript-guide.md",
+          path: "docs/typescript-guide.md",
+          extension: "md",
+          name: "typescript-guide.md",
+        });
+        mockApp.vault.getMarkdownFiles.mockReturnValue([file]);
+
+        const messages = await loadNote(
+          noteWithBody(
+            "**user**: What are the files about TypeScript?\n[Context: Notes: typescript-guide.md]\n[Timestamp: 2024/09/23 22:18:00]"
+          )
+        );
+
+        expect(messages[0].context?.notes).toEqual([file]);
+      });
+
+      it("skips a basename-only note reference that matches several vault notes but keeps the rest of the context", async () => {
+        mockApp.vault.getMarkdownFiles.mockReturnValue([
+          mockTFile({ basename: "typescript-guide.md", path: "docs/typescript-guide.md" }),
+          mockTFile({ basename: "typescript-guide.md", path: "archive/typescript-guide.md" }),
+        ]);
+
+        const messages = await loadNote(
+          noteWithBody(
+            "**user**: What are the files about TypeScript?\n[Context: Notes: typescript-guide.md | URLs: https://typescriptlang.org]\n[Timestamp: 2024/09/23 22:18:00]"
+          )
+        );
+
+        expect(messages[0].context?.notes).toEqual([]);
+        expect(messages[0].context?.urls).toEqual(["https://typescriptlang.org"]);
+      });
+
+      it("drops a referenced note that no longer exists but keeps the rest of the context", async () => {
+        const messages = await loadNote(
+          noteWithBody(
+            "**user**: What are the files about TypeScript?\n[Context: Notes: docs/deleted-file.md | Tags: typescript, programming]\n[Timestamp: 2024/09/23 22:18:00]"
+          )
+        );
+
+        expect(messages[0].context?.notes).toEqual([]);
+        expect(messages[0].context?.tags).toEqual(["typescript", "programming"]);
+      });
+
+      it("loads messages without a context line as having no context", async () => {
+        const messages = await loadNote(
+          noteWithBody(
+            "**user**: Hello without context\n[Timestamp: 2024/09/23 22:18:00]\n\n**ai**: Hi there!\n[Timestamp: 2024/09/23 22:18:01]"
+          )
+        );
+
+        expect(messages.map((m) => m.context)).toEqual([undefined, undefined]);
+      });
+
+      it("reads through the adapter when the vault cannot read the file", async () => {
+        mockApp.vault.read.mockRejectedValue(new Error("not cached"));
+        mockApp.vault.adapter.read.mockResolvedValue("**user**: Hello\n[Timestamp: Unknown time]");
+
+        const messages = await persistenceManager.loadChat(mockTFile({ path: "hidden/chat.md" }));
+
+        expect(messages.map((m) => m.message)).toEqual(["Hello"]);
+      });
+
+      it("returns no messages and shows a notice when the file cannot be read", async () => {
+        mockApp.vault.read.mockRejectedValue(new Error("not cached"));
+        mockApp.vault.adapter.read.mockRejectedValue(new Error("missing"));
+
+        expect(await persistenceManager.loadChat(mockTFile({ path: "gone.md" }))).toEqual([]);
+        expect(Notice).toHaveBeenCalledWith(
+          "Failed to load chat history. Check console for details."
+        );
+      });
+
+      it("keeps appended turns in the topic-renamed note after reload for https://github.com/logancyang/obsidian-copilot/issues/2886", async () => {
+        const display = "2024/09/23 22:18:00";
+        const epoch = new Date(display).getTime() + 865;
+        const firstMessage = chatMessage("testing1", USER_SENDER, {
+          id: undefined,
+          timestamp: { epoch, display, fileName: "20240923_221800" },
+        });
+        const file = mockTFile({ path: "test-folder/Generated_topic@20240923_221800.md" });
+        let savedContent = "";
+        mockApp.vault.create.mockImplementation(async (_path: string, content: string) => {
+          savedContent = content;
+          return file;
+        });
+        mockApp.vault.read.mockImplementation(async () => savedContent);
+        mockApp.vault.modify.mockImplementation(async (_file: TFile, content: string) => {
+          savedContent = content;
+        });
+        await saveMessages([firstMessage]);
+        expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
+
+        mockApp.vault.getMarkdownFiles.mockReturnValue([file]);
+        const folder = mockTFolder({ path: "test-folder" });
+        mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) =>
+          path === file.path ? file : path === folder.path ? folder : null
+        );
+        mockApp.metadataCache.getFileCache.mockReturnValue({
+          frontmatter: { epoch, topic: "Generated topic" },
+        });
+        const loaded = await persistenceManager.loadChat(file);
+        const appended = {
+          ...firstMessage,
+          message: "testing3",
+          timestamp: { ...firstMessage.timestamp!, epoch: epoch + 3000 },
+        };
+        await saveMessages([...loaded, appended]);
+
+        expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
+        expect(mockApp.vault.modify).toHaveBeenCalledWith(
+          file,
+          expect.stringContaining("**user**: testing3")
+        );
+        expect(loaded[0].timestamp).toMatchObject({ epoch, display });
+        expect(savedContent).toContain(`epoch: ${epoch}`);
+        expect((await persistenceManager.loadChat(file)).map((message) => message.message)).toEqual(
+          ["testing1", "testing3"]
+        );
+      });
+
+      it.each(["1788916607865", '"1788916607865"'])(
+        "restores numeric or quoted identity %s only on the first message for https://github.com/logancyang/obsidian-copilot/issues/2886",
+        async (epoch) => {
+          const messages = await loadNote(
+            `---\nepoch: ${epoch}\n---\n\n**user**: testing1\n[Timestamp: 2026/09/08 18:16:47]\n\n**ai**: OK\n[Timestamp: 2026/09/08 18:16:48]`
+          );
+
+          expect(messages[0].timestamp).toMatchObject({
+            epoch: 1788916607865,
+            display: "2026/09/08 18:16:47",
+          });
+          expect(messages[1].timestamp?.epoch).toBe(new Date("2026/09/08 18:16:48").getTime());
+        }
+      );
+
+      it.each([
+        "",
+        "---\ntopic: Legacy\n---\n",
+        "---\nepoch: nope\n---\n",
+        "---\nepoch: .inf\n---\n",
+        "---\nepoch: true\n---\n",
+        "---\nepoch: 0\n---\n",
+        "---\nepoch: -1\n---\n",
+        "---\nepoch: [broken\n---\n",
+      ])(
+        "loads legacy message timestamps when identity is absent or invalid (%s) for https://github.com/logancyang/obsidian-copilot/issues/2886",
+        async (frontmatter) => {
+          const display = "2024/09/23 22:18:00";
+
+          const messages = await loadNote(
+            `${frontmatter}\n**user**: Hello\n[Timestamp: ${display}]`
+          );
+
+          expect(messages[0].timestamp).toMatchObject({
+            epoch: new Date(display).getTime(),
+            display,
+          });
+        }
+      );
+
+      it("restores identity even without a display timestamp for https://github.com/logancyang/obsidian-copilot/issues/2886", async () => {
+        const messages = await loadNote("---\nepoch: 1788916607865\n---\n**user**: Hello");
+
         expect(messages[0].timestamp).toMatchObject({
           epoch: 1788916607865,
-          display: "2026/09/08 18:16:47",
+          display: "Unknown time",
         });
-        expect(messages[1].timestamp?.epoch).toBe(new Date("2026/09/08 18:16:48").getTime());
-      }
-    );
+      });
+    });
 
-    it.each([
-      "",
-      "---\ntopic: Legacy\n---\n",
-      "---\nepoch: nope\n---\n",
-      "---\nepoch: .inf\n---\n",
-      "---\nepoch: true\n---\n",
-      "---\nepoch: 0\n---\n",
-      "---\nepoch: -1\n---\n",
-      "---\nepoch: [broken\n---\n",
-    ])(
-      "loads legacy message timestamps when identity is absent or invalid (%s) for https://github.com/logancyang/obsidian-copilot/issues/2886",
-      async (frontmatter) => {
-        const display = "2024/09/23 22:18:00";
-        mockApp.vault.read.mockResolvedValue(
-          `${frontmatter}\n**user**: Hello\n[Timestamp: ${display}]`
+    describe("getChatHistoryFiles()", () => {
+      it("lists the markdown files of a folder and leaves out chats that belong to a project", async () => {
+        const folder = mockTFolder({ path: "test-folder" });
+        const plainChat = mockTFile({ path: "test-folder/plain.md", basename: "plain" });
+        const projectChat = mockTFile({
+          path: "test-folder/project-chat.md",
+          basename: "project-chat",
+        });
+        mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) =>
+          path === "test-folder" ? folder : null
         );
-        const messages = await persistenceManager.loadChat(mockTFile({ path: "legacy.md" }));
-        expect(messages[0].timestamp).toMatchObject({
-          epoch: new Date(display).getTime(),
-          display,
-        });
-      }
-    );
+        mockApp.vault.getMarkdownFiles.mockReturnValue([plainChat, projectChat]);
+        mockApp.metadataCache.getFileCache.mockImplementation((file: TFile) => ({
+          frontmatter: file === projectChat ? { projectId: "project-1" } : {},
+        }));
 
-    it("restores identity even without a display timestamp for https://github.com/logancyang/obsidian-copilot/issues/2886", async () => {
-      mockApp.vault.read.mockResolvedValue("---\nepoch: 1788916607865\n---\n**user**: Hello");
-      const messages = await persistenceManager.loadChat(mockTFile({ path: "chat.md" }));
-      expect(messages[0].timestamp).toMatchObject({
-        epoch: 1788916607865,
-        display: "Unknown time",
+        expect(await persistenceManager.getChatHistoryFiles("test-folder")).toEqual([plainChat]);
       });
     });
-    it("should load and parse chat from file", async () => {
-      const fileContent = `---
-epoch: 1695513480000
-modelKey: gpt-4
-tags:
-  - copilot-conversation
----
 
-**user**: Hello
-[Timestamp: 2024/09/23 22:18:00]
-
-**ai**: Hi there!
-[Timestamp: 2024/09/23 22:18:01]`;
-
-      const mockFile = mockTFile({ path: "test.md" });
-      mockApp.vault.read.mockResolvedValue(fileContent);
-
-      const result = await persistenceManager.loadChat(mockFile);
-
-      expect(result).toHaveLength(2);
-      expect(result[0].sender).toBe(USER_SENDER);
-      expect(result[1].sender).toBe(AI_SENDER);
-    });
-  });
-
-  describe("round-trip save and load", () => {
-    it("should preserve messages through save and load cycle", async () => {
-      const originalMessages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "What is TypeScript?",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-        {
-          id: "2",
-          message: "TypeScript is a strongly typed programming language that builds on JavaScript.",
-          sender: AI_SENDER,
-          timestamp: {
-            epoch: 1695513481000,
-            display: "2024/09/23 22:18:01",
-            fileName: "2024_09_23_221801",
-          },
-          isVisible: true,
-        },
-      ];
-
-      const formattedContent = asInternal(persistenceManager).formatChatContent(originalMessages);
-
-      const fullContent = `---
-epoch: 1695513480000
-modelKey: gpt-4
-tags:
-  - copilot-conversation
----
-
-${formattedContent}`;
-
-      const parsedMessages = asInternal(persistenceManager).parseChatContent(fullContent);
-
-      expect(parsedMessages).toHaveLength(2);
-      expect(parsedMessages[0].message).toBe(originalMessages[0].message);
-      expect(parsedMessages[0].sender).toBe(originalMessages[0].sender);
-      expect(parsedMessages[1].message).toBe(originalMessages[1].message);
-      expect(parsedMessages[1].sender).toBe(originalMessages[1].sender);
-    });
-
-    it("should preserve context information through save and load cycle", async () => {
-      const noteFile = mockTFile({
-        basename: "typescript-guide.md",
-        path: "docs/typescript-guide.md",
-        extension: "md",
-        name: "typescript-guide.md",
+    describe("renameFileToMatchTopic()", () => {
+      beforeEach(() => {
+        mockMessageRepo.getDisplayMessages.mockReturnValue([]);
+        jest
+          .mocked(getEffectiveConversationsFolder)
+          .mockReturnValue("live-root/copilot-conversations");
       });
 
-      mockApp.vault.getAbstractFileByPath = jest.fn().mockImplementation((path: string) => {
-        return path === "docs/typescript-guide.md" ? noteFile : null;
-      });
-
-      const testPersistenceManager = new ChatPersistenceManager(
-        mockApp as unknown as App,
-        mockMessageRepo as unknown as MessageRepository
-      );
-
-      const originalMessages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "What are the files about TypeScript?",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-          context: {
-            notes: [noteFile],
-            urls: ["https://typescriptlang.org"],
-            tags: ["programming", "typescript"],
-            folders: ["docs/"],
-            webTabs: [
-              {
-                url: "https://example.com/",
-                title: "Example Domain",
-                faviconUrl: "https://example.com/favicon.ico",
-                isLoaded: true,
-              },
-              {
-                url: "https://lucide.dev/",
-                title: "Lucide",
-                faviconUrl: "https://lucide.dev/favicon.ico",
-                isActive: true,
-              },
-              {
-                url: "https://obsidian.md/",
-                title: "Obsidian - Sharpen your thinking",
-                faviconUrl: "https://obsidian.md/favicon.ico",
-                isLoaded: true,
-              },
-            ],
-          },
-        },
-        {
-          id: "2",
-          message: "Here's what I found about TypeScript in your files...",
-          sender: AI_SENDER,
-          timestamp: {
-            epoch: 1695513481000,
-            display: "2024/09/23 22:18:01",
-            fileName: "2024_09_23_221801",
-          },
-          isVisible: true,
-        },
-      ];
-
-      const formattedContent =
-        asInternal(testPersistenceManager).formatChatContent(originalMessages);
-
-      expect(formattedContent).toContain("docs/typescript-guide.md");
-
-      const fullContent = `---
-epoch: 1695513480000
-modelKey: gpt-4
-tags:
-  - copilot-conversation
----
-
-${formattedContent}`;
-
-      const parsedMessages = asInternal(testPersistenceManager).parseChatContent(fullContent);
-
-      expect(parsedMessages).toHaveLength(2);
-      expect(parsedMessages[0].message).toBe(originalMessages[0].message);
-      expect(parsedMessages[0].sender).toBe(originalMessages[0].sender);
-
-      expect(parsedMessages[0].context).toBeDefined();
-      expect(parsedMessages[0].context!.notes).toHaveLength(1);
-      expect(parsedMessages[0].context!.notes[0].basename).toBe("typescript-guide.md");
-      expect(parsedMessages[0].context!.notes[0].path).toBe("docs/typescript-guide.md");
-      expect(parsedMessages[0].context!.urls).toEqual(["https://typescriptlang.org"]);
-      expect(parsedMessages[0].context!.tags!).toEqual(["programming", "typescript"]);
-      expect(parsedMessages[0].context!.folders!).toHaveLength(1);
-      expect(parsedMessages[0].context!.folders![0]).toBe("docs/");
-      expect(parsedMessages[0].context!.webTabs!).toHaveLength(3);
-      expect(parsedMessages[0].context!.webTabs![0].url).toBe("https://example.com/");
-      expect(parsedMessages[0].context!.webTabs![1].url).toBe("https://lucide.dev/");
-      expect(parsedMessages[0].context!.webTabs![2].url).toBe("https://obsidian.md/");
-
-      expect(parsedMessages[1].context).toBeUndefined();
-    });
-
-    it("should resolve legacy basename-only context (backward compatibility)", async () => {
-      const file = mockTFile({
-        basename: "typescript-guide.md",
-        path: "docs/typescript-guide.md",
-        extension: "md",
-        name: "typescript-guide.md",
-      });
-
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
-      mockApp.vault.getMarkdownFiles.mockReturnValue([file]);
-
-      const content = `---
-epoch: 1695513480000
-modelKey: gpt-4
-tags:
-  - copilot-conversation
----
-
-**user**: What are the files about TypeScript?
-[Context: Notes: typescript-guide.md]
-[Timestamp: 2024/09/23 22:18:00]
-
-**ai**: Here's what I found about TypeScript in your files...
-[Timestamp: 2024/09/23 22:18:01]`;
-
-      const parsedMessages = asInternal(persistenceManager).parseChatContent(content);
-
-      expect(parsedMessages).toHaveLength(2);
-      expect(parsedMessages[0].context).toBeDefined();
-      expect(parsedMessages[0].context!.notes).toHaveLength(1);
-      expect(parsedMessages[0].context!.notes[0].basename).toBe("typescript-guide.md");
-      expect(parsedMessages[0].context!.notes[0].path).toBe("docs/typescript-guide.md");
-    });
-
-    it("should handle ambiguous basename resolution gracefully", async () => {
-      const mockTFile1 = mockTFile({
-        basename: "typescript-guide.md",
-        path: "docs/typescript-guide.md",
-        extension: "md",
-        name: "typescript-guide.md",
-      });
-
-      const mockTFile2 = mockTFile({
-        basename: "typescript-guide.md",
-        path: "archive/typescript-guide.md",
-        extension: "md",
-        name: "typescript-guide.md",
-      });
-
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
-      mockApp.vault.getMarkdownFiles.mockReturnValue([mockTFile1, mockTFile2]);
-
-      const content = `---
-epoch: 1695513480000
-modelKey: gpt-4
-tags:
-  - copilot-conversation
----
-
-**user**: What are the files about TypeScript?
-[Context: Notes: typescript-guide.md | URLs: https://typescriptlang.org]
-[Timestamp: 2024/09/23 22:18:00]`;
-
-      const parsedMessages = asInternal(persistenceManager).parseChatContent(content);
-
-      expect(parsedMessages).toHaveLength(1);
-      expect(parsedMessages[0].context).toBeDefined();
-      expect(parsedMessages[0].context!.notes).toHaveLength(0);
-      expect(parsedMessages[0].context!.urls).toEqual(["https://typescriptlang.org"]);
-    });
-
-    it("should handle deleted notes gracefully", async () => {
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
-      mockApp.vault.getMarkdownFiles.mockReturnValue([]);
-
-      const content = `---
-epoch: 1695513480000
-modelKey: gpt-4
-tags:
-  - copilot-conversation
----
-
-**user**: What are the files about TypeScript?
-[Context: Notes: docs/deleted-file.md | Tags: typescript, programming]
-[Timestamp: 2024/09/23 22:18:00]`;
-
-      const parsedMessages = asInternal(persistenceManager).parseChatContent(content);
-
-      expect(parsedMessages).toHaveLength(1);
-      expect(parsedMessages[0].context).toBeDefined();
-      expect(parsedMessages[0].context!.notes).toHaveLength(0);
-      expect(parsedMessages[0].context!.tags!).toEqual(["typescript", "programming"]);
-    });
-
-    it("should handle messages without context (backward compatibility)", async () => {
-      const content = `---
-epoch: 1695513480000
-modelKey: gpt-4
-tags:
-  - copilot-conversation
----
-
-**user**: Hello without context
-[Timestamp: 2024/09/23 22:18:00]
-
-**ai**: Hi there!
-[Timestamp: 2024/09/23 22:18:01]`;
-
-      const parsedMessages = asInternal(persistenceManager).parseChatContent(content);
-
-      expect(parsedMessages).toHaveLength(2);
-      expect(parsedMessages[0].context).toBeUndefined();
-      expect(parsedMessages[1].context).toBeUndefined();
-    });
-  });
-
-  describe("modelKey escaping in frontmatter", () => {
-    it("should properly escape modelKey with special YAML characters", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Test message",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      await persistenceManager.saveChat("[芥兰]Gemini-2.5-pro|3rd party");
-
-      const savedContent = mockApp.vault.create.mock.calls[0][1] as string;
-      expect(savedContent).toContain('modelKey: "[芥兰]Gemini-2.5-pro|3rd party"');
-    });
-
-    it("should properly escape modelKey with slashes", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Test message",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      await persistenceManager.saveChat("x-ai/grok-4-fast");
-
-      const savedContent = mockApp.vault.create.mock.calls[0][1] as string;
-      expect(savedContent).toContain('modelKey: "x-ai/grok-4-fast"');
-    });
-
-    it("should properly escape modelKey with pipe characters", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Test message",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      await persistenceManager.saveChat("copilot-plus-flash|copilot-plus");
-
-      const savedContent = mockApp.vault.create.mock.calls[0][1] as string;
-      expect(savedContent).toContain('modelKey: "copilot-plus-flash|copilot-plus"');
-    });
-
-    it("should properly escape modelKey with embedded quotes", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Test message",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      await persistenceManager.saveChat('model"with"quotes|provider');
-
-      const savedContent = mockApp.vault.create.mock.calls[0][1] as string;
-      expect(savedContent).toContain('modelKey: "model\\"with\\"quotes|provider"');
-    });
-
-    it("should properly escape modelKey with embedded backslashes", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Test message",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      await persistenceManager.saveChat("model\\with\\backslash|provider");
-
-      const savedContent = mockApp.vault.create.mock.calls[0][1] as string;
-      expect(savedContent).toContain('modelKey: "model\\\\with\\\\backslash|provider"');
-    });
-
-    it("should preserve modelKey through save-load round trip with special characters", async () => {
-      const testModelKey = "[芥兰]Gemini-2.5-pro|3rd party";
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Test message",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      const chatContent = asInternal(persistenceManager).formatChatContent(messages);
-      const noteContent = asInternal(persistenceManager).generateNoteContent(
-        chatContent,
-        messages[0].timestamp!.epoch,
-        testModelKey
-      );
-
-      expect(noteContent).toContain(`modelKey: "${testModelKey}"`);
-
-      const lines = noteContent.split("\n");
-      const modelKeyLine = lines.find((line: string) => line.startsWith("modelKey:"));
-      expect(modelKeyLine).toBe(`modelKey: "${testModelKey}"`);
-    });
-
-    it("should preserve modelKey with quotes through save-load round trip", async () => {
-      const testModelKey = 'model"with"quotes|provider';
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Test message",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      const chatContent = asInternal(persistenceManager).formatChatContent(messages);
-      const noteContent = asInternal(persistenceManager).generateNoteContent(
-        chatContent,
-        messages[0].timestamp!.epoch,
-        testModelKey
-      );
-
-      expect(noteContent).toContain('modelKey: "model\\"with\\"quotes|provider"');
-
-      const lines = noteContent.split("\n");
-      const modelKeyLine = lines.find((line: string) => line.startsWith("modelKey:"));
-      expect(modelKeyLine).toBe('modelKey: "model\\"with\\"quotes|provider"');
-    });
-
-    it("should preserve modelKey with backslashes through save-load round trip", async () => {
-      const testModelKey = "model\\with\\backslash|provider";
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Test message",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      const chatContent = asInternal(persistenceManager).formatChatContent(messages);
-      const noteContent = asInternal(persistenceManager).generateNoteContent(
-        chatContent,
-        messages[0].timestamp!.epoch,
-        testModelKey
-      );
-
-      expect(noteContent).toContain('modelKey: "model\\\\with\\\\backslash|provider"');
-
-      const lines = noteContent.split("\n");
-      const modelKeyLine = lines.find((line: string) => line.startsWith("modelKey:"));
-      expect(modelKeyLine).toBe('modelKey: "model\\\\with\\\\backslash|provider"');
-    });
-  });
-
-  describe("frozen conversation tag", () => {
-    it("writes the built-in tag independent of the persisted defaultConversationTag", () => {
-      const gs = getSettings as jest.Mock;
-      gs.mockReturnValue({
-        defaultSaveFolder: "test-folder",
-        defaultConversationTag: "user-custom-tag",
-        defaultConversationNoteName: "{$topic}@{$date}_{$time}",
-      });
-      try {
-        const noteContent = asInternal(persistenceManager).generateNoteContent(
-          "**user**: hi",
-          1695513480000,
-          "gpt-4"
+      it("renames the note to a name built from the topic and its epoch", async () => {
+        const file = mockTFile({ path: "test-folder/chat.md" });
+        mockApp.metadataCache.getFileCache.mockReturnValue({ frontmatter: { epoch: FIRST_EPOCH } });
+
+        await persistenceManager.renameFileToMatchTopic(file, "New Topic");
+
+        expect(mockApp.fileManager.renameFile).toHaveBeenCalledWith(
+          file,
+          "test-folder/New_Topic@20240923_221800.md"
         );
-        expect(noteContent).toContain("tags:\n  - copilot-conversation");
-        expect(noteContent).not.toContain("user-custom-tag");
-      } finally {
-        gs.mockReturnValue({
-          defaultSaveFolder: "test-folder",
-          defaultConversationTag: "copilot-conversation",
-          defaultConversationNoteName: "{$topic}@{$date}_{$time}",
-        });
-      }
-    });
-  });
-
-  describe("lastAccessedAt preservation", () => {
-    it("should preserve lastAccessedAt when updating existing file", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Hello",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      const existingFile = mockTFile({
-        path: "test-folder/Hello@20240923_221800.md",
       });
 
-      const getFilesSpy = jest
-        .spyOn(persistenceManager, "getChatHistoryFiles")
-        .mockResolvedValue([existingFile]);
+      it("does not rename a note that has no epoch", async () => {
+        const file = mockTFile({ path: "test-folder/chat.md" });
+        mockApp.metadataCache.getFileCache.mockReturnValue({ frontmatter: {} });
 
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.metadataCache.getFileCache.mockReturnValue({
-        frontmatter: {
-          epoch: 1695513480000,
-          topic: "Existing Topic",
-          lastAccessedAt: 1700000000000,
-        },
-      });
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(existingFile);
+        await persistenceManager.renameFileToMatchTopic(file, "New Topic");
 
-      await persistenceManager.saveChat("gpt-4");
-
-      expect(mockApp.vault.modify).toHaveBeenCalledWith(
-        existingFile,
-        expect.stringContaining("lastAccessedAt: 1700000000000")
-      );
-
-      getFilesSpy.mockRestore();
-    });
-
-    it("should not include lastAccessedAt when it does not exist", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "New chat",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-      mockApp.vault.create.mockResolvedValue(
-        mockTFile({
-          path: "test-folder/New_chat@20240923_221800.md",
-        })
-      );
-
-      await persistenceManager.saveChat("gpt-4");
-
-      const createCall = mockApp.vault.create.mock.calls[0] as [string, string];
-      const content = createCall[1];
-      expect(content).not.toContain("lastAccessedAt:");
-    });
-
-    it("should preserve lastAccessedAt during conflict resolution", async () => {
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: "Conflict test",
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      const existingFile = mockTFile({
-        path: "test-folder/Conflict_test@20240923_221800.md",
-        basename: "Conflict_test@20240923_221800",
+        expect(mockApp.fileManager.renameFile).not.toHaveBeenCalled();
       });
 
-      const getFilesSpy = jest
-        .spyOn(persistenceManager, "getChatHistoryFiles")
-        .mockResolvedValue([]);
+      it("keeps a nested chat in its own folder, ignoring the live root", async () => {
+        const file = mockTFile({ path: "old-root/copilot-conversations/chat.md" });
+        mockApp.metadataCache.getFileCache.mockReturnValue({ frontmatter: { epoch: FIRST_EPOCH } });
 
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.create.mockRejectedValue(new Error("File already exists"));
-      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
-        if (path === "test-folder/Conflict_test@20240923_221800.md") {
-          return existingFile;
-        }
-        return null;
-      });
-      mockApp.metadataCache.getFileCache.mockReturnValue({
-        frontmatter: {
-          topic: "Conflict Topic",
-          lastAccessedAt: 1700000000000,
-        },
+        await persistenceManager.renameFileToMatchTopic(file, "New Topic");
+
+        const newPath = mockApp.fileManager.renameFile.mock.calls[0][1] as string;
+        expect(newPath.startsWith("old-root/copilot-conversations/")).toBe(true);
+        expect(newPath).not.toContain("live-root");
       });
 
-      await persistenceManager.saveChat("gpt-4");
+      it("does not produce a leading slash when renaming a vault-root file", async () => {
+        const file = mockTFile({ path: "chat.md" });
+        mockApp.metadataCache.getFileCache.mockReturnValue({ frontmatter: { epoch: FIRST_EPOCH } });
 
-      expect(mockApp.vault.modify).toHaveBeenCalledWith(
-        existingFile,
-        expect.stringContaining("lastAccessedAt: 1700000000000")
-      );
+        await persistenceManager.renameFileToMatchTopic(file, "New Topic");
 
-      getFilesSpy.mockRestore();
-    });
-  });
-
-  describe("renameFileToMatchTopic", () => {
-    beforeEach(() => {
-      mockMessageRepo.getDisplayMessages.mockReturnValue([]);
-      jest
-        .mocked(getEffectiveConversationsFolder)
-        .mockReturnValue("live-root/copilot-conversations");
-    });
-
-    it("keeps a nested chat in its own folder, ignoring the live root", async () => {
-      const file = mockTFile({ path: "old-root/copilot-conversations/chat.md" });
-      mockApp.metadataCache.getFileCache.mockReturnValue({ frontmatter: { epoch: 1695513480000 } });
-
-      await persistenceManager.renameFileToMatchTopic(file, "New Topic");
-
-      const newPath = mockApp.fileManager.renameFile.mock.calls[0][1] as string;
-      expect(newPath.startsWith("old-root/copilot-conversations/")).toBe(true);
-      expect(newPath).not.toContain("live-root");
-    });
-
-    it("does not produce a leading slash when renaming a vault-root file", async () => {
-      const file = mockTFile({ path: "chat.md" });
-      mockApp.metadataCache.getFileCache.mockReturnValue({ frontmatter: { epoch: 1695513480000 } });
-
-      await persistenceManager.renameFileToMatchTopic(file, "New Topic");
-
-      const newPath = mockApp.fileManager.renameFile.mock.calls[0][1] as string;
-      expect(newPath.startsWith("/")).toBe(false);
+        const newPath = mockApp.fileManager.renameFile.mock.calls[0][1] as string;
+        expect(newPath.startsWith("/")).toBe(false);
+      });
     });
   });
 });
