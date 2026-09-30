@@ -34,9 +34,9 @@ export class CodexBackend implements AcpBackend {
         ...(await buildBuiltinSkillEnv(this.clientVersion, ctx.vaultBasePath, ctx.vaultName)),
         // The supported adapter derives its initial ACP mode from this variable.
         // User env overrides still win.
-        // The adapter's "read-only" ID is its approval preset and still permits
-        // workspace edits. Start there until a saved picker choice is replayed.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+        // The adapter's "read-only" mode asks before each workspace edit, like
+        // Default. Start there until a saved picker choice is replayed.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/618
         INITIAL_AGENT_MODE: "read-only",
       }
     );
