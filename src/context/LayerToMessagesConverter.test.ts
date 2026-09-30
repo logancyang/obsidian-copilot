@@ -19,8 +19,8 @@ describe("LayerToMessagesConverter", () => {
     };
   };
 
-  describe("convert", () => {
-    it("should convert envelope with L1 and L5 to system + user messages", () => {
+  describe("convert()", () => {
+    it("converts L1 and L5 into a system message followed by a user message", () => {
       const envelope = createMockEnvelope([
         {
           id: "L1_SYSTEM",
@@ -49,7 +49,7 @@ describe("LayerToMessagesConverter", () => {
       expect(messages[1].content).toBe("Hello, how are you?");
     });
 
-    it("should merge L3 and L5 into user message", () => {
+    it("merges L3 turn context and the L5 query into one user message with a query marker between them", () => {
       const envelope = createMockEnvelope([
         {
           id: "L1_SYSTEM",
@@ -88,7 +88,7 @@ describe("LayerToMessagesConverter", () => {
       expect(messages[1].content).toContain("Summarize this");
     });
 
-    it("should include L2 in system message and L3 with smart references", () => {
+    it("puts L2 in the system message and references L3 segments already in L2 by id instead of repeating them", () => {
       const envelope = createMockEnvelope([
         {
           id: "L1_SYSTEM",
@@ -158,7 +158,7 @@ describe("LayerToMessagesConverter", () => {
       expect(messages[1].content).toContain("User query");
     });
 
-    it("should skip system message when includeSystemMessage is false", () => {
+    it("omits the system message when includeSystemMessage is false", () => {
       const envelope = createMockEnvelope([
         {
           id: "L1_SYSTEM",
@@ -186,7 +186,7 @@ describe("LayerToMessagesConverter", () => {
       expect(messages[0].role).toBe("user");
     });
 
-    it("should handle envelope with empty layers", () => {
+    it("omits the system message when the L1 text is empty", () => {
       const envelope = createMockEnvelope([
         {
           id: "L1_SYSTEM",
@@ -212,7 +212,7 @@ describe("LayerToMessagesConverter", () => {
       expect(messages[0].role).toBe("user");
     });
 
-    it("should handle envelope with only L5 layer", () => {
+    it("returns only the user message when the envelope has only an L5 layer", () => {
       const envelope = createMockEnvelope([
         {
           id: "L5_USER",
@@ -229,6 +229,34 @@ describe("LayerToMessagesConverter", () => {
       expect(messages).toHaveLength(1);
       expect(messages[0].role).toBe("user");
       expect(messages[0].content).toBe("User query");
+    });
+
+    it("returns the L3 text and the L5 text as separate user messages when mergeUserContent is false", () => {
+      const envelope = createMockEnvelope([
+        {
+          id: "L3_TURN",
+          label: "Turn Context",
+          text: "Context about note.md",
+          stable: false,
+          segments: [],
+          hash: "l3-hash",
+        },
+        {
+          id: "L5_USER",
+          label: "User Message",
+          text: "Summarize this",
+          stable: false,
+          segments: [],
+          hash: "l5-hash",
+        },
+      ]);
+
+      const messages = LayerToMessagesConverter.convert(envelope, { mergeUserContent: false });
+
+      expect(messages).toEqual([
+        { role: "user", content: "Context about note.md" },
+        { role: "user", content: "Summarize this" },
+      ]);
     });
   });
 });

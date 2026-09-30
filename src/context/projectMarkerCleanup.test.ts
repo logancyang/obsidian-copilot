@@ -10,36 +10,38 @@ jest.mock("./conversionsLocation", () => ({ markersDir: jest.fn() }));
 const mockedMarkersDir = markersDir as jest.MockedFunction<typeof markersDir>;
 const app = {} as App;
 
-describe("clearProjectMarkers", () => {
-  let root: string;
+describe("projectMarkerCleanup", () => {
+  describe("clearProjectMarkers()", () => {
+    let root: string;
 
-  beforeEach(async () => {
-    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "marker-cleanup-"));
-    await fs.promises.mkdir(path.join(root, "markers", "projA"), { recursive: true });
-    await fs.promises.mkdir(path.join(root, "markers", "projB"), { recursive: true });
-    await fs.promises.mkdir(path.join(root, "remotes"), { recursive: true });
-    await fs.promises.writeFile(path.join(root, "markers", "projA", "failed-web-1.json"), "{}");
-    await fs.promises.writeFile(path.join(root, "markers", "projB", "failed-web-2.json"), "{}");
-    await fs.promises.writeFile(path.join(root, "remotes", "web-1.md"), "snapshot");
-  });
+    beforeEach(async () => {
+      root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "marker-cleanup-"));
+      await fs.promises.mkdir(path.join(root, "markers", "projA"), { recursive: true });
+      await fs.promises.mkdir(path.join(root, "markers", "projB"), { recursive: true });
+      await fs.promises.mkdir(path.join(root, "remotes"), { recursive: true });
+      await fs.promises.writeFile(path.join(root, "markers", "projA", "failed-web-1.json"), "{}");
+      await fs.promises.writeFile(path.join(root, "markers", "projB", "failed-web-2.json"), "{}");
+      await fs.promises.writeFile(path.join(root, "remotes", "web-1.md"), "snapshot");
+    });
 
-  afterEach(async () => {
-    await fs.promises.rm(root, { recursive: true, force: true });
-    mockedMarkersDir.mockReset();
-  });
+    afterEach(async () => {
+      await fs.promises.rm(root, { recursive: true, force: true });
+      mockedMarkersDir.mockReset();
+    });
 
-  it("removes only the target project's bucket, leaving siblings and snapshots", async () => {
-    mockedMarkersDir.mockReturnValue(path.join(root, "markers", "projA"));
+    it("removes the target project's marker bucket and leaves other projects' markers and snapshots", async () => {
+      mockedMarkersDir.mockReturnValue(path.join(root, "markers", "projA"));
 
-    await clearProjectMarkers(app, "project-a");
+      await clearProjectMarkers(app, "project-a");
 
-    expect(fs.existsSync(path.join(root, "markers", "projA"))).toBe(false);
-    expect(fs.existsSync(path.join(root, "markers", "projB", "failed-web-2.json"))).toBe(true);
-    expect(fs.existsSync(path.join(root, "remotes", "web-1.md"))).toBe(true);
-  });
+      expect(fs.existsSync(path.join(root, "markers", "projA"))).toBe(false);
+      expect(fs.existsSync(path.join(root, "markers", "projB", "failed-web-2.json"))).toBe(true);
+      expect(fs.existsSync(path.join(root, "remotes", "web-1.md"))).toBe(true);
+    });
 
-  it("is a no-op for a blank project id (never resolves a bucket path)", async () => {
-    await clearProjectMarkers(app, "   ");
-    expect(mockedMarkersDir).not.toHaveBeenCalled();
+    it("does nothing for a blank project id", async () => {
+      await clearProjectMarkers(app, "   ");
+      expect(mockedMarkersDir).not.toHaveBeenCalled();
+    });
   });
 });

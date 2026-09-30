@@ -1,14 +1,13 @@
 import { buildProjectContextUpdatesBlock } from "./contextUpdatesBlockBuilder";
 
-describe("buildProjectContextUpdatesBlock", () => {
-  it("returns the fixed coarse note wrapped in a project_context_updates tag", () => {
-    const block = buildProjectContextUpdatesBlock();
-    expect(block).toContain("<project_context_updates>");
-    expect(block).toContain("</project_context_updates>");
-    expect(block).toContain("re-check the declared project context before answering");
-  });
+describe("contextUpdatesBlockBuilder", () => {
+  describe("buildProjectContextUpdatesBlock()", () => {
+    it("returns a project_context_updates block telling the model to re-check the declared project context", () => {
+      const block = buildProjectContextUpdatesBlock();
 
-  it("is a stable, source-agnostic constant (no per-path detail)", () => {
-    expect(buildProjectContextUpdatesBlock()).toBe(buildProjectContextUpdatesBlock());
+      expect(block.startsWith("<project_context_updates>")).toBe(true);
+      expect(block.endsWith("</project_context_updates>")).toBe(true);
+      expect(block).toContain("re-check the declared project context before answering");
+    });
   });
 });
