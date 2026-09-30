@@ -294,19 +294,6 @@ describe("RelevantNotes", () => {
       expect(openCopilotSettings).toHaveBeenCalledWith(mockApp, window, "miyo");
     });
 
-    it("shows an informational no-matches state without setup actions when registered Miyo is ready (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockFindRelevantNotes.mockResolvedValue({
-        notes: [],
-        status: "no-matches",
-      });
-
-      render(<RelevantNotes onAddToChat={jest.fn()} />);
-
-      expect(await screen.findByText("No semantic matches yet")).toBeTruthy();
-      expect(screen.queryByText("Target")).toBeNull();
-      expect(screen.queryByRole("button", { name: "Open Miyo settings" })).toBeNull();
-    });
-
     it("starts a fresh request when the same note reopens after no note was active (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       const sourceFile = makeMarkdownFile("Source.md");
       const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);

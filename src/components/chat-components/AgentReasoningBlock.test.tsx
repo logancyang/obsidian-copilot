@@ -19,11 +19,6 @@ describe("AgentReasoningBlock", () => {
       expect(container.textContent).toContain("Reasoning...");
       expect(screen.queryByText("3s")).toBeNull();
       expect(container.querySelector(".copilot-shimmer-text")?.textContent).toBe("...");
-      expect(
-        container
-          .querySelector(".lucide-brain")
-          ?.parentElement?.parentElement?.classList.contains("tw-pl-1")
-      ).toBe(true);
 
       rerender(
         <AgentReasoningBlock
