@@ -1,78 +1,99 @@
 import { listProviderModels } from "./listProviderModels";
 
-jest.mock("./listOpenAICompatibleModels", () => ({
-  listOpenAICompatibleModels: jest.fn(),
-}));
-jest.mock("./listAnthropicModels", () => ({
-  listAnthropicModels: jest.fn(),
-}));
-jest.mock("./listGoogleModels", () => ({
-  listGoogleModels: jest.fn(),
+jest.mock("@/utils", () => ({
+  safeFetchNoThrow: jest.fn(),
 }));
 
-import { listAnthropicModels } from "./listAnthropicModels";
-import { listGoogleModels } from "./listGoogleModels";
-import { listOpenAICompatibleModels } from "./listOpenAICompatibleModels";
+import { safeFetchNoThrow } from "@/utils";
 
-const mockOAI = listOpenAICompatibleModels as jest.MockedFunction<
-  typeof listOpenAICompatibleModels
->;
-const mockAnthropic = listAnthropicModels as jest.MockedFunction<typeof listAnthropicModels>;
-const mockGoogle = listGoogleModels as jest.MockedFunction<typeof listGoogleModels>;
+const mockSafeFetch = safeFetchNoThrow as jest.MockedFunction<typeof safeFetchNoThrow>;
+
+function respondWithJson(json: unknown): void {
+  mockSafeFetch.mockResolvedValue({
+    status: 200,
+    json: async () => json,
+    text: async () => "",
+  } as unknown as Response);
+}
 
 describe("listProviderModels", () => {
-  beforeEach(() => {
-    mockOAI.mockReset();
-    mockAnthropic.mockReset();
-    mockGoogle.mockReset();
-  });
+  describe("listProviderModels()", () => {
+    beforeEach(() => {
+      mockSafeFetch.mockReset();
+    });
 
-  it("routes openai-compatible to listOpenAICompatibleModels and forwards openAIOrgId from extras", async () => {
-    mockOAI.mockResolvedValue({ ok: true, modelIds: ["gpt-5"] });
-    const result = await listProviderModels("openai-compatible", "https://api.openai.com/v1", {
-      apiKey: "sk",
-      extras: { openAIOrgId: "org-9" },
-      timeoutMs: 1234,
-    });
-    expect(result).toEqual({ ok: true, modelIds: ["gpt-5"] });
-    expect(mockOAI).toHaveBeenCalledWith("https://api.openai.com/v1", {
-      apiKey: "sk",
-      openAIOrgId: "org-9",
-      timeoutMs: 1234,
-    });
-  });
+    it("lists openai-compatible models from <baseUrl>/models with the key and organization from extras", async () => {
+      respondWithJson({ data: [{ id: "gpt-5" }] });
 
-  it("ignores non-string openAIOrgId in extras", async () => {
-    mockOAI.mockResolvedValue({ ok: true, modelIds: [] });
-    await listProviderModels("openai-compatible", "u", { extras: { openAIOrgId: 7 } });
-    expect(mockOAI).toHaveBeenCalledWith("u", {
-      apiKey: undefined,
-      openAIOrgId: undefined,
-      timeoutMs: undefined,
-    });
-  });
+      const result = await listProviderModels("openai-compatible", "https://api.openai.com/v1", {
+        apiKey: "sk",
+        extras: { openAIOrgId: "org-9" },
+      });
 
-  it("routes anthropic to listAnthropicModels", async () => {
-    mockAnthropic.mockResolvedValue({ ok: true, modelIds: ["claude"] });
-    const result = await listProviderModels("anthropic", "https://api.anthropic.com", {
-      apiKey: "sk-ant",
+      expect(result).toEqual({ ok: true, modelIds: ["gpt-5"] });
+      expect(mockSafeFetch).toHaveBeenCalledWith("https://api.openai.com/v1/models", {
+        method: "GET",
+        headers: { Authorization: "Bearer sk", "OpenAI-Organization": "org-9" },
+      });
     });
-    expect(result).toEqual({ ok: true, modelIds: ["claude"] });
-    expect(mockAnthropic).toHaveBeenCalledWith("https://api.anthropic.com", {
-      apiKey: "sk-ant",
-      timeoutMs: undefined,
-    });
-  });
 
-  it("routes google to listGoogleModels", async () => {
-    mockGoogle.mockResolvedValue({ ok: true, modelIds: ["gemini-2.0-flash"] });
-    const result = await listProviderModels("google", "https://generativelanguage.googleapis.com", {
-      apiKey: "key",
+    it("sends no organization header when extras.openAIOrgId is not a string", async () => {
+      respondWithJson({ data: [] });
+
+      await listProviderModels("openai-compatible", "https://api.openai.com/v1", {
+        extras: { openAIOrgId: 7 },
+      });
+
+      expect(mockSafeFetch).toHaveBeenCalledWith("https://api.openai.com/v1/models", {
+        method: "GET",
+        headers: {},
+      });
     });
-    expect(result).toEqual({ ok: true, modelIds: ["gemini-2.0-flash"] });
-    expect(mockGoogle).toHaveBeenCalledWith("https://generativelanguage.googleapis.com", {
-      apiKey: "key",
-      timeoutMs: undefined,
+
+    it("lists anthropic models from /v1/models with the x-api-key header", async () => {
+      respondWithJson({ data: [{ id: "claude-sonnet-4-5" }] });
+
+      const result = await listProviderModels("anthropic", "https://api.anthropic.com", {
+        apiKey: "sk-ant",
+      });
+
+      expect(result).toEqual({ ok: true, modelIds: ["claude-sonnet-4-5"] });
+      expect(mockSafeFetch).toHaveBeenCalledWith("https://api.anthropic.com/v1/models", {
+        method: "GET",
+        headers: { "anthropic-version": "2023-06-01", "x-api-key": "sk-ant" },
+      });
     });
+
+    it("lists google models from /v1beta/models with the key query parameter", async () => {
+      respondWithJson({ models: [{ name: "models/gemini-2.0-flash" }] });
+
+      const result = await listProviderModels(
+        "google",
+        "https://generativelanguage.googleapis.com",
+        {
+          apiKey: "key",
+        }
+      );
+
+      expect(result).toEqual({ ok: true, modelIds: ["gemini-2.0-flash"] });
+      expect(mockSafeFetch).toHaveBeenCalledWith(
+        "https://generativelanguage.googleapis.com/v1beta/models?key=key",
+        { method: "GET", headers: {} }
+      );
+    });
+
+    it.each(["openai-compatible", "anthropic", "google"] as const)(
+      "reports a timeout for %s when the request hangs past timeoutMs",
+      async (providerType) => {
+        mockSafeFetch.mockImplementation(() => new Promise(() => {}));
+
+        const result = await listProviderModels(providerType, "https://example.test", {
+          timeoutMs: 5,
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.message).toMatch(/timed out/i);
+      }
+    );
   });
 });

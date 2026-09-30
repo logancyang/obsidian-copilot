@@ -33,155 +33,144 @@ const EMBED: ModelInfo = {
 };
 
 describe("ModelChecklist", () => {
-  it("renders the empty state with a manual-add hint when there are no models", () => {
-    renderList();
-    expect(screen.getByTestId("model-checklist-empty")).toBeTruthy();
-  });
-
-  it("renders one row per model with metadata when available", () => {
-    renderList({ availableModels: [RICH, PLAIN] });
-    expect(screen.getByTestId("model-row-claude-sonnet-4-5")).toBeTruthy();
-    expect(screen.getByTestId("model-row-gpt-5")).toBeTruthy();
-  });
-
-  it("shows an Embedding badge for embedding models", () => {
-    renderList({ availableModels: [EMBED] });
-    expect(screen.getByText("Embedding")).toBeTruthy();
-  });
-
-  it("badges only the no-vision exception: nothing for vision or unknown, an eye-off for known text-only", () => {
-    const VISION_REASON: ModelInfo = {
-      id: "omni",
-      displayName: "Omni",
-      modalities: { input: ["text", "image"] },
-      reasoning: true,
-    };
-    const TEXT_ONLY: ModelInfo = {
-      id: "text-only",
-      displayName: "Text Only",
-      modalities: { input: ["text"] },
-    };
-    render(
-      <ModelChecklist
-        availableModels={[VISION_REASON, TEXT_ONLY, PLAIN]}
-        selected={new Set<string>()}
-        onToggle={jest.fn()}
-        onAddId={jest.fn()}
-        query=""
-        onQueryChange={jest.fn()}
-      />
-    );
-    expect(screen.getByTestId("model-row-omni").querySelectorAll("svg").length).toBe(0);
-    expect(
-      screen.getByTestId("model-row-text-only").querySelector('[data-testid="model-cap-no-vision"]')
-    ).not.toBeNull();
-    expect(screen.getByTestId("model-row-gpt-5").querySelectorAll("svg").length).toBe(0);
-  });
-
-  it("emits onToggle with the wire id when a checkbox is clicked", () => {
-    const onToggle = jest.fn();
-    renderList({ availableModels: [PLAIN], onToggle });
-    fireEvent.click(screen.getByRole("checkbox"));
-    expect(onToggle).toHaveBeenCalledWith("gpt-5", true);
-  });
-
-  it("keeps manual entry above model search when discovery is unavailable (https://github.com/logancyang/obsidian-copilot/issues/2894)", () => {
-    renderList({ fetchError: "Endpoint did not return a model list." });
-    const inputs = screen.getAllByRole("textbox");
-    expect(inputs[0]).toBe(screen.getByTestId("model-checklist-manual-input"));
-    expect(inputs[1].getAttribute("placeholder")).toBe("Search available models…");
-  });
-
-  it("emits onAddId on Enter and clears the input", () => {
-    const onAddId = jest.fn();
-    renderList({ onAddId });
-    const input = screen.getByTestId<HTMLInputElement>("model-checklist-manual-input");
-    fireEvent.change(input, { target: { value: "claude-haiku-4-5" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    expect(onAddId).toHaveBeenCalledWith("claude-haiku-4-5");
-    expect(input.value).toBe("");
-  });
-
-  it("trims whitespace and ignores blank manual submits", () => {
-    const onAddId = jest.fn();
-    renderList({ onAddId });
-    const input = screen.getByTestId<HTMLInputElement>("model-checklist-manual-input");
-    fireEvent.change(input, { target: { value: "   " } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    expect(onAddId).not.toHaveBeenCalled();
-  });
-
-  it("shows the X button only for custom ids and emits onRemoveId on click", () => {
-    const onRemoveId = jest.fn();
-    renderList({
-      availableModels: [RICH, PLAIN],
-      onRemoveId,
-      customIds: new Set([PLAIN.id]),
+  describe("ModelChecklist()", () => {
+    it("shows the empty state when there are no models", () => {
+      renderList();
+      expect(screen.getByTestId("model-checklist-empty")).toBeTruthy();
     });
-    expect(screen.queryByTestId(`model-row-remove-${RICH.id}`)).toBeNull();
-    fireEvent.click(screen.getByTestId(`model-row-remove-${PLAIN.id}`));
-    expect(onRemoveId).toHaveBeenCalledWith(PLAIN.id);
-  });
 
-  it("hides the X button on every row when customIds is omitted", () => {
-    renderList({
-      availableModels: [RICH, PLAIN],
-      onRemoveId: jest.fn(),
+    it("lists one row per available model", () => {
+      renderList({ availableModels: [RICH, PLAIN] });
+      expect(screen.getByTestId("model-row-claude-sonnet-4-5")).toBeTruthy();
+      expect(screen.getByTestId("model-row-gpt-5")).toBeTruthy();
     });
-    expect(screen.queryByTestId(`model-row-remove-${RICH.id}`)).toBeNull();
-    expect(screen.queryByTestId(`model-row-remove-${PLAIN.id}`)).toBeNull();
-  });
 
-  it("floats custom ids above discovered ones within each selection group", () => {
-    const olderCustom: ModelInfo = {
-      id: "custom-old",
-      displayName: "custom-old",
-      releaseDate: "2024-01-01",
-    };
-    renderList({
-      availableModels: [RICH, olderCustom],
-      customIds: new Set([olderCustom.id]),
+    it("labels an embedding model with an Embedding badge", () => {
+      renderList({ availableModels: [EMBED] });
+      expect(screen.getByText("Embedding")).toBeTruthy();
     });
-    const rows = screen.getAllByRole("listitem");
-    expect(rows[0].getAttribute("data-testid")).toBe(`model-row-${olderCustom.id}`);
-    expect(rows[1].getAttribute("data-testid")).toBe(`model-row-${RICH.id}`);
-  });
 
-  it("renders the loading state when fetching", () => {
-    renderList({ fetching: true });
-    expect(screen.getAllByText("Loading models…").length).toBeGreaterThan(0);
-  });
-
-  it("surfaces a fetch error inline", () => {
-    renderList({ fetchError: "Authentication failed" });
-    expect(screen.getByText("Authentication failed")).toBeTruthy();
-  });
-
-  it("filters by the search query against name + id", () => {
-    renderList({
-      availableModels: [RICH, PLAIN, { id: "gemini-2.0-flash", displayName: "Gemini 2 Flash" }],
-      query: "gemini",
+    it("marks only known text-only models with a no-vision icon, not vision-capable or unknown ones", () => {
+      const VISION_REASON: ModelInfo = {
+        id: "omni",
+        displayName: "Omni",
+        modalities: { input: ["text", "image"] },
+        reasoning: true,
+      };
+      const TEXT_ONLY: ModelInfo = {
+        id: "text-only",
+        displayName: "Text Only",
+        modalities: { input: ["text"] },
+      };
+      render(
+        <ModelChecklist
+          availableModels={[VISION_REASON, TEXT_ONLY, PLAIN]}
+          selected={new Set<string>()}
+          onToggle={jest.fn()}
+          onAddId={jest.fn()}
+          query=""
+          onQueryChange={jest.fn()}
+        />
+      );
+      expect(screen.getByTestId("model-row-omni").querySelectorAll("svg").length).toBe(0);
+      expect(
+        screen
+          .getByTestId("model-row-text-only")
+          .querySelector('[data-testid="model-cap-no-vision"]')
+      ).not.toBeNull();
+      expect(screen.getByTestId("model-row-gpt-5").querySelectorAll("svg").length).toBe(0);
     });
-    expect(screen.queryByTestId("model-row-gemini-2.0-flash")).toBeTruthy();
-    expect(screen.queryByTestId(`model-row-${RICH.id}`)).toBeNull();
-    expect(screen.queryByTestId("model-row-gpt-5")).toBeNull();
-  });
 
-  it("emits search query changes", () => {
-    const onQueryChange = jest.fn();
-    renderList({ onQueryChange });
-    fireEvent.change(screen.getByPlaceholderText("Search available models…"), {
-      target: { value: "qwen" },
+    it("calls onToggle with the wire id and true when a model checkbox is ticked", () => {
+      const onToggle = jest.fn();
+      renderList({ availableModels: [PLAIN], onToggle });
+      fireEvent.click(screen.getByRole("checkbox"));
+      expect(onToggle).toHaveBeenCalledWith("gpt-5", true);
     });
-    expect(onQueryChange).toHaveBeenCalledWith("qwen");
-  });
 
-  it("sorts checked models to the top", () => {
-    renderList({
-      availableModels: [RICH, PLAIN],
-      selected: new Set([PLAIN.id]),
+    it("keeps manual entry above model search when discovery is unavailable (https://github.com/logancyang/obsidian-copilot/issues/2894)", () => {
+      renderList({ fetchError: "Endpoint did not return a model list." });
+      const inputs = screen.getAllByRole("textbox");
+      expect(inputs[0]).toBe(screen.getByTestId("model-checklist-manual-input"));
+      expect(inputs[1].getAttribute("placeholder")).toBe("Search available models…");
     });
-    const rows = screen.getAllByRole("listitem");
-    expect(rows[0].getAttribute("data-testid")).toBe(`model-row-${PLAIN.id}`);
+
+    it("calls onAddId with the typed id on Enter and clears the input", () => {
+      const onAddId = jest.fn();
+      renderList({ onAddId });
+      const input = screen.getByTestId<HTMLInputElement>("model-checklist-manual-input");
+      fireEvent.change(input, { target: { value: "claude-haiku-4-5" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(onAddId).toHaveBeenCalledWith("claude-haiku-4-5");
+      expect(input.value).toBe("");
+    });
+
+    it("ignores a blank manual id submitted with Enter", () => {
+      const onAddId = jest.fn();
+      renderList({ onAddId });
+      const input = screen.getByTestId<HTMLInputElement>("model-checklist-manual-input");
+      fireEvent.change(input, { target: { value: "   " } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(onAddId).not.toHaveBeenCalled();
+    });
+
+    it("shows the remove button only on custom ids and calls onRemoveId when clicked", () => {
+      const onRemoveId = jest.fn();
+      renderList({
+        availableModels: [RICH, PLAIN],
+        onRemoveId,
+        customIds: new Set([PLAIN.id]),
+      });
+      expect(screen.queryByTestId(`model-row-remove-${RICH.id}`)).toBeNull();
+      fireEvent.click(screen.getByTestId(`model-row-remove-${PLAIN.id}`));
+      expect(onRemoveId).toHaveBeenCalledWith(PLAIN.id);
+    });
+
+    it("shows no remove button on any row when customIds is omitted", () => {
+      renderList({
+        availableModels: [RICH, PLAIN],
+        onRemoveId: jest.fn(),
+      });
+      expect(screen.queryByTestId(`model-row-remove-${RICH.id}`)).toBeNull();
+      expect(screen.queryByTestId(`model-row-remove-${PLAIN.id}`)).toBeNull();
+    });
+
+    it("shows Loading models… while fetching", () => {
+      renderList({ fetching: true });
+      expect(screen.getAllByText("Loading models…").length).toBeGreaterThan(0);
+    });
+
+    it("shows the fetch error inline", () => {
+      renderList({ fetchError: "Authentication failed" });
+      expect(screen.getByText("Authentication failed")).toBeTruthy();
+    });
+
+    it("hides models whose name and id do not match the search query", () => {
+      renderList({
+        availableModels: [RICH, PLAIN, { id: "gemini-2.0-flash", displayName: "Gemini 2 Flash" }],
+        query: "gemini",
+      });
+      expect(screen.queryByTestId("model-row-gemini-2.0-flash")).toBeTruthy();
+      expect(screen.queryByTestId(`model-row-${RICH.id}`)).toBeNull();
+      expect(screen.queryByTestId("model-row-gpt-5")).toBeNull();
+    });
+
+    it("calls onQueryChange with the text typed in the search box", () => {
+      const onQueryChange = jest.fn();
+      renderList({ onQueryChange });
+      fireEvent.change(screen.getByPlaceholderText("Search available models…"), {
+        target: { value: "qwen" },
+      });
+      expect(onQueryChange).toHaveBeenCalledWith("qwen");
+    });
+
+    it("lists checked models before unchecked ones", () => {
+      renderList({
+        availableModels: [RICH, PLAIN],
+        selected: new Set([PLAIN.id]),
+      });
+      const rows = screen.getAllByRole("listitem");
+      expect(rows[0].getAttribute("data-testid")).toBe(`model-row-${PLAIN.id}`);
+    });
   });
 });

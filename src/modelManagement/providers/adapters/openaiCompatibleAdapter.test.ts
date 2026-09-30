@@ -1,14 +1,18 @@
 import { openaiCompatibleAdapter } from "./openaiCompatibleAdapter";
 
-jest.mock("./verifyViaListModels", () => ({
-  verifyViaListModels: jest.fn(),
+jest.mock("@/utils", () => ({
+  safeFetchNoThrow: jest.fn(),
 }));
 
-import { verifyViaListModels } from "./verifyViaListModels";
+import { safeFetchNoThrow } from "@/utils";
 
 import type { Provider } from "@/modelManagement/types/persisted";
 
-const mockVerify = verifyViaListModels as jest.MockedFunction<typeof verifyViaListModels>;
+const mockSafeFetch = safeFetchNoThrow as jest.MockedFunction<typeof safeFetchNoThrow>;
+
+function respondWith(status: number): void {
+  mockSafeFetch.mockResolvedValue({ status, text: async () => "" } as Response);
+}
 
 function provider(overrides: Partial<Provider> = {}): Provider {
   return {
@@ -23,112 +27,121 @@ function provider(overrides: Partial<Provider> = {}): Provider {
   };
 }
 
-describe("openaiCompatibleAdapter.verifyCredentials", () => {
-  beforeEach(() => {
-    mockVerify.mockReset();
-    mockVerify.mockResolvedValue({ ok: true, checkedAt: 1 });
-  });
+const OPENROUTER = {
+  baseUrl: "https://openrouter.ai/api/v1",
+  origin: { kind: "byok", catalogProviderId: "openrouter" },
+} as const;
 
-  it("returns missing_base_url when baseUrl is unset", async () => {
-    const result = await openaiCompatibleAdapter.verifyCredentials({
-      provider: provider({ baseUrl: undefined }),
-      apiKey: "sk-openai",
-      extras: {},
+describe("openaiCompatibleAdapter", () => {
+  describe("verifyCredentials()", () => {
+    beforeEach(() => {
+      mockSafeFetch.mockReset();
+      respondWith(200);
     });
-    expect(result.ok).toBe(false);
-    expect(result.code).toBe("missing_base_url");
-    expect(mockVerify).not.toHaveBeenCalled();
-  });
 
-  it("returns missing_base_url when baseUrl is only whitespace", async () => {
-    const result = await openaiCompatibleAdapter.verifyCredentials({
-      provider: provider({ baseUrl: "   " }),
-      apiKey: "sk-openai",
-      extras: {},
-    });
-    expect(result.code).toBe("missing_base_url");
-  });
+    it("sends Bearer auth to the provider's models endpoint when an API key is set", async () => {
+      const result = await openaiCompatibleAdapter.verifyCredentials({
+        provider: provider(),
+        apiKey: "sk-openai",
+        extras: {},
+      });
 
-  it("sends Bearer auth when apiKey is set", async () => {
-    await openaiCompatibleAdapter.verifyCredentials({
-      provider: provider(),
-      apiKey: "sk-openai",
-      extras: {},
+      expect(result.ok).toBe(true);
+      expect(mockSafeFetch).toHaveBeenCalledWith("https://api.openai.com/v1/models", {
+        method: "GET",
+        headers: { Authorization: "Bearer sk-openai" },
+      });
     });
-    expect(mockVerify).toHaveBeenCalledWith("https://api.openai.com/v1/models", {
-      Authorization: "Bearer sk-openai",
-    });
-  });
 
-  it("omits Authorization header for keyless providers (Ollama / LMStudio)", async () => {
-    await openaiCompatibleAdapter.verifyCredentials({
-      provider: provider({ baseUrl: "http://localhost:11434/v1" }),
-      apiKey: null,
-      extras: {},
-    });
-    const headers = mockVerify.mock.calls[0][1];
-    expect(headers).not.toHaveProperty("Authorization");
-    expect(mockVerify).toHaveBeenCalledWith("http://localhost:11434/v1/models", {});
-  });
+    it("sends no Authorization header for a keyless provider such as Ollama", async () => {
+      await openaiCompatibleAdapter.verifyCredentials({
+        provider: provider({ baseUrl: "http://localhost:11434/v1" }),
+        apiKey: null,
+        extras: {},
+      });
 
-  it("adds OpenAI-Organization header when extras.openAIOrgId is set", async () => {
-    await openaiCompatibleAdapter.verifyCredentials({
-      provider: provider(),
-      apiKey: "sk-openai",
-      extras: { openAIOrgId: "org-abc" },
+      expect(mockSafeFetch).toHaveBeenCalledWith("http://localhost:11434/v1/models", {
+        method: "GET",
+        headers: {},
+      });
     });
-    expect(mockVerify).toHaveBeenCalledWith(
-      "https://api.openai.com/v1/models",
-      expect.objectContaining({
-        Authorization: "Bearer sk-openai",
-        "OpenAI-Organization": "org-abc",
-      })
+
+    it("adds the OpenAI-Organization header when extras carry an organization id", async () => {
+      await openaiCompatibleAdapter.verifyCredentials({
+        provider: provider(),
+        apiKey: "sk-openai",
+        extras: { openAIOrgId: "org-abc" },
+      });
+
+      expect(mockSafeFetch).toHaveBeenCalledWith("https://api.openai.com/v1/models", {
+        method: "GET",
+        headers: { Authorization: "Bearer sk-openai", "OpenAI-Organization": "org-abc" },
+      });
+    });
+
+    it("strips the trailing slash from the base URL", async () => {
+      await openaiCompatibleAdapter.verifyCredentials({
+        provider: provider({ baseUrl: "https://example.test/v1/" }),
+        apiKey: "k",
+        extras: {},
+      });
+
+      expect(mockSafeFetch).toHaveBeenCalledWith(
+        "https://example.test/v1/models",
+        expect.any(Object)
+      );
+    });
+
+    it("uses the plain models endpoint for catalog providers other than OpenRouter", async () => {
+      await openaiCompatibleAdapter.verifyCredentials({
+        provider: provider({ origin: { kind: "byok", catalogProviderId: "groq" } }),
+        apiKey: "k",
+        extras: {},
+      });
+
+      expect(mockSafeFetch).toHaveBeenCalledWith(
+        "https://api.openai.com/v1/models",
+        expect.any(Object)
+      );
+    });
+
+    it("verifies OpenRouter against its auth-gated /key path because public /models would always succeed", async () => {
+      await openaiCompatibleAdapter.verifyCredentials({
+        provider: provider(OPENROUTER),
+        apiKey: "sk-or",
+        extras: {},
+      });
+
+      expect(mockSafeFetch).toHaveBeenCalledWith("https://openrouter.ai/api/v1/key", {
+        method: "GET",
+        headers: { Authorization: "Bearer sk-or" },
+      });
+    });
+
+    it("reports invalid_api_key when OpenRouter's /key rejects the key with 401", async () => {
+      respondWith(401);
+
+      const result = await openaiCompatibleAdapter.verifyCredentials({
+        provider: provider(OPENROUTER),
+        apiKey: "sk-wrong",
+        extras: {},
+      });
+
+      expect(result).toMatchObject({ ok: false, code: "invalid_api_key" });
+    });
+
+    it.each([undefined, "   "])(
+      "returns missing_base_url without sending a request when the base URL is %p",
+      async (baseUrl) => {
+        const result = await openaiCompatibleAdapter.verifyCredentials({
+          provider: provider({ baseUrl }),
+          apiKey: "sk-openai",
+          extras: {},
+        });
+
+        expect(result).toMatchObject({ ok: false, code: "missing_base_url" });
+        expect(mockSafeFetch).not.toHaveBeenCalled();
+      }
     );
-  });
-
-  it("strips trailing slash from baseUrl", async () => {
-    await openaiCompatibleAdapter.verifyCredentials({
-      provider: provider({ baseUrl: "https://example.test/v1/" }),
-      apiKey: "k",
-      extras: {},
-    });
-    expect(mockVerify).toHaveBeenCalledWith("https://example.test/v1/models", expect.any(Object));
-  });
-
-  it("verifies OpenRouter against the auth-gated /key path (public /models would 200)", async () => {
-    await openaiCompatibleAdapter.verifyCredentials({
-      provider: provider({
-        baseUrl: "https://openrouter.ai/api/v1",
-        origin: { kind: "byok", catalogProviderId: "openrouter" },
-      }),
-      apiKey: "sk-or",
-      extras: {},
-    });
-    expect(mockVerify).toHaveBeenCalledWith("https://openrouter.ai/api/v1/key", {
-      Authorization: "Bearer sk-or",
-    });
-  });
-
-  it("uses /models for non-OpenRouter catalog providers", async () => {
-    await openaiCompatibleAdapter.verifyCredentials({
-      provider: provider({ origin: { kind: "byok", catalogProviderId: "groq" } }),
-      apiKey: "k",
-      extras: {},
-    });
-    expect(mockVerify).toHaveBeenCalledWith("https://api.openai.com/v1/models", expect.any(Object));
-  });
-
-  it("maps a 401 from OpenRouter's /key to invalid_api_key", async () => {
-    mockVerify.mockResolvedValue({ ok: false, code: "invalid_api_key", checkedAt: 1 });
-    const result = await openaiCompatibleAdapter.verifyCredentials({
-      provider: provider({
-        baseUrl: "https://openrouter.ai/api/v1",
-        origin: { kind: "byok", catalogProviderId: "openrouter" },
-      }),
-      apiKey: "sk-wrong",
-      extras: {},
-    });
-    expect(result.code).toBe("invalid_api_key");
-    expect(mockVerify).toHaveBeenCalledWith("https://openrouter.ai/api/v1/key", expect.any(Object));
   });
 });

@@ -41,63 +41,65 @@ function makeApi(
 }
 
 describe("resolveChatBackendModel", () => {
-  it("resolves the preferred model when it is enabled", async () => {
-    const p = provider("p1");
-    const api = makeApi([okEntry("a", p), okEntry("b", p)], { p1: "key" });
+  describe("resolveChatBackendModel()", () => {
+    it("returns the preferred model with its stored API key when it is enabled", async () => {
+      const p = provider("p1");
+      const api = makeApi([okEntry("a", p), okEntry("b", p)], { p1: "key" });
 
-    const result = await resolveChatBackendModel(api, "b");
+      const result = await resolveChatBackendModel(api, "b");
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.configuredModelId).toBe("b");
-      expect(result.customModel.apiKey).toBe("key");
-    }
-  });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.configuredModelId).toBe("b");
+        expect(result.customModel.apiKey).toBe("key");
+      }
+    });
 
-  it("falls back to the first enabled model when the preferred id is gone", async () => {
-    const p = provider("p1");
-    const api = makeApi([okEntry("a", p), okEntry("b", p)], { p1: "key" });
+    it("falls back to the first enabled model when the preferred id is no longer enabled", async () => {
+      const p = provider("p1");
+      const api = makeApi([okEntry("a", p), okEntry("b", p)], { p1: "key" });
 
-    const result = await resolveChatBackendModel(api, "stale-uuid");
+      const result = await resolveChatBackendModel(api, "stale-uuid");
 
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.configuredModelId).toBe("a");
-  });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.configuredModelId).toBe("a");
+    });
 
-  it("resolves a legacy name|provider selection", async () => {
-    const p = provider("p1");
-    const api = makeApi([okEntry("a", p)], { p1: "key" });
+    it("resolves a legacy name|provider selection to its configured model", async () => {
+      const p = provider("p1");
+      const api = makeApi([okEntry("a", p)], { p1: "key" });
 
-    const result = await resolveChatBackendModel(api, "a-wire|anthropic");
+      const result = await resolveChatBackendModel(api, "a-wire|anthropic");
 
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.configuredModelId).toBe("a");
-  });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.configuredModelId).toBe("a");
+    });
 
-  it("falls back to the first enabled model when no preference is given", async () => {
-    const p = provider("p1");
-    const api = makeApi([okEntry("a", p)], { p1: "key" });
+    it("falls back to the first enabled model when no preference is given", async () => {
+      const p = provider("p1");
+      const api = makeApi([okEntry("a", p)], { p1: "key" });
 
-    const result = await resolveChatBackendModel(api, undefined);
+      const result = await resolveChatBackendModel(api, undefined);
 
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.configuredModelId).toBe("a");
-  });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.configuredModelId).toBe("a");
+    });
 
-  it("returns empty when nothing is enabled", async () => {
-    const api = makeApi([]);
-    const result = await resolveChatBackendModel(api, "anything");
-    expect(result).toEqual({ ok: false, reason: "empty" });
-  });
+    it("reports empty when no chat model is enabled", async () => {
+      const api = makeApi([]);
+      const result = await resolveChatBackendModel(api, "anything");
+      expect(result).toEqual({ ok: false, reason: "empty" });
+    });
 
-  it("skips broken refs and resolves the first ok entry", async () => {
-    const p = provider("p1");
-    const broken: EnabledBackendEntry = { configuredModelId: "x", state: "broken" };
-    const api = makeApi([broken, okEntry("a", p)], { p1: "key" });
+    it("skips a broken enabled ref and resolves the first usable model", async () => {
+      const p = provider("p1");
+      const broken: EnabledBackendEntry = { configuredModelId: "x", state: "broken" };
+      const api = makeApi([broken, okEntry("a", p)], { p1: "key" });
 
-    const result = await resolveChatBackendModel(api, "x");
+      const result = await resolveChatBackendModel(api, "x");
 
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.configuredModelId).toBe("a");
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.configuredModelId).toBe("a");
+    });
   });
 });
