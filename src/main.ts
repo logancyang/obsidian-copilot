@@ -5,6 +5,7 @@ import type { AgentSessionManager, SkillManager } from "@/agentMode";
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import {
   buildChatDeepLink,
+  buildMarkdownChatLink,
   findChatFileByDeepLinkId,
   getSavedChatDeepLinkId,
 } from "@/utils/chatDeepLink";
@@ -124,6 +125,7 @@ import {
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import {
   extractChatLastAccessedAtMs,
+  extractChatTitle,
   fileToHistoryItem,
   filterChatHistoryFiles,
 } from "@/utils/chatHistoryUtils";
@@ -1215,14 +1217,23 @@ export default class CopilotPlugin extends Plugin {
     await this.loadChatHistory(file);
   }
 
-  async copyChatLink(chatId: string): Promise<void> {
+  async copyChatLink(chatId: string, displayTitle?: string): Promise<void> {
     try {
-      const id = isNativeChatId(chatId) ? chatId : await getSavedChatDeepLinkId(this.app, chatId);
+      const nativeChat = isNativeChatId(chatId);
+      const id = nativeChat ? chatId : await getSavedChatDeepLinkId(this.app, chatId);
       if (!id) {
         new Notice("Save this chat before copying a link.");
         return;
       }
-      await navigator.clipboard.writeText(buildChatDeepLink(this.app.vault.getName(), id));
+      // Hidden saved notes are absent from Obsidian's vault cache but still need their title.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/615
+      const file = nativeChat ? null : await resolveFileByPath(this.app, chatId);
+      const title =
+        displayTitle?.trim() ||
+        (file instanceof TFile ? extractChatTitle(this.app, file) : "") ||
+        "Chat";
+      const link = buildChatDeepLink(this.app.vault.getName(), id);
+      await navigator.clipboard.writeText(buildMarkdownChatLink(title, link));
       new Notice("Chat link copied.");
     } catch (error) {
       logError("Failed to copy chat link", error);
