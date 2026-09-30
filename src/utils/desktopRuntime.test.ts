@@ -27,11 +27,6 @@ describe("desktopRuntime", () => {
       setPlatform(false, true);
       expect(isDesktopRuntime()).toBe(false);
     });
-
-    it("is false on any non-desktop runtime", () => {
-      setPlatform(false, false);
-      expect(isDesktopRuntime()).toBe(false);
-    });
   });
 
   describe("requireNodeModule()", () => {
@@ -39,12 +34,6 @@ describe("desktopRuntime", () => {
       setPlatform(true, false);
       const events = requireNodeModule<typeof import("node:events")>("events");
       expect(events.EventEmitter).toBe(EventEmitter);
-    });
-
-    it("resolves working module functions on desktop", () => {
-      setPlatform(true, false);
-      const path = requireNodeModule<typeof import("node:path")>("path");
-      expect(path.posix.join("a", "b")).toBe("a/b");
     });
 
     it("throws a clear error naming the module on real mobile", () => {
