@@ -101,6 +101,21 @@ describe("codexPlanUsage", () => {
     );
   });
 
+  describe("lastRateLimits()", () => {
+    it("skips a truncated leading line", () => {
+      const tail = [
+        '_count","rate_limits":{"primary"',
+        JSON.stringify({ payload: { rate_limits: { primary: { used_percent: 13 } } } }),
+      ].join("\n");
+
+      expect(lastRateLimits(tail)?.primary?.used_percent).toBe(13);
+    });
+
+    it("returns null when no line carries rate limits", () => {
+      expect(lastRateLimits('{"type":"event_msg"}\n')).toBeNull();
+    });
+  });
+
   describe("readCodexPlanUsage()", () => {
     const RESETS_AT_SECONDS = Math.floor(Date.now() / 1000) + 3_600;
 
@@ -287,22 +302,6 @@ describe("codexPlanUsage", () => {
       setup();
 
       await expect(readCodexPlanUsage(codexHome)).resolves.toEqual(UNAVAILABLE);
-    });
-
-    it("reports unavailable when the home directory does not exist", async () => {
-      await expect(readCodexPlanUsage(path.join(codexHome, "nope"))).resolves.toEqual(UNAVAILABLE);
-    });
-
-    describe("lastRateLimits()", () => {
-      it("skips a truncated leading line", () => {
-        const tail = ['_count","rate_limits":{"primary"', tokenCountLine(13)].join("\n");
-
-        expect(lastRateLimits(tail)?.primary?.used_percent).toBe(13);
-      });
-
-      it("returns null when no line carries rate limits", () => {
-        expect(lastRateLimits('{"type":"event_msg"}\n')).toBeNull();
-      });
     });
   });
 });

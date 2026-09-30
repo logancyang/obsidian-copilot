@@ -10,12 +10,8 @@ jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
 const mockSpawn = jest.fn();
 const mockExec = jest.fn();
 jest.mock("./codexVersion", () => ({
+  ...jest.requireActual("./codexVersion"),
   resolveSupportedCodexAcpEntry: (path: string) => path,
-  buildCodexAcpInvocation: (command: string, args: string[], env: object) => ({
-    command,
-    args,
-    env,
-  }),
 }));
 jest.mock("@/utils/desktopRuntime", () => ({
   requireNodeModule: (id: string) =>

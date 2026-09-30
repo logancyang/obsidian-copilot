@@ -53,5 +53,14 @@ describe("codexConfigEnv", () => {
         default_mode_request_user_input: false,
       });
     });
+
+    it.each(["not-json", "[]", "null"])(
+      "rejects the invalid CODEX_CONFIG override %s without echoing it",
+      (existing) => {
+        expect(() => mergeCodexConfigEnv(existing, "Use the vault.")).toThrow(
+          "Codex CODEX_CONFIG must be a valid JSON object."
+        );
+      }
+    );
   });
 });
