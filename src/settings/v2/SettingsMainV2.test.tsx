@@ -7,6 +7,15 @@ jest.mock("@/settings/v2/components/BasicSettings", () => ({ BasicSettings: () =
 jest.mock("@/settings/v2/components/MiyoSettings", () => ({
   MiyoSettings: () => <div>Miyo settings content</div>,
 }));
+jest.mock("@/settings/v2/components/PreviewSwitch", () => ({
+  PreviewSwitch: ({
+    currentVersion,
+    hasUpdate,
+  }: {
+    currentVersion: string;
+    hasUpdate: boolean;
+  }) => <div>{`Preview switch for ${currentVersion}${hasUpdate ? " with update" : ""}`}</div>,
+}));
 jest.mock("@/settings/v2/components/SelfHostSettings", () => ({ SelfHostSettings: () => null }));
 jest.mock("@/settings/v2/components/CommandSettings", () => ({ CommandSettings: () => null }));
 jest.mock("@/settings/v2/components/AdvancedSettings", () => ({ AdvancedSettings: () => null }));
@@ -56,6 +65,13 @@ describe("SettingsMainV2", () => {
       render(<SettingsMainV2 plugin={plugin} />);
       expect(screen.getByText("v1.2.3")).toBeTruthy();
       expect(screen.getByRole("link", { name: "(Update to v4.1.0)" })).toBeTruthy();
+    });
+
+    it("shows the release channel switch for the installed version and the shared update state", () => {
+      mockLatestVersion = "4.1.0";
+      mockHasUpdate = true;
+      render(<SettingsMainV2 plugin={plugin} />);
+      expect(screen.getByText("Preview switch for 1.2.3 with update")).toBeTruthy();
     });
 
     it("shows up to date when the shared check finds no newer release", () => {

@@ -93,6 +93,7 @@ export interface CopilotSettings {
   enableAutonomousAgent: boolean;
   enableCustomPromptTemplating: boolean;
   enableSelfHostMode: boolean;
+  previewEnabled: boolean;
   enableMiyo: boolean;
   enableMiyoSearchSkill: boolean;
   miyoSearchAll: boolean;

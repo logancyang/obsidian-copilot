@@ -25,6 +25,20 @@ export function isSelfHostModeValid(): boolean {
   return getSettings().enableSelfHostMode === true && hasVerifiedFeature("self_host");
 }
 
+let previewFailedThisSession = false;
+
+export function isPreviewEnabled(): boolean {
+  return (
+    !previewFailedThisSession &&
+    getSettings().previewEnabled === true &&
+    hasVerifiedFeature("preview")
+  );
+}
+
+export function disablePreviewForSession(): void {
+  previewFailedThisSession = true;
+}
+
 function isPlusModel(modelKey: string): boolean {
   const settings = getSettings();
   const configuredModel = settings.configuredModels.find(
@@ -180,6 +194,16 @@ export function useLicenseState(): LicenseState {
   return settings.isPaidUser === true && !isEntitlementExpired(settings)
     ? UNNAMED_ACTIVE_LICENSE
     : INACTIVE_LICENSE;
+}
+
+export function useIsPreviewAvailable(): boolean {
+  useSettingsValue();
+  return hasVerifiedFeature("preview");
+}
+
+export function useIsPreviewEnabled(): boolean {
+  useSettingsValue();
+  return isPreviewEnabled();
 }
 
 export function useIsSelfHostEligible(): boolean | undefined {

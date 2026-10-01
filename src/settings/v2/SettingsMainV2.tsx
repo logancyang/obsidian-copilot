@@ -17,6 +17,7 @@ import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
 import { DesktopOnlySettingsPanel } from "./components/DesktopOnlySettingsPanel";
 import { MiyoSettings } from "./components/MiyoSettings";
+import { PreviewSwitch } from "./components/PreviewSwitch";
 import { SelfHostSettings } from "./components/SelfHostSettings";
 
 const LazySkillsSettings = React.lazy(() =>
@@ -180,6 +181,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "b
                   </Button>
                 </div>
               </div>
+              <PreviewSwitch currentVersion={plugin.manifest.version} hasUpdate={hasUpdate} />
             </div>
             <SettingsContent key={resetKey} />
           </div>
