@@ -19,7 +19,7 @@ export function PreviewBadge({ onOpen }: PreviewBadgeProps): React.ReactElement 
       aria-label="Copilot Preview is on. Open the release channel switch."
       className={cn(
         badgeVariants({ variant: "accent" }),
-        "tw-absolute tw-right-2 tw-top-2 tw-z-cover tw-h-auto tw-cursor-pointer tw-border-none tw-shadow-none"
+        "tw-absolute tw-right-2 tw-top-2 tw-z-cover tw-h-auto tw-cursor-pointer tw-border-none !tw-bg-interactive-accent !tw-text-on-accent !tw-shadow-none"
       )}
       onClick={(event) => onOpen(event.currentTarget.win)}
       type="button"
