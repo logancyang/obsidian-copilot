@@ -762,6 +762,28 @@ describe("agentModelPickerHelpers", () => {
       expect(byId["copilot-plus/flash"].displayName).toBe("copilot-plus/flash");
     });
 
+    it("shows an enabled model's host label when the agent has no model catalog yet, and its name when unlabeled (https://github.com/logancyang/obsidian-copilot/issues/3496)", () => {
+      const enabled: EnabledModelEntry[] = [
+        {
+          baseModelId: "d5df8680/auto",
+          name: "custom-model",
+          label: "custom-provider/custom-model",
+          credentialState: "ok",
+        },
+        { baseModelId: "copilot-plus/flash", name: "Flash", credentialState: "ok" },
+      ];
+      const entries: ModelSelectorEntry[] = [];
+      appendBackendSection(entries, opencodeWithEntries(enabled), {
+        backendModels: null,
+        keepBaseModelId: null,
+        settings: emptySettings,
+        useEnabledFallback: true,
+      });
+      const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
+      expect(byId["d5df8680/auto"].displayName).toBe("custom-provider/custom-model");
+      expect(byId["copilot-plus/flash"].displayName).toBe("Flash");
+    });
+
     it("carries the backend's free flag onto the picker entry", () => {
       const enabled: EnabledModelEntry[] = [
         {

@@ -148,6 +148,30 @@ describe("opencodeModelResolve", () => {
       expect(unnamed.label).toBe("custom-provider/fast");
     });
 
+    it("leaves a custom provider's models unlabeled when its display name is blank, so opencode's route-id label shows (https://github.com/logancyang/obsidian-copilot/issues/3496)", () => {
+      const customProviderId = "d5df8680-65f4-4c4b-81d2-7797550f47fe";
+      const settings = makeSettings({
+        enabledModels: ["named"],
+        providers: {
+          [customProviderId]: {
+            ...makeProvider(customProviderId, { kind: "byok" }, "openai-compatible"),
+            displayName: "   ",
+          },
+        },
+        configuredModels: [
+          {
+            configuredModelId: "named",
+            providerId: customProviderId,
+            info: { id: "auto", displayName: "custom-model" },
+            configuredAt: 0,
+          },
+        ],
+      });
+      const [entry] = opencodeEnabledModelEntries(settings);
+      expect(entry.baseModelId).toBe(`${customProviderId}/auto`);
+      expect(entry.label).toBeUndefined();
+    });
+
     it("leaves Copilot Plus, catalog BYOK, and agent-native models unlabeled so opencode's own label shows (https://github.com/logancyang/obsidian-copilot/issues/3496)", () => {
       const settings = makeSettings({
         enabledModels: ["plus", "catalog", "native"],
