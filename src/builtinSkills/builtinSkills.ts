@@ -162,13 +162,6 @@ function RequireRelay {
   if (-not $KEY -or -not $BASE) { NoLicense }
 }
 
-# Decode a response body as UTF-8 whatever its header says: Windows PowerShell 5.1
-# decodes .Content as ISO-8859-1 when the server names no charset, mojibaking
-# every non-ASCII character. https://github.com/logancyang/obsidian-copilot/issues/3398
-function Read-Utf8Body($resp) {
-  [System.Text.Encoding]::UTF8.GetString($resp.RawContentStream.ToArray())
-}
-
 # Invoke-Relay endpoint body -> prints the response body, mapping HTTP status.
 function Invoke-Relay($endpoint, $body) {
   $json = $body | ConvertTo-Json -Compress -Depth 5
@@ -181,14 +174,14 @@ function Invoke-Relay($endpoint, $body) {
       -Headers @{ Authorization = "Bearer $KEY"; 'X-Client-Version' = $CLIENT_VERSION } \`
       -Body $bytes -UseBasicParsing
     $code = [int]$resp.StatusCode
-    $out = Read-Utf8Body $resp
+    $out = $resp.Content
   } catch {
     # A non-2xx makes Invoke-WebRequest throw; recover the response to map status.
     $r = $null
     try { $r = $_.Exception.Response } catch {}
     if (-not $r) { Die "Could not reach the Copilot relay. $RELAY_FAILED_FALLBACK" 1 }
     $code = [int]$r.StatusCode
-    $reader = New-Object System.IO.StreamReader($r.GetResponseStream(), [System.Text.Encoding]::UTF8)
+    $reader = New-Object System.IO.StreamReader($r.GetResponseStream())
     $out = $reader.ReadToEnd()
   }
   if ($code -eq 401 -or $code -eq 403) { Die $LICENSE_INVALID }
@@ -273,7 +266,7 @@ function relaySkill(opts: {
   const [argKey, argPlaceholder] = opts.arg;
   const cmdFile = opts.scriptFile.replace(/\.sh$/, ".cmd");
   const ps1File = opts.scriptFile.replace(/\.sh$/, ".ps1");
-  const version = 8;
+  const version = 7;
   // Self-host search crosses back into the Obsidian renderer so API keys never enter the
   // agent process.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
@@ -309,7 +302,7 @@ fi
     if ($_.ErrorDetails.Message) { [Console]::Error.WriteLine($_.ErrorDetails.Message) }
     Die 'Copilot could not complete self-host web search.' 1
   }
-  [Console]::Out.WriteLine((Read-Utf8Body $response))
+  [Console]::Out.WriteLine($response.Content)
   exit 0
 }
 `
@@ -399,7 +392,7 @@ fetch tool. Use \`copilot-web-search\` when search results can answer the reques
 otherwise tell the user that fetching the page is unavailable.`,
 });
 
-const READ_PDF_VERSION = 8;
+const READ_PDF_VERSION = 7;
 const READ_PDF: BuiltinSkill = {
   name: "copilot-read-pdf",
   version: READ_PDF_VERSION,
