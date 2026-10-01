@@ -290,7 +290,7 @@ export function QuickAskPanel({
         />
       </div>
 
-      <div className="tw-mt-auto tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-1.5">
+      <div className="tw-mt-auto tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-0 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-1.5">
         <div className="tw-flex tw-items-center tw-gap-1">
           <ModelSelector
             size="sm"
