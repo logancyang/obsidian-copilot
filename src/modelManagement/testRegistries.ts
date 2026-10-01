@@ -16,7 +16,7 @@ export interface TestRegistries {
   coordinator: ModelManagementCoordinator;
 }
 
-export function createFakeApp(): App {
+function createFakeApp(): App {
   const secrets = new Map<string, string>();
   return {
     secretStorage: {

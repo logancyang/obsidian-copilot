@@ -253,12 +253,9 @@ export class BrevilabsClient {
 
   private async makeFormDataRequest<T>(
     endpoint: string,
-    formData: FormData,
-    skipLicenseCheck = false
+    formData: FormData
   ): Promise<BrevilabsApiResult<T>> {
-    if (!skipLicenseCheck) {
-      this.checkLicenseKey();
-    }
+    this.checkLicenseKey();
 
     formData.append("user_id", getSettings().userId);
 

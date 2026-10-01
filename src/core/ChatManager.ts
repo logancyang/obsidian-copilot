@@ -122,7 +122,6 @@ export class ChatManager {
   }
 
   private async getSystemPromptForMessage(
-    chainType: ChainType,
     vault: Vault,
     activeNote: TFile | null
   ): Promise<ProcessedPromptResult> {
@@ -224,7 +223,7 @@ export class ChatManager {
       }
 
       const { processedPrompt: systemPrompt, includedFiles: systemPromptIncludedFiles } =
-        await this.getSystemPromptForMessage(chainType, this.plugin.app.vault, activeNote);
+        await this.getSystemPromptForMessage(this.plugin.app.vault, activeNote);
 
       const { processedContent, contextEnvelope } = await this.contextManager.processMessageContext(
         this.plugin.app,
@@ -266,7 +265,7 @@ export class ChatManager {
 
       const activeNote = this.plugin.app.workspace.getActiveFile();
       const { processedPrompt: systemPrompt, includedFiles: systemPromptIncludedFiles } =
-        await this.getSystemPromptForMessage(chainType, this.plugin.app.vault, activeNote);
+        await this.getSystemPromptForMessage(this.plugin.app.vault, activeNote);
       await this.contextManager.reprocessMessageContext(
         this.plugin.app,
         messageId,
@@ -343,7 +342,7 @@ export class ChatManager {
       const chainType = getChainType();
       const activeNote = this.plugin.app.workspace.getActiveFile();
       const { processedPrompt: systemPrompt, includedFiles: systemPromptIncludedFiles } =
-        await this.getSystemPromptForMessage(chainType, this.plugin.app.vault, activeNote);
+        await this.getSystemPromptForMessage(this.plugin.app.vault, activeNote);
       await this.contextManager.reprocessMessageContext(
         this.plugin.app,
         userMessage.id,

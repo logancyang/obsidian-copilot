@@ -235,10 +235,9 @@ function summarizeExplanation(explanation: unknown): string {
 
 export function formatSplitSearchResultsForLLM(
   filterDocs: SearchDoc[],
-  searchDocs: SearchDoc[],
-  startId = 1
+  searchDocs: SearchDoc[]
 ): string {
-  let currentId = startId;
+  let currentId = 1;
   const sections: string[] = [];
 
   if (filterDocs.length > 0) {
@@ -315,7 +314,7 @@ export function isTimeDominantResults(docs: Array<{ source?: string }>): boolean
   return docs.some((doc) => doc.source === "time-filtered");
 }
 
-export function formatMetadataOnlyDocuments(docs: unknown, snippetLength = 300): string {
+export function formatMetadataOnlyDocuments(docs: unknown): string {
   if (!Array.isArray(docs) || docs.length === 0) {
     return "";
   }
@@ -326,7 +325,7 @@ export function formatMetadataOnlyDocuments(docs: unknown, snippetLength = 300):
       const path = doc.path || "";
       const modified = toIsoString(doc.mtime);
       const content = sanitizeContentForCitations(doc.content || "");
-      const snippet = content.slice(0, snippetLength);
+      const snippet = content.slice(0, 300);
 
       const pathEl = path ? `\n<path>${path}</path>` : "";
       const modifiedEl = modified ? `\n<modified>${modified}</modified>` : "";

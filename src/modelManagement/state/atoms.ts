@@ -32,7 +32,7 @@ export const copilotPlusCatalogAtom = atom<Readonly<PersistedCopilotPlusCatalog>
   (get) => get(settingsAtom).copilotPlusCatalog
 );
 
-export const selfHostModeAtom = atom<boolean>((get) => get(settingsAtom).enableSelfHostMode);
+const selfHostModeAtom = atom<boolean>((get) => get(settingsAtom).enableSelfHostMode);
 
 function filterByOrigin(
   providers: Readonly<Record<string, Provider>>,
@@ -61,14 +61,6 @@ export const visibleByokProvidersAtom = atom<readonly Provider[]>((get) => {
   if (cloud.length === 0) return providers;
   return [...selfHosted, ...cloud];
 });
-
-export const agentProvidersAtom = atom<readonly Provider[]>((get) =>
-  filterByOrigin(get(providersAtom), "agent")
-);
-
-export const copilotPlusProvidersAtom = atom<readonly Provider[]>((get) =>
-  filterByOrigin(get(providersAtom), "copilot-plus")
-);
 
 export const backendPickerAtomFamily = atomFamily((backend: BackendType) =>
   atom<readonly EnabledBackendEntry[]>((get) => {

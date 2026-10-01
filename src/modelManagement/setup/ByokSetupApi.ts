@@ -1,5 +1,4 @@
 import { logError } from "@/logger";
-import { looksLikeEmbeddingModel } from "@/modelManagement/catalog/catalogTransform";
 import type { ModelInfo, ProviderType } from "@/modelManagement/types/catalog";
 import type { BackendType } from "@/modelManagement/types/persisted";
 import type { BackendConfigRegistry } from "@/modelManagement/backends/BackendConfigRegistry";
@@ -7,12 +6,6 @@ import type { ConfiguredModelRegistry } from "@/modelManagement/models/Configure
 import type { ProviderRegistry } from "@/modelManagement/providers/ProviderRegistry";
 
 export const BYOK_DEFAULT_AUTO_ENROLL: readonly BackendType[] = ["chat", "opencode"];
-
-export interface AddModelsInput {
-  providerId: string;
-  models: readonly ModelInfo[];
-  autoEnrollIn?: readonly BackendType[];
-}
 
 export interface SetupProviderInput {
   catalogProviderId?: string;
@@ -76,26 +69,6 @@ export class ByokSetupApi {
       await this.#rollbackProvider(providerId);
       throw err;
     }
-  }
-
-  async addModels(input: AddModelsInput): Promise<string[]> {
-    const resultIds: string[] = [];
-    const newChatIds: string[] = [];
-    for (const info of input.models) {
-      const existing = this.#models.getByWireId(input.providerId, info.id);
-      if (existing) {
-        resultIds.push(existing.configuredModelId);
-        continue;
-      }
-      const configuredModelId = await this.#models.add({ providerId: input.providerId, info });
-      resultIds.push(configuredModelId);
-      const isEmbedding = info.isEmbedding ?? looksLikeEmbeddingModel(info.id);
-      if (!isEmbedding) {
-        newChatIds.push(configuredModelId);
-      }
-    }
-    await this.#enrollInBackends(input.autoEnrollIn ?? BYOK_DEFAULT_AUTO_ENROLL, newChatIds);
-    return resultIds;
   }
 
   async #enrollInBackends(

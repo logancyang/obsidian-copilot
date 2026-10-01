@@ -1,6 +1,5 @@
-import { getChainType, getModelKey, SetChainOptions } from "@/aiParams";
+import { getChainType, getModelKey } from "@/aiParams";
 import { ChainType } from "@/chainType";
-import { USER_SENDER } from "@/constants";
 import {
   AutonomousAgentChainRunner,
   ChainRunner,
@@ -9,16 +8,10 @@ import {
 } from "@/LLMProviders/chainRunner/index";
 import { logError, logInfo } from "@/logger";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { getEffectiveUserPrompt, getSystemPrompt } from "@/system-prompts/systemPromptBuilder";
 import { ChatMessage } from "@/types/message";
 import { isOSeriesModel } from "@/utils";
 import { resolveChatBackendModel, type ModelManagementApi } from "@/modelManagement";
 import { MissingModelKeyError } from "@/error";
-import {
-  ChatPromptTemplate,
-  HumanMessagePromptTemplate,
-  MessagesPlaceholder,
-} from "@langchain/core/prompts";
 import { App } from "obsidian";
 import ChatModelManager from "./chatModelManager";
 import MemoryManager from "./memoryManager";
@@ -78,10 +71,7 @@ export default class ChainManager {
     }
   }
 
-  async createChainWithNewModel(
-    options: SetChainOptions = {},
-    neededReInitChatMode: boolean = true
-  ): Promise<void> {
+  async createChainWithNewModel(neededReInitChatMode: boolean = true): Promise<void> {
     let selectedModelId: string | undefined;
     const chainType = getChainType();
 
@@ -159,21 +149,7 @@ export default class ChainManager {
     const chatModel = this.chatModelManager.getChatModel();
 
     if (ignoreSystemMessage || isOSeriesModel(chatModel)) {
-      let effectivePrompt = ChatPromptTemplate.fromMessages([
-        new MessagesPlaceholder("history"),
-        HumanMessagePromptTemplate.fromTemplate("{input}"),
-      ]);
-
-      // Workaround: o-series models reject system prompts in langchainjs.
-      // https://github.com/langchain-ai/langchain/issues/28895
-      if (isOSeriesModel(chatModel)) {
-        effectivePrompt = ChatPromptTemplate.fromMessages([
-          [USER_SENDER, getSystemPrompt(await getEffectiveUserPrompt(this.app))],
-          effectivePrompt,
-        ]);
-      }
-
-      void this.createChainWithNewModel({ prompt: effectivePrompt }, false).catch((err) =>
+      void this.createChainWithNewModel(false).catch((err) =>
         logError("createChainWithNewModel failed", err)
       );
     }
