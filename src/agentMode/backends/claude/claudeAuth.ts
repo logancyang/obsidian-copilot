@@ -24,14 +24,6 @@ interface ClaudeAuthStatusJson {
   apiProvider?: string;
 }
 
-export function parseClaudeAuthStatusOutput(stdout: string): ClaudeAuthStatus {
-  try {
-    return parseVerifiedClaudeAuthStatus(stdout);
-  } catch {
-    return { loggedIn: false };
-  }
-}
-
 function parseVerifiedClaudeAuthStatus(stdout: string): ClaudeAuthStatus {
   const parsed = JSON.parse(stdout) as ClaudeAuthStatusJson | null;
   // Malformed output cannot establish that credentials were removed during logout.

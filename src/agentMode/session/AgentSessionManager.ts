@@ -1903,10 +1903,6 @@ export class AgentSessionManager {
     }
   }
 
-  async cancel(): Promise<void> {
-    await this.getActiveSession()?.cancel();
-  }
-
   async shutdown(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;

@@ -1,6 +1,6 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
-export const SDK_STREAM_STALL_TIMEOUT_MS = 60_000;
+const SDK_STREAM_STALL_TIMEOUT_MS = 60_000;
 
 export const SDK_STREAM_STALL_MESSAGE =
   `Claude stopped responding — the response stream stalled mid-reply (no output for ` +

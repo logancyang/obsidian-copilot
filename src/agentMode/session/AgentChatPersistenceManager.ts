@@ -33,7 +33,7 @@ import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage, BackendId, SessionUsage } from "./types";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;
-export const AGENT_FILENAME_PREFIX = "agent__";
+const AGENT_FILENAME_PREFIX = "agent__";
 
 function parseUsageJson(raw: unknown): SessionUsage | undefined {
   if (typeof raw !== "string" || raw.trim().length === 0) return undefined;

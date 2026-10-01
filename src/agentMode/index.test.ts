@@ -68,14 +68,10 @@ jest.mock("./ui/permissionPrompter", () => ({
   createDefaultPermissionPrompter: jest.fn(),
   createDefaultAskUserQuestionPrompter: jest.fn(),
 }));
-jest.mock("./ui/AgentModeChat", () => ({}));
 jest.mock("./ui/CopilotAgentView", () => ({}));
 jest.mock("./ui/useBackendDescriptor", () => ({}));
-jest.mock("./ui/useAgentModelPicker", () => ({}));
-jest.mock("./ui/useAgentModePicker", () => ({}));
 jest.mock("./backends/opencode/opencodeProbePartition", () => ({}));
 jest.mock("./backends/opencode/opencodeModelResolve", () => ({}));
-jest.mock("./backends/shared/installStatus", () => ({}));
 jest.mock("./ui/AgentDefaultModelSetting", () => ({}));
 jest.mock("@/components/ui/ModelEnableList", () => ({}));
 jest.mock("./ui/PlanPreviewView", () => ({}));

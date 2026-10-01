@@ -181,7 +181,7 @@ export class AgentMessageStore {
    * batch over this transition, so render-time clocks cannot recover it later.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/336
    */
-  private finishTrailingThought(msg: StoredAgentMessage, endedAtMs = Date.now()): boolean {
+  private finishTrailingThought(msg: StoredAgentMessage): boolean {
     const last = msg.parts?.[msg.parts.length - 1];
     if (
       !last ||
@@ -191,7 +191,7 @@ export class AgentMessageStore {
     ) {
       return false;
     }
-    const durationMs = Math.max(last.durationMs ?? 0, endedAtMs - last.startedAtMs);
+    const durationMs = Math.max(last.durationMs ?? 0, Date.now() - last.startedAtMs);
     if (last.durationMs === durationMs) return false;
     last.durationMs = durationMs;
     return true;
@@ -429,13 +429,6 @@ export class AgentMessageStore {
       });
     }
     logInfo(`[AgentMessageStore] Loaded ${messages.length} messages`);
-  }
-
-  getDebugInfo() {
-    return {
-      totalMessages: this.messages.length,
-      visibleMessages: this.messages.filter((m) => m.isVisible).length,
-    };
   }
 
   private toAgentChatMessage(m: StoredAgentMessage): AgentChatMessage {
