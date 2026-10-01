@@ -203,24 +203,6 @@ export class SearchCore {
     }
   }
 
-  getStats(): {
-    fullTextStats: { documentsIndexed: number; memoryUsed: number; memoryPercent: number };
-  } {
-    return {
-      fullTextStats: this.fullTextEngine.getStats(),
-    };
-  }
-
-  getChunkManager(): ChunkManager {
-    return this.chunkManager;
-  }
-
-  clear(): void {
-    this.fullTextEngine.clear();
-    this.queryExpander.clearCache();
-    logInfo("SearchCore: Cleared all caches");
-  }
-
   private async executeLexicalSearch(
     candidates: string[],
     recallQueries: string[],
@@ -262,7 +244,7 @@ export class SearchCore {
   }
 }
 
-export function selectDiverseTopK(results: NoteIdRank[], limit: number): NoteIdRank[] {
+function selectDiverseTopK(results: NoteIdRank[], limit: number): NoteIdRank[] {
   if (results.length <= limit) {
     return results;
   }

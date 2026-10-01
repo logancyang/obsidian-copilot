@@ -236,7 +236,7 @@ newText: "## Attendees\\n- John Smith\\n- Jane Doe\\n- Bob Johnson"`,
   ];
 }
 
-export function registerFileTreeTool(app: App): void {
+function registerFileTreeTool(app: App): void {
   const registry = ToolRegistry.getInstance();
 
   registry.register({
@@ -263,7 +263,7 @@ Example queries that should use getFileTree:
   });
 }
 
-export function registerTagListTool(app: App): void {
+function registerTagListTool(app: App): void {
   const registry = ToolRegistry.getInstance();
 
   registry.register({
@@ -289,7 +289,7 @@ Examples:
   });
 }
 
-export function registerMemoryTool(app: App): void {
+function registerMemoryTool(app: App): void {
   const registry = ToolRegistry.getInstance();
 
   registry.register({
@@ -311,7 +311,7 @@ Example: statement: "I'm studying Japanese and I'm preparing for JLPT N3"`,
   });
 }
 
-export function registerCliTools(): void {
+function registerCliTools(): void {
   const registry = ToolRegistry.getInstance();
 
   registry.register({

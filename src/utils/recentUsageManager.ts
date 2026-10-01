@@ -203,16 +203,4 @@ export class RecentUsageManager<Key extends string = string> {
     const persistedValue = normalizeTimestampMs(persistedLastUsedAtMs);
     return Math.max(memoryValue ?? 0, persistedValue ?? 0);
   }
-
-  clear(key?: Key): void {
-    if (key) {
-      this.lastTouchedAtMsByKey.delete(key);
-      this.lastPersistedAtMsByKey.delete(key);
-      this.notifyChange();
-      return;
-    }
-    this.lastTouchedAtMsByKey.clear();
-    this.lastPersistedAtMsByKey.clear();
-    this.notifyChange();
-  }
 }

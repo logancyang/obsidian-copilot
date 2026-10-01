@@ -1,9 +1,9 @@
 import {
   buildOpenArtifactsDocument,
   createOpenArtifactsDocument,
-  OPENARTIFACTS_MAX_HTML_BYTES,
   OpenArtifactsDocumentTooLargeError,
 } from "@/openArtifacts/openArtifactsDocument";
+import { OPENARTIFACTS_MAX_HTML_BYTES } from "@/openArtifacts/constants";
 import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 
 jest.mock("obsidian", () => ({

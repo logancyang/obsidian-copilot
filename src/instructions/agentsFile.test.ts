@@ -329,19 +329,10 @@ describe("agentsFile", () => {
   });
 
   describe("ensureAgentsFileForDiscovery()", () => {
-    it("initializes an old project so the backend discovers it without a manual open", async () => {
-      const { app, state } = makeApp({}, ["copilot/projects/Research"]);
-
-      await ensureAgentsFileForDiscovery(app, "copilot/projects/Research", "Legacy project rules");
-
-      expect(state.files.get("copilot/projects/Research/AGENTS.md")).toBe("Legacy project rules");
-      expect(state.files.get("copilot/projects/Research/CLAUDE.md")).toBe("@AGENTS.md\n");
-    });
-
-    it("creates nothing for a scope with no instructions to preserve", async () => {
+    it("creates nothing for a scope with no AGENTS.md", async () => {
       const { app, state } = makeApp({}, ["copilot/projects/Fresh"]);
 
-      await ensureAgentsFileForDiscovery(app, "copilot/projects/Fresh", "   \n ");
+      await ensureAgentsFileForDiscovery(app, "copilot/projects/Fresh");
 
       expect(state.files.size).toBe(0);
     });
@@ -349,18 +340,18 @@ describe("agentsFile", () => {
     it("adds the Claude import next to a user-authored AGENTS.md without a legacy body", async () => {
       const { app, state } = makeApp({ "AGENTS.md": "My vault rules" });
 
-      await ensureAgentsFileForDiscovery(app, "", "");
+      await ensureAgentsFileForDiscovery(app, "");
 
       expect(state.files.get("AGENTS.md")).toBe("My vault rules");
       expect(state.files.get("CLAUDE.md")).toBe("@AGENTS.md\n");
     });
 
     it("never rejects when the vault write fails", async () => {
-      const { app } = makeApp({}, ["copilot/projects/Research"]);
+      const { app } = makeApp({ "copilot/projects/Research/AGENTS.md": "rules" });
       (app.vault.create as jest.Mock).mockRejectedValue(new Error("disk full"));
 
       await expect(
-        ensureAgentsFileForDiscovery(app, "copilot/projects/Research", "rules")
+        ensureAgentsFileForDiscovery(app, "copilot/projects/Research")
       ).resolves.toBeUndefined();
     });
   });
@@ -383,7 +374,7 @@ describe("agentsFile", () => {
     it("opens the ensured AGENTS file in the requested leaf", async () => {
       const { app, openFile } = makeApp();
 
-      await openAgentsFile(app, "", "", true);
+      await openAgentsFile(app, "");
 
       expect(app.workspace.getLeaf).toHaveBeenCalledWith(true);
       expect(openFile).toHaveBeenCalledWith(expect.objectContaining({ path: "AGENTS.md" }));
@@ -392,7 +383,7 @@ describe("agentsFile", () => {
     it("reports the path instead of opening a file Obsidian cannot show", async () => {
       const { app, openFile } = makeApp({ ".copilot/projects/One/AGENTS.md": "rules" });
 
-      await expect(openAgentsFile(app, ".copilot/projects/One", "", true)).rejects.toThrow(
+      await expect(openAgentsFile(app, ".copilot/projects/One")).rejects.toThrow(
         ".copilot/projects/One/AGENTS.md"
       );
       expect(openFile).not.toHaveBeenCalled();
@@ -402,7 +393,7 @@ describe("agentsFile", () => {
       setCaseInsensitiveFilesystem(true);
       const { app, openFile } = makeApp({ "agents.md": "rules" });
 
-      await openAgentsFile(app, "", "", false);
+      await openAgentsFile(app, "");
 
       expect(openFile).toHaveBeenCalledWith(expect.objectContaining({ path: "agents.md" }));
     });

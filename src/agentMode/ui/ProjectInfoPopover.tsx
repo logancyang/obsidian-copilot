@@ -245,12 +245,7 @@ function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps
     onClose();
     void moveProjectPromptToAgentsFile(app, record)
       .then(() =>
-        openAgentsFile(
-          app,
-          getProjectAnchorFromConfigPath(record.filePath).projectFolderPath,
-          "",
-          true
-        )
+        openAgentsFile(app, getProjectAnchorFromConfigPath(record.filePath).projectFolderPath)
       )
       .catch((error) => {
         logError("[ProjectInfoPopover] Failed to open project AGENTS.md", error);

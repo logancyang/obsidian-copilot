@@ -388,13 +388,4 @@ Format:
     }
     this.cache.set(query, expanded);
   }
-
-  clearCache(): void {
-    this.cache.clear();
-    logInfo("QueryExpander: Cache cleared");
-  }
-
-  getCacheSize(): number {
-    return this.cache.size;
-  }
 }

@@ -230,12 +230,6 @@ export class ChunkManager {
     }
   }
 
-  clearCache(): void {
-    this.cache.clear();
-    this.memoryUsage = 0;
-    logInfo("ChunkManager: Cache cleared");
-  }
-
   private async generateChunksForNote(notePath: string, options: ChunkOptions): Promise<Chunk[]> {
     try {
       const file = this.app.vault.getAbstractFileByPath(notePath);

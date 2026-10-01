@@ -2,8 +2,8 @@ import { OPENARTIFACTS_VAULT_FOLDER } from "@/openArtifacts/constants";
 import { ensureFolderExists } from "@/utils";
 import type { Vault } from "obsidian";
 
-export const OPENARTIFACTS_LEDGER_FOLDER = OPENARTIFACTS_VAULT_FOLDER;
-export const OPENARTIFACTS_LEDGER_PATH = `${OPENARTIFACTS_LEDGER_FOLDER}/publish-history.md`;
+const OPENARTIFACTS_LEDGER_FOLDER = OPENARTIFACTS_VAULT_FOLDER;
+const OPENARTIFACTS_LEDGER_PATH = `${OPENARTIFACTS_LEDGER_FOLDER}/publish-history.md`;
 const LEGACY_LEDGER_FOLDER = ".symposium";
 const LEGACY_LEDGER_PATH = `${LEGACY_LEDGER_FOLDER}/publish-history.md`;
 

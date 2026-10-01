@@ -53,14 +53,11 @@ export interface DocumentRetriever {
 export class RetrieverFactory {
   static async createRetriever(
     app: App,
-    options: RetrieverOptions,
-    settings?: Partial<CopilotSettings>
+    options: RetrieverOptions
   ): Promise<RetrieverSelectionResult> {
-    const currentSettings = settings ? { ...getSettings(), ...settings } : getSettings();
-
     const normalizedOptions = normalizeOptions(options);
 
-    if (RetrieverFactory.shouldUseMiyo(currentSettings)) {
+    if (RetrieverFactory.shouldUseMiyo(getSettings())) {
       const retriever = RetrieverFactory.createMiyoRetriever(app, options);
       logInfo("RetrieverFactory: Using MiyoSemanticRetriever (standalone)");
       return {
@@ -86,14 +83,8 @@ export class RetrieverFactory {
     return new TieredLexicalRetriever(app, normalizeOptions(options));
   }
 
-  static getRetrieverType(settings?: Partial<CopilotSettings>): "semantic" | "lexical" {
-    const currentSettings = settings ? { ...getSettings(), ...settings } : getSettings();
-
-    if (RetrieverFactory.shouldUseMiyo(currentSettings)) {
-      return "semantic";
-    }
-
-    return "lexical";
+  static getRetrieverType(): "semantic" | "lexical" {
+    return RetrieverFactory.shouldUseMiyo(getSettings()) ? "semantic" : "lexical";
   }
 
   private static shouldUseMiyo(settings: CopilotSettings): boolean {

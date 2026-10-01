@@ -1,9 +1,6 @@
 export class CustomError extends Error {
-  public code?: string;
-
-  constructor(message: string, code?: string) {
+  constructor(message: string) {
     super(message);
-    this.code = code;
     Object.setPrototypeOf(this, CustomError.prototype);
   }
 }

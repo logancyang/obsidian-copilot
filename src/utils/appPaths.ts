@@ -2,7 +2,7 @@ import { type App, FileSystemAdapter } from "obsidian";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { md5 } from "@/utils/hash";
 
-export const COPILOT_APP_DIR_NAME = ".obsidian-copilot";
+const COPILOT_APP_DIR_NAME = ".obsidian-copilot";
 
 export function copilotAppDataDir(homeDir: string): string {
   const path = requireNodeModule<typeof import("node:path")>("path");

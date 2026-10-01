@@ -214,9 +214,7 @@ describe("BasicSettings", () => {
     it("opens a blank vault AGENTS.md, never seeded from a Chat prompt", async () => {
       render(<BasicSettings />);
       fireEvent.click(await screen.findByRole("button", { name: /Open AGENTS.md/ }));
-      await waitFor(() =>
-        expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "", true)
-      );
+      await waitFor(() => expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), ""));
     });
 
     it("lands a pending edit before opening the file, so the open cannot race the save", async () => {
@@ -226,9 +224,7 @@ describe("BasicSettings", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /Open AGENTS.md/ }));
 
-      await waitFor(() =>
-        expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "", true)
-      );
+      await waitFor(() => expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), ""));
       expect(writeAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "Always cite.");
       expect(writeAgentsFile.mock.invocationCallOrder[0]).toBeLessThan(
         openAgentsFile.mock.invocationCallOrder[0]

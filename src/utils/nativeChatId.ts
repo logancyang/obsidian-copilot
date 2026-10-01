@@ -1,4 +1,4 @@
-export const NATIVE_CHAT_ID_PREFIX = "copilot-agent-session://";
+const NATIVE_CHAT_ID_PREFIX = "copilot-agent-session://";
 
 export function buildNativeChatId(backendId: string, sessionId: string): string {
   return `${NATIVE_CHAT_ID_PREFIX}${backendId}/${encodeURIComponent(sessionId)}`;

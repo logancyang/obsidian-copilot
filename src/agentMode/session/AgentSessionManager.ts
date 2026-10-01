@@ -1306,16 +1306,15 @@ export class AgentSessionManager {
     record: ProjectFileRecord | undefined
   ): Promise<void> {
     if (projectId === GLOBAL_SCOPE) {
-      await ensureAgentsFileForDiscovery(this.app, "", "");
+      await ensureAgentsFileForDiscovery(this.app, "");
       return;
     }
     if (!record) return;
-    await ensureAgentsFileForDiscovery(this.app, "", "");
+    await ensureAgentsFileForDiscovery(this.app, "");
     await moveProjectPromptToAgentsFile(this.app, record);
     await ensureAgentsFileForDiscovery(
       this.app,
-      getProjectAnchorFromConfigPath(record.filePath).projectFolderPath,
-      ""
+      getProjectAnchorFromConfigPath(record.filePath).projectFolderPath
     );
   }
 

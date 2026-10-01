@@ -892,7 +892,7 @@ const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
 // eslint-disable-next-line no-control-regex -- settings paths must reject embedded control bytes
 const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/;
 
-export function validateSkillsFolder(
+function validateSkillsFolder(
   value: string
 ): { ok: true; folder: string } | { ok: false; reason: string } {
   if (typeof value !== "string" || value.trim().length === 0) {

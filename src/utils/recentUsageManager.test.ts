@@ -223,48 +223,5 @@ describe("recentUsageManager", () => {
         expect(effective).toBe(0);
       });
     });
-
-    describe("clear()", () => {
-      it("forgets only the given key", () => {
-        const currentTime = 1000;
-        const manager = new RecentUsageManager({
-          nowMs: () => currentTime,
-        });
-
-        manager.touch("key1");
-        manager.touch("key2");
-        manager.clear("key1");
-
-        expect(manager.getLastTouchedAt("key1")).toBeNull();
-        expect(manager.getLastTouchedAt("key2")).toBe(1000);
-      });
-
-      it("forgets every key when called without one", () => {
-        const currentTime = 1000;
-        const manager = new RecentUsageManager({
-          nowMs: () => currentTime,
-        });
-
-        manager.touch("key1");
-        manager.touch("key2");
-        manager.clear();
-
-        expect(manager.getLastTouchedAt("key1")).toBeNull();
-        expect(manager.getLastTouchedAt("key2")).toBeNull();
-      });
-
-      it("increments the revision and notifies subscribers", () => {
-        const manager = new RecentUsageManager({ nowMs: () => 1000 });
-        const listener = jest.fn();
-        manager.subscribe(listener);
-
-        manager.touch("key1");
-        const revisionAfterTouch = manager.getRevision();
-
-        manager.clear("key1");
-        expect(manager.getRevision()).toBe(revisionAfterTouch + 1);
-        expect(listener).toHaveBeenCalledTimes(2);
-      });
-    });
   });
 });

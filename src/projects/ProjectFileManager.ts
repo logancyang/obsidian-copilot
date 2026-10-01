@@ -77,18 +77,6 @@ export class ProjectFileManager {
     return migrationResult;
   }
 
-  public getProjects(): ProjectConfig[] {
-    return getCachedProjectRecords().map((r) => r.project);
-  }
-
-  public getProjectRecords(): ProjectFileRecord[] {
-    return getCachedProjectRecords();
-  }
-
-  public async reloadProjects(): Promise<ProjectFileRecord[]> {
-    return await loadAllProjects(this.app);
-  }
-
   public async fetchProjects(): Promise<ProjectFileRecord[]> {
     return await fetchAllProjects(this.app);
   }

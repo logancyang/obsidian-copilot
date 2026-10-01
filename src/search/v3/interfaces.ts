@@ -1,14 +1,3 @@
-export interface NoteDoc {
-  id: string;
-  title: string;
-  headings: string[];
-  tags: string[];
-  props: Record<string, unknown>;
-  linksOut: string[];
-  linksIn: string[];
-  body: string;
-}
-
 export interface SearchExplanation {
   lexicalMatches?: {
     field: string;
