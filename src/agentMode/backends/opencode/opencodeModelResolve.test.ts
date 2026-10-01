@@ -206,6 +206,32 @@ describe("opencodeModelResolve", () => {
       expect(entry.credentialState).toBe("ok");
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 marks Copilot Plus and BYOK models as Copilot-routed and agent-hosted models as not", () => {
+      const settings = makeSettings({
+        enabledModels: ["plus", "byok", "native"],
+        providers: {
+          plus: makeProvider("plus", { kind: "copilot-plus" }),
+          byok: byokProvider({ providerId: "byok" }),
+          native: makeProvider("native", { kind: "agent", agentType: "opencode" }),
+        },
+        configuredModels: [
+          makeModel("plus", "plus", "copilot-plus-flash"),
+          makeModel("byok", "byok", "stepfun/step-3.5-flash"),
+          makeModel("native", "native", "opencode/big-pickle"),
+        ],
+      });
+      expect(
+        opencodeEnabledModelEntries(settings).map(({ baseModelId, copilotRouted }) => ({
+          baseModelId,
+          copilotRouted,
+        }))
+      ).toEqual([
+        { baseModelId: "copilot-plus/copilot-plus-flash", copilotRouted: true },
+        { baseModelId: "openrouter/stepfun/step-3.5-flash", copilotRouted: true },
+        { baseModelId: "opencode/big-pickle", copilotRouted: false },
+      ]);
+    });
+
     it("flags opencode Zen models (opencode/ prefix) as free, others not", () => {
       const settings = makeSettings({
         enabledModels: ["zen", "lms"],

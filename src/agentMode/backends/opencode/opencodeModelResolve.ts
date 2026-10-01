@@ -100,6 +100,7 @@ export function opencodeEnabledModelEntries(
       label: isCustomEndpoint && providerName ? `${providerName}/${name}` : undefined,
       description: configuredModel.info.description,
       credentialState: credentialStateFor(provider, mapping.native),
+      copilotRouted: !mapping.native,
       isFree: isOpencodeZenWireId(baseModelId),
       capabilities: capabilitiesFromConfiguredInfo(configuredModel.info),
       needsSelfHostWarning: providerNeedsSelfHostWarning(provider, settings),

@@ -69,6 +69,7 @@ export interface EnabledModelEntry {
   label?: string;
   description?: string;
   credentialState: EnabledModelCredentialState;
+  copilotRouted?: boolean;
   capabilities?: ModelCapability[];
   isFree?: boolean;
   needsSelfHostWarning?: boolean;
