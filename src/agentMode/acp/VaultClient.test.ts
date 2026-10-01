@@ -148,6 +148,23 @@ describe("VaultClient", () => {
         ).rejects.toThrow(/hidden directory/);
         expect(adapter.read).not.toHaveBeenCalled();
       });
+
+      it("keeps denying a nested vault config folder when an ancestor is set as the Copilot folder", async () => {
+        jest
+          .mocked(getSettings)
+          .mockReturnValue({ copilotFolder: ".config" } as ReturnType<typeof getSettings>);
+        const { app, adapter } = buildApp("/Users/me/vault");
+        (app.vault as unknown as { configDir: string }).configDir = ".config/custom";
+        adapter.read.mockResolvedValue("content");
+        const client = buildClient(app);
+
+        await expect(
+          client.readTextFile({ sessionId: "s1", path: ".config/custom/plugins/data.json" })
+        ).rejects.toThrow(/hidden directory/);
+        await expect(
+          client.readTextFile({ sessionId: "s1", path: ".config/skills/example.md" })
+        ).resolves.toEqual({ content: "content" });
+      });
     });
 
     describe("writeTextFile()", () => {
