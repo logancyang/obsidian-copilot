@@ -8,6 +8,13 @@ import {
 } from "@/utils/frontmatterMarkdownFile";
 import { parseYaml, stringifyYaml, TFile } from "obsidian";
 import * as vaultAdapterUtils from "@/utils/vaultAdapterUtils";
+import { logWarn } from "@/logger";
+
+jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
+
+jest.mock("@/utils", () => ({
+  stripFrontmatter: (content: string) => content.replace(/^---\n[\s\S]*?\n---\n/, ""),
+}));
 
 jest.mock("obsidian", () => {
   const yaml = jest.requireActual<typeof import("yaml")>("yaml");
@@ -27,7 +34,73 @@ jest.mock("@/utils/vaultAdapterUtils", () => ({
   trashFile: jest.fn(),
 }));
 
+function hiddenFile(path: string): TFile {
+  return Object.assign(new (TFile as unknown as new () => TFile)(), { path });
+}
+
+function hiddenApp(raw: string): { app: never; read: jest.Mock } {
+  const read = jest.fn(async () => raw);
+  return { app: { vault: { adapter: { read } } } as never, read };
+}
+
 describe("frontmatterMarkdownFile", () => {
+  describe("readFrontmatterMarkdownFile()", () => {
+    it("hands indexed files to the metadata cache like any visible vault file", async () => {
+      jest.mocked(vaultAdapterUtils.isInVaultCache).mockReturnValueOnce(true);
+      const file = hiddenFile("commands/example.md");
+      const app = {
+        vault: { read: jest.fn(async () => "---\nslash: true\n---\nBody") },
+        metadataCache: { getFileCache: jest.fn(() => ({ frontmatter: { slash: true } })) },
+      } as never;
+
+      await expect(readFrontmatterMarkdownFile(app, file)).resolves.toEqual({
+        content: "Body",
+        frontmatter: { slash: true },
+        hasMalformedFrontmatter: false,
+      });
+    });
+
+    it("treats malformed YAML in an unindexed file as empty frontmatter instead of throwing", async () => {
+      const { app } = hiddenApp("---\ndescription: Summarize: briefly\n---\nBody");
+
+      const parsed = await readFrontmatterMarkdownFile(app, hiddenFile(".copilot/a.md"));
+
+      expect(parsed).toMatchObject({ frontmatter: {}, hasMalformedFrontmatter: true });
+      expect(logWarn).toHaveBeenCalled();
+    });
+
+    it("recognizes an empty frontmatter block without swallowing a later horizontal rule", async () => {
+      const { app } = hiddenApp("---\n---\nBody\n---\nMore");
+
+      const parsed = await readFrontmatterMarkdownFile(app, hiddenFile(".copilot/a.md"));
+
+      expect(parsed).toEqual({
+        content: "Body\n---\nMore",
+        frontmatter: {},
+        hasMalformedFrontmatter: false,
+      });
+    });
+
+    it.each([
+      ["CRLF line endings", "---\r\nslash: true\r\n---\r\nBody"],
+      ["a leading BOM", "\uFEFF---\nslash: true\n---\nBody"],
+    ])("parses frontmatter with %s", async (_name, raw) => {
+      const { app } = hiddenApp(raw);
+
+      const parsed = await readFrontmatterMarkdownFile(app, hiddenFile(".copilot/a.md"));
+
+      expect(parsed).toMatchObject({ content: "Body", frontmatter: { slash: true } });
+    });
+
+    it("returns the whole file as the body when there is no frontmatter", async () => {
+      const { app } = hiddenApp("Just a body");
+
+      const parsed = await readFrontmatterMarkdownFile(app, hiddenFile(".copilot/a.md"));
+
+      expect(parsed).toMatchObject({ content: "Just a body", frontmatter: {} });
+    });
+  });
+
   describe("writeFrontmatterMarkdownFile()", () => {
     it("round-trips arrays and quoted strings using Obsidian frontmatter serialization for https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
       const files = new Map<string, string>([
@@ -48,7 +121,10 @@ describe("frontmatterMarkdownFile", () => {
       const body = "Use the selected tools.";
 
       await writeFrontmatterMarkdownFile(app, ".copilot/commands/example.md", body, frontmatter);
-      const parsed = await readFrontmatterMarkdownFile(app, ".copilot/commands/example.md");
+      const parsed = await readFrontmatterMarkdownFile(
+        app,
+        hiddenFile(".copilot/commands/example.md")
+      );
 
       expect(adapter.write).toHaveBeenCalledWith(
         ".copilot/commands/example.md",
@@ -89,6 +165,22 @@ describe("frontmatterMarkdownFile", () => {
         ".copilot/commands/example.md",
         `---\n${stringifyYaml({ names: ["a", "b"], label: 'say "hi"', active: true })}---\nBody`
       );
+    });
+  });
+
+  describe("updateFrontmatterMarkdownFile() with malformed YAML", () => {
+    it("leaves a hidden file untouched instead of rewriting its unreadable frontmatter", async () => {
+      const read = jest.fn(async () => "---\ndescription: Summarize: briefly\n---\nBody");
+      const write = jest.fn(async () => {});
+      const app = {
+        vault: { adapter: { read, write }, getAbstractFileByPath: jest.fn(() => null) },
+      } as never;
+      const update = jest.fn();
+
+      await updateFrontmatterMarkdownFile(app, ".copilot/commands/example.md", update);
+
+      expect(update).not.toHaveBeenCalled();
+      expect(write).not.toHaveBeenCalled();
     });
   });
 

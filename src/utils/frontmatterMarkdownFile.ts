@@ -1,3 +1,5 @@
+import { logWarn } from "@/logger";
+import { stripFrontmatter } from "@/utils";
 import { App, parseYaml, stringifyYaml, TFile } from "obsidian";
 import {
   isInVaultCache,
@@ -7,36 +9,43 @@ import {
 } from "@/utils/vaultAdapterUtils";
 
 export interface FrontmatterMarkdownFile {
-  file: TFile;
   content: string;
   frontmatter: Record<string, unknown>;
+  hasMalformedFrontmatter: boolean;
 }
 
 export async function readFrontmatterMarkdownFile(
   app: App,
-  filePath: string
-): Promise<FrontmatterMarkdownFile | null> {
-  if (!app.vault.adapter?.read || !app.vault.getAbstractFileByPath) return null;
-  const file = await resolveFileByPath(app, filePath);
-  if (!file) return null;
-  const raw = await app.vault.adapter.read(filePath);
+  file: TFile
+): Promise<FrontmatterMarkdownFile> {
+  if (isInVaultCache(app, file.path)) {
+    const raw = await app.vault.read(file);
+    return {
+      content: stripFrontmatter(raw),
+      frontmatter: app.metadataCache.getFileCache(file)?.frontmatter ?? {},
+      hasMalformedFrontmatter: false,
+    };
+  }
+  const raw = await app.vault.adapter.read(file.path);
   const normalized = raw.replace(/^\uFEFF/, "");
-  const match = normalized.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-  const data = match ? parseYaml(match[1]) : null;
+  const match = normalized.match(/^---\r?\n(?:([\s\S]*?)\r?\n)??---(?:\r?\n|$)/);
+  let data: unknown = null;
+  let hasMalformedFrontmatter = false;
+  try {
+    data = match?.[1] ? parseYaml(match[1]) : null;
+  } catch (error) {
+    hasMalformedFrontmatter = true;
+    logWarn(`Ignoring malformed frontmatter in ${file.path}`, error);
+  }
   const frontmatter =
     data && typeof data === "object" && !Array.isArray(data)
       ? (data as Record<string, unknown>)
       : {};
   const content = match ? normalized.slice(match[0].length).replace(/^\r?\n/, "") : normalized;
-  return { file, content, frontmatter };
+  return { content, frontmatter, hasMalformedFrontmatter };
 }
 
 export async function listFrontmatterMarkdownFiles(app: App, folderPath: string): Promise<TFile[]> {
-  if (!app.vault.getAbstractFileByPath) {
-    return app.vault
-      .getFiles()
-      .filter((file) => file.path.startsWith(`${folderPath}/`) && file.extension === "md");
-  }
   return listMarkdownFiles(app, folderPath);
 }
 
@@ -47,7 +56,7 @@ export async function writeFrontmatterMarkdownFile(
   frontmatter: Record<string, unknown>
 ): Promise<TFile> {
   const file = app.vault.getAbstractFileByPath(filePath);
-  if (file instanceof TFile && app.fileManager?.processFrontMatter) {
+  if (file instanceof TFile) {
     await app.vault.modify(file, content);
     await app.fileManager.processFrontMatter(file, (current: Record<string, unknown>) => {
       Object.assign(current, frontmatter);
@@ -64,7 +73,7 @@ export async function writeFrontmatterMarkdownFile(
   }
   const existing = await resolveFileByPath(app, filePath);
   // Obsidian does not index dot-folders, so preserve metadata through adapter writes. https://github.com/logancyang/obsidian-copilot/issues/3075
-  const current = existing ? await readFrontmatterMarkdownFile(app, filePath) : null;
+  const current = existing ? await readFrontmatterMarkdownFile(app, existing) : null;
   const serialized = `---\n${stringifyYaml({ ...current?.frontmatter, ...frontmatter })}---\n${content}`;
   await app.vault.adapter.write(filePath, serialized);
   return existing ?? (await resolveFileByPath(app, filePath))!;
@@ -76,13 +85,15 @@ export async function updateFrontmatterMarkdownFile(
   update: (frontmatter: Record<string, unknown>) => void
 ): Promise<void> {
   const file = app.vault.getAbstractFileByPath(filePath);
-  if (file instanceof TFile && app.fileManager?.processFrontMatter) {
+  if (file instanceof TFile) {
     await app.fileManager.processFrontMatter(file, update);
     return;
   }
   // Hidden files do not have metadata-cache entries, so apply the same update to serialized YAML. https://github.com/logancyang/obsidian-copilot/issues/3075
-  const parsed = await readFrontmatterMarkdownFile(app, filePath);
-  if (!parsed) return;
+  const hiddenFile = await resolveFileByPath(app, filePath);
+  if (!hiddenFile) return;
+  const parsed = await readFrontmatterMarkdownFile(app, hiddenFile);
+  if (parsed.hasMalformedFrontmatter) return;
   update(parsed.frontmatter);
   await app.vault.adapter.write(
     filePath,

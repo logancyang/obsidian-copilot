@@ -26,13 +26,12 @@ import {
   getNotesFromPath,
   getNotesFromTags,
   processVariableNameForNotePath,
-  stripFrontmatter,
 } from "@/utils";
 import { sortByStrategy } from "@/utils/recentUsageManager";
 import {
   listFrontmatterMarkdownFiles,
   readFrontmatterMarkdownFile,
-  writeFrontmatterMarkdownFile,
+  updateFrontmatterMarkdownFile,
 } from "@/utils/frontmatterMarkdownFile";
 import {
   NOTE_CONTEXT_PROMPT_TAG,
@@ -96,16 +95,12 @@ export function isCustomCommandFile(file: TAbstractFile): boolean {
 }
 
 export async function hasOrderFrontmatter(app: App, file: TFile): Promise<boolean> {
-  const parsed = await readFrontmatterMarkdownFile(app, file.path);
-  const frontmatter = parsed?.frontmatter ?? app.metadataCache.getFileCache(file)?.frontmatter;
-  return frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] != null;
+  const { frontmatter } = await readFrontmatterMarkdownFile(app, file);
+  return frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] != null;
 }
 
 export async function parseCustomCommandFile(app: App, file: TFile): Promise<CustomCommand> {
-  const parsed = await readFrontmatterMarkdownFile(app, file.path);
-  const raw = parsed ? parsed.content : await app.vault.read(file);
-  const content = parsed ? raw : stripFrontmatter(raw);
-  const metadata = parsed?.frontmatter ?? app.metadataCache.getFileCache(file)?.frontmatter ?? {};
+  const { content, frontmatter: metadata } = await readFrontmatterMarkdownFile(app, file);
   const showInContextMenu =
     (metadata[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] as boolean | undefined) ??
     EMPTY_COMMAND.showInContextMenu;
@@ -431,15 +426,13 @@ export function getNextCustomCommandOrder(): number {
 export async function ensureCommandFrontmatter(app: App, file: TFile, command: CustomCommand) {
   try {
     addPendingFileWrite(file.path);
-    const parsed = await readFrontmatterMarkdownFile(app, file.path);
-    if (!parsed) return;
-    const frontmatter = { ...parsed.frontmatter };
-    frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] ??= command.showInContextMenu;
-    frontmatter[COPILOT_COMMAND_SLASH_ENABLED] ??= command.showInSlashMenu;
-    frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] ??= command.order;
-    frontmatter[COPILOT_COMMAND_MODEL_KEY] ??= command.modelKey;
-    frontmatter[COPILOT_COMMAND_LAST_USED] ??= command.lastUsedMs;
-    await writeFrontmatterMarkdownFile(app, file.path, parsed.content, frontmatter);
+    await updateFrontmatterMarkdownFile(app, file.path, (frontmatter) => {
+      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] ??= command.showInContextMenu;
+      frontmatter[COPILOT_COMMAND_SLASH_ENABLED] ??= command.showInSlashMenu;
+      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] ??= command.order;
+      frontmatter[COPILOT_COMMAND_MODEL_KEY] ??= command.modelKey;
+      frontmatter[COPILOT_COMMAND_LAST_USED] ??= command.lastUsedMs;
+    });
   } finally {
     removePendingFileWrite(file.path);
   }

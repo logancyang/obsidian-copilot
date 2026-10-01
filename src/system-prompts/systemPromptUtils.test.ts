@@ -6,7 +6,7 @@ import {
   fetchAllSystemPrompts,
   loadAllSystemPrompts,
 } from "@/system-prompts/systemPromptUtils";
-import { App, TFile, TAbstractFile } from "obsidian";
+import { App, TFile, TAbstractFile, TFolder } from "obsidian";
 import * as settingsModel from "@/settings/model";
 import * as state from "@/system-prompts/state";
 import type { CopilotSettings } from "@/settings/model";
@@ -15,6 +15,7 @@ import { mockTFile } from "@/__tests__/mockObsidian";
 jest.mock("obsidian", () => ({
   TFile: jest.fn(),
   TAbstractFile: jest.fn(),
+  TFolder: jest.fn(),
   normalizePath: jest.fn((path: string) => path),
 }));
 
@@ -167,6 +168,7 @@ describe("systemPromptUtils", () => {
       window.app = {
         vault: {
           read: jest.fn(),
+          getAbstractFileByPath: jest.fn(() => mockFile),
         },
         metadataCache: {
           getFileCache: jest.fn(),
@@ -277,9 +279,15 @@ Content with --- separator in the middle.`;
         extension: "md",
       });
       Object.setPrototypeOf(promptFile, TFile.prototype);
+      const promptFolder: TFolder = Object.assign(new (TFolder as unknown as new () => TFolder)(), {
+        path: "SystemPrompts",
+      });
       const app = {
         vault: {
-          getFiles: jest.fn().mockReturnValue([promptFile]),
+          getAbstractFileByPath: jest.fn((path: string) =>
+            path === "SystemPrompts" ? promptFolder : promptFile
+          ),
+          getMarkdownFiles: jest.fn().mockReturnValue([promptFile]),
           read: jest.fn().mockResolvedValue("Prompt content"),
         },
         metadataCache: {
@@ -310,9 +318,15 @@ Content with --- separator in the middle.`;
         extension: "md",
       });
       Object.setPrototypeOf(promptFile, TFile.prototype);
+      const promptFolder: TFolder = Object.assign(new (TFolder as unknown as new () => TFolder)(), {
+        path: "SystemPrompts",
+      });
       const app = {
         vault: {
-          getFiles: jest.fn().mockReturnValue([promptFile]),
+          getAbstractFileByPath: jest.fn((path: string) =>
+            path === "SystemPrompts" ? promptFolder : promptFile
+          ),
+          getMarkdownFiles: jest.fn().mockReturnValue([promptFile]),
           read: jest.fn().mockResolvedValue("Prompt content"),
         },
         metadataCache: {
