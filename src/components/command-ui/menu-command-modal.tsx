@@ -9,6 +9,7 @@ import { ModelSelector, type ModelSelectorEntry } from "@/components/ui/ModelSel
 import { Checkbox } from "@/components/ui/checkbox";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { ActionButtons } from "./action-buttons";
+import { ModelSettingsButton } from "./model-settings-button";
 import { MODAL_MIN_HEIGHT_COMPACT, MODAL_MIN_HEIGHT_EXPANDED } from "./constants";
 import { Button } from "@/components/ui/button";
 import { useSettingsValue } from "@/settings/model";
@@ -27,7 +28,10 @@ interface MenuCommandModalProps {
   selectedModel: string;
   onSelectModel: (modelKey: string) => void;
   models?: ModelSelectorEntry[];
+  needsModel?: boolean;
+  onOpenModelSettings?: (ownerWindow: Window) => void;
   onStop?: () => void;
+  onRunAgain?: () => void;
   onCopy?: () => void;
   onInsert?: () => void;
   onReplace?: () => void;
@@ -54,7 +58,10 @@ export function MenuCommandModal({
   selectedModel,
   onSelectModel,
   models,
+  needsModel = false,
+  onOpenModelSettings,
   onStop,
+  onRunAgain,
   onCopy,
   onInsert,
   onReplace,
@@ -111,7 +118,7 @@ export function MenuCommandModal({
       anchorBottom={anchorBottom}
       resizable={resizable}
       minHeight={resizable ? dynamicMinHeight : undefined}
-      width="min(620px, 92vw)"
+      width="min(680px, 92vw)"
       closeOnEscapeFromOutside
     >
       <div onKeyDown={handleKeyDown} className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col">
@@ -130,6 +137,7 @@ export function MenuCommandModal({
             disableAutoGrow={resizable}
             minHeight={resizable ? "0px" : undefined}
             renderMarkdown={renderMarkdown}
+            onCopy={onCopy}
           />
         )}
 
@@ -148,15 +156,24 @@ export function MenuCommandModal({
 
         <div className="tw-flex tw-flex-none tw-items-center tw-justify-between tw-border-t tw-border-border tw-px-4 tw-py-3">
           <div className="tw-flex tw-items-center tw-gap-3">
-            <ModelSelector
-              size="sm"
-              variant="ghost"
-              value={selectedModel}
-              onChange={onSelectModel}
-              models={models ?? settings.activeModels}
-              apiKeySettings={models ? undefined : settings}
-              disabled={isBusy}
-            />
+            <div className="tw-flex tw-items-center tw-gap-1">
+              <ModelSelector
+                size="sm"
+                variant="ghost"
+                value={selectedModel}
+                onChange={onSelectModel}
+                models={models ?? settings.activeModels}
+                apiKeySettings={models ? undefined : settings}
+                disabled={isBusy}
+              />
+              {onOpenModelSettings && (
+                <ModelSettingsButton
+                  needsModel={needsModel}
+                  disabled={isBusy}
+                  onClick={onOpenModelSettings}
+                />
+              )}
+            </div>
             {onIncludeNoteContextChange && (
               <div className="tw-flex tw-items-center tw-gap-1.5">
                 <Checkbox
@@ -192,7 +209,7 @@ export function MenuCommandModal({
             <ActionButtons
               state={actionState}
               onStop={onStop}
-              onCopy={onCopy}
+              onRunAgain={onRunAgain}
               onInsert={onInsert}
               onReplace={onReplace}
             />

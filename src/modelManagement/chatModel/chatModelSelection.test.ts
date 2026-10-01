@@ -58,6 +58,24 @@ describe("chatModelSelection", () => {
         findChatBackendEntry([{ configuredModelId: "broken", state: "broken" }], "broken")
       ).toBeUndefined();
     });
+
+    it.each([undefined, "", "removed", "broken"])(
+      "returns undefined for %s when first-entry fallback is off (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)",
+      (selection) => {
+        const entries: EnabledBackendEntry[] = [
+          { configuredModelId: "broken", state: "broken" },
+          entry("a", "gpt-4o", provider("p1")),
+        ];
+        expect(findChatBackendEntry(entries, selection, false)).toBeUndefined();
+      }
+    );
+
+    it("maps a legacy selection when first-entry fallback is off (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)", () => {
+      expect(
+        findChatBackendEntry([entry("a", "gpt-4o", provider("p1"))], "gpt-4o|openai", false)
+          ?.configuredModelId
+      ).toBe("a");
+    });
   });
 
   describe("isChatModelSelectionForEntry()", () => {

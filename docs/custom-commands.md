@@ -23,7 +23,9 @@ Skills can be shared with opencode, Claude, and Codex. Commands stay inside Copi
 4. Optionally choose **Model (Optional)**, **Show in context menu**, and **Show in slash menu**.
 5. Click **Save**.
 
-Choose **Inherit from chat model** when the command should use your current Quick Chat model. A command-specific model applies to editor and command-palette runs. A slash run uses the model selected for that Quick Chat or Agent Chat.
+Choose **Default model** to use **Default quick command model** from **Settings → Copilot → Command**. A command-specific model applies to editor and command-palette runs. A slash run uses the model selected for that Quick Chat or Agent Chat.
+
+If a saved command’s selected model or the shared default is unavailable, configure it in **Settings → Copilot → Command**, then rerun the command. Copilot does not substitute your chat model or another enabled model, and changing the popup picker does not retry the original command. Quick Ask and Quick Command keep your unsent input while you choose a model.
 
 Use **Generate Default** for a starter set. You can edit, duplicate, delete, or drag commands to reorder them. **Custom Prompts Sort Strategy** controls their order in the slash menu.
 
@@ -65,13 +67,13 @@ Editor and command-palette runs open a result panel. You can refine the result, 
 3. Ask your question. Use the model picker if needed, and enable **Note** to include the full active note.
 4. Use **Copy to clipboard**, **Insert at cursor**, or **Replace selection** on the answer. You can continue with follow-up questions in the same panel.
 
-Quick Ask is an inline panel, not an Agent Chat session or the full Quick Chat view. It uses a Copilot-hosted or [BYOK](settings.md#byok) Quick Chat model, not the model selected in Agent Chat. Its model and **Note** choices are remembered and shared with **Trigger quick command**.
+Quick Ask is an inline panel, not an Agent Chat session or the full Quick Chat view. It uses a Copilot-hosted or [BYOK](settings.md#byok) Quick Chat model, not the model selected in Agent Chat. It starts with **Default quick command model**, shared with **Trigger quick command** and saved commands set to **Default model**. Model changes in either popup apply only to that run; change the shared default in **Settings → Copilot → Command**. The **Note** choice is remembered and shared.
 
 Quick Ask is unavailable in Source mode. **Replace selection** appears only when text was selected and stays available only while Copilot can safely identify the original text in the same note and editor pane.
 
 ## Quick Command
 
-Run **Trigger quick command** when you want a one-off instruction for selected text without saving a command. A selection is required. The panel uses the same model and **Note** preference as Quick Ask and offers the same copy, insert, and replace actions.
+Run **Trigger quick command** when you want a one-off instruction for selected text without saving a command. A selection is required. The panel starts with the same default model and **Note** preference as Quick Ask and offers the same copy, insert, and replace actions.
 
 Quick Command is also unavailable in Source mode.
 

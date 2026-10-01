@@ -1,3 +1,5 @@
+import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
+import { QuickCommandModelSetting } from "@/settings/v2/components/ui/QuickCommandModelSetting";
 import React, { useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { useCustomCommands } from "@/commands/state";
@@ -294,6 +296,7 @@ export const CommandSettings: React.FC = () => {
   }, [rawCommands]);
 
   const settings = useSettingsValue();
+  const { options, resolveSelectionId } = useChatBackendModelOptions(false);
   const customPromptsFolder = deriveCustomPromptsFolder(settings);
   const containerRef = useRef<HTMLDivElement>(null);
   const sensors = useSensors(
@@ -420,6 +423,11 @@ export const CommandSettings: React.FC = () => {
         </div>
 
         <SettingSection>
+          <QuickCommandModelSetting
+            value={resolveSelectionId(settings.quickCommandModelKey)}
+            options={options}
+            onChange={(value) => updateSetting("quickCommandModelKey", value || undefined)}
+          />
           <SettingItem
             type="switch"
             title="Custom Prompt Templating"

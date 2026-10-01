@@ -39,7 +39,7 @@ const InsertShortcutHint = () =>
 interface ActionButtonsProps {
   state: ActionState;
   onStop?: () => void;
-  onCopy?: () => void;
+  onRunAgain?: () => void;
   onInsert?: () => void;
   onReplace?: () => void;
   onSubmit?: () => void;
@@ -52,7 +52,7 @@ interface ActionButtonsProps {
 export function ActionButtons({
   state,
   onStop,
-  onCopy,
+  onRunAgain,
   onInsert,
   onReplace,
   onSubmit,
@@ -69,13 +69,14 @@ export function ActionButtons({
         </Button>
       )}
 
+      {state !== "loading" && onRunAgain && (
+        <Button size="sm" variant="secondary" onClick={onRunAgain} title="Run the prompt again">
+          Run again
+        </Button>
+      )}
+
       {state === "result" && showInsertReplace && (
         <>
-          {onCopy && (
-            <Button size="sm" variant="secondary" onClick={onCopy} title="Copy to clipboard">
-              Copy
-            </Button>
-          )}
           <Button
             size="sm"
             variant="secondary"
