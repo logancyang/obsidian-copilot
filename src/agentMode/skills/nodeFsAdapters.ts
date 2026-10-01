@@ -46,7 +46,7 @@ async function nodeReadlinkAbs(p: string): Promise<string | null> {
   }
 }
 
-export function createNodeSymlinksFs(): SymlinksFs {
+function createNodeSymlinksFs(): SymlinksFs {
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
   const path = requireNodeModule<typeof import("node:path")>("path");
   return {

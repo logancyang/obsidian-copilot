@@ -2,7 +2,6 @@ import { ProjectConfig } from "@/aiParams";
 import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { getProjectFolderPath } from "@/projects/projectPaths";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
@@ -38,25 +37,16 @@ export function revealProjectFolder(app: App, project: ProjectConfig): void {
 interface AgentProjectRowActionsProps {
   app: App;
   project: ProjectConfig;
-  onEdited?: (project: ProjectConfig) => void;
   onDeleted?: (projectId: string) => void;
-  className?: string;
 }
 
 export const AgentProjectRowActions = memo(
-  ({
-    app,
-    project,
-    onEdited,
-    onDeleted,
-    className,
-  }: AgentProjectRowActionsProps): React.ReactElement => {
+  ({ app, project, onDeleted }: AgentProjectRowActionsProps): React.ReactElement => {
     const handleEdit = () => {
       new AddProjectModal(
         app,
         async (next) => {
-          const updated = await ProjectFileManager.getInstance(app).updateProject(project.id, next);
-          onEdited?.(updated.project);
+          await ProjectFileManager.getInstance(app).updateProject(project.id, next);
         },
         project
       ).open();
@@ -82,7 +72,7 @@ export const AgentProjectRowActions = memo(
     };
 
     return (
-      <div className={cn("tw-flex tw-items-center tw-gap-1.5", className)}>
+      <div className="tw-flex tw-items-center tw-gap-1.5">
         <Button
           size="sm"
           variant="ghost"

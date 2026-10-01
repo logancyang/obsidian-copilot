@@ -1,5 +1,5 @@
 import type { ProjectSkillCandidate } from "./discoverProjectSkills";
-import type { BackendId, Skill } from "./types";
+import type { Skill } from "./types";
 
 export function mergeDiscovery(
   canonicalSkills: ReadonlyArray<Skill>,
@@ -84,5 +84,3 @@ export function formatSkillDisplayName(skill: Skill): string {
     ? `${skill.name}${skill.displayNameSuffix}`
     : skill.name;
 }
-
-export type { ProjectSkillCandidate, BackendId };

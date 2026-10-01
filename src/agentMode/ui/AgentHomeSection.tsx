@@ -34,9 +34,7 @@ interface AgentHomeListRowProps {
   label: string;
   timeMs: number;
   onClick: () => void;
-  indent?: boolean;
   icon?: React.ComponentType<{ className?: string }>;
-  leading?: React.ReactNode;
   trailing?: React.ReactNode;
 }
 
@@ -44,9 +42,7 @@ export const AgentHomeListRow = memo(function AgentHomeListRow({
   label,
   timeMs,
   onClick,
-  indent = false,
   icon: Icon,
-  leading,
   trailing,
 }: AgentHomeListRowProps): React.ReactElement {
   return (
@@ -65,17 +61,13 @@ export const AgentHomeListRow = memo(function AgentHomeListRow({
         }
       }}
     >
-      {leading ??
-        (Icon && (
-          <span className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center">
-            <Icon className="tw-size-4 tw-text-muted" />
-          </span>
-        ))}
+      {Icon && (
+        <span className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center">
+          <Icon className="tw-size-4 tw-text-muted" />
+        </span>
+      )}
       <span
-        className={cn(
-          "tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal",
-          indent && !Icon && !leading && "tw-pl-6"
-        )}
+        className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal"
         title={label}
       >
         {label}
