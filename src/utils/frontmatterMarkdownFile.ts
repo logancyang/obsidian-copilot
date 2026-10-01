@@ -12,7 +12,6 @@ export interface FrontmatterMarkdownFile {
   frontmatter: Record<string, unknown>;
 }
 
-/** Read indexed or hidden Markdown files with their body and YAML frontmatter. */
 export async function readFrontmatterMarkdownFile(
   app: App,
   filePath: string
@@ -32,7 +31,6 @@ export async function readFrontmatterMarkdownFile(
   return { file, content, frontmatter };
 }
 
-/** List Markdown files directly inside a folder, including files in hidden folders. */
 export async function listFrontmatterMarkdownFiles(app: App, folderPath: string): Promise<TFile[]> {
   if (!app.vault.getAbstractFileByPath) {
     return app.vault
@@ -42,7 +40,6 @@ export async function listFrontmatterMarkdownFiles(app: App, folderPath: string)
   return listMarkdownFiles(app, folderPath);
 }
 
-/** Write a Markdown body and its frontmatter through the indexed or adapter path. */
 export async function writeFrontmatterMarkdownFile(
   app: App,
   filePath: string,
@@ -73,7 +70,6 @@ export async function writeFrontmatterMarkdownFile(
   return existing ?? (await resolveFileByPath(app, filePath))!;
 }
 
-/** Update frontmatter fields without changing the Markdown body. */
 export async function updateFrontmatterMarkdownFile(
   app: App,
   filePath: string,
@@ -94,7 +90,6 @@ export async function updateFrontmatterMarkdownFile(
   );
 }
 
-/** Rename an indexed or hidden Markdown file. */
 export async function renameFrontmatterMarkdownFile(
   app: App,
   oldPath: string,
@@ -109,7 +104,6 @@ export async function renameFrontmatterMarkdownFile(
   }
 }
 
-/** Delete an indexed Markdown file to the configured trash, or remove its hidden path. */
 export async function deleteFrontmatterMarkdownFile(app: App, filePath: string): Promise<void> {
   const file = app.vault.getAbstractFileByPath(filePath);
   if (file instanceof TFile) {
