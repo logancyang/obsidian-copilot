@@ -84,10 +84,12 @@ export class VaultClient implements Client {
     const normalized = normalizePath(rel.split(path.sep).join("/"));
     const firstSegment = normalized.split("/")[0] ?? "";
     const copilotFolder = normalizePath(getSettings().copilotFolder);
-    const configDir = this.app.vault.configDir;
-    const isConfigDir = !!configDir && firstSegment === normalizePath(configDir);
+    const configDir = this.app.vault.configDir ? normalizePath(this.app.vault.configDir) : null;
+    const isInConfigDir =
+      !!configDir && (normalized === configDir || normalized.startsWith(`${configDir}/`));
     const isConfiguredCopilotFolder =
-      !isConfigDir && (normalized === copilotFolder || normalized.startsWith(`${copilotFolder}/`));
+      !isInConfigDir &&
+      (normalized === copilotFolder || normalized.startsWith(`${copilotFolder}/`));
     // Users store Agent Mode resources under this root; other hidden roots stay private. https://github.com/logancyang/obsidian-copilot/issues/3075
     if (firstSegment.startsWith(".") && !isConfiguredCopilotFolder) {
       throw RequestError.invalidParams(
