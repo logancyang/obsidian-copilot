@@ -154,7 +154,7 @@ describe("builtinSkills", () => {
       const ps1 = scriptOf("copilot-web-search", ".ps1");
       expect(ps1).toContain("Invoke-WebRequest");
       expect(ps1).toContain("Bearer $SELF_HOST_TOKEN");
-      expect(ps1).toContain("[Console]::Out.WriteLine($response.Content)");
+      expect(ps1).toContain("[Console]::Out.WriteLine((Read-Utf8Body $response))");
       expect(ps1).not.toContain("COPILOT_OBSIDIAN_CLI");
       expect(ps1.indexOf("if ($SELF_HOST -eq '1')")).toBeLessThan(ps1.indexOf("RequireRelay\n"));
     });
