@@ -14,6 +14,7 @@ export interface BuiltinSkill {
   readonly name: string;
   readonly version: number;
   readonly enabledAgents: readonly BackendId[];
+  readonly defaultDisabled?: boolean;
   readonly skillMd: string;
   readonly files: ReadonlyArray<{ readonly path: string; readonly content: string }>;
 }
@@ -269,6 +270,7 @@ function relaySkill(opts: {
   license?: string;
   selfHostMode?: "search" | "deny";
   extraInstructions?: string;
+  defaultDisabled?: boolean;
 }): BuiltinSkill {
   const [argKey, argPlaceholder] = opts.arg;
   const cmdFile = opts.scriptFile.replace(/\.sh$/, ".cmd");
@@ -323,6 +325,7 @@ fi
     name: opts.name,
     version,
     enabledAgents: ["claude", "codex", "opencode"],
+    defaultDisabled: opts.defaultDisabled,
     skillMd: `---
 name: ${opts.name}
 description: ${opts.description}
@@ -379,6 +382,7 @@ const WEB_SEARCH = relaySkill({
   scriptFile: "web-search.sh",
   license: "Copilot Plus or Self-Host",
   selfHostMode: "search",
+  defaultDisabled: true,
 });
 
 const WEB_FETCH = relaySkill({
@@ -391,6 +395,7 @@ const WEB_FETCH = relaySkill({
   arg: ["url", "<url-to-fetch>"],
   scriptFile: "web-fetch.sh",
   selfHostMode: "deny",
+  defaultDisabled: true,
   extraInstructions: `## Self-Host mode
 
 Self-Host search providers do not provide a common full-page fetch contract. If
@@ -404,6 +409,7 @@ const READ_PDF: BuiltinSkill = {
   name: "copilot-read-pdf",
   version: READ_PDF_VERSION,
   enabledAgents: ["claude", "codex", "opencode"],
+  defaultDisabled: true,
   skillMd: `---
 name: copilot-read-pdf
 description: Extract the full text of a PDF as Markdown using Copilot Plus. Use when the user wants to read, summarize, or quote a PDF file (in the vault or an absolute path). Requires an active Copilot Plus license.
@@ -1108,13 +1114,24 @@ export function planManagedBuiltins(gates: { search: boolean; documents: boolean
   };
 }
 
+export function isBuiltinSkillDisabled(
+  skillName: string,
+  pref: { disabled?: boolean } | undefined
+): boolean {
+  return (
+    pref?.disabled ??
+    ALL_MANAGED_SKILLS.some((skill) => skill.name === skillName && skill.defaultDisabled === true)
+  );
+}
+
 export function isBuiltinSkillEnabledFor(
   settings: CopilotSettings,
   skillName: string,
   agentId: string
 ): boolean {
   const pref = settings.agentMode.skills.builtinPreferences?.[skillName];
-  if (pref?.disabled || pref?.disabledAgents?.includes(agentId)) return false;
+  if (isBuiltinSkillDisabled(skillName, pref) || pref?.disabledAgents?.includes(agentId))
+    return false;
   return planManagedBuiltins({
     search: settings.enableMiyoSearchSkill === true,
     documents: settings.docProcessorBackend === "miyo",

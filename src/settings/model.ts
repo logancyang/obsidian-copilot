@@ -868,7 +868,7 @@ export function sanitizeBuiltinPreferences(raw: unknown): BuiltinPreferences {
     return EMPTY_BUILTIN_PREFERENCES;
   }
   const preferences: BuiltinPreferences = {};
-  for (const { name } of ALL_MANAGED_SKILLS) {
+  for (const { name, defaultDisabled = false } of ALL_MANAGED_SKILLS) {
     const value = (raw as Record<string, unknown>)[name];
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
     const pref = value as Record<string, unknown>;
@@ -877,9 +877,13 @@ export function sanitizeBuiltinPreferences(raw: unknown): BuiltinPreferences {
     const disabledAgents = Array.isArray(pref.disabledAgents)
       ? pref.disabledAgents.filter((agent): agent is string => typeof agent === "string")
       : [];
-    if (pref.disabled === true || disabledAgents.length > 0) {
+    const disabled =
+      typeof pref.disabled === "boolean" && pref.disabled !== defaultDisabled
+        ? pref.disabled
+        : undefined;
+    if (disabled !== undefined || disabledAgents.length > 0) {
       preferences[name] = {
-        ...(pref.disabled === true ? { disabled: true } : {}),
+        ...(disabled !== undefined ? { disabled } : {}),
         ...(disabledAgents.length > 0 ? { disabledAgents } : {}),
       };
     }

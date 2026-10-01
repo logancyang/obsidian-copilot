@@ -31,6 +31,12 @@ const AGENT = "opencode";
 const ALL_RELAY_SKILLS_LINE =
   "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-web-search for web search, copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts, copilot-read-pdf for PDFs.";
 
+const DEFAULT_OFF_OPT_INS = {
+  "copilot-web-search": { disabled: false },
+  "copilot-web-fetch": { disabled: false },
+  "copilot-read-pdf": { disabled: false },
+};
+
 function setBuiltinPreferences(
   builtinPreferences: NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>
 ): void {
@@ -89,6 +95,7 @@ describe("agentSystemPrompt", () => {
     });
 
     it("steers every agent to the enabled Copilot relay skills first, regardless of Plus status", () => {
+      setBuiltinPreferences(DEFAULT_OFF_OPT_INS);
       for (const agent of ["claude", "codex", "opencode"]) {
         const prompt = buildAgentSystemPrompt(agent);
         expect(prompt).toContain(`${ALL_RELAY_SKILLS_LINE} ${COPILOT_SKILL_FALLBACK}`);
@@ -99,8 +106,19 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT)).toBe(nonPlus);
     });
 
+    it("omits default-off web search, web fetch, and PDF skills until the user enables them https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
+      expect(buildAgentSystemPrompt(AGENT)).toContain(
+        "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts."
+      );
+      setBuiltinPreferences(DEFAULT_OFF_OPT_INS);
+      expect(buildAgentSystemPrompt(AGENT)).toContain(ALL_RELAY_SKILLS_LINE);
+    });
+
     it(`names a skill disabled for one agent only in the other agents' prompts (${ISSUE_599})`, () => {
-      setBuiltinPreferences({ "copilot-web-search": { disabledAgents: ["opencode"] } });
+      setBuiltinPreferences({
+        ...DEFAULT_OFF_OPT_INS,
+        "copilot-web-search": { disabled: false, disabledAgents: ["opencode"] },
+      });
 
       expect(buildAgentSystemPrompt("opencode")).toContain(
         "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts, copilot-read-pdf for PDFs."

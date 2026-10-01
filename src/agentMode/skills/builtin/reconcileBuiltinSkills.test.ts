@@ -16,6 +16,7 @@ jest.mock("@/logger", () => ({ logError: jest.fn(), logInfo: jest.fn(), logWarn:
 
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
 const folder = "copilot/skills";
+const DEFAULT_ON_SKILLS = BUILTIN_SKILLS.filter((skill) => !skill.defaultDisabled);
 function fixture(preferences?: BuiltinPreferences) {
   const files = new Map<string, string>();
   const dirs = new Set<string>();
@@ -90,7 +91,7 @@ describe("reconcileBuiltinSkills", () => {
   });
   describe("reconcileBuiltinSkills()", () => {
     it(`keeps canonical metadata stable across devices and retains existing files without a local agent ${ISSUE}`, async () => {
-      const skill = BUILTIN_SKILLS[0];
+      const skill = DEFAULT_ON_SKILLS[0];
       const f = fixture();
       f.options.availableAgents = ["claude"];
       await reconcileBuiltinSkills(f.options);
@@ -116,7 +117,7 @@ describe("reconcileBuiltinSkills", () => {
       expect(f.files.has(userPath)).toBe(false);
     });
     it(`preserves current-name user content containing a body marker with no agents and with an available agent ${ISSUE}`, async () => {
-      const skill = BUILTIN_SKILLS[0];
+      const skill = DEFAULT_ON_SKILLS[0];
       const f = fixture();
       const content = `---\nname: ${skill.name}\ndescription: A user-owned skill.\n---\nExample:\n  copilot-builtin-version: "1"`;
       f.files.set(f.path(skill.name), content);
@@ -162,7 +163,7 @@ describe("reconcileBuiltinSkills", () => {
     it(`retires installed skills without an available agent or a saved preference and removes user additions ${ISSUE}`, async () => {
       const retired = RETIRED_BUILTIN_SKILLS[0];
       const f = fixture();
-      f.files.set(f.path(retired.name), BUILTIN_SKILLS[0].skillMd);
+      f.files.set(f.path(retired.name), DEFAULT_ON_SKILLS[0].skillMd);
       const userPath = `${folder}/${retired.name}/references/personal.md`;
       f.files.set(userPath, "personal");
       await reconcileBuiltinSkills(f.options);
@@ -172,7 +173,7 @@ describe("reconcileBuiltinSkills", () => {
     it(`reports retired cleanup failures, continues installing defaults, and retries without preference records ${ISSUE}`, async () => {
       const retired = RETIRED_BUILTIN_SKILLS[0];
       const f = fixture();
-      f.files.set(f.path(retired.name), BUILTIN_SKILLS[0].skillMd);
+      f.files.set(f.path(retired.name), DEFAULT_ON_SKILLS[0].skillMd);
       f.options.availableAgents = ["claude"];
       const remove = f.options.fs.removeDir;
       f.options.fs.removeDir = async () => {
@@ -180,7 +181,7 @@ describe("reconcileBuiltinSkills", () => {
       };
       await expect(reconcileBuiltinSkills(f.options)).rejects.toThrow("Could not remove retired");
       expect(f.files.has(f.path(retired.name))).toBe(true);
-      expect(f.files.has(f.path(BUILTIN_SKILLS[0].name))).toBe(true);
+      expect(f.files.has(f.path(DEFAULT_ON_SKILLS[0].name))).toBe(true);
       expect(f.options.settings.agentMode.skills.builtinPreferences).toBeUndefined();
       f.options.fs.removeDir = remove;
       await reconcileBuiltinSkills(f.options);
@@ -192,12 +193,12 @@ describe("reconcileBuiltinSkills", () => {
       expect(f.files.size).toBe(0);
       expect(f.dirs.size).toBe(0);
       expect(
-        f.options.settings.agentMode.skills.builtinPreferences?.[BUILTIN_SKILLS[0].name]
+        f.options.settings.agentMode.skills.builtinPreferences?.[DEFAULT_ON_SKILLS[0].name]
       ).toBeUndefined();
     });
     it(`enables a newly available agent while preserving whole-skill and per-agent opt-outs through regeneration ${ISSUE}`, async () => {
-      const first = BUILTIN_SKILLS[0];
-      const second = BUILTIN_SKILLS[1];
+      const first = DEFAULT_ON_SKILLS[0];
+      const second = DEFAULT_ON_SKILLS[1];
       const f = fixture({
         [first.name]: { disabledAgents: ["opencode"] },
         [second.name]: { disabled: true },
@@ -210,7 +211,7 @@ describe("reconcileBuiltinSkills", () => {
       expect(
         parseSkillFile(f.files.get(f.path(first.name))!, first.name).frontmatter.enabledAgents
       ).toEqual(["claude", "codex"]);
-      const third = BUILTIN_SKILLS[2];
+      const third = DEFAULT_ON_SKILLS[2];
       expect(
         parseSkillFile(f.files.get(f.path(third.name))!, third.name).frontmatter.enabledAgents
       ).toEqual(["claude", "codex", "opencode"]);
@@ -221,7 +222,7 @@ describe("reconcileBuiltinSkills", () => {
       ).not.toContain("opencode");
     });
     it(`uses defaults for a newly bundled skill without adding or changing preferences ${ISSUE}`, async () => {
-      const first = BUILTIN_SKILLS[0];
+      const first = DEFAULT_ON_SKILLS[0];
       const f = fixture({ [first.name]: { disabledAgents: ["opencode"] } });
       const preferences = f.options.settings.agentMode.skills.builtinPreferences;
       const added = {
@@ -243,8 +244,23 @@ describe("reconcileBuiltinSkills", () => {
         (BUILTIN_SKILLS as (typeof added)[]).pop();
       }
     });
+    it("installs default-off skills only after the user opts in https://github.com/Brevilabs/obsidian-copilot-private/issues/629", async () => {
+      const f = fixture();
+      f.options.availableAgents = ["claude"];
+      await reconcileBuiltinSkills(f.options);
+      expect(f.files.has(f.path("copilot-web-search"))).toBe(false);
+      expect(f.files.has(f.path("copilot-read-pdf"))).toBe(false);
+      expect(f.files.has(f.path(DEFAULT_ON_SKILLS[0].name))).toBe(true);
+
+      f.options.settings.agentMode.skills.builtinPreferences = {
+        "copilot-web-search": { disabled: false },
+      };
+      await reconcileBuiltinSkills(f.options);
+      expect(f.files.has(f.path("copilot-web-search"))).toBe(true);
+      expect(f.files.has(f.path("copilot-read-pdf"))).toBe(false);
+    });
     it(`deletes disabled managed copies but preserves user-owned name collisions ${ISSUE}`, async () => {
-      const skill = BUILTIN_SKILLS[0];
+      const skill = DEFAULT_ON_SKILLS[0];
       const f = fixture();
       f.options.availableAgents = ["claude"];
       await reconcileBuiltinSkills(f.options);
@@ -260,8 +276,8 @@ describe("reconcileBuiltinSkills", () => {
       async (kind) => {
         const skill =
           kind === "retired"
-            ? { ...BUILTIN_SKILLS[0], name: RETIRED_BUILTIN_SKILLS[0].name }
-            : BUILTIN_SKILLS[0];
+            ? { ...DEFAULT_ON_SKILLS[0], name: RETIRED_BUILTIN_SKILLS[0].name }
+            : DEFAULT_ON_SKILLS[0];
         const f = fixture({ [skill.name]: { disabled: true } });
         f.files.set(f.path(skill.name), skill.skillMd);
         const supportPath = `${folder}/${skill.name}/remaining.sh`;
@@ -280,7 +296,7 @@ describe("reconcileBuiltinSkills", () => {
     );
 
     it(`surfaces disabled-file cleanup failures while retaining the opt-out ${ISSUE}`, async () => {
-      const skill = BUILTIN_SKILLS[0];
+      const skill = DEFAULT_ON_SKILLS[0];
       const f = fixture({ [skill.name]: { disabled: true } });
       f.files.set(f.path(skill.name), skill.skillMd);
       f.options.fs.removeDir = async () => {

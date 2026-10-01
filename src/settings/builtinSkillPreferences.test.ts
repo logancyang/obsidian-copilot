@@ -33,17 +33,17 @@ describe("builtinSkillPreferences", () => {
     it("merges concurrent updater saves instead of losing the first opt-out https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
       await Promise.all([
         saveBuiltinPreferences(
-          (current) => ({ ...current, "copilot-web-search": { disabled: true } }),
+          (current) => ({ ...current, "copilot-youtube-transcript": { disabled: true } }),
           jest.fn()
         ),
         saveBuiltinPreferences(
-          (current) => ({ ...current, "copilot-web-fetch": { disabledAgents: ["opencode"] } }),
+          (current) => ({ ...current, "copilot-fetch-x": { disabledAgents: ["opencode"] } }),
           jest.fn()
         ),
       ]);
       expect(getSettings().agentMode.skills.builtinPreferences).toEqual({
-        "copilot-web-search": { disabled: true },
-        "copilot-web-fetch": { disabledAgents: ["opencode"] },
+        "copilot-youtube-transcript": { disabled: true },
+        "copilot-fetch-x": { disabledAgents: ["opencode"] },
       });
       expect(persist.mock.calls[1][0].agentMode.skills.builtinPreferences).toEqual(
         getSettings().agentMode.skills.builtinPreferences
@@ -51,23 +51,24 @@ describe("builtinSkillPreferences", () => {
     });
     it("preserves untouched preference objects when saving another skill https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
       await saveBuiltinPreferences(
-        () => ({ "copilot-web-search": { disabledAgents: ["codex"] } }),
+        () => ({ "copilot-youtube-transcript": { disabledAgents: ["codex"] } }),
         jest.fn()
       );
-      const previous = getSettings().agentMode.skills.builtinPreferences!["copilot-web-search"];
+      const previous =
+        getSettings().agentMode.skills.builtinPreferences!["copilot-youtube-transcript"];
       await saveBuiltinPreferences(
-        (current) => ({ ...current, "copilot-web-fetch": { disabled: true } }),
+        (current) => ({ ...current, "copilot-fetch-x": { disabled: true } }),
         jest.fn()
       );
-      expect(getSettings().agentMode.skills.builtinPreferences!["copilot-web-search"]).toBe(
+      expect(getSettings().agentMode.skills.builtinPreferences!["copilot-youtube-transcript"]).toBe(
         previous
       );
-      expect(getSettings().agentMode.skills.builtinPreferences!["copilot-web-fetch"]).toEqual({
+      expect(getSettings().agentMode.skills.builtinPreferences!["copilot-fetch-x"]).toEqual({
         disabled: true,
       });
     });
     it("activates opt-outs only after the durable transaction exits (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {
-      const preferences = { "copilot-web-search": { disabled: true } };
+      const preferences = { "copilot-youtube-transcript": { disabled: true } };
       persist.mockImplementation(async (settings) => {
         expect(inTransaction).toBe(true);
         expect(settings.agentMode.skills.builtinPreferences).toEqual(preferences);
@@ -95,23 +96,23 @@ describe("builtinSkillPreferences", () => {
         }));
       });
       await saveBuiltinPreferences(
-        () => ({ "copilot-web-search": { disabledAgents: ["opencode"] } }),
+        () => ({ "copilot-youtube-transcript": { disabledAgents: ["opencode"] } }),
         jest.fn()
       );
       expect(getSettings().debug).toBe(true);
       expect(getSettings().agentMode.skills.suppressMigrationConfirm).toBe(true);
       expect(getSettings().agentMode.skills.builtinPreferences).toEqual({
-        "copilot-web-search": { disabledAgents: ["opencode"] },
+        "copilot-youtube-transcript": { disabledAgents: ["opencode"] },
       });
     });
 
     it("persists, activates, and returns empty preferences when restoring defaults https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
       await saveBuiltinPreferences(
-        () => ({ "copilot-web-search": { disabled: true, disabledAgents: ["opencode"] } }),
+        () => ({ "copilot-youtube-transcript": { disabled: true, disabledAgents: ["opencode"] } }),
         jest.fn()
       );
       const preferences = await saveBuiltinPreferences(
-        () => ({ "copilot-web-search": { disabled: false, disabledAgents: [] } }),
+        () => ({ "copilot-youtube-transcript": { disabled: false, disabledAgents: [] } }),
         jest.fn()
       );
       expect(preferences).toEqual({});
@@ -123,17 +124,17 @@ describe("builtinSkillPreferences", () => {
       persist.mockRejectedValueOnce(new Error("disk full"));
       const results = await Promise.allSettled([
         saveBuiltinPreferences(
-          (current) => ({ ...current, "copilot-web-search": { disabled: true } }),
+          (current) => ({ ...current, "copilot-youtube-transcript": { disabled: true } }),
           jest.fn()
         ),
         saveBuiltinPreferences(
-          (current) => ({ ...current, "copilot-web-fetch": { disabledAgents: ["codex"] } }),
+          (current) => ({ ...current, "copilot-fetch-x": { disabledAgents: ["codex"] } }),
           jest.fn()
         ),
       ]);
       expect(results.map((result) => result.status)).toEqual(["rejected", "fulfilled"]);
       expect(getSettings().agentMode.skills.builtinPreferences).toEqual({
-        "copilot-web-fetch": { disabledAgents: ["codex"] },
+        "copilot-fetch-x": { disabledAgents: ["codex"] },
       });
       expect(persist.mock.calls[1][0].agentMode.skills.builtinPreferences).toEqual(
         getSettings().agentMode.skills.builtinPreferences
@@ -143,7 +144,10 @@ describe("builtinSkillPreferences", () => {
     it("leaves preferences unchanged when persistence fails (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {
       persist.mockRejectedValue(new Error("disk full"));
       await expect(
-        saveBuiltinPreferences(() => ({ "copilot-web-search": { disabled: true } }), jest.fn())
+        saveBuiltinPreferences(
+          () => ({ "copilot-youtube-transcript": { disabled: true } }),
+          jest.fn()
+        )
       ).rejects.toThrow("disk full");
       expect(getSettings().agentMode.skills.builtinPreferences).toBeUndefined();
     });

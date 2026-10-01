@@ -484,7 +484,7 @@ describe("model", () => {
           skills: {
             folder: "copilot/skills",
             builtinPreferences: {
-              "copilot-web-search": { disabled: true, disabledAgents: ["opencode", 3] },
+              "copilot-fetch-x": { disabled: true, disabledAgents: ["opencode", 3] },
               invalid: null,
               malformedArray: [],
             },
@@ -492,7 +492,7 @@ describe("model", () => {
         },
       } as unknown as CopilotSettings);
       expect(result.agentMode.skills.builtinPreferences).toEqual({
-        "copilot-web-search": { disabled: true, disabledAgents: ["opencode"] },
+        "copilot-fetch-x": { disabled: true, disabledAgents: ["opencode"] },
       });
     });
 
@@ -803,7 +803,8 @@ describe("model", () => {
       false,
       [],
       {},
-      { "copilot-web-search": { disabled: false, disabledAgents: [] } },
+      { "copilot-fetch-x": { disabled: false, disabledAgents: [] } },
+      { "copilot-web-search": { disabled: true } },
     ])(
       "keeps absent, malformed, or default preferences empty: %p https://github.com/logancyang/obsidian-copilot/issues/3022",
       (raw) => {
@@ -815,16 +816,18 @@ describe("model", () => {
     it("drops retired names and malformed entries while preserving sparse overrides for known skills and absent agents https://github.com/logancyang/obsidian-copilot/issues/3022", () => {
       expect(
         sanitizeBuiltinPreferences({
-          "copilot-web-search": { disabled: true },
-          "copilot-web-fetch": { disabled: false, disabledAgents: ["uninstalled-agent", 3] },
+          "copilot-web-search": { disabled: false },
+          "copilot-youtube-transcript": { disabled: true },
+          "copilot-fetch-x": { disabled: false, disabledAgents: ["uninstalled-agent", 3] },
           "miyo-search": { disabled: true, disabledAgents: [] },
           "copilot-read-pdf": null,
           "miyo-parse": [],
           "retired-skill": { disabled: true },
         })
       ).toEqual({
-        "copilot-web-search": { disabled: true },
-        "copilot-web-fetch": { disabledAgents: ["uninstalled-agent"] },
+        "copilot-web-search": { disabled: false },
+        "copilot-youtube-transcript": { disabled: true },
+        "copilot-fetch-x": { disabledAgents: ["uninstalled-agent"] },
         "miyo-search": { disabled: true },
       });
     });

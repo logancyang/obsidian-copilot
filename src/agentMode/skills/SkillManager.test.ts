@@ -108,7 +108,7 @@ describe("SkillManager", () => {
       it(`uses one availability snapshot for every built-in row ${ISSUE}`, async () => {
         const f = builtinFixture();
         mockedDiscoverManagedSkills.mockResolvedValue(
-          discoveryResult([builtinSkill, { ...builtinSkill, name: BUILTIN_SKILLS[1].name }])
+          discoveryResult([builtinSkill, { ...builtinSkill, name: DEFAULT_ON_SKILLS[1].name }])
         );
         await f.manager.refresh();
         expect(f.availableAgents).toHaveBeenCalledTimes(1);
@@ -641,6 +641,18 @@ describe("SkillManager", () => {
         expect(preferences).toEqual({});
         expect(getManagedSkills()[0].enabledAgents).toEqual(["claude", "opencode"]);
       });
+      it("persists an explicit opt-in for a default-off skill and drops it on disable https://github.com/Brevilabs/obsidian-copilot-private/issues/629", async () => {
+        const f = builtinFixture();
+        mockedDiscoverManagedSkills.mockResolvedValue(
+          discoveryResult([{ ...builtinSkill, name: "copilot-web-search" }])
+        );
+        await f.manager.setBuiltinSkillEnabled("copilot-web-search", true);
+        expect(preferences).toEqual({ "copilot-web-search": { disabled: false } });
+        expect(getManagedSkills()[0].enabledAgents).toEqual(["claude", "opencode"]);
+        await f.manager.setBuiltinSkillEnabled("copilot-web-search", false);
+        expect(preferences).toEqual({});
+        expect(getManagedSkills()[0].enabledAgents).toEqual([]);
+      });
       it(`does not remove files when saving the opt-out fails ${ISSUE}`, async () => {
         const f = builtinFixture();
         f.savePreferences.mockRejectedValue(new Error("save failed"));
@@ -775,8 +787,9 @@ function makeSkill(overrides: Partial<Skill> = {}): Skill {
   };
 }
 
+const DEFAULT_ON_SKILLS = BUILTIN_SKILLS.filter((skill) => !skill.defaultDisabled);
 const builtinSkill: Skill = makeSkill({
-  name: BUILTIN_SKILLS[0].name,
+  name: DEFAULT_ON_SKILLS[0].name,
   enabledAgents: ["claude", "opencode"],
   builtin: true,
 });
