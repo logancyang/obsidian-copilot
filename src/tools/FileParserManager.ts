@@ -20,11 +20,7 @@ interface FileParser {
   parseFile: (file: TFile, vault: Vault) => Promise<string>;
 }
 
-export async function saveConvertedDocOutput(
-  file: TFile,
-  content: string,
-  vault: Vault
-): Promise<void> {
+async function saveConvertedDocOutput(file: TFile, content: string, vault: Vault): Promise<void> {
   const outputFolder = getSettings().convertedDocOutputFolder ?? "";
   await saveConvertedDocOutputCore(file, content, vault, outputFolder);
 }

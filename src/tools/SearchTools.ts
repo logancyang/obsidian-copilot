@@ -234,22 +234,6 @@ async function performLexicalSearch({
   return { type: "local_search", documents: allDocs, queryExpansion };
 }
 
-const createLexicalSearchTool = (app: App) =>
-  createLangChainTool({
-    name: "lexicalSearch",
-    description: "Search for notes using lexical/keyword-based search",
-    schema: localSearchSchema,
-    func: async ({ timeRange: rawTimeRange, query, salientTerms }) => {
-      const timeRange = validateTimeRange(rawTimeRange);
-      return await performLexicalSearch({
-        app,
-        timeRange,
-        query,
-        salientTerms,
-      });
-    },
-  });
-
 function validateTimeRange(timeRange?: {
   startTime?: number;
   endTime?: number;
@@ -432,4 +416,4 @@ const webSearchTool = createLangChainTool({
   },
 });
 
-export { createLexicalSearchTool, createLocalSearchTool, webSearchTool };
+export { createLocalSearchTool, webSearchTool };

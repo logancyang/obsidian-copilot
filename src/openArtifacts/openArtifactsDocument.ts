@@ -4,8 +4,6 @@ import { OpenArtifactsDocument } from "@/openArtifacts/types";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 
-export { OPENARTIFACTS_MAX_HTML_BYTES };
-
 const PUBLISH_REMOVAL_SELECTOR = [
   "base",
   "button",

@@ -3487,11 +3487,10 @@ describe("AgentSessionManager", () => {
       it("ensures vault-root instruction discovery before a project session, not just global", async () => {
         const mgr = buildManager();
         await mgr.enterProject(PROJECT_ID);
-        expect(ensureAgentsFileForDiscoverySpy).toHaveBeenCalledWith(expect.anything(), "", "");
+        expect(ensureAgentsFileForDiscoverySpy).toHaveBeenCalledWith(expect.anything(), "");
         expect(ensureAgentsFileForDiscoverySpy).toHaveBeenCalledWith(
           expect.anything(),
-          `Projects/${PROJECT_ID}`,
-          ""
+          `Projects/${PROJECT_ID}`
         );
       });
 

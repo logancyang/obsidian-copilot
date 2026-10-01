@@ -1,46 +1,7 @@
 import * as z from "zod";
-import {
-  runDailyReadCommand,
-  runRandomReadCommand,
-} from "@/services/obsidianCli/ObsidianCliClient";
+import { runRandomReadCommand } from "@/services/obsidianCli/ObsidianCliClient";
 import { formatCliFailureMessage } from "@/services/obsidianCli/cliErrors";
 import { createLangChainTool } from "./createLangChainTool";
-
-export const obsidianDailyReadTool = createLangChainTool({
-  name: "obsidianDailyRead",
-  description:
-    "Read the current daily note via Obsidian CLI and return the note content as plain text.",
-  schema: z.object({
-    vault: z
-      .string()
-      .optional()
-      .describe(
-        "Optional vault name to target. Omit to use the active/default vault resolution from Obsidian CLI."
-      ),
-  }),
-  func: async ({ vault }) => {
-    const result = await runDailyReadCommand(vault);
-
-    if (!result.ok) {
-      throw new Error(
-        `Failed to read daily note via Obsidian CLI: ${formatCliFailureMessage(
-          result.stderr,
-          result.exitCode,
-          result.errorCode,
-          result.attemptedBinaries
-        )}`
-      );
-    }
-
-    return {
-      type: "obsidian_cli_daily_read",
-      command: result.command,
-      vault: vault || null,
-      content: result.stdout,
-      durationMs: result.durationMs,
-    };
-  },
-});
 
 export const obsidianRandomReadTool = createLangChainTool({
   name: "obsidianRandomRead",

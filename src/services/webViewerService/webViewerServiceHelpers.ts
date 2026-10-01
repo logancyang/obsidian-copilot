@@ -7,7 +7,7 @@ import {
   type WebViewerPluginApi,
 } from "@/services/webViewerService/webViewerServiceTypes";
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
@@ -26,12 +26,7 @@ export function toStringSafe(value: unknown): string {
   }
 }
 
-export function toErrorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  return toStringSafe(err);
-}
-
-export async function delay(ms: number): Promise<void> {
+async function delay(ms: number): Promise<void> {
   await new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 }
 
@@ -51,7 +46,7 @@ export async function waitFor(
   }
 }
 
-export function resolveUrl(rawUrl: string, baseUrl: string): string {
+function resolveUrl(rawUrl: string, baseUrl: string): string {
   const input = (rawUrl ?? "").trim();
   if (!input) return "";
   if (!baseUrl) return input;
@@ -62,13 +57,13 @@ export function resolveUrl(rawUrl: string, baseUrl: string): string {
   }
 }
 
-export function formatMarkdownDestination(url: string): string {
+function formatMarkdownDestination(url: string): string {
   const u = (url ?? "").trim();
   if (!u) return "";
   return /[\s)]/.test(u) ? `<${u}>` : u;
 }
 
-export function createTurndown(baseUrl: string): TurndownService {
+function createTurndown(baseUrl: string): TurndownService {
   const td = new TurndownService({
     headingStyle: "atx",
     hr: "---",
@@ -124,7 +119,7 @@ export function htmlToMarkdown(html: string, baseUrl: string): string {
     .trim();
 }
 
-export function getCommandManager(app: App): CommandManager | null {
+function getCommandManager(app: App): CommandManager | null {
   const commands = (app as unknown as { commands?: unknown }).commands;
   if (!commands || !isRecord(commands)) return null;
   if (typeof (commands as unknown as CommandManager).executeCommandById !== "function") return null;

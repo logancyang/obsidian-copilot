@@ -1,45 +1,18 @@
 import { ProjectConfig } from "@/aiParams";
 
-export interface ProjectSearchOptions {
-  caseSensitive?: boolean;
-  searchInName?: boolean;
-  searchInDescription?: boolean;
-}
+function searchInProject(project: ProjectConfig, query: string): boolean {
+  const processedQuery = query.toLowerCase();
 
-function searchInProject(
-  project: ProjectConfig,
-  query: string,
-  options: ProjectSearchOptions = {}
-): boolean {
-  const { caseSensitive = false, searchInName = true, searchInDescription = true } = options;
-
-  if (!query.trim()) {
+  if (project.name.toLowerCase().includes(processedQuery)) {
     return true;
   }
 
-  const processedQuery = caseSensitive ? query : query.toLowerCase();
-
-  if (searchInName) {
-    const projectName = caseSensitive ? project.name : project.name.toLowerCase();
-    if (projectName.includes(processedQuery)) {
-      return true;
-    }
-  }
-
-  if (searchInDescription && project.description) {
-    const projectDesc = caseSensitive ? project.description : project.description.toLowerCase();
-    if (projectDesc.includes(processedQuery)) {
-      return true;
-    }
-  }
-
-  return false;
+  return !!project.description && project.description.toLowerCase().includes(processedQuery);
 }
 
 export function filterProjects(
   projects: ProjectConfig[] | null | undefined,
-  query: string,
-  options: ProjectSearchOptions = {}
+  query: string
 ): ProjectConfig[] {
   if (!projects || projects.length === 0) {
     return [];
@@ -49,5 +22,5 @@ export function filterProjects(
     return projects;
   }
 
-  return projects.filter((project) => searchInProject(project, query, options));
+  return projects.filter((project) => searchInProject(project, query));
 }

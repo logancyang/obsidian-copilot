@@ -131,16 +131,12 @@ export async function ensureAgentsFile(
   return agentsFile;
 }
 
-export async function ensureAgentsFileForDiscovery(
-  app: App,
-  folderPath: string,
-  initialContent: string
-): Promise<void> {
+export async function ensureAgentsFileForDiscovery(app: App, folderPath: string): Promise<void> {
   try {
     const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
     const existing = await resolveInstructionFile(app, agentsPath);
-    if (!existing && !initialContent.trim()) return;
-    await ensureAgentsFile(app, folderPath, initialContent);
+    if (!existing) return;
+    await ensureAgentsFile(app, folderPath, "");
   } catch (error) {
     logWarn(
       `[Instructions] Failed to ensure AGENTS.md for "${folderPath || "<vault root>"}"`,
@@ -149,17 +145,12 @@ export async function ensureAgentsFileForDiscovery(
   }
 }
 
-export async function openAgentsFile(
-  app: App,
-  folderPath: string,
-  initialContent: string,
-  newLeaf: boolean
-): Promise<void> {
-  const file = await ensureAgentsFile(app, folderPath, initialContent);
+export async function openAgentsFile(app: App, folderPath: string): Promise<void> {
+  const file = await ensureAgentsFile(app, folderPath, "");
   if (!isInVaultCache(app, file.path)) {
     throw new Error(`${file.path} is in a hidden folder Obsidian cannot open. Edit it externally.`);
   }
-  await app.workspace.getLeaf(newLeaf).openFile(file);
+  await app.workspace.getLeaf(true).openFile(file);
 }
 
 function childPath(folderPath: string, fileName: string): string {

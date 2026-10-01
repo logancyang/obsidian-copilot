@@ -355,10 +355,6 @@ export function getFilePattern(file: TFile): string {
   return `[[${file.basename}]]`;
 }
 
-export function getExtensionPattern(extension: string): string {
-  return `*.${extension}`;
-}
-
 function getInternalExcludePaths(): string[] {
   return [logFileManager.getLogPath(), AGENTS_FILE_NAME, CLAUDE_FILE_NAME];
 }

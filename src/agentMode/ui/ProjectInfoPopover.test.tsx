@@ -141,12 +141,7 @@ describe("ProjectInfoPopover", () => {
       expect.anything(),
       expect.objectContaining({ folderName: "proj-1" })
     );
-    expect(openAgentsFile).toHaveBeenCalledWith(
-      expect.anything(),
-      "copilot/projects/proj-1",
-      "",
-      true
-    );
+    expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "copilot/projects/proj-1");
   });
 
   it("reveals the project folder from the header button", async () => {

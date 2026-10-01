@@ -265,13 +265,6 @@ export async function runObsidianCliCommand(
   throw new Error("Obsidian CLI execution failed before process spawn.");
 }
 
-export async function runDailyReadCommand(vault?: string): Promise<ObsidianCliProcessResult> {
-  return await runObsidianCliCommand({
-    command: "daily:read",
-    vault,
-  });
-}
-
 export async function runRandomReadCommand(vault?: string): Promise<ObsidianCliProcessResult> {
   return await runObsidianCliCommand({
     command: "random:read",

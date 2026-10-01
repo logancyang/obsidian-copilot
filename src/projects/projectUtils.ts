@@ -90,9 +90,8 @@ function coerceFrontmatterNumber(value: unknown, fallback: number): number {
   return fallback;
 }
 
-function coerceFrontmatterString(value: unknown, fallback: string): string {
-  if (typeof value === "string") return value;
-  return fallback;
+function coerceFrontmatterString(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 function coerceFrontmatterStringArray(value: unknown): string[] {
@@ -161,33 +160,24 @@ export async function parseProjectConfigFile(
   const idFromFrontmatter =
     typeof rawId === "number" && Number.isFinite(rawId)
       ? String(rawId)
-      : coerceFrontmatterString(rawId, "");
+      : coerceFrontmatterString(rawId);
   if (!idFromFrontmatter.trim()) {
     logWarn(`[Projects] Missing ${COPILOT_PROJECT_ID} in frontmatter, skipping file: ${file.path}`);
     return null;
   }
   const projectId = idFromFrontmatter.trim();
 
-  const nameFromFrontmatter = coerceFrontmatterString(
-    frontmatter?.[COPILOT_PROJECT_NAME],
-    ""
-  ).trim();
+  const nameFromFrontmatter = coerceFrontmatterString(frontmatter?.[COPILOT_PROJECT_NAME]).trim();
   const projectName = nameFromFrontmatter || folderName;
 
-  const description = coerceFrontmatterString(
-    frontmatter?.[COPILOT_PROJECT_DESCRIPTION],
-    ""
-  ).trim();
-  const projectModelKey = coerceFrontmatterString(
-    frontmatter?.[COPILOT_PROJECT_MODEL_KEY],
-    ""
-  ).trim();
+  const description = coerceFrontmatterString(frontmatter?.[COPILOT_PROJECT_DESCRIPTION]).trim();
+  const projectModelKey = coerceFrontmatterString(frontmatter?.[COPILOT_PROJECT_MODEL_KEY]).trim();
 
   const temperature = coerceFrontmatterNumber(frontmatter?.[COPILOT_PROJECT_TEMPERATURE], NaN);
   const maxTokens = coerceFrontmatterNumber(frontmatter?.[COPILOT_PROJECT_MAX_TOKENS], NaN);
 
-  const rawInclusions = coerceFrontmatterString(frontmatter?.[COPILOT_PROJECT_INCLUSIONS], "");
-  const rawExclusions = coerceFrontmatterString(frontmatter?.[COPILOT_PROJECT_EXCLUSIONS], "");
+  const rawInclusions = coerceFrontmatterString(frontmatter?.[COPILOT_PROJECT_INCLUSIONS]);
+  const rawExclusions = coerceFrontmatterString(frontmatter?.[COPILOT_PROJECT_EXCLUSIONS]);
   const inclusions = stripYamlFoldingArtifacts(rawInclusions);
   const exclusions = stripYamlFoldingArtifacts(rawExclusions);
 

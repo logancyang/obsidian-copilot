@@ -166,11 +166,6 @@ export class KeychainService {
     this.removeSecret(keychainId);
   }
 
-  setSecret(settingsKey: string, value: string): void {
-    const id = toKeychainId(this.vaultId, settingsKey);
-    this.storage.setSecret(id, value);
-  }
-
   deleteSecret(settingsKey: string): void {
     this.removeSecret(toKeychainId(this.vaultId, settingsKey));
   }
@@ -178,16 +173,6 @@ export class KeychainService {
   getSecret(settingsKey: string): string | null {
     const id = toKeychainId(this.vaultId, settingsKey);
     return this.storage.getSecret(id);
-  }
-
-  setModelSecret(
-    scope: ModelScope,
-    modelIdentity: string,
-    field: ModelSecretField,
-    value: string
-  ): void {
-    const id = toModelKeychainId(this.vaultId, scope, modelIdentity, field);
-    this.storage.setSecret(id, value);
   }
 
   getModelSecret(scope: ModelScope, modelIdentity: string, field: ModelSecretField): string | null {

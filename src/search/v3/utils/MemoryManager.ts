@@ -17,10 +17,6 @@ export class MemoryManager {
     return this.maxBytes;
   }
 
-  getBytesUsed(): number {
-    return this.bytesUsed;
-  }
-
   canAddContent(contentSize: number): boolean {
     return this.bytesUsed + contentSize <= this.maxBytes;
   }

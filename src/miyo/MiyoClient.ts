@@ -27,19 +27,6 @@ export class MiyoRequestError extends Error {
   }
 }
 
-export interface MiyoIndexedFileEntry {
-  path: string;
-  title?: string | null;
-  mtime: number;
-  updated_at?: string;
-  total_chunks?: number;
-}
-
-export interface MiyoIndexedFilesResponse {
-  files: MiyoIndexedFileEntry[];
-  total: number;
-}
-
 export interface MiyoFolderEntry {
   path: string;
   exclude_folders?: string[];
@@ -65,24 +52,6 @@ export type MiyoFolderRegistration = "registered" | "unregistered" | "error";
 export interface MiyoScanResponse {
   status?: string;
   path?: string;
-}
-
-export interface MiyoDocumentsResponse {
-  documents: Array<{
-    id: string;
-    path: string;
-    title?: string | null;
-    chunk_index?: number;
-    chunk_text?: string | null;
-    metadata?: Record<string, unknown>;
-    embedding_model?: string | null;
-    ctime?: number;
-    mtime?: number;
-    tags?: string[];
-    extension?: string;
-    created_at?: string | number | null;
-    nchars?: number;
-  }>;
 }
 
 export interface MiyoSearchResult {
@@ -351,48 +320,6 @@ export class MiyoClient {
       body: {
         path: folderName,
         force,
-      },
-    });
-  }
-
-  public async listFolderFiles(
-    baseUrl: string,
-    options: {
-      folderName: string;
-      title?: string;
-      filePath?: string;
-      mtimeAfter?: number;
-      mtimeBefore?: number;
-      offset?: number;
-      limit?: number;
-      orderBy?: "mtime" | "updated_at";
-    }
-  ): Promise<MiyoIndexedFilesResponse> {
-    return this.requestJson<MiyoIndexedFilesResponse>(baseUrl, "/v0/folder/files", {
-      method: "GET",
-      query: {
-        folder_name: options.folderName,
-        title: options.title,
-        file_path: options.filePath,
-        mtime_after: options.mtimeAfter,
-        mtime_before: options.mtimeBefore,
-        offset: options.offset,
-        limit: options.limit,
-        order_by: options.orderBy,
-      },
-    });
-  }
-
-  public async getDocumentsByPath(
-    baseUrl: string,
-    folderName: string,
-    path: string
-  ): Promise<MiyoDocumentsResponse> {
-    return this.requestJson<MiyoDocumentsResponse>(baseUrl, "/v0/folder/documents", {
-      method: "GET",
-      query: {
-        path,
-        folder_name: folderName,
       },
     });
   }

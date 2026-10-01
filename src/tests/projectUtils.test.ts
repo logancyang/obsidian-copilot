@@ -1,5 +1,5 @@
 import { ProjectConfig } from "@/aiParams";
-import { filterProjects, ProjectSearchOptions } from "@/utils/projectUtils";
+import { filterProjects } from "@/utils/projectUtils";
 
 describe("projectUtils", () => {
   const mockProjects: ProjectConfig[] = [
@@ -84,45 +84,6 @@ describe("projectUtils", () => {
       const result = filterProjects(mockProjects, "react");
       expect(result.length).toBe(1);
       expect(result[0].name).toBe("React Project");
-    });
-
-    it("matches only the exact letter case when caseSensitive is set", () => {
-      const options: ProjectSearchOptions = { caseSensitive: true };
-
-      const result1 = filterProjects(mockProjects, "React", options);
-      expect(result1.length).toBe(1);
-      expect(result1[0].name).toBe("React Project");
-
-      const result2 = filterProjects(mockProjects, "react", options);
-      expect(result2.length).toBe(0);
-    });
-
-    it("ignores descriptions when searchInDescription is false", () => {
-      const options: ProjectSearchOptions = {
-        searchInName: true,
-        searchInDescription: false,
-      };
-
-      const result1 = filterProjects(mockProjects, "Vue", options);
-      expect(result1.length).toBe(1);
-      expect(result1[0].name).toBe("Vue Dashboard");
-
-      const result2 = filterProjects(mockProjects, "application", options);
-      expect(result2.length).toBe(0);
-    });
-
-    it("ignores names when searchInName is false", () => {
-      const options: ProjectSearchOptions = {
-        searchInName: false,
-        searchInDescription: true,
-      };
-
-      const result1 = filterProjects(mockProjects, "dashboard", options);
-      expect(result1.length).toBe(1);
-      expect(result1[0].name).toBe("Vue Dashboard");
-
-      const result2 = filterProjects(mockProjects, "API", options);
-      expect(result2.length).toBe(0);
     });
 
     it("matches a substring of a project name", () => {

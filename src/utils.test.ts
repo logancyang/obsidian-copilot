@@ -13,7 +13,6 @@ import {
   noteHasProperty,
   getUtf8ByteLength,
   insertAtCursor,
-  isFolderMatch,
   processVariableNameForNotePath,
   removeThinkTags,
   stripFrontmatter,
@@ -104,21 +103,6 @@ const mockApp = {
 } as unknown as typeof window.app;
 
 describe("utils", () => {
-  describe("isFolderMatch()", () => {
-    it.each([
-      ["a top-level folder holding the file", "test2/note3.md", "test2"],
-      ["a folder nested inside the file's path", "test/test2/note1.md", "test2"],
-      ["a folder that is the file's first segment", "test/test2/note1.md", "test"],
-      ["the file's own name", "test/test2/note1.md", "note1.md"],
-    ])("matches when the pattern is %s", (_label, filePath, pattern) => {
-      expect(isFolderMatch(filePath, pattern)).toBe(true);
-    });
-
-    it("does not match a partial folder name", () => {
-      expect(isFolderMatch("test/test2/note1.md", "tes")).toBe(false);
-    });
-  });
-
   describe("getNotesFromPath()", () => {
     it("returns every markdown file for the root path", () => {
       const files = getNotesFromPath(new Obsidian.Vault(), "/");

@@ -6,8 +6,6 @@ import { logError } from "@/logger";
 import { v4 as uuidv4 } from "uuid";
 import { formatErrorChunk } from "@/utils/toolResultUtils";
 
-export type Role = "assistant" | "user" | "system";
-
 export const getAIResponse = async (
   userMessage: ChatMessage,
   chainManager: ChainManager,

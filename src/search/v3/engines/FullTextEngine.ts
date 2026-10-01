@@ -415,16 +415,4 @@ export class FullTextEngine {
       logWarn(`FullTextEngine: Cleanup error: ${error}`);
     }
   }
-
-  getStats(): {
-    documentsIndexed: number;
-    memoryUsed: number;
-    memoryPercent: number;
-  } {
-    return {
-      documentsIndexed: this.indexedChunks.size,
-      memoryUsed: this.memoryManager.getBytesUsed(),
-      memoryPercent: this.memoryManager.getUsagePercent(),
-    };
-  }
 }
