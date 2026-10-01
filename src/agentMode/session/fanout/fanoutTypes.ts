@@ -132,8 +132,6 @@ export interface PendingFanoutContext {
   summary: string;
 }
 
-export const EMPTY_PENDING_FANOUT_CONTEXT: ReadonlyArray<PendingFanoutContext> = Object.freeze([]);
-
 export function buildPriorFanoutContextBlock(
   entries: ReadonlyArray<PendingFanoutContext>
 ): string | null {

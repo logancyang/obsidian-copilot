@@ -117,7 +117,7 @@ function claudeCompatibilityInput(
   };
 }
 
-export function resolveClaudeCliPath(settings: CopilotSettings): string | null {
+function resolveClaudeCliPath(settings: CopilotSettings): string | null {
   return resolveClaudeBinary({
     override: settings.agentMode?.claudeCli?.path,
     ...claudeResolverEnv(),

@@ -31,67 +31,28 @@ import {
   createDefaultPermissionPrompter,
 } from "./ui/permissionPrompter";
 
-export { AGENT_CHAT_MODE } from "@/constants";
-export { AgentModeChat } from "./ui/AgentModeChat";
 export { default as CopilotAgentView } from "./ui/CopilotAgentView";
-export {
-  useActiveBackendDescriptor,
-  useBackendInstallState,
-  useManagedInstallActionState,
-  useSessionBackendDescriptor,
-} from "./ui/useBackendDescriptor";
-export { useAgentModelPicker } from "./ui/useAgentModelPicker";
-export type { AgentModelPickerOverride } from "./ui/useAgentModelPicker";
-export { useAgentModePicker } from "./ui/useAgentModePicker";
-export type { AgentModePickerOverride } from "./ui/useAgentModePicker";
+export { useBackendInstallState, useManagedInstallActionState } from "./ui/useBackendDescriptor";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
-export type {
-  AgentBrand,
-  BackendDescriptor,
-  BackendId,
-  InstallState,
-  ManagedInstallAction,
-  ManagedInstallActionState,
-} from "./session/types";
+export type { BackendDescriptor, BackendId } from "./session/types";
 export { partitionOpencodeOnlyWireIds } from "./backends/opencode/opencodeProbePartition";
-export {
-  mapProviderToOpencodeId,
-  isOpencodeZenWireId,
-} from "./backends/opencode/opencodeModelResolve";
-export type { OpencodeProviderMapping } from "./backends/opencode/opencodeModelResolve";
-export { installBadge, InstallBadge } from "./backends/shared/installStatus";
-export type {
-  BackendState,
-  CopilotMode,
-  EffortOption,
-  ModelEntry,
-  ModelSelection,
-  ModelState,
-} from "./session/types";
+export { mapProviderToOpencodeId } from "./backends/opencode/opencodeModelResolve";
+export type { CopilotMode, ModelSelection } from "./session/types";
 export { AgentDefaultModelSetting } from "./ui/AgentDefaultModelSetting";
 export { ModelEnableList } from "@/components/ui/ModelEnableList";
-export type { ModelEnableGroup, ModelEnableRow } from "@/components/ui/ModelEnableList";
+export type { ModelEnableGroup } from "@/components/ui/ModelEnableList";
 export { PlanPreviewView, PLAN_PREVIEW_VIEW_TYPE } from "./ui/PlanPreviewView";
-export type { PlanPreviewViewState } from "./ui/PlanPreviewView";
 export { ReportIssueModal } from "./ui/ReportIssueModal";
-export type { ReportIssueModalParams } from "./ui/ReportIssueModal";
 export {
   backendDisplayOrder,
   backendNeedsSelfHostWarning,
-  getActiveBackendDescriptor,
-  getCloudAgentIds,
   listBackendDescriptors,
-  RECOMMENDED_BACKEND_ID,
 } from "./backends/registry";
 export { frameSink as acpFrameSink, setFrameSinkVaultBasePath } from "./session/debugSink";
-export { getManagedSkills, SkillManager, SkillsSettings, useManagedSkills } from "./skills";
+export { getManagedSkills, SkillManager, SkillsSettings } from "./skills";
 export type { Skill } from "./skills";
-export function isAgentModeEnabled(): boolean {
+function isAgentModeEnabled(): boolean {
   return !Platform.isMobile;
-}
-
-export function useIsAgentModeEnabled(): boolean {
-  return isAgentModeEnabled();
 }
 
 export function applyCopilotDefaultModel(configuredModelId: string): BackendId[] {

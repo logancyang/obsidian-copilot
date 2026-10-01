@@ -51,7 +51,7 @@ export function mapNodeArch(nodeArch: string): OpencodeArch | undefined {
   return undefined;
 }
 
-export async function detectMusl(): Promise<boolean> {
+async function detectMusl(): Promise<boolean> {
   if (process.platform !== "linux") return false;
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
   const { execFile: execFileCb } =
@@ -70,7 +70,7 @@ export async function detectMusl(): Promise<boolean> {
   }
 }
 
-export async function detectAvx2(): Promise<boolean> {
+async function detectAvx2(): Promise<boolean> {
   if (process.arch !== "x64") return false;
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
   const { execFile: execFileCb } =

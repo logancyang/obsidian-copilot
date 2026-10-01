@@ -35,9 +35,9 @@ export const OPENCODE_PROVIDER_MAP: Partial<Record<ChatModelProviders, string>> 
   [ChatModelProviders.COPILOT_PLUS]: "copilot-plus",
 };
 
-export const OPENCODE_COPILOT_BUILD_AGENT_ID = "copilot-build";
+const OPENCODE_COPILOT_BUILD_AGENT_ID = "copilot-build";
 
-export const OPENCODE_BUILTIN_BUILD_AGENT_ID = "build";
+const OPENCODE_BUILTIN_BUILD_AGENT_ID = "build";
 
 export const OPENCODE_CANONICAL_MODE_AGENT_IDS: Partial<Record<CopilotMode, string>> = {
   default: OPENCODE_COPILOT_BUILD_AGENT_ID,
