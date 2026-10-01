@@ -3,7 +3,6 @@ import Chat from "@/components/Chat";
 import { CHAT_VIEWTYPE } from "@/constants";
 import { ChatViewEventTarget, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
-import { FileParserManager } from "@/tools/FileParserManager";
 import { registerActiveLeafChangeBridge } from "@/utils/registerActiveLeafChangeBridge";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -15,7 +14,6 @@ export default class CopilotView extends ItemView {
     return this.plugin.chainOwner.getCurrentChainManager();
   }
 
-  private fileParserManager: FileParserManager;
   private viewRoot: PluginViewRootHandle | null = null;
   private handleSaveAsNote: (() => Promise<void>) | null = null;
   private drawerHideObserver: MutationObserver | null = null;
@@ -27,7 +25,6 @@ export default class CopilotView extends ItemView {
   ) {
     super(leaf);
     this.app = plugin.app;
-    this.fileParserManager = plugin.fileParserManager;
     this.eventTarget = new ChatViewEventTarget();
     this.plugin = plugin;
   }
@@ -102,7 +99,6 @@ export default class CopilotView extends ItemView {
           <Chat
             chainManager={this.chainManager}
             updateUserMessageHistory={this.handleUpdateUserMessageHistory}
-            fileParserManager={this.fileParserManager}
             plugin={this.plugin}
             onSaveChat={this.setSaveHandler}
             chatUIState={this.plugin.chatUIState}

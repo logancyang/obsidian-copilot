@@ -50,7 +50,7 @@ export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Ele
       if (editor) {
         editor.dispatchCommand(INSERT_TEXT_WITH_PILLS_COMMAND, {
           text,
-          options: { enableURLPills, insertAtSelection: true },
+          options: { enableURLPills },
         });
       } else {
         pendingInsertRef.current = { text, enableURLPills };
@@ -65,7 +65,7 @@ export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Ele
     pendingInsertRef.current = null;
     editor.dispatchCommand(INSERT_TEXT_WITH_PILLS_COMMAND, {
       text,
-      options: { enableURLPills, insertAtSelection: true },
+      options: { enableURLPills },
     });
   }, [editor]);
 

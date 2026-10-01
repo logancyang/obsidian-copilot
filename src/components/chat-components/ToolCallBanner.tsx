@@ -1,7 +1,7 @@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
-import { Check, ChevronRight, X } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import React, { useMemo, useState } from "react";
 
 const SHIMMER_ANIMATION = "shimmer 2s ease-in-out infinite";
@@ -13,8 +13,6 @@ interface ToolCallBannerProps {
   isExecuting: boolean;
   result: string | null;
   confirmationMessage?: string | null;
-  onAccept?: () => void;
-  onReject?: () => void;
 }
 
 const MAX_DISPLAY_CHARS = 5_000;
@@ -51,8 +49,6 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
   isExecuting,
   result,
   confirmationMessage,
-  onAccept,
-  onReject,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -110,33 +106,6 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
           </div>
 
           <div className="tw-flex tw-items-center tw-gap-2">
-            {!actuallyExecuting && onAccept && onReject && (
-              <>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAccept();
-                  }}
-                  className="hover:tw-bg-green-rgb/20 tw-rounded tw-p-1"
-                  title="Accept"
-                >
-                  <Check className="tw-size-4 tw-text-success" />
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onReject();
-                  }}
-                  className="hover:tw-bg-red-rgb/20 tw-rounded tw-p-1"
-                  title="Reject"
-                >
-                  <X className="tw-size-4 tw-text-error" />
-                </button>
-              </>
-            )}
-
             {canExpand && (
               <ChevronRight
                 className={cn(

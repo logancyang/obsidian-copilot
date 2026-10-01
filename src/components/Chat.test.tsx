@@ -94,7 +94,6 @@ function renderChat() {
   const props = {
     chatUIState,
     chainManager: { chatModelManager: {} },
-    fileParserManager: {},
     onSaveChat: jest.fn(),
     updateUserMessageHistory: jest.fn(),
     plugin: {

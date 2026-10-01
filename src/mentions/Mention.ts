@@ -10,7 +10,6 @@ import { err2String, isTwitterUrl, isYoutubeUrl } from "@/utils";
 import { logError } from "@/logger";
 import { isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
-import { extractUrlsFromText } from "@/utils/urlTagUtils";
 
 export interface MentionData {
   type: string;
@@ -34,10 +33,6 @@ export class Mention {
       Mention.instance = new Mention();
     }
     return Mention.instance;
-  }
-
-  extractUrls(text: string): string[] {
-    return extractUrlsFromText(text);
   }
 
   async processUrl(url: string): Promise<Url4llmResponse & { error?: string }> {

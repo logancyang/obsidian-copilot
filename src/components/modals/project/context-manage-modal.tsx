@@ -223,13 +223,12 @@ const SectionList: React.FC<SectionListProps> = ({
 
 interface ItemCardProps {
   item: GroupItem;
-  viewMode: "list";
   agentProcessingItem?: ProcessingItem;
   onDelete: (e: React.MouseEvent, item: GroupItem) => void;
   onOpenCached?: () => void;
 }
 
-function ItemCard({ item, viewMode, agentProcessingItem, onDelete, onOpenCached }: ItemCardProps) {
+function ItemCard({ item, agentProcessingItem, onDelete, onOpenCached }: ItemCardProps) {
   const extension = item.id.split(".").pop() || "";
 
   const IconComponent = item.isIgnored ? Plus : XIcon;
@@ -541,7 +540,7 @@ function ContextManage({
   );
 
   const convertGroupListToInclusions = useCallback(
-    (list: GroupListItem, appFiles: TFile[]): string => {
+    (list: GroupListItem): string => {
       const tagPatterns = Object.keys(list.tags);
       const folderPatterns = Object.keys(list.folders);
       const extensionPatterns = Object.keys(list.extensions);
@@ -1143,7 +1142,7 @@ function ContextManage({
   };
 
   const refreshGroupListFromCurrentPatterns = useCallback(() => {
-    const currentInclude = convertGroupListToInclusions(latestGroupList.current, appAllFiles);
+    const currentInclude = convertGroupListToInclusions(latestGroupList.current);
     const currentExclude = convertDeletedItemsToExclusions(latestIgnoreItems.current);
 
     const { inclusions, exclusions } = getMatchingPatterns({
@@ -1178,7 +1177,7 @@ function ContextManage({
   };
 
   const handleSave = () => {
-    const include = convertGroupListToInclusions(groupList, appAllFiles);
+    const include = convertGroupListToInclusions(groupList);
     const exclude = convertDeletedItemsToExclusions(ignoreItems);
     onSave({
       ...initialProject,
@@ -1364,7 +1363,6 @@ function ContextManage({
                             <ItemCard
                               key={item.id}
                               item={item}
-                              viewMode="list"
                               onDelete={
                                 activeSection === "ignoreFiles" || item.isIgnored
                                   ? handleDeleteIgnoreItem

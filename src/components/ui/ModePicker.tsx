@@ -37,7 +37,7 @@ const MODE_DISPLAY: Record<CopilotMode, { label: string; description: string }> 
   },
 };
 
-export function getModeLabel(value: CopilotMode): string {
+function getModeLabel(value: CopilotMode): string {
   return MODE_DISPLAY[value]?.label ?? value;
 }
 

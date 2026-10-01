@@ -9,7 +9,6 @@ import type { WebTabContext } from "@/types/message";
 
 interface WebTabPillSyncPluginProps {
   onWebTabsChange?: (webTabs: WebTabContext[]) => void;
-  onWebTabsRemoved?: (removedWebTabs: WebTabContext[]) => void;
   onActiveWebTabAdded?: () => void;
   onActiveWebTabRemoved?: () => void;
 }
@@ -28,17 +27,12 @@ const webTabPillConfig: PillSyncConfig<WebTabContext> = {
 
 export function WebTabPillSyncPlugin({
   onWebTabsChange,
-  onWebTabsRemoved,
   onActiveWebTabAdded,
   onActiveWebTabRemoved,
 }: WebTabPillSyncPluginProps) {
   return (
     <>
-      <GenericPillSyncPlugin
-        config={webTabPillConfig}
-        onChange={onWebTabsChange}
-        onRemoved={onWebTabsRemoved}
-      />
+      <GenericPillSyncPlugin config={webTabPillConfig} onChange={onWebTabsChange} />
       {(onActiveWebTabAdded || onActiveWebTabRemoved) && (
         <ActiveWebTabPillSyncPlugin
           onActiveWebTabAdded={onActiveWebTabAdded}
