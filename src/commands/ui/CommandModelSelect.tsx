@@ -20,10 +20,6 @@ export function CommandModelSelect({ value, options, onChange }: CommandModelSel
           className="tw-flex tw-h-9 tw-w-full tw-appearance-none tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-dropdown tw-px-3 tw-py-1 tw-pr-8 tw-text-sm tw-shadow tw-transition-colors hover:tw-bg-interactive-hover hover:tw-text-normal focus:tw-outline-none focus:tw-ring-1 focus:tw-ring-ring disabled:tw-cursor-not-allowed disabled:tw-opacity-50"
         >
           <option value="">Default model</option>
-          {/* Preserve a removed selection until the user changes it. https://github.com/Brevilabs/obsidian-copilot-private/issues/616 */}
-          {value && !options.some((option) => option.value === value) && (
-            <option value={value}>Unavailable model</option>
-          )}
           {options.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}

@@ -153,7 +153,12 @@ export function CustomCommandChatModalContent({
     systemPrompt: systemPrompt || "",
     excludeThinking: true,
     onNoModel: () => {
-      new Notice("Configure a model in Settings → Copilot → Command, then rerun the command.");
+      // An explicit command model overrides the default, so setting a default cannot repair it. https://github.com/Brevilabs/obsidian-copilot-private/issues/616
+      new Notice(
+        command.modelKey
+          ? "This command's model is unavailable. Edit the command in Settings → Copilot → Command to choose another, then rerun."
+          : "Configure a model in Settings → Copilot → Command, then rerun the command."
+      );
       setIsLoading(false);
     },
     onNonAbortError: (error) => {
@@ -267,11 +272,13 @@ export function CustomCommandChatModalContent({
 
   const runAgainInstruction = behavior.autoExecuteOnOpen ? command.content : firstInstruction;
 
-  const handleRunAgain = () => {
-    if (runAgainInstruction === null || isLoading || isStreaming) return;
-    resetSession();
-    void runPrompt(() => buildFirstPrompt(runAgainInstruction));
-  };
+  const handleRunAgain =
+    runAgainInstruction === null
+      ? undefined
+      : () => {
+          resetSession();
+          void runPrompt(() => buildFirstPrompt(runAgainInstruction));
+        };
 
   const handleStop = useCallback(() => {
     const latestStreamedText = getLatestStreamingText().trim();
@@ -324,7 +331,7 @@ export function CustomCommandChatModalContent({
       needsModel={!resolvedModel}
       onOpenModelSettings={(ownerWindow) => openCopilotSettings(app, ownerWindow, "command")}
       onStop={handleStop}
-      onRunAgain={runAgainInstruction === null ? undefined : handleRunAgain}
+      onRunAgain={handleRunAgain}
       onCopy={safeAsyncHandler(handleCopy)}
       onInsert={handleInsert}
       onReplace={handleReplace}

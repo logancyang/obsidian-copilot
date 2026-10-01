@@ -1,4 +1,8 @@
-import { backendPickerAtomFamily, resolveChatModelSelectionId } from "@/modelManagement";
+import {
+  backendPickerAtomFamily,
+  providerRequiresApiKey,
+  resolveChatModelSelectionId,
+} from "@/modelManagement";
 import { settingsStore } from "@/settings/model";
 import { useAtomValue } from "jotai";
 import { useCallback, useMemo } from "react";
@@ -19,6 +23,8 @@ export function useChatBackendModelOptions(fallbackToFirst = true): ChatBackendM
     const result: ChatBackendModelOption[] = [];
     for (const entry of entries) {
       if (entry.state !== "ok") continue;
+      // A default that cannot authenticate looks configured but fails every request. https://github.com/Brevilabs/obsidian-copilot-private/issues/616
+      if (providerRequiresApiKey(entry.provider) && !entry.provider.apiKeyKeychainId) continue;
       result.push({
         label: entry.configuredModel.info.displayName || entry.configuredModel.info.id,
         value: entry.configuredModelId,

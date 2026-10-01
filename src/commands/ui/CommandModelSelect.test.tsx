@@ -16,19 +16,5 @@ describe("CommandModelSelect", () => {
       fireEvent.change(screen.getByLabelText("Model (Optional)"), { target: { value: "gpt4o" } });
       expect(onChange).toHaveBeenCalledWith("gpt4o");
     });
-    it("keeps a removed selection visible until it is replaced (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)", () => {
-      const onChange = jest.fn();
-      render(
-        <CommandModelSelect
-          value="removed"
-          options={[{ label: "GPT-4o", value: "gpt4o" }]}
-          onChange={onChange}
-        />
-      );
-      expect(screen.getByDisplayValue("Unavailable model")).not.toBeNull();
-      expect(onChange).not.toHaveBeenCalled();
-      fireEvent.change(screen.getByLabelText("Model (Optional)"), { target: { value: "" } });
-      expect(onChange).toHaveBeenCalledWith("");
-    });
   });
 });

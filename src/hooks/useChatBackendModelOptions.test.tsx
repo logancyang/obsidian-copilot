@@ -18,6 +18,22 @@ const mockEntries = [
       info: { id: "gpt-4o", displayName: "GPT-4o" },
     },
   },
+  {
+    state: "ok",
+    configuredModelId: "model-keyless",
+    provider: {
+      providerId: "k",
+      providerType: "anthropic",
+      displayName: "Anthropic",
+      origin: { kind: "byok", catalogProviderId: "anthropic" },
+      requiresApiKey: true,
+    },
+    configuredModel: {
+      configuredModelId: "model-keyless",
+      providerId: "k",
+      info: { id: "claude", displayName: "Claude" },
+    },
+  },
 ];
 jest.mock("jotai", () => ({ useAtomValue: () => mockEntries }));
 jest.mock("@/modelManagement", () => ({
@@ -25,6 +41,8 @@ jest.mock("@/modelManagement", () => ({
     "@/modelManagement/chatModel/chatModelSelection"
   ),
   backendPickerAtomFamily: () => "chat",
+  providerRequiresApiKey: (provider: { requiresApiKey?: boolean }) =>
+    provider.requiresApiKey ?? true,
   configuredModelToCustomModel: ({
     configuredModel,
   }: {
@@ -39,7 +57,7 @@ jest.mock("@/services/keychainService", () => ({ KeychainService: { getInstance:
 
 describe("useChatBackendModelOptions", () => {
   describe("useChatBackendModelOptions()", () => {
-    it("lists enabled models and resolves a legacy selection", () => {
+    it("lists enabled models whose provider can authenticate and resolves a legacy selection (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)", () => {
       const { result } = renderHook(() => useChatBackendModelOptions(false));
       expect(result.current.options).toEqual([{ label: "GPT-4o", value: "model-a" }]);
       expect(result.current.resolveSelectionId("gpt-4o|openai")).toBe("model-a");

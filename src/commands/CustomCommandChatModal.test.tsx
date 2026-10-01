@@ -150,16 +150,18 @@ describe("CustomCommandChatModal", () => {
       await screen.findByText("Answer from quick");
       expect(mockTurns[0].model).toBe("quick");
     });
-    it.each(["removed", ""])(
-      "asks for settings configuration when selection %s is unavailable and does not resume after a popup choice (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)",
-      async (modelKey) => {
+    it.each([
+      [
+        "removed",
+        "This command's model is unavailable. Edit the command in Settings → Copilot → Command to choose another, then rerun.",
+      ],
+      ["", "Configure a model in Settings → Copilot → Command, then rerun the command."],
+    ])(
+      "with unavailable selection %p, shows %p and does not resume after a popup choice (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)",
+      async (modelKey, notice) => {
         mockSettings.quickCommandModelKey = "";
         renderCommand(modelKey);
-        await waitFor(() =>
-          expect(Notice).toHaveBeenCalledWith(
-            "Configure a model in Settings → Copilot → Command, then rerun the command."
-          )
-        );
+        await waitFor(() => expect(Notice).toHaveBeenCalledWith(notice));
         expect(screen.getByText("idle")).not.toBeNull();
         expect(processCommandPrompt).not.toHaveBeenCalled();
         fireEvent.click(screen.getByText("Choose model"));
