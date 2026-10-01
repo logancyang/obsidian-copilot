@@ -1,6 +1,7 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
 import {
   buildChatDeepLink,
+  buildChatMarkdownLink,
   findChatFileByDeepLinkId,
   getSavedChatDeepLinkId,
 } from "@/utils/chatDeepLink";
@@ -33,6 +34,20 @@ describe("chatDeepLink", () => {
     it("encodes the vault and chat id without exposing a file path", () => {
       expect(buildChatDeepLink("My Vault", "epoch:1735732800000")).toBe(
         "obsidian://copilot-chat?vault=My+Vault&id=epoch%3A1735732800000"
+      );
+    });
+  });
+
+  describe("buildChatMarkdownLink()", () => {
+    it("uses the chat title as the link text", () => {
+      expect(buildChatMarkdownLink("Trip planning", "obsidian://copilot-chat?id=1")).toBe(
+        "[Trip planning](obsidian://copilot-chat?id=1)"
+      );
+    });
+
+    it("escapes brackets and backslashes so the title cannot end the link text early", () => {
+      expect(buildChatMarkdownLink("Fix [bug] a\\b", "obsidian://x")).toBe(
+        "[Fix \\[bug\\] a\\\\b](obsidian://x)"
       );
     });
   });

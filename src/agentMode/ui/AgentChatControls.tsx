@@ -27,8 +27,7 @@ interface AgentChatControlsProps {
   openChatIds?: ReadonlySet<string>;
   runningChatIds?: ReadonlySet<string>;
   onOpenSourceFile?: (id: string) => Promise<void>;
-  chatLinkId?: string;
-  onCopyChatLink?: (id: string) => void | Promise<void>;
+  onCopyChatLink?: () => void | Promise<void>;
   usageMeter?: React.ReactNode;
   showMultiAgentUpsell?: boolean;
 }
@@ -45,7 +44,6 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   openChatIds,
   runningChatIds,
   onOpenSourceFile,
-  chatLinkId,
   onCopyChatLink,
   usageMeter,
   showMultiAgentUpsell = false,
@@ -88,7 +86,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
               </TooltipTrigger>
               <TooltipContent>New Chat</TooltipContent>
             </Tooltip>
-            <CopyChatLinkButton chatId={chatLinkId} onCopyLink={onCopyChatLink} />
+            <CopyChatLinkButton onCopyLink={onCopyChatLink} />
           </>
         )}
         {!settings.autosaveChat && onSaveAsNote && (
