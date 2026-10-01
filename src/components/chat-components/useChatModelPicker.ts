@@ -75,12 +75,8 @@ export function useChatModelPicker(params: {
 
   const resolvedValue = React.useMemo(() => {
     const resolvedId = resolveChatModelSelectionId(entries, value, fallbackToFirst);
-    const current = resolvedId ? idToModelKey.get(resolvedId) : undefined;
-    if (current) return current;
-    // Leave the picker unselected when a command needs an explicit choice. https://github.com/Brevilabs/obsidian-copilot-private/issues/616
-    const first = fallbackToFirst ? models[0] : undefined;
-    return first ? getModelKeyFromModel(first) : "";
-  }, [entries, value, idToModelKey, models, fallbackToFirst]);
+    return (resolvedId && idToModelKey.get(resolvedId)) || "";
+  }, [entries, value, idToModelKey, fallbackToFirst]);
 
   const displayModels = React.useMemo(() => {
     if (!models.some((m) => m._needsSelfHostWarning)) return models;
