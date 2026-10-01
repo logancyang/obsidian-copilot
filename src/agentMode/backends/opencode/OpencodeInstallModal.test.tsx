@@ -59,7 +59,7 @@ const makeManager = (): {
     onProgress?: (progress: ManagedInstallProgress) => void;
   }> = [];
   const deferreds: Deferred<{ version: string; path: string }>[] = [];
-  const upgradeManaged = jest.fn().mockResolvedValue({ version: "2.0.3", path: "/managed" });
+  const upgradeManaged = jest.fn().mockResolvedValue({ version: "2.0.21", path: "/managed" });
   const upgradeCustomBinary = jest.fn().mockResolvedValue({ version: "1.16.0", path: "/custom" });
   const setCustomBinaryPath = jest.fn().mockResolvedValue(undefined);
   const uninstall = jest.fn().mockResolvedValue(undefined);
@@ -261,12 +261,12 @@ describe("OpencodeInstallModal", () => {
       renderContainer(manager);
 
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.3" }));
+        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.21" }));
       });
 
       expect(upgradeManaged).toHaveBeenCalledTimes(1);
       expect(upgradeCustomBinary).not.toHaveBeenCalled();
-      expect(noticeMessages()).toContain("opencode upgraded to v2.0.3.");
+      expect(noticeMessages()).toContain("opencode upgraded to v2.0.21.");
     });
     it("drops a failed upgrade's reason once an install has replaced the binary", async () => {
       setOpencodeSettings({
@@ -278,13 +278,13 @@ describe("OpencodeInstallModal", () => {
       upgradeManaged.mockRejectedValue(new Error("tar exited with 1"));
       renderContainer(manager);
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.3" }));
+        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.21" }));
       });
       expect(screen.getByText("tar exited with 1")).toBeTruthy();
 
       fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
       await act(async () => {
-        installDeferred().resolve({ version: "2.0.3", path: "/managed" });
+        installDeferred().resolve({ version: "2.0.21", path: "/managed" });
       });
       publish({ kind: "idle" });
 
@@ -303,7 +303,7 @@ describe("OpencodeInstallModal", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.3" }));
+        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.21" }));
       });
 
       expect(screen.getAllByRole("progressbar")).toHaveLength(1);
@@ -321,11 +321,11 @@ describe("OpencodeInstallModal", () => {
       renderContainer(manager);
 
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.3" }));
+        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.21" }));
       });
 
       expect(screen.queryByText("Aborted")).toBeNull();
-      expect(screen.getByRole("button", { name: "Upgrade to v2.0.3" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Upgrade to v2.0.21" })).toBeTruthy();
     });
 
     it("drops a failed upgrade's reason once another binary is applied", async () => {
@@ -338,7 +338,7 @@ describe("OpencodeInstallModal", () => {
       upgradeManaged.mockRejectedValue(new Error("GitHub API rate-limited"));
       renderContainer(manager);
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.3" }));
+        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.21" }));
       });
       expect(screen.getByText("GitHub API rate-limited")).toBeTruthy();
 
