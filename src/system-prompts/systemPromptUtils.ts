@@ -13,7 +13,6 @@ import {
   readFrontmatterMarkdownFile,
   updateFrontmatterMarkdownFile,
 } from "@/utils/frontmatterMarkdownFile";
-import { stripFrontmatter } from "@/utils";
 import {
   updateCachedSystemPrompts,
   addPendingFileWrite,
@@ -63,10 +62,7 @@ function coerceFrontmatterNumber(value: unknown, fallback: number): number {
 }
 
 export async function parseSystemPromptFile(app: App, file: TFile): Promise<UserSystemPrompt> {
-  const parsed = await readFrontmatterMarkdownFile(app, file.path);
-  const raw = parsed ? parsed.content : await app.vault.read(file);
-  const content = parsed ? raw : stripFrontmatter(raw);
-  const frontmatter = parsed?.frontmatter ?? app.metadataCache.getFileCache(file)?.frontmatter;
+  const { content, frontmatter } = await readFrontmatterMarkdownFile(app, file);
 
   const createdMs = coerceFrontmatterNumber(
     frontmatter?.[COPILOT_SYSTEM_PROMPT_CREATED],
