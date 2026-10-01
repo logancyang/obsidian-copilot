@@ -11,6 +11,7 @@ import type {
   BackendState,
   EffortOption,
   SessionId,
+  SessionUpdateHandler,
 } from "./types";
 
 export interface WarmBackend {
@@ -167,11 +168,31 @@ export class AgentModelPreloader {
       descriptor,
     });
 
+    // OpenCode lists Copilot's models only in a catalog update after the probe session starts.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
+    let catalog: BackendModelCatalog | null = null;
+    let updatedState: BackendState | null = null;
+    const onProbeEvent: SessionUpdateHandler = ({ update }) => {
+      if (update.sessionUpdate !== "state_changed" || !update.state.model) return;
+      updatedState = update.state;
+      if (!catalog || this.modelCatalogCache.get(backendId) !== catalog) return;
+      catalog = { availableModels: update.state.model.availableModels };
+      this.modelCatalogCache.set(backendId, catalog);
+      this.notify();
+    };
+
     let probe: { sessionId: SessionId; state: BackendState } | null = null;
     try {
       await proc.start?.();
       const storedId = descriptor.getProbeSessionId?.(getSettings());
-      probe = await this.fetchInitialState(proc, descriptor, backendId, storedId, cwd);
+      probe = await this.fetchInitialState(
+        proc,
+        descriptor,
+        backendId,
+        storedId,
+        cwd,
+        onProbeEvent
+      );
     } catch (err) {
       logError(`[AgentMode] preload ${backendId} failed`, err);
     }
@@ -216,9 +237,8 @@ export class AgentModelPreloader {
       }
     });
     this.warm.set(backendId, warm);
-    this.modelCatalogCache.set(backendId, {
-      availableModels: probe.state.model?.availableModels ?? null,
-    });
+    catalog = { availableModels: (updatedState ?? probe.state).model?.availableModels ?? null };
+    this.modelCatalogCache.set(backendId, catalog);
     this.warmExitUnsubs.set(backendId, exitUnsub);
     logProbeResult(backendId, "session probe", probe.state);
     this.notify();
@@ -254,7 +274,8 @@ export class AgentModelPreloader {
     descriptor: BackendDescriptor,
     backendId: BackendId,
     storedId: string | undefined,
-    cwd: string
+    cwd: string,
+    onProbeEvent: SessionUpdateHandler
   ): Promise<{ sessionId: SessionId; state: BackendState }> {
     type Strategy = {
       label: string;
@@ -277,7 +298,7 @@ export class AgentModelPreloader {
 
     for (const { label, sessionId, run } of strategies) {
       try {
-        proc.registerSessionHandler(sessionId, () => {});
+        proc.registerSessionHandler(sessionId, onProbeEvent);
         const resp = await run();
         logInfo(`[AgentMode] preload ${backendId}: ${label}`);
         return { sessionId: resp.sessionId, state: resp.state };
@@ -289,7 +310,7 @@ export class AgentModelPreloader {
     }
 
     const resp = await proc.newSession({ cwd });
-    proc.registerSessionHandler(resp.sessionId, () => {});
+    proc.registerSessionHandler(resp.sessionId, onProbeEvent);
     logInfo(`[AgentMode] preload ${backendId}: created probe session ${resp.sessionId}`);
     if (descriptor.persistProbeSessionId) {
       try {
