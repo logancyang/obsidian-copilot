@@ -1,11 +1,9 @@
 import { TFile, App } from "obsidian";
 import { logWarn } from "@/logger";
 
-async function loadNoteContentForPreview(
-  app: App,
-  file: TFile,
-  maxLength: number = 500
-): Promise<string> {
+const NOTE_PREVIEW_MAX_LENGTH = 500;
+
+async function loadNoteContentForPreview(app: App, file: TFile): Promise<string> {
   try {
     if (file.extension === "pdf" || file.extension === "canvas") {
       return "";
@@ -16,8 +14,8 @@ async function loadNoteContentForPreview(
     const contentWithoutFrontmatter = content.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "").trim();
 
     const truncatedContent =
-      contentWithoutFrontmatter.length > maxLength
-        ? contentWithoutFrontmatter.slice(0, maxLength) + "..."
+      contentWithoutFrontmatter.length > NOTE_PREVIEW_MAX_LENGTH
+        ? contentWithoutFrontmatter.slice(0, NOTE_PREVIEW_MAX_LENGTH) + "..."
         : contentWithoutFrontmatter;
 
     return truncatedContent;
@@ -32,26 +30,14 @@ export class NotePreviewCache {
 
   constructor(private readonly app: App) {}
 
-  async getOrLoadContent(file: TFile, maxLength: number = 500): Promise<string> {
+  async getOrLoadContent(file: TFile): Promise<string> {
     const cached = this.cache.get(file.path);
     if (cached !== undefined) {
       return cached;
     }
 
-    const content = await loadNoteContentForPreview(this.app, file, maxLength);
+    const content = await loadNoteContentForPreview(this.app, file);
     this.cache.set(file.path, content);
     return content;
-  }
-
-  clear(): void {
-    this.cache.clear();
-  }
-
-  remove(filePath: string): void {
-    this.cache.delete(filePath);
-  }
-
-  has(filePath: string): boolean {
-    return this.cache.has(filePath);
   }
 }

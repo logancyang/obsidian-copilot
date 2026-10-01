@@ -17,14 +17,12 @@ const Strip: React.FC<{ variant: TabVariant; labels?: string[] }> = ({ variant, 
   return (
     <div className="tw-flex tw-flex-col">
       <div className="tw-flex tw-flex-wrap tw-gap-1" role="tablist">
-        {tabs.map((tab, index) => (
+        {tabs.map((tab) => (
           <TabItem
             key={tab.id}
             tab={tab}
             isSelected={selected === tab.id}
             onClick={() => setSelected(tab.id)}
-            isFirst={index === 0}
-            isLast={index === tabs.length - 1}
             variant={variant}
           />
         ))}
@@ -63,8 +61,6 @@ export const WarningDot: StoryObj<TabItemProps> = {
         }}
         isSelected={false}
         onClick={() => undefined}
-        isFirst={false}
-        isLast={false}
       />
       <TabItem
         tab={{
@@ -75,8 +71,6 @@ export const WarningDot: StoryObj<TabItemProps> = {
         }}
         isSelected
         onClick={() => undefined}
-        isFirst={false}
-        isLast={false}
       />
     </div>
   ),

@@ -15,7 +15,6 @@ interface ContentAreaProps {
   editable?: boolean;
   value?: string;
   onChange?: (value: string) => void;
-  placeholder?: string;
   className?: string;
   minHeight?: string;
   disableAutoGrow?: boolean;
@@ -28,7 +27,6 @@ export function ContentArea({
   editable = false,
   value,
   onChange,
-  placeholder = "Ready to generate...",
   className,
   minHeight = "180px",
   disableAutoGrow = false,
@@ -121,7 +119,7 @@ export function ContentArea({
             ref={textareaRef}
             value={displayValue}
             onChange={(e) => onChange?.(e.target.value)}
-            placeholder={placeholder}
+            placeholder="Ready to generate..."
             disabled={isDisabled}
             className={cn(
               "tw-min-w-fit tw-overflow-auto tw-border-solid",
@@ -152,7 +150,7 @@ export function ContentArea({
         ref={textareaRef}
         value={displayValue}
         onChange={(e) => onChange?.(e.target.value)}
-        placeholder={placeholder}
+        placeholder="Ready to generate..."
         disabled={isDisabled}
         className={cn(
           "tw-min-h-[120px] tw-resize-y",

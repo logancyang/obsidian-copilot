@@ -5,34 +5,15 @@ import { cn } from "@/lib/utils";
 import { type PropsWithChildren, useRef, useState } from "react";
 
 const TOLERANCE = 2;
-function isEllipsesActive(
-  textRef: React.MutableRefObject<HTMLDivElement | null>,
-  lineClamp?: number
-): boolean {
-  if (lineClamp && lineClamp > 1) {
-    return textRef.current ? textRef.current.offsetHeight < textRef.current.scrollHeight : false;
-  }
+function isEllipsesActive(textRef: React.MutableRefObject<HTMLDivElement | null>): boolean {
   return (
     (textRef.current && textRef.current?.offsetWidth + TOLERANCE < textRef.current?.scrollWidth) ??
     false
   );
 }
 
-function getLineClampClass(lineClamp: number): string {
-  switch (lineClamp) {
-    case 2:
-      return "tw-line-clamp-2";
-    case 3:
-      return "tw-line-clamp-3";
-    default:
-      return "";
-  }
-}
-
 type Props = {
   className?: string;
-
-  lineClamp?: number;
 
   tooltipContent?: React.ReactNode;
 
@@ -42,7 +23,6 @@ type Props = {
 export const TruncatedText = ({
   children,
   className,
-  lineClamp,
   tooltipContent,
   alwaysShowTooltip = false,
   ...props
@@ -52,7 +32,7 @@ export const TruncatedText = ({
   const [open, setOpen] = useState<boolean>(false);
 
   const onOpenChange = (isOpen: boolean): void => {
-    setOpen(isOpen && (alwaysShowTooltip || isEllipsesActive(textRef, lineClamp)));
+    setOpen(isOpen && (alwaysShowTooltip || isEllipsesActive(textRef)));
   };
 
   return (
@@ -62,12 +42,7 @@ export const TruncatedText = ({
           <div
             {...props}
             ref={textRef}
-            className={cn(
-              "tw-max-w-full tw-text-normal",
-              (!lineClamp || lineClamp <= 1) && "tw-truncate",
-              lineClamp && getLineClampClass(lineClamp),
-              className
-            )}
+            className={cn("tw-max-w-full tw-truncate tw-text-normal", className)}
             data-testid="truncatedText"
           >
             {children}

@@ -1,7 +1,6 @@
 import * as React from "react";
 import { Platform } from "obsidian";
 import { ArrowBigUp, Command, CornerDownLeft } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 type ActionState = "idle" | "loading" | "result";
@@ -42,11 +41,6 @@ interface ActionButtonsProps {
   onRunAgain?: () => void;
   onInsert?: () => void;
   onReplace?: () => void;
-  onSubmit?: () => void;
-  onCancel?: () => void;
-  showInsertReplace?: boolean;
-  showSubmitCancel?: boolean;
-  className?: string;
 }
 
 export function ActionButtons({
@@ -55,14 +49,9 @@ export function ActionButtons({
   onRunAgain,
   onInsert,
   onReplace,
-  onSubmit,
-  onCancel,
-  showInsertReplace = true,
-  showSubmitCancel = false,
-  className,
 }: ActionButtonsProps) {
   return (
-    <div className={cn("tw-flex tw-items-center tw-gap-2", className)}>
+    <div className="tw-flex tw-items-center tw-gap-2">
       {state === "loading" && (
         <Button variant="secondary" size="sm" onClick={onStop}>
           Stop
@@ -75,7 +64,7 @@ export function ActionButtons({
         </Button>
       )}
 
-      {state === "result" && showInsertReplace && (
+      {state === "result" && (
         <>
           <Button
             size="sm"
@@ -93,17 +82,6 @@ export function ActionButtons({
           >
             Replace
             <ReplaceShortcutHint />
-          </Button>
-        </>
-      )}
-
-      {showSubmitCancel && state !== "loading" && (
-        <>
-          <Button variant="secondary" size="sm" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button size="sm" onClick={onSubmit}>
-            Submit
           </Button>
         </>
       )}

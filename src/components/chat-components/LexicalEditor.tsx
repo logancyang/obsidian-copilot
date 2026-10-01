@@ -34,7 +34,6 @@ import { AgentPillSyncPlugin } from "./plugins/AgentPillSyncPlugin";
 import { PastePlugin } from "./plugins/PastePlugin";
 import { TextInsertionPlugin } from "./plugins/TextInsertionPlugin";
 import { useChatInput } from "@/context/ChatInputContext";
-import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { ActiveFileProvider } from "./context/ActiveFileContext";
 import { CloudAgentProvider, EMPTY_CLOUD_AGENT_IDS } from "./context/CloudAgentContext";
@@ -47,20 +46,16 @@ interface LexicalEditorProps {
   onChange: (value: string) => void;
   onSubmit: () => void;
   placeholder?: string;
-  disabled?: boolean;
-  className?: string;
   onNotesChange?: (notes: { path: string; basename: string }[]) => void;
   onNotesRemoved?: (removedNotes: { path: string; basename: string }[]) => void;
   onURLsChange?: (urls: string[]) => void;
   onURLsRemoved?: (removedUrls: string[]) => void;
   onToolsChange?: (tools: string[]) => void;
-  onToolsRemoved?: (removedTools: string[]) => void;
   onFoldersChange?: (folders: string[]) => void;
   onFoldersRemoved?: (removedFolders: string[]) => void;
   onActiveNoteAdded?: () => void;
   onActiveNoteRemoved?: () => void;
   onWebTabsChange?: (webTabs: WebTabContext[]) => void;
-  onWebTabsRemoved?: (removedWebTabs: WebTabContext[]) => void;
   onActiveWebTabAdded?: () => void;
   onActiveWebTabRemoved?: () => void;
   onAgentsChange?: (backendIds: string[]) => void;
@@ -82,20 +77,16 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onChange,
   onSubmit,
   placeholder = "Type a message...",
-  disabled = false,
-  className = "",
   onNotesChange,
   onNotesRemoved,
   onURLsChange,
   onURLsRemoved,
   onToolsChange,
-  onToolsRemoved,
   onFoldersChange,
   onFoldersRemoved,
   onActiveNoteAdded,
   onActiveNoteRemoved,
   onWebTabsChange,
-  onWebTabsRemoved,
   onActiveWebTabAdded,
   onActiveWebTabRemoved,
   onAgentsChange,
@@ -152,9 +143,8 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
       onError: (error: Error) => {
         logError("Lexical error:", error);
       },
-      editable: !disabled,
     }),
-    [onURLsChange, disabled]
+    [onURLsChange]
   );
 
   const handleEditorChange = useCallback(
@@ -182,7 +172,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
     <LexicalComposer initialConfig={initialConfig}>
       <ActiveFileProvider currentActiveFile={currentActiveFile}>
         <CloudAgentProvider cloudAgentIds={cloudAgentIds}>
-          <div className={cn("tw-relative", className)}>
+          <div className="tw-relative">
             <span id={editorLabelId} className="tw-sr-only">
               Chat input
             </span>
@@ -216,7 +206,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
             {onURLsChange && (
               <URLPillSyncPlugin onURLsChange={onURLsChange} onURLsRemoved={onURLsRemoved} />
             )}
-            <ToolPillSyncPlugin onToolsChange={onToolsChange} onToolsRemoved={onToolsRemoved} />
+            <ToolPillSyncPlugin onToolsChange={onToolsChange} />
             <FolderPillSyncPlugin
               onFoldersChange={onFoldersChange}
               onFoldersRemoved={onFoldersRemoved}
@@ -227,7 +217,6 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
             />
             <WebTabPillSyncPlugin
               onWebTabsChange={onWebTabsChange}
-              onWebTabsRemoved={onWebTabsRemoved}
               onActiveWebTabAdded={onActiveWebTabAdded}
               onActiveWebTabRemoved={onActiveWebTabRemoved}
             />

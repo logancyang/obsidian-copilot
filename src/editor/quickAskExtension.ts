@@ -1,5 +1,5 @@
 import { StateEffect } from "@codemirror/state";
-import { EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
+import { ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { QuickAskOverlay } from "@/components/quick-ask/QuickAskOverlay";
 import type { QuickAskWidgetPayload } from "@/components/quick-ask/types";
 import { mapQuickAskAnchorPositions } from "@/utils/quickAskAnchorMapping";
@@ -12,8 +12,6 @@ export const quickAskOverlayPlugin = ViewPlugin.fromClass(
     private bottomAnchorPos: number | null = null;
     private topAnchorPos: number | null = null;
     private focusAnchorPos: number | null = null;
-
-    constructor(private readonly view: EditorView) {}
 
     update(update: ViewUpdate) {
       for (const tr of update.transactions) {

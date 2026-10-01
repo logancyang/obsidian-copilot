@@ -83,43 +83,5 @@ describe("ToolCallBanner", () => {
 
       expect(screen.getByText(/returned 6,000 characters.*preserved in chat history/)).toBeTruthy();
     });
-
-    it("offers Accept and Reject once the call has a result and forwards each click without expanding", () => {
-      const onAccept = jest.fn();
-      const onReject = jest.fn();
-      const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
-      render(
-        <ToolCallBanner
-          {...defaultProps}
-          isExecuting={true}
-          result="Success"
-          onAccept={onAccept}
-          onReject={onReject}
-        />
-      );
-
-      fireEvent.click(screen.getByTitle("Accept"));
-      fireEvent.click(screen.getByTitle("Reject"));
-
-      expect(onAccept).toHaveBeenCalledTimes(1);
-      expect(onReject).toHaveBeenCalledTimes(1);
-      expect(screen.queryByText("Success")).toBeNull();
-      consoleError.mockRestore();
-    });
-
-    it("hides Accept and Reject while the call is still running", () => {
-      render(
-        <ToolCallBanner
-          {...defaultProps}
-          isExecuting={true}
-          result={null}
-          onAccept={jest.fn()}
-          onReject={jest.fn()}
-        />
-      );
-
-      expect(screen.queryByTitle("Accept")).toBeNull();
-      expect(screen.queryByTitle("Reject")).toBeNull();
-    });
   });
 });

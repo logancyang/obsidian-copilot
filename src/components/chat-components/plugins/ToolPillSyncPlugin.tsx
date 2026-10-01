@@ -5,7 +5,6 @@ import type { LexicalNode } from "lexical";
 
 interface ToolPillSyncPluginProps {
   onToolsChange?: (tools: string[]) => void;
-  onToolsRemoved?: (removedTools: string[]) => void;
 }
 
 const toolPillConfig: PillSyncConfig<string> = {
@@ -13,12 +12,6 @@ const toolPillConfig: PillSyncConfig<string> = {
   extractData: (node: LexicalNode) => (node as ToolPillNode).getToolName(),
 };
 
-export function ToolPillSyncPlugin({ onToolsChange, onToolsRemoved }: ToolPillSyncPluginProps) {
-  return (
-    <GenericPillSyncPlugin
-      config={toolPillConfig}
-      onChange={onToolsChange}
-      onRemoved={onToolsRemoved}
-    />
-  );
+export function ToolPillSyncPlugin({ onToolsChange }: ToolPillSyncPluginProps) {
+  return <GenericPillSyncPlugin config={toolPillConfig} onChange={onToolsChange} />;
 }

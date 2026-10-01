@@ -11,8 +11,6 @@ interface FollowUpInputProps {
   onClear?: () => void;
   placeholder?: string;
   className?: string;
-  showClear?: boolean;
-  disabled?: boolean;
   hint?: string;
   autoFocus?: boolean;
 }
@@ -24,8 +22,6 @@ export function FollowUpInput({
   onClear,
   placeholder = "Enter follow-up instructions...",
   className,
-  showClear = true,
-  disabled = false,
   hint,
   autoFocus = false,
 }: FollowUpInputProps) {
@@ -51,7 +47,6 @@ export function FollowUpInput({
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        disabled={disabled}
         autoFocus={autoFocus}
         className="tw-min-h-[36px] tw-resize-none tw-py-2 tw-pr-8"
       />
@@ -60,13 +55,12 @@ export function FollowUpInput({
           {hint}
         </span>
       )}
-      {showClear && value && onClear && !hint && (
+      {value && onClear && !hint && (
         <Button
           type="button"
           variant="ghost2"
           size="fit"
           onClick={onClear}
-          disabled={disabled}
           className="tw-absolute tw-right-6 tw-top-4 tw-text-muted"
           aria-label="Clear input"
         >

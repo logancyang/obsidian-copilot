@@ -77,7 +77,7 @@ const SettingsContent: React.FC = () => {
   return (
     <div className="tw-flex tw-flex-col">
       <div className="tw-flex tw-flex-wrap tw-rounded-lg">
-        {tabs.map((tab, index) => (
+        {tabs.map((tab) => (
           <TabItem
             key={tab.id}
             tab={{
@@ -92,8 +92,6 @@ const SettingsContent: React.FC = () => {
             }}
             isSelected={selectedTab === tab.id}
             onClick={() => setSelectedTab(tab.id)}
-            isFirst={index === 0}
-            isLast={index === tabs.length - 1}
           />
         ))}
       </div>

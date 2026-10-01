@@ -14,19 +14,10 @@ interface TabItemProps {
   tab: TabItem;
   isSelected: boolean;
   onClick: () => void;
-  isFirst: boolean;
-  isLast: boolean;
   variant?: TabVariant;
 }
 
-export const TabItem: React.FC<TabItemProps> = ({
-  tab,
-  isSelected,
-  onClick,
-  isFirst,
-  isLast,
-  variant = "page",
-}) => {
+export const TabItem: React.FC<TabItemProps> = ({ tab, isSelected, onClick, variant = "page" }) => {
   return (
     <div
       role="tab"
