@@ -242,5 +242,3 @@ const PlanPill: React.FC<PlanPillProps> = ({ entries }) =>
       </ul>
     </div>
   );
-
-export default AgentTrail;

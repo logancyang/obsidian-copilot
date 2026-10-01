@@ -36,7 +36,7 @@ export function handlePickerSwitchError(err: unknown, action: "model" | "effort"
   new Notice(`Failed to switch ${action}. See console for details.`);
 }
 
-export const AGENT_PROVIDER = "agent";
+const AGENT_PROVIDER = "agent";
 
 export function appendBackendSection(
   entries: ModelSelectorEntry[],
@@ -174,7 +174,7 @@ export function synthesizeAgentEntry(
   };
 }
 
-export function synthesizePreloadPlaceholder(
+function synthesizePreloadPlaceholder(
   descriptor: BackendDescriptor,
   status: "pending" | "error"
 ): ModelSelectorEntry {
@@ -189,7 +189,7 @@ export function synthesizePreloadPlaceholder(
   };
 }
 
-export function resolveBaseModelId(entry: ModelSelectorEntry): string | undefined {
+function resolveBaseModelId(entry: ModelSelectorEntry): string | undefined {
   return entry.provider === AGENT_PROVIDER ? entry.name : undefined;
 }
 
@@ -439,7 +439,7 @@ export function resolveEffortOptions(
   );
 }
 
-export function buildCommitSelection(
+function buildCommitSelection(
   manager: AgentSessionManager,
   ctx: ModelActiveContext,
   entries: ModelSelectorEntry[],

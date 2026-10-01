@@ -51,8 +51,8 @@ function isOpencodeTaskTool(part: ToolCallPart): boolean {
   return typeof input?.subagent_type === "string";
 }
 
-export function pluralize(n: number, singular: string, plural?: string): string {
-  return `${n} ${n === 1 ? singular : (plural ?? `${singular}s`)}`;
+export function pluralize(n: number, singular: string): string {
+  return `${n} ${n === 1 ? singular : `${singular}s`}`;
 }
 
 function targetFromTitle(part: ToolCallPart): string {

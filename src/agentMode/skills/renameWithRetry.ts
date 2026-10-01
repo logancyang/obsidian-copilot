@@ -1,9 +1,9 @@
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
-export async function renameWithRetry(from: string, to: string, attempts = 3): Promise<void> {
+export async function renameWithRetry(from: string, to: string): Promise<void> {
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
   let lastErr: unknown;
-  for (let i = 0; i < attempts; i++) {
+  for (let i = 0; i < 3; i++) {
     try {
       await fs.promises.rename(from, to);
       return;

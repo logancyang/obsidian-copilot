@@ -81,12 +81,6 @@ export async function reconcile(options: ReconcileOptions): Promise<ReconcileRep
   return report;
 }
 
-export function getAgentDirs(
-  agentDirsAbs: Readonly<Record<BackendId, string>>
-): Array<{ agent: BackendId; dir: string }> {
-  return Object.entries(agentDirsAbs).map(([agent, dir]) => ({ agent, dir }));
-}
-
 interface ForwardSyncEntry {
   created?: string;
   error?: { path: string; reason: string };

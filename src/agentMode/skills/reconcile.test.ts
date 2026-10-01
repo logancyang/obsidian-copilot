@@ -1,4 +1,4 @@
-import { getAgentDirs, reconcile, type ReconcileFs } from "./reconcile";
+import { reconcile, type ReconcileFs } from "./reconcile";
 import type { Skill } from "./types";
 
 jest.mock("@/logger", () => ({
@@ -265,16 +265,6 @@ describe("reconcile", () => {
       const report = await run(fs, [mkSkill("foo", [])]);
 
       expect(report).toEqual({ created: [], removedOrphans: [], errors: [] });
-    });
-  });
-
-  describe("getAgentDirs()", () => {
-    it("lists each agent with its skills directory", () => {
-      expect(getAgentDirs(AGENT_DIRS_ABS)).toEqual([
-        { agent: "claude", dir: "/vault/.claude/skills" },
-        { agent: "codex", dir: "/vault/.agents/skills" },
-        { agent: "opencode", dir: "/vault/.opencode/skills" },
-      ]);
     });
   });
 });
