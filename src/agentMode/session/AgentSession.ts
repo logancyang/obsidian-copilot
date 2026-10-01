@@ -80,7 +80,7 @@ const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as string[];
 const EMPTY_ENABLED_MODELS: readonly EnabledModelEntry[] = Object.freeze([]);
-const ENABLED_MODEL_WAIT_MS = 5_000;
+const ENABLED_MODEL_WAIT_MS = 10_000;
 
 function seedSelectionIntoState(
   state: BackendState | null,

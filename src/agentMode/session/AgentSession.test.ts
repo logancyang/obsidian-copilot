@@ -938,7 +938,7 @@ describe("AgentSession", () => {
           expect(mock.setSessionConfigOption).toHaveBeenCalledTimes(1);
         });
 
-        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 falls back to the first enabled model in the catalog when a Copilot-routed default is still missing after 5 seconds", async () => {
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 falls back to the first enabled model in the catalog when a Copilot-routed default is still missing after 10 seconds", async () => {
           jest.useFakeTimers();
           try {
             const mock = makeMockBackend();
@@ -952,7 +952,7 @@ describe("AgentSession", () => {
                 ]),
             });
 
-            await jest.advanceTimersByTimeAsync(4_999);
+            await jest.advanceTimersByTimeAsync(9_999);
             expect(session.getStatus()).toBe("starting");
             expect(session.getState()?.model?.current.baseModelId).toBe(PLUS_FLASH);
 
@@ -966,7 +966,7 @@ describe("AgentSession", () => {
           }
         });
 
-        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 fails to start, without ever showing the agent's model, when no enabled model reaches the catalog within 5 seconds", async () => {
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 fails to start, without ever showing the agent's model, when no enabled model reaches the catalog within 10 seconds", async () => {
           jest.useFakeTimers();
           try {
             const mock = makeMockBackend();
@@ -978,7 +978,7 @@ describe("AgentSession", () => {
             const shown = modelsShownBy(session);
             const startup = session.ready.catch((error: Error) => error.message);
 
-            await jest.advanceTimersByTimeAsync(5_000);
+            await jest.advanceTimersByTimeAsync(10_000);
 
             expect(await startup).toBe(
               "None of the models enabled for opencode are available. Check them in Copilot's model settings."
