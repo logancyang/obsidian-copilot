@@ -132,7 +132,7 @@ Quick Ask uses an enabled Quick Chat model, starting with **Default quick comman
 | **Send Shortcut**           | **Enter**        | Chooses **Enter** or **Shift + Enter** to send. If the shortcut does not work, check **Obsidian → Hotkeys** for a conflict.                                                                           |
 | **Copilot folder location** | `copilot`        | Sets the root for conversations, custom prompts, system prompts, skills, and projects. Press Enter or select **Apply** to validate and confirm the change. The folder button reveals the active root. |
 
-Changing the Copilot folder does not move existing files. The old root remains treated as Copilot data, and a new root that already contains notes becomes excluded from Copilot search. Move files yourself after the change. Copilot applies the new root to its own search results immediately. Adjust the registered folder's scope in the Miyo app if you want Miyo and any enabled Relay clients to skip other content.
+Changing the Copilot folder does not move existing files. The old root remains treated as Copilot data, and a new root that already contains notes becomes excluded from Copilot search. Move files yourself after the change. Copilot applies the new root to its own search results immediately. Adjust the registered folder's scope in the Miyo app if you want Miyo and any enabled Relay clients to skip other content. A folder whose name starts with a dot, such as `.copilot`, works as the Copilot folder, but Obsidian's File Explorer cannot show it; open it in your system file manager instead.
 
 ### Custom instructions
 

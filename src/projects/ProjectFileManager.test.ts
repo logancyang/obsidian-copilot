@@ -206,7 +206,7 @@ describe("ProjectFileManager", () => {
       );
     });
 
-    it("removes the empty project folder when writing a hidden project file fails", async () => {
+    it("removes the empty project folder when writing a hidden project file fails for https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
       const folderPath = "vault-copilot/projects/Failed Project";
       const { app, vault } = makeTestVault({ hiddenFolder: true, existingPaths: [folderPath] });
       (vault.adapter.write as jest.Mock).mockRejectedValue(new Error("disk full"));

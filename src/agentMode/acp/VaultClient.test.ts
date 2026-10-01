@@ -133,6 +133,21 @@ describe("VaultClient", () => {
           client.readTextFile({ sessionId: "s1", path: ".other-private-folder/notes.md" })
         ).rejects.toThrow(/hidden directory/);
       });
+
+      it("keeps denying the vault config folder even when it is set as the Copilot folder", async () => {
+        const configDir = ".custom-config";
+        jest
+          .mocked(getSettings)
+          .mockReturnValue({ copilotFolder: configDir } as ReturnType<typeof getSettings>);
+        const { app, adapter } = buildApp("/Users/me/vault");
+        (app.vault as unknown as { configDir: string }).configDir = configDir;
+        adapter.read.mockResolvedValue("secret");
+
+        await expect(
+          buildClient(app).readTextFile({ sessionId: "s1", path: `${configDir}/plugins/data.json` })
+        ).rejects.toThrow(/hidden directory/);
+        expect(adapter.read).not.toHaveBeenCalled();
+      });
     });
 
     describe("writeTextFile()", () => {
