@@ -161,6 +161,11 @@ const emptySettings = {
   },
 } as unknown as CopilotSettings;
 
+const copilotPlusSettings = {
+  ...emptySettings,
+  providers: { plus: { origin: { kind: "copilot-plus" } } },
+} as unknown as CopilotSettings;
+
 function claudeWithInstallState(installState: InstallState): BackendDescriptor {
   return {
     ...makeDescriptor("claude", installState),
@@ -467,17 +472,18 @@ describe("agentModelPickerHelpers", () => {
       expect(entries.map((e) => e.name)).toEqual(["anthropic/claude-sonnet-4-6"]);
     });
 
-    it("drops every model not in the enabled set except the kept one", () => {
-      const kept = makeModelEntry("kept-model");
-      const dropped = makeModelEntry("dropped-model");
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 never lists or selects an active model the user has not enabled on a backend that may only run enabled models", () => {
+      const pushed = makeModelEntry("openrouter/unbiased/pareto-26.10-preview");
+      const enabled = makeModelEntry("copilot-plus/copilot-plus-flash");
       const opencode = {
         ...makeDescriptor("opencode"),
-        getEnabledModelEntries: () => [],
+        routesCopilotModels: true,
+        getEnabledModelEntries: () => [
+          { baseModelId: enabled.baseModelId, name: "Flash", credentialState: "ok" as const },
+        ],
       } as unknown as BackendDescriptor;
       const manager = makeManager({
-        catalogById: {
-          opencode: makeCatalog([kept, dropped]),
-        },
+        catalogById: { opencode: makeCatalog([pushed, enabled]) },
       });
       const ctx: ModelActiveContext = {
         activeSession: { backendId: "opencode" } as unknown as AgentSession,
@@ -485,11 +491,54 @@ describe("agentModelPickerHelpers", () => {
         activeBackendId: "opencode",
         activeDescriptor: opencode,
         activeSessionHasHistory: false,
-        activeModelState: makeModelState("kept-model", [kept, dropped]),
-        activeCurrentEntry: kept,
+        activeModelState: makeModelState(pushed.baseModelId, [pushed, enabled]),
+        activeCurrentEntry: pushed,
       };
-      const { entries } = buildPickerEntries(manager, [opencode], ctx, emptySettings);
-      expect(entries.map((e) => e.name)).toEqual(["kept-model"]);
+
+      const { entries, valueKey } = buildPickerEntries(
+        manager,
+        [opencode],
+        ctx,
+        copilotPlusSettings
+      );
+
+      expect(entries.map((e) => e.name)).toEqual([enabled.baseModelId]);
+      expect(valueKey).toBe("");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 selects the chat's enabled model while the agent has yet to list it", () => {
+      const opencode = {
+        ...makeDescriptor("opencode"),
+        routesCopilotModels: true,
+        getEnabledModelEntries: () => [
+          {
+            baseModelId: "copilot-plus/copilot-plus-flash",
+            name: "Flash",
+            credentialState: "ok" as const,
+          },
+        ],
+      } as unknown as BackendDescriptor;
+      const earlyCatalog = [makeModelEntry("opencode/fledge-alpha-free")];
+      const manager = makeManager({ catalogById: { opencode: makeCatalog(earlyCatalog) } });
+      const ctx: ModelActiveContext = {
+        activeSession: { backendId: "opencode" } as unknown as AgentSession,
+        activeChatUIState: null,
+        activeBackendId: "opencode",
+        activeDescriptor: opencode,
+        activeSessionHasHistory: false,
+        activeModelState: makeModelState("copilot-plus/copilot-plus-flash", earlyCatalog),
+        activeCurrentEntry: undefined,
+      };
+
+      const { entries, valueKey } = buildPickerEntries(
+        manager,
+        [opencode],
+        ctx,
+        copilotPlusSettings
+      );
+
+      expect(valueKey).toBe("opencode:copilot-plus/copilot-plus-flash|agent");
+      expect(entries.map((e) => e.name)).toEqual(["copilot-plus/copilot-plus-flash"]);
     });
 
     it("carries the model description onto the picker entry as _subtitle", () => {
@@ -728,7 +777,6 @@ describe("agentModelPickerHelpers", () => {
       const entries: ModelSelectorEntry[] = [];
       appendBackendSection(entries, opencodeWithEntries(enabled), {
         backendModels: [makeModelEntry("openrouter/c", "Reported C")],
-        keepBaseModelId: null,
         settings: emptySettings,
       });
       const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
@@ -805,7 +853,6 @@ describe("agentModelPickerHelpers", () => {
           makeModelEntry("opencode/big-pickle", "Big Pickle"),
           makeModelEntry("lmstudio/gpt-oss-20b", "GPT OSS 20B"),
         ],
-        keepBaseModelId: null,
         settings: emptySettings,
       });
       const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
@@ -813,28 +860,12 @@ describe("agentModelPickerHelpers", () => {
       expect(byId["lmstudio/gpt-oss-20b"]._isFree).toBe(false);
     });
 
-    it("appends a reported keepBaseModelId not already in the enabled set", () => {
-      const entries: ModelSelectorEntry[] = [];
-      appendBackendSection(
-        entries,
-        opencodeWithEntries([{ baseModelId: "openrouter/a", name: "A", credentialState: "ok" }]),
-        {
-          backendModels: [makeModelEntry("openrouter/a"), makeModelEntry("sticky")],
-          keepBaseModelId: "sticky",
-          settings: emptySettings,
-        }
-      );
-      const names = entries.map((e) => e.name);
-      expect(names).toContain("sticky");
-      expect(entries.find((e) => e.name === "sticky")?._disabledReason).toBeUndefined();
-    });
-
     it("defers to the loading placeholder during preload (no reported catalog yet)", () => {
       const entries: ModelSelectorEntry[] = [];
       appendBackendSection(
         entries,
         opencodeWithEntries([{ baseModelId: "openrouter/a", name: "A", credentialState: "ok" }]),
-        { backendModels: null, keepBaseModelId: null, settings: emptySettings }
+        { backendModels: null, settings: emptySettings }
       );
       expect(entries).toHaveLength(0);
     });

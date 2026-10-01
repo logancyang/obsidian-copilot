@@ -43,7 +43,6 @@ export function appendBackendSection(
   descriptor: BackendDescriptor,
   ctx: {
     backendModels: ReadonlyArray<ModelEntry> | null;
-    keepBaseModelId: string | null;
     settings: CopilotSettings;
     useEnabledFallback?: boolean;
   }
@@ -55,13 +54,7 @@ export function appendBackendSection(
     appendEnabledFallbackEntries(entries, descriptor, enabledEntries);
     return;
   }
-  appendFromEnabledEntries(
-    entries,
-    descriptor,
-    enabledEntries,
-    ctx.backendModels,
-    ctx.keepBaseModelId
-  );
+  appendFromEnabledEntries(entries, descriptor, enabledEntries, ctx.backendModels);
 }
 
 function appendEnabledFallbackEntries(
@@ -87,11 +80,9 @@ function appendFromEnabledEntries(
   entries: ModelSelectorEntry[],
   descriptor: BackendDescriptor,
   enabledEntries: ReadonlyArray<EnabledModelEntry>,
-  backendModels: ReadonlyArray<ModelEntry>,
-  keepBaseModelId: string | null
+  backendModels: ReadonlyArray<ModelEntry>
 ): void {
   const reportedById = new Map(backendModels.map((m) => [m.baseModelId, m]));
-  const emitted = new Set<string>();
   for (const enabled of enabledEntries) {
     const reported = reportedById.get(enabled.baseModelId);
     const name = enabled.label || reported?.name || enabled.name;
@@ -109,23 +100,6 @@ function appendFromEnabledEntries(
     if (reason) entry._disabledReason = reason;
     if (enabled.needsSelfHostWarning) entry._needsSelfHostWarning = true;
     entries.push(entry);
-    emitted.add(enabled.baseModelId);
-  }
-
-  if (keepBaseModelId && !emitted.has(keepBaseModelId)) {
-    const reported = reportedById.get(keepBaseModelId);
-    if (reported) {
-      entries.push(
-        synthesizeAgentEntry(
-          reported.baseModelId,
-          reported.name,
-          descriptor,
-          reported.description,
-          undefined,
-          undefined
-        )
-      );
-    }
   }
 }
 
@@ -236,16 +210,12 @@ export function buildPickerEntries(
     const isActiveBackend = descriptor.id === ctx.activeBackendId;
     if (!isActiveBackend && ctx.activeSessionHasHistory) continue;
     const catalog = manager.getCachedModelCatalog(descriptor.id);
-    const keepBaseModelId = isActiveBackend
-      ? (ctx.activeModelState?.current.baseModelId ?? null)
-      : (manager.getDefaultSelection(descriptor.id)?.baseModelId ?? null);
     const backendModels = catalog?.availableModels ?? null;
     const hasNoCatalog = catalog === null;
     const preloadStatus = manager.getPreloadStatus(descriptor.id);
     const sectionStart = entries.length;
     appendBackendSection(entries, descriptor, {
       backendModels,
-      keepBaseModelId,
       settings,
       useEnabledFallback: hasNoCatalog && (preloadStatus === "ready" || preloadStatus === "error"),
     });
@@ -282,19 +252,19 @@ export function buildPickerEntries(
   }
 
   let valueKey = "";
-  if (
-    ctx.activeBackendId &&
-    ctx.activeDescriptor &&
-    ctx.activeModelState &&
-    ctx.activeCurrentEntry
-  ) {
+  if (ctx.activeBackendId && ctx.activeDescriptor && ctx.activeModelState) {
     const baseId = ctx.activeModelState.current.baseModelId;
     const match = entries.find(
       (e) => e._backendId === ctx.activeBackendId && resolveBaseModelId(e) === baseId
     );
     if (match) {
       valueKey = getModelKeyFromModel(match);
-    } else {
+    } else if (
+      ctx.activeCurrentEntry &&
+      // A backend that may only run enabled models must never show any other model.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
+      !ctx.activeDescriptor.routesCopilotModels
+    ) {
       const synth = synthesizeAgentEntry(
         baseId,
         ctx.activeCurrentEntry.name,
