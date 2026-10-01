@@ -70,6 +70,7 @@ export interface ChatInputProps {
   }) => void;
   isGenerating: boolean;
   onStopGenerating: () => void;
+  sendDisabledReason?: string;
   app: App;
   contextNotes: TFile[];
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
@@ -157,6 +158,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     handleSendMessage,
     isGenerating,
     onStopGenerating,
+    sendDisabledReason,
     app,
     contextNotes,
     setContextNotes,
@@ -802,6 +804,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                   inputMessage={inputMessage}
                   imageCount={selectedImages.length}
                   onSend={() => onSendMessage()}
+                  disabledReason={sendDisabledReason}
                 />
               )}
             </>

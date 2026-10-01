@@ -39,6 +39,7 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
         handleSendMessage?: () => void;
         onStopGenerating?: () => void;
         isGenerating?: boolean;
+        sendDisabledReason?: string;
       },
       ref: React.ForwardedRef<import("@/components/chat-components/ChatInput").ChatInputHandle>
     ) => {
@@ -56,6 +57,7 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
         <>
           {props.topRightAccessory}
           <span data-testid="generating-state">{props.isGenerating ? "running" : "idle"}</span>
+          <span data-testid="send-disabled-reason">{props.sendDisabledReason ?? "none"}</span>
           <button type="button" onClick={() => props.handleSendMessage?.()}>
             send
           </button>
@@ -251,6 +253,17 @@ describe("AgentChatInput", () => {
         });
       }
     );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 disables the send button with a loading hint only while the chat is starting", () => {
+      const backend = { sendMessage: jest.fn() } as unknown as AgentChatBackend;
+      const draft = makeDraft({ input: "Summarize this note" });
+      const { rerender } = renderInput(backend, draft, { isStarting: true });
+      expect(screen.getByTestId("send-disabled-reason").textContent).toBe("Loading your model…");
+
+      rerender(inputNode(backend, draft, { isStarting: false }));
+
+      expect(screen.getByTestId("send-disabled-reason").textContent).toBe("none");
+    });
 
     it("sends text-only commands that expand to empty without an image-read error https://github.com/logancyang/obsidian-copilot/issues/2850", async () => {
       jest.mocked(expandCustomCommandPrefix).mockResolvedValueOnce({ text: "" });

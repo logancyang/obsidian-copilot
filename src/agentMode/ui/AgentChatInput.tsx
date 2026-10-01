@@ -437,6 +437,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           handleSendMessage={safeAsyncHandler((meta) => handleSendMessage(meta?.webTabs))}
           isGenerating={loading}
           onStopGenerating={safeAsyncHandler(handleStopGenerating)}
+          sendDisabledReason={isStarting ? "Loading your model…" : undefined}
           onEscape={loading ? safeAsyncHandler(handleStopGenerating) : undefined}
           onShiftTab={modePickerOverride ? onCycleMode : undefined}
           app={app}

@@ -16,7 +16,28 @@ describe("ChatSendButton", () => {
         expect(button.disabled).toBe(disabled);
         fireEvent.click(button);
         expect(onSend).toHaveBeenCalledTimes(disabled ? 0 : 1);
+        expect(screen.queryByRole("tooltip")).toBeNull();
       }
     );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 stays disabled with a draft and explains why on hover when given a reason", async () => {
+      const onSend = jest.fn();
+      render(
+        <ChatSendButton
+          inputMessage="Explain"
+          imageCount={0}
+          onSend={onSend}
+          disabledReason="Loading your model…"
+        />
+      );
+      const button = screen.getByRole<HTMLButtonElement>("button", { name: "Send" });
+
+      fireEvent.click(button);
+      fireEvent.pointerMove(button.parentElement!);
+
+      expect(button.disabled).toBe(true);
+      expect(onSend).not.toHaveBeenCalled();
+      expect((await screen.findByRole("tooltip")).textContent).toBe("Loading your model…");
+    });
   });
 });
