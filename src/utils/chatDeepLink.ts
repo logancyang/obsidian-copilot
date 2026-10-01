@@ -23,6 +23,10 @@ export function buildChatDeepLink(vault: string, id: string): string {
   return `obsidian://copilot-chat?${new URLSearchParams({ vault, id }).toString()}`;
 }
 
+export function buildChatMarkdownLink(title: string, url: string): string {
+  return `[${title.replace(/[[\]\\]/g, "\\$&")}](${url})`;
+}
+
 export async function getSavedChatDeepLinkId(app: App, path: string): Promise<string | null> {
   const epoch = await readEpoch(app, path);
   return epoch === null ? null : `epoch:${epoch}`;

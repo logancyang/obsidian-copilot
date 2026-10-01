@@ -5,6 +5,7 @@ import type { AgentSessionManager, SkillManager } from "@/agentMode";
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import {
   buildChatDeepLink,
+  buildChatMarkdownLink,
   findChatFileByDeepLinkId,
   getSavedChatDeepLinkId,
 } from "@/utils/chatDeepLink";
@@ -124,6 +125,7 @@ import {
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import {
   extractChatLastAccessedAtMs,
+  extractChatTitle,
   fileToHistoryItem,
   filterChatHistoryFiles,
 } from "@/utils/chatHistoryUtils";
@@ -1218,9 +1220,13 @@ export default class CopilotPlugin extends Plugin {
   async copyChatLink(resolveNotePath: () => Promise<string>): Promise<void> {
     try {
       const path = await resolveNotePath();
-      const id = path && (await getSavedChatDeepLinkId(this.app, path));
-      if (!id) throw new Error(`No saved chat note to link: "${path}"`);
-      await navigator.clipboard.writeText(buildChatDeepLink(this.app.vault.getName(), id));
+      const file = path ? await resolveFileByPath(this.app, path) : null;
+      const id = file && (await getSavedChatDeepLinkId(this.app, file.path));
+      if (!file || !id) throw new Error(`No saved chat note to link: "${path}"`);
+      const url = buildChatDeepLink(this.app.vault.getName(), id);
+      await navigator.clipboard.writeText(
+        buildChatMarkdownLink(extractChatTitle(this.app, file), url)
+      );
       new Notice("Chat link copied.");
     } catch (error) {
       logError("Failed to copy chat link", error);

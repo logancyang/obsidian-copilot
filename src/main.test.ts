@@ -114,12 +114,20 @@ describe("main", () => {
     describe("copyChatLink()", () => {
       beforeEach(() => jest.clearAllMocks());
 
-      it("copies the saved file's frontmatter epoch as a vault-scoped URI", async () => {
+      it("copies a markdown link titled by the chat topic that targets the note's epoch", async () => {
         const plugin = createPluginUnderTest([]);
+        const frontmatter = { epoch: 1735732800000, topic: "Trip planning" };
         Object.assign(plugin, {
           app: {
-            vault: { getName: () => "My Vault" },
-            metadataCache: { getCache: () => ({ frontmatter: { epoch: 1735732800000 } }) },
+            vault: {
+              getName: () => "My Vault",
+              getAbstractFileByPath: (path: string) =>
+                new (TFile as unknown as new (path: string) => TFile)(path),
+            },
+            metadataCache: {
+              getCache: () => ({ frontmatter }),
+              getFileCache: () => ({ frontmatter }),
+            },
           },
         });
         const writeText = jest.fn().mockResolvedValue(undefined);
@@ -128,7 +136,7 @@ describe("main", () => {
         await plugin.copyChatLink(async () => "Copilot/conversations/renamed.md");
 
         expect(writeText).toHaveBeenCalledWith(
-          "obsidian://copilot-chat?vault=My+Vault&id=epoch%3A1735732800000"
+          "[Trip planning](obsidian://copilot-chat?vault=My+Vault&id=epoch%3A1735732800000)"
         );
       });
 
