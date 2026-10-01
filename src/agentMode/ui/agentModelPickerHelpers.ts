@@ -94,7 +94,7 @@ function appendFromEnabledEntries(
   const emitted = new Set<string>();
   for (const enabled of enabledEntries) {
     const reported = reportedById.get(enabled.baseModelId);
-    const name = reported?.name || enabled.name || enabled.baseModelId;
+    const name = enabled.label || reported?.name || enabled.name || enabled.baseModelId;
     const subtitle = reported?.description ?? enabled.description;
     const capabilities = enabled.capabilities;
     const entry = synthesizeAgentEntry(
