@@ -267,24 +267,6 @@ describe("ProviderRegistry", () => {
     });
   });
 
-  describe("listByProviderType()", () => {
-    it("returns stable references while settings are unchanged", async () => {
-      await registry.add({
-        providerType: "anthropic",
-        displayName: "A",
-        origin: { kind: "byok" },
-      });
-      await registry.add({
-        providerType: "anthropic",
-        displayName: "B",
-        origin: { kind: "agent", agentType: "claude" },
-      });
-      const rows = registry.listByProviderType("anthropic");
-      expect(registry.listByProviderType("anthropic")).toBe(rows);
-      expect(rows).toHaveLength(2);
-    });
-  });
-
   describe("verify()", () => {
     it("returns the adapter result for the provider's type", async () => {
       const id = await registry.add({

@@ -1,5 +1,3 @@
-import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
-
 import type { ProviderType } from "./catalog";
 import type { ConfiguredModel, Provider } from "./persisted";
 
@@ -29,12 +27,6 @@ export type EnabledBackendEntry =
       configuredModelId: string;
       state: "broken";
     };
-
-export interface BuiltChatModel {
-  client: BaseChatModel;
-  provider: Provider;
-  configuredModel: ConfiguredModel;
-}
 
 export interface ProviderDefinition {
   id: string;

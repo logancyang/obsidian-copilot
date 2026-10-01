@@ -397,7 +397,7 @@ export default class CopilotPlugin extends Plugin {
     );
 
     this.customCommandRegister = new CustomCommandRegister(this, this.app);
-    this.systemPromptRegister = new SystemPromptRegister(this, this.app);
+    this.systemPromptRegister = new SystemPromptRegister(this.app);
     this.projectRegister = new ProjectRegister(this.app);
 
     this.app.workspace.onLayoutReady(() => {

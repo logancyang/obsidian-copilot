@@ -701,28 +701,6 @@ ${chatContent}`;
     }
   }
 
-  private errorToMessage(error: unknown): string {
-    if (error instanceof Error) return error.message;
-    if (typeof error === "string") return error;
-    return JSON.stringify(error);
-  }
-
-  private isNameTooLongError(error: unknown): boolean {
-    if (!error) {
-      return false;
-    }
-
-    const normalized = this.errorToMessage(error).toLowerCase();
-    return normalized.includes("enametoolong") || normalized.includes("name too long");
-  }
-
-  private isFileAlreadyExistsError(error: unknown): boolean {
-    if (!error) {
-      return false;
-    }
-    return this.errorToMessage(error).toLowerCase().includes("already exists");
-  }
-
   async renameFileToMatchTopic(file: TFile, topic: string): Promise<void> {
     if (!file || !topic) return;
 

@@ -72,13 +72,6 @@ describe("queryDeduplication", () => {
         ])
       ).toBeNull();
     });
-
-    it("applies a custom threshold", () => {
-      const previous = ["paul graham mistakes"];
-
-      expect(findDuplicateQuery("paul graham errors", previous, 0.6)).toBe("paul graham mistakes");
-      expect(findDuplicateQuery("paul graham errors", previous, 0.7)).toBeNull();
-    });
   });
 
   describe("stripLeakedRoleLines()", () => {

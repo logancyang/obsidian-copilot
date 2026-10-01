@@ -22,11 +22,6 @@ export function createInitialReasoningState(): AgentReasoningState {
   };
 }
 
-export interface SerializedReasoningData {
-  elapsed: number;
-  steps: string[];
-}
-
 export function serializeReasoningBlock(state: AgentReasoningState): string {
   if (state.status === "idle") {
     return "";
@@ -208,31 +203,9 @@ export function summarizeToolResult(
   }
 }
 
-export function summarizeToolCall(
-  toolName: string,
-  args?: Record<string, unknown>,
-  expansion?: QueryExpansionInfo
-): string {
+export function summarizeToolCall(toolName: string, args?: Record<string, unknown>): string {
   switch (toolName) {
     case "localSearch": {
-      if (expansion && expansion.recallTerms && expansion.recallTerms.length > 0) {
-        const validTerms = expansion.recallTerms.filter(
-          (t): t is string =>
-            typeof t === "string" &&
-            t.trim().length > 0 &&
-            !t.includes("[object ") &&
-            t !== "[object Object]"
-        );
-        if (validTerms.length > 0) {
-          const terms = validTerms
-            .slice(0, 6)
-            .map((t) => `"${t}"`)
-            .join(", ");
-          const moreCount = validTerms.length - 6;
-          const termsSuffix = moreCount > 0 ? ` +${moreCount} more` : "";
-          return `Searching notes for ${terms}${termsSuffix}`;
-        }
-      }
       const query = args?.query as string | undefined;
       if (query) {
         const truncatedQuery = query.length > 50 ? query.slice(0, 50) + "..." : query;

@@ -1,13 +1,10 @@
 import { ChainType } from "@/chainType";
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { ChatPromptTemplate } from "@langchain/core/prompts";
 
 import { ModelCapability, ReasoningEffort, Verbosity } from "@/constants";
 import type { MaterializedSourceType } from "@/context/contextCacheStore";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { atom, useAtom } from "jotai";
-import { TFile } from "obsidian";
 
 const userModelKeyAtom = atom<string | null>(null);
 const modelKeyAtom = atom(
@@ -110,13 +107,6 @@ export interface ModelConfig {
   groqApiKey?: string;
   mistralApiKey?: string;
   enableCors?: boolean;
-}
-
-export interface SetChainOptions {
-  prompt?: ChatPromptTemplate;
-  chatModel?: BaseChatModel;
-  noteFile?: TFile;
-  abortController?: AbortController;
 }
 
 export interface CustomModel {

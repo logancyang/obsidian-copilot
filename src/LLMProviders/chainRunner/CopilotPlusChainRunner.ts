@@ -497,8 +497,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     allToolOutputs: { tool: string; output: unknown }[],
     abortController: AbortController,
     thinkStreamer: ThinkBlockStreamer,
-    originalUserQuestion: string,
-    updateLoadingMessage?: (message: string) => void
+    originalUserQuestion: string
   ): Promise<void> {
     const memory = this.chainManager.memoryManager.getMemory();
 
@@ -516,11 +515,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
     logInfo("[CopilotPlus] Using envelope-based context construction");
 
-    const baseMessages = LayerToMessagesConverter.convert(envelope, {
-      includeSystemMessage: true,
-      mergeUserContent: true,
-      debug: false,
-    });
+    const baseMessages = LayerToMessagesConverter.convert(envelope);
 
     const systemMessage = baseMessages.find((m) => m.role === "system");
     if (systemMessage) {
@@ -789,8 +784,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         allToolOutputs,
         abortController,
         thinkStreamer,
-        cleanedUserMessage,
-        updateLoadingMessage
+        cleanedUserMessage
       );
     } catch (error: unknown) {
       updateLoadingMessage?.(LOADING_MESSAGES.DEFAULT);

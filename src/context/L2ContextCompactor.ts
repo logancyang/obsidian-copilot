@@ -12,13 +12,6 @@ import {
   escapeXmlAttr,
 } from "./compactionUtils";
 
-export type { ContextSourceType } from "./contextBlockRegistry";
-export type { CompactionConfig as L2CompactorConfig } from "./compactionUtils";
-export { compactBySection, truncateWithEllipsis } from "./compactionUtils";
-export { getSourceType as detectSourceType } from "./contextBlockRegistry";
-
-export { compactChatHistoryContent } from "./ChatHistoryCompactor";
-
 function extractSourceFromCommonTags(xmlBlock: string): string {
   const pathMatch = /<path>([^<]+)<\/path>/.exec(xmlBlock);
   if (pathMatch) return pathMatch[1];
@@ -30,14 +23,6 @@ function extractSourceFromCommonTags(xmlBlock: string): string {
   if (nameMatch) return nameMatch[1];
 
   return "";
-}
-
-export function extractSource(xmlBlock: string): string {
-  return extractSourceFromCommonTags(xmlBlock);
-}
-
-export function extractContent(xmlBlock: string): string {
-  return extractContentFromBlock(xmlBlock);
 }
 
 export function compactL3ForL2(

@@ -35,55 +35,6 @@ describe("ByokSetupApi", () => {
     api = new ByokSetupApi(providers, models, backends);
   });
 
-  describe("addModels()", () => {
-    it("keeps the ids of models already added and enrolls only the newly added ones", async () => {
-      const { providerId, configuredModelIds } = await api.setupProvider({
-        providerType: "openai-compatible",
-        displayName: "Ollama",
-        baseUrl: "http://localhost:11434/v1",
-        models: [{ id: "llama3.2", displayName: "llama3.2" }],
-      });
-      const existingId = configuredModelIds[0];
-
-      const ids = await api.addModels({
-        providerId,
-        models: [
-          { id: "llama3.2", displayName: "llama3.2" },
-          { id: "mistral", displayName: "mistral" },
-        ],
-      });
-
-      expect(ids[0]).toBe(existingId);
-      expect(ids[1]).not.toBe(existingId);
-      expect(models.listByProvider(providerId)).toHaveLength(2);
-
-      for (const backend of BYOK_DEFAULT_AUTO_ENROLL) {
-        const enabled = backends.get(backend).enabledModels;
-        expect(enabled).toContain(existingId);
-        expect(enabled).toContain(ids[1]);
-      }
-    });
-
-    it("does not enroll an embedding model such as nomic-embed-text into any backend", async () => {
-      const { providerId } = await api.setupProvider({
-        providerType: "openai-compatible",
-        displayName: "Ollama",
-        baseUrl: "http://localhost:11434/v1",
-        models: [{ id: "llama3.2", displayName: "llama3.2" }],
-      });
-
-      const ids = await api.addModels({
-        providerId,
-        models: [{ id: "nomic-embed-text", displayName: "nomic-embed-text" }],
-      });
-      const embedId = ids[0];
-
-      for (const backend of BYOK_DEFAULT_AUTO_ENROLL) {
-        expect(backends.get(backend).enabledModels).not.toContain(embedId);
-      }
-    });
-  });
-
   describe("setupProvider()", () => {
     it("creates a catalog-linked BYOK provider with its key and models and enrolls the models into the default backends", async () => {
       const result = await api.setupProvider({

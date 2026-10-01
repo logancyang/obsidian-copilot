@@ -2,7 +2,6 @@ import type { App } from "obsidian";
 
 import { BackendConfigRegistry } from "@/modelManagement/backends/BackendConfigRegistry";
 import { CatalogDownloadService } from "@/modelManagement/catalog/CatalogDownloadService";
-import { ChatModelFactory } from "@/modelManagement/chatModel/ChatModelFactory";
 import { ConfiguredModelRegistry } from "@/modelManagement/models/ConfiguredModelRegistry";
 import {
   createDefaultAdapterRegistry,
@@ -22,7 +21,6 @@ export interface ModelManagementApi {
   providerRegistry: ProviderRegistry;
   configuredModelRegistry: ConfiguredModelRegistry;
   backendConfigRegistry: BackendConfigRegistry;
-  chatModelFactory: ChatModelFactory;
   adapters: ProviderAdapterRegistry;
   setup: {
     byok: ByokSetupApi;
@@ -75,11 +73,6 @@ export function createModelManagement(input: CreateModelManagementInput): ModelM
     providerRegistry,
     configuredModelRegistry
   );
-  const chatModelFactory = new ChatModelFactory(
-    providerRegistry,
-    configuredModelRegistry,
-    adapters
-  );
   const coordinator = new ModelManagementCoordinator(
     providerRegistry,
     configuredModelRegistry,
@@ -107,7 +100,6 @@ export function createModelManagement(input: CreateModelManagementInput): ModelM
     providerRegistry,
     configuredModelRegistry,
     backendConfigRegistry,
-    chatModelFactory,
     adapters,
     setup,
     coordinator,

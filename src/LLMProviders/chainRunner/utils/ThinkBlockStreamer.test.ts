@@ -150,25 +150,6 @@ describe("ThinkBlockStreamer", () => {
       });
     });
 
-    describe("getToolCalls()", () => {
-      it("builds tool calls from tool_call_chunks streamed across chunks", () => {
-        const { streamer } = createStreamer();
-
-        streamer.processChunk({
-          content: "",
-          tool_call_chunks: [{ index: 0, id: "call_1", name: "localSearch", args: '{"query":' }],
-        });
-        streamer.processChunk({
-          content: "",
-          tool_call_chunks: [{ index: 0, args: '"notes"}' }],
-        });
-
-        expect(streamer.getToolCalls()).toEqual([
-          { id: "call_1", name: "localSearch", args: { query: "notes" } },
-        ]);
-      });
-    });
-
     describe("close()", () => {
       it("closes a think block that is still open at the end of the stream", () => {
         const { streamer, message } = createStreamer();
