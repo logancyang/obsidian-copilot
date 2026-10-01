@@ -521,6 +521,24 @@ describe("AgentSession", () => {
         expect(session.getStatus()).toBe("idle");
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 stops showing the enabled default and refuses turns when a resumed session cannot be switched to it", async () => {
+        const mock = makeMockBackend();
+        const resumedState = catalogState([PLUS_FLASH, PARETO], PARETO);
+        fakeCatalogAgent(mock, resumedState);
+        mock.setSessionConfigOption.mockRejectedValue(new Error("Invalid params: model not found"));
+        const session = makeSession(mock, {
+          initialState: resumedState,
+          defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+          getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(PLUS_FLASH, true)]),
+        });
+
+        await session.ready;
+
+        expect(session.getState()?.model?.current.baseModelId).toBe(PARETO);
+        expect(await session.sendPrompt("hello").turn).toBe("refusal");
+        expect(mock.prompt).not.toHaveBeenCalled();
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 leaves a resumed session open for picking a model, but refuses its turns, when no enabled model is offered", async () => {
         const mock = makeMockBackend();
         const resumedState = catalogState([PARETO], PARETO);
@@ -966,7 +984,25 @@ describe("AgentSession", () => {
           }
         });
 
-        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 fails to start, without ever showing the agent's model, when no enabled model reaches the catalog within 10 seconds", async () => {
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 stops showing the enabled default and refuses turns when switching to it fails during startup", async () => {
+          const mock = makeMockBackend();
+          fakeCatalogAgent(mock, catalogState([PLUS_FLASH, PARETO], PARETO));
+          mock.setSessionConfigOption.mockRejectedValue(
+            new Error("Invalid params: model not found")
+          );
+          const session = startSession(mock, {
+            defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+            getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(PLUS_FLASH, true)]),
+          });
+
+          await expect(session.ready).rejects.toThrow("model not found");
+
+          expect(session.getState()?.model?.current.baseModelId).toBe(PARETO);
+          expect(await session.sendPrompt("hello").turn).toBe("refusal");
+          expect(mock.prompt).not.toHaveBeenCalled();
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 fails to start, showing only the enabled default until then and the agent's real model after, when no enabled model reaches the catalog within 10 seconds", async () => {
           jest.useFakeTimers();
           try {
             const mock = makeMockBackend();
@@ -984,7 +1020,7 @@ describe("AgentSession", () => {
               "None of the models enabled for opencode are available. Check them in Copilot's model settings."
             );
             expect(session.getStatus()).toBe("error");
-            expect(shown).not.toContain(FLEDGE);
+            expect(shown).toEqual([PLUS_FLASH, FLEDGE]);
             expect(mock.setSessionConfigOption).not.toHaveBeenCalled();
           } finally {
             jest.useRealTimers();

@@ -207,6 +207,8 @@ export class AgentSession {
   private unregisterSessionHandler: (() => void) | null = null;
   private currentState: BackendState | null = null;
   private startupTarget: ModelSelection | null = null;
+  private presented: { from: BackendState; target: ModelSelection; state: BackendState } | null =
+    null;
   private readonly correctedModelIds = new Set<string>();
   private label: string | null = null;
   private labelSource: "user" | "agent" | null = null;
@@ -262,7 +264,10 @@ export class AgentSession {
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
       const originalState = opts.initialState ?? null;
-      this.currentState = seedSelectionIntoState(originalState, opts.defaultModelSelection);
+      if (this.runsOnlyEnabledModels()) this.startupTarget = opts.defaultModelSelection ?? null;
+      this.currentState = this.startupTarget
+        ? originalState
+        : seedSelectionIntoState(originalState, opts.defaultModelSelection);
       this.unregisterSessionHandler = this.backend.registerSessionHandler(
         opts.backendSessionId,
         (event) => this.handleSessionEvent(event)
@@ -270,7 +275,7 @@ export class AgentSession {
       const selection = opts.defaultModelSelection ?? originalState?.model?.current;
       if (selection && originalState) {
         this.ready = this.confirmSeededSelection(selection, originalState)
-          // A resumed chat stays open so the user can pick an enabled model; its turns are refused.
+          // A resumed chat stays open to pick an enabled model; sends on any other model are refused.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
           .catch((e) => logWarn(`[AgentMode] resumed ${this.backendId} session kept its model`, e))
           .finally(() => {
@@ -318,9 +323,9 @@ export class AgentSession {
       logInfo(`[AgentMode] session ${resp.sessionId} ${modelLog}`);
       this.backendSessionId = resp.sessionId;
       if (this.runsOnlyEnabledModels()) this.startupTarget = defaultModelSelection ?? null;
-      this.currentState = this.presentState(
-        seedSelectionIntoState(resp.state, defaultModelSelection)
-      );
+      this.currentState = this.startupTarget
+        ? resp.state
+        : seedSelectionIntoState(resp.state, defaultModelSelection);
       this.unregisterSessionHandler = this.backend.registerSessionHandler(resp.sessionId, (event) =>
         this.handleSessionEvent(event)
       );
@@ -346,7 +351,16 @@ export class AgentSession {
   }
 
   getState(): BackendState | null {
-    return this.currentState;
+    const target = this.startupTarget;
+    const state = this.currentState;
+    if (!target || !state?.model || state.model.current.baseModelId === target.baseModelId) {
+      return state;
+    }
+    if (this.presented?.from !== state || this.presented.target !== target) {
+      const model = { ...state.model, current: { ...target } };
+      this.presented = { from: state, target, state: { ...state, model } };
+    }
+    return this.presented.state;
   }
 
   async setModel(modelId: string): Promise<void> {
@@ -403,32 +417,35 @@ export class AgentSession {
     seed: ModelSelection,
     mode: CopilotMode | null
   ): Promise<void> {
-    const enabled = this.enabledModels();
-    const seedEntry = enabled.find((entry) => entry.baseModelId === seed.baseModelId);
-    const offers = (baseModelId: string): boolean =>
-      findModelEntry(this.currentState?.model, baseModelId) !== undefined;
-    await this.waitForState(
-      () =>
-        (!seedEntry?.copilotRouted || offers(seed.baseModelId)) &&
-        (!mode || this.currentState?.mode?.apply[mode] !== undefined)
-    );
-    const fallback = enabled.find(
-      (entry) => entry.credentialState === "ok" && offers(entry.baseModelId)
-    );
-    const target =
-      seedEntry && offers(seed.baseModelId)
-        ? seed
-        : fallback && { baseModelId: fallback.baseModelId, effort: null };
-    if (!target) {
-      throw new Error(
-        `None of the models enabled for ${descriptor.displayName} are available. Check them in Copilot's model settings.`
+    try {
+      const enabled = this.enabledModels();
+      const seedEntry = enabled.find((entry) => entry.baseModelId === seed.baseModelId);
+      const offers = (baseModelId: string): boolean =>
+        findModelEntry(this.currentState?.model, baseModelId) !== undefined;
+      await this.waitForState(
+        () =>
+          (!seedEntry?.copilotRouted || offers(seed.baseModelId)) &&
+          (!mode || this.currentState?.mode?.apply[mode] !== undefined)
       );
+      const fallback = enabled.find(
+        (entry) => entry.credentialState === "ok" && offers(entry.baseModelId)
+      );
+      const target =
+        seedEntry && offers(seed.baseModelId)
+          ? seed
+          : fallback && { baseModelId: fallback.baseModelId, effort: null };
+      if (!target) {
+        throw new Error(
+          `None of the models enabled for ${descriptor.displayName} are available. Check them in Copilot's model settings.`
+        );
+      }
+      this.startupTarget = target;
+      this.notifyModelChanged();
+      await descriptor.applySelection(this, target, { backendReportedCurrent: null });
+    } finally {
+      this.startupTarget = null;
+      this.notifyModelChanged();
     }
-    this.startupTarget = target;
-    this.currentState = this.presentState(this.currentState);
-    this.notifyModelChanged();
-    await descriptor.applySelection(this, target, { backendReportedCurrent: null });
-    this.startupTarget = null;
     if (mode) await replayPersistedMode(this, mode);
   }
 
@@ -482,14 +499,6 @@ export class AgentSession {
 
   private enabledModels(): readonly EnabledModelEntry[] {
     return this.getDescriptor?.()?.getEnabledModelEntries?.(getSettings()) ?? EMPTY_ENABLED_MODELS;
-  }
-
-  private presentState(state: BackendState | null): BackendState | null {
-    const target = this.startupTarget;
-    if (!target || !state?.model || state.model.current.baseModelId === target.baseModelId) {
-      return state;
-    }
-    return { ...state, model: { ...state.model, current: { ...target } } };
   }
 
   async setConfigOption(configId: string, value: string): Promise<void> {
@@ -1357,7 +1366,7 @@ export class AgentSession {
     if (update.sessionUpdate === "state_changed") {
       const previous = this.currentState?.model?.current ?? null;
       this.dropUsageWindowOnModelChange(update.state);
-      this.currentState = this.presentState(update.state);
+      this.currentState = update.state;
       this.notifyModelChanged();
       this.clearCurrentPlanIfModeLeft();
       if (!this.startupTarget) void this.restoreEnabledModel(previous);
