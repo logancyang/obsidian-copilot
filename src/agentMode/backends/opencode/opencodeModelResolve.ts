@@ -61,6 +61,20 @@ export function opencodeWireBaseIdFor(
   return opencodeWireBaseId(provider, configuredModel);
 }
 
+// OpenCode lists a Copilot-routed model as `<provider id>/<model name>`, and its name is the
+// model id unless OpenCode's catalog knows the model; the picker shows it before OpenCode does.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/625
+function copilotRoutedLabel(
+  provider: Provider,
+  mapping: OpencodeProviderMapping,
+  configuredModel: ConfiguredModel,
+  baseModelId: string
+): string | undefined {
+  if (mapping.native) return undefined;
+  if (provider.origin.kind !== "byok" || !provider.origin.catalogProviderId) return baseModelId;
+  return `${mapping.id}/${configuredModel.info.displayName || configuredModel.info.id}`;
+}
+
 function credentialStateFor(provider: Provider, native: boolean): EnabledModelCredentialState {
   if (native) return "ok";
   if (providerRequiresApiKey(provider) && !provider.apiKeyKeychainId) return "missing_key";
@@ -100,7 +114,7 @@ export function opencodeEnabledModelEntries(
       label: isCustomEndpoint && providerName ? `${providerName}/${name}` : undefined,
       description: configuredModel.info.description,
       credentialState: credentialStateFor(provider, mapping.native),
-      copilotRouted: !mapping.native,
+      copilotRoutedLabel: copilotRoutedLabel(provider, mapping, configuredModel, baseModelId),
       isFree: isOpencodeZenWireId(baseModelId),
       capabilities: capabilitiesFromConfiguredInfo(configuredModel.info),
       needsSelfHostWarning: providerNeedsSelfHostWarning(provider, settings),

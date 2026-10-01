@@ -310,7 +310,12 @@ const FLEDGE = "opencode/fledge-alpha-free";
 const PARETO = "openrouter/unbiased/pareto-26.10-preview";
 
 function enabledModel(baseModelId: string, copilotRouted: boolean): EnabledModelEntry {
-  return { baseModelId, name: baseModelId, credentialState: "ok", copilotRouted };
+  return {
+    baseModelId,
+    name: baseModelId,
+    credentialState: "ok",
+    copilotRoutedLabel: copilotRouted ? baseModelId : undefined,
+  };
 }
 
 function enabledModelsOnlyDescriptor(enabled: EnabledModelEntry[]): BackendDescriptor {

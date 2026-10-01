@@ -424,7 +424,7 @@ export class AgentSession {
         findModelEntry(this.currentState?.model, baseModelId) !== undefined;
       await this.waitForState(
         () =>
-          (!seedEntry?.copilotRouted || offers(seed.baseModelId)) &&
+          (seedEntry?.copilotRoutedLabel === undefined || offers(seed.baseModelId)) &&
           (!mode || this.currentState?.mode?.apply[mode] !== undefined)
       );
       const fallback = enabled.find(

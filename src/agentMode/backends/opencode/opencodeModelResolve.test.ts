@@ -206,29 +206,48 @@ describe("opencodeModelResolve", () => {
       expect(entry.credentialState).toBe("ok");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 marks Copilot Plus and BYOK models as Copilot-routed and agent-hosted models as not", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 gives each Copilot-routed model the label OpenCode will list it under, and agent-hosted models none", () => {
       const settings = makeSettings({
-        enabledModels: ["plus", "byok", "native"],
+        enabledModels: ["plus", "custom", "catalog", "native"],
         providers: {
           plus: makeProvider("plus", { kind: "copilot-plus" }),
-          byok: byokProvider({ providerId: "byok" }),
+          custom: makeProvider("my-vllm", { kind: "byok" }, "openai-compatible"),
+          catalog: byokProvider({ providerId: "catalog" }),
           native: makeProvider("native", { kind: "agent", agentType: "opencode" }),
         },
         configuredModels: [
           makeModel("plus", "plus", "copilot-plus-flash"),
-          makeModel("byok", "byok", "stepfun/step-3.5-flash"),
+          {
+            configuredModelId: "custom",
+            providerId: "custom",
+            info: { id: "qwen/qwen3-4b", displayName: "Qwen3 4B" },
+            configuredAt: 0,
+          },
+          {
+            configuredModelId: "catalog",
+            providerId: "catalog",
+            info: { id: "stepfun/step-3.5-flash", displayName: "Step 3.5 Flash" },
+            configuredAt: 0,
+          },
           makeModel("native", "native", "opencode/big-pickle"),
         ],
       });
       expect(
-        opencodeEnabledModelEntries(settings).map(({ baseModelId, copilotRouted }) => ({
+        opencodeEnabledModelEntries(settings).map(({ baseModelId, copilotRoutedLabel }) => ({
           baseModelId,
-          copilotRouted,
+          copilotRoutedLabel,
         }))
       ).toEqual([
-        { baseModelId: "copilot-plus/copilot-plus-flash", copilotRouted: true },
-        { baseModelId: "openrouter/stepfun/step-3.5-flash", copilotRouted: true },
-        { baseModelId: "opencode/big-pickle", copilotRouted: false },
+        {
+          baseModelId: "copilot-plus/copilot-plus-flash",
+          copilotRoutedLabel: "copilot-plus/copilot-plus-flash",
+        },
+        { baseModelId: "my-vllm/qwen/qwen3-4b", copilotRoutedLabel: "my-vllm/qwen/qwen3-4b" },
+        {
+          baseModelId: "openrouter/stepfun/step-3.5-flash",
+          copilotRoutedLabel: "openrouter/Step 3.5 Flash",
+        },
+        { baseModelId: "opencode/big-pickle", copilotRoutedLabel: undefined },
       ]);
     });
 

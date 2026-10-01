@@ -65,7 +65,7 @@ function appendEnabledFallbackEntries(
   for (const enabled of enabledEntries) {
     const entry = synthesizeAgentEntry(
       enabled.baseModelId,
-      enabled.label || enabled.name,
+      enabled.label || enabled.copilotRoutedLabel || enabled.name,
       descriptor,
       enabled.description,
       enabled.isFree,
@@ -85,7 +85,7 @@ function appendFromEnabledEntries(
   const reportedById = new Map(backendModels.map((m) => [m.baseModelId, m]));
   for (const enabled of enabledEntries) {
     const reported = reportedById.get(enabled.baseModelId);
-    const name = enabled.label || reported?.name || enabled.name;
+    const name = enabled.label || reported?.name || enabled.copilotRoutedLabel || enabled.name;
     const subtitle = reported?.description ?? enabled.description;
     const capabilities = enabled.capabilities;
     const entry = synthesizeAgentEntry(

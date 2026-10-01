@@ -802,7 +802,6 @@ describe("agentModelPickerHelpers", () => {
           makeModelEntry("d5df8680/auto", "d5df8680/auto"),
           makeModelEntry("copilot-plus/flash", "copilot-plus/flash"),
         ],
-        keepBaseModelId: null,
         settings: emptySettings,
       });
       const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
@@ -823,7 +822,6 @@ describe("agentModelPickerHelpers", () => {
       const entries: ModelSelectorEntry[] = [];
       appendBackendSection(entries, opencodeWithEntries(enabled), {
         backendModels: null,
-        keepBaseModelId: null,
         settings: emptySettings,
         useEnabledFallback: true,
       });
@@ -858,6 +856,43 @@ describe("agentModelPickerHelpers", () => {
       const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
       expect(byId["opencode/big-pickle"]._isFree).toBe(true);
       expect(byId["lmstudio/gpt-oss-20b"]._isFree).toBe(false);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 labels a Copilot-routed model the way OpenCode will until OpenCode reports it, then uses OpenCode's name", () => {
+      const descriptor = opencodeWithEntries([
+        {
+          baseModelId: "openrouter/stepfun/step-3.5-flash",
+          name: "Step 3.5 Flash",
+          credentialState: "ok",
+          copilotRoutedLabel: "openrouter/Step 3.5 Flash",
+        },
+      ]);
+      const loading: ModelSelectorEntry[] = [];
+      const settled: ModelSelectorEntry[] = [];
+      const unprobed: ModelSelectorEntry[] = [];
+
+      appendBackendSection(loading, descriptor, {
+        backendModels: [makeModelEntry("opencode/fledge-alpha-free")],
+        settings: emptySettings,
+      });
+      appendBackendSection(settled, descriptor, {
+        backendModels: [
+          makeModelEntry(
+            "openrouter/stepfun/step-3.5-flash",
+            "openrouter/Step 3.5 Flash (reported)"
+          ),
+        ],
+        settings: emptySettings,
+      });
+      appendBackendSection(unprobed, descriptor, {
+        backendModels: null,
+        settings: emptySettings,
+        useEnabledFallback: true,
+      });
+
+      expect(loading[0].displayName).toBe("openrouter/Step 3.5 Flash");
+      expect(settled[0].displayName).toBe("openrouter/Step 3.5 Flash (reported)");
+      expect(unprobed[0].displayName).toBe("openrouter/Step 3.5 Flash");
     });
 
     it("defers to the loading placeholder during preload (no reported catalog yet)", () => {
