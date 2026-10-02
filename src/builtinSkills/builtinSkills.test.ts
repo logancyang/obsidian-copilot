@@ -3,7 +3,7 @@ import type { CopilotSettings } from "@/settings/model";
 import {
   ALL_MANAGED_SKILLS,
   BUILTIN_SKILLS,
-  isBuiltinSkillDisabled,
+  DEFAULT_BUILTIN_PREFERENCES,
   isBuiltinSkillEnabledFor,
   MIYO_PARSE_SKILL,
   MIYO_SEARCH_SKILL,
@@ -540,45 +540,41 @@ describe("builtinSkills", () => {
     });
   });
 
-  describe("isBuiltinSkillDisabled()", () => {
-    it("falls back to each skill's bundled default when no preference is stored https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
-      expect(isBuiltinSkillDisabled("copilot-web-search", undefined)).toBe(true);
-      expect(isBuiltinSkillDisabled("copilot-web-fetch", undefined)).toBe(true);
-      expect(isBuiltinSkillDisabled("copilot-read-pdf", undefined)).toBe(true);
-      expect(isBuiltinSkillDisabled("copilot-fetch-x", undefined)).toBe(false);
-    });
-
-    it("lets a stored preference override the bundled default in either direction https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
-      expect(isBuiltinSkillDisabled("copilot-web-search", { disabled: false })).toBe(false);
-      expect(isBuiltinSkillDisabled("copilot-fetch-x", { disabled: true })).toBe(true);
+  describe("DEFAULT_BUILTIN_PREFERENCES", () => {
+    it("stores web search, web fetch, and PDF reading as opt-outs so older releases keep them https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
+      expect(DEFAULT_BUILTIN_PREFERENCES).toEqual({
+        "copilot-web-search": { disabled: true },
+        "copilot-web-fetch": { disabled: true },
+        "copilot-read-pdf": { disabled: true },
+      });
+      expect(DEFAULT_SETTINGS.agentMode.skills.builtinPreferences).toBe(
+        DEFAULT_BUILTIN_PREFERENCES
+      );
     });
   });
 
   describe("isBuiltinSkillEnabledFor()", () => {
-    it("enables default-on seeded builtins for every agent under default settings", () => {
+    it("enables every seeded builtin for every agent when no preference is stored", () => {
       const settings = settingsWith({});
       for (const agent of ["claude", "codex", "opencode"]) {
-        expect(isBuiltinSkillEnabledFor(settings, "copilot-youtube-transcript", agent)).toBe(true);
-        expect(isBuiltinSkillEnabledFor(settings, "copilot-fetch-x", agent)).toBe(true);
+        expect(isBuiltinSkillEnabledFor(settings, "copilot-web-search", agent)).toBe(true);
+        expect(isBuiltinSkillEnabledFor(settings, "copilot-read-pdf", agent)).toBe(true);
       }
     });
 
-    it.each(["copilot-web-search", "copilot-web-fetch", "copilot-read-pdf"])(
-      "keeps %s off until the user enables it https://github.com/Brevilabs/obsidian-copilot-private/issues/629",
-      (name) => {
-        const defaults = settingsWith({});
-        const optedIn = settingsWith({ [name]: { disabled: false } });
-        for (const agent of ["claude", "codex", "opencode"]) {
-          expect(isBuiltinSkillEnabledFor(defaults, name, agent)).toBe(false);
-          expect(isBuiltinSkillEnabledFor(optedIn, name, agent)).toBe(true);
+    it("keeps default-off skills off for every agent in a fresh install https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
+      for (const agent of ["claude", "codex", "opencode"]) {
+        for (const name of Object.keys(DEFAULT_BUILTIN_PREFERENCES)) {
+          expect(isBuiltinSkillEnabledFor(DEFAULT_SETTINGS, name, agent)).toBe(false);
         }
+        expect(isBuiltinSkillEnabledFor(DEFAULT_SETTINGS, "copilot-fetch-x", agent)).toBe(true);
       }
-    );
+    });
 
     it("disables a skill only for the agents the user opted out", () => {
-      const settings = settingsWith({ "copilot-fetch-x": { disabledAgents: ["opencode"] } });
-      expect(isBuiltinSkillEnabledFor(settings, "copilot-fetch-x", "opencode")).toBe(false);
-      expect(isBuiltinSkillEnabledFor(settings, "copilot-fetch-x", "claude")).toBe(true);
+      const settings = settingsWith({ "copilot-web-search": { disabledAgents: ["opencode"] } });
+      expect(isBuiltinSkillEnabledFor(settings, "copilot-web-search", "opencode")).toBe(false);
+      expect(isBuiltinSkillEnabledFor(settings, "copilot-web-search", "claude")).toBe(true);
     });
 
     it("disables a skill for every agent when the user turned it off entirely", () => {
@@ -593,10 +589,7 @@ describe("builtinSkills", () => {
       expect(isBuiltinSkillEnabledFor(off, "miyo-search", "claude")).toBe(false);
       expect(isBuiltinSkillEnabledFor(off, "miyo-parse", "claude")).toBe(false);
 
-      const on = settingsWith(
-        { "copilot-read-pdf": { disabled: false } },
-        { enableMiyoSearchSkill: true, docProcessorBackend: "miyo" }
-      );
+      const on = settingsWith({}, { enableMiyoSearchSkill: true, docProcessorBackend: "miyo" });
       expect(isBuiltinSkillEnabledFor(on, "miyo-search", "claude")).toBe(true);
       expect(isBuiltinSkillEnabledFor(on, "miyo-parse", "claude")).toBe(true);
       expect(isBuiltinSkillEnabledFor(on, "copilot-read-pdf", "claude")).toBe(false);

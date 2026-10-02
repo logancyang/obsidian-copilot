@@ -1,4 +1,3 @@
-import { isBuiltinSkillDisabled } from "@/builtinSkills/builtinSkills";
 import type { BuiltinPreferences } from "@/settings/builtinSkillPreferences";
 import type { AgentBrand, BackendId } from "@/agentMode/session/types";
 import React from "react";
@@ -96,7 +95,7 @@ const BuiltinSkillItem = React.memo(function BuiltinSkillItem({
   onToggleSkill,
   onToggleAgent,
 }: BuiltinSkillItemProps) {
-  const skillEnabled = !isBuiltinSkillDisabled(skill.name, preference);
+  const skillEnabled = preference?.disabled !== true;
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [previewOpen, setPreviewOpen] = React.useState(false);

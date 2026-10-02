@@ -170,15 +170,15 @@ describe("CodexBackend", () => {
           ...agentMode,
           skills: {
             ...agentMode.skills,
-            builtinPreferences: { "copilot-fetch-x": { disabledAgents: ["codex"] } },
+            builtinPreferences: { "copilot-web-search": { disabledAgents: ["codex"] } },
           },
         });
 
         const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
         const prompt = JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions;
 
-        expect(prompt).not.toContain("copilot-fetch-x");
-        expect(prompt).toContain("copilot-youtube-transcript for YouTube");
+        expect(prompt).not.toContain("copilot-web-search");
+        expect(prompt).toContain("copilot-web-fetch for pages/URLs");
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 launches a Windows native bundle without detecting Node", async () => {

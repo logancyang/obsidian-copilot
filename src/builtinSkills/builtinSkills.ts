@@ -1114,15 +1114,19 @@ export function planManagedBuiltins(gates: { search: boolean; documents: boolean
   };
 }
 
-export function isBuiltinSkillDisabled(
-  skillName: string,
-  pref: { disabled?: boolean } | undefined
-): boolean {
-  return (
-    pref?.disabled ??
-    ALL_MANAGED_SKILLS.some((skill) => skill.name === skillName && skill.defaultDisabled === true)
-  );
-}
+// Default-off is stored as an opt-out because older releases drop every other record,
+// which would erase opt-ins synced from newer devices:
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/629
+export const DEFAULT_BUILTIN_PREFERENCES: NonNullable<
+  CopilotSettings["agentMode"]["skills"]["builtinPreferences"]
+> = Object.freeze(
+  Object.fromEntries(
+    ALL_MANAGED_SKILLS.filter((skill) => skill.defaultDisabled).map((skill) => [
+      skill.name,
+      Object.freeze({ disabled: true }),
+    ])
+  )
+);
 
 export function isBuiltinSkillEnabledFor(
   settings: CopilotSettings,
@@ -1130,8 +1134,7 @@ export function isBuiltinSkillEnabledFor(
   agentId: string
 ): boolean {
   const pref = settings.agentMode.skills.builtinPreferences?.[skillName];
-  if (isBuiltinSkillDisabled(skillName, pref) || pref?.disabledAgents?.includes(agentId))
-    return false;
+  if (pref?.disabled || pref?.disabledAgents?.includes(agentId)) return false;
   return planManagedBuiltins({
     search: settings.enableMiyoSearchSkill === true,
     documents: settings.docProcessorBackend === "miyo",

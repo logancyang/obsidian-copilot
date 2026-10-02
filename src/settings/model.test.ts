@@ -164,7 +164,14 @@ describe("model", () => {
         notificationSound: true,
         notificationSoundId: "piano",
         welcomeDismissed: false,
-        skills: { folder: "copilot/skills" },
+        skills: {
+          folder: "copilot/skills",
+          builtinPreferences: {
+            "copilot-web-search": { disabled: true },
+            "copilot-web-fetch": { disabled: true },
+            "copilot-read-pdf": { disabled: true },
+          },
+        },
       });
     });
 
@@ -484,7 +491,7 @@ describe("model", () => {
           skills: {
             folder: "copilot/skills",
             builtinPreferences: {
-              "copilot-fetch-x": { disabled: true, disabledAgents: ["opencode", 3] },
+              "copilot-web-search": { disabled: true, disabledAgents: ["opencode", 3] },
               invalid: null,
               malformedArray: [],
             },
@@ -492,7 +499,7 @@ describe("model", () => {
         },
       } as unknown as CopilotSettings);
       expect(result.agentMode.skills.builtinPreferences).toEqual({
-        "copilot-fetch-x": { disabled: true, disabledAgents: ["opencode"] },
+        "copilot-web-search": { disabled: true, disabledAgents: ["opencode"] },
       });
     });
 
@@ -803,8 +810,7 @@ describe("model", () => {
       false,
       [],
       {},
-      { "copilot-fetch-x": { disabled: false, disabledAgents: [] } },
-      { "copilot-web-search": { disabled: true } },
+      { "copilot-web-search": { disabled: false, disabledAgents: [] } },
     ])(
       "keeps absent, malformed, or default preferences empty: %p https://github.com/logancyang/obsidian-copilot/issues/3022",
       (raw) => {
@@ -816,18 +822,16 @@ describe("model", () => {
     it("drops retired names and malformed entries while preserving sparse overrides for known skills and absent agents https://github.com/logancyang/obsidian-copilot/issues/3022", () => {
       expect(
         sanitizeBuiltinPreferences({
-          "copilot-web-search": { disabled: false },
-          "copilot-youtube-transcript": { disabled: true },
-          "copilot-fetch-x": { disabled: false, disabledAgents: ["uninstalled-agent", 3] },
+          "copilot-web-search": { disabled: true },
+          "copilot-web-fetch": { disabled: false, disabledAgents: ["uninstalled-agent", 3] },
           "miyo-search": { disabled: true, disabledAgents: [] },
           "copilot-read-pdf": null,
           "miyo-parse": [],
           "retired-skill": { disabled: true },
         })
       ).toEqual({
-        "copilot-web-search": { disabled: false },
-        "copilot-youtube-transcript": { disabled: true },
-        "copilot-fetch-x": { disabledAgents: ["uninstalled-agent"] },
+        "copilot-web-search": { disabled: true },
+        "copilot-web-fetch": { disabledAgents: ["uninstalled-agent"] },
         "miyo-search": { disabled: true },
       });
     });

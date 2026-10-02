@@ -122,7 +122,10 @@ describe("SkillsSettings", () => {
           ...current,
           skills: {
             ...current.skills,
-            builtinPreferences: { "copilot-youtube-transcript": { disabled: true } },
+            builtinPreferences: {
+              ...current.skills.builtinPreferences,
+              "copilot-youtube-transcript": { disabled: true },
+            },
           },
         });
       });

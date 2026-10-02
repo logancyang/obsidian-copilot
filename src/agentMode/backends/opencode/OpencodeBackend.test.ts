@@ -798,15 +798,15 @@ describe("OpencodeBackend", () => {
         ...agentMode,
         skills: {
           ...agentMode.skills,
-          builtinPreferences: { "copilot-fetch-x": { disabledAgents: ["opencode"] } },
+          builtinPreferences: { "copilot-web-search": { disabledAgents: ["opencode"] } },
         },
       });
 
       const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
       for (const id of ["copilot-build", "build"]) {
-        expect(cfg.agents[id].system).not.toContain("copilot-fetch-x");
-        expect(cfg.agents[id].system).toContain("copilot-youtube-transcript for YouTube");
+        expect(cfg.agents[id].system).not.toContain("copilot-web-search");
+        expect(cfg.agents[id].system).toContain("copilot-web-fetch for pages/URLs");
       }
     });
 
