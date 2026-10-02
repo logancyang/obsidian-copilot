@@ -710,6 +710,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableAutonomousAgent: true,
   enableCustomPromptTemplating: true,
   enableSelfHostMode: false,
+  previewEnabled: false,
   enableMiyo: false,
   enableMiyoSearchSkill: false,
   miyoSearchAll: false,

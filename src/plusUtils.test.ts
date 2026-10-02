@@ -71,9 +71,12 @@ import {
   checkIsPaidUser,
   ensureMultiAgentEntitlement,
   isPlusEnabled,
+  isPreviewEnabled,
   isSelfHostModeValid,
   markPaidPendingEntitlement,
   turnOffPaid,
+  useIsPreviewAvailable,
+  useIsPreviewEnabled,
   useIsSelfHostEligible,
   useLicenseState,
   verifyCachedEntitlement,
@@ -91,7 +94,8 @@ function buildSettings(overrides: Partial<CopilotSettings>): CopilotSettings {
 
 async function verifySessionFeatures(
   features: string[],
-  expSeconds: number = FUTURE_EXP_SECONDS
+  expSeconds: number = FUTURE_EXP_SECONDS,
+  verify: () => Promise<void> = verifyCachedEntitlement
 ): Promise<void> {
   mockVerifyEntitlement.mockResolvedValue({
     user_id: "user-123",
@@ -108,7 +112,7 @@ async function verifySessionFeatures(
       plusLicenseKey: STORED_LICENSE_KEY,
     })
   );
-  await verifyCachedEntitlement();
+  await verify();
 }
 
 function tokenBackedSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
@@ -467,6 +471,101 @@ describe("plusUtils", () => {
       );
 
       expect(isSelfHostModeValid()).toBe(false);
+    });
+  });
+
+  describe("isPreviewEnabled()", () => {
+    it("is true when Preview is selected and the verified token carries preview", async () => {
+      await verifySessionFeatures(["self_host", "preview"]);
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: true }));
+
+      expect(isPreviewEnabled()).toBe(true);
+    });
+
+    it("is false when Official is selected even though the token carries preview", async () => {
+      await verifySessionFeatures(["self_host", "preview"]);
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: false }));
+
+      expect(isPreviewEnabled()).toBe(false);
+    });
+
+    it("is false for a token without the preview feature", async () => {
+      await verifySessionFeatures(["multi_agent"]);
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: true }));
+
+      expect(isPreviewEnabled()).toBe(false);
+    });
+
+    it("is false when no token was verified, keeping the saved choice for when access returns", () => {
+      mockGetSettings.mockReturnValue(
+        buildSettings({ previewEnabled: true, entitlementToken: "" })
+      );
+
+      expect(isPreviewEnabled()).toBe(false);
+      expect(mockUpdateSetting).not.toHaveBeenCalled();
+      expect(mockSetSettings).not.toHaveBeenCalled();
+    });
+
+    it("is false once the signed exp has passed", async () => {
+      await verifySessionFeatures(["self_host", "preview"], PAST_EXP_SECONDS);
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: true }));
+
+      expect(isPreviewEnabled()).toBe(false);
+    });
+  });
+
+  describe("disablePreviewForSession()", () => {
+    it("runs Copilot as Official for the rest of the session after Preview fails to start (https://github.com/Brevilabs/obsidian-copilot-private/issues/626)", async () => {
+      await jest.isolateModulesAsync(async () => {
+        const isolated = await import("@/plusUtils");
+        await verifySessionFeatures(
+          ["preview"],
+          FUTURE_EXP_SECONDS,
+          isolated.verifyCachedEntitlement
+        );
+        mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: true }));
+        expect(isolated.isPreviewEnabled()).toBe(true);
+
+        isolated.disablePreviewForSession();
+
+        expect(isolated.isPreviewEnabled()).toBe(false);
+        expect(mockGetSettings().previewEnabled).toBe(true);
+      });
+    });
+  });
+
+  describe("useIsPreviewAvailable()", () => {
+    it("is true for a verified token carrying preview, whichever channel is selected", async () => {
+      await verifySessionFeatures(["self_host", "preview"]);
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: false }));
+
+      const { result } = renderHook(() => useIsPreviewAvailable());
+
+      expect(result.current).toBe(true);
+    });
+
+    it("is false for a token without preview", async () => {
+      await verifySessionFeatures(["multi_agent", "self_host"]);
+      mockGetSettings.mockReturnValue(tokenBackedSettings());
+
+      const { result } = renderHook(() => useIsPreviewAvailable());
+
+      expect(result.current).toBe(false);
+    });
+  });
+
+  describe("useIsPreviewEnabled()", () => {
+    it("follows the selected channel for a token carrying preview", async () => {
+      await verifySessionFeatures(["preview"]);
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: true }));
+
+      const { result, rerender } = renderHook(() => useIsPreviewEnabled());
+      expect(result.current).toBe(true);
+
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: false }));
+      rerender();
+
+      expect(result.current).toBe(false);
     });
   });
 
