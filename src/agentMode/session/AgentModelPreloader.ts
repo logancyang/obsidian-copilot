@@ -168,7 +168,7 @@ export class AgentModelPreloader {
       descriptor,
     });
 
-    // OpenCode lists Copilot's models only in a catalog update after the probe session starts.
+    // An agent can revise its model list after the probe session opens, so the cache follows it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
     let catalog: BackendModelCatalog | null = null;
     let updatedState: BackendState | null = null;
