@@ -107,7 +107,8 @@ export class ProjectFileManager {
       } else if (await this.vault.adapter.exists(folderPath)) {
         const listing = await this.vault.adapter.list(folderPath);
         if (listing.files.length === 0 && listing.folders.length === 0) {
-          await this.vault.adapter.rmdir(folderPath, false);
+          // Obsidian's desktop adapter rejects non-recursive rmdir even for an empty folder. https://github.com/logancyang/obsidian-copilot/issues/3075
+          await this.vault.adapter.rmdir(folderPath, true);
         }
       }
     } catch (rollbackError) {
@@ -446,7 +447,8 @@ export class ProjectFileManager {
         } else if (await this.vault.adapter.exists(folderPath)) {
           const listing = await this.vault.adapter.list(folderPath);
           if (listing.files.length === 0 && listing.folders.length === 0) {
-            await this.vault.adapter.rmdir(folderPath, false);
+            // Obsidian's desktop adapter rejects non-recursive rmdir even for an empty folder. https://github.com/logancyang/obsidian-copilot/issues/3075
+            await this.vault.adapter.rmdir(folderPath, true);
           }
         }
       } catch (cleanupError) {

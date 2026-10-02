@@ -216,7 +216,7 @@ describe("ProjectFileManager", () => {
         manager.createProject(makeConfig({ id: "failed", name: "Failed Project" }))
       ).rejects.toThrow("disk full");
 
-      expect(vault.adapter.rmdir).toHaveBeenCalledWith(folderPath, false);
+      expect(vault.adapter.rmdir).toHaveBeenCalledWith(folderPath, true);
     });
   });
 });
