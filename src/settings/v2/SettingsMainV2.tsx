@@ -150,6 +150,10 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "b
               >
                 <div className="tw-flex tw-items-center tw-gap-2">
                   <span>Copilot Settings</span>
+                  <PreviewSwitch
+                    currentVersion={plugin.manifest.version}
+                    latestVersion={latestVersion}
+                  />
                   <div className="tw-flex tw-items-center tw-gap-1">
                     <span className="tw-text-xs tw-font-normal tw-text-muted">
                       v{plugin.manifest.version}
@@ -173,10 +177,6 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "b
                         )}
                       </>
                     )}
-                    <PreviewSwitch
-                      currentVersion={plugin.manifest.version}
-                      latestVersion={latestVersion}
-                    />
                   </div>
                 </div>
                 <div className="tw-self-end sm:tw-self-auto">

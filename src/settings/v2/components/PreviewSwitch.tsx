@@ -32,7 +32,7 @@ export function PreviewChannelSwitch({
   return (
     <SegmentedControl<ReleaseChannel>
       aria-label="Copilot release channel"
-      className="tw-ml-1 tw-font-normal"
+      className="tw-shrink-0 tw-whitespace-nowrap tw-font-normal"
       onChange={onSelect}
       options={[
         { label: "Official", value: "official" },

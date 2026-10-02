@@ -67,13 +67,15 @@ describe("SettingsMainV2", () => {
       expect(screen.getByRole("link", { name: "(Update to v4.1.0)" })).toBeTruthy();
     });
 
-    it("shows the release channel switch next to the version with the latest official release", () => {
+    it("puts the release channel switch before the version so a long version never pushes it off (https://github.com/Brevilabs/obsidian-copilot-private/issues/626)", () => {
       mockLatestVersion = "4.1.0";
       mockHasUpdate = true;
       render(<SettingsMainV2 plugin={plugin} />);
-      expect(screen.getByText("v1.2.3").parentElement?.textContent).toContain(
-        "Preview switch for 1.2.3 against 4.1.0"
-      );
+      const previewSwitch = screen.getByText("Preview switch for 1.2.3 against 4.1.0");
+      const version = screen.getByText("v1.2.3");
+      expect(
+        previewSwitch.compareDocumentPosition(version) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
     });
 
     it("shows up to date when the shared check finds no newer release", () => {
