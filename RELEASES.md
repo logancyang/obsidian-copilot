@@ -2,6 +2,8 @@
 
 # v4.0.13 - Codex Safe mode and custom command default model
 
+[![Demo video: Obsidian Copilot 4.0.13: Codex asks before it edits](https://github.com/user-attachments/assets/adeab3df-bd00-4425-8dc2-bc39146669b8)](https://youtube.com/shorts/VNH0E_hcrMQ?feature=share)
+
 Codex now asks before it changes your vault in Safe mode. Approve or reject each edit from Agent Chat, the same way you do with Claude and OpenCode.
 
 Commands also get their own default model, and you can run a command again straight from its result window. This release installs OpenCode 2.0.22 and Codex 2.0.1.
