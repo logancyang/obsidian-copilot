@@ -256,14 +256,6 @@ export class AgentMessageStore {
     return true;
   }
 
-  setDisplayText(id: string, text: string): boolean {
-    const msg = this.messages.find((m) => m.id === id);
-    if (!msg || msg.displayText === text) return false;
-    msg.displayText = text;
-    this.touch(msg);
-    return true;
-  }
-
   appendAgentText(id: string, text: string): boolean {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;

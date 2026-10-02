@@ -40,21 +40,6 @@ describe("AgentMessageStore", () => {
     });
   });
 
-  describe("setDisplayText()", () => {
-    it("replaces the message text and reports a change only when the text differs", () => {
-      const store = new AgentMessageStore();
-      const id = store.addMessage({ ...placeholder(), sender: USER_SENDER, message: "draft" });
-
-      expect(store.setDisplayText(id, "final")).toBe(true);
-      expect(store.setDisplayText(id, "final")).toBe(false);
-      expect(store.getMessage(id)?.message).toBe("final");
-    });
-
-    it("returns false for an unknown message id", () => {
-      expect(new AgentMessageStore().setDisplayText("missing", "x")).toBe(false);
-    });
-  });
-
   describe("appendDisplayText()", () => {
     it("accumulates streaming chunks", () => {
       const store = new AgentMessageStore();

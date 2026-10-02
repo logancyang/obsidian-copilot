@@ -2214,7 +2214,6 @@ export class AgentSessionManager {
       chatInputId,
       backendId,
       projectId,
-      awaitResumeState: true,
       defaultModelSelection: seedSelection,
       defaultMode: this.getDefaultMode(backendId),
       cwd,
@@ -2247,9 +2246,6 @@ export class AgentSessionManager {
     if (!resumeResult) {
       try {
         resumeResult = await backend.resumeSession(openInput);
-        // resumeSession replays nothing, so an out-of-turn frame here is live activity, not history.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/602
-        session.endHistory();
       } catch (err) {
         if (err instanceof MethodUnsupportedError) {
           logInfo(

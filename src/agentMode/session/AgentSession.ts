@@ -143,8 +143,6 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   chatInputId?: string;
   backendId: BackendId;
   projectId?: ProjectScopeId;
-  initialState?: BackendState | null;
-  awaitResumeState?: boolean;
   defaultModelSelection?: ModelSelection;
   defaultMode?: CopilotMode | null;
   cwd?: string | null;
@@ -202,7 +200,7 @@ export class AgentSession {
   private resumeMode: CopilotMode | null | undefined;
   private settleReady: () => void = () => {};
   private historyOpen = false;
-  private historyUser: { id: string; wireId: string | undefined; raw: string } | null = null;
+  private historyUser: { wireId: string | undefined; raw: string } | null = null;
   private historyAiId: string | null = null;
   private pendingPlanResolvers = new Map<
     string,
@@ -256,7 +254,7 @@ export class AgentSession {
       this.backendSessionId = opts.backendSessionId;
       this.resumeSelection = opts.defaultModelSelection;
       this.resumeMode = opts.defaultMode;
-      // The backend replays the chat as live-shaped updates; collect them from the first frame. https://github.com/Brevilabs/obsidian-copilot-private/issues/602
+      // The backend replays the chat as live-shaped updates until its load response; collect them from the first frame. https://github.com/Brevilabs/obsidian-copilot-private/issues/602
       this.historyOpen = true;
       this.unregisterSessionHandler = this.backend.registerSessionHandler(
         opts.backendSessionId,
@@ -265,7 +263,6 @@ export class AgentSession {
       this.ready = new Promise<void>((resolve) => {
         this.settleReady = resolve;
       });
-      if (!opts.awaitResumeState) this.completeResume(opts.initialState ?? null);
     } else {
       this.currentState = null;
       this.ready = this.initialize(opts);
@@ -273,25 +270,20 @@ export class AgentSession {
   }
 
   completeResume(state: BackendState | null): void {
-    if (this.disposed) return;
+    this.endHistory();
     this.currentState = state;
-    this.notifyModelChanged();
-    const selection = this.resumeSelection ?? state?.model?.current;
-    if (selection && state) {
-      void this.applyStartupSelection(selection, this.resumeMode)
-        // A resumed chat stays open to pick an enabled model; sends on any other model are refused.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
-        .catch((e) => logWarn(`[AgentMode] resumed ${this.backendId} session kept its model`, e))
-        .finally(() => {
-          this.startupSettled = true;
-          this.recomputeStatusIfChanged();
-          this.settleReady();
-        });
-    } else {
+    const settle = () => {
       this.startupSettled = true;
       this.recomputeStatusIfChanged();
       this.settleReady();
-    }
+    };
+    const selection = this.resumeSelection ?? state?.model?.current;
+    if (!selection || !state) return settle();
+    void this.applyStartupSelection(selection, this.resumeMode)
+      // A resumed chat stays open to pick an enabled model; sends on any other model are refused.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
+      .catch((e) => logWarn(`[AgentMode] resumed ${this.backendId} session kept its model`, e))
+      .finally(settle);
   }
 
   static start(opts: AgentSessionStartOptions): AgentSession {
@@ -563,7 +555,6 @@ export class AgentSession {
   }
 
   loadDisplayMessages(messages: AgentChatMessage[]): void {
-    this.endHistory();
     this.store.loadMessages(messages);
     this.notifyMessages();
   }
@@ -634,7 +625,6 @@ export class AgentSession {
       throw new Error("Session is closed");
     }
 
-    this.endHistory();
     const userMessage: NewAgentChatMessage = {
       message: displayText,
       sender: USER_SENDER,
@@ -962,7 +952,6 @@ export class AgentSession {
 
   async dispose(): Promise<void> {
     this.disposed = true;
-    this.settleReady();
     this.unregisterSessionHandler?.();
     this.unregisterSessionHandler = null;
     this.flushResolvers(this.pendingPlanResolvers);
@@ -1425,7 +1414,7 @@ export class AgentSession {
     }
   }
 
-  // Frames replayed before the first prompt or display-message load are the chat's past turns, not a turn in flight. https://github.com/Brevilabs/obsidian-copilot-private/issues/602
+  // Frames replayed before the load response are the chat's past turns, not a turn in flight. https://github.com/Brevilabs/obsidian-copilot-private/issues/602
   private appendHistory(update: SessionEvent["update"]): boolean {
     switch (update.sessionUpdate) {
       case "user_message_chunk": {
@@ -1433,24 +1422,12 @@ export class AgentSession {
         const current = this.historyUser;
         if (current && update.messageId !== undefined && current.wireId === update.messageId) {
           current.raw += text;
-          if (this.store.setDisplayText(current.id, stripUserMessageWrapper(current.raw))) {
-            this.scheduleNotifyMessages();
-          }
           return true;
         }
         if (!text.trim()) return true;
+        this.flushHistoryUser();
         this.historyAiId = null;
-        this.historyUser = {
-          id: this.store.addMessage({
-            message: stripUserMessageWrapper(text),
-            sender: USER_SENDER,
-            timestamp: null,
-            isVisible: true,
-          }),
-          wireId: update.messageId,
-          raw: text,
-        };
-        this.scheduleNotifyMessages();
+        this.historyUser = { wireId: update.messageId, raw: text };
         return true;
       }
       case "agent_message_chunk":
@@ -1487,9 +1464,23 @@ export class AgentSession {
     }
   }
 
+  // A prompt's context envelope stays hidden until its wrapper is complete, so a user bubble waits for the message to end. https://github.com/Brevilabs/obsidian-copilot-private/issues/602
+  private flushHistoryUser(): void {
+    const pending = this.historyUser;
+    this.historyUser = null;
+    if (!pending) return;
+    this.store.addMessage({
+      message: stripUserMessageWrapper(pending.raw),
+      sender: USER_SENDER,
+      timestamp: null,
+      isVisible: true,
+    });
+    this.scheduleNotifyMessages();
+  }
+
   private historyAiBubbleId(): string {
     if (this.historyAiId) return this.historyAiId;
-    this.historyUser = null;
+    this.flushHistoryUser();
     this.historyAiId = this.store.addMessage({
       message: "",
       sender: AI_SENDER,
@@ -1500,9 +1491,9 @@ export class AgentSession {
     return this.historyAiId;
   }
 
-  endHistory(): void {
+  private endHistory(): void {
+    this.flushHistoryUser();
     this.historyOpen = false;
-    this.historyUser = null;
     this.historyAiId = null;
   }
 

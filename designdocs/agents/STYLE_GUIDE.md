@@ -115,9 +115,9 @@ Wait on an event that is ordered with the work by construction:
 - **Move the work to where the order is defined.** When a library reorders events you
   need in sequence (for example, it settles a response before dispatching notifications
   read earlier), handle those events at the layer that still sees the original order.
-  `deliverSessionUpdatesInWireOrder` in `src/agentMode/acp/` routes ACP `session/update`
-  notifications from the inbound message stream, so every update that precedes a
-  response on the wire is delivered before the SDK can read that response.
+  `deliverSessionUpdatesInWireOrder` in `src/agentMode/acp/sessionUpdateWireOrder.ts` routes
+  ACP `session/update` notifications from the inbound message stream, so every update that
+  precedes a response on the wire is delivered before the SDK can read that response.
 - **Signal completion explicitly.** Emit an event, bump a sequence number, or resolve a
   promise when the state you depend on is ready, and wait on that.
 
