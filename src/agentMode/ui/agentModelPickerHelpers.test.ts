@@ -486,7 +486,10 @@ describe("agentModelPickerHelpers", () => {
         catalogById: { opencode: makeCatalog([pushed, enabled]) },
       });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "opencode" } as unknown as AgentSession,
+        activeSession: {
+          backendId: "opencode",
+          getStatus: () => "idle",
+        } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "opencode",
         activeDescriptor: opencode,
@@ -506,11 +509,13 @@ describe("agentModelPickerHelpers", () => {
       expect(valueKey).toBe("");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 selects the chat's enabled model while the agent has yet to list it", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 shows Loading models… as the selection, never the agent's own model, while the chat is starting on a backend that may only run enabled models", () => {
+      const agentDefault = makeModelEntry("opencode/fledge-alpha-free");
       const opencode = {
         ...makeDescriptor("opencode"),
         routesCopilotModels: true,
         getEnabledModelEntries: () => [
+          { baseModelId: agentDefault.baseModelId, name: "Fledge", credentialState: "ok" as const },
           {
             baseModelId: "copilot-plus/copilot-plus-flash",
             name: "Flash",
@@ -518,16 +523,18 @@ describe("agentModelPickerHelpers", () => {
           },
         ],
       } as unknown as BackendDescriptor;
-      const earlyCatalog = [makeModelEntry("opencode/fledge-alpha-free")];
-      const manager = makeManager({ catalogById: { opencode: makeCatalog(earlyCatalog) } });
+      const manager = makeManager({ catalogById: { opencode: makeCatalog([agentDefault]) } });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "opencode" } as unknown as AgentSession,
+        activeSession: {
+          backendId: "opencode",
+          getStatus: () => "starting",
+        } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "opencode",
         activeDescriptor: opencode,
         activeSessionHasHistory: false,
-        activeModelState: makeModelState("copilot-plus/copilot-plus-flash", earlyCatalog),
-        activeCurrentEntry: undefined,
+        activeModelState: makeModelState(agentDefault.baseModelId, [agentDefault]),
+        activeCurrentEntry: agentDefault,
       };
 
       const { entries, valueKey } = buildPickerEntries(
@@ -537,8 +544,13 @@ describe("agentModelPickerHelpers", () => {
         copilotPlusSettings
       );
 
-      expect(valueKey).toBe("opencode:copilot-plus/copilot-plus-flash|agent");
-      expect(entries.map((e) => e.name)).toEqual(["copilot-plus/copilot-plus-flash"]);
+      const selected = entries.find((e) => getModelKeyFromModel(e) === valueKey);
+      expect(selected?.displayName).toBe("Loading models…");
+      expect(entries.map((e) => e.name)).toEqual([
+        "__preload_pending__",
+        agentDefault.baseModelId,
+        "copilot-plus/copilot-plus-flash",
+      ]);
     });
 
     it("carries the model description onto the picker entry as _subtitle", () => {
@@ -856,43 +868,6 @@ describe("agentModelPickerHelpers", () => {
       const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
       expect(byId["opencode/big-pickle"]._isFree).toBe(true);
       expect(byId["lmstudio/gpt-oss-20b"]._isFree).toBe(false);
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 labels a Copilot-routed model the way OpenCode will until OpenCode reports it, then uses OpenCode's name", () => {
-      const descriptor = opencodeWithEntries([
-        {
-          baseModelId: "openrouter/stepfun/step-3.5-flash",
-          name: "Step 3.5 Flash",
-          credentialState: "ok",
-          copilotRoutedLabel: "openrouter/Step 3.5 Flash",
-        },
-      ]);
-      const loading: ModelSelectorEntry[] = [];
-      const settled: ModelSelectorEntry[] = [];
-      const unprobed: ModelSelectorEntry[] = [];
-
-      appendBackendSection(loading, descriptor, {
-        backendModels: [makeModelEntry("opencode/fledge-alpha-free")],
-        settings: emptySettings,
-      });
-      appendBackendSection(settled, descriptor, {
-        backendModels: [
-          makeModelEntry(
-            "openrouter/stepfun/step-3.5-flash",
-            "openrouter/Step 3.5 Flash (reported)"
-          ),
-        ],
-        settings: emptySettings,
-      });
-      appendBackendSection(unprobed, descriptor, {
-        backendModels: null,
-        settings: emptySettings,
-        useEnabledFallback: true,
-      });
-
-      expect(loading[0].displayName).toBe("openrouter/Step 3.5 Flash");
-      expect(settled[0].displayName).toBe("openrouter/Step 3.5 Flash (reported)");
-      expect(unprobed[0].displayName).toBe("openrouter/Step 3.5 Flash");
     });
 
     it("defers to the loading placeholder during preload (no reported catalog yet)", () => {

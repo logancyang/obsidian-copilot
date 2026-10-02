@@ -854,7 +854,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getIsStarting()).toBe(false);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 hands the saved mode to the new session so it is applied before the chat becomes usable", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 hands the saved mode to the new session so startup waits for that mode to arrive", async () => {
         getSettingsMock.mockReturnValue({
           agentMode: { backends: { opencode: { defaultMode: "default" } } },
         });

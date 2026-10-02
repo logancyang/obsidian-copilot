@@ -65,7 +65,7 @@ function appendEnabledFallbackEntries(
   for (const enabled of enabledEntries) {
     const entry = synthesizeAgentEntry(
       enabled.baseModelId,
-      enabled.label || enabled.copilotRoutedLabel || enabled.name,
+      enabled.label || enabled.name,
       descriptor,
       enabled.description,
       enabled.isFree,
@@ -85,7 +85,7 @@ function appendFromEnabledEntries(
   const reportedById = new Map(backendModels.map((m) => [m.baseModelId, m]));
   for (const enabled of enabledEntries) {
     const reported = reportedById.get(enabled.baseModelId);
-    const name = enabled.label || reported?.name || enabled.copilotRoutedLabel || enabled.name;
+    const name = enabled.label || reported?.name || enabled.name;
     const subtitle = reported?.description ?? enabled.description;
     const capabilities = enabled.capabilities;
     const entry = synthesizeAgentEntry(
@@ -252,7 +252,13 @@ export function buildPickerEntries(
   }
 
   let valueKey = "";
-  if (ctx.activeBackendId && ctx.activeDescriptor && ctx.activeModelState) {
+  if (ctx.activeDescriptor?.routesCopilotModels && ctx.activeSession?.getStatus() === "starting") {
+    // Until startup switches it, the agent reports its own model, never the chat's.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
+    const loading = synthesizePreloadPlaceholder(ctx.activeDescriptor, "pending");
+    valueKey = getModelKeyFromModel(loading);
+    if (!entries.some((e) => getModelKeyFromModel(e) === valueKey)) entries.unshift(loading);
+  } else if (ctx.activeBackendId && ctx.activeDescriptor && ctx.activeModelState) {
     const baseId = ctx.activeModelState.current.baseModelId;
     const match = entries.find(
       (e) => e._backendId === ctx.activeBackendId && resolveBaseModelId(e) === baseId

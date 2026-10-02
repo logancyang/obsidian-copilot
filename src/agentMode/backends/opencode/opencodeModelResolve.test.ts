@@ -206,51 +206,6 @@ describe("opencodeModelResolve", () => {
       expect(entry.credentialState).toBe("ok");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 gives each Copilot-routed model the label OpenCode will list it under, and agent-hosted models none", () => {
-      const settings = makeSettings({
-        enabledModels: ["plus", "custom", "catalog", "native"],
-        providers: {
-          plus: makeProvider("plus", { kind: "copilot-plus" }),
-          custom: makeProvider("my-vllm", { kind: "byok" }, "openai-compatible"),
-          catalog: byokProvider({ providerId: "catalog" }),
-          native: makeProvider("native", { kind: "agent", agentType: "opencode" }),
-        },
-        configuredModels: [
-          makeModel("plus", "plus", "copilot-plus-flash"),
-          {
-            configuredModelId: "custom",
-            providerId: "custom",
-            info: { id: "qwen/qwen3-4b", displayName: "Qwen3 4B" },
-            configuredAt: 0,
-          },
-          {
-            configuredModelId: "catalog",
-            providerId: "catalog",
-            info: { id: "stepfun/step-3.5-flash", displayName: "Step 3.5 Flash" },
-            configuredAt: 0,
-          },
-          makeModel("native", "native", "opencode/big-pickle"),
-        ],
-      });
-      expect(
-        opencodeEnabledModelEntries(settings).map(({ baseModelId, copilotRoutedLabel }) => ({
-          baseModelId,
-          copilotRoutedLabel,
-        }))
-      ).toEqual([
-        {
-          baseModelId: "copilot-plus/copilot-plus-flash",
-          copilotRoutedLabel: "copilot-plus/copilot-plus-flash",
-        },
-        { baseModelId: "my-vllm/qwen/qwen3-4b", copilotRoutedLabel: "my-vllm/qwen/qwen3-4b" },
-        {
-          baseModelId: "openrouter/stepfun/step-3.5-flash",
-          copilotRoutedLabel: "openrouter/Step 3.5 Flash",
-        },
-        { baseModelId: "opencode/big-pickle", copilotRoutedLabel: undefined },
-      ]);
-    });
-
     it("flags opencode Zen models (opencode/ prefix) as free, others not", () => {
       const settings = makeSettings({
         enabledModels: ["zen", "lms"],
