@@ -72,7 +72,7 @@ function appendEnabledFallbackEntries(
   for (const enabled of enabledEntries) {
     const entry = synthesizeAgentEntry(
       enabled.baseModelId,
-      enabled.name || enabled.baseModelId,
+      enabled.label || enabled.name,
       descriptor,
       enabled.description,
       enabled.isFree,
@@ -94,7 +94,7 @@ function appendFromEnabledEntries(
   const emitted = new Set<string>();
   for (const enabled of enabledEntries) {
     const reported = reportedById.get(enabled.baseModelId);
-    const name = reported?.name || enabled.name || enabled.baseModelId;
+    const name = enabled.label || reported?.name || enabled.name;
     const subtitle = reported?.description ?? enabled.description;
     const capabilities = enabled.capabilities;
     const entry = synthesizeAgentEntry(

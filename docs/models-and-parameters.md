@@ -61,6 +61,11 @@ an empty session, choosing a model from another installed agent switches that
 session to the other agent. After the conversation has started, the picker
 stays with the current agent.
 
+In the **opencode** group, models from a custom provider appear as
+`Provider name/Model name`, using the display name you gave the provider, so
+the same model from two endpoints stays distinguishable. If the provider's
+display name is blank, the picker shows the provider's internal ID instead.
+
 A model or effort picked beside the message box applies to that chat; it does
 not replace the saved **Default model** or **Default effort**. Saved agent
 defaults are used for new chats and multi-agent answers. Changes to an explicit
