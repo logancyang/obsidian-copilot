@@ -44,6 +44,26 @@ interface ModelEnableListProps {
   defaultOpenGroupKey?: string;
 }
 
+interface EnabledCountBadgeProps {
+  rows: ModelEnableRow[];
+}
+
+const EnabledCountBadge: React.FC<EnabledCountBadgeProps> = ({ rows }) => {
+  const count = rows.filter((row) => row.enabled).length;
+  // A zero badge on every unused provider would bury the ones that hold selections.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/631
+  if (count === 0) return null;
+  return (
+    <Badge
+      variant="accent"
+      title={`${count} selected`}
+      className="tw-shrink-0 tw-px-1.5 tw-py-0 tw-font-normal"
+    >
+      {count}
+    </Badge>
+  );
+};
+
 export const ModelEnableList: React.FC<ModelEnableListProps> = ({
   groups,
   onToggle,
@@ -156,6 +176,7 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
                       >
                         {group.label}
                       </span>
+                      <EnabledCountBadge rows={group.rows} />
                       {group.badge && (
                         <Badge variant="secondary" className="tw-shrink-0 tw-font-normal">
                           {group.badge}
