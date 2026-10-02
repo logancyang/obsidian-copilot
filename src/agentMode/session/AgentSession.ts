@@ -14,7 +14,9 @@ import {
   BackendId,
   BackendProcess,
   BackendState,
+  CopilotMode,
   CurrentPlan,
+  EnabledModelEntry,
   ModelSelection,
   NewAgentChatMessage,
   PERMISSION_ALLOW_KINDS,
@@ -63,6 +65,14 @@ import {
   type PendingFanoutContext,
 } from "@/agentMode/session/fanout/fanoutTypes";
 import { v4 as uuidv4 } from "uuid";
+import { getSettings } from "@/settings/model";
+import {
+  EMPTY_ENABLED_MODELS,
+  ENABLED_MODEL_WAIT_MS,
+  noEnabledModelError,
+  pickEnabledModel,
+} from "@/agentMode/session/enabledModelSelection";
+import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
@@ -134,6 +144,7 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   backendId: BackendId;
   projectId?: ProjectScopeId;
   defaultModelSelection?: ModelSelection;
+  defaultMode?: CopilotMode | null;
   getDescriptor?: () => BackendDescriptor | undefined;
   runFanoutTurn?: RunFanoutTurn;
   getDisplayName?: (backendId: BackendId) => string;
@@ -150,6 +161,7 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   projectId?: ProjectScopeId;
   initialState?: BackendState | null;
   defaultModelSelection?: ModelSelection;
+  defaultMode?: CopilotMode | null;
   cwd?: string | null;
   getDescriptor?: () => BackendDescriptor | undefined;
   runFanoutTurn?: RunFanoutTurn;
@@ -252,17 +264,23 @@ export class AgentSession {
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
       const originalState = opts.initialState ?? null;
-      this.currentState = seedSelectionIntoState(originalState, opts.defaultModelSelection);
+      this.currentState = this.runsOnlyEnabledModels()
+        ? originalState
+        : seedSelectionIntoState(originalState, opts.defaultModelSelection);
       this.unregisterSessionHandler = this.backend.registerSessionHandler(
         opts.backendSessionId,
         (event) => this.handleSessionEvent(event)
       );
       const selection = opts.defaultModelSelection ?? originalState?.model?.current;
       if (selection && originalState) {
-        this.ready = this.confirmSeededSelection(selection, originalState).finally(() => {
-          this.startupSettled = true;
-          this.recomputeStatusIfChanged();
-        });
+        this.ready = this.confirmSeededSelection(selection, originalState, opts.defaultMode)
+          // A resumed chat stays open to pick an enabled model; sends on any other model are refused.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
+          .catch((e) => logWarn(`[AgentMode] resumed ${this.backendId} session kept its model`, e))
+          .finally(() => {
+            this.startupSettled = true;
+            this.recomputeStatusIfChanged();
+          });
       } else {
         this.startupSettled = true;
         this.ready = Promise.resolve();
@@ -303,7 +321,9 @@ export class AgentSession {
         : "agent did not report model state";
       logInfo(`[AgentMode] session ${resp.sessionId} ${modelLog}`);
       this.backendSessionId = resp.sessionId;
-      this.currentState = seedSelectionIntoState(resp.state, defaultModelSelection);
+      this.currentState = this.runsOnlyEnabledModels()
+        ? resp.state
+        : seedSelectionIntoState(resp.state, defaultModelSelection);
       this.unregisterSessionHandler = this.backend.registerSessionHandler(resp.sessionId, (event) =>
         this.handleSessionEvent(event)
       );
@@ -316,7 +336,7 @@ export class AgentSession {
       this.notifyModelChanged();
 
       const selection = defaultModelSelection ?? resp.state.model?.current;
-      if (selection) await this.confirmSeededSelection(selection, resp.state);
+      if (selection) await this.confirmSeededSelection(selection, resp.state, opts.defaultMode);
       this.startupSettled = true;
       this.recomputeStatusIfChanged();
     } catch (err) {
@@ -355,10 +375,15 @@ export class AgentSession {
 
   private async confirmSeededSelection(
     selection: ModelSelection,
-    originalState: BackendState
+    originalState: BackendState,
+    mode: CopilotMode | null = null
   ): Promise<void> {
     const descriptor = this.getDescriptor?.();
     if (!descriptor) return;
+    if (this.runsOnlyEnabledModels()) {
+      await this.settleOnEnabledModel(descriptor, selection, mode);
+      return;
+    }
     try {
       await descriptor.applySelection(this, selection, {
         backendReportedCurrent: originalState.model?.current ?? null,
@@ -371,6 +396,64 @@ export class AgentSession {
       this.currentState = originalState;
       this.notifyModelChanged();
     }
+  }
+
+  // OpenCode answers session/new before Copilot's models and modes load and lists them in a later
+  // update, so wait for them; a chat must never show or run a model the user did not enable.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
+  private async settleOnEnabledModel(
+    descriptor: BackendDescriptor,
+    seed: ModelSelection,
+    mode: CopilotMode | null
+  ): Promise<void> {
+    const enabled = this.enabledModels();
+    const pick = () => pickEnabledModel(enabled, this.currentState?.model, seed);
+    await this.waitForState(
+      () => pick().settled && (!mode || this.currentState?.mode?.apply[mode] !== undefined)
+    );
+    if (this.disposed) return;
+    const { target } = pick();
+    if (!target) throw noEnabledModelError(descriptor.displayName);
+    await descriptor.applySelection(this, target, { backendReportedCurrent: null });
+    await replayPersistedMode(this, mode);
+  }
+
+  private waitForState(isReady: () => boolean): Promise<void> {
+    if (isReady()) return Promise.resolve();
+    return new Promise((resolve) => {
+      const unsubscribe = this.subscribe({
+        onMessagesChanged: () => {},
+        onStatusChanged: (status) => {
+          if (status === "closed") finish();
+        },
+        onModelChanged: () => {
+          if (isReady()) finish();
+        },
+      });
+      const timer = window.setTimeout(() => finish(), ENABLED_MODEL_WAIT_MS);
+      const finish = (): void => {
+        window.clearTimeout(timer);
+        unsubscribe();
+        resolve();
+      };
+    });
+  }
+
+  private isOnModelNotEnabled(): boolean {
+    const current = this.currentState?.model?.current.baseModelId;
+    return (
+      this.runsOnlyEnabledModels() &&
+      current !== undefined &&
+      !this.enabledModels().some((entry) => entry.baseModelId === current)
+    );
+  }
+
+  private runsOnlyEnabledModels(): boolean {
+    return this.getDescriptor?.()?.routesCopilotModels === true;
+  }
+
+  private enabledModels(): readonly EnabledModelEntry[] {
+    return this.getDescriptor?.()?.getEnabledModelEntries?.(getSettings()) ?? EMPTY_ENABLED_MODELS;
   }
 
   async setConfigOption(configId: string, value: string): Promise<void> {
@@ -616,6 +699,13 @@ export class AgentSession {
 
       const hasWebTabs = (context?.webTabs?.length ?? 0) > 0;
       const webTabBlock = hasWebTabs ? await serializeWebTabContext(context) : "";
+      if (placeholderId && this.isOnModelNotEnabled()) {
+        return this.refuseTurn(
+          placeholderId,
+          turnStartedAtMs,
+          `This chat's model isn't enabled for ${this.displayNameFor(this.backendId)}. Pick an enabled model to continue.`
+        );
+      }
       const isFirstTurn = !this.firstPromptSent;
       const projectContextBlock = isFirstTurn ? this.projectContextBlock : null;
       const projectContextUpdates = this.getProjectContextUpdatesFn?.() ?? null;
@@ -627,7 +717,12 @@ export class AgentSession {
         placeholderId
       ) {
         if (!(await this.ensureMultiAgentEntitlement())) {
-          return this.blockFanoutForEntitlement(placeholderId, turnStartedAtMs);
+          showMultiAgentUpgradePrompt();
+          return this.refuseTurn(
+            placeholderId,
+            turnStartedAtMs,
+            "Multi-agent QA is a Copilot Plus feature. Upgrade to mention more than one agent in a turn."
+          );
         }
 
         const historyBlock = buildConversationHistoryBlock(
@@ -756,12 +851,8 @@ export class AgentSession {
     return ensureMultiAgentEntitlement(this.getApp?.());
   }
 
-  private blockFanoutForEntitlement(placeholderId: string, turnStartedAtMs: number): StopReason {
-    showMultiAgentUpgradePrompt();
-    this.store.markMessageError(
-      placeholderId,
-      "Multi-agent QA is a Copilot Plus feature. Upgrade to mention more than one agent in a turn."
-    );
+  private refuseTurn(placeholderId: string, turnStartedAtMs: number, message: string): StopReason {
+    this.store.markMessageError(placeholderId, message);
     this.store.markTurnComplete(placeholderId, "refusal", Date.now() - turnStartedAtMs);
     this.currentMessageIds = new Set();
     if (this.placeholderId === placeholderId) this.placeholderId = null;

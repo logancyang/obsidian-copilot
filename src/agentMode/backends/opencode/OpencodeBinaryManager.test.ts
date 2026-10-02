@@ -89,10 +89,14 @@ describe("OpencodeBinaryManager", () => {
   }
 
   describe("isOpencodeVersionOutdated()", () => {
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/569 rejects V1 and accepts the first supported V2 release", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/569 rejects V1 releases", () => {
       expect(isOpencodeVersionOutdated("1.18.31")).toBe(true);
-      expect(isOpencodeVersionOutdated("2.0.2")).toBe(true);
-      expect(isOpencodeVersionOutdated("2.0.3")).toBe(false);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 rejects V2 releases that never send the late model catalog and accepts 2.0.21", () => {
+      expect(isOpencodeVersionOutdated("2.0.3")).toBe(true);
+      expect(isOpencodeVersionOutdated("2.0.20")).toBe(true);
+      expect(isOpencodeVersionOutdated("2.0.21")).toBe(false);
     });
   });
 
@@ -186,7 +190,7 @@ describe("OpencodeBinaryManager", () => {
       expect(
         toOpencodeInstallState({
           kind: "installed",
-          version: "2.0.14",
+          version: "2.0.30",
           path: "/custom/opencode",
           source: "custom",
         })

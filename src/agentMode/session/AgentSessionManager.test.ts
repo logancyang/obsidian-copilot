@@ -835,6 +835,38 @@ describe("AgentSessionManager", () => {
         expect(mgr.getChatUIState(session.internalId)).toBe(mgr.getActiveChatUIState());
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 refuses to start a chat, and asks for an enabled model, when a backend that may only run enabled models has none", async () => {
+        mockSavedDefault(null);
+        const mgr = buildManager({
+          descriptor: buildDescriptor({
+            routesCopilotModels: true,
+            getEnabledModelEntries: () => [],
+          }),
+        });
+
+        await expect(mgr.createSession()).rejects.toThrow(
+          "Enable a model for opencode in Copilot's model settings to start a chat."
+        );
+        expect(mgr.getLastError()).toBe(
+          "Enable a model for opencode in Copilot's model settings to start a chat."
+        );
+        expect(mockBackendStart).not.toHaveBeenCalled();
+        expect(mgr.getIsStarting()).toBe(false);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 hands the saved mode to the new session so startup waits for that mode to arrive", async () => {
+        getSettingsMock.mockReturnValue({
+          agentMode: { backends: { opencode: { defaultMode: "default" } } },
+        });
+        const mgr = buildManager();
+
+        await mgr.createSession();
+
+        expect(sessionCreateSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ defaultMode: "default" })
+        );
+      });
+
       it("only spawns the backend once across multiple createSession calls", async () => {
         const mgr = buildManager();
         await mgr.createSession();
@@ -2782,13 +2814,15 @@ describe("AgentSessionManager", () => {
         offered:
           | readonly (string | { baseModelId: string; credentialState: "ok" | "missing_key" })[]
           | undefined,
-        saved: { baseModelId: string; effort: string | null } | null
+        saved: { baseModelId: string; effort: string | null } | null,
+        routesCopilotModels = false
       ): AgentSessionManager {
         mockSavedDefault(saved);
         return buildManager({
           descriptor: buildDescriptor(
             offered
               ? {
+                  routesCopilotModels,
                   getEnabledModelEntries: () =>
                     offered.map((entry) =>
                       typeof entry === "string"
@@ -2805,6 +2839,34 @@ describe("AgentSessionManager", () => {
         expect(
           buildManagerWithOffered(["copilot-plus/flash"], null).getSeedSelection("opencode")
         ).toBeNull();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 seeds the first enabled model with a working key when nothing is saved for a backend that may only run enabled models", () => {
+        const mgr = buildManagerWithOffered(
+          [
+            { baseModelId: "byok/gpt-5.6", credentialState: "missing_key" },
+            "copilot-plus/flash",
+            "copilot-plus/glm-5.2",
+          ],
+          null,
+          true
+        );
+
+        expect(mgr.getSeedSelection("opencode")).toEqual({
+          baseModelId: "copilot-plus/flash",
+          effort: null,
+        });
+        expect(Notice).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 seeds nothing, even from a saved default, when a backend that may only run enabled models has none enabled", () => {
+        const mgr = buildManagerWithOffered(
+          [],
+          { baseModelId: "copilot-plus/glm-5.2", effort: null },
+          true
+        );
+
+        expect(mgr.getSeedSelection("opencode")).toBeNull();
       });
 
       it("returns the saved selection while its model is still offered", () => {

@@ -43,7 +43,7 @@ function resetPromptState(): void {
 
 jest.mock("./OpencodeBinaryManager", () => ({
   ...jest.requireActual("./OpencodeBinaryManager"),
-  verifyOpencodeBinary: jest.fn().mockResolvedValue({ stdout: "2.0.3" }),
+  verifyOpencodeBinary: jest.fn().mockResolvedValue({ stdout: "2.0.21" }),
 }));
 
 jest.mock("@/logger", () => ({
@@ -923,7 +923,7 @@ describe("OpencodeBackend", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/569 rejects a V1 executable even when settings claim a supported V2 version", async () => {
         updateAgentModeBackendFields("opencode", {
           binaryPath: "/old-opencode",
-          binaryVersion: "2.0.3",
+          binaryVersion: "2.0.21",
           binarySource: "managed",
         });
         jest.mocked(verifyOpencodeBinary).mockResolvedValueOnce({ stdout: "1.18.31" });

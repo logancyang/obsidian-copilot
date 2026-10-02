@@ -816,6 +816,14 @@ export class AgentSessionManager {
     const requestedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
     const resolvedId = this.opts.resolveDescriptor(requestedId) ? requestedId : "opencode";
     const errorSeqAtStart = this.lastErrorSeq;
+    const descriptor = this.resolveDescriptor(resolvedId);
+    const resolvedSeed = seedSelection ?? this.getSeedSelection(resolvedId) ?? undefined;
+    if (!resolvedSeed && descriptor.routesCopilotModels) {
+      const message = `Enable a model for ${descriptor.displayName} in Copilot's model settings to start a chat.`;
+      this.setLastError(message);
+      this.notify();
+      throw new Error(message);
+    }
 
     const projectRecord =
       projectId === GLOBAL_SCOPE ? undefined : getCachedProjectRecordById(projectId);
@@ -843,8 +851,6 @@ export class AgentSessionManager {
             this.currentContextRevisionKey(projectId)
           );
 
-    const descriptor = this.resolveDescriptor(resolvedId);
-
     this.pendingCreates++;
     this.startingBackendId = resolvedId;
     this.notify();
@@ -863,8 +869,6 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager was shut down during session creation");
     }
 
-    const resolvedSeed = seedSelection ?? this.getSeedSelection(resolvedId) ?? undefined;
-
     const internalId = uuidv4();
     const resolvedChatInputId = chatInputId ?? uuidv4();
     const session = AgentSession.start({
@@ -875,6 +879,7 @@ export class AgentSessionManager {
       backendId: resolvedId,
       projectId,
       defaultModelSelection: resolvedSeed,
+      defaultMode: this.getDefaultMode(resolvedId),
       getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
@@ -1403,7 +1408,8 @@ export class AgentSessionManager {
    */
   getSeedSelection(backendId: BackendId, preferred?: ModelSelection | null): ModelSelection | null {
     const saved = this.getDefaultSelection(backendId);
-    const offered = this.opts.resolveDescriptor(backendId)?.getEnabledModelEntries?.(getSettings());
+    const descriptor = this.opts.resolveDescriptor(backendId);
+    const offered = descriptor?.getEnabledModelEntries?.(getSettings());
     const requested = preferred ?? saved;
     // A missing accessor cannot validate agent-native models. An empty list is
     // authoritative because it can mean the user just disabled the last model.
@@ -1411,14 +1417,16 @@ export class AgentSessionManager {
     if (!offered) return requested;
 
     const runnable = offered.filter((entry) => entry.credentialState === "ok");
-    if (!requested) return null;
+    // A backend that may only run enabled models has no agent default to fall back to.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
+    if (!requested && descriptor?.routesCopilotModels !== true) return null;
 
     const resolved =
       [preferred, saved].find(
         (selection): selection is ModelSelection =>
           !!selection && runnable.some((entry) => entry.baseModelId === selection.baseModelId)
       ) ?? (runnable[0] ? { baseModelId: runnable[0].baseModelId, effort: null } : null);
-    if (resolved?.baseModelId !== requested.baseModelId) {
+    if (requested && resolved?.baseModelId !== requested.baseModelId) {
       const replacementName = runnable.find(
         (entry) => entry.baseModelId === resolved?.baseModelId
       )?.name;
@@ -2248,6 +2256,7 @@ export class AgentSessionManager {
       projectId,
       initialState: resumeResult.state,
       defaultModelSelection: seedSelection,
+      defaultMode: this.getDefaultMode(backendId),
       cwd,
       getDescriptor: () => this.opts.resolveDescriptor(backendId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),

@@ -11,6 +11,7 @@ import type {
   BackendState,
   EffortOption,
   SessionId,
+  SessionUpdateHandler,
 } from "./types";
 
 export interface WarmBackend {
@@ -167,11 +168,47 @@ export class AgentModelPreloader {
       descriptor,
     });
 
+    // An agent can revise its model list after the probe session opens, so the cache follows it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
+    let catalog: BackendModelCatalog | null = null;
+    let updatedState: BackendState | null = null;
+    let effortProbedModelIds: ReadonlySet<string> = new Set();
+    let effortPrefetch = Promise.resolve();
+    const prefetchEfforts = (sessionId: SessionId, state: BackendState): Promise<void> => {
+      effortProbedModelIds = new Set(state.model?.availableModels.map((m) => m.baseModelId));
+      effortPrefetch = effortPrefetch.then(() =>
+        this.runEffortPrefetch(backendId, descriptor, proc, sessionId, state)
+      );
+      return effortPrefetch;
+    };
+    const reprefetchEffortsOnNewModels = (sessionId: SessionId, state: BackendState): void => {
+      if (!state.model?.availableModels.some((m) => !effortProbedModelIds.has(m.baseModelId))) {
+        return;
+      }
+      void prefetchEfforts(sessionId, state).then(() => this.notify());
+    };
+    const onProbeEvent: SessionUpdateHandler = ({ sessionId, update }) => {
+      if (update.sessionUpdate !== "state_changed" || !update.state.model) return;
+      updatedState = update.state;
+      if (!catalog || this.modelCatalogCache.get(backendId) !== catalog) return;
+      catalog = { availableModels: update.state.model.availableModels };
+      this.modelCatalogCache.set(backendId, catalog);
+      this.notify();
+      reprefetchEffortsOnNewModels(sessionId, update.state);
+    };
+
     let probe: { sessionId: SessionId; state: BackendState } | null = null;
     try {
       await proc.start?.();
       const storedId = descriptor.getProbeSessionId?.(getSettings());
-      probe = await this.fetchInitialState(proc, descriptor, backendId, storedId, cwd);
+      probe = await this.fetchInitialState(
+        proc,
+        descriptor,
+        backendId,
+        storedId,
+        cwd,
+        onProbeEvent
+      );
     } catch (err) {
       logError(`[AgentMode] preload ${backendId} failed`, err);
     }
@@ -188,7 +225,7 @@ export class AgentModelPreloader {
       return;
     }
 
-    await this.runEffortPrefetch(backendId, descriptor, proc, probe.sessionId, probe.state);
+    await prefetchEfforts(probe.sessionId, updatedState ?? probe.state);
 
     // Prefetch awaits RPCs before the exit listener is installed; never cache a
     // dead process or retain one after shutdown. https://github.com/Brevilabs/obsidian-copilot-private/issues/550
@@ -216,12 +253,12 @@ export class AgentModelPreloader {
       }
     });
     this.warm.set(backendId, warm);
-    this.modelCatalogCache.set(backendId, {
-      availableModels: probe.state.model?.availableModels ?? null,
-    });
+    catalog = { availableModels: (updatedState ?? probe.state).model?.availableModels ?? null };
+    this.modelCatalogCache.set(backendId, catalog);
     this.warmExitUnsubs.set(backendId, exitUnsub);
     logProbeResult(backendId, "session probe", probe.state);
     this.notify();
+    if (updatedState) reprefetchEffortsOnNewModels(probe.sessionId, updatedState);
   }
 
   private async runEffortPrefetch(
@@ -254,7 +291,8 @@ export class AgentModelPreloader {
     descriptor: BackendDescriptor,
     backendId: BackendId,
     storedId: string | undefined,
-    cwd: string
+    cwd: string,
+    onProbeEvent: SessionUpdateHandler
   ): Promise<{ sessionId: SessionId; state: BackendState }> {
     type Strategy = {
       label: string;
@@ -276,12 +314,13 @@ export class AgentModelPreloader {
     }
 
     for (const { label, sessionId, run } of strategies) {
+      const unregister = proc.registerSessionHandler(sessionId, onProbeEvent);
       try {
-        proc.registerSessionHandler(sessionId, () => {});
         const resp = await run();
         logInfo(`[AgentMode] preload ${backendId}: ${label}`);
         return { sessionId: resp.sessionId, state: resp.state };
       } catch (err) {
+        unregister();
         if (!(err instanceof MethodUnsupportedError)) {
           logWarn(`[AgentMode] preload ${backendId}: ${label} failed (will fall back)`, err);
         }
@@ -289,7 +328,7 @@ export class AgentModelPreloader {
     }
 
     const resp = await proc.newSession({ cwd });
-    proc.registerSessionHandler(resp.sessionId, () => {});
+    proc.registerSessionHandler(resp.sessionId, onProbeEvent);
     logInfo(`[AgentMode] preload ${backendId}: created probe session ${resp.sessionId}`);
     if (descriptor.persistProbeSessionId) {
       try {

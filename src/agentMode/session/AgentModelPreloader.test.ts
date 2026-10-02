@@ -2,7 +2,13 @@ import { App, FileSystemAdapter } from "obsidian";
 import { waitFor } from "@testing-library/react";
 import type CopilotPlugin from "@/main";
 import { AgentModelPreloader } from "./AgentModelPreloader";
-import type { BackendDescriptor, BackendProcess, BackendState, ModelSelection } from "./types";
+import type {
+  BackendDescriptor,
+  BackendProcess,
+  BackendState,
+  ModelSelection,
+  SessionUpdateHandler,
+} from "./types";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -103,6 +109,33 @@ function buildDescriptor(makeProc: () => MockProcHandle): {
   return { descriptor, procHandle };
 }
 
+function catalogOf(baseModelIds: string[]): BackendState {
+  return {
+    model: {
+      current: { baseModelId: baseModelIds[0], effort: null },
+      availableModels: baseModelIds.map((baseModelId) => ({
+        baseModelId,
+        name: baseModelId,
+        provider: null,
+        effortOptions: [],
+      })),
+      apply: { kind: "setConfigOption", configId: "model" },
+    },
+    mode: null,
+  };
+}
+
+function probeHandlerOf(procHandle: MockProcHandle): SessionUpdateHandler {
+  return (procHandle.proc.registerSessionHandler as jest.Mock).mock.calls[0][1];
+}
+
+function pushCatalog(procHandle: MockProcHandle, state: BackendState): void {
+  probeHandlerOf(procHandle)({
+    sessionId: "probe-1",
+    update: { sessionUpdate: "state_changed", state },
+  });
+}
+
 describe("AgentModelPreloader", () => {
   describe("preload()", () => {
     it("retains the probe subprocess after a successful preload and hands it to the manager", async () => {
@@ -128,6 +161,26 @@ describe("AgentModelPreloader", () => {
       expect(preloader.getCachedModelCatalog("claude-sdk")?.availableModels?.[0].baseModelId).toBe(
         "claude-sonnet"
       );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 listens only to the new probe session after the stored one fails to resume and load", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+      Object.assign(descriptor, { getProbeSessionId: () => "stale-probe" });
+      const { proc } = procHandle;
+      jest.mocked(proc.resumeSession).mockRejectedValue(new Error("session not found"));
+      jest.mocked(proc.loadSession).mockRejectedValue(new Error("session not found"));
+      const listening = new Map<string, SessionUpdateHandler>();
+      jest.mocked(proc.registerSessionHandler).mockImplementation((sessionId, handler) => {
+        listening.set(sessionId, handler);
+        return () => {
+          if (listening.get(sessionId) === handler) listening.delete(sessionId);
+        };
+      });
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+
+      await preloader.preload("claude-sdk");
+
+      expect([...listening.keys()]).toEqual(["probe-1"]);
     });
 
     it("waits for installation before inspecting and probing the selected binary (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", async () => {
@@ -325,6 +378,108 @@ describe("AgentModelPreloader", () => {
       await preloader.preload("claude-sdk");
 
       expect(preloader.getCachedModelCatalog("claude-sdk")).toEqual({ availableModels: null });
+    });
+
+    describe("when the agent sends its full catalog after the probe session starts", () => {
+      const earlyCatalog = catalogOf(["opencode/fledge-alpha-free"]);
+      const fullCatalog = catalogOf([
+        "opencode/fledge-alpha-free",
+        "copilot-plus/copilot-plus-flash",
+      ]);
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 replaces the cached catalog and notifies subscribers, even after the process was handed to a chat", async () => {
+        const { descriptor, procHandle } = buildDescriptor(() =>
+          makeMockProc({ newSessionState: earlyCatalog })
+        );
+        const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+        await preloader.preload("claude-sdk");
+        preloader.takeWarm("claude-sdk");
+        const listener = jest.fn();
+        preloader.subscribe(listener);
+
+        pushCatalog(procHandle, fullCatalog);
+
+        expect(preloader.getCachedModelCatalog("claude-sdk")).toEqual({
+          availableModels: fullCatalog.model?.availableModels,
+        });
+        expect(listener).toHaveBeenCalledTimes(1);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 caches a catalog that arrives while the probe is still running instead of the first list", async () => {
+        const { descriptor, procHandle } = buildDescriptor(() =>
+          makeMockProc({ newSessionState: earlyCatalog })
+        );
+        Object.assign(descriptor, {
+          getEnabledModelEntries: () => [
+            {
+              baseModelId: "copilot-plus/copilot-plus-flash",
+              name: "Flash",
+              credentialState: "ok",
+            },
+          ],
+          prefetchEffortCatalog: async () => {
+            pushCatalog(procHandle, fullCatalog);
+            return {};
+          },
+        });
+        const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+
+        await preloader.preload("claude-sdk");
+
+        expect(preloader.getCachedModelCatalog("claude-sdk")).toEqual({
+          availableModels: fullCatalog.model?.availableModels,
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 ignores a catalog from a probe whose cache entry was cleared", async () => {
+        const { descriptor, procHandle } = buildDescriptor(() =>
+          makeMockProc({ newSessionState: earlyCatalog })
+        );
+        const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+        await preloader.preload("claude-sdk");
+        preloader.clearCached("claude-sdk");
+
+        pushCatalog(procHandle, fullCatalog);
+
+        expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
+      });
+    });
+  });
+
+  describe("getEffortCatalog()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 prefetches efforts for enabled models that only a late catalog update lists, and notifies subscribers", async () => {
+      const flash = "copilot-plus/copilot-plus-flash";
+      const efforts = [{ value: "low", label: "Low" }];
+      const { descriptor, procHandle } = buildDescriptor(() =>
+        makeMockProc({ newSessionState: catalogOf(["opencode/fledge-alpha-free"]) })
+      );
+      const prefetchEffortCatalog = jest.fn(
+        async ({ modelState }: { modelState: NonNullable<BackendState["model"]> }) => {
+          pushCatalog(procHandle, { model: modelState, mode: null });
+          return modelState.availableModels.some((entry) => entry.baseModelId === flash)
+            ? { [flash]: efforts }
+            : {};
+        }
+      );
+      Object.assign(descriptor, {
+        getEnabledModelEntries: () => [
+          { baseModelId: flash, name: "Flash", credentialState: "ok" },
+        ],
+        prefetchEffortCatalog,
+      });
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      await preloader.preload("claude-sdk");
+      expect(preloader.getEffortCatalog("claude-sdk")).toBeNull();
+      const seenEfforts: Array<Record<string, unknown> | null> = [];
+      preloader.subscribe(() => seenEfforts.push(preloader.getEffortCatalog("claude-sdk")));
+
+      pushCatalog(procHandle, catalogOf(["opencode/fledge-alpha-free", flash]));
+
+      await waitFor(() =>
+        expect(preloader.getEffortCatalog("claude-sdk")).toEqual({ [flash]: efforts })
+      );
+      expect(seenEfforts.at(-1)).toEqual({ [flash]: efforts });
+      expect(prefetchEffortCatalog).toHaveBeenCalledTimes(2);
     });
   });
 
