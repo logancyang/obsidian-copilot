@@ -67,6 +67,7 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { getSettings } from "@/settings/model";
 import { findModelEntry } from "@/agentMode/session/translateBackendState";
+import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
@@ -157,6 +158,7 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   projectId?: ProjectScopeId;
   initialState?: BackendState | null;
   defaultModelSelection?: ModelSelection;
+  defaultMode?: CopilotMode | null;
   cwd?: string | null;
   getDescriptor?: () => BackendDescriptor | undefined;
   runFanoutTurn?: RunFanoutTurn;
@@ -268,7 +270,7 @@ export class AgentSession {
       );
       const selection = opts.defaultModelSelection ?? originalState?.model?.current;
       if (selection && originalState) {
-        this.ready = this.confirmSeededSelection(selection, originalState)
+        this.ready = this.confirmSeededSelection(selection, originalState, opts.defaultMode)
           // A resumed chat stays open to pick an enabled model; sends on any other model are refused.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
           .catch((e) => logWarn(`[AgentMode] resumed ${this.backendId} session kept its model`, e))
@@ -410,6 +412,7 @@ export class AgentSession {
         (!seedEntry || offers(seed.baseModelId)) &&
         (!mode || this.currentState?.mode?.apply[mode] !== undefined)
     );
+    if (this.disposed) return;
     const fallback = enabled.find(
       (entry) => entry.credentialState === "ok" && offers(entry.baseModelId)
     );
@@ -423,6 +426,7 @@ export class AgentSession {
       );
     }
     await descriptor.applySelection(this, target, { backendReportedCurrent: null });
+    await replayPersistedMode(this, mode);
   }
 
   private waitForState(isReady: () => boolean): Promise<void> {
@@ -430,7 +434,9 @@ export class AgentSession {
     return new Promise((resolve) => {
       const unsubscribe = this.subscribe({
         onMessagesChanged: () => {},
-        onStatusChanged: () => {},
+        onStatusChanged: (status) => {
+          if (status === "closed") finish();
+        },
         onModelChanged: () => {
           if (isReady()) finish();
         },

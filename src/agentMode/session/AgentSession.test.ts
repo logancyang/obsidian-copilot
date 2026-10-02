@@ -547,6 +547,24 @@ describe("AgentSession", () => {
         expect(mock.prompt).not.toHaveBeenCalled();
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 applies the saved Copilot mode to a resumed session once a late catalog update lists it", async () => {
+        const mock = makeMockBackend();
+        const resumedState = catalogState([BIG_PICKLE], BIG_PICKLE, ["auto"]);
+        const agent = fakeCatalogAgent(mock, resumedState);
+        const session = makeSession(mock, {
+          initialState: resumedState,
+          defaultMode: "default",
+          getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(BIG_PICKLE)]),
+        });
+        expect(session.getStatus()).toBe("starting");
+
+        agent.push(catalogState([BIG_PICKLE], BIG_PICKLE, ["default", "auto"]));
+        await session.ready;
+
+        expect(session.getState()?.mode?.current).toBe("default");
+        expect(session.getStatus()).toBe("idle");
+      });
+
       it("ready resolves immediately when no default selection is supplied", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock, {
@@ -876,7 +894,11 @@ describe("AgentSession", () => {
         jest.mocked(getSettings).mockReturnValue({
           agentMode: {},
           providers: {
-            zen: { providerId: "zen", origin: { kind: "agent", agentType: "opencode" } },
+            zen: {
+              providerId: "zen",
+              displayName: "OpenCode Zen",
+              origin: { kind: "agent", agentType: "opencode" },
+            },
           },
           configuredModels: [
             {
@@ -1021,7 +1043,29 @@ describe("AgentSession", () => {
           agent.push(catalogState([BIG_PICKLE], BIG_PICKLE, ["default", "auto"]));
           await session.ready;
 
+          expect(session.getState()?.mode?.current).toBe("default");
           expect(session.getStatus()).toBe("idle");
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 stops waiting for the catalog, without touching the agent, when the chat is closed", async () => {
+          jest.useFakeTimers();
+          try {
+            const mock = makeMockBackend();
+            fakeCatalogAgent(mock, catalogState([FLEDGE], FLEDGE));
+            const session = startSession(mock, {
+              defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+              getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(PLUS_FLASH)]),
+            });
+            await jest.advanceTimersByTimeAsync(0);
+            expect(session.getStatus()).toBe("starting");
+
+            await session.dispose();
+
+            await expect(session.ready).resolves.toBeUndefined();
+            expect(mock.setSessionConfigOption).not.toHaveBeenCalled();
+          } finally {
+            jest.useRealTimers();
+          }
         });
       });
     });

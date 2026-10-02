@@ -2256,6 +2256,7 @@ export class AgentSessionManager {
       projectId,
       initialState: resumeResult.state,
       defaultModelSelection: seedSelection,
+      defaultMode: this.getDefaultMode(backendId),
       cwd,
       getDescriptor: () => this.opts.resolveDescriptor(backendId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),

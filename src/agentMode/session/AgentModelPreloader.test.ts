@@ -109,6 +109,33 @@ function buildDescriptor(makeProc: () => MockProcHandle): {
   return { descriptor, procHandle };
 }
 
+function catalogOf(baseModelIds: string[]): BackendState {
+  return {
+    model: {
+      current: { baseModelId: baseModelIds[0], effort: null },
+      availableModels: baseModelIds.map((baseModelId) => ({
+        baseModelId,
+        name: baseModelId,
+        provider: null,
+        effortOptions: [],
+      })),
+      apply: { kind: "setConfigOption", configId: "model" },
+    },
+    mode: null,
+  };
+}
+
+function probeHandlerOf(procHandle: MockProcHandle): SessionUpdateHandler {
+  return (procHandle.proc.registerSessionHandler as jest.Mock).mock.calls[0][1];
+}
+
+function pushCatalog(procHandle: MockProcHandle, state: BackendState): void {
+  probeHandlerOf(procHandle)({
+    sessionId: "probe-1",
+    update: { sessionUpdate: "state_changed", state },
+  });
+}
+
 describe("AgentModelPreloader", () => {
   describe("preload()", () => {
     it("retains the probe subprocess after a successful preload and hands it to the manager", async () => {
@@ -340,33 +367,6 @@ describe("AgentModelPreloader", () => {
         "copilot-plus/copilot-plus-flash",
       ]);
 
-      function catalogOf(baseModelIds: string[]): BackendState {
-        return {
-          model: {
-            current: { baseModelId: baseModelIds[0], effort: null },
-            availableModels: baseModelIds.map((baseModelId) => ({
-              baseModelId,
-              name: baseModelId,
-              provider: null,
-              effortOptions: [],
-            })),
-            apply: { kind: "setConfigOption", configId: "model" },
-          },
-          mode: null,
-        };
-      }
-
-      function probeHandlerOf(procHandle: MockProcHandle): SessionUpdateHandler {
-        return (procHandle.proc.registerSessionHandler as jest.Mock).mock.calls[0][1];
-      }
-
-      function pushCatalog(procHandle: MockProcHandle, state: BackendState): void {
-        probeHandlerOf(procHandle)({
-          sessionId: "probe-1",
-          update: { sessionUpdate: "state_changed", state },
-        });
-      }
-
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 replaces the cached catalog and notifies subscribers, even after the process was handed to a chat", async () => {
         const { descriptor, procHandle } = buildDescriptor(() =>
           makeMockProc({ newSessionState: earlyCatalog })
@@ -423,6 +423,43 @@ describe("AgentModelPreloader", () => {
 
         expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
       });
+    });
+  });
+
+  describe("getEffortCatalog()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 prefetches efforts for enabled models that only a late catalog update lists, and notifies subscribers", async () => {
+      const flash = "copilot-plus/copilot-plus-flash";
+      const efforts = [{ value: "low", label: "Low" }];
+      const { descriptor, procHandle } = buildDescriptor(() =>
+        makeMockProc({ newSessionState: catalogOf(["opencode/fledge-alpha-free"]) })
+      );
+      const prefetchEffortCatalog = jest.fn(
+        async ({ modelState }: { modelState: NonNullable<BackendState["model"]> }) => {
+          pushCatalog(procHandle, { model: modelState, mode: null });
+          return modelState.availableModels.some((entry) => entry.baseModelId === flash)
+            ? { [flash]: efforts }
+            : {};
+        }
+      );
+      Object.assign(descriptor, {
+        getEnabledModelEntries: () => [
+          { baseModelId: flash, name: "Flash", credentialState: "ok" },
+        ],
+        prefetchEffortCatalog,
+      });
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      await preloader.preload("claude-sdk");
+      expect(preloader.getEffortCatalog("claude-sdk")).toBeNull();
+      const seenEfforts: Array<Record<string, unknown> | null> = [];
+      preloader.subscribe(() => seenEfforts.push(preloader.getEffortCatalog("claude-sdk")));
+
+      pushCatalog(procHandle, catalogOf(["opencode/fledge-alpha-free", flash]));
+
+      await waitFor(() =>
+        expect(preloader.getEffortCatalog("claude-sdk")).toEqual({ [flash]: efforts })
+      );
+      expect(seenEfforts.at(-1)).toEqual({ [flash]: efforts });
+      expect(prefetchEffortCatalog).toHaveBeenCalledTimes(2);
     });
   });
 

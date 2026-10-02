@@ -172,13 +172,29 @@ export class AgentModelPreloader {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
     let catalog: BackendModelCatalog | null = null;
     let updatedState: BackendState | null = null;
-    const onProbeEvent: SessionUpdateHandler = ({ update }) => {
+    let effortProbedModelIds: ReadonlySet<string> = new Set();
+    let effortPrefetch = Promise.resolve();
+    const prefetchEfforts = (sessionId: SessionId, state: BackendState): Promise<void> => {
+      effortProbedModelIds = new Set(state.model?.availableModels.map((m) => m.baseModelId));
+      effortPrefetch = effortPrefetch.then(() =>
+        this.runEffortPrefetch(backendId, descriptor, proc, sessionId, state)
+      );
+      return effortPrefetch;
+    };
+    const reprefetchEffortsOnNewModels = (sessionId: SessionId, state: BackendState): void => {
+      if (!state.model?.availableModels.some((m) => !effortProbedModelIds.has(m.baseModelId))) {
+        return;
+      }
+      void prefetchEfforts(sessionId, state).then(() => this.notify());
+    };
+    const onProbeEvent: SessionUpdateHandler = ({ sessionId, update }) => {
       if (update.sessionUpdate !== "state_changed" || !update.state.model) return;
       updatedState = update.state;
       if (!catalog || this.modelCatalogCache.get(backendId) !== catalog) return;
       catalog = { availableModels: update.state.model.availableModels };
       this.modelCatalogCache.set(backendId, catalog);
       this.notify();
+      reprefetchEffortsOnNewModels(sessionId, update.state);
     };
 
     let probe: { sessionId: SessionId; state: BackendState } | null = null;
@@ -209,7 +225,7 @@ export class AgentModelPreloader {
       return;
     }
 
-    await this.runEffortPrefetch(backendId, descriptor, proc, probe.sessionId, probe.state);
+    await prefetchEfforts(probe.sessionId, updatedState ?? probe.state);
 
     // Prefetch awaits RPCs before the exit listener is installed; never cache a
     // dead process or retain one after shutdown. https://github.com/Brevilabs/obsidian-copilot-private/issues/550
@@ -242,6 +258,7 @@ export class AgentModelPreloader {
     this.warmExitUnsubs.set(backendId, exitUnsub);
     logProbeResult(backendId, "session probe", probe.state);
     this.notify();
+    if (updatedState) reprefetchEffortsOnNewModels(probe.sessionId, updatedState);
   }
 
   private async runEffortPrefetch(
