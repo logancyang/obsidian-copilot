@@ -65,7 +65,7 @@ Use **New Chat** in the top bar or run **New Copilot Quick Chat**. Starting over
 
 Use **Chat History** to search saved conversations, reopen one, rename it, open its Markdown source, or delete it. Continuing a reopened conversation updates its existing note, including after the note has been renamed or while its source is open.
 
-Select **Copy Chat Link** beside **New Chat** to copy an `obsidian://` link to the current saved conversation. Paste it into another note to reopen that chat in the same vault. The button becomes available after the chat is saved; the link still works if the conversation note is renamed.
+Select **Copy Chat Link** beside **New Chat** to copy an `obsidian://` link to the current conversation. Paste it into another note to reopen that chat in the same vault. The button becomes available once the chat has a message and is disabled while a response is streaming. If the chat has no conversation note yet, for example because autosave is off, Copilot saves one first. The link still works if the conversation note is renamed.
 
 **Autosave Chat as Markdown** is enabled by default. Copilot saves after each user message and response under `<Copilot folder>/copilot-conversations/`. If autosave is off, use **Save Chat as Note** in the top bar. Change autosave and **Conversation Filename Template** under **Settings → Copilot → Basic → Saving conversations**.
 

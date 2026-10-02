@@ -28,8 +28,7 @@ interface ChatControlsProps {
   onLoadChat: (id: string) => Promise<void>;
   onOpenSourceFile?: (id: string) => Promise<void>;
   latestTokenCount?: number | null;
-  chatLinkId?: string;
-  onCopyChatLink?: (id: string) => void | Promise<void>;
+  onCopyChatLink?: () => void | Promise<void>;
 }
 
 export function ChatControls({
@@ -42,7 +41,6 @@ export function ChatControls({
   onLoadChat,
   onOpenSourceFile,
   latestTokenCount,
-  chatLinkId,
   onCopyChatLink,
 }: ChatControlsProps) {
   const settings = useSettingsValue();
@@ -73,7 +71,7 @@ export function ChatControls({
           </TooltipTrigger>
           <TooltipContent>New Chat</TooltipContent>
         </Tooltip>
-        <CopyChatLinkButton chatId={chatLinkId} onCopyLink={onCopyChatLink} />
+        <CopyChatLinkButton onCopyLink={onCopyChatLink} />
         <ChatSettingsPopover />
         {!settings.autosaveChat && (
           <Tooltip>
