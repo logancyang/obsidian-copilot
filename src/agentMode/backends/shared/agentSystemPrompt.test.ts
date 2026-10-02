@@ -89,6 +89,7 @@ describe("agentSystemPrompt", () => {
     });
 
     it("steers every agent to the enabled Copilot relay skills first, regardless of Plus status", () => {
+      setBuiltinPreferences({});
       for (const agent of ["claude", "codex", "opencode"]) {
         const prompt = buildAgentSystemPrompt(agent);
         expect(prompt).toContain(`${ALL_RELAY_SKILLS_LINE} ${COPILOT_SKILL_FALLBACK}`);
@@ -97,6 +98,12 @@ describe("agentSystemPrompt", () => {
       const nonPlus = buildAgentSystemPrompt(AGENT);
       updateSetting("isPaidUser", true);
       expect(buildAgentSystemPrompt(AGENT)).toBe(nonPlus);
+    });
+
+    it("omits web search, web fetch, and PDF skills under default settings https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
+      expect(buildAgentSystemPrompt(AGENT)).toContain(
+        "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts."
+      );
     });
 
     it(`names a skill disabled for one agent only in the other agents' prompts (${ISSUE_599})`, () => {

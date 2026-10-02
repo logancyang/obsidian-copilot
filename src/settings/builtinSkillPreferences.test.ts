@@ -25,7 +25,10 @@ jest.mock("@/services/settingsPersistence", () => ({
 describe("builtinSkillPreferences", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS });
+    settingsStore.set(settingsAtom, {
+      ...DEFAULT_SETTINGS,
+      agentMode: { ...DEFAULT_SETTINGS.agentMode, skills: { folder: "copilot/skills" } },
+    });
     persist.mockResolvedValue(undefined);
   });
 

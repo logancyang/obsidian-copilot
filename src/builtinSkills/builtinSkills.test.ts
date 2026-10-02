@@ -3,6 +3,7 @@ import type { CopilotSettings } from "@/settings/model";
 import {
   ALL_MANAGED_SKILLS,
   BUILTIN_SKILLS,
+  DEFAULT_BUILTIN_PREFERENCES,
   isBuiltinSkillEnabledFor,
   MIYO_PARSE_SKILL,
   MIYO_SEARCH_SKILL,
@@ -539,12 +540,34 @@ describe("builtinSkills", () => {
     });
   });
 
+  describe("DEFAULT_BUILTIN_PREFERENCES", () => {
+    it("stores web search, web fetch, and PDF reading as opt-outs so older releases keep them https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
+      expect(DEFAULT_BUILTIN_PREFERENCES).toEqual({
+        "copilot-web-search": { disabled: true },
+        "copilot-web-fetch": { disabled: true },
+        "copilot-read-pdf": { disabled: true },
+      });
+      expect(DEFAULT_SETTINGS.agentMode.skills.builtinPreferences).toBe(
+        DEFAULT_BUILTIN_PREFERENCES
+      );
+    });
+  });
+
   describe("isBuiltinSkillEnabledFor()", () => {
-    it("enables every seeded builtin for every agent under default settings", () => {
+    it("enables every seeded builtin for every agent when no preference is stored", () => {
       const settings = settingsWith({});
       for (const agent of ["claude", "codex", "opencode"]) {
         expect(isBuiltinSkillEnabledFor(settings, "copilot-web-search", agent)).toBe(true);
         expect(isBuiltinSkillEnabledFor(settings, "copilot-read-pdf", agent)).toBe(true);
+      }
+    });
+
+    it("keeps default-off skills off for every agent in a fresh install https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
+      for (const agent of ["claude", "codex", "opencode"]) {
+        for (const name of Object.keys(DEFAULT_BUILTIN_PREFERENCES)) {
+          expect(isBuiltinSkillEnabledFor(DEFAULT_SETTINGS, name, agent)).toBe(false);
+        }
+        expect(isBuiltinSkillEnabledFor(DEFAULT_SETTINGS, "copilot-fetch-x", agent)).toBe(true);
       }
     });
 

@@ -164,7 +164,14 @@ describe("model", () => {
         notificationSound: true,
         notificationSoundId: "piano",
         welcomeDismissed: false,
-        skills: { folder: "copilot/skills" },
+        skills: {
+          folder: "copilot/skills",
+          builtinPreferences: {
+            "copilot-web-search": { disabled: true },
+            "copilot-web-fetch": { disabled: true },
+            "copilot-read-pdf": { disabled: true },
+          },
+        },
       });
     });
 

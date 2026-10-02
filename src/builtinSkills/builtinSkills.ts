@@ -14,6 +14,7 @@ export interface BuiltinSkill {
   readonly name: string;
   readonly version: number;
   readonly enabledAgents: readonly BackendId[];
+  readonly defaultDisabled?: boolean;
   readonly skillMd: string;
   readonly files: ReadonlyArray<{ readonly path: string; readonly content: string }>;
 }
@@ -269,6 +270,7 @@ function relaySkill(opts: {
   license?: string;
   selfHostMode?: "search" | "deny";
   extraInstructions?: string;
+  defaultDisabled?: boolean;
 }): BuiltinSkill {
   const [argKey, argPlaceholder] = opts.arg;
   const cmdFile = opts.scriptFile.replace(/\.sh$/, ".cmd");
@@ -323,6 +325,7 @@ fi
     name: opts.name,
     version,
     enabledAgents: ["claude", "codex", "opencode"],
+    defaultDisabled: opts.defaultDisabled,
     skillMd: `---
 name: ${opts.name}
 description: ${opts.description}
@@ -379,6 +382,7 @@ const WEB_SEARCH = relaySkill({
   scriptFile: "web-search.sh",
   license: "Copilot Plus or Self-Host",
   selfHostMode: "search",
+  defaultDisabled: true,
 });
 
 const WEB_FETCH = relaySkill({
@@ -391,6 +395,7 @@ const WEB_FETCH = relaySkill({
   arg: ["url", "<url-to-fetch>"],
   scriptFile: "web-fetch.sh",
   selfHostMode: "deny",
+  defaultDisabled: true,
   extraInstructions: `## Self-Host mode
 
 Self-Host search providers do not provide a common full-page fetch contract. If
@@ -404,6 +409,7 @@ const READ_PDF: BuiltinSkill = {
   name: "copilot-read-pdf",
   version: READ_PDF_VERSION,
   enabledAgents: ["claude", "codex", "opencode"],
+  defaultDisabled: true,
   skillMd: `---
 name: copilot-read-pdf
 description: Extract the full text of a PDF as Markdown using Copilot Plus. Use when the user wants to read, summarize, or quote a PDF file (in the vault or an absolute path). Requires an active Copilot Plus license.
@@ -1107,6 +1113,20 @@ export function planManagedBuiltins(gates: { search: boolean; documents: boolean
     prune: ALL_MANAGED_SKILLS.filter((skill) => !seed.includes(skill)).map((skill) => skill.name),
   };
 }
+
+// Default-off is stored as an opt-out because older releases drop every other record,
+// which would erase opt-ins synced from newer devices:
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/629
+export const DEFAULT_BUILTIN_PREFERENCES: NonNullable<
+  CopilotSettings["agentMode"]["skills"]["builtinPreferences"]
+> = Object.freeze(
+  Object.fromEntries(
+    ALL_MANAGED_SKILLS.filter((skill) => skill.defaultDisabled).map((skill) => [
+      skill.name,
+      Object.freeze({ disabled: true }),
+    ])
+  )
+);
 
 export function isBuiltinSkillEnabledFor(
   settings: CopilotSettings,
