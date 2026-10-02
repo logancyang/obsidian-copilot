@@ -98,9 +98,6 @@ jest.mock("@/agentMode", () => ({
     descriptor: { selfHostable?: boolean },
     settings: { enableSelfHostMode?: boolean }
   ) => Boolean(settings.enableSelfHostMode) && !descriptor.selfHostable,
-  InstallBadge: jest.requireActual<typeof import("@/agentMode/backends/shared/installStatus")>(
-    "@/agentMode/backends/shared/installStatus"
-  ).InstallBadge,
   useBackendInstallState: (descriptor: { getInstallState: () => unknown }) => {
     const subscribe = React.useCallback((listener: () => void) => {
       installStateListeners.add(listener);

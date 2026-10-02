@@ -248,8 +248,4 @@ export class GraphBoostCalculator {
 
     return candidates;
   }
-
-  setConfig(config: Partial<GraphBoostConfig>): void {
-    this.config = { ...this.config, ...config };
-  }
 }

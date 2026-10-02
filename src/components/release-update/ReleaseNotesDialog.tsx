@@ -10,7 +10,7 @@ import { AlertTriangle, ArrowUpCircle, ExternalLink, LoaderCircle } from "lucide
 import { App } from "obsidian";
 import * as React from "react";
 
-export const GITHUB_RELEASES_URL = "https://github.com/logancyang/obsidian-copilot/releases/latest";
+const GITHUB_RELEASES_URL = "https://github.com/logancyang/obsidian-copilot/releases/latest";
 
 const UPDATE_PLUGIN_URL = "obsidian://show-plugin?id=copilot";
 

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
-import { PencilLine, BookOpen } from "lucide-react";
+import { PencilLine, BookOpen, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkdownPreview } from "./markdown-preview";
 
@@ -15,11 +15,11 @@ interface ContentAreaProps {
   editable?: boolean;
   value?: string;
   onChange?: (value: string) => void;
-  placeholder?: string;
   className?: string;
   minHeight?: string;
   disableAutoGrow?: boolean;
   renderMarkdown?: (content: string, el: HTMLElement) => Promise<void>;
+  onCopy?: () => void;
 }
 
 export function ContentArea({
@@ -27,17 +27,28 @@ export function ContentArea({
   editable = false,
   value,
   onChange,
-  placeholder = "Ready to generate...",
   className,
   minHeight = "180px",
   disableAutoGrow = false,
   renderMarkdown,
+  onCopy,
 }: ContentAreaProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const [isEditMode, setIsEditMode] = React.useState(false);
 
   const isCompletedResult = state.type === "result" && !state.isStreaming;
   const showPreview = !!renderMarkdown && isCompletedResult && !isEditMode;
+  const copyButton = isCompletedResult && onCopy && (
+    <Button
+      variant="ghost2"
+      size="icon"
+      className="tw-absolute tw-bottom-2 tw-right-2 tw-z-[1] tw-size-6 tw-opacity-60 hover:tw-opacity-100"
+      onClick={onCopy}
+      title="Copy to clipboard"
+    >
+      <Copy className="tw-size-3" />
+    </Button>
+  );
 
   const isGenerating = state.type === "loading" || (state.type === "result" && state.isStreaming);
   const [prevIsGenerating, setPrevIsGenerating] = React.useState(isGenerating);
@@ -73,23 +84,26 @@ export function ContentArea({
       editable && value !== undefined ? value : (state as { text: string }).text;
     return (
       <div className={cn("tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-px-4 tw-py-2", className)}>
-        <div className="tw-relative tw-min-h-0 tw-flex-1 tw-overflow-auto tw-rounded-md tw-border tw-border-solid tw-px-3 tw-py-2">
-          <MarkdownPreview
-            content={previewContent}
-            renderMarkdown={renderMarkdown}
-            className="tw-pr-6 tw-text-sm"
-          />
+        <div className="tw-relative tw-flex tw-min-h-0 tw-flex-1 tw-flex-col">
+          <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto tw-rounded-md tw-border tw-border-solid tw-px-3 tw-pb-8 tw-pt-2">
+            <MarkdownPreview
+              content={previewContent}
+              renderMarkdown={renderMarkdown}
+              className="tw-pr-6 tw-text-sm"
+            />
+          </div>
           {editable && (
             <Button
               variant="ghost2"
               size="icon"
-              className="tw-absolute tw-right-1 tw-top-1 tw-size-6 tw-opacity-60 hover:tw-opacity-100"
+              className="tw-absolute tw-right-2 tw-top-2 tw-size-6 tw-opacity-60 hover:tw-opacity-100"
               onClick={() => setIsEditMode(true)}
               title="Edit content"
             >
               <PencilLine className="tw-size-3" />
             </Button>
           )}
+          {copyButton}
         </div>
       </div>
     );
@@ -105,7 +119,7 @@ export function ContentArea({
             ref={textareaRef}
             value={displayValue}
             onChange={(e) => onChange?.(e.target.value)}
-            placeholder={placeholder}
+            placeholder="Ready to generate..."
             disabled={isDisabled}
             className={cn(
               "tw-min-w-fit tw-overflow-auto tw-border-solid",
@@ -124,6 +138,7 @@ export function ContentArea({
               <BookOpen className="tw-size-3" />
             </Button>
           )}
+          {copyButton}
         </div>
       </div>
     );
@@ -135,7 +150,7 @@ export function ContentArea({
         ref={textareaRef}
         value={displayValue}
         onChange={(e) => onChange?.(e.target.value)}
-        placeholder={placeholder}
+        placeholder="Ready to generate..."
         disabled={isDisabled}
         className={cn(
           "tw-min-h-[120px] tw-resize-y",

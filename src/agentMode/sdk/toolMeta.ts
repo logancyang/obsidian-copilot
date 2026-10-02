@@ -1,5 +1,7 @@
 import type { AgentToolKind } from "@/agentMode/session/types";
 
+const TITLE_ARG_MAX_CHARS = 60;
+
 export interface VendorMetaFields {
   vendorToolName: string;
   parentToolCallId?: string;
@@ -44,13 +46,13 @@ export function deriveToolTitle(
   if (input && typeof input === "object") {
     if (typeof input.path === "string") return `${toolName} ${input.path}`;
     if (typeof input.file_path === "string") return `${toolName} ${input.file_path}`;
-    if (typeof input.command === "string") return `${toolName}: ${truncate(input.command, 60)}`;
-    if (typeof input.pattern === "string") return `${toolName} ${truncate(input.pattern, 60)}`;
+    if (typeof input.command === "string") return `${toolName}: ${truncate(input.command)}`;
+    if (typeof input.pattern === "string") return `${toolName} ${truncate(input.pattern)}`;
     if (typeof input.url === "string") return `${toolName} ${input.url}`;
   }
   return toolName;
 }
 
-export function truncate(s: string, n: number): string {
-  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+function truncate(s: string): string {
+  return s.length > TITLE_ARG_MAX_CHARS ? `${s.slice(0, TITLE_ARG_MAX_CHARS - 1)}…` : s;
 }

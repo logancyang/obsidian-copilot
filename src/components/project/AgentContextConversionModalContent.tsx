@@ -164,8 +164,6 @@ export function AgentContextConversionModalContent({
       <div className="tw-max-h-[280px] tw-min-h-0 tw-overflow-y-auto tw-px-3.5 tw-pb-2 tw-pt-1">
         <ProcessingStatus
           items={filteredItems}
-          hideSummaryBar
-          showHeader={false}
           onRetryItem={onRetryItem}
           skippedMarkdownCount={skippedMarkdownCount}
           maxHeight="none"

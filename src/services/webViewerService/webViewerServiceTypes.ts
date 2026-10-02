@@ -6,10 +6,7 @@ export const WEB_VIEWER_VIEW_TYPE = "webviewer";
 
 export const WEB_VIEWER_COMMANDS = {
   OPEN: "webviewer:open",
-  SAVE_TO_VAULT: "webviewer:save-to-vault",
 } as const;
-
-export type WebViewerCommandId = (typeof WEB_VIEWER_COMMANDS)[keyof typeof WEB_VIEWER_COMMANDS];
 
 export type WebViewerMode = "webview" | "reader";
 
@@ -33,7 +30,6 @@ export interface WebViewerView extends View {
   webviewFirstLoadFinished: boolean;
 
   getReaderModeContent(): WebViewerReaderContent | Promise<WebViewerReaderContent>;
-  saveAsMarkdown(): Promise<void> | void;
 }
 
 export type WebViewerLeaf = WorkspaceLeaf & { view: WebViewerView };
@@ -50,15 +46,6 @@ export interface CommandManager {
   commands?: Map<string, Command> | Record<string, Command>;
 }
 
-export type ResolveStrategy = "active-only" | "active-or-last" | "active-or-last-or-any";
-
-export interface ResolveLeafOptions {
-  strategy?: ResolveStrategy;
-  focus?: boolean;
-  requireWebviewReady?: boolean;
-  timeoutMs?: number;
-}
-
 export interface WebViewerAvailability {
   supported: boolean;
   available: boolean;
@@ -73,10 +60,6 @@ export interface WebViewerPageInfo {
   mode: WebViewerMode;
 }
 
-export interface SaveToVaultResult {
-  method: "command" | "view.saveAsMarkdown";
-}
-
 export class WebViewerError extends Error {
   constructor(message: string) {
     super(message);
@@ -85,23 +68,7 @@ export class WebViewerError extends Error {
   }
 }
 
-export class WebViewerUnsupportedError extends WebViewerError {
-  constructor(message: string) {
-    super(message);
-    this.name = "WebViewerUnsupportedError";
-    Object.setPrototypeOf(this, WebViewerUnsupportedError.prototype);
-  }
-}
-
-export class WebViewerLeafNotFoundError extends WebViewerError {
-  constructor(message: string) {
-    super(message);
-    this.name = "WebViewerLeafNotFoundError";
-    Object.setPrototypeOf(this, WebViewerLeafNotFoundError.prototype);
-  }
-}
-
-export class WebviewUnavailableError extends WebViewerError {
+class WebviewUnavailableError extends WebViewerError {
   constructor(message: string) {
     super(message);
     this.name = "WebviewUnavailableError";

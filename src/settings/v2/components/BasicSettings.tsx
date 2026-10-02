@@ -96,7 +96,7 @@ export const BasicSettings: React.FC = () => {
     await saveVaultInstructions.flush();
     (app as unknown as { setting: { close: () => void } }).setting.close();
     try {
-      await openAgentsFile(app, "", "", true);
+      await openAgentsFile(app, "");
     } catch (error) {
       logError("Failed to open vault AGENTS.md.", error);
       new Notice(error instanceof Error ? error.message : "Failed to open AGENTS.md.");

@@ -17,7 +17,7 @@ export function useResolvedChatBackendModel(
 ): CustomModel | null {
   const entries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
   return useMemo(() => {
-    const target = findChatBackendEntry(entries, configuredModelId);
+    const target = findChatBackendEntry(entries, configuredModelId, false);
     if (!target) return null;
     const apiKey = target.provider.apiKeyKeychainId
       ? KeychainService.getInstance(app).getSecretById(target.provider.apiKeyKeychainId)

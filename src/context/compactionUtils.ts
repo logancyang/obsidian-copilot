@@ -10,10 +10,6 @@ export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
   verbatimThreshold: 5000,
 };
 
-export function mergeConfig(config: Partial<CompactionConfig> = {}): CompactionConfig {
-  return { ...DEFAULT_COMPACTION_CONFIG, ...config };
-}
-
 export function compactBySection(
   content: string,
   previewCharsPerSection = 500,

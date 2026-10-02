@@ -593,10 +593,6 @@ export class AgentSession {
     return { userMessageId, turn };
   }
 
-  getLastMentionedAgents(): ReadonlyArray<BackendId> {
-    return this.lastMentionedAgents;
-  }
-
   private async runTurn(
     displayText: string,
     userMessageId: string,

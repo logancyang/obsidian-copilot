@@ -194,17 +194,13 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     }, 100);
   }
 
-  private addReasoningStep(summary: string, toolName?: string, detailedOnly = false): void {
+  private addReasoningStep(summary: string, toolName?: string): void {
     const step = {
       timestamp: Date.now(),
       summary,
       toolName,
     };
     this.allReasoningSteps.push(step);
-
-    if (detailedOnly) {
-      return;
-    }
 
     this.reasoningState.steps.push(step);
     if (this.reasoningState.steps.length > 4) {
@@ -288,11 +284,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     logInfo("[Agent] Using native tool calling with ReAct pattern");
 
-    const context = await this.prepareAgentConversation(
-      userMessage,
-      chatModel,
-      options.updateLoadingMessage
-    );
+    const context = await this.prepareAgentConversation(userMessage, chatModel);
 
     try {
       this.startReasoningTimer(updateCurrentAiMessage, abortController);
@@ -393,8 +385,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       modelName?: string;
       model?: string;
       bindTools?: (tools: unknown[]) => unknown;
-    },
-    _updateLoadingMessage?: (message: string) => void
+    }
   ): Promise<AgentRunContext> {
     const messages: BaseMessage[] = [];
     const availableTools = this.getAvailableTools();
@@ -417,11 +408,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     const envelope = userMessage.contextEnvelope!;
 
-    const baseMessages = LayerToMessagesConverter.convert(envelope, {
-      includeSystemMessage: true,
-      mergeUserContent: true,
-      debug: false,
-    });
+    const baseMessages = LayerToMessagesConverter.convert(envelope);
 
     const memory = this.chainManager.memoryManager.getMemory();
 
@@ -514,8 +501,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       const { content, aiMessage, streamingResult } = await this.streamModelResponse(
         boundModel,
         messages,
-        abortController,
-        updateCurrentAiMessage
+        abortController
       );
 
       responseMetadata = {
@@ -707,8 +693,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           const synthesis = await this.streamModelResponse(
             params.chatModel,
             messages,
-            abortController,
-            updateCurrentAiMessage
+            abortController
           );
 
           responseMetadata = {
@@ -786,8 +771,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private async streamModelResponse(
     boundModel: Runnable,
     messages: BaseMessage[],
-    abortController: AbortController,
-    _updateCurrentAiMessage: (message: string) => void
+    abortController: AbortController
   ): Promise<{ content: string; aiMessage: AIMessage; streamingResult: StreamingResult }> {
     const toolCallChunks: Map<number, ToolCallChunk> = new Map();
 

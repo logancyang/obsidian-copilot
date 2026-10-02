@@ -1,13 +1,11 @@
 import type { App } from "obsidian";
 
-import { logError, logWarn } from "@/logger";
+import { logWarn } from "@/logger";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import * as actions from "@/services/webViewerService/webViewerServiceActions";
 import {
-  getCommandManager,
   getInternalWebViewerPluginApi,
   isCommandRegistered,
-  toErrorMessage,
   waitFor,
 } from "@/services/webViewerService/webViewerServiceHelpers";
 import { WebViewerStateManager } from "@/services/webViewerService/webViewerServiceState";
@@ -16,19 +14,13 @@ import {
   type ActiveWebTabStateSnapshot,
   type ActiveWebTabTrackingRefs,
   isWebViewerLeaf,
-  type ResolveLeafOptions,
-  type SaveToVaultResult,
   type StartActiveWebTabTrackingOptions,
   WEB_VIEWER_COMMANDS,
   WEB_VIEWER_VIEW_TYPE,
   type WebViewerAvailability,
-  type WebViewerCommandId,
-  WebViewerError,
   type WebViewerLeaf,
-  WebViewerLeafNotFoundError,
   type WebViewerPageInfo,
   type WebViewerPluginApi,
-  WebViewerUnsupportedError,
 } from "@/services/webViewerService/webViewerServiceTypes";
 
 export class WebViewerService {
@@ -95,16 +87,6 @@ export class WebViewerService {
     };
   }
 
-  assertAvailable(): void {
-    const availability = this.getAvailability();
-    if (!availability.supported) {
-      throw new WebViewerUnsupportedError(availability.reason ?? "Web Viewer unsupported.");
-    }
-    if (!availability.available) {
-      throw new WebViewerError(availability.reason ?? "Web Viewer is not available.");
-    }
-  }
-
   getLeaves(): WebViewerLeaf[] {
     if (!this.isSupportedPlatform()) return [];
     return this.app.workspace.getLeavesOfType(WEB_VIEWER_VIEW_TYPE) as WebViewerLeaf[];
@@ -117,44 +99,6 @@ export class WebViewerService {
 
   getLastActiveLeaf(): WebViewerLeaf | null {
     return this.stateManager.getLastActiveLeaf();
-  }
-
-  async resolveLeaf(options: ResolveLeafOptions = {}): Promise<WebViewerLeaf> {
-    this.assertAvailable();
-
-    const {
-      strategy = "active-or-last",
-      focus = false,
-      requireWebviewReady = false,
-      timeoutMs = 15_000,
-    } = options;
-
-    const active = this.getActiveLeaf();
-    if (active) {
-      if (focus) this.app.workspace.setActiveLeaf(active, { focus: true });
-      if (requireWebviewReady) await this.waitForWebviewReady(active, timeoutMs);
-      return active;
-    }
-
-    if (strategy === "active-or-last" || strategy === "active-or-last-or-any") {
-      const last = this.getLastActiveLeaf();
-      if (last) {
-        if (focus) this.app.workspace.setActiveLeaf(last, { focus: true });
-        if (requireWebviewReady) await this.waitForWebviewReady(last, timeoutMs);
-        return last;
-      }
-    }
-
-    if (strategy === "active-or-last-or-any") {
-      const anyLeaf = this.getLeaves()[0];
-      if (anyLeaf) {
-        if (focus) this.app.workspace.setActiveLeaf(anyLeaf, { focus: true });
-        if (requireWebviewReady) await this.waitForWebviewReady(anyLeaf, timeoutMs);
-        return anyLeaf;
-      }
-    }
-
-    throw new WebViewerLeafNotFoundError("No Web Viewer leaf found.");
   }
 
   async waitForWebviewReady(leaf: WebViewerLeaf, timeoutMs: number): Promise<void> {
@@ -200,25 +144,6 @@ export class WebViewerService {
     this.stateManager.stopActiveWebTabTracking();
   }
 
-  async executeCommand(
-    id: WebViewerCommandId,
-    options: { leaf?: WebViewerLeaf; focusLeaf?: boolean } = {}
-  ): Promise<void> {
-    const cm = getCommandManager(this.app);
-    if (!cm) throw new WebViewerError("Command manager unavailable.");
-
-    const { leaf, focusLeaf = false } = options;
-    if (leaf && focusLeaf) this.app.workspace.setActiveLeaf(leaf, { focus: true });
-
-    try {
-      const result = cm.executeCommandById(id);
-      if (result === false) throw new WebViewerError(`Command returned false: ${id}`);
-    } catch (err) {
-      logError(`Failed to execute command ${id}:`, err);
-      throw new WebViewerError(`Failed to execute command ${id}: ${toErrorMessage(err)}`);
-    }
-  }
-
   private internalApiWarned = false;
 
   getInternalPluginApi(): WebViewerPluginApi | null {
@@ -249,9 +174,6 @@ export class WebViewerService {
   ): Promise<string> {
     return actions.getReaderModeMarkdown(leaf, options);
   }
-  async getSelectedText(leaf: WebViewerLeaf, trim = true): Promise<string> {
-    return actions.getSelectedText(leaf, trim);
-  }
   async getSelectedMarkdown(leaf: WebViewerLeaf): Promise<string> {
     return actions.getSelectedMarkdown(leaf);
   }
@@ -265,12 +187,5 @@ export class WebViewerService {
     options?: { timeoutMs?: number }
   ): Promise<actions.YouTubeTranscriptResult> {
     return actions.getYouTubeTranscript(leaf, options);
-  }
-
-  async saveToVault(
-    leaf: WebViewerLeaf,
-    options: { preferCommand?: boolean; focusLeafBeforeCommand?: boolean } = {}
-  ): Promise<SaveToVaultResult> {
-    return actions.saveToVault(leaf, (id, opts) => this.executeCommand(id, opts), options);
   }
 }

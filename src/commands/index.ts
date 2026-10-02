@@ -189,7 +189,6 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
         commandLabel: "Quick Command",
         commandIcon: null,
         showIncludeNoteContext: true,
-        modelSelectionScope: "quick-command",
         firstSubmitTransform: (input, includeNoteContext) =>
           appendIncludeNoteContextPlaceholders(input, includeNoteContext),
       },

@@ -145,10 +145,6 @@ export class QuickAskController {
     }
   }
 
-  isOpen(): boolean {
-    return this.quickAskWidgetState !== null;
-  }
-
   createExtension(): Extension {
     return [quickAskOverlayPlugin];
   }

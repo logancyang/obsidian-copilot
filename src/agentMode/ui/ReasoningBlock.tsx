@@ -34,7 +34,6 @@ export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({ part, isStreamin
       status={isStreaming ? "reasoning" : "complete"}
       elapsedSeconds={elapsedSeconds}
       steps={steps.length > 0 ? steps : [part.text]}
-      isStreaming={isStreaming}
     />
   );
 };

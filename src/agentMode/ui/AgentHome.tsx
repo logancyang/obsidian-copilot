@@ -28,7 +28,6 @@ import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpe
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
-import { buildNativeChatId } from "@/utils/nativeChatId";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
@@ -581,12 +580,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   );
 
   const activeSession = manager.getSession(sessionId);
-  const nativeSessionId = activeSession?.getBackendSessionId();
-  const chatLinkId =
-    manager.getSessionSourcePath(sessionId) ||
-    (activeSession && nativeSessionId
-      ? buildNativeChatId(activeSession.backendId, nativeSessionId)
-      : undefined);
+  const handleCopyChatLink = () =>
+    plugin.copyChatLink(async () => {
+      // A native session link only opens on this device: https://github.com/Brevilabs/obsidian-copilot-private/issues/601
+      return (await manager.saveActiveSession())?.path ?? "";
+    });
 
   return (
     <div ref={setRootEl} className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
@@ -702,8 +700,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       isLoading={isLoading}
                     />
                     <AgentChatControls
-                      chatLinkId={chatLinkId}
-                      onCopyChatLink={(id) => plugin.copyChatLink(id)}
+                      onCopyChatLink={
+                        activeSession?.hasUserVisibleMessages() ? handleCopyChatLink : undefined
+                      }
                       onNewChat={handleNewChat}
                       onSaveAsNote={handleSaveAsNote}
                       chatHistoryItems={chatHistoryItems}
@@ -737,5 +736,3 @@ export const AgentHome: React.FC<AgentHomeProps> = (props) => {
     </ChatInputProvider>
   );
 };
-
-export default AgentHome;

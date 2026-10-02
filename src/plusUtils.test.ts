@@ -68,7 +68,6 @@ import {
   applyEntitlement,
   applyLicenseSettings,
   isUsingLicensedModels,
-  canUseMultiAgent,
   checkIsPaidUser,
   ensureMultiAgentEntitlement,
   isPlusEnabled,
@@ -495,33 +494,33 @@ describe("plusUtils", () => {
     });
   });
 
-  describe("canUseMultiAgent()", () => {
+  describe("isPlusEnabled()", () => {
     it("returns false for a free user", () => {
       mockGetSettings.mockReturnValue(buildSettings({ isPlusUser: false }));
-      expect(canUseMultiAgent()).toBe(false);
+      expect(isPlusEnabled()).toBe(false);
     });
 
     it("returns false for a Lite user (paid but below Plus)", () => {
       mockGetSettings.mockReturnValue(buildSettings({ isPaidUser: true, isPlusUser: false }));
-      expect(canUseMultiAgent()).toBe(false);
+      expect(isPlusEnabled()).toBe(false);
     });
 
     it("returns false once the signed exp has passed (offline lock)", async () => {
       await verifySessionFeatures(["multi_agent"], PAST_EXP_SECONDS);
       mockGetSettings.mockReturnValue(tokenBackedSettings({ isPlusUser: true }));
-      expect(canUseMultiAgent()).toBe(false);
+      expect(isPlusEnabled()).toBe(false);
     });
 
     it("blocks token-derived Plus that was not verified this session (edited data.json)", () => {
       mockGetSettings.mockReturnValue(tokenBackedSettings({ isPlusUser: true }));
-      expect(canUseMultiAgent()).toBe(false);
+      expect(isPlusEnabled()).toBe(false);
     });
 
     it("allows token-derived Plus once the signed token is verified this session", async () => {
       await verifySessionFeatures(["multi_agent"]);
       mockGetSettings.mockReturnValue(tokenBackedSettings({ isPlusUser: true }));
 
-      expect(canUseMultiAgent()).toBe(true);
+      expect(isPlusEnabled()).toBe(true);
     });
 
     it("is not granted by self-host mode alone", async () => {
@@ -530,7 +529,7 @@ describe("plusUtils", () => {
         tokenBackedSettings({ enableSelfHostMode: true, isPlusUser: false })
       );
 
-      expect(canUseMultiAgent()).toBe(false);
+      expect(isPlusEnabled()).toBe(false);
     });
   });
 
@@ -665,7 +664,7 @@ describe("plusUtils", () => {
         tokenBackedSettings({ plusLicenseKey: "a-different-key", enableSelfHostMode: true })
       );
       expect(isSelfHostModeValid()).toBe(false);
-      expect(canUseMultiAgent()).toBe(false);
+      expect(isPlusEnabled()).toBe(false);
     });
 
     it("does NOT change settings when the token cannot be verified", async () => {
@@ -682,7 +681,7 @@ describe("plusUtils", () => {
       mockGetSettings.mockReturnValue(tokenBackedSettings({ enableSelfHostMode: true }));
 
       expect(isSelfHostModeValid()).toBe(true);
-      expect(canUseMultiAgent()).toBe(true);
+      expect(isPlusEnabled()).toBe(true);
     });
 
     it("does not clobber a fresher token applied while its verification was in flight", async () => {
@@ -714,7 +713,7 @@ describe("plusUtils", () => {
       await verifyCachedEntitlement();
 
       expect(isSelfHostModeValid()).toBe(true);
-      expect(canUseMultiAgent()).toBe(true);
+      expect(isPlusEnabled()).toBe(true);
     });
 
     it("closes every gate when the same cached token stops verifying", async () => {
@@ -727,7 +726,7 @@ describe("plusUtils", () => {
       await verifyCachedEntitlement();
 
       expect(isSelfHostModeValid()).toBe(false);
-      expect(canUseMultiAgent()).toBe(false);
+      expect(isPlusEnabled()).toBe(false);
     });
   });
 

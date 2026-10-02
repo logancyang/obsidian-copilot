@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 
 export const ROW_EXIT_MS = 200;
 
-export const ROW_MOVE_MS = 280;
+const ROW_MOVE_MS = 280;
 
 const ROW_MOVE_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
 

@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Notice } from "obsidian";
 import { Send, Square, X, MessageSquareX } from "lucide-react";
-import { useModelKey } from "@/aiParams";
 import { useDraggable } from "@/hooks/use-draggable";
 import type { ResizeDirection } from "@/hooks/use-resizable";
 import { useSettingsValue, updateSetting } from "@/settings/model";
@@ -38,13 +37,12 @@ export function QuickAskPanel({
   const filePathSnapshot = filePathSnapshotRef.current;
 
   const settings = useSettingsValue();
-  const [globalModelKey] = useModelKey();
-  const selectedModelKey = settings.quickCommandModelKey ?? globalModelKey;
+  const [selectedModelKey, setSelectedModelKey] = useState(settings.quickCommandModelKey);
   const [includeNoteContext, setIncludeNoteContext] = useState(
     () => settings.quickCommandIncludeNoteContext
   );
 
-  const { messages, isStreaming, sendMessage, stop, clear } = useQuickAskSession({
+  const { hasModel, messages, isStreaming, sendMessage, stop, clear } = useQuickAskSession({
     selectedText,
     selectedModelKey,
     includeNoteContext,
@@ -91,10 +89,15 @@ export function QuickAskPanel({
 
   const handleSubmit = useCallback(async () => {
     if (!inputText.trim() || isStreaming) return;
+    // Keep the draft until a model is selected. https://github.com/Brevilabs/obsidian-copilot-private/issues/616
+    if (!hasModel) {
+      new Notice("Select a model to continue.");
+      return;
+    }
     const text = inputText;
     setInputText("");
     await sendMessage(text);
-  }, [inputText, isStreaming, sendMessage]);
+  }, [inputText, isStreaming, sendMessage, hasModel]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -201,11 +204,11 @@ export function QuickAskPanel({
     [messages, replaceGuard, onClose]
   );
 
-  const handleModelChange = useCallback((configuredModelId: string) => {
-    updateSetting("quickCommandModelKey", configuredModelId);
-  }, []);
-
-  const chatPicker = useChatModelPicker({ value: selectedModelKey, onChange: handleModelChange });
+  const chatPicker = useChatModelPicker({
+    value: selectedModelKey,
+    onChange: setSelectedModelKey,
+    fallbackToFirst: false,
+  });
 
   const handleIncludeNoteContextChange = useCallback((checked: boolean) => {
     setIncludeNoteContext(checked);
@@ -287,7 +290,7 @@ export function QuickAskPanel({
         />
       </div>
 
-      <div className="tw-mt-auto tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-1.5">
+      <div className="tw-mt-auto tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-0 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-1.5">
         <div className="tw-flex tw-items-center tw-gap-1">
           <ModelSelector
             size="sm"

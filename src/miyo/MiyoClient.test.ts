@@ -239,31 +239,6 @@ describe("MiyoClient", () => {
     });
   });
 
-  describe("listFolderFiles()", () => {
-    it("requests /v0/folder/files with folder_name, offset, limit, and order_by query params", async () => {
-      mockedRequestUrl.mockResolvedValue({
-        status: 200,
-        json: { files: [], total: 0 },
-        text: "",
-      } as RequestUrlResponse);
-
-      const client = new MiyoClient();
-      await client.listFolderFiles("http://127.0.0.1:8742", {
-        folderName: "/vault",
-        offset: 10,
-        limit: 25,
-        orderBy: "mtime",
-      });
-
-      expect(mockedRequestUrl).toHaveBeenCalledWith(
-        expect.objectContaining({
-          url: "http://127.0.0.1:8742/v0/folder/files?folder_name=%2Fvault&offset=10&limit=25&order_by=mtime",
-          method: "GET",
-        })
-      );
-    });
-  });
-
   describe("recommend()", () => {
     it("sends the agreed contract without logging conversation text even with debug enabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
       mockedGetSettings.mockReturnValue({ plusLicenseKey: "key", debug: true } as CopilotSettings);
@@ -881,27 +856,6 @@ describe("MiyoClient", () => {
       mockedRequestUrl.mockRejectedValue(new Error("network down"));
 
       await expect(new MiyoClient().isBackendAvailable()).resolves.toBe(false);
-    });
-  });
-
-  describe("getDocumentsByPath()", () => {
-    it("requests /v0/folder/documents with the folder name and path query params", async () => {
-      const documents = { documents: [] };
-      mockedRequestUrl.mockResolvedValue({ status: 200, json: documents } as RequestUrlResponse);
-
-      const result = await new MiyoClient().getDocumentsByPath(
-        "http://127.0.0.1:8742",
-        "Vault",
-        "notes/a.md"
-      );
-
-      expect(result).toEqual(documents);
-      expect(mockedRequestUrl).toHaveBeenCalledWith(
-        expect.objectContaining({
-          url: "http://127.0.0.1:8742/v0/folder/documents?path=notes%2Fa.md&folder_name=Vault",
-          method: "GET",
-        })
-      );
     });
   });
 

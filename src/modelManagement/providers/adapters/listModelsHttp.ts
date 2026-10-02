@@ -1,6 +1,6 @@
 import { safeFetchNoThrow } from "@/utils";
 
-export const DEFAULT_TIMEOUT_MS = 8000;
+const DEFAULT_TIMEOUT_MS = 8000;
 const MAX_BODY_CHARS = 200;
 
 export type ListModelsResult = { ok: true; modelIds: string[] } | { ok: false; message: string };

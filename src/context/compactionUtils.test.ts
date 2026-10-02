@@ -1,24 +1,6 @@
-import {
-  compactBySection,
-  truncateWithEllipsis,
-  escapeXmlAttr,
-  mergeConfig,
-  DEFAULT_COMPACTION_CONFIG,
-} from "./compactionUtils";
+import { compactBySection, truncateWithEllipsis, escapeXmlAttr } from "./compactionUtils";
 
 describe("compactionUtils", () => {
-  describe("mergeConfig()", () => {
-    it("returns the default config when no overrides are given", () => {
-      expect(mergeConfig()).toEqual(DEFAULT_COMPACTION_CONFIG);
-    });
-
-    it("overrides only the provided fields and keeps the other defaults", () => {
-      const config = mergeConfig({ previewCharsPerSection: 100 });
-      expect(config.previewCharsPerSection).toBe(100);
-      expect(config.maxSections).toBe(DEFAULT_COMPACTION_CONFIG.maxSections);
-    });
-  });
-
   describe("truncateWithEllipsis()", () => {
     it("returns text at or under maxLength unchanged", () => {
       expect(truncateWithEllipsis("Short.", 100)).toBe("Short.");

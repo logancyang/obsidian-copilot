@@ -60,3 +60,5 @@ export const UnlicensedWithNoModelsOfTheirOwn: StoryObj<ModelSelectorProps> = {
     models: [LOCKED_COPILOT_ROW],
   },
 };
+
+export const CommandNeedsSelection: StoryObj<ModelSelectorProps> = { args: { value: "" } };

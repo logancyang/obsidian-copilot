@@ -1,67 +1,6 @@
-import {
-  compactL3ForL2,
-  extractSource,
-  extractContent,
-  compactXmlBlock,
-  getL2RefetchInstruction,
-} from "./L2ContextCompactor";
+import { compactL3ForL2, compactXmlBlock, getL2RefetchInstruction } from "./L2ContextCompactor";
 
 describe("L2ContextCompactor", () => {
-  describe("extractSource()", () => {
-    it("returns the path of a note block", () => {
-      const xml = `<note_context>
-<title>My Note</title>
-<path>folder/my-note.md</path>
-<content>Content here</content>
-</note_context>`;
-      expect(extractSource(xml)).toBe("folder/my-note.md");
-    });
-
-    it("returns the URL of a web block", () => {
-      const xml = `<url_content>
-<title>Web Page</title>
-<url>https://example.com/page</url>
-<content>Content here</content>
-</url_content>`;
-      expect(extractSource(xml)).toBe("https://example.com/page");
-    });
-
-    it("returns the name of a PDF block", () => {
-      const xml = `<embedded_pdf>
-<name>document.pdf</name>
-<content>PDF content</content>
-</embedded_pdf>`;
-      expect(extractSource(xml)).toBe("document.pdf");
-    });
-
-    it("prefers the path over the URL when a block has both", () => {
-      const xml = `<mixed>
-<path>local/file.md</path>
-<url>https://example.com</url>
-</mixed>`;
-      expect(extractSource(xml)).toBe("local/file.md");
-    });
-
-    it("returns an empty string when the block has no path, URL, or name", () => {
-      const xml = `<selected_text>
-<content>Just some text</content>
-</selected_text>`;
-      expect(extractSource(xml)).toBe("");
-    });
-  });
-
-  describe("extractContent()", () => {
-    it("returns the multi-line text inside the content tag", () => {
-      const xml = `<note_context>
-<title>Title</title>
-<path>path.md</path>
-<content>This is the actual content
-with multiple lines.</content>
-</note_context>`;
-      expect(extractContent(xml)).toBe("This is the actual content\nwith multiple lines.");
-    });
-  });
-
   describe("compactL3ForL2()", () => {
     it("returns content under the verbatim threshold unchanged", () => {
       const content = "Small content";

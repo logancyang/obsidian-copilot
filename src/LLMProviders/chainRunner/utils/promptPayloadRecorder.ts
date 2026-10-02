@@ -272,7 +272,3 @@ export async function flushRecordedPromptPayloadToLog(): Promise<void> {
   logMarkdownBlock(lines);
   latestSnapshot = null;
 }
-
-export function __getLatestPromptPayloadSnapshotForTests(): PromptPayloadSnapshot | null {
-  return latestSnapshot;
-}

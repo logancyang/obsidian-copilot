@@ -1,13 +1,10 @@
 import { ChainType } from "@/chainType";
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { ChatPromptTemplate } from "@langchain/core/prompts";
 
 import { ModelCapability, ReasoningEffort, Verbosity } from "@/constants";
 import type { MaterializedSourceType } from "@/context/contextCacheStore";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { atom, useAtom } from "jotai";
-import { TFile } from "obsidian";
 
 const userModelKeyAtom = atom<string | null>(null);
 const modelKeyAtom = atom(
@@ -112,13 +109,6 @@ export interface ModelConfig {
   enableCors?: boolean;
 }
 
-export interface SetChainOptions {
-  prompt?: ChatPromptTemplate;
-  chatModel?: BaseChatModel;
-  noteFile?: TFile;
-  abortController?: AbortController;
-}
-
 export interface CustomModel {
   configuredModelId?: string;
   name: string;
@@ -173,10 +163,6 @@ export function useModelKey() {
 
 export function getChainType(): ChainType {
   return settingsStore.get(chainTypeAtom);
-}
-
-export function setChainType(chainType: ChainType) {
-  settingsStore.set(chainTypeAtom, chainType);
 }
 
 export function subscribeToChainTypeChange(callback: () => void): () => void {

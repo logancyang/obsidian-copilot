@@ -10,7 +10,6 @@ describe("AgentReasoningBlock", () => {
           status="reasoning"
           elapsedSeconds={3}
           steps={["Inspecting the current interface"]}
-          isStreaming
         />
       );
 
@@ -25,7 +24,6 @@ describe("AgentReasoningBlock", () => {
           status="complete"
           elapsedSeconds={4}
           steps={["Inspecting the current interface"]}
-          isStreaming={false}
         />
       );
 

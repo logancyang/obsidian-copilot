@@ -158,34 +158,6 @@ describe("LayerToMessagesConverter", () => {
       expect(messages[1].content).toContain("User query");
     });
 
-    it("omits the system message when includeSystemMessage is false", () => {
-      const envelope = createMockEnvelope([
-        {
-          id: "L1_SYSTEM",
-          label: "System & Policies",
-          text: "System prompt",
-          stable: true,
-          segments: [],
-          hash: "l1-hash",
-        },
-        {
-          id: "L5_USER",
-          label: "User Message",
-          text: "User query",
-          stable: false,
-          segments: [],
-          hash: "l5-hash",
-        },
-      ]);
-
-      const messages = LayerToMessagesConverter.convert(envelope, {
-        includeSystemMessage: false,
-      });
-
-      expect(messages).toHaveLength(1);
-      expect(messages[0].role).toBe("user");
-    });
-
     it("omits the system message when the L1 text is empty", () => {
       const envelope = createMockEnvelope([
         {
@@ -229,34 +201,6 @@ describe("LayerToMessagesConverter", () => {
       expect(messages).toHaveLength(1);
       expect(messages[0].role).toBe("user");
       expect(messages[0].content).toBe("User query");
-    });
-
-    it("returns the L3 text and the L5 text as separate user messages when mergeUserContent is false", () => {
-      const envelope = createMockEnvelope([
-        {
-          id: "L3_TURN",
-          label: "Turn Context",
-          text: "Context about note.md",
-          stable: false,
-          segments: [],
-          hash: "l3-hash",
-        },
-        {
-          id: "L5_USER",
-          label: "User Message",
-          text: "Summarize this",
-          stable: false,
-          segments: [],
-          hash: "l5-hash",
-        },
-      ]);
-
-      const messages = LayerToMessagesConverter.convert(envelope, { mergeUserContent: false });
-
-      expect(messages).toEqual([
-        { role: "user", content: "Context about note.md" },
-        { role: "user", content: "Summarize this" },
-      ]);
     });
   });
 });

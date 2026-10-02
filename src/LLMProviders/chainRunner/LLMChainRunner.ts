@@ -20,11 +20,7 @@ export class LLMChainRunner extends BaseChainRunner {
 
     logInfo("[LLMChainRunner] Using envelope-based context");
 
-    const baseMessages = LayerToMessagesConverter.convert(userMessage.contextEnvelope, {
-      includeSystemMessage: true,
-      mergeUserContent: true,
-      debug: false,
-    });
+    const baseMessages = LayerToMessagesConverter.convert(userMessage.contextEnvelope);
 
     const messages: { role: string; content: string | unknown[] }[] = [];
 

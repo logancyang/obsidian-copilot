@@ -8,14 +8,12 @@ interface AgentReasoningBlockProps {
   status: ReasoningStatus;
   elapsedSeconds: number;
   steps: string[];
-  isStreaming: boolean;
 }
 
 export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
   status,
   elapsedSeconds,
   steps,
-  isStreaming,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [prevStatus, setPrevStatus] = useState(status);

@@ -7,7 +7,6 @@ import { KeychainService } from "@/services/keychainService";
 import { getSettings, setSettings } from "@/settings/model";
 import { frozenOr, sliceMemo, sliceMemoByKey } from "@/utils/sliceCache";
 
-import type { ProviderType } from "@/modelManagement/types/catalog";
 import type { Provider, ProviderOrigin } from "@/modelManagement/types/persisted";
 import type { VerificationResult } from "@/modelManagement/types/runtime";
 import type { ProviderAdapterRegistry } from "./adapters/ProviderAdapterRegistry";
@@ -29,13 +28,6 @@ export class ProviderRegistry {
     (source: Record<string, Provider>, kind: ProviderOrigin["kind"]) =>
       frozenOr(
         Object.values(source).filter((p) => p.origin.kind === kind),
-        EMPTY_LIST
-      )
-  );
-  readonly #byType = sliceMemoByKey(
-    (source: Record<string, Provider>, providerType: ProviderType) =>
-      frozenOr(
-        Object.values(source).filter((p) => p.providerType === providerType),
         EMPTY_LIST
       )
   );
@@ -72,10 +64,6 @@ export class ProviderRegistry {
 
   listByOrigin(originKind: ProviderOrigin["kind"]): readonly Provider[] {
     return this.#byOrigin(getSettings().providers, originKind);
-  }
-
-  listByProviderType(providerType: ProviderType): readonly Provider[] {
-    return this.#byType(getSettings().providers, providerType);
   }
 
   async add(input: Omit<Provider, "providerId" | "addedAt" | "apiKeyKeychainId">): Promise<string> {

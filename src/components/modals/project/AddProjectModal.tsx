@@ -19,7 +19,6 @@ import { ProjectInstructionsField } from "@/instructions/ProjectInstructionsFiel
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { getCachedProjectRecordById } from "@/projects/state";
 import { err2String, randomUUID } from "@/utils";
-import type CopilotPlugin from "@/main";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { App, Modal, Notice } from "obsidian";
 import React, { useEffect, useMemo, useState } from "react";
@@ -30,7 +29,6 @@ export interface AddProjectModalContentProps {
   initialProject?: ProjectConfig;
   onSave: (project: ProjectConfig) => Promise<void>;
   onCancel: () => void;
-  plugin?: CopilotPlugin;
   popoverContainer?: HTMLElement | null;
 }
 
@@ -38,7 +36,6 @@ export function AddProjectModalContent({
   initialProject,
   onSave,
   onCancel,
-  plugin,
   popoverContainer,
 }: AddProjectModalContentProps) {
   const app = useApp();
@@ -297,8 +294,7 @@ export class AddProjectModal extends Modal {
   constructor(
     app: App,
     private onSave: (project: ProjectConfig) => Promise<void>,
-    private initialProject?: ProjectConfig,
-    private plugin?: CopilotPlugin
+    private initialProject?: ProjectConfig
   ) {
     super(app);
   }
@@ -324,7 +320,6 @@ export class AddProjectModal extends Modal {
         initialProject={this.initialProject}
         onSave={handleSave}
         onCancel={handleCancel}
-        plugin={this.plugin}
         popoverContainer={contentEl}
       />
     );

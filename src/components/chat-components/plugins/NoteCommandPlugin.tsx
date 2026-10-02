@@ -33,7 +33,7 @@ export function NoteCommandPlugin({
   const loadNoteContent = useCallback(
     async (file: TFile): Promise<string> => {
       try {
-        const content = await previewCache.getOrLoadContent(file, 500);
+        const content = await previewCache.getOrLoadContent(file);
         setPreviewContent((prev) => {
           const newMap = new Map(prev);
           newMap.set(file.path, content);

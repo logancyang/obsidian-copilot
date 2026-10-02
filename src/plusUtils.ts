@@ -25,7 +25,7 @@ export function isSelfHostModeValid(): boolean {
   return getSettings().enableSelfHostMode === true && hasVerifiedFeature("self_host");
 }
 
-export function isPlusModel(modelKey: string): boolean {
+function isPlusModel(modelKey: string): boolean {
   const settings = getSettings();
   const configuredModel = settings.configuredModels.find(
     (model) => model.configuredModelId === modelKey
@@ -49,10 +49,6 @@ export function isUsingLicensedModels(settings: CopilotSettings): boolean {
     const baseModelId = backend?.defaultModel?.baseModelId;
     return baseModelId !== undefined && LICENSED_DEFAULT_WIRE_IDS.has(baseModelId);
   });
-}
-
-export function isPaidEnabled(): boolean {
-  return getSettings().isPaidUser === true;
 }
 
 function isEntitlementExpired(settings: CopilotSettings): boolean {
@@ -109,16 +105,12 @@ export function useIsPaidUser(): boolean | undefined {
   return useSettingsValue().isPaidUser;
 }
 
-export function useIsPlusUser(): boolean | undefined {
+function useIsPlusUser(): boolean | undefined {
   const settings = useSettingsValue();
   if (isEntitlementExpired(settings)) {
     return false;
   }
   return settings.isPlusUser;
-}
-
-export function canUseMultiAgent(): boolean {
-  return isPlusEnabled();
 }
 
 export async function ensureMultiAgentEntitlement(app?: App): Promise<boolean> {

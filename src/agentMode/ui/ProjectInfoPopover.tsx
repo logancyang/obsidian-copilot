@@ -245,12 +245,7 @@ function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps
     onClose();
     void moveProjectPromptToAgentsFile(app, record)
       .then(() =>
-        openAgentsFile(
-          app,
-          getProjectAnchorFromConfigPath(record.filePath).projectFolderPath,
-          "",
-          true
-        )
+        openAgentsFile(app, getProjectAnchorFromConfigPath(record.filePath).projectFolderPath)
       )
       .catch((error) => {
         logError("[ProjectInfoPopover] Failed to open project AGENTS.md", error);
@@ -275,13 +270,11 @@ interface ProjectInfoPopoverProps {
   app: App;
   project: ProjectConfig;
   todoList: AgentTodoListEntry[] | null;
-  onEdited?: (project: ProjectConfig) => void;
   container?: HTMLElement | null;
-  className?: string;
 }
 
 export const ProjectInfoPopover = memo(
-  ({ app, project, todoList, onEdited, container, className }: ProjectInfoPopoverProps) => {
+  ({ app, project, todoList, container }: ProjectInfoPopoverProps) => {
     const [open, setOpen] = useState(false);
 
     const handleEdit = () => {
@@ -290,11 +283,7 @@ export const ProjectInfoPopover = memo(
         app,
         async (next) => {
           try {
-            const updated = await ProjectFileManager.getInstance(app).updateProject(
-              project.id,
-              next
-            );
-            onEdited?.(updated.project);
+            await ProjectFileManager.getInstance(app).updateProject(project.id, next);
           } catch (e) {
             logError("[ProjectInfoPopover] updateProject failed", e);
             throw e;
@@ -311,7 +300,7 @@ export const ProjectInfoPopover = memo(
             variant="ghost2"
             size="icon"
             aria-label={`Project info for ${project.name}`}
-            className={cn("tw-size-7 tw-text-muted hover:tw-text-normal", className)}
+            className="tw-size-7 tw-text-muted hover:tw-text-normal"
           >
             <List className="tw-size-4" />
           </Button>

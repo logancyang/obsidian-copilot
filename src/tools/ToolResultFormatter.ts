@@ -313,13 +313,13 @@ export class ToolResultFormatter {
     return lines.join("\n");
   }
 
-  private static extractContentSnippet(content: string, maxLength = 150): string {
+  private static extractContentSnippet(content: string): string {
     if (!content) return "";
 
     const contentMatch = content.match(/NOTE BLOCK CONTENT:\s*([\s\S]*)/);
     const cleanContent = contentMatch?.[1] || content;
 
-    return cleanContent.substring(0, maxLength).replace(/\s+/g, " ").trim();
+    return cleanContent.substring(0, 150).replace(/\s+/g, " ").trim();
   }
 
   private static formatWebSearch(result: unknown): string {

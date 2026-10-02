@@ -10,7 +10,6 @@ import { reconcile } from "./reconcile";
 import {
   computeSkillSetSignature,
   getManagedSkills,
-  getRejectedSkills,
   SkillManager,
   type RefreshResult,
   useRejectedSkills,
@@ -167,14 +166,12 @@ describe("SkillManager", () => {
         await act(async () => {
           await manager.refresh();
         });
-        expect(getRejectedSkills()).toEqual([rejected]);
         expect(result.current).toEqual([rejected]);
         expect(loadErrorCount.current).toBe(1);
 
         await act(async () => {
           await manager.refresh();
         });
-        expect(getRejectedSkills()).toEqual([]);
         expect(result.current).toBe(initialRejectedSkills);
         expect(loadErrorCount.current).toBe(0);
 
@@ -367,65 +364,6 @@ describe("SkillManager", () => {
         expect(refreshSpy).toHaveBeenCalledTimes(1);
       });
     });
-    describe("renameSkill()", () => {
-      it("refreshes after a rename failure that already mutated the canonical directory", async () => {
-        const app = makeApp();
-        const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
-        mockedRunRenameSkill.mockResolvedValueOnce({
-          ok: false,
-          reason: "Could not rewrite SKILL.md",
-          mutated: true,
-        });
-        const refreshResult: RefreshResult = {
-          ok: true,
-          folder: "copilot/skills",
-          skillCount: 0,
-          reconcileErrorCount: 0,
-        };
-        const refreshSpy = jest.spyOn(manager, "refresh").mockResolvedValue(refreshResult);
-
-        const result = await manager.renameSkill(makeSkill(), "bar");
-
-        expect(result).toEqual({
-          ok: false,
-          code: "fs-error",
-          message: "Could not rewrite SKILL.md",
-        });
-        expect(refreshSpy).toHaveBeenCalledTimes(1);
-      });
-
-      it("renames one row in place without rerunning discovery or reconcile", async () => {
-        const app = makeApp();
-        const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
-        const skill = makeSkill();
-        await seedSkills(manager, [skill]);
-        mockedRunRenameSkill.mockResolvedValueOnce({
-          ok: true,
-          newDirPath: "/vault/copilot/skills/bar",
-          newFilePath: "/vault/copilot/skills/bar/SKILL.md",
-        });
-        mockedDiscoverManagedSkills.mockClear();
-        mockedReconcile.mockClear();
-
-        const result = await manager.renameSkill(skill, "bar");
-
-        expect(result).toEqual({ ok: true });
-        expect(mockedDiscoverManagedSkills).not.toHaveBeenCalled();
-        expect(mockedReconcile).not.toHaveBeenCalled();
-        expect(getManagedSkills()[0]).toMatchObject({
-          name: "bar",
-          dirPath: "/vault/copilot/skills/bar",
-          filePath: "/vault/copilot/skills/bar/SKILL.md",
-        });
-      });
-
-      it(`rejects renaming bundled content ${ISSUE}`, async () => {
-        expect(await builtinFixture().manager.renameSkill(builtinSkill, "changed")).toMatchObject({
-          ok: false,
-        });
-        expect(runRenameSkill).not.toHaveBeenCalled();
-      });
-    });
     describe("toggleAgent()", () => {
       it("adds the agent to one row without rerunning discovery or reconcile", async () => {
         const app = makeApp();
@@ -449,37 +387,6 @@ describe("SkillManager", () => {
         await f.manager.toggleAgent(builtinSkill, "opencode", false);
         expect(preferences[builtinSkill.name].disabledAgents).toEqual(["opencode"]);
         expect(runToggleAgent).not.toHaveBeenCalled();
-      });
-    });
-    describe("updateProperties()", () => {
-      it("updates one row in place without rerunning discovery or reconcile", async () => {
-        const app = makeApp();
-        const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
-        const skill = makeSkill();
-        await seedSkills(manager, [skill]);
-        mockedRunUpdateProperties.mockResolvedValueOnce({ ok: true });
-        mockedDiscoverManagedSkills.mockClear();
-        mockedReconcile.mockClear();
-
-        const result = await manager.updateProperties(skill, {
-          description: "Updated description.",
-          model: "claude-sonnet",
-        });
-
-        expect(result).toEqual({ ok: true });
-        expect(mockedDiscoverManagedSkills).not.toHaveBeenCalled();
-        expect(mockedReconcile).not.toHaveBeenCalled();
-        expect(getManagedSkills()[0]).toMatchObject({
-          description: "Updated description.",
-          model: "claude-sonnet",
-        });
-      });
-
-      it(`rejects edits to bundled content ${ISSUE}`, async () => {
-        expect(
-          await builtinFixture().manager.updateProperties(builtinSkill, { description: "changed" })
-        ).toMatchObject({ ok: false });
-        expect(runUpdateProperties).not.toHaveBeenCalled();
       });
     });
     describe("deleteSkill()", () => {
@@ -597,6 +504,38 @@ describe("SkillManager", () => {
           code: "collision",
           message: "A skill with that name already exists.",
         });
+        expect(mockedRunUpdateProperties).not.toHaveBeenCalled();
+      });
+
+      it("refreshes from disk and returns the failure when the rename fails after mutating the canonical directory", async () => {
+        const app = makeApp();
+        const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+        const skill = makeSkill();
+        await seedSkills(manager, [skill]);
+        mockedRunRenameSkill.mockResolvedValueOnce({
+          ok: false,
+          reason: "Could not rewrite SKILL.md",
+          mutated: true,
+        });
+        const refreshResult: RefreshResult = {
+          ok: true,
+          folder: "copilot/skills",
+          skillCount: 0,
+          reconcileErrorCount: 0,
+        };
+        const refreshSpy = jest.spyOn(manager, "refresh").mockResolvedValue(refreshResult);
+
+        const result = await manager.saveProperties(skill, {
+          newName: "bar",
+          patch: { description: "Updated description." },
+        });
+
+        expect(result).toEqual({
+          ok: false,
+          code: "fs-error",
+          message: "Could not rewrite SKILL.md",
+        });
+        expect(refreshSpy).toHaveBeenCalledTimes(1);
         expect(mockedRunUpdateProperties).not.toHaveBeenCalled();
       });
 

@@ -32,10 +32,6 @@ function managedInstallActionStateSignature(state: ManagedInstallActionState): s
   }
 }
 
-export function useActiveBackendDescriptor(): BackendDescriptor {
-  return getActiveBackendDescriptor(useSettingsValue());
-}
-
 export function useSessionBackendDescriptor(
   manager: AgentSessionManager | null | undefined
 ): BackendDescriptor {

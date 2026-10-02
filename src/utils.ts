@@ -14,9 +14,7 @@ import { MemoryVariables } from "@langchain/core/memory";
 import { DateTime } from "luxon";
 import { App, MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
-export { checkModelApiKey, err2String, getProviderLabel } from "@/lib/model-display-utils";
-
-export type FetchImplementation = (url: string, init?: RequestInit) => Promise<Response>;
+export { err2String } from "@/lib/model-display-utils";
 
 export function getDomainFromUrl(url: string): string {
   try {
@@ -80,11 +78,6 @@ export function getApiErrorMessage(error: unknown): string {
     (errorDetail.reason ? `Error: ${errorDetail.reason}` : ERROR_MESSAGES.UNKNOWN_ERROR)
   );
 }
-
-export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean => {
-  const fileSegments = fileFullpath.split("/").map((segment) => segment.toLowerCase());
-  return fileSegments.includes(inputPath.toLowerCase());
-};
 
 export const getNotesFromPath = (vault: Vault, path: string): TFile[] => {
   const files = vault.getMarkdownFiles();
@@ -583,14 +576,6 @@ function createReadableStreamFromString(input: string) {
   });
 }
 
-export function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
-  const result = { ...obj };
-  keys.forEach((key) => {
-    delete result[key];
-  });
-  return result;
-}
-
 export function modelSupportsVision(model: CustomModel): boolean {
   return !!model.capabilities?.includes(ModelCapability.VISION);
 }
@@ -707,8 +692,6 @@ export async function insertIntoEditor(app: App, message: string, replace: boole
 
   finalizeInsertion();
 }
-
-export { debounce } from "@/utils/debounce";
 
 export function isNewerVersion(latest: string, current: string): boolean {
   return compareSemver(latest, current) > 0;
@@ -836,11 +819,8 @@ export function getModelInfo(model: BaseChatModel | string): ModelInfo {
   };
 }
 
-export function getMessageRole(
-  model: BaseChatModel | string,
-  defaultRole: "system" | "human" = "system"
-): "system" | "human" {
-  return isOSeriesModel(model) ? "human" : defaultRole;
+export function getMessageRole(model: BaseChatModel | string): "system" | "human" {
+  return isOSeriesModel(model) ? "human" : "system";
 }
 
 export function extractTextFromChunk(content: unknown): string {
@@ -988,11 +968,7 @@ export function sanitizeFilePath(filePath: string): string {
   return parts.join("/");
 }
 
-export async function openFileInWorkspace(
-  app: App,
-  file: TFile,
-  focusIfOpen: boolean = true
-): Promise<void> {
+export async function openFileInWorkspace(app: App, file: TFile): Promise<void> {
   let existingLeaf = null;
   app.workspace.iterateAllLeaves((leaf) => {
     if (
@@ -1009,9 +985,9 @@ export async function openFileInWorkspace(
     }
   });
 
-  if (existingLeaf && focusIfOpen) {
+  if (existingLeaf) {
     app.workspace.setActiveLeaf(existingLeaf, { focus: true });
-  } else if (!existingLeaf) {
+  } else {
     const leaf = app.workspace.getLeaf("tab");
     await leaf.openFile(file);
   }

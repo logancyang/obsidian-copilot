@@ -5,8 +5,6 @@ import React from "react";
 const baseProps = {
   isSelected: false,
   onClick: jest.fn(),
-  isFirst: false,
-  isLast: false,
 };
 
 describe("setting-tabs", () => {

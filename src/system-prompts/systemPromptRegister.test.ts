@@ -1,4 +1,4 @@
-import { App, Notice, Plugin, Vault } from "obsidian";
+import { App, Notice, Vault } from "obsidian";
 import { SystemPromptRegister } from "@/system-prompts/systemPromptRegister";
 import * as state from "@/system-prompts/state";
 import * as systemPromptUtils from "@/system-prompts/systemPromptUtils";
@@ -48,7 +48,6 @@ function cachedPrompt(title: string) {
 
 describe("systemPromptRegister", () => {
   describe("SystemPromptRegister", () => {
-    let mockPlugin: Plugin;
     let mockVault: Vault;
     let mockApp: App;
     let register: SystemPromptRegister;
@@ -62,7 +61,6 @@ describe("systemPromptRegister", () => {
 
       vaultEventHandlers = {};
 
-      mockPlugin = {} as Plugin;
       mockVault = {
         on: jest.fn((event: string, handler: (...args: unknown[]) => unknown) => {
           vaultEventHandlers[event] = handler;
@@ -71,7 +69,7 @@ describe("systemPromptRegister", () => {
       } as unknown as Vault;
 
       mockApp = { vault: mockVault } as unknown as App;
-      register = new SystemPromptRegister(mockPlugin, mockApp);
+      register = new SystemPromptRegister(mockApp);
     });
 
     afterEach(() => {

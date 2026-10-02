@@ -18,11 +18,12 @@ import type { QuickAskMessage } from "./types";
 
 interface UseQuickAskSessionParams {
   selectedText: string;
-  selectedModelKey: string;
+  selectedModelKey: string | undefined;
   includeNoteContext: boolean;
 }
 
 interface QuickAskSessionApi {
+  hasModel: boolean;
   messages: QuickAskMessage[];
   isStreaming: boolean;
   sendMessage: (inputText: string) => Promise<void>;
@@ -145,6 +146,7 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
   }, [messages, isStreaming, streamingText]);
 
   return {
+    hasModel: resolvedModel !== null,
     messages: displayMessages,
     isStreaming,
     sendMessage,

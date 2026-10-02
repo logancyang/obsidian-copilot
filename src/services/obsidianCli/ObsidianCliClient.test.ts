@@ -2,7 +2,6 @@ import { Platform } from "obsidian";
 import {
   buildObsidianCliArgs,
   isDesktopRuntime,
-  runDailyReadCommand,
   runRandomReadCommand,
   runObsidianCliCommand,
 } from "@/services/obsidianCli/ObsidianCliClient";
@@ -171,21 +170,6 @@ describe("ObsidianCliClient", () => {
       await expect(runObsidianCliCommand({ command: "daily:read" })).rejects.toThrow(
         "only supported in desktop Obsidian"
       );
-    });
-  });
-
-  describe("runDailyReadCommand()", () => {
-    it("runs daily:read against the given vault", async () => {
-      installExecFile((_binary, callback) => callback(null, "Daily note content", ""));
-
-      const result = await runDailyReadCommand("Personal");
-
-      expect(result).toMatchObject({
-        ok: true,
-        command: "daily:read",
-        args: ["vault=Personal", "daily:read"],
-        stdout: "Daily note content",
-      });
     });
   });
 

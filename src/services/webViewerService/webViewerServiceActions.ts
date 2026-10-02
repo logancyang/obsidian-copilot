@@ -1,20 +1,12 @@
-import { logError, logInfo, logWarn } from "@/logger";
+import { logError } from "@/logger";
 import { getYouTubeVideoId } from "@/utils/youtubeUrl";
 import {
   requireWebview,
-  type SaveToVaultResult,
-  WEB_VIEWER_COMMANDS,
-  type WebViewerCommandId,
   type WebViewerLeaf,
   type WebViewerPageInfo,
   WebViewerTimeoutError,
 } from "@/services/webViewerService/webViewerServiceTypes";
 import { htmlToMarkdown, toStringSafe } from "@/services/webViewerService/webViewerServiceHelpers";
-
-export type ExecuteWebViewerCommand = (
-  id: WebViewerCommandId,
-  options?: { leaf?: WebViewerLeaf; focusLeaf?: boolean }
-) => Promise<void>;
 
 export function getPageInfo(leaf: WebViewerLeaf): WebViewerPageInfo {
   return {
@@ -362,34 +354,4 @@ export async function getYouTubeTranscript(
   }
 
   return result;
-}
-
-export async function saveToVault(
-  leaf: WebViewerLeaf,
-  executeCommand: ExecuteWebViewerCommand,
-  options: { preferCommand?: boolean; focusLeafBeforeCommand?: boolean } = {}
-): Promise<SaveToVaultResult> {
-  const { preferCommand = true, focusLeafBeforeCommand = true } = options;
-
-  if (preferCommand) {
-    try {
-      await executeCommand(WEB_VIEWER_COMMANDS.SAVE_TO_VAULT, {
-        leaf,
-        focusLeaf: focusLeafBeforeCommand,
-      });
-      logInfo("Saved via webviewer:save-to-vault command");
-      return { method: "command" };
-    } catch (err) {
-      logWarn("save-to-vault command failed, falling back:", err);
-    }
-  }
-
-  try {
-    await Promise.resolve(leaf.view.saveAsMarkdown());
-    logInfo("Saved via view.saveAsMarkdown()");
-    return { method: "view.saveAsMarkdown" };
-  } catch (err) {
-    logError("Failed to save Web Viewer page:", err);
-    throw err;
-  }
 }

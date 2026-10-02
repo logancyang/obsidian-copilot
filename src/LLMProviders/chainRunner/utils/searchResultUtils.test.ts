@@ -399,14 +399,6 @@ describe("searchResultUtils", () => {
       expect(result).not.toContain("a".repeat(301));
     });
 
-    it("cuts the snippet to a custom snippetLength", () => {
-      const longContent = "b".repeat(200);
-      const docs = [{ title: "Doc", content: longContent }];
-      const result = formatMetadataOnlyDocuments(docs, 100);
-      expect(result).toContain(`<snippet>${"b".repeat(100)}</snippet>`);
-      expect(result).not.toContain("b".repeat(101));
-    });
-
     it("omits the path when the document has none", () => {
       const docs = [{ title: "Doc", content: "Content" }];
       const result = formatMetadataOnlyDocuments(docs);

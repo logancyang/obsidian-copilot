@@ -97,5 +97,3 @@ export function CreateProjectPanel({
     doc.body
   );
 }
-
-export default CreateProjectPanel;

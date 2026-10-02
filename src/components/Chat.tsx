@@ -34,7 +34,6 @@ import { logFileManager } from "@/logFileManager";
 import CopilotPlugin from "@/main";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { ChatManagerChatUIState } from "@/state/ChatUIState";
-import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage } from "@/types/message";
 import { err2String, isPlusChain, modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
@@ -50,7 +49,6 @@ interface ChatProps {
   chainManager: ChainManager;
   onSaveChat: (saveAsNote: () => Promise<void>) => void;
   updateUserMessageHistory: (newMessage: string) => void;
-  fileParserManager: FileParserManager;
   plugin: CopilotPlugin;
   chatUIState: ChatManagerChatUIState;
 }
@@ -59,7 +57,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   chainManager,
   onSaveChat,
   updateUserMessageHistory,
-  fileParserManager,
   plugin,
   chatUIState,
   chatInput,
@@ -306,6 +303,16 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       new Notice("Failed to save chat as note. Check console for details.");
     }
   }, [app, chatUIState, currentModelKey]);
+
+  const handleCopyChatLink = useCallback(
+    () =>
+      plugin.copyChatLink(async () => {
+        // Links need a saved note: https://github.com/Brevilabs/obsidian-copilot-private/issues/601
+        if (!chatUIState.getSourcePath()) await chatUIState.saveChat(currentModelKey);
+        return chatUIState.getSourcePath();
+      }),
+    [plugin, chatUIState, currentModelKey]
+  );
 
   const handleStopGenerating = useCallback(
     (reason?: ABORT_REASON) => {
@@ -682,8 +689,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           onDelete={safeAsyncHandler(handleDelete)}
         />
         <ChatControls
-          chatLinkId={sourcePath || undefined}
-          onCopyChatLink={(id) => plugin.copyChatLink(id)}
+          onCopyChatLink={chatHistory.length > 0 && !loading ? handleCopyChatLink : undefined}
           onNewChat={() => void handleNewChat()}
           onSaveAsNote={() => handleSaveAsNote()}
           onLoadHistory={() => void handleLoadChatHistory()}

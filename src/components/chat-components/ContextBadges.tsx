@@ -72,7 +72,7 @@ function FaviconImage({ faviconUrl, className }: { faviconUrl: string; className
   );
 }
 
-export function FaviconOrGlobe({
+function FaviconOrGlobe({
   faviconUrl,
   isLoaded = true,
   className = "tw-size-3",

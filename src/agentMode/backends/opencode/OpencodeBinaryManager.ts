@@ -95,7 +95,7 @@ export function computeInstallState(
   return { kind: "absent" };
 }
 
-export function readOpencodeSettings(): OpencodeBackendSettings {
+function readOpencodeSettings(): OpencodeBackendSettings {
   return getSettings().agentMode?.backends?.opencode ?? {};
 }
 
@@ -176,10 +176,6 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
       }
       throw error;
     }
-  }
-
-  getInstallState(): InstallState {
-    return computeInstallState(readOpencodeSettings());
   }
 
   async refreshInstallState(): Promise<void> {

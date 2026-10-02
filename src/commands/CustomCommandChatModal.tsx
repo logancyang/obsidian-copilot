@@ -1,4 +1,3 @@
-import { useModelKey } from "@/aiParams";
 import { processCommandPrompt } from "@/commands/customCommandUtils";
 import { MenuCommandModal, type ContentState } from "@/components/command-ui";
 import { useApp } from "@/context";
@@ -23,14 +22,13 @@ import { Root } from "react-dom/client";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { CustomCommand } from "@/commands/type";
 import { useSettingsValue, updateSetting } from "@/settings/model";
+import { openCopilotSettings } from "@/settings/openSettings";
 import {
   useStreamingChatSession,
   type StreamingChatTurnContext,
 } from "@/hooks/use-streaming-chat-session";
 import { ABORT_REASON } from "@/constants";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
-
-export type ModelSelectionScope = "quick-command" | "custom-command";
 
 export interface ModalBehaviorConfig {
   autoExecuteOnOpen: boolean;
@@ -39,7 +37,6 @@ export interface ModalBehaviorConfig {
   commandLabel: string;
   commandIcon?: React.ReactNode | null;
   showIncludeNoteContext?: boolean;
-  modelSelectionScope?: ModelSelectionScope;
 }
 
 function resolveBehaviorConfig(
@@ -68,7 +65,7 @@ interface CustomCommandChatModalContentProps {
   behaviorConfig?: Partial<ModalBehaviorConfig>;
 }
 
-function CustomCommandChatModalContent({
+export function CustomCommandChatModalContent({
   originalText,
   command,
   onInsert,
@@ -122,28 +119,10 @@ function CustomCommandChatModalContent({
   const [isLoading, setIsLoading] = useState(behavior.autoExecuteOnOpen);
   const [followUpValue, setFollowUpValue] = useState("");
 
-  const [globalModelKey] = useModelKey();
   const settings = useSettingsValue();
-  const modelSelectionScope = behavior.modelSelectionScope ?? "custom-command";
-
-  const initialModelKey = useMemo(() => {
-    if (modelSelectionScope === "quick-command") {
-      return settings.quickCommandModelKey ?? globalModelKey;
-    }
-    return command.modelKey || globalModelKey;
-  }, [modelSelectionScope, settings.quickCommandModelKey, command.modelKey, globalModelKey]);
-
-  const [userSelectedModelKey, setUserSelectedModelKey] = useState(initialModelKey);
-
-  const handleModelChange = useCallback(
-    (newModelKey: string) => {
-      setUserSelectedModelKey(newModelKey);
-      if (modelSelectionScope === "quick-command") {
-        updateSetting("quickCommandModelKey", newModelKey);
-      }
-    },
-    [modelSelectionScope]
-  );
+  const [pickedModelKey, setPickedModelKey] = useState<string>();
+  const userSelectedModelKey =
+    pickedModelKey ?? (command.modelKey || settings.quickCommandModelKey);
 
   const [includeNoteContext, setIncludeNoteContext] = useState(
     () => settings.quickCommandIncludeNoteContext
@@ -158,7 +137,8 @@ function CustomCommandChatModalContent({
 
   const chatPicker = useChatModelPicker({
     value: userSelectedModelKey,
-    onChange: handleModelChange,
+    onChange: setPickedModelKey,
+    fallbackToFirst: false,
   });
 
   const {
@@ -166,13 +146,19 @@ function CustomCommandChatModalContent({
     streamingText,
     runTurn,
     stop: stopStreaming,
+    reset: resetSession,
     getLatestStreamingText,
   } = useStreamingChatSession({
     model: resolvedModel,
     systemPrompt: systemPrompt || "",
     excludeThinking: true,
     onNoModel: () => {
-      new Notice("No active model is configured. Please configure a model in Copilot settings.");
+      // An explicit command model overrides the default, so setting a default cannot repair it. https://github.com/Brevilabs/obsidian-copilot-private/issues/616
+      new Notice(
+        command.modelKey
+          ? "This command's model is unavailable. Edit the command in Settings → Copilot → Command to choose another, then rerun."
+          : "Configure a model in Settings → Copilot → Command, then rerun the command."
+      );
       setIsLoading(false);
     },
     onNonAbortError: (error) => {
@@ -205,6 +191,48 @@ function CustomCommandChatModalContent({
     return { type: "idle" };
   }, [isLoading, isStreaming, streamingText, finalText]);
 
+  const [firstInstruction, setFirstInstruction] = useState<string | null>(null);
+
+  const runPrompt = useCallback(
+    async (getPrompt: (ctx: StreamingChatTurnContext) => Promise<string>) => {
+      setFinalText("");
+      setEditedText("");
+      setIsLoading(true);
+      try {
+        const result = await runTurn(async (ctx: StreamingChatTurnContext) => {
+          if (ctx.signal.aborted) return "";
+          const prompt = await getPrompt(ctx);
+          lastInputPromptRef.current = prompt;
+          return prompt;
+        });
+
+        if (isMountedRef.current && result) {
+          setFinalText(result);
+          lastInputPromptRef.current = "";
+        }
+      } catch (error) {
+        logError("Error running command prompt:", error);
+        if (isMountedRef.current) {
+          new Notice("Failed to send message. Please try again.");
+        }
+      } finally {
+        if (isMountedRef.current) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [runTurn]
+  );
+
+  const buildFirstPrompt = (instruction: string) =>
+    processCommandPrompt(
+      app,
+      behavior.firstSubmitTransform
+        ? behavior.firstSubmitTransform(instruction, includeNoteContext)
+        : instruction,
+      originalText
+    );
+
   const didAutoExecuteRef = useRef(false);
 
   useEffect(() => {
@@ -212,40 +240,16 @@ function CustomCommandChatModalContent({
     if (didAutoExecuteRef.current) return;
     didAutoExecuteRef.current = true;
 
-    let cancelled = false;
-
-    async function generateInitialResponse() {
-      try {
-        const result = await runTurn(async (ctx: StreamingChatTurnContext) => {
-          if (ctx.signal.aborted) return "";
-          const prompt = await processCommandPrompt(app, command.content, originalText);
-          lastInputPromptRef.current = prompt;
-          return prompt;
-        });
-
-        if (!cancelled && result) {
-          setFinalText(result);
-          lastInputPromptRef.current = "";
-        }
-      } catch (error) {
-        logError("Error in initial response:", error);
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void generateInitialResponse();
-
-    return () => {
-      cancelled = true;
-      stopStreaming(ABORT_REASON.UNMOUNT);
-    };
-  }, [app, behavior.autoExecuteOnOpen, command.content, originalText, runTurn, stopStreaming]);
+    void runPrompt(() => processCommandPrompt(app, command.content, originalText));
+  }, [app, behavior.autoExecuteOnOpen, command.content, originalText, runPrompt]);
 
   const handleFollowUpSubmit = async () => {
     if (!followUpValue.trim()) return;
+    // Preserve the instruction while the user repairs an unavailable selection. https://github.com/Brevilabs/obsidian-copilot-private/issues/616
+    if (!resolvedModel) {
+      new Notice("Select a model to continue.");
+      return;
+    }
 
     if (followUpSubmitLockRef.current) return;
     if (isLoading || isStreaming) return;
@@ -254,47 +258,27 @@ function CustomCommandChatModalContent({
 
     const inputValue = followUpValue;
     setFollowUpValue("");
-    setFinalText("");
-    setEditedText("");
 
     try {
-      setIsLoading(true);
-
-      const result = await runTurn(async (ctx: StreamingChatTurnContext) => {
-        if (ctx.signal.aborted) return "";
-
-        const isFirstTurn = ctx.isFirstTurn;
-
-        let rawInput = inputValue;
-        if (isFirstTurn && behavior.firstSubmitTransform) {
-          rawInput = behavior.firstSubmitTransform(rawInput, includeNoteContext);
-        }
-
-        const prompt = await processCommandPrompt(app, rawInput, originalText, !isFirstTurn);
-        lastInputPromptRef.current = prompt;
-        return prompt;
+      await runPrompt(async (ctx) => {
+        if (!ctx.isFirstTurn) return processCommandPrompt(app, inputValue, originalText, true);
+        setFirstInstruction(inputValue);
+        return buildFirstPrompt(inputValue);
       });
-
-      if (!isMountedRef.current) return;
-
-      if (result) {
-        setFinalText(result);
-        lastInputPromptRef.current = "";
-      }
-    } catch (error) {
-      if (!(error instanceof Error && error.name === "AbortError")) {
-        logError("Error in follow-up submit:", error);
-        if (isMountedRef.current) {
-          new Notice("Failed to send message. Please try again.");
-        }
-      }
     } finally {
-      if (isMountedRef.current) {
-        setIsLoading(false);
-      }
       followUpSubmitLockRef.current = false;
     }
   };
+
+  const runAgainInstruction = behavior.autoExecuteOnOpen ? command.content : firstInstruction;
+
+  const handleRunAgain =
+    runAgainInstruction === null
+      ? undefined
+      : () => {
+          resetSession();
+          void runPrompt(() => buildFirstPrompt(runAgainInstruction));
+        };
 
   const handleStop = useCallback(() => {
     const latestStreamedText = getLatestStreamingText().trim();
@@ -344,7 +328,10 @@ function CustomCommandChatModalContent({
       selectedModel={chatPicker.value}
       onSelectModel={chatPicker.onChange}
       models={chatPicker.models}
+      needsModel={!resolvedModel}
+      onOpenModelSettings={(ownerWindow) => openCopilotSettings(app, ownerWindow, "command")}
       onStop={handleStop}
+      onRunAgain={handleRunAgain}
       onCopy={safeAsyncHandler(handleCopy)}
       onInsert={handleInsert}
       onReplace={handleReplace}

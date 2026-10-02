@@ -112,14 +112,12 @@ export const AgentSettings: React.FC = () => {
 
       <div className="tw-flex tw-flex-col">
         <div ref={tabStripRef} className="tw-flex tw-flex-wrap tw-gap-1" role="tablist">
-          {tabs.map((tab, index) => (
+          {tabs.map((tab) => (
             <TabItem
               key={tab.id}
               tab={tab}
               isSelected={selectedTabId === tab.id}
               onClick={() => handleSelectTab(tab.id)}
-              isFirst={index === 0}
-              isLast={index === tabs.length - 1}
               variant="inline"
             />
           ))}

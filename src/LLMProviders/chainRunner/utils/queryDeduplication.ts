@@ -17,13 +17,9 @@ export function computeWordOverlap(a: string, b: string): number {
   return Math.max(jaccard, containment);
 }
 
-export function findDuplicateQuery(
-  query: string,
-  previousQueries: string[],
-  threshold = 0.6
-): string | null {
+export function findDuplicateQuery(query: string, previousQueries: string[]): string | null {
   for (const prev of previousQueries) {
-    if (computeWordOverlap(query, prev) >= threshold) {
+    if (computeWordOverlap(query, prev) >= 0.6) {
       return prev;
     }
   }

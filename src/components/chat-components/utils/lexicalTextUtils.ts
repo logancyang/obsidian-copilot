@@ -2,8 +2,6 @@ import {
   $getSelection,
   $isRangeSelection,
   $createTextNode,
-  $setSelection,
-  $createRangeSelection,
   LexicalNode,
   TextNode,
   createCommand,
@@ -100,9 +98,6 @@ export interface ParsedContent {
 
 export interface InsertTextOptions {
   enableURLPills?: boolean;
-  enableToolPills?: boolean;
-  enableCustomTemplatePills?: boolean;
-  insertAtSelection?: boolean;
 }
 
 function splitTextAtRange(
@@ -114,31 +109,6 @@ function splitTextAtRange(
     beforeText: text.slice(0, startOffset),
     afterText: text.slice(endOffset),
   };
-}
-
-function $replaceTextNodeWithNodes(
-  textNode: TextNode,
-  nodes: LexicalNode[],
-  setCursorAfter: boolean = true
-): void {
-  if (nodes.length === 1 && nodes[0].getType() === "text") {
-    textNode.replace(nodes[0]);
-    if (setCursorAfter) {
-      $setSelectionAfterNode(nodes[0]);
-    }
-  } else {
-    for (let i = 0; i < nodes.length; i++) {
-      if (i === 0) {
-        textNode.replace(nodes[i]);
-      } else {
-        nodes[i - 1].insertAfter(nodes[i]);
-      }
-    }
-    if (setCursorAfter && nodes.length > 0) {
-      const lastNode = nodes[nodes.length - 1];
-      $setSelectionAfterNode(lastNode);
-    }
-  }
 }
 
 function $insertPillWithOptionalSpace(
@@ -164,23 +134,6 @@ function $insertPillWithOptionalSpace(
   }
 
   pillNode.selectNext();
-}
-
-function $setSelectionAfterNode(node: LexicalNode): void {
-  if (node.getType() === "text") {
-    const textNode = node as TextNode;
-    const textLength = textNode.getTextContent().length;
-    textNode.select(textLength, textLength);
-  } else {
-    const parent = node.getParent();
-    if (parent) {
-      const rangeSelection = $createRangeSelection();
-      const nodeIndex = node.getIndexWithinParent();
-      rangeSelection.anchor.set(parent.getKey(), nodeIndex + 1, "element");
-      rangeSelection.focus.set(parent.getKey(), nodeIndex + 1, "element");
-      $setSelection(rangeSelection);
-    }
-  }
 }
 
 export const INSERT_TEXT_WITH_PILLS_COMMAND: LexicalCommand<{
@@ -496,7 +449,7 @@ export function $insertTextWithPills(
   text: string,
   options: InsertTextOptions = {}
 ): void {
-  const { enableURLPills = false, insertAtSelection = true } = options;
+  const { enableURLPills = false } = options;
 
   if (!text) return;
 
@@ -514,69 +467,7 @@ export function $insertTextWithPills(
   const nodes = createNodesFromSegments(segments);
 
   if (nodes.length > 0) {
-    if (insertAtSelection) {
-      selection.insertNodes(nodes);
-    } else {
-      selection.removeText();
-      selection.insertNodes(nodes);
-    }
-  }
-}
-
-export function $replaceTextRangeWithPills(
-  app: App,
-  startOffset: number,
-  endOffset: number,
-  newText: string,
-  options: InsertTextOptions = {}
-): void {
-  const {
-    enableURLPills = false,
-    enableToolPills = false,
-    enableCustomTemplatePills = false,
-  } = options;
-
-  const selection = $getSelection();
-  if (!$isRangeSelection(selection)) return;
-
-  const anchor = selection.anchor;
-  const anchorNode = anchor.getNode();
-
-  if (anchorNode.getType() !== "text") return;
-
-  const textNode = anchorNode as TextNode;
-  const textContent = textNode.getTextContent();
-
-  const segments = parseTextForPills(app, newText, {
-    includeNotes: true,
-    includeURLs: enableURLPills,
-    includeTools: enableToolPills,
-    includeCustomTemplates: enableCustomTemplatePills,
-  });
-
-  if (segments.length === 1 && segments[0].type === "text") {
-    const { beforeText, afterText } = splitTextAtRange(textContent, startOffset, endOffset);
-    const finalText = beforeText + segments[0].content + afterText;
-    textNode.setTextContent(finalText);
-
-    const newOffset = beforeText.length + segments[0].content.length;
-    textNode.select(newOffset, newOffset);
-  } else {
-    const { beforeText, afterText } = splitTextAtRange(textContent, startOffset, endOffset);
-
-    const nodes: LexicalNode[] = [];
-
-    if (beforeText) {
-      nodes.push($createTextNode(beforeText));
-    }
-
-    nodes.push(...createNodesFromSegments(segments));
-
-    if (afterText) {
-      nodes.push($createTextNode(afterText));
-    }
-
-    $replaceTextNodeWithNodes(textNode, nodes);
+    selection.insertNodes(nodes);
   }
 }
 

@@ -5,7 +5,6 @@ import {
   buildConversationHistoryBlock,
   buildPriorFanoutContextBlock,
   buildSummaryUserPrompt,
-  EMPTY_PENDING_FANOUT_CONTEXT,
   FANOUT_HISTORY_MAX_CHARS,
   FANOUT_PERSISTED_ANSWER_MAX_CHARS,
   isDirectAnswerTurn,
@@ -145,7 +144,6 @@ describe("fanoutTypes", () => {
   describe("buildPriorFanoutContextBlock()", () => {
     it("returns null for an empty buffer so the prompt stays unchanged", () => {
       expect(buildPriorFanoutContextBlock([])).toBeNull();
-      expect(buildPriorFanoutContextBlock(EMPTY_PENDING_FANOUT_CONTEXT)).toBeNull();
     });
 
     it("frames a single turn as prior conversation with labeled question + summary, escaping XML", () => {

@@ -262,5 +262,3 @@ function compactReadNoteResult(
     _wasCompacted: true,
   };
 }
-
-export { compactAssistantOutput as compactChatHistoryContent };

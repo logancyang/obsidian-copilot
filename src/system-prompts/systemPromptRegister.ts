@@ -1,4 +1,4 @@
-import { App, Notice, Plugin, TAbstractFile, Vault } from "obsidian";
+import { App, Notice, TAbstractFile, Vault } from "obsidian";
 import {
   isSystemPromptFile,
   getSystemPromptsFolder,
@@ -22,14 +22,12 @@ import { debounce } from "@/utils/debounce";
 import { logError, logInfo } from "@/logger";
 
 export class SystemPromptRegister {
-  private plugin: Plugin;
   private app: App;
   private vault: Vault;
   private settingsUnsubscriber?: () => void;
   private folderChangeRequestId = 0;
 
-  constructor(plugin: Plugin, app: App) {
-    this.plugin = plugin;
+  constructor(app: App) {
     this.app = app;
     this.vault = app.vault;
     this.initializeEventListeners();

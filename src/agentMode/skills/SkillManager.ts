@@ -74,12 +74,6 @@ export type ToggleAgentResult = SkillOperationResult<
 
 export type DeleteSkillResult = SkillOperationResult<"no-vault-path" | "fs-error">;
 
-export type UpdatePropertiesResult = SkillOperationResult<"fs-error">;
-
-export type RenameSkillResult = SkillOperationResult<
-  "no-vault-path" | "invalid" | "collision" | "eperm" | "fs-error"
->;
-
 export type SavePropertiesResult = SkillOperationResult<
   "no-vault-path" | "invalid" | "collision" | "eperm" | "fs-error"
 >;
@@ -202,10 +196,6 @@ export class SkillManager {
   subscribeToSkillSetChange(listener: SkillSetChangeListener): () => void {
     this.skillSetListeners.add(listener);
     return () => this.skillSetListeners.delete(listener);
-  }
-
-  computeSkillSetSignature(backendId: BackendId): string {
-    return computeSkillSetSignature(getManagedSkills(), backendId);
   }
 
   private async runRefreshLoop(initialFolder: string): Promise<RefreshResult> {
@@ -449,24 +439,6 @@ export class SkillManager {
     return result.ok ? { ok: true } : fsFailure(result.reason ?? "Unknown filesystem error.");
   }
 
-  async updateProperties(
-    skill: Skill,
-    patch: Omit<SkillFrontmatterPatch, "name" | "enabledAgents">
-  ): Promise<UpdatePropertiesResult> {
-    if (skill.builtin)
-      return fsFailure("Built-in skills cannot be edited or deleted. Disable the skill instead.");
-    const fs = createNodeReconcileFs();
-    const vaultRoot = resolveVaultRootAbs(this.app);
-    const result = await this.runInternalMutation(
-      () => runUpdateProperties({ skill, patch, fs }),
-      (r) => (r.ok && vaultRoot !== null ? buildUpdatePropertiesExpectations(skill, vaultRoot) : [])
-    );
-    if (result.ok) {
-      this.replaceManagedSkill(skill, applyPropertiesPatch(skill, patch));
-    }
-    return result.ok ? { ok: true } : fsFailure(result.reason);
-  }
-
   async saveProperties(
     skill: Skill,
     req: {
@@ -551,60 +523,6 @@ export class SkillManager {
 
     this.replaceManagedSkill(skill, applyPropertiesPatch(activeSkill, req.patch));
     return { ok: true };
-  }
-
-  async renameSkill(skill: Skill, newName: string): Promise<RenameSkillResult> {
-    if (skill.builtin)
-      return fsFailure("Built-in skills cannot be edited or deleted. Disable the skill instead.");
-    const vaultRoot = resolveVaultRootAbs(this.app);
-    if (vaultRoot === null) {
-      return noVaultPathFailure();
-    }
-    const folder = resolveSkillsFolder();
-    const canonical = resolveAbsolutePath(this.app, folder);
-    if (canonical === null) {
-      return noVaultPathFailure();
-    }
-
-    const fs = createNodeReconcileFs();
-    const agentDirsAbs = this.resolveAgentDirsAbs(vaultRoot);
-    const result = await this.runInternalMutation(
-      async () => {
-        const renameResult = await runRenameSkill({
-          skill,
-          newName,
-          canonicalAbsRoot: canonical,
-          agentDirsAbs,
-          fs,
-        });
-        if (renameResult.ok || (!renameResult.ok && renameResult.reason === "eperm")) {
-          await this.cleanupLinksToSkill(fs, vaultRoot, skill.dirPath);
-        }
-        return renameResult;
-      },
-      (r) =>
-        r.ok || (!r.ok && r.reason === "eperm")
-          ? buildRenameExpectations(skill, newName, canonical, agentDirsAbs, vaultRoot)
-          : []
-    );
-
-    if (!result.ok && result.reason === "eperm") {
-      skillManagerStore.set(epermSeenAtom, true);
-    }
-
-    if (result.ok || (!result.ok && result.reason === "eperm")) {
-      this.replaceManagedSkill(skill, buildRenamedSkill(skill, newName, canonical));
-    } else if (result.mutated === true) {
-      void this.refresh();
-    }
-    if (result.ok) return { ok: true };
-    if (result.reason === "invalid") {
-      return { ok: false, code: "invalid", message: "Skill name is invalid." };
-    }
-    if (result.reason === "collision") {
-      return { ok: false, code: "collision", message: "A skill with that name already exists." };
-    }
-    return failureFromReason(result.reason);
   }
 
   resolveCanonicalNameForMigration(name: string): string {
@@ -958,10 +876,6 @@ export function dismissEpermBanner(): void {
 
 export function getManagedSkills(): Skill[] {
   return skillManagerStore.get(skillsAtom);
-}
-
-export function getRejectedSkills(): RejectedSkill[] {
-  return skillManagerStore.get(rejectedSkillsAtom);
 }
 
 function computeNextAgents(current: BackendId[], agent: BackendId, enabled: boolean): BackendId[] {

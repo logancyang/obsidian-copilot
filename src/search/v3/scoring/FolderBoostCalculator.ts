@@ -33,10 +33,6 @@ export class FolderBoostCalculator {
     this.app = app || null;
   }
 
-  setConfig(config: Partial<FolderBoostConfig>): void {
-    this.config = { ...this.config, ...config };
-  }
-
   applyBoosts(results: NoteIdRank[]): NoteIdRank[] {
     if (!this.config.enabled || results.length === 0) {
       return results;
@@ -154,12 +150,5 @@ export class FolderBoostCalculator {
         );
       });
     }
-  }
-
-  getFolderBoosts(results: NoteIdRank[]): Map<string, FolderBoostResult> {
-    if (!this.config.enabled) {
-      return new Map();
-    }
-    return this.calculateFolderStats(results);
   }
 }

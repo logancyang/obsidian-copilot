@@ -124,7 +124,7 @@ interface SourcesSection {
   sourcesBlock: string;
 }
 
-export function extractSourcesSection(content: string): SourcesSection | null {
+function extractSourcesSection(content: string): SourcesSection | null {
   const sourcesRegex = /([\s\S]*?)\n+(?:####\s*)?Sources\s*:?\s*\n+([\s\S]*)$/i;
   const match = content.match(sourcesRegex);
   if (match) {
@@ -212,7 +212,7 @@ function buildCitationMap(mainContent: string, footnoteLines: string[]): Map<num
   return map;
 }
 
-export function normalizeCitations(content: string, map: Map<number, number>): string {
+function normalizeCitations(content: string, map: Map<number, number>): string {
   let result = content;
   let changed;
   do {
@@ -319,7 +319,7 @@ function consolidateDuplicateSources(items: string[]): {
   return { uniqueItems, consolidationMap };
 }
 
-export function updateCitationsForConsolidation(
+function updateCitationsForConsolidation(
   content: string,
   consolidationMap: Map<number, number>
 ): string {
@@ -340,7 +340,7 @@ export function updateCitationsForConsolidation(
   });
 }
 
-export function deduplicateAdjacentCitations(content: string): string {
+function deduplicateAdjacentCitations(content: string): string {
   let result = content;
   let prev;
   do {

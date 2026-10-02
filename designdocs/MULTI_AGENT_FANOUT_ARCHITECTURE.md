@@ -29,15 +29,15 @@ Summary-first tab row switching between the summary and each full answer.
 
 ## Modules
 
-| Stage              | Module                                                    | Responsibility                                                        |
-| ------------------ | --------------------------------------------------------- | --------------------------------------------------------------------- |
-| Routing            | `fanout/answerers.ts`                                     | `resolveAnswerers` / `isFanout`: `@`-mentions → answerer list. Pure.  |
-| Entitlement        | `plusUtils.ts`                                            | `canUseMultiAgent` (sync) + `ensureMultiAgentEntitlement` (re-check). |
-| Orchestration      | `fanout/FanoutOrchestrator.ts`                            | Per-agent sub-sessions, timeouts, cancel, then multi-answer summary.  |
-| Turn data + format | `fanout/fanoutTypes.ts`                                   | Types, serialize/parse/render composite, history budgeting.           |
-| Live state         | `AgentMessageStore` (`setFanout`)                         | Holds `message.fanout`; bumps a version per streamed tick.            |
-| Render             | `FanoutMessageCard` + `FanoutTurnView` + `fanoutDropdown` | Direct or Summary-first tabs, per-tab live status, 2-tier copy.       |
-| Persistence        | `AgentChatPersistenceManager` + serializer                | The composite markdown body IS the saved form; no schema change.      |
+| Stage              | Module                                                    | Responsibility                                                       |
+| ------------------ | --------------------------------------------------------- | -------------------------------------------------------------------- |
+| Routing            | `fanout/answerers.ts`                                     | `resolveAnswerers` / `isFanout`: `@`-mentions → answerer list. Pure. |
+| Entitlement        | `plusUtils.ts`                                            | `isPlusEnabled` (sync) + `ensureMultiAgentEntitlement` (re-check).   |
+| Orchestration      | `fanout/FanoutOrchestrator.ts`                            | Per-agent sub-sessions, timeouts, cancel, then multi-answer summary. |
+| Turn data + format | `fanout/fanoutTypes.ts`                                   | Types, serialize/parse/render composite, history budgeting.          |
+| Live state         | `AgentMessageStore` (`setFanout`)                         | Holds `message.fanout`; bumps a version per streamed tick.           |
+| Render             | `FanoutMessageCard` + `FanoutTurnView` + `fanoutDropdown` | Direct or Summary-first tabs, per-tab live status, 2-tier copy.      |
+| Persistence        | `AgentChatPersistenceManager` + serializer                | The composite markdown body IS the saved form; no schema change.     |
 
 ## Key decisions
 

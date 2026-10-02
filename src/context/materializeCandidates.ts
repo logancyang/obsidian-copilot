@@ -1,7 +1,7 @@
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { App, TFile } from "obsidian";
 
-export const MATERIALIZE_EXTENSIONS = new Set([
+const MATERIALIZE_EXTENSIONS = new Set([
   "pdf",
   "doc",
   "docx",

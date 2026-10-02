@@ -869,7 +869,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               status={reasoningData.status}
               elapsedSeconds={reasoningData.elapsedSeconds}
               steps={reasoningData.steps}
-              isStreaming={isStreaming}
             />
           )}
 

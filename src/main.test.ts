@@ -114,37 +114,56 @@ describe("main", () => {
     describe("copyChatLink()", () => {
       beforeEach(() => jest.clearAllMocks());
 
-      it("copies the saved file's frontmatter epoch as a vault-scoped URI", async () => {
+      it("copies a markdown link titled by the chat topic that targets the note's epoch", async () => {
         const plugin = createPluginUnderTest([]);
+        const frontmatter = { epoch: 1735732800000, topic: "Trip planning" };
         Object.assign(plugin, {
           app: {
-            vault: { getName: () => "My Vault" },
-            metadataCache: { getCache: () => ({ frontmatter: { epoch: 1735732800000 } }) },
+            vault: {
+              getName: () => "My Vault",
+              getAbstractFileByPath: (path: string) =>
+                new (TFile as unknown as new (path: string) => TFile)(path),
+            },
+            metadataCache: {
+              getCache: () => ({ frontmatter }),
+              getFileCache: () => ({ frontmatter }),
+            },
           },
         });
         const writeText = jest.fn().mockResolvedValue(undefined);
         Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
 
-        await plugin.copyChatLink("Copilot/conversations/renamed.md");
+        await plugin.copyChatLink(async () => "Copilot/conversations/renamed.md");
 
         expect(writeText).toHaveBeenCalledWith(
-          "obsidian://copilot-chat?vault=My+Vault&id=epoch%3A1735732800000"
+          "[Trip planning](obsidian://copilot-chat?vault=My+Vault&id=epoch%3A1735732800000)"
         );
       });
 
-      it("copies a native agent identity without looking for a Markdown note", async () => {
-        const plugin = createPluginUnderTest([]);
-        Object.assign(plugin, { app: { vault: { getName: () => "My Vault" } } });
-        const nativeId = "copilot-agent-session://codex/abc";
-        const writeText = jest.fn().mockResolvedValue(undefined);
-        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+      it.each([
+        ["returns no note", async () => ""],
+        [
+          "throws",
+          async () => {
+            throw new Error("disk full");
+          },
+        ],
+      ])(
+        "reports a failure and copies nothing when saving the chat %s https://github.com/Brevilabs/obsidian-copilot-private/issues/601",
+        async (_, resolveNotePath) => {
+          const plugin = createPluginUnderTest([]);
+          const writeText = jest.fn().mockResolvedValue(undefined);
+          Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: { writeText },
+          });
 
-        await plugin.copyChatLink(nativeId);
+          await plugin.copyChatLink(resolveNotePath);
 
-        expect(writeText).toHaveBeenCalledWith(
-          "obsidian://copilot-chat?vault=My+Vault&id=copilot-agent-session%3A%2F%2Fcodex%2Fabc"
-        );
-      });
+          expect(writeText).not.toHaveBeenCalled();
+          expect(Notice).toHaveBeenCalledWith("Could not copy chat link.");
+        }
+      );
     });
 
     describe("openChatDeepLink()", () => {

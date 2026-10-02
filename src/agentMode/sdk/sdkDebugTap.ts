@@ -19,7 +19,7 @@ export interface LogSdkFrameArgs {
   kind?: SdkFrameKind;
 }
 
-export function logSdkFrame(args: LogSdkFrameArgs, sink: SdkFrameSinkLike = frameSink): void {
+function logSdkFrame(args: LogSdkFrameArgs, sink: SdkFrameSinkLike = frameSink): void {
   const id = args.id ?? null;
   const idLabel = id !== null ? `#${id}` : args.kind === "notif" ? "(notif)" : "(no-id)";
   logInfo(
