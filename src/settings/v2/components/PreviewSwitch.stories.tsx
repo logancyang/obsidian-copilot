@@ -5,8 +5,7 @@ const meta = {
   title: "Settings/Preview Switch",
   component: PreviewChannelSwitch,
   args: {
-    currentVersion: "4.0.13",
-    hasUpdate: false,
+    previewVersion: null,
     previewEnabled: false,
     onSelect: () => undefined,
   },
@@ -20,6 +19,6 @@ export const Preview: StoryObj<PreviewChannelSwitchProps> = {
   args: { previewEnabled: true },
 };
 
-export const UpdateAvailable: StoryObj<PreviewChannelSwitchProps> = {
-  args: { previewEnabled: true, hasUpdate: true },
+export const PreviewAheadOfOfficial: StoryObj<PreviewChannelSwitchProps> = {
+  args: { previewEnabled: true, previewVersion: "4.0.14" },
 };

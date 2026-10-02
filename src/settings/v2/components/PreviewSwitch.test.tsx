@@ -16,13 +16,19 @@ jest.mock("@/settings/model", () => ({
 function renderSwitch({
   available = true,
   previewEnabled = false,
-  hasUpdate = false,
-}: { available?: boolean; previewEnabled?: boolean; hasUpdate?: boolean } = {}) {
+  currentVersion = "4.0.13",
+  latestVersion = "4.0.13",
+}: {
+  available?: boolean;
+  previewEnabled?: boolean;
+  currentVersion?: string;
+  latestVersion?: string | null;
+} = {}) {
   jest.mocked(useIsPreviewAvailable).mockReturnValue(available);
   jest.mocked(useSettingsValue).mockReturnValue({
     previewEnabled,
   } as ReturnType<typeof useSettingsValue>);
-  return render(<PreviewSwitch currentVersion="4.0.13" hasUpdate={hasUpdate} />);
+  return render(<PreviewSwitch currentVersion={currentVersion} latestVersion={latestVersion} />);
 }
 
 describe("PreviewSwitch", () => {
@@ -31,24 +37,21 @@ describe("PreviewSwitch", () => {
   });
 
   describe("PreviewSwitch()", () => {
-    it("labels Preview with the installed release and links to that release's notes", () => {
-      renderSwitch();
+    it("offers Official and Preview with the saved choice selected", () => {
+      renderSwitch({ previewEnabled: true });
 
       expect(screen.getByRole("radio", { name: "Official" }).getAttribute("aria-checked")).toBe(
+        "false"
+      );
+      expect(screen.getByRole("radio", { name: "Preview" }).getAttribute("aria-checked")).toBe(
         "true"
       );
-      expect(
-        screen.getByRole("radio", { name: "Preview · 4.0.13" }).getAttribute("aria-checked")
-      ).toBe("false");
-      expect(
-        screen.getByRole("link", { name: "See what is in this preview" }).getAttribute("href")
-      ).toBe("https://github.com/logancyang/obsidian-copilot/releases/tag/4.0.13");
     });
 
     it("turns Preview on and confirms the switch", () => {
       renderSwitch();
 
-      fireEvent.click(screen.getByRole("radio", { name: "Preview · 4.0.13" }));
+      fireEvent.click(screen.getByRole("radio", { name: "Preview" }));
 
       expect(updateSetting).toHaveBeenCalledWith("previewEnabled", true);
       expect(Notice).toHaveBeenCalledWith("Copilot Preview is on.");
@@ -63,18 +66,28 @@ describe("PreviewSwitch", () => {
       expect(Notice).toHaveBeenCalledWith("Copilot is back on Official.");
     });
 
-    it("prompts an update to the community store when a newer release exists", () => {
-      renderSwitch({ hasUpdate: true });
+    it("shows the preview version when the installed release is newer than the latest official (https://github.com/Brevilabs/obsidian-copilot-private/issues/626)", () => {
+      renderSwitch({ currentVersion: "4.0.14", latestVersion: "4.0.13" });
 
-      expect(
-        screen.getByRole("link", { name: "Update to get the latest preview" }).getAttribute("href")
-      ).toBe("obsidian://show-plugin?id=copilot");
+      expect(screen.getByRole("radio", { name: "Preview · v4.0.14" })).toBeTruthy();
     });
 
-    it("omits the update prompt when the installed release is the latest", () => {
-      renderSwitch();
+    it.each([
+      ["equals", "4.0.13"],
+      ["is older than", "4.0.14"],
+    ])(
+      "hides the preview version when the installed release %s the latest official",
+      (_relation, latestVersion) => {
+        renderSwitch({ currentVersion: "4.0.13", latestVersion });
 
-      expect(screen.queryByRole("link", { name: "Update to get the latest preview" })).toBeNull();
+        expect(screen.getByRole("radio", { name: "Preview" })).toBeTruthy();
+      }
+    );
+
+    it("hides the preview version until the latest official release is known", () => {
+      renderSwitch({ currentVersion: "4.0.14", latestVersion: null });
+
+      expect(screen.getByRole("radio", { name: "Preview" })).toBeTruthy();
     });
 
     it("renders nothing when the verified token does not carry preview", () => {

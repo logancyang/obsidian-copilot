@@ -173,6 +173,10 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "b
                         )}
                       </>
                     )}
+                    <PreviewSwitch
+                      currentVersion={plugin.manifest.version}
+                      latestVersion={latestVersion}
+                    />
                   </div>
                 </div>
                 <div className="tw-self-end sm:tw-self-auto">
@@ -181,7 +185,6 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "b
                   </Button>
                 </div>
               </div>
-              <PreviewSwitch currentVersion={plugin.manifest.version} hasUpdate={hasUpdate} />
             </div>
             <SettingsContent key={resetKey} />
           </div>
