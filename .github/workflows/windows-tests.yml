@@ -41,8 +41,8 @@ jobs:
           key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
       - if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci
-      - name: Test native PowerShell publishing wrapper
-        run: npm test -- --runInBand src/agentMode/skills/builtin/openArtifactsPublishWrappers.test.ts
+      - name: Test native PowerShell wrappers
+        run: npm test -- --runInBand src/agentMode/skills/builtin/openArtifactsPublishWrappers.test.ts src/builtinSkills/relayWrappers.test.ts
       - name: Verify sanitization without regexp optimization
         run: node --no-regexp-optimization node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/openArtifacts/openArtifactsDocument.test.ts src/utils/redactLog.test.ts
 
@@ -79,7 +79,7 @@ jobs:
             ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json') }}-
       - if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci
-      # The PowerShell wrapper suite runs in publish-windows. Running it again
+      # The PowerShell wrapper suites run in publish-windows. Running it again
       # in the full-suite process intermittently exceeds its subprocess timeout.
       - name: Run remaining native Windows unit suite
         shell: pwsh
@@ -90,7 +90,7 @@ jobs:
           node --version >> windows-test-results/environment.txt
           npm.cmd --version >> windows-test-results/environment.txt
           node -p "process.platform + ' ' + process.arch" >> windows-test-results/environment.txt
-          node node_modules/jest/bin/jest.js --shard=${{ matrix.shard }}/4 --cacheDirectory=.jest-cache --silent --testPathIgnorePatterns=openArtifactsPublishWrappers.test.ts --json --outputFile=windows-test-results/jest-${{ matrix.shard }}.json *> windows-test-results/jest-${{ matrix.shard }}.log
+          node node_modules/jest/bin/jest.js --shard=${{ matrix.shard }}/4 --cacheDirectory=.jest-cache --silent --testPathIgnorePatterns=openArtifactsPublishWrappers.test.ts --testPathIgnorePatterns=relayWrappers.test.ts --json --outputFile=windows-test-results/jest-${{ matrix.shard }}.json *> windows-test-results/jest-${{ matrix.shard }}.log
           $testExitCode = $LASTEXITCODE
           if ($testExitCode -ne 0) {
             Get-Content windows-test-results/jest-${{ matrix.shard }}.log
