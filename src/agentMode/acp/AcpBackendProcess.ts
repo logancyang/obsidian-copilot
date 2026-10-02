@@ -619,11 +619,9 @@ export class AcpBackendProcess implements BackendProcess {
     this.lastPlanUsage = null;
     this.backendContextWindows.clear();
     if (this.process) {
-      try {
-        await this.process.shutdown();
-      } catch (e) {
-        logError("[AgentMode] backend shutdown failed", e);
-      }
+      // Removal must fail before deleting files when the owned process cannot stop.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+      await this.process.shutdown();
       this.process = null;
     }
   }

@@ -1592,5 +1592,22 @@ describe("AcpBackendProcess", () => {
         expect(usageEvents(handler)[0].update.usage.contextWindow).toBeUndefined();
       });
     });
+
+    describe("shutdown()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 reports failed shutdown and retries the same owned process", async () => {
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend(),
+          "test-version",
+          buildStubDescriptor()
+        );
+        await backend.start();
+        const owner = jest.mocked(AcpProcessManager).mock.results.at(-1)!.value;
+        owner.shutdown.mockRejectedValueOnce(new Error("stop denied"));
+        await expect(backend.shutdown()).rejects.toThrow("stop denied");
+        await backend.shutdown();
+        expect(owner.shutdown).toHaveBeenCalledTimes(2);
+      });
+    });
   });
 });

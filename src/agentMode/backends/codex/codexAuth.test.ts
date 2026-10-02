@@ -284,9 +284,9 @@ describe("codexAuth", () => {
           });
           if (host === "win32")
             expect(mockExec).toHaveBeenCalledWith(
-              "taskkill",
+              "taskkill.exe",
               ["/PID", String(processChild.pid), "/T", "/F"],
-              { windowsHide: true },
+              { windowsHide: true, timeout: 10_000 },
               expect.any(Function)
             );
           else expect(kill).toHaveBeenCalledWith(-processChild.pid, "SIGTERM");

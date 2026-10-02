@@ -222,9 +222,9 @@ describe("cliSignIn", () => {
         await Promise.resolve();
         expect(completed).toBe(false);
         expect(mockExec).toHaveBeenCalledWith(
-          "taskkill",
+          "taskkill.exe",
           ["/PID", "12345", "/T", "/F"],
-          { windowsHide: true },
+          { windowsHide: true, timeout: 10_000 },
           expect.any(Function)
         );
         complete(null);

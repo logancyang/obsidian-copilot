@@ -342,6 +342,54 @@ describe("ManagedBinaryManager", () => {
       });
     });
     describe("uninstall()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 waits for runtime shutdown before removing a managed selection", async () => {
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
+        manager.settings = {
+          binarySource: "managed",
+          binaryPath: "/managed/binary",
+          binaryVersion: "1.2.3",
+        };
+        let release!: () => void;
+        let started!: () => void;
+        const stopping = new Promise<void>((resolve) => {
+          started = resolve;
+        });
+        manager.subscribeBeforeManagedRemoval(async () => {
+          started();
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        });
+        const uninstalling = manager.uninstall();
+        const waited = await Promise.race([
+          stopping.then(() => true),
+          uninstalling.then(() => false),
+        ]);
+        if (waited) {
+          expect(fs.existsSync(manager.getDataDir())).toBe(true);
+          expect(manager.settings.binarySource).toBeUndefined();
+          release();
+        }
+        await uninstalling;
+        expect(waited).toBe(true);
+        expect(fs.existsSync(manager.getDataDir())).toBe(false);
+        expect(manager.settings.binarySource).toBeUndefined();
+      });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 preserves files and restores the managed selection when runtime shutdown fails", async () => {
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
+        const selected = {
+          binarySource: "managed" as const,
+          binaryPath: "/managed/binary",
+          binaryVersion: "1.2.3",
+        };
+        manager.settings = selected;
+        manager.subscribeBeforeManagedRemoval(async () => {
+          throw new Error("Cannot stop runtime");
+        });
+        await expect(manager.uninstall()).rejects.toThrow("Cannot stop runtime");
+        expect(fs.existsSync(manager.getDataDir())).toBe(true);
+        expect(manager.settings).toEqual(selected);
+      });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 removes all managed versions and clears the managed selection", async () => {
         fs.mkdirSync(path.join(manager.getDataDir(), "1.2.3"), { recursive: true });
         manager.settings = {
@@ -366,13 +414,56 @@ describe("ManagedBinaryManager", () => {
           binaryVersion: "1.2.3",
         };
         const selected = manager.settings;
+        const stop = jest.fn();
+        manager.subscribeBeforeManagedRemoval(stop);
         await manager.uninstall();
+        expect(stop).not.toHaveBeenCalled();
         expect(fs.existsSync(manager.getDataDir())).toBe(false);
         expect(fs.existsSync(customPath)).toBe(true);
         expect(manager.settings).toEqual(selected);
       });
     });
+    describe("subscribeBeforeManagedRemoval()", () => {
+      it("notifies runtime owners with the validated selection and detaches them on unsubscribe", async () => {
+        const selections: string[] = [];
+        const unsubscribe = manager.subscribeBeforeManagedRemoval(async () => {
+          selections.push(manager.settings.binaryPath!);
+        });
+        await manager.setCustomBinaryPath(customPath);
+        unsubscribe();
+        await manager.setCustomBinaryPath(customPath);
+        expect(selections).toEqual([customPath]);
+      });
+    });
+
     describe("setCustomBinaryPath()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 waits for the selected custom runtime to replace the managed process before deleting downloads", async () => {
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
+        const managedPath = path.join(manager.getDataDir(), "agent");
+        fs.writeFileSync(managedPath, "managed");
+        let release!: () => void;
+        let started!: () => void;
+        const refreshing = new Promise<void>((resolve) => {
+          started = resolve;
+        });
+        manager.subscribeBeforeManagedRemoval(async () => {
+          expect(manager.settings.binaryPath).toBe(customPath);
+          started();
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        });
+        const selected = manager.setCustomBinaryPath(customPath);
+        expect(await Promise.race([refreshing.then(() => true), selected.then(() => false)])).toBe(
+          true
+        );
+        expect(fs.existsSync(managedPath)).toBe(true);
+        release();
+        await selected;
+        expect(fs.existsSync(managedPath)).toBe(false);
+        expect(manager.settings.binarySource).toBe("custom");
+        expect(manager.getRuntimeState()).toEqual({ kind: "idle" });
+      });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 validates and selects a custom executable before removing managed downloads", async () => {
         fs.mkdirSync(manager.getDataDir(), { recursive: true });
         manager.validate.mockImplementationOnce(async (binaryPath) => {

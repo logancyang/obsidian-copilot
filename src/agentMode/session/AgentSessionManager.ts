@@ -189,6 +189,7 @@ export interface AgentSessionManagerOptions {
 export class AgentSessionManager {
   private backends = new Map<BackendId, BackendProcess>();
   private starting = new Map<BackendId, Promise<BackendProcess>>();
+  private readonly startingProcesses = new Map<BackendId, BackendProcess>();
   private sessions = new Map<string, AgentSession>();
   private chatUIStates = new Map<string, AgentChatUIState>();
   private activeSessionId: string | null = null;
@@ -219,7 +220,7 @@ export class AgentSessionManager {
     BackendId,
     { reason: string; immediate: boolean }
   >();
-  private readonly restartingBackends = new Set<BackendId>();
+  private readonly restartingBackends = new Map<BackendId, Promise<void>>();
   /**
    * Backends running with spawn config the user has since changed. Applying it restarts the
    * backend and closes every session, so it waits for the user's Reload.
@@ -1537,6 +1538,9 @@ export class AgentSessionManager {
     if (this.disposed) return false;
     const inflight = this.starting.get(backendId);
     if (inflight) {
+      // Release pending startup before awaiting it. https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+      if (options?.deferWhileBusy === false)
+        await this.startingProcesses.get(backendId)?.shutdown();
       await inflight.catch(() => undefined);
     }
     const backend = this.backends.get(backendId);
@@ -1607,19 +1611,30 @@ export class AgentSessionManager {
     return Array.from(this.sessions.values()).some((s) => s.backendId === backendId);
   }
 
-  async onInstallStateChanged(backendId: BackendId): Promise<void> {
+  /**
+   * Refreshes runtime ownership after installation changes, including before cleanup.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+   * @param backendId - Backend whose configured executable changed.
+   * @param options - Whether a running turn may delay release of the old executable.
+   */
+  async onInstallStateChanged(
+    backendId: BackendId,
+    options?: { deferWhileBusy?: boolean }
+  ): Promise<void> {
     if (this.disposed) return;
     const installState = this.opts.resolveDescriptor(backendId)?.getInstallState(getSettings());
     if (installState?.kind === "checking") return;
+    // Release probes before dependent startup. https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+    if (options?.deferWhileBusy === false) await this.preloader.stopBackend(backendId);
     if (installState?.kind !== "ready") {
-      await this.restartBackend(backendId, "binary no longer available");
-      this.preloader.clearCached(backendId);
+      await this.restartBackend(backendId, "binary no longer available", options);
+      await this.preloader.stopBackend(backendId);
       if (!installState || installState.kind === "absent") {
         if (this.preloadStatus.delete(backendId)) this.notify();
       }
       return;
     }
-    const refreshed = await this.restartBackend(backendId, "binary path changed");
+    const refreshed = await this.restartBackend(backendId, "binary path changed", options);
     if (!refreshed) {
       this.registerPreload(backendId, this.preloader.preload(backendId));
     }
@@ -2542,6 +2557,7 @@ export class AgentSessionManager {
         clientVersion: this.plugin.manifest.version,
         descriptor,
       });
+      this.startingProcesses.set(backendId, proc);
       if (proc.start) await proc.start();
       this.wireProcessCallbacks(backendId, proc);
       this.installBackendExitHandler(backendId, proc, descriptor);
@@ -2553,6 +2569,7 @@ export class AgentSessionManager {
       return await startPromise;
     } finally {
       this.starting.delete(backendId);
+      this.startingProcesses.delete(backendId);
     }
   }
 
@@ -2662,7 +2679,8 @@ export class AgentSessionManager {
     reason: string,
     immediate = false
   ): Promise<void> {
-    if (this.restartingBackends.has(backendId)) {
+    const inFlight = this.restartingBackends.get(backendId);
+    if (inFlight) {
       const prev = this.pendingBackendRestarts.get(backendId);
       this.pendingBackendRestarts.set(backendId, {
         reason: prev ? `${prev.reason}; ${reason}` : reason,
@@ -2671,11 +2689,25 @@ export class AgentSessionManager {
       // A Search scope change queued behind another refresh must keep its
       // non-deferrable privacy semantics when the first refresh completes.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
+      // Managed cleanup awaits the queued refresh to release its executable.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+      if (immediate) await inFlight;
       return;
     }
     const proc = this.backends.get(backendId);
     if (!proc) return;
-    this.restartingBackends.add(backendId);
+    const restarting = Promise.resolve().then(() =>
+      this.performBackendRestart(backendId, reason, proc)
+    );
+    this.restartingBackends.set(backendId, restarting);
+    await restarting;
+  }
+
+  private async performBackendRestart(
+    backendId: BackendId,
+    reason: string,
+    proc: BackendProcess
+  ): Promise<void> {
     // Every restart rebuilds spawn config from current settings, so nothing is
     // held once one runs — including restarts this hold never asked for, such
     // as a tightened privacy boundary or a binary that changed underneath.
@@ -2714,7 +2746,7 @@ export class AgentSessionManager {
       if (this.backends.get(backendId) === proc) {
         this.backends.delete(backendId);
       }
-      this.preloader.clearCached(backendId);
+      void this.preloader.clearCached(backendId);
       new Notice(`${this.resolveDescriptor(backendId).displayName} refreshed.`);
       if (!this.disposed && this.isBackendInstalled(backendId)) {
         const probe = this.preloader.preload(backendId);

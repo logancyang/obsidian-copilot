@@ -43,8 +43,21 @@ export abstract class ManagedBinaryManager<
   private operation: AbortController | null = null;
   private runtimeState: ManagedInstallRuntimeState = { kind: "idle" };
   private readonly subscribers = new Set<() => void>();
+  private readonly removalHandlers = new Set<() => Promise<void>>();
 
   constructor(private readonly displayName: string) {}
+
+  /**
+   * Lets runtime owners release managed files before uninstall or custom selection.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+   * @param handler - Stops execution of the previous managed binary before deletion.
+   */
+  subscribeBeforeManagedRemoval(handler: () => Promise<void>): () => void {
+    this.removalHandlers.add(handler);
+    return () => {
+      this.removalHandlers.delete(handler);
+    };
+  }
 
   readonly subscribeRuntimeState = (onChange: () => void): (() => void) => {
     this.subscribers.add(onChange);
@@ -270,8 +283,22 @@ export abstract class ManagedBinaryManager<
 
   async uninstall(): Promise<void> {
     return this.runExclusive({ kind: "busy" }, async () => {
-      await this.removeManagedDownloads();
-      if (this.readBinarySettings().binarySource !== "custom") this.clearBinarySettings();
+      const previous = this.readBinarySettings();
+      if (previous.binarySource === "custom") {
+        await this.removeManagedDownloads();
+        return;
+      }
+      // Mark unavailable before stopping owners so neither a busy chat nor a probe
+      // restarts the executable being removed. Restore selection if removal fails.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+      this.clearBinarySettings();
+      try {
+        await this.beforeManagedRemoval();
+        await this.removeManagedDownloads();
+      } catch (error) {
+        this.updateBinarySettings(previous);
+        throw error;
+      }
     });
   }
 
@@ -293,12 +320,20 @@ export abstract class ManagedBinaryManager<
       binarySource: "custom",
     });
     try {
+      // Refresh owners before reclaiming files; a settings notification alone
+      // neither waits for process exit nor interrupts a busy managed runtime.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+      await this.beforeManagedRemoval();
       await this.removeManagedDownloads();
     } catch (error) {
       throw new Error(
         `Your own binary is now in use, but Copilot could not remove its managed downloads: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+  }
+
+  private async beforeManagedRemoval(): Promise<void> {
+    await Promise.all(Array.from(this.removalHandlers, (stop) => stop()));
   }
 
   private async removeManagedDownloads(): Promise<void> {

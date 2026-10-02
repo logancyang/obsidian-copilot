@@ -104,6 +104,31 @@ function buildDescriptor(makeProc: () => MockProcHandle): {
 }
 
 describe("AgentModelPreloader", () => {
+  describe("stopBackend()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/620 stops a process that is still discovering models and prevents caching it after uninstall", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      let rejectProbe!: (error: Error) => void;
+      procHandle.newSession.mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectProbe = reject;
+          })
+      );
+      const probing = preloader.preload(descriptor.id);
+      await waitFor(() => expect(procHandle.newSession).toHaveBeenCalled());
+      descriptor.getInstallState = () => ({ kind: "absent" });
+      procHandle.shutdown.mockImplementation(async () => {
+        rejectProbe(new Error("closed"));
+      });
+      await preloader.stopBackend(descriptor.id);
+      await probing;
+      expect(procHandle.shutdown).toHaveBeenCalled();
+      expect(preloader.getCachedModelCatalog(descriptor.id)).toBeNull();
+      expect(preloader.takeWarm(descriptor.id)).toBeNull();
+    });
+  });
+
   describe("preload()", () => {
     it("retains the probe subprocess after a successful preload and hands it to the manager", async () => {
       const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
@@ -374,9 +399,9 @@ describe("AgentModelPreloader", () => {
       await preloader.preload("claude-sdk");
       expect(preloader.getCachedModelCatalog("claude-sdk")).not.toBeNull();
 
-      preloader.clearCached("claude-sdk");
+      await preloader.clearCached("claude-sdk");
 
-      await waitFor(() => expect(procHandle.shutdown).toHaveBeenCalledTimes(1));
+      expect(procHandle.shutdown).toHaveBeenCalledTimes(1);
       expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
       expect(preloader.takeWarm("claude-sdk")).toBeNull();
     });

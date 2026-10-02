@@ -1,6 +1,9 @@
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { AcpProcessManager, sanitizeAcpStdout } from "@/agentMode/acp/AcpProcessManager";
 
+import { EventEmitter } from "node:events";
+import { terminateProcessTree } from "@/utils/terminateProcessTree";
+jest.mock("@/utils/terminateProcessTree", () => ({ terminateProcessTree: jest.fn() }));
 const mockSpawn = jest.fn();
 
 jest.mock("@/logger", () => ({
@@ -41,6 +44,66 @@ async function readLines(stream: ReadableStream<Uint8Array>): Promise<string[]> 
 
 describe("AcpProcessManager", () => {
   describe("AcpProcessManager", () => {
+    describe("shutdown()", () => {
+      const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/620";
+      let child: EventEmitter;
+      let manager: AcpProcessManager;
+      beforeEach(() => {
+        child = Object.assign(new EventEmitter(), {
+          pid: 24680,
+          stdin: {},
+          stdout: streamOf([]),
+          stderr: { setEncoding: jest.fn(), on: jest.fn() },
+        });
+        mockSpawn.mockReturnValue(child);
+        (requireNodeModule as jest.Mock).mockImplementation((id: string) =>
+          id === "child_process"
+            ? { spawn: mockSpawn }
+            : { Readable: { toWeb: (v: unknown) => v }, Writable: { toWeb: (v: unknown) => v } }
+        );
+        jest.mocked(terminateProcessTree).mockReset().mockResolvedValue(undefined);
+        manager = new AcpProcessManager({ command: "/adapter", args: [], env: {} });
+        manager.start();
+      });
+      afterEach(() => jest.useRealTimers());
+      it(`waits for child pipes to close after signaling its owned tree: ${ISSUE}`, async () => {
+        let stopped = false;
+        const stopping = manager.shutdown().then(() => {
+          stopped = true;
+        });
+        child.emit("exit", 0, null);
+        await Promise.resolve();
+        expect(stopped).toBe(false);
+        expect(terminateProcessTree).toHaveBeenCalledWith(child);
+        child.emit("close", 0, null);
+        await stopping;
+        expect(stopped).toBe(true);
+      });
+      it(`forces a tree that exceeds the shutdown grace period: ${ISSUE}`, async () => {
+        jest.useFakeTimers();
+        jest.mocked(terminateProcessTree).mockImplementation(async (_child, signal) => {
+          if (signal === "SIGKILL") child.emit("close");
+        });
+        const stopping = manager.shutdown();
+        await jest.advanceTimersByTimeAsync(3000);
+        await stopping;
+        expect(terminateProcessTree).toHaveBeenCalledWith(child, "SIGKILL");
+      });
+      it(`reports stop failure and retains its owner for retry: ${ISSUE}`, async () => {
+        jest.mocked(terminateProcessTree).mockRejectedValueOnce(new Error("Access denied"));
+        await expect(manager.shutdown()).rejects.toThrow("Access denied");
+        expect(manager.isRunning()).toBe(true);
+        jest.mocked(terminateProcessTree).mockImplementationOnce(async () => {
+          child.emit("close");
+        });
+        await manager.shutdown();
+      });
+      it(`does not signal a closed process identifier: ${ISSUE}`, async () => {
+        child.emit("close");
+        await manager.shutdown();
+        expect(terminateProcessTree).not.toHaveBeenCalled();
+      });
+    });
     describe("start()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/555 starts the agent in the requested vault directory", () => {
         const identity = <T>(value: T): T => value;

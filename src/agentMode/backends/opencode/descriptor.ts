@@ -123,6 +123,8 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   },
 
   managedInstall: {
+    subscribeBeforeManagedRemoval: (plugin, refresh) =>
+      getOpencodeBinaryManager(plugin).subscribeBeforeManagedRemoval(refresh),
     getState(plugin: CopilotPlugin): ManagedInstallActionState {
       return getOpencodeBinaryManager(plugin).getActionState();
     },

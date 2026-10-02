@@ -1,6 +1,7 @@
 import { logError, logInfo, logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { NdjsonLineSplitter } from "./debugTap";
+import { terminateProcessTree } from "@/utils/terminateProcessTree";
 
 type ChildProcessByStdio = import("node:child_process").ChildProcessByStdio<
   Writable,
@@ -20,10 +21,12 @@ export interface AcpProcessManagerOptions {
   logTag?: string;
 }
 
+/** Owns ACP process trees until close. https://github.com/Brevilabs/obsidian-copilot-private/issues/620 */
 export class AcpProcessManager {
   private child: ChildProcessByStdio | null = null;
   private exitListeners = new Set<(code: number | null, signal: NodeJS.Signals | null) => void>();
   private hasExited = false;
+  private hasClosed = false;
   private exitCode: number | null = null;
   private exitSignal: NodeJS.Signals | null = null;
 
@@ -42,6 +45,9 @@ export class AcpProcessManager {
       env: this.opts.env,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
+      // Own the process group so shutdown releases the adapter's native children.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/620
+      detached: process.platform !== "win32",
     });
     this.child = child;
 
@@ -60,6 +66,9 @@ export class AcpProcessManager {
           logWarn(`[AgentMode] exit listener threw`, e);
         }
       }
+    });
+    child.on("close", () => {
+      this.hasClosed = true;
     });
 
     pipeStderrToLogger(child.stderr, tag);
@@ -98,32 +107,36 @@ export class AcpProcessManager {
   }
 
   async shutdown(): Promise<void> {
-    if (!this.child || this.hasExited) return;
+    if (!this.child || this.hasClosed) return;
     const child = this.child;
     const tag = this.opts.logTag ?? "acp";
 
     const exited = new Promise<void>((resolve) => {
-      this.onExit(() => resolve());
+      child.once("close", () => resolve());
     });
 
     try {
-      child.kill("SIGTERM");
+      await terminateProcessTree(child);
     } catch (e) {
+      if (!this.hasExited) throw e;
       logWarn(`[AgentMode] SIGTERM failed (${tag})`, e);
     }
 
-    const timeout = new Promise<"timeout">((resolve) =>
-      window.setTimeout(() => resolve("timeout"), SIGTERM_GRACE_MS)
-    );
-    const winner = await Promise.race([exited.then(() => "exited" as const), timeout]);
-    if (winner === "timeout" && !this.hasExited) {
-      logWarn(`[AgentMode] subprocess (${tag}) did not exit within ${SIGTERM_GRACE_MS}ms; SIGKILL`);
-      try {
-        child.kill("SIGKILL");
-      } catch (e) {
-        logWarn(`[AgentMode] SIGKILL failed (${tag})`, e);
+    let timer: number | undefined;
+    const timeout = new Promise<"timeout">((resolve) => {
+      timer = window.setTimeout(() => resolve("timeout"), SIGTERM_GRACE_MS);
+    });
+    try {
+      const winner = await Promise.race([exited.then(() => "exited" as const), timeout]);
+      if (winner === "timeout" && !this.hasClosed) {
+        logWarn(
+          `[AgentMode] subprocess (${tag}) did not exit within ${SIGTERM_GRACE_MS}ms; SIGKILL`
+        );
+        await terminateProcessTree(child, "SIGKILL");
+        await exited;
       }
-      await exited;
+    } finally {
+      window.clearTimeout(timer);
     }
   }
 }

@@ -47,6 +47,8 @@ export interface ManagedInstallAction {
   getState(plugin: CopilotPlugin): ManagedInstallActionState;
   subscribe(plugin: CopilotPlugin, onChange: () => void): () => void;
   run(plugin: CopilotPlugin): Promise<void>;
+  /** Await release of managed files before cleanup. https://github.com/Brevilabs/obsidian-copilot-private/issues/620 */
+  subscribeBeforeManagedRemoval?(plugin: CopilotPlugin, stop: () => Promise<void>): () => void;
 }
 
 export interface BackendAuthStatus {
