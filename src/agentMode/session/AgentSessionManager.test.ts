@@ -3724,7 +3724,7 @@ describe("AgentSessionManager", () => {
     });
 
     describe("loadNativeSessionFromHistory()", () => {
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 keeps replayed frames as history bubbles whether they arrive before or after the load response", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 keeps the frames replayed before the load response as history bubbles and drops out-of-turn frames that arrive after it", async () => {
         const replay = buildReplayingBackend({
           onLoad: (emit) => {
             emit(replayChunk("user_message_chunk", "test", "u1"));
@@ -3740,7 +3740,7 @@ describe("AgentSessionManager", () => {
 
         expect(senderAndText(session)).toEqual([
           [USER_SENDER, "test"],
-          [AI_SENDER, "first second"],
+          [AI_SENDER, "first "],
         ]);
       });
 

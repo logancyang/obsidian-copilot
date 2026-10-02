@@ -45,6 +45,7 @@ import type {
 } from "@/agentMode/session/types";
 import { wrapStreamsForDebug } from "./debugTap";
 import { formToQuestionPrompt } from "./elicitation";
+import { deliverSessionUpdatesInWireOrder } from "./sessionUpdateWireOrder";
 import { AcpBackend } from "./types";
 import {
   withoutExpiredWindows,
@@ -166,11 +167,14 @@ export class AcpBackendProcess implements BackendProcess {
       }
     });
 
-    const stream = ndJsonStream(stdin, stdout);
     const client = new VaultClient(this.app, {
       onSessionUpdate: (sessionId, update) => this.routeSessionUpdate(sessionId, update),
       requestPermission: (req) => this.handlePermission(req),
     });
+    const stream = deliverSessionUpdatesInWireOrder(
+      ndJsonStream(stdin, stdout),
+      (notification) => void client.sessionUpdate(notification)
+    );
     this.connection = createClient()
       .onRequest("fs/read_text_file", ({ params }) => client.readTextFile(params))
       .onRequest("fs/write_text_file", ({ params }) => client.writeTextFile(params))
@@ -178,7 +182,6 @@ export class AcpBackendProcess implements BackendProcess {
       .onRequest("elicitation/create", ({ params, requestId, signal }) =>
         this.handleElicitation(params, String(requestId), signal)
       )
-      .onNotification("session/update", ({ params }) => client.sessionUpdate(params))
       .connect(stream);
 
     try {
