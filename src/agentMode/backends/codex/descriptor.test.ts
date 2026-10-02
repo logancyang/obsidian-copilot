@@ -273,19 +273,6 @@ describe("descriptor", () => {
         }
       );
 
-      it("uses the backend-reported model instead of an optimistic startup seed https://github.com/Brevilabs/obsidian-copilot-private/issues/550", async () => {
-        const state = stateFor("gpt-5.6-sol", ["low", "high"]);
-        const applyModelWireId = jest.fn();
-        const setConfigOption = jest.fn();
-        await CodexBackendDescriptor.applySelection(
-          { getState: () => state, applyModelWireId, setConfigOption },
-          state.model!.current,
-          { backendReportedCurrent: { baseModelId: "gpt-5.5", effort: "high" } }
-        );
-        expect(applyModelWireId).toHaveBeenCalledWith("gpt-5.6-sol");
-        expect(setConfigOption).toHaveBeenCalledWith("reasoning_effort", "low");
-      });
-
       it("leaves effort unset when the selected model advertises no effort option https://github.com/Brevilabs/obsidian-copilot-private/issues/550", async () => {
         const state = translateBackendState(
           { models: null, modes: null, configOptions: ADVERTISED_CONFIG_OPTIONS },

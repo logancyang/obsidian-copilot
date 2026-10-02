@@ -390,7 +390,7 @@ describe("agentModelPickerHelpers", () => {
         },
       });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "codex" } as unknown as AgentSession,
+        activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
@@ -413,7 +413,7 @@ describe("agentModelPickerHelpers", () => {
         },
       });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "codex" } as unknown as AgentSession,
+        activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
@@ -436,7 +436,7 @@ describe("agentModelPickerHelpers", () => {
         },
       });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "codex" } as unknown as AgentSession,
+        activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
@@ -553,6 +553,29 @@ describe("agentModelPickerHelpers", () => {
       ]);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/630 shows Loading models… as the selection while any chat is starting, not the model its agent reports", () => {
+      const agentDefault = makeModelEntry("gpt-5");
+      const codex = makeDescriptor("codex");
+      const manager = makeManager({ catalogById: { codex: makeCatalog([agentDefault]) } });
+      const ctx: ModelActiveContext = {
+        activeSession: {
+          backendId: "codex",
+          getStatus: () => "starting",
+        } as unknown as AgentSession,
+        activeChatUIState: null,
+        activeBackendId: "codex",
+        activeDescriptor: codex,
+        activeSessionHasHistory: false,
+        activeModelState: makeModelState(agentDefault.baseModelId, [agentDefault]),
+        activeCurrentEntry: agentDefault,
+      };
+
+      const { entries, valueKey } = buildPickerEntries(manager, [codex], ctx, emptySettings);
+
+      const selected = entries.find((e) => getModelKeyFromModel(e) === valueKey);
+      expect(selected?.displayName).toBe("Loading models…");
+    });
+
     it("carries the model description onto the picker entry as _subtitle", () => {
       const entry: ModelEntry = {
         baseModelId: "gpt-5",
@@ -573,7 +596,7 @@ describe("agentModelPickerHelpers", () => {
         },
       });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "codex" } as unknown as AgentSession,
+        activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
@@ -601,7 +624,7 @@ describe("agentModelPickerHelpers", () => {
         },
       });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "codex" } as unknown as AgentSession,
+        activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
@@ -661,7 +684,7 @@ describe("agentModelPickerHelpers", () => {
         },
       });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "codex" } as unknown as AgentSession,
+        activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
@@ -706,7 +729,7 @@ describe("agentModelPickerHelpers", () => {
       const claude = claudeWithInstallState({ kind: "absent" });
       const ctx: ModelActiveContext = {
         ...noSessionContext(),
-        activeSession: { backendId: "claude" } as unknown as AgentSession,
+        activeSession: { backendId: "claude", getStatus: () => "idle" } as unknown as AgentSession,
         activeBackendId: "claude",
         activeDescriptor: claude,
       };
@@ -722,7 +745,7 @@ describe("agentModelPickerHelpers", () => {
 
     function ctxFor(backendId: "codex" | "claude" | "opencode"): ModelActiveContext {
       return {
-        activeSession: { backendId } as unknown as AgentSession,
+        activeSession: { backendId, getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: backendId,
         activeDescriptor: makeDescriptor(backendId),
@@ -893,7 +916,7 @@ describe("agentModelPickerHelpers", () => {
         effortOptions: opts.effortOptions,
       };
       return {
-        activeSession: { backendId: "codex" } as unknown as AgentSession,
+        activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: makeUIState({ canSwitchEffort: opts.canSwitchEffort }),
         activeBackendId: "codex",
         activeDescriptor: makeDescriptor("codex"),

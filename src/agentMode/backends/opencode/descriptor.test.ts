@@ -305,26 +305,6 @@ describe("descriptor", () => {
         );
       });
 
-      it("uses backend-confirmed startup state instead of the optimistic session state", async () => {
-        const { session, applyModelWireId, setConfigOption } = makeSession({
-          model: {
-            current: { baseModelId: "openai/gpt-5", effort: "high" },
-            availableModels: [entryOffering("openai/gpt-5", ["low", "high"])],
-            apply: { kind: "setConfigOption", configId: "model", effortConfigId: "effort" },
-          },
-          mode: null,
-        });
-
-        await OpencodeBackendDescriptor.applySelection(
-          session,
-          { baseModelId: "openai/gpt-5", effort: "high" },
-          { backendReportedCurrent: { baseModelId: "copilot-plus/minimax-m2.7", effort: null } }
-        );
-
-        expect(applyModelWireId).toHaveBeenCalledWith("openai/gpt-5");
-        expect(setConfigOption).toHaveBeenCalledWith("effort", "high");
-      });
-
       it("activates the bare model when the catalog is config-option backed but publishes no effort option, dropping a saved level instead of suffixing it (https://github.com/Brevilabs/obsidian-copilot-private/issues/364)", async () => {
         const { session, applyModelWireId, setConfigOption } = makeSession({
           model: {
