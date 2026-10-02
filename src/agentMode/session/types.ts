@@ -246,6 +246,7 @@ export interface PlanSummary {
 }
 
 export type SessionUpdate =
+  | { sessionUpdate: "user_message_chunk"; content: PromptContent; messageId?: string }
   | { sessionUpdate: "agent_message_chunk"; content: PromptContent; messageId?: string }
   | { sessionUpdate: "agent_thought_chunk"; content: PromptContent; messageId?: string }
   | ({ sessionUpdate: "tool_call" } & ToolCallSnapshot)
@@ -355,9 +356,7 @@ export interface LoadSessionInput {
   additionalDirectories?: string[];
 }
 
-export interface LoadSessionOutput extends OpenSessionOutput {
-  transcript?: AgentChatMessage[];
-}
+export type LoadSessionOutput = OpenSessionOutput;
 
 export interface PromptInput {
   sessionId: SessionId;

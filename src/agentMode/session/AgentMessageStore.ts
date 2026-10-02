@@ -199,7 +199,8 @@ export class AgentMessageStore {
 
   addMessage(message: NewAgentChatMessage): string {
     const id = message.id || this.generateId();
-    const timestamp = message.timestamp || formatDateTime(new Date());
+    const timestamp =
+      message.timestamp === null ? null : message.timestamp || formatDateTime(new Date());
     this.messages.push({
       id,
       displayText: message.message,
@@ -251,6 +252,14 @@ export class AgentMessageStore {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;
     msg.displayText += chunk;
+    this.touch(msg);
+    return true;
+  }
+
+  setDisplayText(id: string, text: string): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg || msg.displayText === text) return false;
+    msg.displayText = text;
     this.touch(msg);
     return true;
   }

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { waitFor } from "@testing-library/react";
 import { AgentSession } from "./AgentSession";
 import { buildNativeChatId } from "@/utils/nativeChatId";
-import { CHAT_AGENT_VIEWTYPE } from "@/constants";
+import { AI_SENDER, CHAT_AGENT_VIEWTYPE, USER_SENDER } from "@/constants";
 import { playNotificationSound } from "@/utils/notificationSound";
 import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
@@ -36,6 +36,7 @@ import type {
   BackendState,
   InstallState,
   ModelSelection,
+  SessionEvent,
 } from "./types";
 
 const mockEnsureMaterialized = ensureProjectContextMaterialized as jest.Mock;
@@ -511,6 +512,59 @@ function holdNextBackendShutdown(): { started: Promise<void>; release: () => voi
     );
   });
   return { started, release: () => release() };
+}
+
+type ReplayFrame = SessionEvent["update"];
+
+function buildReplayingBackend(
+  opts: {
+    onLoad?: (emit: (update: ReplayFrame) => void) => void;
+    loadSession?: jest.Mock;
+    resumeSession?: jest.Mock;
+  } = {}
+) {
+  const handlers = new Map<string, (event: SessionEvent) => void>();
+  const buffered: SessionEvent[] = [];
+  const unregister = jest.fn();
+  const handlerCountAtOpen: Record<"load" | "resume", number> = { load: -1, resume: -1 };
+  const deliver = (sessionId: string, update: ReplayFrame) => {
+    const handler = handlers.get(sessionId);
+    if (handler) handler({ sessionId, update });
+    else buffered.push({ sessionId, update });
+  };
+  const state = { model: null, mode: null };
+  const backend = {
+    ...makeMockBackendProcess(),
+    registerSessionHandler: jest.fn((sessionId: string, handler: (event: SessionEvent) => void) => {
+      handlers.set(sessionId, handler);
+      for (const event of buffered.splice(0)) handler(event);
+      return unregister;
+    }),
+    loadSession:
+      opts.loadSession ??
+      jest.fn(async ({ sessionId }: { sessionId: string }) => {
+        handlerCountAtOpen.load = handlers.size;
+        opts.onLoad?.((update) => deliver(sessionId, update));
+        return { sessionId, state };
+      }),
+    resumeSession:
+      opts.resumeSession ??
+      jest.fn(async ({ sessionId }: { sessionId: string }) => {
+        handlerCountAtOpen.resume = handlers.size;
+        return { sessionId, state };
+      }),
+  };
+  return { backend, unregister, handlerCountAtOpen, emit: deliver };
+}
+
+const replayChunk = (
+  sessionUpdate: "user_message_chunk" | "agent_message_chunk",
+  text: string,
+  messageId: string
+): ReplayFrame => ({ sessionUpdate, content: { type: "text", text }, messageId });
+
+function senderAndText(session: AgentSession): [string, string][] {
+  return session.store.getDisplayMessages().map((m) => [m.sender, m.message]);
 }
 
 function buildManagerWithReplay(
@@ -3624,7 +3678,150 @@ describe("AgentSessionManager", () => {
       });
     });
 
+    describe("loadSessionFromHistory()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 shows only the saved markdown messages when the backend replays the same chat before and after the load response", async () => {
+        const file = mockTFile({ path: "chat/Saved.md" });
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "replayed question", "u1"));
+            emit(replayChunk("agent_message_chunk", "replayed answer", "a1"));
+          },
+        });
+        const loadFile = jest.fn().mockResolvedValue({
+          backendId: "opencode",
+          sessionId: "native-1",
+          projectId: GLOBAL_SCOPE,
+          messages: [
+            {
+              id: "s1",
+              sender: USER_SENDER,
+              message: "saved question",
+              isVisible: true,
+              timestamp: null,
+            },
+            {
+              id: "s2",
+              sender: AI_SENDER,
+              message: "saved answer",
+              isVisible: true,
+              timestamp: null,
+            },
+          ],
+        });
+        const mgr = buildManager({
+          persistence: { loadFile },
+          descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
+        });
+
+        const session = await mgr.loadSessionFromHistory(file);
+        replay.emit("native-1", replayChunk("agent_message_chunk", "late replayed answer", "a1"));
+
+        expect(senderAndText(session)).toEqual([
+          [USER_SENDER, "saved question"],
+          [AI_SENDER, "saved answer"],
+        ]);
+      });
+    });
+
     describe("loadNativeSessionFromHistory()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 keeps replayed frames as history bubbles whether they arrive before or after the load response", async () => {
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "test", "u1"));
+            emit(replayChunk("agent_message_chunk", "first ", "a1"));
+          },
+        });
+        const { manager } = buildHistoryHarness({
+          createBackendProcess: jest.fn(() => replay.backend),
+        });
+
+        const session = await manager.loadNativeSessionFromHistory("opencode", "saved-chat");
+        replay.emit("saved-chat", replayChunk("agent_message_chunk", "second", "a1"));
+
+        expect(senderAndText(session)).toEqual([
+          [USER_SENDER, "test"],
+          [AI_SENDER, "first second"],
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 registers the chat's handler before asking the backend to load the session", async () => {
+        const replay = buildReplayingBackend();
+        const { manager } = buildHistoryHarness({
+          createBackendProcess: jest.fn(() => replay.backend),
+        });
+
+        await manager.loadNativeSessionFromHistory("opencode", "saved-chat");
+
+        expect(replay.handlerCountAtOpen.load).toBe(1);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 registers the chat's handler before falling back to resumeSession when load is unsupported", async () => {
+        const replay = buildReplayingBackend({
+          loadSession: jest.fn(async () => {
+            throw new MethodUnsupportedError("session/load");
+          }),
+        });
+        const { manager } = buildHistoryHarness({
+          createBackendProcess: jest.fn(() => replay.backend),
+        });
+
+        await manager.loadNativeSessionFromHistory("opencode", "saved-chat");
+
+        expect(replay.backend.resumeSession).toHaveBeenCalledTimes(1);
+        expect(replay.handlerCountAtOpen.resume).toBe(1);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 drops out-of-turn agent frames for a chat reopened through resumeSession, which replays nothing", async () => {
+        const replay = buildReplayingBackend({
+          loadSession: jest.fn(async () => {
+            throw new MethodUnsupportedError("session/load");
+          }),
+        });
+        const { manager } = buildHistoryHarness({
+          createBackendProcess: jest.fn(() => replay.backend),
+        });
+
+        const session = await manager.loadNativeSessionFromHistory("opencode", "saved-chat");
+        replay.emit("saved-chat", replayChunk("agent_message_chunk", "background", "a1"));
+
+        expect(senderAndText(session)).toEqual([]);
+      });
+
+      it.each([
+        ["load fails", new Error("load blew up"), undefined],
+        [
+          "load is unsupported and resume fails",
+          new MethodUnsupportedError("session/load"),
+          new Error("resume blew up"),
+        ],
+      ] as const)(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/602 disposes the attached chat and opens nothing when %s",
+        async (_case, loadError, resumeError) => {
+          const replay = buildReplayingBackend({
+            loadSession: jest.fn(async () => {
+              throw loadError;
+            }),
+            ...(resumeError
+              ? {
+                  resumeSession: jest.fn(async () => {
+                    throw resumeError;
+                  }),
+                }
+              : {}),
+          });
+          const { manager } = buildHistoryHarness({
+            createBackendProcess: jest.fn(() => replay.backend),
+          });
+
+          await expect(
+            manager.loadNativeSessionFromHistory("opencode", "saved-chat")
+          ).rejects.toThrow("Could not resume");
+
+          expect(replay.unregister).toHaveBeenCalledTimes(1);
+          expect(manager.getSessions()).toEqual([]);
+        }
+      );
+
       it("matches live sessions by the (backendId, sessionId) pair, not session id alone", async () => {
         const { manager } = buildHistoryHarness();
         const session = await manager.createSession("opencode");

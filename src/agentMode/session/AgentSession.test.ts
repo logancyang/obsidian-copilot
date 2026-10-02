@@ -224,6 +224,27 @@ function makeSession(
   });
 }
 
+const replayText = (
+  sessionUpdate: "user_message_chunk" | "agent_message_chunk" | "agent_thought_chunk",
+  text: string,
+  messageId?: string
+): SessionEvent["update"] => ({
+  sessionUpdate,
+  content: { type: "text", text },
+  messageId,
+});
+
+function bubbles(session: AgentSession): { sender: string; message: string }[] {
+  return session.store.getDisplayMessages().map((m) => ({ sender: m.sender, message: m.message }));
+}
+
+function makeAwaitingResumeSession(
+  mock: MockBackend,
+  overrides: Partial<AgentSessionStateOptions> = {}
+): AgentSession {
+  return makeSession(mock, { awaitResumeState: true, ...overrides });
+}
+
 function startSession(
   mock: MockBackend,
   overrides: Partial<AgentSessionStartOptions> = {}
@@ -585,6 +606,140 @@ describe("AgentSession", () => {
         expect(session.getStatus()).toBe("idle");
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 turns replayed user and agent frames into one user bubble and one agent bubble", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "test", "u1"));
+        mock.emitUpdate(replayText("agent_message_chunk", "Hello", "a1"));
+        mock.emitUpdate(replayText("agent_message_chunk", " there", "a1"));
+
+        expect(bubbles(session)).toEqual([
+          { sender: USER_SENDER, message: "test" },
+          { sender: AI_SENDER, message: "Hello there" },
+        ]);
+        expect(session.store.getDisplayMessages().map((m) => m.timestamp)).toEqual([null, null]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 folds several replayed agent messages between two user messages into one agent bubble", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "first", "u1"));
+        mock.emitUpdate(replayText("agent_message_chunk", "one ", "a1"));
+        mock.emitUpdate(replayText("agent_message_chunk", "two", "a2"));
+        mock.emitUpdate(replayText("user_message_chunk", "second", "u2"));
+        mock.emitUpdate(replayText("agent_message_chunk", "three", "a3"));
+
+        expect(bubbles(session)).toEqual([
+          { sender: USER_SENDER, message: "first" },
+          { sender: AI_SENDER, message: "one two" },
+          { sender: USER_SENDER, message: "second" },
+          { sender: AI_SENDER, message: "three" },
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 joins user chunks that share a message id and splits chunks that have none", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "one prompt ", "u1"));
+        mock.emitUpdate(replayText("user_message_chunk", "in two chunks", "u1"));
+        mock.emitUpdate(replayText("user_message_chunk", "cancelled"));
+        mock.emitUpdate(replayText("user_message_chunk", "next"));
+
+        expect(bubbles(session).map((b) => b.message)).toEqual([
+          "one prompt in two chunks",
+          "cancelled",
+          "next",
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 strips the prompt envelope from a replayed user message even when it spans chunks", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+
+        mock.emitUpdate(
+          replayText(
+            "user_message_chunk",
+            "<copilot-context>ctx</copilot-context>\n<user-message>\nlist ",
+            "u1"
+          )
+        );
+        mock.emitUpdate(replayText("user_message_chunk", "the files\n</user-message>", "u1"));
+
+        expect(bubbles(session)).toEqual([{ sender: USER_SENDER, message: "list the files" }]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 renders replayed thoughts, tool calls with their updates, and plans as parts of the agent bubble", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "do it", "u1"));
+        mock.emitUpdate(replayText("agent_thought_chunk", "thinking", "a1"));
+        mock.emitUpdate({
+          sessionUpdate: "tool_call",
+          toolCallId: "t1",
+          title: "read",
+          kind: "read",
+          status: "in_progress",
+        });
+        mock.emitUpdate({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "t1",
+          status: "completed",
+        });
+        mock.emitUpdate({
+          sessionUpdate: "plan",
+          entries: [{ content: "step", status: "pending", priority: "medium" }],
+        });
+        mock.emitUpdate(replayText("agent_message_chunk", "done", "a2"));
+
+        const ai = session.store.getDisplayMessages()[1];
+        expect(session.store.getDisplayMessages()).toHaveLength(2);
+        expect(ai.parts?.map((p) => p.kind)).toEqual(["thought", "tool_call", "plan", "text"]);
+        const tool = ai.parts?.find((p) => p.kind === "tool_call");
+        expect(tool).toMatchObject({ id: "t1", status: "completed" });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 does not open a plan-approval card or a todo list for a replayed ExitPlanMode call or plan", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        const onCurrentPlanChanged = jest.fn();
+        const onCurrentTodoListChanged = jest.fn();
+        subscribeTo(session, { onCurrentPlanChanged, onCurrentTodoListChanged });
+
+        mock.emitUpdate({
+          sessionUpdate: "tool_call",
+          toolCallId: "exit-1",
+          title: "ExitPlanMode",
+          kind: "switch_mode",
+          status: "completed",
+          rawInput: { plan: "# Old plan\n\n1. step" },
+        });
+        mock.emitUpdate({
+          sessionUpdate: "plan",
+          entries: [{ content: "step", status: "pending", priority: "medium" }],
+        });
+
+        expect(session.getCurrentPlan()).toBeNull();
+        expect(session.getCurrentTodoList()).toBeNull();
+        expect(onCurrentPlanChanged).not.toHaveBeenCalled();
+        expect(onCurrentTodoListChanged).not.toHaveBeenCalled();
+        expect(session.getStatus()).toBe("idle");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 keeps handling state and usage updates normally while history is collected", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        const state = catalogState([PARETO], PARETO);
+
+        mock.emitUpdate({ sessionUpdate: "state_changed", state });
+
+        expect(session.getState()).toBe(state);
+        expect(bubbles(session)).toEqual([]);
+      });
+
       it("ready resolves immediately when no default selection is supplied", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock, {
@@ -593,6 +748,101 @@ describe("AgentSession", () => {
         });
         await session.ready;
         expect(mock.setSessionModel).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("completeResume()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 collects replayed frames before the backend state arrives and stays starting until it does", async () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "hi", "u1"));
+        mock.emitUpdate(replayText("agent_message_chunk", "hello", "a1"));
+
+        expect(session.getStatus()).toBe("starting");
+        expect(mock.registerHandler).toHaveBeenCalledWith("acp-1", expect.any(Function));
+        expect(bubbles(session).map((b) => b.message)).toEqual(["hi", "hello"]);
+
+        const state = emptyState();
+        session.completeResume(state);
+        await session.ready;
+
+        expect(session.getState()).toBe(state);
+        expect(session.getStatus()).toBe("idle");
+      });
+
+      it("applies the startup selection only after the state arrives and holds ready until it is applied", async () => {
+        const mock = makeMockBackend();
+        const state = sonnetAndGpt5State();
+        let resolveSetModel!: (s: BackendState) => void;
+        mock.setSessionModel.mockImplementationOnce(
+          () => new Promise<BackendState>((resolve) => (resolveSetModel = resolve))
+        );
+        const session = makeAwaitingResumeSession(mock, {
+          defaultModelSelection: { baseModelId: "openai/gpt-5", effort: null },
+          getDescriptor: () => makeWireOnlyDescriptor(),
+        });
+        let readySettled = false;
+        void session.ready.then(() => (readySettled = true));
+        expect(mock.setSessionModel).not.toHaveBeenCalled();
+
+        session.completeResume(state);
+        await waitFor(() => expect(mock.setSessionModel).toHaveBeenCalled());
+        expect(session.getStatus()).toBe("starting");
+        expect(readySettled).toBe(false);
+
+        resolveSetModel({
+          ...state,
+          model: { ...state.model!, current: { baseModelId: "openai/gpt-5", effort: null } },
+        });
+        await session.ready;
+
+        expect(readySettled).toBe(true);
+        expect(session.getStatus()).toBe("idle");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 moves a session that attached before its state arrived onto the enabled model", async () => {
+        const mock = makeMockBackend();
+        const resumedState = catalogState([PARETO, STEP_FLASH], PARETO);
+        fakeCatalogAgent(mock, resumedState);
+        const session = makeAwaitingResumeSession(mock, {
+          getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(STEP_FLASH)]),
+        });
+
+        session.completeResume(resumedState);
+        await session.ready;
+
+        expect(session.getState()?.model?.current.baseModelId).toBe(STEP_FLASH);
+        expect(await session.sendPrompt("hello").turn).toBe("end_turn");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 refuses turns on a model the user has not enabled after a deferred resume cannot switch it", async () => {
+        const mock = makeMockBackend();
+        const resumedState = catalogState([PLUS_FLASH, PARETO], PARETO);
+        fakeCatalogAgent(mock, resumedState);
+        mock.setSessionConfigOption.mockRejectedValue(new Error("Invalid params: model not found"));
+        const session = makeAwaitingResumeSession(mock, {
+          defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+          getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(PLUS_FLASH)]),
+        });
+
+        session.completeResume(resumedState);
+        await session.ready;
+
+        expect(await session.sendPrompt("hello").turn).toBe("refusal");
+        expect(mock.prompt).not.toHaveBeenCalled();
+      });
+
+      it("is ignored after the session was disposed, and dispose releases a pending ready", async () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+
+        await session.dispose();
+        session.completeResume(emptyState());
+        await session.ready;
+
+        expect(session.getState()).toBeNull();
+        expect(session.getStatus()).toBe("closed");
       });
     });
 
@@ -1163,6 +1413,21 @@ describe("AgentSession", () => {
     });
 
     describe("sendPrompt()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 stops turning out-of-turn frames into history once the first prompt is sent", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        mock.emitUpdate(replayText("user_message_chunk", "old", "u1"));
+        mock.emitUpdate(replayText("agent_message_chunk", "older reply", "a1"));
+
+        await session.sendPrompt("new").turn;
+        mock.emitUpdate(replayText("user_message_chunk", "stray user", "u9"));
+        mock.emitUpdate(replayText("agent_message_chunk", "stray reply", "a9"));
+
+        const messages = bubbles(session).map((b) => b.message);
+        expect(messages.slice(0, 3)).toEqual(["old", "older reply", "new"]);
+        expect(messages.some((m) => m.includes("stray"))).toBe(false);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 refuses to run a turn, and says why, while the agent is on a model the user has not enabled", async () => {
         const mock = makeMockBackend();
         const agent = fakeCatalogAgent(mock, catalogState([PLUS_FLASH, PARETO], PLUS_FLASH));
@@ -2142,7 +2407,35 @@ describe("AgentSession", () => {
       );
     });
 
+    describe("endHistory()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 keeps the history already collected and drops out-of-turn conversation frames that arrive afterwards", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        mock.emitUpdate(replayText("user_message_chunk", "earlier", "u1"));
+
+        session.endHistory();
+        mock.emitUpdate(replayText("user_message_chunk", "echo", "u2"));
+        mock.emitUpdate(replayText("agent_message_chunk", "background", "a1"));
+
+        expect(bubbles(session)).toEqual([{ sender: USER_SENDER, message: "earlier" }]);
+      });
+    });
+
     describe("loadDisplayMessages()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 drops replay frames that arrive after the display messages were loaded so the loaded chat is not duplicated", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        mock.emitUpdate(replayText("user_message_chunk", "from replay", "u1"));
+
+        session.loadDisplayMessages([
+          { id: "m0", sender: USER_SENDER, message: "saved", isVisible: true, timestamp: null },
+        ]);
+        mock.emitUpdate(replayText("user_message_chunk", "from replay", "u1"));
+        mock.emitUpdate(replayText("agent_message_chunk", "late reply", "a1"));
+
+        expect(bubbles(session)).toEqual([{ sender: USER_SENDER, message: "saved" }]);
+      });
+
       it("replaces the transcript and notifies subscribers so an open view re-renders", () => {
         const mock = makeMockBackend();
         const session = makeSession(mock);
@@ -3424,9 +3717,15 @@ describe("AgentSession", () => {
         update: { sessionUpdate: "plan", entries } as never,
       });
 
+      const makeLiveSession = (mock: MockBackend): AgentSession => {
+        const session = makeSession(mock);
+        session.loadDisplayMessages([]);
+        return session;
+      };
+
       it("starts null, snapshots plan entries, and notifies the dedicated channel", () => {
         const mock = makeMockBackend();
-        const session = makeSession(mock);
+        const session = makeLiveSession(mock);
         expect(session.getCurrentTodoList()).toBeNull();
 
         let notified = 0;
@@ -3446,7 +3745,7 @@ describe("AgentSession", () => {
 
       it("dedupes identical lists (synthesized + real plan channel) by content signature", () => {
         const mock = makeMockBackend();
-        const session = makeSession(mock);
+        const session = makeLiveSession(mock);
         let notified = 0;
         subscribeTo(session, { onCurrentTodoListChanged: () => notified++ });
         const entries = [{ content: "same", status: "pending", priority: "high" }];
@@ -3459,7 +3758,7 @@ describe("AgentSession", () => {
 
       it("clears to null on an empty plan and on dispose", async () => {
         const mock = makeMockBackend();
-        const session = makeSession(mock);
+        const session = makeLiveSession(mock);
         mock.emit(planUpdate([{ content: "only", status: "pending" }]));
         expect(session.getCurrentTodoList()).not.toBeNull();
 
