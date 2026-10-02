@@ -66,7 +66,12 @@ import {
 } from "@/agentMode/session/fanout/fanoutTypes";
 import { v4 as uuidv4 } from "uuid";
 import { getSettings } from "@/settings/model";
-import { findModelEntry } from "@/agentMode/session/translateBackendState";
+import {
+  EMPTY_ENABLED_MODELS,
+  ENABLED_MODEL_WAIT_MS,
+  noEnabledModelError,
+  pickEnabledModel,
+} from "@/agentMode/session/enabledModelSelection";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
@@ -79,8 +84,6 @@ const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
 const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as string[];
-const EMPTY_ENABLED_MODELS: readonly EnabledModelEntry[] = Object.freeze([]);
-const ENABLED_MODEL_WAIT_MS = 10_000;
 
 function seedSelectionIntoState(
   state: BackendState | null,
@@ -403,26 +406,14 @@ export class AgentSession {
     seed: ModelSelection,
     mode: CopilotMode | null
   ): Promise<void> {
-    const usable = this.enabledModels().filter((entry) => entry.credentialState === "ok");
-    const seedUsable = usable.some((entry) => entry.baseModelId === seed.baseModelId);
-    const offers = (baseModelId: string): boolean =>
-      findModelEntry(this.currentState?.model, baseModelId) !== undefined;
+    const enabled = this.enabledModels();
+    const pick = () => pickEnabledModel(enabled, this.currentState?.model, seed);
     await this.waitForState(
-      () =>
-        (!seedUsable || offers(seed.baseModelId)) &&
-        (!mode || this.currentState?.mode?.apply[mode] !== undefined)
+      () => pick().settled && (!mode || this.currentState?.mode?.apply[mode] !== undefined)
     );
     if (this.disposed) return;
-    const fallback = usable.find((entry) => offers(entry.baseModelId));
-    const target =
-      seedUsable && offers(seed.baseModelId)
-        ? seed
-        : fallback && { baseModelId: fallback.baseModelId, effort: null };
-    if (!target) {
-      throw new Error(
-        `None of the models enabled for ${descriptor.displayName} are available. Check them in Copilot's model settings.`
-      );
-    }
+    const { target } = pick();
+    if (!target) throw noEnabledModelError(descriptor.displayName);
     await descriptor.applySelection(this, target, { backendReportedCurrent: null });
     await replayPersistedMode(this, mode);
   }

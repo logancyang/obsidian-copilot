@@ -532,20 +532,46 @@ describe("AgentSession", () => {
         expect(mock.prompt).not.toHaveBeenCalled();
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 leaves a resumed session open for picking a model, but refuses its turns, when no enabled model is offered", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 waits for a late catalog to list an enabled model, then moves a resumed session off its disabled model", async () => {
         const mock = makeMockBackend();
         const resumedState = catalogState([PARETO], PARETO);
-        fakeCatalogAgent(mock, resumedState);
+        const agent = fakeCatalogAgent(mock, resumedState);
         const session = makeSession(mock, {
           initialState: resumedState,
-          getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(BIG_PICKLE)]),
+          getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(STEP_FLASH)]),
         });
+        expect(session.getStatus()).toBe("starting");
 
+        agent.push(catalogState([PARETO, STEP_FLASH], PARETO));
         await session.ready;
 
+        expect(session.getState()?.model?.current.baseModelId).toBe(STEP_FLASH);
         expect(session.getStatus()).toBe("idle");
-        expect(await session.sendPrompt("hello").turn).toBe("refusal");
-        expect(mock.prompt).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 leaves a resumed session open for picking a model, but refuses its turns, when no enabled model is offered within 10 seconds", async () => {
+        jest.useFakeTimers();
+        try {
+          const mock = makeMockBackend();
+          const resumedState = catalogState([PARETO], PARETO);
+          fakeCatalogAgent(mock, resumedState);
+          const session = makeSession(mock, {
+            initialState: resumedState,
+            getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(BIG_PICKLE)]),
+          });
+
+          await jest.advanceTimersByTimeAsync(9_999);
+          expect(session.getStatus()).toBe("starting");
+
+          await jest.advanceTimersByTimeAsync(1);
+          await session.ready;
+
+          expect(session.getStatus()).toBe("idle");
+          expect(await session.sendPrompt("hello").turn).toBe("refusal");
+          expect(mock.prompt).not.toHaveBeenCalled();
+        } finally {
+          jest.useRealTimers();
+        }
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 applies the saved Copilot mode to a resumed session once a late catalog update lists it", async () => {

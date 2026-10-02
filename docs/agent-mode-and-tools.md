@@ -30,7 +30,7 @@ opencode is the most flexible choice because it can use Copilot-hosted, BYOK, an
 2. If you already installed it, choose **My own binary** in **Configure**, then select **Auto-detect** or enter the absolute path and click **Apply**.
 3. Enable the models you want to see and choose a **Default model**.
 
-Managed installs download and verify a pinned OpenCode release directly. You do not need to install npm, Bun, Node, or a separate archive tool. Copilot accepts your own OpenCode 2.0.3 or newer binary.
+Managed installs download and verify a pinned OpenCode release directly. You do not need to install npm, Bun, Node, or a separate archive tool. Copilot accepts your own OpenCode 2.0.21 or newer binary.
 
 If OpenCode's internal service stops responding, Copilot refreshes it. The failed turn explains the problem; send the message again when the agent is ready. If OpenCode cannot reopen the conversation, Copilot starts a new chat. If the service fails before it answers any chat, Copilot stops retrying and shows the error; check the Copilot log for the cause.
 

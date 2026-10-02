@@ -58,12 +58,12 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
       return Object.assign(new EventEmitter(), { setTimeout: jest.fn() });
     }) as never);
     jest.mocked(npmPackage.resolveNpmAsset).mockResolvedValue({
-      name: "cli-darwin-arm64-2.0.14.tgz",
+      name: "cli-darwin-arm64-2.0.21.tgz",
       url: "https://registry.npmjs.org/package.tgz",
       integrity: "sha512-" + Buffer.alloc(64).toString("base64"),
     });
     jest.mocked(npmPackage.extractNpmBinary).mockImplementation(async (_archive, destination) => {
-      fs.writeFileSync(destination, `#!${process.execPath}\nprocess.stdout.write("2.0.14");\n`);
+      fs.writeFileSync(destination, `#!${process.execPath}\nprocess.stdout.write("2.0.21");\n`);
     });
   });
   afterEach(() => {
@@ -86,7 +86,7 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/560 installs and selects a requested OpenCode 2 npm binary after verifying its integrity", async () => {
-      const version = "2.0.14";
+      const version = "2.0.21";
       const result = await manager.install({ version });
       expect(result.version).toBe(version);
       expect(fs.existsSync(result.path)).toBe(true);
@@ -108,7 +108,7 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
       jest
         .mocked(npmPackage.verifyNpmIntegrity)
         .mockRejectedValue(new Error("OpenCode npm download integrity mismatch"));
-      await expect(manager.install({ version: "2.0.14" })).rejects.toThrow(/integrity mismatch/);
+      await expect(manager.install({ version: "2.0.21" })).rejects.toThrow(/integrity mismatch/);
       expect(npmPackage.extractNpmBinary).not.toHaveBeenCalled();
       expect(fs.readFileSync(previous, "utf8")).toBe("running process executable");
       expect(getSettings().agentMode.backends?.opencode?.binaryPath).toBe(previous);
@@ -132,7 +132,7 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
       jest.mocked(npmPackage.extractNpmBinary).mockImplementation(async (_archive, destination) => {
         fs.writeFileSync(destination, `#!${process.execPath}\nprocess.stdout.write("0.0.1");\n`);
       });
-      await expect(manager.install({ version: "2.0.14" })).rejects.toThrow(
+      await expect(manager.install({ version: "2.0.21" })).rejects.toThrow(
         "did not report version"
       );
       expect(fs.readFileSync(previous, "utf8")).toBe("running process executable");
@@ -142,7 +142,7 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
       jest.mocked(npmPackage.extractNpmBinary).mockImplementation(async (_archive, destination) => {
         fs.writeFileSync(destination, "broken binary");
       });
-      await expect(manager.install({ version: "2.0.14" })).rejects.toThrow();
+      await expect(manager.install({ version: "2.0.21" })).rejects.toThrow();
       expect(fs.readFileSync(previous, "utf8")).toBe("running process executable");
       expect(getSettings().agentMode.backends?.opencode?.binaryPath).toBe(previous);
     });

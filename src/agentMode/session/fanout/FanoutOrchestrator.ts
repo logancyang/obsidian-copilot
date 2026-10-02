@@ -1,5 +1,12 @@
 import { logWarn } from "@/logger";
+import { getSettings } from "@/settings/model";
 import { err2String } from "@/utils";
+import {
+  EMPTY_ENABLED_MODELS,
+  ENABLED_MODEL_WAIT_MS,
+  noEnabledModelError,
+  pickEnabledModel,
+} from "@/agentMode/session/enabledModelSelection";
 import type {
   BackendDescriptor,
   BackendId,
@@ -48,6 +55,11 @@ export interface FanoutRunInput {
   originalPromptText: string;
   signal: AbortSignal;
   onChange: (turn: FanoutTurn) => void;
+}
+
+interface SubSessionState {
+  current: BackendState;
+  onChange: (() => void) | null;
 }
 
 export function createFanoutTurn(agents: ReadonlyArray<BackendId>): FanoutTurn {
@@ -173,14 +185,20 @@ export class FanoutOrchestrator {
         unregisterReadOnly = this.host.registerReadOnlySession(sessionId);
         this.host.excludeSubSessionFromHistory(backendId, sessionId);
 
+        const live: SubSessionState = { current: opened.state, onChange: null };
         unregisterHandler = proc.registerSessionHandler(sessionId, (event) => {
+          if (event.update.sessionUpdate === "state_changed") {
+            live.current = event.update.state;
+            live.onChange?.();
+            return;
+          }
           const text = textChunkOf(event);
           if (text !== null) onText(text);
         });
 
         await Promise.all([
           this.applyReadOnlyMode(proc, descriptor, sessionId),
-          this.applyDefaultModel(proc, descriptor, backendId, sessionId, opened.state),
+          this.applyDefaultModel(proc, descriptor, backendId, sessionId, live),
         ]);
 
         if (raceSettled()) return "done";
@@ -318,18 +336,21 @@ export class FanoutOrchestrator {
     descriptor: BackendDescriptor,
     backendId: BackendId,
     sessionId: SessionId,
-    state: BackendState
+    live: SubSessionState
   ): Promise<void> {
-    const selection = this.host.getDefaultSelection(backendId) ?? state.model?.current;
+    const seed = this.host.getDefaultSelection(backendId);
+    const selection = descriptor.routesCopilotModels
+      ? await this.settleOnEnabledModel(descriptor, seed, live)
+      : (seed ?? live.current.model?.current);
     if (!selection) return;
     // Duplicating codec/config dispatch here bypasses backend default-effort
     // handling. https://github.com/Brevilabs/obsidian-copilot-private/issues/219
     await descriptor.applySelection(
       {
-        getState: () => state,
+        getState: () => live.current,
         applyModelWireId: async (modelId) => {
-          const apply = state.model?.apply;
-          state =
+          const apply = live.current.model?.apply;
+          live.current =
             apply?.kind === "setConfigOption"
               ? await proc.setSessionConfigOption({
                   sessionId,
@@ -339,11 +360,38 @@ export class FanoutOrchestrator {
               : await proc.setSessionModel({ sessionId, modelId });
         },
         setConfigOption: async (configId, value) => {
-          state = await proc.setSessionConfigOption({ sessionId, configId, value });
+          live.current = await proc.setSessionConfigOption({ sessionId, configId, value });
         },
       },
       selection
     );
-    this.host.onSelectionApplied?.(backendId, state);
+    this.host.onSelectionApplied?.(backendId, live.current);
+  }
+
+  // Sub-sessions follow the parent chat's rule: wait for OpenCode's late catalog and never fall
+  // back to the agent's own model. https://github.com/Brevilabs/obsidian-copilot-private/issues/625
+  private async settleOnEnabledModel(
+    descriptor: BackendDescriptor,
+    seed: ModelSelection | null,
+    live: SubSessionState
+  ): Promise<ModelSelection> {
+    const enabled = descriptor.getEnabledModelEntries?.(getSettings()) ?? EMPTY_ENABLED_MODELS;
+    const pick = () => pickEnabledModel(enabled, live.current.model, seed);
+    if (!pick().settled) {
+      await new Promise<void>((resolve) => {
+        const finish = (): void => {
+          window.clearTimeout(timer);
+          live.onChange = null;
+          resolve();
+        };
+        const timer = window.setTimeout(finish, ENABLED_MODEL_WAIT_MS);
+        live.onChange = () => {
+          if (pick().settled) finish();
+        };
+      });
+    }
+    const { target } = pick();
+    if (!target) throw noEnabledModelError(descriptor.displayName);
+    return target;
   }
 }
