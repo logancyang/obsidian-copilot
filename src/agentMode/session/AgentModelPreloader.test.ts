@@ -163,6 +163,26 @@ describe("AgentModelPreloader", () => {
       );
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 listens only to the new probe session after the stored one fails to resume and load", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+      Object.assign(descriptor, { getProbeSessionId: () => "stale-probe" });
+      const { proc } = procHandle;
+      jest.mocked(proc.resumeSession).mockRejectedValue(new Error("session not found"));
+      jest.mocked(proc.loadSession).mockRejectedValue(new Error("session not found"));
+      const listening = new Map<string, SessionUpdateHandler>();
+      jest.mocked(proc.registerSessionHandler).mockImplementation((sessionId, handler) => {
+        listening.set(sessionId, handler);
+        return () => {
+          if (listening.get(sessionId) === handler) listening.delete(sessionId);
+        };
+      });
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+
+      await preloader.preload("claude-sdk");
+
+      expect([...listening.keys()]).toEqual(["probe-1"]);
+    });
+
     it("waits for installation before inspecting and probing the selected binary (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", async () => {
       const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
       let finish!: () => void;

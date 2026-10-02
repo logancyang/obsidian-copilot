@@ -16,6 +16,7 @@ import {
 } from "./AgentSession";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
+import { ContextProcessor } from "@/contextProcessor";
 import { GLOBAL_SCOPE } from "./scope";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type { ApplySelectionContext } from "./descriptor";
@@ -987,6 +988,24 @@ describe("AgentSession", () => {
           }
         });
 
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 falls back at once to an offered enabled model when the default's provider key is missing", async () => {
+          const mock = makeMockBackend();
+          fakeCatalogAgent(mock, catalogState([FLEDGE, STEP_FLASH], FLEDGE));
+          const session = startSession(mock, {
+            defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+            getDescriptor: () =>
+              enabledModelsOnlyDescriptor([
+                { ...enabledModel(PLUS_FLASH), credentialState: "missing_key" },
+                enabledModel(STEP_FLASH),
+              ]),
+          });
+
+          await session.ready;
+
+          expect(session.getState()?.model?.current.baseModelId).toBe(STEP_FLASH);
+          expect(session.getStatus()).toBe("idle");
+        });
+
         it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 keeps the agent's model and refuses turns when switching to the enabled default fails during startup", async () => {
           const mock = makeMockBackend();
           fakeCatalogAgent(mock, catalogState([PLUS_FLASH, PARETO], PARETO));
@@ -1134,6 +1153,39 @@ describe("AgentSession", () => {
         expect(aiMessage(session)?.message).toBe(
           "**Error:** This chat's model isn't enabled for opencode. Pick an enabled model to continue."
         );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 refuses a turn whose model switches to one the user has not enabled while its web tabs load", async () => {
+        const mock = makeMockBackend();
+        const agent = fakeCatalogAgent(mock, catalogState([PLUS_FLASH, PARETO], PLUS_FLASH));
+        const session = startSession(mock, {
+          defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+          getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(PLUS_FLASH)]),
+        });
+        await session.ready;
+        let finishWebTabs: (text: string) => void = () => {};
+        const getInstance = jest.spyOn(ContextProcessor, "getInstance").mockReturnValue({
+          processContextWebTabs: () =>
+            new Promise<string>((resolve) => {
+              finishWebTabs = resolve;
+            }),
+        } as never);
+        try {
+          const { turn } = session.sendPrompt("hello", {
+            notes: [],
+            urls: [],
+            webTabs: [{ url: "https://example.com" }],
+          });
+          await waitFor(() => expect(getInstance).toHaveBeenCalled());
+
+          agent.push(catalogState([PARETO], PARETO));
+          finishWebTabs("<web-tab />");
+
+          expect(await turn).toBe("refusal");
+          expect(mock.prompt).not.toHaveBeenCalled();
+        } finally {
+          getInstance.mockRestore();
+        }
       });
 
       it("appends the user message and a running placeholder, then goes idle with the stop reason when the prompt resolves", async () => {

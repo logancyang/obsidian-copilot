@@ -403,21 +403,19 @@ export class AgentSession {
     seed: ModelSelection,
     mode: CopilotMode | null
   ): Promise<void> {
-    const enabled = this.enabledModels();
-    const seedEntry = enabled.find((entry) => entry.baseModelId === seed.baseModelId);
+    const usable = this.enabledModels().filter((entry) => entry.credentialState === "ok");
+    const seedUsable = usable.some((entry) => entry.baseModelId === seed.baseModelId);
     const offers = (baseModelId: string): boolean =>
       findModelEntry(this.currentState?.model, baseModelId) !== undefined;
     await this.waitForState(
       () =>
-        (!seedEntry || offers(seed.baseModelId)) &&
+        (!seedUsable || offers(seed.baseModelId)) &&
         (!mode || this.currentState?.mode?.apply[mode] !== undefined)
     );
     if (this.disposed) return;
-    const fallback = enabled.find(
-      (entry) => entry.credentialState === "ok" && offers(entry.baseModelId)
-    );
+    const fallback = usable.find((entry) => offers(entry.baseModelId));
     const target =
-      seedEntry && offers(seed.baseModelId)
+      seedUsable && offers(seed.baseModelId)
         ? seed
         : fallback && { baseModelId: fallback.baseModelId, effort: null };
     if (!target) {
@@ -708,6 +706,8 @@ export class AgentSession {
         ]);
       }
 
+      const hasWebTabs = (context?.webTabs?.length ?? 0) > 0;
+      const webTabBlock = hasWebTabs ? await serializeWebTabContext(context) : "";
       if (placeholderId && this.isOnModelNotEnabled()) {
         return this.refuseTurn(
           placeholderId,
@@ -715,8 +715,6 @@ export class AgentSession {
           `This chat's model isn't enabled for ${this.displayNameFor(this.backendId)}. Pick an enabled model to continue.`
         );
       }
-      const hasWebTabs = (context?.webTabs?.length ?? 0) > 0;
-      const webTabBlock = hasWebTabs ? await serializeWebTabContext(context) : "";
       const isFirstTurn = !this.firstPromptSent;
       const projectContextBlock = isFirstTurn ? this.projectContextBlock : null;
       const projectContextUpdates = this.getProjectContextUpdatesFn?.() ?? null;

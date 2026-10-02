@@ -314,12 +314,13 @@ export class AgentModelPreloader {
     }
 
     for (const { label, sessionId, run } of strategies) {
+      const unregister = proc.registerSessionHandler(sessionId, onProbeEvent);
       try {
-        proc.registerSessionHandler(sessionId, onProbeEvent);
         const resp = await run();
         logInfo(`[AgentMode] preload ${backendId}: ${label}`);
         return { sessionId: resp.sessionId, state: resp.state };
       } catch (err) {
+        unregister();
         if (!(err instanceof MethodUnsupportedError)) {
           logWarn(`[AgentMode] preload ${backendId}: ${label} failed (will fall back)`, err);
         }
