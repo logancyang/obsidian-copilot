@@ -134,7 +134,7 @@ describe("VaultClient", () => {
         ).rejects.toThrow(/hidden directory/);
       });
 
-      it("keeps denying the vault config folder even when it is set as the Copilot folder", async () => {
+      it("keeps denying the vault config folder even when it is set as the Copilot folder for https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
         const configDir = ".custom-config";
         jest
           .mocked(getSettings)
@@ -149,7 +149,7 @@ describe("VaultClient", () => {
         expect(adapter.read).not.toHaveBeenCalled();
       });
 
-      it("keeps denying a nested vault config folder when an ancestor is set as the Copilot folder", async () => {
+      it("keeps denying a nested vault config folder when an ancestor is set as the Copilot folder for https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
         jest
           .mocked(getSettings)
           .mockReturnValue({ copilotFolder: ".config" } as ReturnType<typeof getSettings>);
