@@ -9,6 +9,7 @@ Commands also get their own default model, and you can run a command again strai
 ## ✨ Enhancements
 
 - Codex in Safe mode now asks before each edit to your vault. Approve the edit to apply it, or reject it to keep your notes unchanged. ([#3447](https://github.com/logancyang/obsidian-copilot/pull/3447), @zeroliu)
+- Codex chats can use GPT-6.1 Sol. Pick it from the model picker once Copilot installs Codex 2.0.1. ([#3447](https://github.com/logancyang/obsidian-copilot/pull/3447), @zeroliu)
 - Choose a default model for commands in **Settings → Copilot → Command**. Saved commands, Quick Command, and Quick Ask use it unless a command names its own model. ([#3443](https://github.com/logancyang/obsidian-copilot/pull/3443), @zeroliu)
 - Click **Run again** in a command's result window to rerun the same command, for example after switching to another model. ([#3443](https://github.com/logancyang/obsidian-copilot/pull/3443), @zeroliu)
 - Copy Chat Link also works on a chat you have not saved. Copilot saves the chat as a note, then copies a link that reopens it. ([#3392](https://github.com/logancyang/obsidian-copilot/pull/3392), @zeroliu)
