@@ -23,6 +23,7 @@ import {
 } from "@/projects/projectPaths";
 import { ProjectFileRecord, ProjectScanDiagnostics } from "@/projects/type";
 import { stripFrontmatter } from "@/utils";
+import { updateFrontmatterMarkdownFile } from "@/utils/frontmatterMarkdownFile";
 import { logError, logWarn } from "@/logger";
 import { App, parseYaml, TFile, TFolder } from "obsidian";
 import {
@@ -54,7 +55,7 @@ export async function writeProjectFrontmatter(
   const webUrls = splitUrlsStringToArray(project.contextSource?.webUrls || "");
   const youtubeUrls = splitUrlsStringToArray(project.contextSource?.youtubeUrls || "");
 
-  await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+  await updateFrontmatterMarkdownFile(app, file.path, (frontmatter) => {
     frontmatter[COPILOT_PROJECT_ID] = project.id.trim();
     frontmatter[COPILOT_PROJECT_NAME] = (project.name || folderName).trim();
     frontmatter[COPILOT_PROJECT_DESCRIPTION] = (project.description || "").trim();

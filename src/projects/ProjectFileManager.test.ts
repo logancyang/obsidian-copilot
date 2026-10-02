@@ -1,4 +1,4 @@
-import { App, Vault } from "obsidian";
+import { App, parseYaml, Vault } from "obsidian";
 import { ProjectConfig } from "@/aiParams";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import {
@@ -12,10 +12,7 @@ import { mockTFile } from "@/__tests__/mockObsidian";
 jest.mock("obsidian", () => {
   const actual = jest.requireActual<typeof import("obsidian")>("obsidian");
   return Object.assign({}, actual, {
-    stringifyYaml: (value: Record<string, unknown>) =>
-      Object.entries(value)
-        .map(([key, item]) => `${key}: ${String(item)}`)
-        .join("\n") + "\n",
+    stringifyYaml: jest.requireActual<typeof import("yaml")>("yaml").stringify,
   });
 });
 
@@ -68,15 +65,24 @@ interface TestVault {
 }
 
 function makeTestVault(
-  options: { existingPaths?: string[]; hiddenFolder?: boolean } = {}
+  options: { existingPaths?: string[]; hiddenFolder?: boolean; files?: Map<string, string> } = {}
 ): TestVault {
   const frontmatter: Record<string, unknown> = {};
   const vault = {
     create: jest.fn(async (path: string) => mockTFile({ path })),
-    getAbstractFileByPath: jest.fn(() => (options.hiddenFolder ? null : {})),
+    getAbstractFileByPath: jest.fn((path: string) =>
+      options.hiddenFolder ? null : path.endsWith(".md") ? mockTFile({ path }) : {}
+    ),
     adapter: {
-      exists: jest.fn(async (path: string) => options.existingPaths?.includes(path) ?? false),
-      write: jest.fn(async () => {}),
+      exists: jest.fn(
+        async (path: string) =>
+          options.existingPaths?.includes(path) || (options.files?.has(path) ?? false)
+      ),
+      read: jest.fn(async (path: string) => options.files?.get(path) ?? ""),
+      stat: jest.fn(async () => ({ ctime: 1, mtime: 1, size: 1 })),
+      write: jest.fn(async (path: string, data: string) => {
+        options.files?.set(path, data);
+      }),
       list: jest.fn(async () => ({ files: [], folders: [] })),
       rmdir: jest.fn(async () => {}),
       remove: jest.fn(async () => {}),
@@ -104,6 +110,49 @@ describe("ProjectFileManager", () => {
     jest.clearAllMocks();
     resetSingleton();
     updateCachedProjectRecords([]);
+  });
+
+  describe("updateProject()", () => {
+    it("keeps frontmatter Copilot does not own when a hidden project is edited for https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
+      const filePath = "vault-copilot/projects/My Project/project.md";
+      const files = new Map([
+        [
+          filePath,
+          [
+            "---",
+            "copilot-project-id: p1",
+            "copilot-project-name: My Project",
+            "copilot-project-temperature: 0.7",
+            "tags:",
+            "  - research",
+            '  - "b: c"',
+            "note: 'say \"hi\"'",
+            "---",
+            "Old prompt",
+          ].join("\n"),
+        ],
+      ]);
+      const { app } = makeTestVault({ hiddenFolder: true, files });
+      seedProject(
+        makeConfig({ id: "p1", name: "My Project", modelConfigs: { temperature: 0.7 } }),
+        "My Project"
+      );
+
+      await ProjectFileManager.getInstance(app).updateProject(
+        "p1",
+        makeConfig({ id: "p1", name: "My Project", systemPrompt: "New prompt" })
+      );
+
+      const [, yamlBlock, body] = files.get(filePath)!.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)!;
+      expect(parseYaml(yamlBlock)).toMatchObject({
+        "copilot-project-id": "p1",
+        "copilot-project-name": "My Project",
+        tags: ["research", "b: c"],
+        note: 'say "hi"',
+      });
+      expect(parseYaml(yamlBlock)).not.toHaveProperty("copilot-project-temperature");
+      expect(body).toBe("New prompt");
+    });
   });
 
   describe("createProject()", () => {
