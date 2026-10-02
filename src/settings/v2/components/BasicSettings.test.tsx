@@ -131,6 +131,19 @@ describe("BasicSettings", () => {
       expect(screen.getByLabelText<HTMLInputElement>("Copilot folder").value).toBe("copilot");
     });
 
+    it("explains hidden Copilot folders in a tooltip beside the folder setting for https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
+      render(<BasicSettings />);
+      const description = screen.getByText(/Where Copilot keeps conversations/);
+
+      fireEvent.focus(description.parentElement!.querySelector("button")!);
+
+      const tooltip = await screen.findByRole("tooltip");
+      expect(tooltip.textContent).toBe(
+        // eslint-disable-next-line obsidianmd/hardcoded-config-path -- the tooltip copy names the config folder literally
+        "Use a dot name like .copilot to hide the folder. Obsidian Sync skips hidden folders. .obsidian can't be used."
+      );
+    });
+
     it("rejects an invalid root on Apply without opening the confirm modal", () => {
       render(<BasicSettings />);
       fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "../escape" } });
