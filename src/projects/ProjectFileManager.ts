@@ -349,33 +349,30 @@ export class ProjectFileManager {
 
       const projectForWrite = { ...nextProject, created: createdMs, UsageTimestamps: lastUsedMs };
 
-      if (isInVaultCache(this.app, filePath)) {
-        try {
-          await writeProjectFrontmatter(this.app, file, projectForWrite, folderName, {
-            createdMs,
-            lastUsedMs,
-          });
-        } catch (fmError) {
-          if (materialized) await this.rollbackCreatedFile(filePath, projectFolderIn(folderName));
-          throw fmError;
-        }
-
-        const rawWithFrontmatter = await this.vault.read(file);
-        const frontmatterBlock = this.getLeadingFrontmatterBlock(rawWithFrontmatter);
-        if (!frontmatterBlock) {
-          throw new Error(`Expected frontmatter block after update: ${file.path}`);
-        }
-        const separator = frontmatterBlock.endsWith("\n") ? "" : "\n";
-        await this.vault.modify(
-          file,
-          frontmatterBlock + separator + (nextProject.systemPrompt || "")
-        );
-      } else {
-        const content = this.buildProjectFileContent(projectForWrite, folderName, {
+      try {
+        await writeProjectFrontmatter(this.app, file, projectForWrite, folderName, {
           createdMs,
           lastUsedMs,
         });
-        await this.vault.adapter.write(filePath, content);
+      } catch (fmError) {
+        if (materialized) await this.rollbackCreatedFile(filePath, projectFolderIn(folderName));
+        throw fmError;
+      }
+
+      const isIndexed = isInVaultCache(this.app, filePath);
+      const rawWithFrontmatter = isIndexed
+        ? await this.vault.read(file)
+        : await this.vault.adapter.read(filePath);
+      const frontmatterBlock = this.getLeadingFrontmatterBlock(rawWithFrontmatter);
+      if (!frontmatterBlock) {
+        throw new Error(`Expected frontmatter block after update: ${file.path}`);
+      }
+      const separator = frontmatterBlock.endsWith("\n") ? "" : "\n";
+      const nextContent = frontmatterBlock + separator + (nextProject.systemPrompt || "");
+      if (isIndexed) {
+        await this.vault.modify(file, nextContent);
+      } else {
+        await this.vault.adapter.write(filePath, nextContent);
       }
 
       const updated: ProjectFileRecord = {

@@ -73,7 +73,9 @@ describe("projectUtils", () => {
       existing: Record<string, unknown> = {}
     ): Promise<Record<string, unknown>> => {
       const frontmatter = { ...existing };
+      const file = makeMockFile("copilot-projects/my-project/project.md");
       const app = {
+        vault: { getAbstractFileByPath: jest.fn(() => file) },
         fileManager: {
           processFrontMatter: jest.fn(
             async (_file: TFile, update: (value: Record<string, unknown>) => void) =>
@@ -83,7 +85,7 @@ describe("projectUtils", () => {
       } as unknown as App;
       await writeProjectFrontmatter(
         app,
-        makeMockFile("copilot-projects/my-project/project.md"),
+        file,
         { id: " my-project ", name: "", ...project } as ProjectConfig,
         "my-project",
         timestamps
