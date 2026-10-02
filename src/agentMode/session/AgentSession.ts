@@ -85,23 +85,6 @@ const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as string[];
 
-function seedSelectionIntoState(
-  state: BackendState | null,
-  selection: ModelSelection | undefined
-): BackendState | null {
-  if (!state || !state.model || !selection) return state;
-  const entry = state.model.availableModels.find((m) => m.baseModelId === selection.baseModelId);
-  if (!entry) return state;
-  if (state.model.current.baseModelId === selection.baseModelId) return state;
-  return {
-    ...state,
-    model: {
-      ...state.model,
-      current: { ...state.model.current, baseModelId: selection.baseModelId },
-    },
-  };
-}
-
 export type AgentSessionStatus =
   | "starting"
   | "idle"
@@ -264,16 +247,14 @@ export class AgentSession {
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
       const originalState = opts.initialState ?? null;
-      this.currentState = this.runsOnlyEnabledModels()
-        ? originalState
-        : seedSelectionIntoState(originalState, opts.defaultModelSelection);
+      this.currentState = originalState;
       this.unregisterSessionHandler = this.backend.registerSessionHandler(
         opts.backendSessionId,
         (event) => this.handleSessionEvent(event)
       );
       const selection = opts.defaultModelSelection ?? originalState?.model?.current;
       if (selection && originalState) {
-        this.ready = this.confirmSeededSelection(selection, originalState, opts.defaultMode)
+        this.ready = this.applyStartupSelection(selection, opts.defaultMode)
           // A resumed chat stays open to pick an enabled model; sends on any other model are refused.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
           .catch((e) => logWarn(`[AgentMode] resumed ${this.backendId} session kept its model`, e))
@@ -321,9 +302,7 @@ export class AgentSession {
         : "agent did not report model state";
       logInfo(`[AgentMode] session ${resp.sessionId} ${modelLog}`);
       this.backendSessionId = resp.sessionId;
-      this.currentState = this.runsOnlyEnabledModels()
-        ? resp.state
-        : seedSelectionIntoState(resp.state, defaultModelSelection);
+      this.currentState = resp.state;
       this.unregisterSessionHandler = this.backend.registerSessionHandler(resp.sessionId, (event) =>
         this.handleSessionEvent(event)
       );
@@ -336,7 +315,7 @@ export class AgentSession {
       this.notifyModelChanged();
 
       const selection = defaultModelSelection ?? resp.state.model?.current;
-      if (selection) await this.confirmSeededSelection(selection, resp.state, opts.defaultMode);
+      if (selection) await this.applyStartupSelection(selection, opts.defaultMode);
       this.startupSettled = true;
       this.recomputeStatusIfChanged();
     } catch (err) {
@@ -373,9 +352,8 @@ export class AgentSession {
     await this.setModel(wireId);
   }
 
-  private async confirmSeededSelection(
+  private async applyStartupSelection(
     selection: ModelSelection,
-    originalState: BackendState,
     mode: CopilotMode | null = null
   ): Promise<void> {
     const descriptor = this.getDescriptor?.();
@@ -385,16 +363,12 @@ export class AgentSession {
       return;
     }
     try {
-      await descriptor.applySelection(this, selection, {
-        backendReportedCurrent: originalState.model?.current ?? null,
-      });
+      await descriptor.applySelection(this, selection);
     } catch (e) {
       logWarn(
-        `[AgentMode] could not apply seeded selection ${selection.baseModelId}; reverting seed`,
+        `[AgentMode] could not apply startup selection ${selection.baseModelId}; keeping the agent's model`,
         e
       );
-      this.currentState = originalState;
-      this.notifyModelChanged();
     }
   }
 
@@ -414,7 +388,7 @@ export class AgentSession {
     if (this.disposed) return;
     const { target } = pick();
     if (!target) throw noEnabledModelError(descriptor.displayName);
-    await descriptor.applySelection(this, target, { backendReportedCurrent: null });
+    await descriptor.applySelection(this, target);
     await replayPersistedMode(this, mode);
   }
 

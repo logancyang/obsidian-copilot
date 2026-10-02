@@ -252,9 +252,9 @@ export function buildPickerEntries(
   }
 
   let valueKey = "";
-  if (ctx.activeDescriptor?.routesCopilotModels && ctx.activeSession?.getStatus() === "starting") {
-    // Until startup switches it, the agent reports its own model, never the chat's.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
+  if (ctx.activeDescriptor && ctx.activeSession?.getStatus() === "starting") {
+    // While starting, the agent still reports its own model, not the chat's, so show "Loading models…".
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/630
     const loading = synthesizePreloadPlaceholder(ctx.activeDescriptor, "pending");
     valueKey = getModelKeyFromModel(loading);
     if (!entries.some((e) => getModelKeyFromModel(e) === valueKey)) entries.unshift(loading);

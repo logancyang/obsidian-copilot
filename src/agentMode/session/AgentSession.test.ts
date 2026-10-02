@@ -19,7 +19,6 @@ import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { GLOBAL_SCOPE } from "./scope";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
-import type { ApplySelectionContext } from "./descriptor";
 import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
 import { FANOUT_READONLY_PREAMBLE, type FanoutTurn } from "./fanout/fanoutTypes";
 import type {
@@ -159,14 +158,11 @@ function makeConfigOptionDescriptor(): BackendDescriptor {
     wire,
     applySelection: async (
       session: AgentSession,
-      selection: { baseModelId: string; effort: string | null },
-      context?: ApplySelectionContext
+      selection: { baseModelId: string; effort: string | null }
     ) => {
       const apply = session.getState()?.model?.apply;
       if (apply?.kind === "setConfigOption" && apply.effortConfigId) {
-        const currentBase = context
-          ? context.backendReportedCurrent?.baseModelId
-          : session.getState()?.model?.current.baseModelId;
+        const currentBase = session.getState()?.model?.current.baseModelId;
         if (currentBase !== selection.baseModelId) {
           await session.applyModelWireId(
             wire.encode({ baseModelId: selection.baseModelId, effort: null })
@@ -205,12 +201,9 @@ function makeDescriptorWireWithoutEffort(): BackendDescriptor {
     wire,
     applySelection: async (
       session: AgentSession,
-      selection: { baseModelId: string; effort: string | null },
-      context?: ApplySelectionContext
+      selection: { baseModelId: string; effort: string | null }
     ) => {
-      const currentBase = context
-        ? context.backendReportedCurrent?.baseModelId
-        : session.getState()?.model?.current.baseModelId;
+      const currentBase = session.getState()?.model?.current.baseModelId;
       if (currentBase !== selection.baseModelId)
         await session.applyModelWireId(wire.encode(selection));
       if (selection.effort !== null) await session.setConfigOption("effort", selection.effort);
@@ -671,7 +664,7 @@ describe("AgentSession", () => {
         });
       });
 
-      it("seeds currentState with the persisted selection before notifying listeners", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/630 reports the agent's own model until the startup switch lands, then the chat's", async () => {
         const mock = makeMockBackend();
         const stateWithSonnet = sonnetAndGpt5State();
         mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: stateWithSonnet });
@@ -690,15 +683,23 @@ describe("AgentSession", () => {
         });
 
         await waitFor(() => {
-          expect(observed[0]).toBe("openai/gpt-5");
           expect(mock.setSessionModel).toHaveBeenCalledWith({
             sessionId: "acp-1",
             modelId: "openai/gpt-5",
           });
         });
+        expect(observed).toEqual(["anthropic/sonnet"]);
 
-        resolveSetModel!(stateWithSonnet);
+        resolveSetModel!({
+          ...stateWithSonnet,
+          model: {
+            ...stateWithSonnet.model!,
+            current: { baseModelId: "openai/gpt-5", effort: null },
+          },
+        });
         await session.ready;
+
+        expect(observed).toEqual(["anthropic/sonnet", "openai/gpt-5"]);
       });
 
       it("stays starting until a newly created session has had the desired model applied", async () => {
@@ -740,7 +741,7 @@ describe("AgentSession", () => {
 
         resolveNewSession!({ sessionId: "acp-1", state: backendState });
         await waitFor(() => {
-          expect(session.getState()?.model?.current.baseModelId).toBe("big-pickle");
+          expect(session.getState()?.model?.current.baseModelId).toBe("kimi-2.6");
           expect(mock.setSessionModel).toHaveBeenCalledWith({
             sessionId: "acp-1",
             modelId: "big-pickle",
@@ -807,7 +808,7 @@ describe("AgentSession", () => {
         expect(session.getState()?.model?.current.effort).toBe("high");
       });
 
-      it("reverts the seeded selection when setModel fails", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/630 keeps the agent's own model and starts when the startup switch fails", async () => {
         const mock = makeMockBackend();
         const stateWithSonnet = sonnetAndGpt5State();
         mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: stateWithSonnet });
@@ -875,7 +876,7 @@ describe("AgentSession", () => {
             value: "openai/gpt-5",
           })
         );
-        expect(session.getState()?.model?.current.baseModelId).toBe("openai/gpt-5");
+        expect(session.getState()?.model?.current.baseModelId).toBe("anthropic/sonnet");
 
         resolveModelSwitch(switchedState);
         await session.ready;

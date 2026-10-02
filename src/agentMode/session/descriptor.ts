@@ -60,10 +60,6 @@ export interface BackendSignInHandlers {
   onLine?: (line: string) => void;
 }
 
-export interface ApplySelectionContext {
-  backendReportedCurrent: ModelSelection | null;
-}
-
 export interface BackendAuth {
   getProbeKey?(settings: CopilotSettings): string;
   getStatus(settings: CopilotSettings): Promise<BackendAuthStatus>;
@@ -131,11 +127,7 @@ export interface BackendDescriptor {
 
   readonly showModelDescriptions?: boolean;
 
-  applySelection(
-    session: ModelSelectionSession,
-    selection: ModelSelection,
-    context?: ApplySelectionContext
-  ): Promise<void>;
+  applySelection(session: ModelSelectionSession, selection: ModelSelection): Promise<void>;
 
   getModeMapping?(
     modeState: RawModeState | null,
