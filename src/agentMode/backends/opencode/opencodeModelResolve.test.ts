@@ -1,10 +1,7 @@
 import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel, Provider, ProviderOrigin, ProviderType } from "@/modelManagement";
-import { ChatModelProviders } from "@/constants";
 import {
-  COPILOT_PLUS_OPENCODE_PROVIDER_ID,
   copilotPlusModelId,
-  mapProviderToOpencodeId,
   opencodeEnabledModelEntries,
   opencodeWireBaseIdFor,
 } from "./opencodeModelResolve";
@@ -50,36 +47,6 @@ function makeSettings(args: {
 }
 
 describe("opencodeModelResolve", () => {
-  describe("mapProviderToOpencodeId()", () => {
-    it("maps a BYOK provider with a catalog id to that catalog id as non-native", () => {
-      const provider = makeProvider("p1", { kind: "byok", catalogProviderId: "anthropic" });
-      expect(mapProviderToOpencodeId(provider)).toEqual({ id: "anthropic", native: false });
-    });
-
-    it("returns null for a non-OpenAI-compatible BYOK provider without a catalog id", () => {
-      const provider = makeProvider("p1", { kind: "byok" });
-      expect(mapProviderToOpencodeId(provider)).toBeNull();
-    });
-
-    it("maps an OpenAI-compatible BYOK provider without a catalog id to its providerId", () => {
-      const provider = makeProvider("p1", { kind: "byok" }, "openai-compatible");
-      expect(mapProviderToOpencodeId(provider)).toEqual({ id: "p1", native: false });
-    });
-
-    it("maps copilot-plus origin to the reserved copilot-plus id, non-native", () => {
-      const provider = makeProvider("p1", { kind: "copilot-plus" });
-      expect(mapProviderToOpencodeId(provider)).toEqual({ id: "copilot-plus", native: false });
-    });
-
-    it("maps an agent-origin provider to its providerId, native", () => {
-      const provider = makeProvider("opencode-provider", { kind: "agent", agentType: "opencode" });
-      expect(mapProviderToOpencodeId(provider)).toEqual({
-        id: "opencode-provider",
-        native: true,
-      });
-    });
-  });
-
   describe("opencodeEnabledModelEntries()", () => {
     const byokProvider = (overrides: Partial<Provider> = {}): Provider => ({
       ...makeProvider("p1", { kind: "byok", catalogProviderId: "openrouter" }, "openai-compatible"),
@@ -305,12 +272,6 @@ describe("opencodeModelResolve", () => {
         configuredModels: [makeModel("cm1", "p1", "some-google-model")],
       });
       expect(opencodeEnabledModelEntries(settings)).toHaveLength(0);
-    });
-  });
-
-  describe("COPILOT_PLUS_OPENCODE_PROVIDER_ID", () => {
-    it("equals the Copilot provider id host code builds wire ids from", () => {
-      expect(COPILOT_PLUS_OPENCODE_PROVIDER_ID).toBe(ChatModelProviders.COPILOT_PLUS);
     });
   });
 

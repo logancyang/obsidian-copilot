@@ -23,13 +23,13 @@ function descriptor(id: string, wireBaseId: string | null | undefined): BackendD
 }
 
 function settingsWith(backends: Record<string, unknown>): CopilotSettings {
-  return { agentMode: { backends } } as unknown as CopilotSettings;
+  return { backends } as unknown as CopilotSettings;
 }
 
 function writtenBackends(current: CopilotSettings): Record<string, unknown> {
   const updater = mockSetSettings.mock.calls[0][0];
-  const patch = updater(current) as { agentMode: { backends: Record<string, unknown> } };
-  return patch.agentMode.backends;
+  const patch = updater(current) as { backends: Record<string, unknown> };
+  return patch.backends;
 }
 
 describe("copilotDefaultModel", () => {
@@ -48,10 +48,8 @@ describe("copilotDefaultModel", () => {
 
       expect(seedCopilotDefaultModel(descriptors, FLASH_ID)).toEqual(["opencode", "pi"]);
       expect(writtenBackends(current)).toEqual({
-        opencode: {
-          defaultModel: { baseModelId: "copilot-plus/copilot-plus-flash", effort: null },
-        },
-        pi: { defaultModel: { baseModelId: "copilot-plus-flash", effort: null } },
+        opencode: { enabledModels: [], default: { configuredModelId: FLASH_ID, effort: null } },
+        pi: { enabledModels: [], default: { configuredModelId: FLASH_ID, effort: null } },
       });
     });
 
@@ -68,13 +66,10 @@ describe("copilotDefaultModel", () => {
       expect(Object.keys(writtenBackends(current))).toEqual(["opencode"]);
     });
 
-    it("preserves other settings in a touched slice and other backends' slices", () => {
+    it("keeps the touched backend's enabled list and other backends' slices", () => {
       const current = settingsWith({
-        opencode: {
-          binaryPath: "/usr/bin/opencode",
-          defaultModel: { baseModelId: "old", effort: "high" },
-        },
-        claude: { defaultModel: { baseModelId: "claude-sonnet-4-5", effort: null } },
+        opencode: { enabledModels: ["cm-a", "cm-b"], default: { configuredModelId: "cm-a" } },
+        claude: { enabledModels: ["cm-c"], default: { configuredModelId: "cm-c" } },
       });
       mockGetSettings.mockReturnValue(current);
       const descriptors = [
@@ -86,10 +81,10 @@ describe("copilotDefaultModel", () => {
 
       expect(writtenBackends(current)).toEqual({
         opencode: {
-          binaryPath: "/usr/bin/opencode",
-          defaultModel: { baseModelId: "copilot-plus/copilot-plus-flash", effort: null },
+          enabledModels: ["cm-a", "cm-b"],
+          default: { configuredModelId: FLASH_ID, effort: null },
         },
-        claude: { defaultModel: { baseModelId: "claude-sonnet-4-5", effort: null } },
+        claude: { enabledModels: ["cm-c"], default: { configuredModelId: "cm-c" } },
       });
     });
 
@@ -133,7 +128,7 @@ describe("copilotDefaultModel", () => {
             addedAt: 0,
           },
         },
-        agentMode: { backends: {} },
+        backends: {},
         enableSelfHostMode: false,
       } as unknown as CopilotSettings;
       mockGetSettings.mockReturnValue(settings);
@@ -142,9 +137,7 @@ describe("copilotDefaultModel", () => {
 
       expect(seeded).toEqual(["opencode"]);
       expect(writtenBackends(settings)).toEqual({
-        opencode: {
-          defaultModel: { baseModelId: "copilot-plus/copilot-plus-flash", effort: null },
-        },
+        opencode: { enabledModels: [], default: { configuredModelId: FLASH_ID, effort: null } },
       });
     });
   });

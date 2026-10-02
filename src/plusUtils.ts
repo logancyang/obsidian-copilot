@@ -10,6 +10,7 @@ import {
   getSettings,
   setSettings,
   subscribeToSettingsChange,
+  updateBackendDefaultModel,
   updateSetting,
   useSettingsValue,
 } from "@/settings/model";
@@ -36,19 +37,10 @@ function isPlusModel(modelKey: string): boolean {
   return modelKey.split("|")[1] === String(ChatModelProviders.COPILOT_PLUS);
 }
 
-const LICENSED_DEFAULT_WIRE_IDS: ReadonlySet<string> = Object.freeze(
-  new Set([
-    DEFAULT_COPILOT_PLUS_CHAT_MODEL as string,
-    `${ChatModelProviders.COPILOT_PLUS}/${DEFAULT_COPILOT_PLUS_CHAT_MODEL}`,
-  ])
-);
-
 export function isUsingLicensedModels(settings: CopilotSettings): boolean {
-  if (isPlusModel(settings.defaultModelKey)) return true;
-  return Object.values(settings.agentMode?.backends ?? {}).some((backend) => {
-    const baseModelId = backend?.defaultModel?.baseModelId;
-    return baseModelId !== undefined && LICENSED_DEFAULT_WIRE_IDS.has(baseModelId);
-  });
+  return Object.values(settings.backends ?? {}).some((backend) =>
+    backend?.default ? isPlusModel(backend.default.configuredModelId) : false
+  );
 }
 
 function isEntitlementExpired(settings: CopilotSettings): boolean {
@@ -258,7 +250,7 @@ export async function applyLicenseSettings(): Promise<void> {
   }
 
   setModelKey(configuredModelId);
-  setSettings({ defaultModelKey: configuredModelId });
+  updateBackendDefaultModel("chat", { configuredModelId });
 
   if (!isDesktopRuntime()) return;
   try {

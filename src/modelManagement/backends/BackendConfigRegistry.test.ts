@@ -1,4 +1,9 @@
-import { getSettings, resetSettings, updateSetting } from "@/settings/model";
+import {
+  getSettings,
+  resetSettings,
+  updateBackendDefaultModel,
+  updateSetting,
+} from "@/settings/model";
 
 import { ConfiguredModelRegistry } from "@/modelManagement/models/ConfiguredModelRegistry";
 import { ProviderRegistry } from "@/modelManagement/providers/ProviderRegistry";
@@ -18,6 +23,7 @@ jest.mock("@/logger", () => ({
 
 const CHAT: BackendType = "chat";
 const OPENCODE: BackendType = "opencode";
+const STORED_DEFAULT = { configuredModelId: "m2", effort: "high" };
 
 describe("BackendConfigRegistry", () => {
   let registry: BackendConfigRegistry;
@@ -31,6 +37,11 @@ describe("BackendConfigRegistry", () => {
     models = new ConfiguredModelRegistry();
     registry = new BackendConfigRegistry(providers, models);
   });
+
+  async function seedStoredDefault(): Promise<void> {
+    await registry.setEnabledModels(CHAT, ["m1", "m2"]);
+    updateBackendDefaultModel(CHAT, STORED_DEFAULT);
+  }
 
   describe("get()", () => {
     it("returns the same empty default for a backend that was never configured", () => {
@@ -54,6 +65,17 @@ describe("BackendConfigRegistry", () => {
       await registry.enableModel(CHAT, "m1");
       expect(registry.get(CHAT).enabledModels).toEqual(["m1"]);
     });
+
+    it("keeps the stored default while appending (https://github.com/Brevilabs/obsidian-copilot-private/issues/540)", async () => {
+      await seedStoredDefault();
+
+      await registry.enableModel(CHAT, "m3");
+
+      expect(registry.get(CHAT)).toEqual({
+        enabledModels: ["m1", "m2", "m3"],
+        default: STORED_DEFAULT,
+      });
+    });
   });
 
   describe("disableModel()", () => {
@@ -63,6 +85,14 @@ describe("BackendConfigRegistry", () => {
       expect(registry.get(CHAT).enabledModels).toEqual(["m1"]);
       await registry.disableModel(CHAT, "m2");
       expect(registry.get(CHAT).enabledModels).toEqual(["m1"]);
+    });
+
+    it("keeps the stored default when another model is turned off (https://github.com/Brevilabs/obsidian-copilot-private/issues/540)", async () => {
+      await seedStoredDefault();
+
+      await registry.disableModel(CHAT, "m1");
+
+      expect(registry.get(CHAT)).toEqual({ enabledModels: ["m2"], default: STORED_DEFAULT });
     });
   });
 
@@ -89,6 +119,17 @@ describe("BackendConfigRegistry", () => {
       expect(listener).toHaveBeenCalledTimes(1);
       expect(registry.get(CHAT).enabledModels).toEqual(["m2", "m1"]);
     });
+
+    it("keeps the stored default while replacing the list (https://github.com/Brevilabs/obsidian-copilot-private/issues/540)", async () => {
+      await seedStoredDefault();
+
+      await registry.setEnabledModels(CHAT, ["m2", "m1", "m3"]);
+
+      expect(registry.get(CHAT)).toEqual({
+        enabledModels: ["m2", "m1", "m3"],
+        default: STORED_DEFAULT,
+      });
+    });
   });
 
   describe("removeRefs()", () => {
@@ -107,6 +148,14 @@ describe("BackendConfigRegistry", () => {
       const before = getSettings().backends;
       await registry.removeRefs([]);
       expect(getSettings().backends).toBe(before);
+    });
+
+    it("keeps the stored default of a backend whose other refs were swept (https://github.com/Brevilabs/obsidian-copilot-private/issues/540)", async () => {
+      await seedStoredDefault();
+
+      await registry.removeRefs(["m1"]);
+
+      expect(registry.get(CHAT)).toEqual({ enabledModels: ["m2"], default: STORED_DEFAULT });
     });
   });
 

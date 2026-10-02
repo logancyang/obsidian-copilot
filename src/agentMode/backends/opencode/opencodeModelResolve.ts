@@ -1,4 +1,9 @@
-import { isOpencodeZenWireId } from "@/utils/opencodeModelId";
+import {
+  COPILOT_PLUS_OPENCODE_PROVIDER_ID,
+  isOpencodeZenWireId,
+  mapProviderToOpencodeId,
+  opencodeWireBaseId,
+} from "@/utils/opencodeModelId";
 import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel, Provider } from "@/modelManagement";
 import {
@@ -8,13 +13,6 @@ import {
 } from "@/modelManagement";
 import type { EnabledModelCredentialState, EnabledModelEntry } from "@/agentMode/session/types";
 
-export interface OpencodeProviderMapping {
-  id: string;
-  native: boolean;
-}
-
-export const COPILOT_PLUS_OPENCODE_PROVIDER_ID = "copilot-plus";
-
 export function copilotPlusModelId(wireModelId: string | null | undefined): string | null {
   const prefix = `${COPILOT_PLUS_OPENCODE_PROVIDER_ID}/`;
   if (typeof wireModelId !== "string" || !wireModelId.startsWith(prefix)) return null;
@@ -22,31 +20,6 @@ export function copilotPlusModelId(wireModelId: string | null | undefined): stri
 }
 
 const EMPTY_ENABLED_ENTRIES: readonly EnabledModelEntry[] = Object.freeze([]);
-
-export function mapProviderToOpencodeId(provider: Provider): OpencodeProviderMapping | null {
-  switch (provider.origin.kind) {
-    case "byok": {
-      const catalogProviderId = provider.origin.catalogProviderId;
-      if (catalogProviderId) return { id: catalogProviderId, native: false };
-      if (provider.providerType === "openai-compatible") {
-        return { id: provider.providerId, native: false };
-      }
-      return null;
-    }
-    case "copilot-plus":
-      return { id: COPILOT_PLUS_OPENCODE_PROVIDER_ID, native: false };
-    case "agent":
-      return { id: provider.providerId, native: true };
-    default:
-      return null;
-  }
-}
-
-function opencodeWireBaseId(provider: Provider, configuredModel: ConfiguredModel): string | null {
-  const mapping = mapProviderToOpencodeId(provider);
-  if (!mapping) return null;
-  return mapping.native ? configuredModel.info.id : `${mapping.id}/${configuredModel.info.id}`;
-}
 
 export function opencodeWireBaseIdFor(
   configuredModelId: string,
@@ -58,7 +31,7 @@ export function opencodeWireBaseIdFor(
   if (!configuredModel) return null;
   const provider = settings.providers[configuredModel.providerId];
   if (!provider) return null;
-  return opencodeWireBaseId(provider, configuredModel);
+  return opencodeWireBaseId(provider, configuredModel.info.id);
 }
 
 function credentialStateFor(provider: Provider, native: boolean): EnabledModelCredentialState {
@@ -86,7 +59,7 @@ export function opencodeEnabledModelEntries(
     if (!provider) continue;
     const mapping = mapProviderToOpencodeId(provider);
     if (!mapping) continue;
-    const baseModelId = opencodeWireBaseId(provider, configuredModel);
+    const baseModelId = opencodeWireBaseId(provider, configuredModel.info.id);
     if (!baseModelId) continue;
     const name = configuredModel.info.displayName || configuredModel.info.id;
     // opencode labels models by provider id, which is a UUID for custom endpoints;

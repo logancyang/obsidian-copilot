@@ -1,30 +1,28 @@
 import type { BackendDescriptor, BackendId } from "./types";
 import { type CopilotSettings, getSettings, setSettings } from "@/settings/model";
 
+type BackendRow = NonNullable<CopilotSettings["backends"][keyof CopilotSettings["backends"]]>;
+
 export function seedCopilotDefaultModel(
   descriptors: readonly BackendDescriptor[],
   configuredModelId: string
 ): BackendId[] {
   const settings = getSettings();
-  const targets = new Map<BackendId, string>();
-  for (const descriptor of descriptors) {
-    const baseModelId = descriptor.getWireBaseId?.(configuredModelId, settings) ?? null;
-    if (baseModelId) targets.set(descriptor.id, baseModelId);
-  }
-  if (targets.size === 0) return [];
+  const targets = descriptors
+    .filter((descriptor) => descriptor.getWireBaseId?.(configuredModelId, settings))
+    .map((descriptor) => descriptor.id);
+  if (targets.length === 0) return [];
 
   setSettings((cur: CopilotSettings) => {
-    const backends = { ...cur.agentMode.backends } as Record<
-      string,
-      Record<string, unknown> | undefined
-    >;
-    for (const [backendId, baseModelId] of targets) {
+    const backends = { ...cur.backends } as Record<string, BackendRow>;
+    for (const backendId of targets) {
       backends[backendId] = {
-        ...(backends[backendId] ?? {}),
-        defaultModel: { baseModelId, effort: null },
+        ...backends[backendId],
+        enabledModels: backends[backendId]?.enabledModels ?? [],
+        default: { configuredModelId, effort: null },
       };
     }
-    return { agentMode: { ...cur.agentMode, backends } };
+    return { backends };
   });
-  return [...targets.keys()];
+  return targets;
 }

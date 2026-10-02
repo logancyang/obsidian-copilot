@@ -91,7 +91,7 @@ export class BackendConfigRegistry {
         if (existing && arraysEqual(existing.enabledModels, nextIds)) {
           return {};
         }
-        const next: BackendConfig = { enabledModels: nextIds };
+        const next: BackendConfig = { ...existing, enabledModels: nextIds };
         return { backends: { ...cur.backends, [backend]: next } };
       });
     });
@@ -105,6 +105,7 @@ export class BackendConfigRegistry {
         const current = cur.backends[backend];
         if (current?.enabledModels.includes(configuredModelId)) return {};
         const next: BackendConfig = {
+          ...current,
           enabledModels: [...(current?.enabledModels ?? []), configuredModelId],
         };
         return { backends: { ...cur.backends, [backend]: next } };
@@ -120,7 +121,7 @@ export class BackendConfigRegistry {
         const current = cur.backends[backend];
         if (!current) return {};
         const nextIds = current.enabledModels.filter((id) => id !== configuredModelId);
-        const next: BackendConfig = { enabledModels: nextIds };
+        const next: BackendConfig = { ...current, enabledModels: nextIds };
         return { backends: { ...cur.backends, [backend]: next } };
       });
     });
@@ -138,6 +139,7 @@ export class BackendConfigRegistry {
         >) {
           if (!config.enabledModels.some((id) => removed.has(id))) continue;
           nextBackends[backendKey] = {
+            ...config,
             enabledModels: config.enabledModels.filter((id) => !removed.has(id)),
           };
           mutated = true;

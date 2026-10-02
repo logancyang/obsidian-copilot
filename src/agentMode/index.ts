@@ -36,7 +36,7 @@ export { useBackendInstallState, useManagedInstallActionState } from "./ui/useBa
 export type { AgentSessionManager } from "./session/AgentSessionManager";
 export type { BackendDescriptor, BackendId } from "./session/types";
 export { partitionOpencodeOnlyWireIds } from "./backends/opencode/opencodeProbePartition";
-export { mapProviderToOpencodeId } from "./backends/opencode/opencodeModelResolve";
+export { mapProviderToOpencodeId } from "@/utils/opencodeModelId";
 export type { CopilotMode, ModelSelection } from "./session/types";
 export { AgentDefaultModelSetting } from "./ui/AgentDefaultModelSetting";
 export { ModelEnableList } from "@/components/ui/ModelEnableList";
