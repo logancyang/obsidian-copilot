@@ -1,3 +1,4 @@
+import type { EffortDiscoveryStatus } from "@/lib/model-effort";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { useSettingsValue } from "@/settings/model";
@@ -22,6 +23,8 @@ export interface AgentModelPickerOverride {
     disabled?: boolean;
   };
   effortOptionsByModelKey?: Record<string, { label: string; value: string | null }[]>;
+  effortStatusByModelKey?: Record<string, EffortDiscoveryStatus>;
+  onOpen?: () => void;
   commitSelection?: (modelKey: string, effort: string | null) => void;
 }
 

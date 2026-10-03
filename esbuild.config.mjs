@@ -1,3 +1,4 @@
+import { companionAdaptersPlugin } from "./scripts/companionAdapters.mjs";
 import esbuild from "esbuild";
 import process from "process";
 import { createRequire } from "module";
@@ -79,7 +80,14 @@ const context = await esbuild.context({
   treeShaking: true,
   outfile: "main.js",
   loader: { ".md": "text" },
-  plugins: [nodeModuleShim, svgrPlugin, wasmPlugin, patchRendererUnsafeUnref, bundleSizeGuard],
+  plugins: [
+    companionAdaptersPlugin(),
+    nodeModuleShim,
+    svgrPlugin,
+    wasmPlugin,
+    patchRendererUnsafeUnref,
+    bundleSizeGuard,
+  ],
   define: {
     global: "window",
     "process.env.NODE_ENV": prod ? '"production"' : '"development"',

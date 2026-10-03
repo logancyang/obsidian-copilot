@@ -1,4 +1,4 @@
-import { sortEffortOptions } from "@/lib/model-effort";
+import { sortEffortOptions, type EffortDiscoveryStatus } from "@/lib/model-effort";
 import { Notice } from "obsidian";
 import { logError } from "@/logger";
 import type { ModelCapability } from "@/constants";
@@ -406,13 +406,49 @@ export function resolveEffortOptions(
   backendId: BackendId,
   baseModelId: string
 ): EffortOption[] {
-  const models = manager.getCachedModelCatalog(backendId)?.availableModels ?? null;
-  const found = models?.find((m) => m.baseModelId === baseModelId);
-  const reported = found?.effortOptions ?? [];
-  if (reported.length > 0) return sortEffortOptions(reported);
-  return sortEffortOptions(
-    manager.getEffortCatalog(backendId)?.[baseModelId] ?? EMPTY_EFFORT_OPTIONS
-  );
+  const active = manager.getActiveSession?.();
+  const liveModel = active?.backendId === backendId ? active.getState()?.model : null;
+  if (liveModel?.current.baseModelId === baseModelId) {
+    const live = liveModel.availableModels.find((entry) => entry.baseModelId === baseModelId);
+    if (live) return sortEffortOptions(live.effortOptions);
+  }
+  const discovered = manager.getEffortCatalog(backendId)?.[baseModelId];
+  if (discovered !== undefined) return sortEffortOptions(discovered);
+  const reported = manager
+    .getCachedModelCatalog(backendId)
+    ?.availableModels?.find((entry) => entry.baseModelId === baseModelId)?.effortOptions;
+  return sortEffortOptions(reported ?? EMPTY_EFFORT_OPTIONS);
+}
+
+export function buildEffortStatusByModelKey(
+  manager: AgentSessionManager,
+  entries: ModelSelectorEntry[]
+): Record<string, EffortDiscoveryStatus> {
+  const out: Record<string, EffortDiscoveryStatus> = {};
+  const active = manager.getActiveSession?.();
+  const live = active?.getState()?.model;
+  for (const entry of entries) {
+    const backendId = entry._backendId;
+    const baseId = resolveBaseModelId(entry);
+    if (!backendId || !baseId) continue;
+    const key = getModelKeyFromModel(entry);
+    const options = resolveEffortOptions(manager, backendId, baseId);
+    const confirmed =
+      (active?.backendId === backendId && live?.current.baseModelId === baseId) ||
+      manager.getEffortCatalog(backendId)?.[baseId] !== undefined ||
+      (!backendRegistry[backendId]?.prefetchEffortCatalog &&
+        manager
+          .getCachedModelCatalog(backendId)
+          ?.availableModels?.some((model) => model.baseModelId === baseId));
+    out[key] = options.length
+      ? "ready"
+      : confirmed
+        ? "unsupported"
+        : manager.getPreloadStatus(backendId) === "pending"
+          ? "loading"
+          : "error";
+  }
+  return out;
 }
 
 function buildCommitSelection(
@@ -467,12 +503,25 @@ export function buildAgentModelPicker(args: {
   const ctx = collectModelActiveContext(manager);
   const { entries, valueKey } = buildPickerEntries(manager, descriptors, ctx, settings);
   const onChange = buildModelOnChange(manager, ctx, entries);
+  const effortStatusByModelKey = buildEffortStatusByModelKey(manager, entries);
   return {
     models: entries,
     value: valueKey,
     disabled: false,
     effort: buildEffortSibling(manager, ctx),
     effortOptionsByModelKey: buildEffortOptionsByModelKey(manager, entries),
+    effortStatusByModelKey,
+    onOpen: () => {
+      const retry = new Set(
+        entries
+          .filter((entry) => effortStatusByModelKey[getModelKeyFromModel(entry)] === "error")
+          .map((entry) => entry._backendId)
+      );
+      for (const backendId of retry) {
+        if (backendId && backendRegistry[backendId]?.prefetchEffortCatalog)
+          manager.refreshEffortCatalog(backendId);
+      }
+    },
     onChange,
     commitSelection: buildCommitSelection(manager, ctx, entries, onChange),
   };

@@ -14,6 +14,60 @@ describe("ModelEffortPicker", () => {
     }));
   });
   describe("ModelEffortPicker()", () => {
+    it.each([
+      ["loading", "Loading…"],
+      ["error", "Not determined"],
+      ["unsupported", "n/a"],
+    ] as const)(
+      "shows %s discovery separately from confirmed lack of support",
+      async (status, label) => {
+        const onOpen = jest.fn();
+        render(
+          <ModelEffortPicker
+            override={{
+              models,
+              value: "model|agent",
+              effortOptionsByModelKey: {},
+              effortStatusByModelKey: { "model|agent": status },
+              onOpen,
+              commitSelection: jest.fn(),
+            }}
+          />
+        );
+        fireEvent.click(screen.getByTitle("Model · effort"));
+        expect(await screen.findByText(label)).toBeTruthy();
+        expect(screen.queryByRole("slider")).toBeNull();
+        expect(onOpen).toHaveBeenCalledTimes(1);
+      }
+    );
+
+    it("keeps the selected draft model when asynchronous effort discovery finishes", async () => {
+      const commitSelection = jest.fn();
+      const override = {
+        models: [...models, { name: "other", provider: "agent", enabled: true }],
+        value: "model|agent",
+        effortOptionsByModelKey: {},
+        commitSelection,
+      };
+      const { rerender } = render(<ModelEffortPicker override={override} />);
+      fireEvent.click(screen.getByTitle("Model \u00b7 effort"));
+      fireEvent.click(await screen.findByRole("option", { name: /other/ }));
+      rerender(
+        <ModelEffortPicker
+          override={{
+            ...override,
+            effortOptionsByModelKey: { "other|agent": [{ value: "high", label: "high" }] },
+          }}
+        />
+      );
+      expect(screen.getByRole("option", { name: /other/ }).getAttribute("aria-selected")).toBe(
+        "true"
+      );
+      expect(await screen.findByText("high")).toBeTruthy();
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+      expect(commitSelection).toHaveBeenCalledWith("other|agent", "high");
+    });
+
     it("commits an available model only when dismissed", async () => {
       const commitSelection = jest.fn();
       render(

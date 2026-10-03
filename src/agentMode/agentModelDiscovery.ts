@@ -14,6 +14,9 @@ const PROVIDER_TYPE_BY_AGENT: Record<AgentType, ProviderType> = {
   claude: "anthropic",
   codex: "openai-compatible",
   opencode: "openai-compatible",
+  grok: "openai-compatible",
+  antigravity: "google",
+  muse: "openai-compatible",
 };
 
 const OPENCODE_DEFAULT_ENABLED_COUNT = 3;

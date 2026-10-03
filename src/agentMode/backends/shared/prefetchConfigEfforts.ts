@@ -17,7 +17,10 @@ export async function prefetchConfigEfforts({
   if (modelState.apply.kind !== "setConfigOption") return EMPTY_EFFORT_CATALOG;
   const configId = modelState.apply.configId;
   const originalWire = modelState.current.baseModelId;
+  const originalEffort = modelState.current.effort;
+  const originalEffortConfigId = modelState.apply.effortConfigId;
   const out: Record<string, EffortOption[]> = {};
+  let restorationError: Error | undefined;
   try {
     for (const model of enabledModels) {
       if (isAborted()) break;
@@ -29,7 +32,7 @@ export async function prefetchConfigEfforts({
           value: model.baseModelId,
         });
         const entry = next.model?.availableModels.find((e) => e.baseModelId === model.baseModelId);
-        if (entry && entry.effortOptions.length > 0) {
+        if (entry && next.model?.current.baseModelId === model.baseModelId) {
           out[model.baseModelId] = entry.effortOptions;
         }
       } catch (e) {
@@ -39,9 +42,18 @@ export async function prefetchConfigEfforts({
   } finally {
     try {
       await proc.setSessionConfigOption({ sessionId, configId, value: originalWire });
+      if (originalEffort !== null && originalEffortConfigId) {
+        await proc.setSessionConfigOption({
+          sessionId,
+          configId: originalEffortConfigId,
+          value: originalEffort,
+        });
+      }
     } catch (e) {
       logWarn("[AgentMode] effort prefetch: restore failed", e);
+      restorationError = e instanceof Error ? e : new Error(String(e));
     }
   }
+  if (restorationError) throw restorationError;
   return Object.keys(out).length > 0 ? out : EMPTY_EFFORT_CATALOG;
 }

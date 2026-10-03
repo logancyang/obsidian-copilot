@@ -73,11 +73,14 @@ describe("registry", () => {
   });
 
   describe("backendDisplayOrder()", () => {
-    it("lists opencode, then Claude, then Codex", () => {
+    it("preserves existing order and appends Grok, Antigravity and Muse", () => {
       expect(backendDisplayOrder()).toEqual([
         OpencodeBackendDescriptor,
         ClaudeBackendDescriptor,
         CodexBackendDescriptor,
+        backendRegistry.grok,
+        backendRegistry.antigravity,
+        backendRegistry.muse,
       ]);
     });
 
@@ -116,7 +119,7 @@ describe("registry", () => {
   describe("getCloudAgentIds()", () => {
     it("contains exactly the non-self-hostable backends and returns the same set on every call", () => {
       const ids = getCloudAgentIds();
-      expect([...ids].sort()).toEqual(["claude", "codex"]);
+      expect([...ids].sort()).toEqual(["antigravity", "claude", "codex", "grok", "muse"]);
       expect(getCloudAgentIds()).toBe(ids);
     });
   });

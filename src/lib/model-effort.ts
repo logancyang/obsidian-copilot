@@ -1,3 +1,5 @@
+export type EffortDiscoveryStatus = "loading" | "ready" | "unsupported" | "error";
+
 export interface EffortOption {
   value: string | null;
   label: string;

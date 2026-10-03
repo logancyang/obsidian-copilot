@@ -192,8 +192,11 @@ describe("descriptor", () => {
     describe("prefetchEffortCatalog()", () => {
       it("discovers inactive model effort and restores the probe model https://github.com/Brevilabs/obsidian-copilot-private/issues/550", async () => {
         const effortOptions = [{ value: "high", label: "high" }];
-        const setSessionConfigOption = jest.fn(async () => ({
-          model: { availableModels: [{ baseModelId: "other", effortOptions }] },
+        const setSessionConfigOption = jest.fn(async ({ value }: { value: string }) => ({
+          model: {
+            current: { baseModelId: value, effort: "high" },
+            availableModels: [{ baseModelId: "other", effortOptions }],
+          },
           mode: null,
         }));
         const result = await CodexBackendDescriptor.prefetchEffortCatalog!({

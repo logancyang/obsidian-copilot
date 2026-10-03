@@ -380,7 +380,7 @@ function getNodeRuntime(): NodeRuntime | null {
           isSymbolicLink: st.isSymbolicLink(),
         };
       },
-      getuid: process.getuid ? () => process.getuid() : undefined,
+      getuid: process.getuid?.bind(process),
       openPath: shell?.openPath?.bind(shell),
       showItemInFolder: shell?.showItemInFolder?.bind(shell),
     };

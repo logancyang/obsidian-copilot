@@ -81,10 +81,26 @@ describe("prefetchConfigEfforts", () => {
         { baseModelId: NEMOTRON, name: "Nemotron", credentialState: "missing_key" },
       ]);
 
-      expect(result).toEqual({ [GPT]: EFFORTS[GPT] });
+      expect(result).toEqual({ [GPT]: EFFORTS[GPT], [QWEN]: [] });
       const values = setSessionConfigOption.mock.calls.map((c) => c[0].value);
       expect(values).not.toContain(NEMOTRON);
       expect(values).toEqual([GPT, QWEN, "orig/model"]);
+    });
+
+    it("restores the original effort after restoring its model https://github.com/Brevilabs/obsidian-copilot-private/issues/550", async () => {
+      const { proc, setSessionConfigOption } = makeProc((value) =>
+        Promise.resolve(stateFor(value))
+      );
+      await run(proc, [{ baseModelId: GPT, name: "GPT", credentialState: "ok" }], () => false, {
+        ...modelState,
+        current: { baseModelId: "orig/model", effort: "high" },
+        apply: { kind: "setConfigOption", configId: "model", effortConfigId: "reasoning_effort" },
+      });
+      expect(setSessionConfigOption).toHaveBeenLastCalledWith({
+        sessionId: "ses_1",
+        configId: "reasoning_effort",
+        value: "high",
+      });
     });
 
     it("returns a frozen empty catalog and probes nothing when the catalog is not config-option-backed", async () => {
@@ -130,7 +146,7 @@ describe("prefetchConfigEfforts", () => {
         { baseModelId: GPT, name: "GPT", credentialState: "ok" },
         { baseModelId: QWEN, name: "Qwen", credentialState: "ok" },
       ]);
-      expect(result).toEqual({});
+      expect(result).toEqual({ [QWEN]: [] });
       expect(setSessionConfigOption.mock.calls.map((c) => c[0].value)).toEqual([
         GPT,
         QWEN,

@@ -1,4 +1,4 @@
-import { resolveEffort } from "@/lib/model-effort";
+import { resolveEffort, type EffortDiscoveryStatus } from "@/lib/model-effort";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import * as SliderPrimitive from "@radix-ui/react-slider";
@@ -26,6 +26,8 @@ export interface ModelEffortPickerOverride {
     disabled?: boolean;
   };
   effortOptionsByModelKey: Record<string, { label: string; value: string | null }[]>;
+  effortStatusByModelKey?: Record<string, EffortDiscoveryStatus>;
+  onOpen?: () => void;
   commitSelection: (modelKey: string, effort: string | null) => void;
 }
 
@@ -46,6 +48,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
   const [draftModelKey, setDraftModelKey] = useState<string | null>(null);
   const [draftEffort, setDraftEffort] = useState<string | null>(null);
+  const initialized = useRef(false);
   const initialRef = useRef<{ model: string; effort: string | null }>({
     model: "",
     effort: null,
@@ -62,6 +65,12 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
   const activeEffortValue = effort?.value ?? null;
 
   useEffect(() => {
+    if (!open) {
+      initialized.current = false;
+      return;
+    }
+    if (initialized.current) return;
+    initialized.current = true;
     if (open) {
       /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- seed the editable draft from props when the popover opens; drafts are committed on close, so this can't be pure derived state */
       const initial = value && enabledKeys.includes(value) ? value : (enabledKeys[0] ?? null);
@@ -82,6 +91,15 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
     () => (draftModelKey ? (effortOptionsByModelKey[draftModelKey] ?? []) : []),
     [draftModelKey, effortOptionsByModelKey]
   );
+
+  useEffect(() => {
+    if (!open || draftOptions.length === 0) return;
+    const nextEffort = resolveEffort(draftEffort, draftOptions);
+    if (nextEffort !== draftEffort) {
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- reconcile asynchronous discovery without discarding the user's model draft
+      setDraftEffort(nextEffort);
+    }
+  }, [open, draftOptions, draftEffort]);
 
   const moveHighlight = useCallback(
     (delta: 1 | -1) => {
@@ -147,6 +165,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
+      override.onOpen?.();
       setOpen(true);
       return;
     }
@@ -294,7 +313,12 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
           })}
         </div>
         <div className="tw-border-0 tw-border-t tw-border-solid tw-border-border tw-bg-secondary tw-px-3 tw-py-2">
-          <EffortFooter options={draftOptions} value={draftEffort} onChange={setDraftEffort} />
+          <EffortFooter
+            options={draftOptions}
+            value={draftEffort}
+            onChange={setDraftEffort}
+            status={draftModelKey ? override.effortStatusByModelKey?.[draftModelKey] : undefined}
+          />
         </div>
       </PopoverContent>
     </Popover>
@@ -302,12 +326,13 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
 }
 
 interface EffortFooterProps {
+  status?: EffortDiscoveryStatus;
   options: EffortOpt[];
   value: string | null;
   onChange: (value: string | null) => void;
 }
 
-function EffortFooter({ options, value, onChange }: EffortFooterProps) {
+function EffortFooter({ options, value, onChange, status }: EffortFooterProps) {
   const hasOptions = options.length > 0;
   const idx = hasOptions
     ? Math.max(
@@ -315,7 +340,13 @@ function EffortFooter({ options, value, onChange }: EffortFooterProps) {
         options.findIndex((o) => o.value === value)
       )
     : 0;
-  const currentLabel = hasOptions ? (options[idx]?.label ?? "") : "n/a";
+  const currentLabel = hasOptions
+    ? (options[idx]?.label ?? "")
+    : status === "unsupported"
+      ? "n/a"
+      : status === "loading"
+        ? "Loading…"
+        : "Not determined";
   return (
     <div className="tw-flex tw-h-6 tw-items-center tw-justify-between tw-gap-3">
       <span className="tw-font-mono tw-text-[10px] tw-uppercase tw-tracking-wider tw-text-muted">
@@ -329,7 +360,7 @@ function EffortFooter({ options, value, onChange }: EffortFooterProps) {
         )}
         <span
           className={cn(
-            "tw-w-[72px] tw-truncate tw-rounded-md tw-px-2 tw-py-0.5 tw-text-center tw-font-mono tw-text-xs tw-font-medium",
+            "tw-min-w-[72px] tw-rounded-md tw-px-2 tw-py-0.5 tw-text-center tw-font-mono tw-text-xs tw-font-medium",
             hasOptions
               ? "tw-bg-interactive-accent-hsl/10 tw-text-accent"
               : "tw-border tw-border-dashed tw-border-border tw-italic tw-text-faint"

@@ -82,6 +82,10 @@ export interface BackendDescriptor {
 
   readonly setupDescription: string;
 
+  readonly executionNotice?: string;
+
+  readonly requiresExplicitNewSessionOnResumeFailure?: boolean;
+
   readonly skillsProjectDir: string;
 
   readonly crossDiscoveredAgents: ReadonlyArray<BackendId>;

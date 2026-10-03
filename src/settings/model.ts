@@ -134,6 +134,9 @@ export interface CopilotSettings {
       opencode?: OpencodeBackendSettings;
       claude?: ClaudeBackendSettings;
       codex?: CodexBackendSettings;
+      grok?: CompanionBackendSettings;
+      antigravity?: CompanionBackendSettings;
+      muse?: CompanionBackendSettings;
     };
     // Keyed by device id because binary paths must not sync across devices:
     // https://github.com/logancyang/obsidian-copilot/issues/2539
@@ -188,7 +191,20 @@ export interface OpencodeBackendSettings {
   envOverrides?: Record<string, string>;
 }
 
+export type CompanionBackendId = "grok" | "antigravity" | "muse";
+export const COMPANION_BACKEND_IDS: readonly CompanionBackendId[] = Object.freeze([
+  "grok",
+  "antigravity",
+  "muse",
+]);
+export interface CompanionBackendSettings extends CodexBackendSettings {
+  automaticToolsConsent?: boolean;
+}
+
 export interface DeviceAgentProfile {
+  grok?: CodexBackendSettings;
+  antigravity?: CodexBackendSettings;
+  muse?: CodexBackendSettings;
   claudeCliPath?: string;
   codex?: {
     binaryPath?: string;
@@ -793,6 +809,14 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
   if (opencodeSlice) backends.opencode = opencodeSlice;
   if (claudeSlice) backends.claude = claudeSlice;
   if (codexSlice) backends.codex = codexSlice;
+  for (const id of COMPANION_BACKEND_IDS) {
+    const raw = backendsRaw[id];
+    if (raw && typeof raw === "object")
+      backends[id] = {
+        ...sanitizeCodexBackendSettings(raw),
+        automaticToolsConsent: (raw as Record<string, unknown>).automaticToolsConsent === true,
+      };
+  }
 
   const deviceProfiles = sanitizeDeviceProfiles(r.deviceProfiles);
 
@@ -1147,6 +1171,17 @@ function sanitizeDeviceAgentProfile(raw: unknown): DeviceAgentProfile | undefine
     if (Object.keys(opencode).length > 0) out.opencode = opencode;
   }
 
+  for (const id of COMPANION_BACKEND_IDS) {
+    if (r[id] && typeof r[id] === "object") {
+      const fields = sanitizeCodexBackendSettings(r[id]);
+      out[id] = {
+        binaryPath: fields.binaryPath,
+        binaryVersion: fields.binaryVersion,
+        binarySource: fields.binarySource,
+        envOverrides: fields.envOverrides,
+      };
+    }
+  }
   const claudeRaw =
     r.claude && typeof r.claude === "object" ? (r.claude as Record<string, unknown>) : null;
   if (claudeRaw) {
