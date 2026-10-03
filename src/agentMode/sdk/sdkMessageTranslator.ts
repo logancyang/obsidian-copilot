@@ -379,7 +379,7 @@ function translateUserMessage(
   const content = (msg.message as { content?: unknown }).content;
   if (!Array.isArray(content)) return [];
   const decision = state.backgroundTasks.accept({ kind: "sdk_message", message: msg });
-  const rawOutput = preEditContent(msg);
+  const originalFile = preEditContent(msg);
 
   const out: SessionEvent[] = [];
   for (const block of content) {
@@ -407,7 +407,7 @@ function translateUserMessage(
         toolCallId: b.tool_use_id,
         status,
         content: outputs,
-        ...(rawOutput ? { rawOutput } : {}),
+        ...(originalFile !== undefined ? { originalFile } : {}),
       })
     );
     const planUpdate = planUpdateFromClaudeToolResult(
@@ -422,13 +422,13 @@ function translateUserMessage(
 }
 
 // The in-process backend can read the vault after the write lands; the SDK's reported
-// originalFile is the only reliable pre-edit text.
+// originalFile is the only reliable pre-edit text, and null marks a file the Write created.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
-function preEditContent(msg: SDKUserMessage): { originalFile: string } | undefined {
+function preEditContent(msg: SDKUserMessage): string | null | undefined {
   const result = (msg as { tool_use_result?: unknown }).tool_use_result;
   if (typeof result !== "object" || result === null) return undefined;
   const originalFile = (result as { originalFile?: unknown }).originalFile;
-  return typeof originalFile === "string" ? { originalFile } : undefined;
+  return typeof originalFile === "string" || originalFile === null ? originalFile : undefined;
 }
 
 function makeToolCallUpdate(

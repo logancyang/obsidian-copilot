@@ -228,7 +228,7 @@ export interface ToolCallDelta {
   kind?: AgentToolKind;
   status?: AgentToolStatus;
   rawInput?: unknown;
-  rawOutput?: unknown;
+  originalFile?: string | null;
   content?: ToolCallContent[] | null;
   locations?: Array<{ path: string; line?: number | null }> | null;
   vendorToolName?: string;

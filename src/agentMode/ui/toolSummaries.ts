@@ -3,10 +3,7 @@ import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import { formatDuration } from "@/lib/duration";
-import {
-  diffTargetPaths as diffTargetPathsOf,
-  primaryEditTargetPath,
-} from "@/agentMode/session/editTargets";
+import { diffTargetPaths, primaryEditTargetPath } from "@/agentMode/session/editTargets";
 import { isAbsolutePath } from "@/utils/vaultPath";
 
 export interface ToolSummaryContext {
@@ -99,13 +96,9 @@ function verb(part: ToolCallPart, progressive: string, past: string): string {
   return part.status === "completed" || part.status === "failed" ? past : progressive;
 }
 
-function diffTargetPaths(part: ToolCallPart): string[] {
-  return diffTargetPathsOf(part.output);
-}
-
 function targetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
   return primaryEditTargetPath(
-    { locations: part.locations, input: part.input, diffPaths: diffTargetPaths(part) },
+    { locations: part.locations, input: part.input, diffPaths: diffTargetPaths(part.output) },
     vaultBase
   );
 }
@@ -182,7 +175,7 @@ const LIST_SUMMARY: ToolSummary = {
 const EDIT_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "Edit" }),
   collapsedLine: (p, ctx) => {
-    const diffPathCount = diffTargetPaths(p).length;
+    const diffPathCount = diffTargetPaths(p.output).length;
     return `${verb(p, "Editing", "Edited")} ${
       diffPathCount > 1
         ? pluralize(diffPathCount, "file")
@@ -195,7 +188,7 @@ const EDIT_SUMMARY: ToolSummary = {
     return `+${added} / −${removed} lines`;
   },
   targetPath: (p, ctx) =>
-    diffTargetPaths(p).length > 1 ? null : targetFromPath(p, ctx?.vaultBase ?? null),
+    diffTargetPaths(p.output).length > 1 ? null : targetFromPath(p, ctx?.vaultBase ?? null),
 };
 
 const BASH_SUMMARY: ToolSummary = {
