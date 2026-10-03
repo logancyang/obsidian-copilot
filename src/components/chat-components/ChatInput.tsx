@@ -36,7 +36,7 @@ import { AddContextButton } from "./AddContextButton";
 import { openImagePicker } from "./openImagePicker";
 import { shouldShowAtMentionTools } from "./hooks/useAtMentionCategories";
 import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
-import { AgentPicker, type AgentPickerSection } from "@/components/ui/AgentPicker";
+import { AgentLabel, type AgentLabelProps } from "@/components/ui/AgentRoster";
 import { BUILTIN_AGENT_SLUG } from "@/agents/types";
 import { ModePicker } from "@/components/ui/ModePicker";
 import { $removePillsByPath } from "./pills/NotePillNode";
@@ -97,7 +97,7 @@ export interface ChatInputProps {
     effortOptionsByModelKey?: Record<string, { label: string; value: string | null }[]>;
     commitSelection?: (modelKey: string, effort: string | null) => void;
   };
-  agentPicker?: AgentPickerSection;
+  agent?: Omit<AgentLabelProps, "builtin"> & { slug: string; showLabel: boolean };
   modePickerOverride?: {
     options: { label: string; value: CopilotMode }[];
     value: CopilotMode | null;
@@ -170,7 +170,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     setSelectedImages,
     disableModelSwitch,
     modelPickerOverride,
-    agentPicker,
+    agent,
     modePickerOverride,
     selectedTextContexts,
     onRemoveSelectedText,
@@ -637,8 +637,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     setIncludeActiveWebTab(false);
   }, [setIncludeActiveWebTab]);
 
-  const showModelPicker = !agentPicker || agentPicker.selectedSlug === BUILTIN_AGENT_SLUG;
-
   return (
     <div
       className={cn(
@@ -741,32 +739,37 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               lexicalEditorRef={lexicalEditorRef}
             />
           )}
-          {agentPicker && <AgentPicker section={agentPicker} />}
-          {showModelPicker &&
-            (modelPickerOverride?.effortOptionsByModelKey && modelPickerOverride.commitSelection ? (
-              <ModelEffortPicker
-                override={{
-                  models: modelPickerOverride.models,
-                  value: modelPickerOverride.value,
-                  disabled: modelPickerOverride.disabled,
-                  effort: modelPickerOverride.effort,
-                  effortOptionsByModelKey: modelPickerOverride.effortOptionsByModelKey,
-                  commitSelection: modelPickerOverride.commitSelection,
-                }}
-                className="tw-min-w-0 tw-max-w-full tw-truncate"
-              />
-            ) : (
-              <ModelSelector
-                variant="ghost2"
-                size="fit"
-                disabled={modelPickerOverride?.disabled ?? disableModelSwitch}
-                value={modelPickerOverride?.value ?? currentModelKey}
-                models={modelPickerOverride?.models ?? settings.activeModels}
-                apiKeySettings={modelPickerOverride ? undefined : settings}
-                onChange={modelPickerOverride?.onChange ?? setCurrentModelKey}
-                className="tw-min-w-0 tw-max-w-full tw-truncate"
-              />
-            ))}
+          {agent?.showLabel && (
+            <AgentLabel
+              name={agent.name}
+              avatarSrc={agent.avatarSrc}
+              builtin={agent.slug === BUILTIN_AGENT_SLUG}
+            />
+          )}
+          {modelPickerOverride?.effortOptionsByModelKey && modelPickerOverride.commitSelection ? (
+            <ModelEffortPicker
+              override={{
+                models: modelPickerOverride.models,
+                value: modelPickerOverride.value,
+                disabled: modelPickerOverride.disabled,
+                effort: modelPickerOverride.effort,
+                effortOptionsByModelKey: modelPickerOverride.effortOptionsByModelKey,
+                commitSelection: modelPickerOverride.commitSelection,
+              }}
+              className="tw-min-w-0 tw-max-w-full tw-truncate"
+            />
+          ) : (
+            <ModelSelector
+              variant="ghost2"
+              size="fit"
+              disabled={modelPickerOverride?.disabled ?? disableModelSwitch}
+              value={modelPickerOverride?.value ?? currentModelKey}
+              models={modelPickerOverride?.models ?? settings.activeModels}
+              apiKeySettings={modelPickerOverride ? undefined : settings}
+              onChange={modelPickerOverride?.onChange ?? setCurrentModelKey}
+              className="tw-min-w-0 tw-max-w-full tw-truncate"
+            />
+          )}
         </div>
 
         <div className="tw-flex tw-items-center tw-gap-1">

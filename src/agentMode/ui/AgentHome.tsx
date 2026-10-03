@@ -11,14 +11,14 @@ import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
 import { listMentionableAgents } from "@/agentMode/ui/mentionedAgents";
 import { BUILTIN_AGENT_SLUG } from "@/agents/types";
-import { openCopilotSettings } from "@/settings/openSettings";
+import { openAgentSettings } from "@/settings/openSettings";
 import { useAgentTalkingTo } from "@/agentMode/ui/useAgentTalkingTo";
 import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
+import { AgentSpotlight, type AgentPickerSection } from "@/components/ui/AgentRoster";
 import { AgentWelcomeCard } from "@/agentMode/ui/AgentWelcomeCard";
 import { AgentHomeReleaseUpdate } from "@/components/release-update/AgentHomeReleaseUpdate";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
-import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import {
@@ -40,14 +40,12 @@ import { useRefreshEmptyLandingOnContextSourceChange } from "@/agentMode/ui/hook
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
-import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { agentProjectContextLoadAtom, type ProjectConfig } from "@/aiParams";
 import { makeNewProjectConfig } from "@/agentMode/ui/AgentProjectCreateForm";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
-import { TruncatedText } from "@/components/TruncatedText";
 import { AppContext } from "@/context";
 import { ChatInputProvider } from "@/context/ChatInputContext";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
@@ -280,7 +278,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const talkingTo = useAgentTalkingTo(manager);
 
-  const modelPickerOverride = useAgentModelPicker(manager, plugin, talkingTo);
+  const modelPickerOverride = useAgentModelPicker(manager, plugin);
   const modePickerOverride = useAgentModePicker(manager);
 
   const handleCycleMode = useCallback(() => {
@@ -370,11 +368,32 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     [talkingTo.entries]
   );
   const handleCreateAgent = useCallback(() => {
-    openCopilotSettings(app, rootEl?.win ?? window, "agents");
+    openAgentSettings(app, rootEl?.win ?? window, { kind: "create" });
   }, [app, rootEl]);
+  const handleOpenAgent = useCallback(
+    (row: { slug: string }) =>
+      openAgentSettings(app, rootEl?.win ?? window, { kind: "edit", slug: row.slug }),
+    [app, rootEl]
+  );
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- sessionId intentionally re-rolls the otherwise argument-free greeting factory
-  const greeting = useMemo(() => pickRandomGreeting(), [sessionId]);
+  const { entries: agentEntries, selectedSlug, select: selectAgent } = talkingTo;
+  const agentSection = useMemo<AgentPickerSection>(
+    () => ({
+      rows: agentEntries,
+      selectedSlug,
+      onSelect: (row) => selectAgent(row.slug),
+    }),
+    [agentEntries, selectedSlug, selectAgent]
+  );
+  const agentRow = agentEntries.find((entry) => entry.slug === selectedSlug);
+  const composerAgent = agentRow
+    ? {
+        slug: agentRow.slug,
+        name: agentRow.name,
+        avatarSrc: agentRow.avatarSrc,
+        showLabel: !isLanding,
+      }
+    : undefined;
 
   useEffect(() => {
     if (isLanding) void handleLoadChatHistory();
@@ -579,7 +598,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       isLoading={isLoading}
       hasPendingPlanPermission={hasPendingPlanPermission}
       modelPickerOverride={modelPickerOverride ?? undefined}
-      agentPicker={modelPickerOverride?.agentPicker}
+      agent={composerAgent}
       modePickerOverride={modePickerOverride ?? undefined}
       onCycleMode={handleCycleMode}
       activeProjectId={activeProjectId}
@@ -589,18 +608,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     />
   );
 
-  const showProjectHero = isProjectLanding && !isOrphanedProject;
-  const heroText = showProjectHero ? `Chat in ${projectName}` : greeting;
   const hero = (
-    <div className="tw-flex tw-min-w-0 tw-items-center tw-justify-center tw-gap-3">
-      <CopilotBrandIcon className="tw-size-6 tw-shrink-0 tw-text-normal" />
-      <TruncatedText
-        className="tw-min-w-0 tw-text-3xl tw-font-[330] tw-text-normal"
-        tooltipContent={heroText}
-      >
-        {heroText}
-      </TruncatedText>
-    </div>
+    <AgentSpotlight
+      section={agentSection}
+      onCreateAgent={handleCreateAgent}
+      onOpenAgent={handleOpenAgent}
+    />
   );
 
   const activeSession = manager.getSession(sessionId);

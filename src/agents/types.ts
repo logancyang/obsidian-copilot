@@ -18,6 +18,7 @@ export interface AgentRecord {
   memoryPath: string;
   memoryFolderPath: string;
   memoryBytes: number;
+  avatarSrc: string | null;
 }
 
 export type AgentDraft = Omit<CustomAgent, "slug" | "created">;
@@ -28,6 +29,7 @@ export interface BuiltinAgentEntry {
   name: string;
   description: string;
   icon: string;
+  avatarSrc: null;
 }
 
 export interface CustomAgentEntry {
@@ -36,6 +38,7 @@ export interface CustomAgentEntry {
   name: string;
   description: string;
   icon: string;
+  avatarSrc: string | null;
   agent: CustomAgent;
 }
 
@@ -49,17 +52,22 @@ export const BUILTIN_AGENT: BuiltinAgentEntry = Object.freeze({
   name: "Copilot",
   description: "Your vault instructions, no persona, no memory.",
   icon: "✦",
+  avatarSrc: null,
 });
 
 export const EMPTY_AGENT_RECORDS: readonly AgentRecord[] = Object.freeze([]);
 
-export function toAgentEntry(agent: CustomAgent): CustomAgentEntry {
+export function toAgentEntry(
+  agent: CustomAgent,
+  avatarSrc: string | null = null
+): CustomAgentEntry {
   return {
     kind: "custom",
     slug: agent.slug,
     name: agent.name,
     description: agent.description,
     icon: agent.icon,
+    avatarSrc,
     agent,
   };
 }

@@ -27,6 +27,7 @@ export interface AgentMentionEntry {
   readonly name: string;
   readonly description: string;
   readonly icon: string;
+  readonly avatarSrc?: string | null;
 }
 
 export const EMPTY_AGENT_MENTIONS: ReadonlyArray<AgentMentionEntry> = Object.freeze([]);

@@ -2,6 +2,9 @@ import type { CopilotSettingsTabId } from "@/settings/settingsTabs";
 import type { App } from "obsidian";
 
 let requestedCopilotSettingsTab: CopilotSettingsTabId | null = null;
+let requestedAgentPage: AgentSettingsPage | null = null;
+
+export type AgentSettingsPage = { kind: "edit"; slug: string } | { kind: "create" };
 
 interface ObsidianSettingsController {
   open: () => void;
@@ -29,4 +32,15 @@ export function consumeRequestedCopilotSettingsTab(): CopilotSettingsTabId {
   const requestedTab = requestedCopilotSettingsTab ?? "basic";
   requestedCopilotSettingsTab = null;
   return requestedTab;
+}
+
+export function openAgentSettings(app: App, ownerWindow: Window, page: AgentSettingsPage): void {
+  requestedAgentPage = page;
+  openCopilotSettings(app, ownerWindow, "agents");
+}
+
+export function consumeRequestedAgentPage(): AgentSettingsPage | null {
+  const page = requestedAgentPage;
+  requestedAgentPage = null;
+  return page;
 }

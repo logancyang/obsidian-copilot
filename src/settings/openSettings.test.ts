@@ -1,4 +1,9 @@
-import { consumeRequestedCopilotSettingsTab, openCopilotSettings } from "@/settings/openSettings";
+import {
+  consumeRequestedAgentPage,
+  consumeRequestedCopilotSettingsTab,
+  openAgentSettings,
+  openCopilotSettings,
+} from "@/settings/openSettings";
 import { COPILOT_SETTINGS_TAB_IDS } from "@/settings/settingsTabs";
 import type { App } from "obsidian";
 
@@ -72,5 +77,26 @@ describe("openSettings", () => {
         expect(consumeRequestedCopilotSettingsTab()).toBe("basic");
       }
     );
+  });
+
+  describe("openAgentSettings()", () => {
+    it("opens the Agents tab and asks it for the requested page, once", () => {
+      const open = jest.fn();
+      const app = { setting: { open, openTabById: jest.fn() } } as unknown as App;
+      const ownerWindow = { requestAnimationFrame: jest.fn() } as unknown as Window;
+
+      openAgentSettings(app, ownerWindow, { kind: "edit", slug: "wendy" });
+
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(consumeRequestedCopilotSettingsTab()).toBe("agents");
+      expect(consumeRequestedAgentPage()).toEqual({ kind: "edit", slug: "wendy" });
+      expect(consumeRequestedAgentPage()).toBeNull();
+    });
+  });
+
+  describe("consumeRequestedAgentPage()", () => {
+    it("asks for no agent page when settings opened any other way", () => {
+      expect(consumeRequestedAgentPage()).toBeNull();
+    });
   });
 });

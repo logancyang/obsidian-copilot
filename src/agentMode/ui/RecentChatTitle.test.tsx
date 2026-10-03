@@ -21,10 +21,24 @@ describe("RecentChatTitle", () => {
       expect(screen.getByText(title).getAttribute("title")).toBe(title);
     });
 
-    it("puts the agent's icon before the title of a chat held with one", () => {
-      const { container } = render(<RecentChatTitle title="Newsletter intro" agentIcon="🪶" />);
+    it("puts the agent's face before the title of a chat held with one", () => {
+      const { container, rerender } = render(
+        <RecentChatTitle
+          title="Newsletter intro"
+          agentFace={{ name: "jennifer", avatarSrc: null }}
+        />
+      );
+      expect(container.textContent).toBe("JNewsletter intro");
 
-      expect(container.textContent).toBe("🪶Newsletter intro");
+      rerender(
+        <RecentChatTitle
+          title="Newsletter intro"
+          agentFace={{ name: "Jennifer", avatarSrc: "app://jennifer/avatar.webp" }}
+        />
+      );
+      expect(container.querySelector("img")?.getAttribute("src")).toBe(
+        "app://jennifer/avatar.webp"
+      );
     });
 
     it("renders a Copilot chat's title with no leading glyph", () => {

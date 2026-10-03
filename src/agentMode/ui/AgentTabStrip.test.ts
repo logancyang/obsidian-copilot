@@ -1,9 +1,5 @@
 import { COPILOT_SESSION_AGENT } from "@/agentMode/session/sessionAgent";
-import {
-  AgentTabStrip,
-  computeVisibleCount,
-  partitionSessions,
-} from "@/agentMode/ui/AgentTabStrip";
+import { AgentTabStrip, computeVisibleCount } from "@/agentMode/ui/AgentTabStrip";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
@@ -38,61 +34,6 @@ describe("AgentTabStrip", () => {
     it("accounts for inter-tab gaps", () => {
       expect(computeVisibleCount(292, 2)).toBe(2);
       expect(computeVisibleCount(291, 2)).toBe(1);
-    });
-  });
-
-  describe("partitionSessions()", () => {
-    const s = (id: string) => ({ internalId: id });
-
-    it("returns empty arrays for empty input", () => {
-      expect(partitionSessions({ sessions: [], visibleCount: 0, activeId: null })).toEqual({
-        visibleSessions: [],
-        overflowSessions: [],
-      });
-    });
-
-    it("splits front-to-back when active is already visible", () => {
-      const sessions = [s("a"), s("b"), s("c"), s("d")];
-      const { visibleSessions, overflowSessions } = partitionSessions({
-        sessions,
-        visibleCount: 2,
-        activeId: "a",
-      });
-      expect(visibleSessions.map((x) => x.internalId)).toEqual(["a", "b"]);
-      expect(overflowSessions.map((x) => x.internalId)).toEqual(["c", "d"]);
-    });
-
-    it("pins the active tab into the last visible slot when it would overflow", () => {
-      const sessions = [s("a"), s("b"), s("c"), s("d")];
-      const { visibleSessions, overflowSessions } = partitionSessions({
-        sessions,
-        visibleCount: 2,
-        activeId: "d",
-      });
-      expect(visibleSessions.map((x) => x.internalId)).toEqual(["a", "d"]);
-      expect(overflowSessions.map((x) => x.internalId)).toEqual(["b", "c"]);
-    });
-
-    it("does not swap when activeId is null", () => {
-      const sessions = [s("a"), s("b"), s("c")];
-      const { visibleSessions, overflowSessions } = partitionSessions({
-        sessions,
-        visibleCount: 1,
-        activeId: null,
-      });
-      expect(visibleSessions.map((x) => x.internalId)).toEqual(["a"]);
-      expect(overflowSessions.map((x) => x.internalId)).toEqual(["b", "c"]);
-    });
-
-    it("handles visibleCount === 1 with overflow active", () => {
-      const sessions = [s("a"), s("b"), s("c")];
-      const { visibleSessions, overflowSessions } = partitionSessions({
-        sessions,
-        visibleCount: 1,
-        activeId: "c",
-      });
-      expect(visibleSessions.map((x) => x.internalId)).toEqual(["c"]);
-      expect(overflowSessions.map((x) => x.internalId)).toEqual(["a", "b"]);
     });
   });
 

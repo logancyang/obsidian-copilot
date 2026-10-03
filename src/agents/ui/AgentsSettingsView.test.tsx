@@ -26,7 +26,7 @@ const JENNIFER: AgentRowItem = {
   slug: "jennifer",
   name: "Jennifer",
   description: "Skeptical editor. Cuts fluff, argues for the reader.",
-  icon: "🪶",
+  avatarSrc: null,
   backendLabel: "Claude Code",
   cloudEgress: false,
   memoryLabel: "2.6 KB",
@@ -36,7 +36,7 @@ const VANCAT: AgentRowItem = {
   slug: "vancat",
   name: "Vancat",
   description: "Blunt systems reviewer.",
-  icon: "🐈",
+  avatarSrc: null,
   backendLabel: null,
   cloudEgress: false,
   memoryLabel: null,
@@ -44,13 +44,8 @@ const VANCAT: AgentRowItem = {
 
 function noopActions(): AgentRowActions {
   return {
-    onSelect: jest.fn(),
-    onEdit: jest.fn(),
+    onOpen: jest.fn(),
     onOpenFolder: jest.fn(),
-    onOpenMemory: jest.fn(),
-    onOpenTodaysNotes: jest.fn(),
-    onConsolidateMemory: jest.fn(),
-    onClearMemory: jest.fn(),
     onDelete: jest.fn(),
   };
 }
@@ -61,15 +56,17 @@ function editorProps(overrides: Partial<AgentEditorProps> = {}): AgentEditorProp
     slug: null,
     draft: {
       name: "",
-      icon: "",
       description: "",
       instructions: "",
       backendId: "",
       modelId: "",
       effort: "",
       memoryEnabled: true,
+      avatarSrc: null,
     },
     onChange: jest.fn(),
+    onPickAvatar: jest.fn(),
+    onRemoveAvatar: jest.fn(),
     backendOptions: [{ label: "Session default", value: "" }],
     modelOptions: [{ label: "Backend default", value: "" }],
     effortOptions: [{ label: "Model default", value: "" }],
@@ -97,7 +94,6 @@ function renderView(overrides: Partial<AgentsSettingsViewProps> = {}) {
     onSearchChange: jest.fn(),
     onNewAgent: jest.fn(),
     actions: noopActions(),
-    selectedSlug: null,
     editor: null,
     ...overrides,
   };
@@ -165,39 +161,71 @@ describe("AgentsSettingsView", () => {
     expect(onNewAgent).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the create editor beside the list even while no agent exists", () => {
-    renderView({ editor: editorProps() });
+  it("replaces the roster with the new agent's page while one is being created", () => {
+    renderView({ agents: [JENNIFER], editor: editorProps() });
 
     expect(screen.getByRole("heading", { name: "New agent" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Create agent" })).toBeTruthy();
-    expect(screen.queryByText("No agents yet")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Your agents" })).toBeNull();
   });
 
-  it("shows the settled folder name and a Save button when editing an existing agent", () => {
+  it("returns to the roster through the back control without saving", () => {
+    const onCancel = jest.fn();
+    renderView({ editor: editorProps({ onCancel }) });
+
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the agent's folder, a Save button, and its memory and delete actions when editing", () => {
+    const memory = {
+      sizeLabel: "2.6 KB",
+      onOpenMemory: jest.fn(),
+      onOpenTodaysNotes: jest.fn(),
+      onConsolidate: jest.fn(),
+      onClear: jest.fn(),
+    };
+    const onDelete = jest.fn();
     renderView({
       agents: [JENNIFER],
-      selectedSlug: "jennifer",
       editor: editorProps({
         mode: "edit",
         slug: "jennifer",
         draft: {
           name: "Jennifer",
-          icon: "🪶",
           description: "Skeptical editor.",
           instructions: "You are Jennifer.",
           backendId: "claude",
           modelId: "",
           effort: "",
           memoryEnabled: true,
+          avatarSrc: null,
         },
         onOpenInEditor: jest.fn(),
+        memory,
+        onDelete,
       }),
     });
 
-    expect(screen.getByRole("heading", { name: "Edit agent" })).toBeTruthy();
-    expect(screen.getByText("Folder: jennifer")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Jennifer" })).toBeTruthy();
+    expect(screen.getByText("Stored in the agent's folder: jennifer/")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Open in editor" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open agent.md" })).toBeTruthy();
+    expect(screen.getByText(/MEMORY\.md \(2\.6 KB\)/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Consolidate now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete agent…" }));
+
+    expect(memory.onConsolidate).toHaveBeenCalledTimes(1);
+    expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers no memory or delete actions for an agent that does not exist yet", () => {
+    renderView({ editor: editorProps() });
+
+    expect(screen.queryByRole("button", { name: "Consolidate now" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete agent…" })).toBeNull();
   });
 
   it("shows only the roster until an agent is opened", () => {
@@ -205,14 +233,14 @@ describe("AgentsSettingsView", () => {
     expect(screen.queryByRole("region", { name: "Agent editor" })).toBeNull();
   });
 
-  it("routes every row-menu action to the selected agent", () => {
+  it("routes the row menu's folder action to that row's agent", () => {
     const actions = noopActions();
     renderView({ agents: [JENNIFER], actions });
 
     fireEvent.pointerDown(screen.getByLabelText("More actions for Jennifer"), { button: 0 });
-    fireEvent.click(screen.getByText("Open memory"));
+    fireEvent.click(screen.getByText("Open folder"));
 
-    expect(actions.onOpenMemory).toHaveBeenCalledWith("jennifer");
+    expect(actions.onOpenFolder).toHaveBeenCalledWith("jennifer");
   });
 
   it("asks to delete the agent whose row menu was used", () => {
@@ -225,13 +253,13 @@ describe("AgentsSettingsView", () => {
     expect(actions.onDelete).toHaveBeenCalledWith("vancat");
   });
 
-  it("selects an agent when its row body is clicked", () => {
+  it("opens an agent's page when anywhere on its row is clicked", () => {
     const actions = noopActions();
     renderView({ agents: [JENNIFER], actions });
 
-    fireEvent.click(screen.getByText("Jennifer"));
+    fireEvent.click(screen.getByText("Skeptical editor. Cuts fluff, argues for the reader."));
 
-    expect(actions.onSelect).toHaveBeenCalledWith("jennifer");
+    expect(actions.onOpen).toHaveBeenCalledWith("jennifer");
   });
 });
 
@@ -339,13 +367,38 @@ describe("AgentEditor", () => {
     expect(onChange).toHaveBeenCalledWith({ modelId: "opus", effort: "" });
   });
 
+  it("hands a picked image file to the container to encode and preview", () => {
+    const onPickAvatar = jest.fn();
+    renderView({ editor: editorProps({ onPickAvatar }) });
+    const file = new File(["x"], "me.png", { type: "image/png" });
+
+    fireEvent.change(screen.getByLabelText("Profile image"), { target: { files: [file] } });
+
+    expect(onPickAvatar).toHaveBeenCalledWith(file);
+  });
+
+  it("offers to remove an image only while the agent has one", () => {
+    const onRemoveAvatar = jest.fn();
+    const { rerender, props } = renderView({ editor: editorProps({ onRemoveAvatar }) });
+    expect(screen.getByRole("button", { name: "Upload image" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+
+    const withImage = editorProps({
+      onRemoveAvatar,
+      draft: { ...editorProps().draft, avatarSrc: "blob:avatar" },
+    });
+    rerender(<AgentsSettingsView {...props} editor={withImage} />);
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    expect(screen.getByRole("button", { name: "Change image" })).toBeTruthy();
+    expect(onRemoveAvatar).toHaveBeenCalledTimes(1);
+  });
+
   it("reports a rejected save above the buttons rather than silently doing nothing", () => {
     renderView({
-      editor: editorProps({ error: "The icon must be a single emoji or letter." }),
+      editor: editorProps({ error: "Could not read that image." }),
     });
-    expect(screen.getByRole("alert").textContent).toBe(
-      "The icon must be a single emoji or letter."
-    );
+    expect(screen.getByRole("alert").textContent).toBe("Could not read that image.");
   });
 
   it("shows progress and blocks a second submit while a save is in flight", () => {

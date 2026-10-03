@@ -11,6 +11,7 @@ export interface SessionAgent {
   slug: string | null;
   name: string;
   icon: string;
+  avatarSrc?: string | null;
   personaBlock: string | null;
   memory: AgentMemoryInjection | null;
 }

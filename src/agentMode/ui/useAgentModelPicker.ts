@@ -6,9 +6,7 @@ import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManage
 import { modelStateSignature } from "@/agentMode/session/translateBackendState";
 import type { BackendDescriptor } from "@/agentMode/session/types";
 import { useBackendInstallStates } from "@/agentMode/ui/useBackendDescriptor";
-import type { AgentPickerSection } from "@/components/ui/AgentPicker";
 import { buildAgentModelPicker } from "./agentModelPickerHelpers";
-import type { AgentTalkingTo } from "./useAgentTalkingTo";
 import { useManagerSubscribe } from "./useManagerSubscribe";
 import type CopilotPlugin from "@/main";
 
@@ -25,7 +23,6 @@ export interface AgentModelPickerOverride {
   };
   effortOptionsByModelKey?: Record<string, { label: string; value: string | null }[]>;
   commitSelection?: (modelKey: string, effort: string | null) => void;
-  agentPicker?: AgentPickerSection;
 }
 
 function useAgentModelSignal(
@@ -55,8 +52,7 @@ function useAgentModelSignal(
 
 export function useAgentModelPicker(
   manager: AgentSessionManager | null,
-  plugin: CopilotPlugin,
-  talkingTo: AgentTalkingTo
+  plugin: CopilotPlugin
 ): AgentModelPickerOverride | null {
   const settings = useSettingsValue();
   const descriptors = useMemo(() => listBackendDescriptors(), []);
@@ -65,6 +61,6 @@ export function useAgentModelPicker(
   return useMemo(() => {
     void signal;
     void installStates;
-    return buildAgentModelPicker({ manager, descriptors, settings, talkingTo });
-  }, [manager, descriptors, settings, signal, installStates, talkingTo]);
+    return buildAgentModelPicker({ manager, descriptors, settings });
+  }, [manager, descriptors, settings, signal, installStates]);
 }

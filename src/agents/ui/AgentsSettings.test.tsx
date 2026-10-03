@@ -1,5 +1,6 @@
 import type { AgentDraft, AgentRecord } from "@/agents/types";
 import { AgentsSettings } from "@/agents/ui/AgentsSettings";
+import { openAgentSettings } from "@/settings/openSettings";
 import { AppContext } from "@/context";
 import { PluginProvider } from "@/contexts/PluginContext";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -11,6 +12,7 @@ const createAgent = jest.fn<Promise<AgentRecord>, [AgentDraft]>();
 const updateAgent = jest.fn<Promise<AgentRecord>, [string, AgentDraft]>();
 const deleteAgent = jest.fn<Promise<void>, [string]>();
 const clearMemory = jest.fn<Promise<void>, [string]>();
+const setAvatar = jest.fn<Promise<void>, [string, ArrayBuffer | null]>();
 
 jest.mock("@/agents/AgentFileManager", () => ({
   AgentFileManager: class {
@@ -19,7 +21,15 @@ jest.mock("@/agents/AgentFileManager", () => ({
     updateAgent = updateAgent;
     deleteAgent = deleteAgent;
     clearMemory = clearMemory;
+    setAvatar = setAvatar;
   },
+}));
+
+const ENCODED_AVATAR = new ArrayBuffer(16);
+jest.mock("@/agents/agentAvatarImage", () => ({
+  encodeAgentAvatar: () => Promise.resolve(ENCODED_AVATAR),
+  createAvatarPreviewUrl: () => "blob:preview",
+  revokeAvatarPreviewUrl: () => {},
 }));
 
 jest.mock("@/agentMode", () => ({
@@ -134,6 +144,7 @@ function makeRecord(overrides: Partial<AgentRecord["agent"]> = {}): AgentRecord 
     memoryPath: `copilot/agents/${slug}/MEMORY.md`,
     memoryFolderPath: `copilot/agents/${slug}/memory`,
     memoryBytes: 2662,
+    avatarSrc: null,
   };
 }
 
@@ -189,7 +200,6 @@ describe("AgentsSettings", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "New agent" }));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Jennifer" } });
-    fireEvent.change(screen.getByLabelText("Icon"), { target: { value: "🪶" } });
     fireEvent.change(screen.getByLabelText("Description"), {
       target: { value: "Skeptical editor." },
     });
@@ -198,7 +208,7 @@ describe("AgentsSettings", () => {
     await waitFor(() =>
       expect(createAgent).toHaveBeenCalledWith({
         name: "Jennifer",
-        icon: "🪶",
+        icon: "",
         description: "Skeptical editor.",
         instructions: "",
         backendId: null,
@@ -235,21 +245,6 @@ describe("AgentsSettings", () => {
     expect(screen.queryByTestId("cloud-warning")).toBeNull();
   });
 
-  it("rejects an icon of more than one character before touching the vault", async () => {
-    renderPanel();
-
-    fireEvent.click(screen.getByRole("button", { name: "New agent" }));
-    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Jennifer" } });
-    fireEvent.change(screen.getByLabelText("Icon"), { target: { value: "ab" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
-
-    expect(await screen.findByRole("alert")).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toBe(
-      "The icon must be a single emoji or letter."
-    );
-    expect(createAgent).not.toHaveBeenCalled();
-  });
-
   it("keeps the editor open and explains a failed write instead of losing the draft", async () => {
     createAgent.mockRejectedValue(new Error("Path conflict"));
     renderPanel();
@@ -261,6 +256,18 @@ describe("AgentsSettings", () => {
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toBe("Path conflict");
     expect(nameInput().value).toBe("Jennifer");
+  });
+
+  it("keeps the icon an agent's file already carries, since Settings no longer edits it", async () => {
+    listAgents.mockResolvedValue([makeRecord()]);
+    updateAgent.mockResolvedValue(makeRecord());
+    renderPanel();
+
+    fireEvent.click(await screen.findByText("Jennifer"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+    expect(updateAgent.mock.calls[0][1].icon).toBe("🪶");
   });
 
   it("saves an edit against the agent's own slug, not its new name", async () => {
@@ -309,10 +316,8 @@ describe("AgentsSettings", () => {
     listAgents.mockResolvedValue([makeRecord()]);
     renderPanel();
 
-    fireEvent.pointerDown(await screen.findByLabelText("More actions for Jennifer"), {
-      button: 0,
-    });
-    fireEvent.click(screen.getByText("Open memory"));
+    fireEvent.click(await screen.findByText("Jennifer"));
+    fireEvent.click(screen.getByRole("button", { name: "Open MEMORY.md" }));
 
     expect(closeSettings).toHaveBeenCalledTimes(1);
     expect(openVaultPath).toHaveBeenCalledWith(app, "copilot/agents/jennifer/MEMORY.md", {
@@ -324,10 +329,8 @@ describe("AgentsSettings", () => {
     listAgents.mockResolvedValue([makeRecord()]);
     renderPanel();
 
-    fireEvent.pointerDown(await screen.findByLabelText("More actions for Jennifer"), {
-      button: 0,
-    });
-    fireEvent.click(screen.getByText("Clear memory"));
+    fireEvent.click(await screen.findByText("Jennifer"));
+    fireEvent.click(screen.getByRole("button", { name: "Clear memory…" }));
 
     expect(clearConfirmArgs).toEqual({
       name: "Jennifer",
@@ -341,16 +344,85 @@ describe("AgentsSettings", () => {
     clearMemory.mockResolvedValue(undefined);
     renderPanel();
 
-    fireEvent.pointerDown(await screen.findByLabelText("More actions for Jennifer"), {
-      button: 0,
-    });
-    fireEvent.click(screen.getByText("Clear memory"));
+    fireEvent.click(await screen.findByText("Jennifer"));
+    fireEvent.click(screen.getByRole("button", { name: "Clear memory…" }));
     await act(async () => {
       await confirmClear?.();
     });
 
     await waitFor(() => expect(clearMemory).toHaveBeenCalledWith("jennifer"));
     expect(listAgents).toHaveBeenCalledTimes(2);
+  });
+
+  it("writes a picked image into the agent's folder only when the page is saved", async () => {
+    listAgents.mockResolvedValue([makeRecord()]);
+    updateAgent.mockResolvedValue(makeRecord());
+    setAvatar.mockResolvedValue(undefined);
+    renderPanel();
+
+    fireEvent.click(await screen.findByText("Jennifer"));
+    const file = new File(["x"], "me.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Profile image"), { target: { files: [file] } });
+    expect(await screen.findByRole("button", { name: "Change image" })).toBeTruthy();
+    expect(setAvatar).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(setAvatar).toHaveBeenCalledWith("jennifer", ENCODED_AVATAR));
+  });
+
+  it("removes the stored image on save after Remove is pressed", async () => {
+    listAgents.mockResolvedValue([{ ...makeRecord(), avatarSrc: "app://jennifer/avatar.webp" }]);
+    updateAgent.mockResolvedValue(makeRecord());
+    setAvatar.mockResolvedValue(undefined);
+    renderPanel();
+
+    fireEvent.click(await screen.findByText("Jennifer"));
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(setAvatar).toHaveBeenCalledWith("jennifer", null));
+  });
+
+  it("leaves the stored image alone when a save changes nothing about it", async () => {
+    listAgents.mockResolvedValue([makeRecord()]);
+    updateAgent.mockResolvedValue(makeRecord());
+    renderPanel();
+
+    fireEvent.click(await screen.findByText("Jennifer"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+    expect(setAvatar).not.toHaveBeenCalled();
+  });
+
+  it("opens straight on the agent page the chat landing asked for", async () => {
+    listAgents.mockResolvedValue([makeRecord()]);
+    openAgentSettings(
+      { setting: { open: jest.fn(), openTabById: jest.fn() } } as unknown as App,
+      { requestAnimationFrame: jest.fn() } as unknown as Window,
+      { kind: "edit", slug: "jennifer" }
+    );
+    renderPanel();
+
+    expect(await screen.findByRole("button", { name: "Save" })).toBeTruthy();
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Instructions").value).toBe(
+      makeRecord().agent.instructions
+    );
+  });
+
+  it("opens straight on a blank create form when the chat landing asked for a new agent", async () => {
+    listAgents.mockResolvedValue([makeRecord()]);
+    openAgentSettings(
+      { setting: { open: jest.fn(), openTabById: jest.fn() } } as unknown as App,
+      { requestAnimationFrame: jest.fn() } as unknown as Window,
+      { kind: "create" }
+    );
+    renderPanel();
+
+    expect(screen.getByRole("button", { name: "Create agent" })).toBeTruthy();
+    expect(nameInput().value).toBe("");
+    await waitFor(() => expect(listAgents).toHaveBeenCalled());
   });
 
   it("asks for confirmation naming the agent and its folder before deleting", async () => {

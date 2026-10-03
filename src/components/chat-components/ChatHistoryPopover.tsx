@@ -32,7 +32,7 @@ export interface ChatHistoryItem {
   backendId?: string;
   projectId?: string;
   needsAttention?: boolean;
-  agentIcon?: string;
+  agentFace?: { name: string; avatarSrc: string | null };
 }
 
 type ChatHistoryIconResolver = (

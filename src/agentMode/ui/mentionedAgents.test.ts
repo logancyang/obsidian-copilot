@@ -25,16 +25,28 @@ function agent(slug: string, over: Partial<CustomAgent> = {}): CustomAgent {
 
 describe("mentionedAgents", () => {
   describe("listMentionableAgents()", () => {
-    it("offers every custom agent with its name, description and icon", () => {
+    it("offers every custom agent with its name, description, icon and profile image", () => {
       const entries = listMentionableAgents([
         BUILTIN_AGENT,
-        toAgentEntry(agent("jennifer")),
+        toAgentEntry(agent("jennifer"), "app://jennifer/avatar.webp"),
         toAgentEntry(agent("vancat", { icon: "🐱" })),
       ]);
 
       expect(entries).toEqual([
-        { slug: "jennifer", name: "Jennifer", description: "jennifer does things", icon: "🪶" },
-        { slug: "vancat", name: "Vancat", description: "vancat does things", icon: "🐱" },
+        {
+          slug: "jennifer",
+          name: "Jennifer",
+          description: "jennifer does things",
+          icon: "🪶",
+          avatarSrc: "app://jennifer/avatar.webp",
+        },
+        {
+          slug: "vancat",
+          name: "Vancat",
+          description: "vancat does things",
+          icon: "🐱",
+          avatarSrc: null,
+        },
       ]);
     });
 

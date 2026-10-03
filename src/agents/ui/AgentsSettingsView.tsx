@@ -4,16 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Plus, Search, Users } from "lucide-react";
-import React from "react";
+import React, { useId } from "react";
 
 export interface AgentRowActions {
-  onSelect: (slug: string) => void;
-  onEdit: (slug: string) => void;
+  onOpen: (slug: string) => void;
   onOpenFolder: (slug: string) => void;
-  onOpenMemory: (slug: string) => void;
-  onOpenTodaysNotes: (slug: string) => void;
-  onConsolidateMemory: (slug: string) => void;
-  onClearMemory: (slug: string) => void;
   onDelete: (slug: string) => void;
 }
 
@@ -24,7 +19,6 @@ export interface AgentsSettingsViewProps {
   onSearchChange: (value: string) => void;
   onNewAgent: () => void;
   actions: AgentRowActions;
-  selectedSlug: string | null;
   editor: AgentEditorProps | null;
   containerRef?: React.RefObject<HTMLElement>;
 }
@@ -36,10 +30,22 @@ export const AgentsSettingsView: React.FC<AgentsSettingsViewProps> = ({
   onSearchChange,
   onNewAgent,
   actions,
-  selectedSlug,
   editor,
   containerRef,
 }) => {
+  const editorLabelId = useId();
+  const rosterLabelId = useId();
+  if (editor !== null) {
+    return (
+      <div role="region" aria-labelledby={editorLabelId}>
+        <span id={editorLabelId} className="tw-sr-only">
+          Agent editor
+        </span>
+        <AgentEditor {...editor} />
+      </div>
+    );
+  }
+
   const query = searchValue.trim().toLowerCase();
   const visible =
     query.length === 0
@@ -83,49 +89,34 @@ export const AgentsSettingsView: React.FC<AgentsSettingsViewProps> = ({
           </div>
         </div>
 
-        {agents.length === 0 && editor === null ? (
+        {agents.length === 0 ? (
           <div className="tw-mt-4">
             <AgentsEmptyPlaceholder folder={agentsFolder} />
           </div>
         ) : (
-          <div className="tw-mt-4 tw-flex tw-flex-col tw-gap-4">
-            <div role="region" aria-label="Your agents" className="tw-flex tw-flex-col tw-gap-1.5">
-              {visible.length === 0 ? (
-                <div className="tw-rounded-sm tw-border tw-border-dashed tw-border-border tw-bg-primary tw-px-3 tw-py-6 tw-text-center tw-text-ui-smaller tw-text-muted">
-                  {agents.length === 0
-                    ? "No agents yet."
-                    : `No agents match “${searchValue.trim()}”.`}
-                </div>
-              ) : (
-                visible.map((agent) => (
-                  <AgentRow
-                    key={agent.slug}
-                    agent={agent}
-                    selected={agent.slug === selectedSlug}
-                    onSelect={() => actions.onSelect(agent.slug)}
-                    onEdit={() => actions.onEdit(agent.slug)}
-                    onOpenFolder={() => actions.onOpenFolder(agent.slug)}
-                    onOpenMemory={() => actions.onOpenMemory(agent.slug)}
-                    onOpenTodaysNotes={() => actions.onOpenTodaysNotes(agent.slug)}
-                    onConsolidateMemory={() => actions.onConsolidateMemory(agent.slug)}
-                    onClearMemory={() => actions.onClearMemory(agent.slug)}
-                    onDelete={() => actions.onDelete(agent.slug)}
-                    containerRef={containerRef}
-                  />
-                ))
-              )}
-            </div>
-            {editor !== null && (
-              <div
-                role="region"
-                aria-label="Agent editor"
-                className={cn(
-                  "tw-rounded-md tw-border tw-border-solid tw-border-border",
-                  "tw-bg-primary tw-p-3.5"
-                )}
-              >
-                <AgentEditor {...editor} />
+          <div
+            role="region"
+            aria-labelledby={rosterLabelId}
+            className="tw-mt-4 tw-flex tw-flex-col tw-gap-1.5"
+          >
+            <span id={rosterLabelId} className="tw-sr-only">
+              Your agents
+            </span>
+            {visible.length === 0 ? (
+              <div className="tw-rounded-sm tw-border tw-border-dashed tw-border-border tw-bg-primary tw-px-3 tw-py-6 tw-text-center tw-text-ui-smaller tw-text-muted">
+                {`No agents match “${searchValue.trim()}”.`}
               </div>
+            ) : (
+              visible.map((agent) => (
+                <AgentRow
+                  key={agent.slug}
+                  agent={agent}
+                  onOpen={() => actions.onOpen(agent.slug)}
+                  onOpenFolder={() => actions.onOpenFolder(agent.slug)}
+                  onDelete={() => actions.onDelete(agent.slug)}
+                  containerRef={containerRef}
+                />
+              ))
             )}
           </div>
         )}

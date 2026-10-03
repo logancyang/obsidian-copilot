@@ -47,7 +47,7 @@ import type { AgentSessionIndex } from "./AgentSessionIndex";
 import type { AgentFileManager } from "@/agents/AgentFileManager";
 import { BUILTIN_AGENT, BUILTIN_AGENT_SLUG, toAgentEntry } from "@/agents/types";
 import { formatMissingAgentLabel } from "@/agents/agentDisplay";
-import type { AgentEntry, CustomAgent } from "@/agents/types";
+import type { AgentEntry, AgentRecord, CustomAgent } from "@/agents/types";
 import { formatMemoryEntryDate } from "@/agents/agentMemory";
 import {
   hasUnconsolidatedNotes,
@@ -201,6 +201,7 @@ export type DescriptorResolver = (id: BackendId) => BackendDescriptor | undefine
 export interface ReplaceSessionOptions {
   preserveChatInput?: boolean;
   seedSelection?: ModelSelection;
+  rebindAgent?: boolean;
 }
 
 export interface AgentSessionManagerOptions {
@@ -567,7 +568,12 @@ export class AgentSessionManager {
 
     const liveAttentionPaths = this.collectLiveAttentionPaths();
     await this.refreshAgents();
-    const iconBySlug = new Map(this.agentRoster.map((agent) => [agent.slug, agent.icon]));
+    const faceBySlug = new Map(
+      this.agentEntries.map((entry) => [
+        entry.slug,
+        { name: entry.name, avatarSrc: entry.avatarSrc },
+      ])
+    );
 
     let files: TFile[] = [];
     let markdownEntries: MarkdownChatEntry[] = [];
@@ -578,13 +584,13 @@ export class AgentSessionManager {
         files.map(async (file) => {
           const ref = await this.readSessionRefFromFile(file.path);
           const base = fileToHistoryItem(this.app, file, tracker);
-          const agentIcon = ref?.agentSlug ? iconBySlug.get(ref.agentSlug) : undefined;
+          const agentFace = ref?.agentSlug ? faceBySlug.get(ref.agentSlug) : undefined;
           const item =
-            liveAttentionPaths.has(base.id) || agentIcon
+            liveAttentionPaths.has(base.id) || agentFace
               ? {
                   ...base,
                   ...(liveAttentionPaths.has(base.id) ? { needsAttention: true } : {}),
-                  ...(agentIcon ? { agentIcon } : {}),
+                  ...(agentFace ? { agentFace } : {}),
                 }
               : base;
           return { item, backendId: ref?.backendId, sessionId: ref?.sessionId };
@@ -1293,17 +1299,18 @@ export class AgentSessionManager {
   async refreshAgents(): Promise<void> {
     const files = this.opts.agentFileManager;
     if (!files) return;
-    let agents: readonly CustomAgent[];
+    let records: readonly AgentRecord[];
     try {
-      agents = (await files.listAgents()).map((record) => record.agent);
+      records = await files.listAgents();
     } catch (error) {
       logWarn("[Agents] Could not list agents", error);
       return;
     }
+    const agents = records.map((record) => record.agent);
     const entries: readonly AgentEntry[] =
-      agents.length === 0
+      records.length === 0
         ? BUILTIN_ONLY_AGENT_ENTRIES
-        : [BUILTIN_AGENT, ...agents.map(toAgentEntry)];
+        : [BUILTIN_AGENT, ...records.map((record) => toAgentEntry(record.agent, record.avatarSrc))];
     const unchanged =
       entries.length === this.agentEntries.length &&
       entries.every((entry, i) => {
@@ -1314,6 +1321,7 @@ export class AgentSessionManager {
           entry.slug === before.slug &&
           entry.name === before.name &&
           entry.icon === before.icon &&
+          entry.avatarSrc === before.avatarSrc &&
           entry.description === before.description &&
           pins?.backendId === pinsBefore?.backendId &&
           pins?.modelId === pinsBefore?.modelId &&
@@ -1346,12 +1354,26 @@ export class AgentSessionManager {
   async setSelectedAgent(slug: string): Promise<void> {
     this.selectedAgentSlug = slug || BUILTIN_AGENT_SLUG;
     const agent = await this.resolveSessionAgent(this.selectedAgentSlug);
+    const active = this.getActiveSession();
+    const activeWasOtherAgent =
+      (active?.getAgent().slug ?? BUILTIN_AGENT_SLUG) !== this.selectedAgentSlug;
     for (const session of this.sessions.values()) {
       if (session.getStatus() === "closed") continue;
       if (session.hasUserVisibleMessages()) continue;
       session.setAgent(agent);
     }
     this.notify();
+    if (
+      active &&
+      activeWasOtherAgent &&
+      active.getStatus() !== "closed" &&
+      !active.hasUserVisibleMessages()
+    ) {
+      await this.replaceSessionInPlace(active.internalId, undefined, {
+        preserveChatInput: true,
+        rebindAgent: true,
+      });
+    }
   }
 
   private async bindSessionAgent(
@@ -1363,7 +1385,8 @@ export class AgentSessionManager {
     try {
       const record = await files.readAgent(slug);
       if (!record) return { agent: missingSessionAgent(slug), source: null };
-      return { agent: await loadSessionAgent(files, record.agent), source: record.agent };
+      const agent = await loadSessionAgent(files, record.agent);
+      return { agent: { ...agent, avatarSrc: record.avatarSrc }, source: record.agent };
     } catch (error) {
       logWarn(`[Agents] Could not read agent "${slug}"`, error);
       return { agent: missingSessionAgent(slug), source: null };
@@ -2225,7 +2248,7 @@ export class AgentSessionManager {
         replacedProjectId,
         options.seedSelection,
         chatInputId,
-        replaced?.getAgent()
+        options.rebindAgent ? undefined : replaced?.getAgent()
       );
     } catch (error) {
       this.continuingSessionIds.delete(oldId);

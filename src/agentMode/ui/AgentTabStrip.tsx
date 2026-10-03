@@ -1,4 +1,6 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
+import { AgentGlyph } from "@/components/ui/AgentGlyph";
+import { partitionOverflow } from "@/lib/partitionOverflow";
 import { TruncatedText } from "@/components/TruncatedText";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,38 +46,6 @@ export function computeVisibleCount(stripWidth: number, sessionCount: number): n
   return Math.max(1, fits(withOverflowBudget));
 }
 
-interface PartitionInput<T extends { internalId: string }> {
-  sessions: readonly T[];
-  visibleCount: number;
-  activeId: string | null;
-}
-
-interface Partition<T> {
-  visibleSessions: T[];
-  overflowSessions: T[];
-}
-
-export function partitionSessions<T extends { internalId: string }>({
-  sessions,
-  visibleCount,
-  activeId,
-}: PartitionInput<T>): Partition<T> {
-  if (sessions.length === 0) return { visibleSessions: [], overflowSessions: [] };
-  const visible = sessions.slice(0, visibleCount);
-  const overflow = sessions.slice(visibleCount);
-  if (activeId && overflow.some((s) => s.internalId === activeId)) {
-    const activeFromOverflow = overflow.find((s) => s.internalId === activeId)!;
-    const otherOverflow = overflow.filter((s) => s.internalId !== activeId);
-    const displaced = visible[visible.length - 1];
-    const swappedVisible = [...visible.slice(0, -1), activeFromOverflow];
-    return {
-      visibleSessions: swappedVisible,
-      overflowSessions: displaced ? [displaced, ...otherOverflow] : otherOverflow,
-    };
-  }
-  return { visibleSessions: visible, overflowSessions: overflow };
-}
-
 function useSessionDisplay(session: AgentSession) {
   const [, setTick] = React.useState(0);
   React.useEffect(
@@ -97,7 +67,7 @@ function useSessionDisplay(session: AgentSession) {
     needsAttention: session.getNeedsAttention(),
     descriptor,
     hasAgentMemory: agent.slug !== null,
-    agentIcon: agent.slug ? agent.icon : "",
+    agentFace: agent.slug ? { name: agent.name, avatarSrc: agent.avatarSrc ?? null } : null,
     displayLabel: label ?? (agent.slug ? agent.name : (descriptor?.displayName ?? "Session")),
     tooltipLabel: agent.slug
       ? `${agent.name}${label ? ` · ${label}` : ""}`
@@ -141,8 +111,8 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
     [stripWidth, sessionCount]
   );
 
-  const { visibleSessions, overflowSessions } = React.useMemo(
-    () => partitionSessions({ sessions, visibleCount, activeId }),
+  const { visible: visibleSessions, overflow: overflowSessions } = React.useMemo(
+    () => partitionOverflow(sessions, visibleCount, activeId, (session) => session.internalId),
     [sessions, visibleCount, activeId]
   );
 
@@ -250,7 +220,7 @@ const SessionTab: React.FC<TabProps> = ({
     needsAttention,
     descriptor,
     hasAgentMemory,
-    agentIcon,
+    agentFace,
     displayLabel,
     tooltipLabel,
   } = useSessionDisplay(session);
@@ -300,7 +270,7 @@ const SessionTab: React.FC<TabProps> = ({
         >
           <BrandIcon
             descriptor={descriptor}
-            agentIcon={agentIcon}
+            agentFace={agentFace}
             status={status}
             needsAttention={needsAttention}
             onCloseOnHover={onClose}
@@ -359,7 +329,7 @@ const RenameInput: React.FC<RenameInputProps> = ({ initialValue, onSubmit, onCan
 
 interface BrandIconProps {
   descriptor: BackendDescriptor | undefined;
-  agentIcon?: string;
+  agentFace?: { name: string; avatarSrc: string | null } | null;
   status: AgentSessionStatus;
   needsAttention?: boolean;
   onCloseOnHover?: () => void;
@@ -367,7 +337,7 @@ interface BrandIconProps {
 
 const BrandIcon: React.FC<BrandIconProps> = ({
   descriptor,
-  agentIcon,
+  agentFace,
   status,
   needsAttention,
   onCloseOnHover,
@@ -388,10 +358,12 @@ const BrandIcon: React.FC<BrandIconProps> = ({
             onCloseOnHover && "group-hover:tw-hidden"
           )}
         />
-      ) : agentIcon ? (
-        <span className={cn("tw-text-xs", onCloseOnHover && "group-hover:tw-hidden")}>
-          {agentIcon}
-        </span>
+      ) : agentFace ? (
+        <AgentGlyph
+          name={agentFace.name}
+          avatarSrc={agentFace.avatarSrc}
+          className={cn(onCloseOnHover && "group-hover:tw-hidden")}
+        />
       ) : Icon ? (
         <Icon className={cn("tw-size-4", onCloseOnHover && "group-hover:tw-hidden")} />
       ) : (
@@ -477,7 +449,7 @@ interface OverflowRowProps {
 }
 
 const OverflowRow: React.FC<OverflowRowProps> = ({ session, isActive, onActivate, onClose }) => {
-  const { status, needsAttention, descriptor, agentIcon, displayLabel, tooltipLabel } =
+  const { status, needsAttention, descriptor, agentFace, displayLabel, tooltipLabel } =
     useSessionDisplay(session);
 
   return (
@@ -492,7 +464,7 @@ const OverflowRow: React.FC<OverflowRowProps> = ({ session, isActive, onActivate
     >
       <BrandIcon
         descriptor={descriptor}
-        agentIcon={agentIcon}
+        agentFace={agentFace}
         status={status}
         needsAttention={needsAttention}
       />

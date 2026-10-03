@@ -26,13 +26,6 @@ export function buildAgentMemorySkeleton(name: string): string {
   return `# ${title}'s memory\n\n${sections}`;
 }
 
-export function isValidAgentIcon(icon: string): boolean {
-  const trimmed = (icon || "").trim();
-  if (trimmed.length === 0) return false;
-  const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-  return [...segmenter.segment(trimmed)].length === 1;
-}
-
 function readString(frontmatter: Record<string, unknown>, key: string): string {
   const value = frontmatter[key];
   if (typeof value === "string") return value.trim();

@@ -70,6 +70,20 @@ class FakeVault {
     return Promise.resolve();
   }
 
+  createBinary(path: string, data: ArrayBuffer): Promise<TFile> {
+    this.files.set(path, `binary:${data.byteLength}`);
+    return Promise.resolve(new FileCtor(path));
+  }
+
+  modifyBinary(file: TFile, data: ArrayBuffer): Promise<void> {
+    this.files.set(file.path, `binary:${data.byteLength}`);
+    return Promise.resolve();
+  }
+
+  getResourcePath(file: TFile): string {
+    return `app://local/${file.path}?${MEMORY_MTIME_MS}`;
+  }
+
   read(file: TFile): Promise<string> {
     const content = this.files.get(file.path);
     if (content === undefined) return Promise.reject(new Error(`Not found: ${file.path}`));
@@ -185,6 +199,31 @@ describe("AgentFileManager", () => {
       expect(records.map((record) => record.agent.slug)).toEqual(["jennifer"]);
     });
 
+    it("reports the folder's avatar image as a resource URL, preferring the uploaded webp", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.seedAgent("vancat", { name: "Vancat" });
+      vault.files.set(`${AGENTS_ROOT}/jennifer/avatar.png`, "png");
+      vault.files.set(`${AGENTS_ROOT}/jennifer/avatar.webp`, "webp");
+
+      const [jennifer, vancat] = await manager.listAgents();
+
+      expect(jennifer.avatarSrc).toBe(
+        `app://local/${AGENTS_ROOT}/jennifer/avatar.webp?${MEMORY_MTIME_MS}`
+      );
+      expect(vancat.avatarSrc).toBeNull();
+    });
+
+    it("ignores a file named avatar that is not an image", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.files.set(`${AGENTS_ROOT}/jennifer/avatar.md`, "notes");
+
+      const [record] = await manager.listAgents();
+
+      expect(record.avatarSrc).toBeNull();
+    });
+
     it("returns nothing when the agents folder does not exist yet", async () => {
       const { manager, vault } = buildManager();
       vault.folders.delete(AGENTS_ROOT);
@@ -255,6 +294,53 @@ describe("AgentFileManager", () => {
       vault.seedAgent("jennifer", { name: "Jennifer" });
       await expect(manager.updateAgent("jennifer", { ...DRAFT, name: "" })).rejects.toThrow(
         "Give the agent a name."
+      );
+    });
+  });
+
+  describe("setAvatar()", () => {
+    it("writes an uploaded image as avatar.webp and trashes any other avatar file", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.files.set(`${AGENTS_ROOT}/jennifer/avatar.png`, "png");
+
+      await manager.setAvatar("jennifer", new ArrayBuffer(8));
+
+      expect(vault.files.get(`${AGENTS_ROOT}/jennifer/avatar.webp`)).toBe("binary:8");
+      expect(trashFile).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ path: `${AGENTS_ROOT}/jennifer/avatar.png` })
+      );
+    });
+
+    it("overwrites an existing avatar.webp in place instead of trashing it", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.files.set(`${AGENTS_ROOT}/jennifer/avatar.webp`, "old");
+
+      await manager.setAvatar("jennifer", new ArrayBuffer(4));
+
+      expect(vault.files.get(`${AGENTS_ROOT}/jennifer/avatar.webp`)).toBe("binary:4");
+      expect(trashFile).not.toHaveBeenCalled();
+    });
+
+    it("trashes every avatar file when the image is removed", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.files.set(`${AGENTS_ROOT}/jennifer/avatar.webp`, "webp");
+
+      await manager.setAvatar("jennifer", null);
+
+      expect(trashFile).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ path: `${AGENTS_ROOT}/jennifer/avatar.webp` })
+      );
+    });
+
+    it("rejects an agent whose folder is gone", async () => {
+      const { manager } = buildManager();
+      await expect(manager.setAvatar("ghost", new ArrayBuffer(1))).rejects.toThrow(
+        "Agent not found: ghost"
       );
     });
   });

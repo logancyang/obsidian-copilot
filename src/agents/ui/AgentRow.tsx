@@ -1,3 +1,5 @@
+import { AgentAvatar } from "@/components/ui/AgentAvatar";
+import { BareButton } from "@/components/ui/bare-button";
 import { Button } from "@/components/ui/button";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import {
@@ -7,23 +9,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import {
-  BookOpen,
-  Edit3,
-  Eraser,
-  FolderSearch,
-  Layers,
-  MoreVertical,
-  NotebookPen,
-  Trash2,
-} from "lucide-react";
+import { ChevronRight, Edit3, FolderSearch, MoreVertical, Trash2 } from "lucide-react";
 import React from "react";
 
 export interface AgentRowItem {
   slug: string;
   name: string;
   description: string;
-  icon: string;
+  avatarSrc: string | null;
   backendLabel: string | null;
   cloudEgress: boolean;
   memoryLabel: string | null;
@@ -31,71 +24,44 @@ export interface AgentRowItem {
 
 export interface AgentRowProps {
   agent: AgentRowItem;
-  selected: boolean;
-  onSelect: () => void;
-  onEdit: () => void;
+  onOpen: () => void;
   onOpenFolder: () => void;
-  onOpenMemory: () => void;
-  onOpenTodaysNotes: () => void;
-  onConsolidateMemory: () => void;
-  onClearMemory: () => void;
   onDelete: () => void;
   containerRef?: React.RefObject<HTMLElement>;
 }
 
 export const AgentRow: React.FC<AgentRowProps> = ({
   agent,
-  selected,
-  onSelect,
-  onEdit,
+  onOpen,
   onOpenFolder,
-  onOpenMemory,
-  onOpenTodaysNotes,
-  onConsolidateMemory,
-  onClearMemory,
   onDelete,
   containerRef,
 }) => {
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const glyph = agent.icon.trim() || agent.name.trim().charAt(0).toUpperCase() || "?";
 
   return (
     <div
       data-menu-open={menuOpen ? "true" : undefined}
-      data-selected={selected ? "true" : undefined}
       className={cn(
-        "tw-flex tw-items-center tw-gap-3",
-        "tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary",
-        "tw-px-3.5 tw-py-2.5",
-        "tw-transition-colors hover:tw-border-border-hover hover:tw-bg-primary-alt",
-        "data-[menu-open=true]:tw-bg-primary-alt data-[menu-open=true]:tw-border-normal/100",
-        "data-[selected=true]:tw-bg-primary-alt data-[selected=true]:tw-border-normal/100"
+        "tw-group tw-relative tw-flex tw-items-center tw-rounded-md tw-border tw-border-solid tw-border-border",
+        "tw-bg-primary tw-transition-colors",
+        "hover:tw-border-border-hover hover:tw-bg-modifier-hover",
+        "data-[menu-open=true]:tw-border-border-hover data-[menu-open=true]:tw-bg-modifier-hover"
       )}
     >
-      <button
-        type="button"
-        onClick={onSelect}
-        aria-pressed={selected}
+      <BareButton
+        onClick={onOpen}
         className={cn(
-          "tw-appearance-none tw-border-0 tw-bg-transparent tw-p-0",
-          "tw-flex tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-items-center tw-gap-3 tw-text-left"
+          "tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-3 tw-rounded-md tw-py-2.5 tw-pl-3 tw-pr-1",
+          "focus-visible:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-ring"
         )}
       >
-        <span
-          aria-hidden="true"
-          className={cn(
-            "tw-flex tw-size-8 tw-shrink-0 tw-items-center tw-justify-center",
-            "tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary-alt",
-            "tw-text-ui-small"
-          )}
-        >
-          {glyph}
-        </span>
-        <span className="tw-min-w-0 tw-flex-1">
-          <span className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+        <AgentAvatar src={agent.avatarSrc} name={agent.name} size="md" />
+        <span className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-0.5">
+          <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
             <span
               title={agent.name}
-              className="tw-max-w-full tw-truncate tw-text-ui-small tw-font-semibold tw-text-normal"
+              className="tw-truncate tw-text-ui-small tw-font-semibold tw-text-normal"
             >
               {agent.name}
             </span>
@@ -105,23 +71,28 @@ export const AgentRow: React.FC<AgentRowProps> = ({
           {agent.description.length > 0 && (
             <span
               title={agent.description}
-              className="tw-mt-0.5 tw-block tw-truncate tw-text-ui-smaller tw-text-muted"
+              className="tw-truncate tw-text-ui-smaller tw-text-muted"
             >
               {agent.description}
             </span>
           )}
         </span>
-      </button>
-      <span className="tw-shrink-0 tw-text-ui-smaller tw-text-faint">
-        {agent.memoryLabel ?? "Memory off"}
-      </span>
+        <span className="tw-shrink-0 tw-text-ui-smaller tw-text-faint">
+          {agent.memoryLabel ?? "Memory off"}
+        </span>
+        <ChevronRight
+          className="tw-size-4 tw-shrink-0 tw-text-faint group-hover:tw-text-muted"
+          aria-hidden="true"
+        />
+      </BareButton>
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
         <DropdownMenuTrigger asChild>
           <Button
-            variant="ghost"
+            variant="ghost2"
             size="icon"
             title="More actions"
             aria-label={`More actions for ${agent.name}`}
+            className="tw-mr-2 tw-shrink-0"
           >
             <MoreVertical className="tw-size-4" />
           </Button>
@@ -131,29 +102,13 @@ export const AgentRow: React.FC<AgentRowProps> = ({
           className="tw-min-w-[180px]"
           container={containerRef?.current ?? null}
         >
-          <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onEdit}>
+          <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onOpen}>
             <Edit3 className="tw-size-3.5" aria-hidden="true" />
             Edit
           </DropdownMenuItem>
           <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onOpenFolder}>
             <FolderSearch className="tw-size-3.5" aria-hidden="true" />
             Open folder
-          </DropdownMenuItem>
-          <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onOpenMemory}>
-            <BookOpen className="tw-size-3.5" aria-hidden="true" />
-            Open memory
-          </DropdownMenuItem>
-          <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onOpenTodaysNotes}>
-            <NotebookPen className="tw-size-3.5" aria-hidden="true" />
-            Open today&apos;s notes
-          </DropdownMenuItem>
-          <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onConsolidateMemory}>
-            <Layers className="tw-size-3.5" aria-hidden="true" />
-            Consolidate memory now
-          </DropdownMenuItem>
-          <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onClearMemory}>
-            <Eraser className="tw-size-3.5" aria-hidden="true" />
-            Clear memory
           </DropdownMenuItem>
           <DropdownMenuItem
             className="tw-gap-2.5 tw-text-ui-small tw-text-error focus:tw-bg-modifier-error-rgb/15 focus:tw-text-error"
@@ -171,7 +126,7 @@ export const AgentRow: React.FC<AgentRowProps> = ({
 const Chip: React.FC<{ label: string }> = ({ label }) => (
   <span
     className={cn(
-      "tw-rounded-sm tw-border tw-border-solid tw-border-border tw-bg-primary-alt tw-px-1.5 tw-py-0.5",
+      "tw-shrink-0 tw-rounded-sm tw-border tw-border-solid tw-border-border tw-bg-primary-alt tw-px-1.5 tw-py-0.5",
       "tw-font-mono tw-text-smallest tw-font-medium tw-uppercase tw-tracking-wide tw-text-normal"
     )}
   >

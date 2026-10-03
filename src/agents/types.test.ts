@@ -22,8 +22,15 @@ describe("agents/types", () => {
         name: "Jennifer",
         description: "Skeptical editor.",
         icon: "🪶",
+        avatarSrc: null,
         agent: JENNIFER,
       });
+    });
+
+    it("carries the agent's profile image URL when its folder has one", () => {
+      expect(toAgentEntry(JENNIFER, "app://jennifer/avatar.webp").avatarSrc).toBe(
+        "app://jennifer/avatar.webp"
+      );
     });
   });
 

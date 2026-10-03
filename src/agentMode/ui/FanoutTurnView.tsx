@@ -51,7 +51,7 @@ const FanoutTab: React.FC<FanoutTabProps> = ({ option, selected, onSelect }) => 
           : "tw-text-muted hover:tw-bg-interactive-hover hover:tw-text-normal"
       )}
     >
-      {icon === undefined ? null : <AgentGlyph icon={icon} />}
+      {icon === undefined ? null : <AgentGlyph name={label} />}
       <span className="tw-max-w-32 tw-truncate">{label}</span>
       <FanoutStatusDot state={state} />
     </button>

@@ -1,8 +1,6 @@
 import { Notice } from "obsidian";
 import { logError } from "@/logger";
 import type { ModelCapability } from "@/constants";
-import type { AgentEntry } from "@/agents/types";
-import type { AgentPickerRow } from "@/components/ui/AgentPicker";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { lockedCopilotEntries, shouldPreviewCopilotModels } from "@/lib/lockedCopilotEntries";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
@@ -10,7 +8,6 @@ import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { resolveEffortOptions } from "@/agentMode/session/effortOptions";
-import { resolveEffort } from "@/lib/model-effort";
 import { backendNeedsSelfHostWarning, backendRegistry } from "@/agentMode/backends/registry";
 import { getModelKeyFromModel } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
@@ -24,7 +21,6 @@ import type {
   ModelEntry,
   ModelState,
 } from "@/agentMode/session/types";
-import type { AgentTalkingTo } from "./useAgentTalkingTo";
 import type { AgentModelPickerOverride } from "./useAgentModelPicker";
 
 export const MISSING_KEY_LABEL = "Add API key";
@@ -445,61 +441,12 @@ export function buildCommitSelection(
   };
 }
 
-export function buildAgentPickerRows(
-  entries: ModelSelectorEntry[],
-  agentEntries: readonly AgentEntry[],
-  activeBackendId: BackendId | null
-): AgentPickerRow[] {
-  return agentEntries.map((entry) => {
-    const pins = entry.kind === "custom" ? entry.agent : null;
-    const backendId = pins?.backendId ?? activeBackendId;
-    const match =
-      pins?.modelId && backendId
-        ? entries.find(
-            (candidate) =>
-              candidate._backendId === backendId &&
-              !candidate._disabledReason &&
-              resolveBaseModelId(candidate) === pins.modelId
-          )
-        : undefined;
-    return {
-      slug: entry.slug,
-      name: entry.name,
-      icon: entry.icon,
-      description: entry.description,
-      modelKey: match ? getModelKeyFromModel(match) : null,
-      effort: pins?.effort ?? null,
-    };
-  });
-}
-
-export interface AgentPinCommit {
-  modelKey: string | null;
-  effort: string | null;
-}
-
-export function resolveAgentPinCommit(
-  row: AgentPickerRow,
-  current: {
-    modelKey: string;
-    effort: string | null;
-    effortOptionsByModelKey: Record<string, EffortOption[]>;
-  }
-): AgentPinCommit | null {
-  const targetKey = row.modelKey ?? current.modelKey;
-  const options = current.effortOptionsByModelKey[targetKey] ?? [];
-  const effort = resolveEffort(row.effort ?? current.effort, options);
-  if (targetKey === current.modelKey && effort === current.effort) return null;
-  return { modelKey: row.modelKey, effort };
-}
-
 export function buildAgentModelPicker(args: {
   manager: AgentSessionManager | null;
   descriptors: BackendDescriptor[];
   settings: CopilotSettings;
-  talkingTo: AgentTalkingTo;
 }): AgentModelPickerOverride | null {
-  const { manager, descriptors, settings, talkingTo } = args;
+  const { manager, descriptors, settings } = args;
   if (!manager) return null;
   const ctx = collectModelActiveContext(manager);
   const { entries, valueKey } = buildPickerEntries(manager, descriptors, ctx, settings);
@@ -515,21 +462,5 @@ export function buildAgentModelPicker(args: {
     effortOptionsByModelKey,
     onChange,
     commitSelection,
-    agentPicker: {
-      rows: buildAgentPickerRows(entries, talkingTo.entries, ctx.activeBackendId),
-      selectedSlug: talkingTo.selectedSlug,
-      onOpen: talkingTo.refresh,
-      onSelect: (row) => {
-        talkingTo.select(row.slug);
-        const commit = resolveAgentPinCommit(row, {
-          modelKey: valueKey,
-          effort: effort?.value ?? null,
-          effortOptionsByModelKey,
-        });
-        if (!commit) return;
-        if (commit.modelKey) commitSelection(commit.modelKey, commit.effort);
-        else effort?.onChange(commit.effort);
-      },
-    },
   };
 }

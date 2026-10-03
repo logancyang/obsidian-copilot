@@ -1,5 +1,9 @@
 import { AgentFileManager } from "@/agents/AgentFileManager";
-import { isValidAgentIcon } from "@/agents/agentFile";
+import {
+  createAvatarPreviewUrl,
+  encodeAgentAvatar,
+  revokeAvatarPreviewUrl,
+} from "@/agents/agentAvatarImage";
 import { formatMemoryEntryDate } from "@/agents/agentMemory";
 import { formatMemorySize } from "@/agents/agentDisplay";
 import type { AgentDraft, AgentRecord } from "@/agents/types";
@@ -14,6 +18,7 @@ import { useApp } from "@/context";
 import { usePlugin } from "@/contexts/PluginContext";
 import { logError } from "@/logger";
 import { deriveAgentsFolder } from "@/settings/copilotFolder";
+import { consumeRequestedAgentPage } from "@/settings/openSettings";
 import { useSettingsValue } from "@/settings/model";
 import { openVaultPath } from "@/utils/openVaultPath";
 import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
@@ -27,21 +32,49 @@ const MODEL_DEFAULT_EFFORT_OPTION: SelectOption = { label: "Model default", valu
 
 const EMPTY_DRAFT: AgentEditorDraft = Object.freeze({
   name: "",
-  icon: "",
   description: "",
   instructions: "",
   backendId: UNPINNED,
   modelId: UNPINNED,
   effort: UNPINNED,
   memoryEnabled: true,
+  avatarSrc: null,
 });
 
 interface EditorState {
   mode: "create" | "edit";
   slug: string | null;
   draft: AgentEditorDraft;
+  avatarChange?: { image: ArrayBuffer | null };
   error: string | null;
   saving: boolean;
+}
+
+const NEW_AGENT_EDITOR: EditorState = Object.freeze({
+  mode: "create",
+  slug: null,
+  draft: EMPTY_DRAFT,
+  error: null,
+  saving: false,
+});
+
+function editStateFor({ agent, avatarSrc }: AgentRecord): EditorState {
+  return {
+    mode: "edit",
+    slug: agent.slug,
+    error: null,
+    saving: false,
+    draft: {
+      name: agent.name,
+      description: agent.description,
+      instructions: agent.instructions,
+      backendId: agent.backendId ?? UNPINNED,
+      modelId: agent.modelId ?? UNPINNED,
+      effort: agent.effort ?? UNPINNED,
+      memoryEnabled: agent.memoryEnabled,
+      avatarSrc,
+    },
+  };
 }
 
 export const AgentsSettings: React.FC = () => {
@@ -53,13 +86,24 @@ export const AgentsSettings: React.FC = () => {
 
   const [records, setRecords] = useState<readonly AgentRecord[]>([]);
   const [searchValue, setSearchValue] = useState("");
-  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [requestedPage] = useState(consumeRequestedAgentPage);
+  const pendingSlugRef = useRef(requestedPage?.kind === "edit" ? requestedPage.slug : null);
+  const [editor, setEditor] = useState<EditorState | null>(
+    requestedPage?.kind === "create" ? NEW_AGENT_EDITOR : null
+  );
 
   const containerRef = useRef<HTMLDivElement>(null);
 
   const reload = useCallback(async () => {
     try {
-      setRecords(await manager.listAgents());
+      const listed = await manager.listAgents();
+      setRecords(listed);
+      const pending = pendingSlugRef.current;
+      if (pending !== null) {
+        pendingSlugRef.current = null;
+        const record = listed.find((entry) => entry.agent.slug === pending);
+        if (record) setEditor(editStateFor(record));
+      }
     } catch (error) {
       logError("[Agents] Failed to list agents", error);
     }
@@ -108,17 +152,18 @@ export const AgentsSettings: React.FC = () => {
 
   const rows = useMemo<AgentRowItem[]>(
     () =>
-      records.map(({ agent, memoryBytes }) => ({
-        slug: agent.slug,
-        name: agent.name,
-        description: agent.description,
-        icon: agent.icon,
+      records.map((record) => ({
+        slug: record.agent.slug,
+        name: record.agent.name,
+        description: record.agent.description,
+        avatarSrc: record.avatarSrc,
         backendLabel:
-          descriptors.find((entry) => entry.id === agent.backendId)?.displayName ?? agent.backendId,
+          descriptors.find((entry) => entry.id === record.agent.backendId)?.displayName ??
+          record.agent.backendId,
         cloudEgress:
           settings.enableSelfHostMode === true &&
-          descriptors.find((entry) => entry.id === agent.backendId)?.selfHostable === false,
-        memoryLabel: agent.memoryEnabled ? formatMemorySize(memoryBytes) : null,
+          descriptors.find((entry) => entry.id === record.agent.backendId)?.selfHostable === false,
+        memoryLabel: record.agent.memoryEnabled ? formatMemorySize(record.memoryBytes) : null,
       })),
     [descriptors, records, settings.enableSelfHostMode]
   );
@@ -126,27 +171,61 @@ export const AgentsSettings: React.FC = () => {
   const openEditor = useCallback(
     (slug: string) => {
       const record = records.find((entry) => entry.agent.slug === slug);
-      if (!record) return;
-      const { agent } = record;
-      setEditor({
-        mode: "edit",
-        slug,
-        error: null,
-        saving: false,
-        draft: {
-          name: agent.name,
-          icon: agent.icon,
-          description: agent.description,
-          instructions: agent.instructions,
-          backendId: agent.backendId ?? UNPINNED,
-          modelId: agent.modelId ?? UNPINNED,
-          effort: agent.effort ?? UNPINNED,
-          memoryEnabled: agent.memoryEnabled,
-        },
-      });
+      if (record) setEditor(editStateFor(record));
     },
     [records]
   );
+
+  const previewUrlRef = useRef<string | null>(null);
+  const setPreviewUrl = useCallback((url: string | null) => {
+    if (previewUrlRef.current) revokeAvatarPreviewUrl(previewUrlRef.current);
+    previewUrlRef.current = url;
+  }, []);
+  useEffect(() => () => setPreviewUrl(null), [setPreviewUrl]);
+  const closeEditor = useCallback(() => {
+    setPreviewUrl(null);
+    setEditor(null);
+  }, [setPreviewUrl]);
+
+  const handlePickAvatar = useCallback(
+    (file: File) => {
+      void encodeAgentAvatar(file)
+        .then((image) => {
+          const url = createAvatarPreviewUrl(image);
+          setPreviewUrl(url);
+          setEditor((current) =>
+            current === null
+              ? null
+              : {
+                  ...current,
+                  error: null,
+                  avatarChange: { image },
+                  draft: { ...current.draft, avatarSrc: url },
+                }
+          );
+        })
+        .catch((error: unknown) => {
+          logError("[Agents] Failed to read avatar image", error);
+          setEditor((current) =>
+            current === null ? null : { ...current, error: "Could not read that image." }
+          );
+        });
+    },
+    [setPreviewUrl]
+  );
+
+  const handleRemoveAvatar = useCallback(() => {
+    setPreviewUrl(null);
+    setEditor((current) =>
+      current === null
+        ? null
+        : {
+            ...current,
+            avatarChange: { image: null },
+            draft: { ...current.draft, avatarSrc: null },
+          }
+    );
+  }, [setPreviewUrl]);
 
   const openNote = useCallback(
     (path: string) => {
@@ -160,14 +239,11 @@ export const AgentsSettings: React.FC = () => {
     if (!editor) return;
     const { draft } = editor;
     const name = draft.name.trim();
-    if (draft.icon.trim().length > 0 && !isValidAgentIcon(draft.icon)) {
-      setEditor({ ...editor, error: "The icon must be a single emoji or letter." });
-      return;
-    }
+    const existingIcon = records.find((entry) => entry.agent.slug === editor.slug)?.agent.icon;
 
     const payload: AgentDraft = {
       name,
-      icon: draft.icon.trim(),
+      icon: existingIcon ?? "",
       description: draft.description.trim(),
       instructions: draft.instructions,
       backendId: draft.backendId || null,
@@ -180,10 +256,12 @@ export const AgentsSettings: React.FC = () => {
       editor.slug === null
         ? manager.createAgent(payload)
         : manager.updateAgent(editor.slug, payload);
+    const { avatarChange } = editor;
     void write
       .then(async (record) => {
+        if (avatarChange) await manager.setAvatar(record.agent.slug, avatarChange.image);
         await reload();
-        setEditor(null);
+        closeEditor();
         new Notice(`Saved ${record.agent.name}.`);
       })
       .catch((error: unknown) => {
@@ -198,7 +276,7 @@ export const AgentsSettings: React.FC = () => {
               }
         );
       });
-  }, [editor, manager, reload]);
+  }, [closeEditor, editor, manager, records, reload]);
 
   const handleClearMemory = useCallback(
     (slug: string) => {
@@ -269,11 +347,11 @@ export const AgentsSettings: React.FC = () => {
           logError("[Agents] Failed to delete agent", error);
           new Notice(`Could not delete ${record.agent.name}.`);
         }
-        setEditor((current) => (current?.slug === slug ? null : current));
+        if (editor?.slug === slug) closeEditor();
         await reload();
       }).open();
     },
-    [app, manager, records, reload]
+    [app, closeEditor, editor?.slug, manager, records, reload]
   );
 
   const editorProps = useMemo<AgentEditorProps | null>(() => {
@@ -292,11 +370,38 @@ export const AgentsSettings: React.FC = () => {
       effortOptions,
       error: editor.error,
       saving: editor.saving,
+      onPickAvatar: handlePickAvatar,
+      onRemoveAvatar: handleRemoveAvatar,
       onSave: handleSave,
-      onCancel: () => setEditor(null),
+      onCancel: closeEditor,
       onOpenInEditor: record ? () => openNote(record.filePath) : undefined,
+      memory: record
+        ? {
+            sizeLabel: formatMemorySize(record.memoryBytes),
+            onOpenMemory: () => openNote(record.memoryPath),
+            onOpenTodaysNotes: () => handleOpenTodaysNotes(record.agent.slug),
+            onConsolidate: () => handleConsolidate(record.agent.slug),
+            onClear: () => handleClearMemory(record.agent.slug),
+          }
+        : undefined,
+      onDelete: record ? () => handleDelete(record.agent.slug) : undefined,
     };
-  }, [backendOptions, editor, effortOptions, handleSave, modelOptions, openNote, records]);
+  }, [
+    backendOptions,
+    closeEditor,
+    editor,
+    effortOptions,
+    handleClearMemory,
+    handleConsolidate,
+    handleDelete,
+    handleOpenTodaysNotes,
+    handlePickAvatar,
+    handleRemoveAvatar,
+    handleSave,
+    modelOptions,
+    openNote,
+    records,
+  ]);
 
   return (
     <div ref={containerRef}>
@@ -305,32 +410,15 @@ export const AgentsSettings: React.FC = () => {
         agents={rows}
         searchValue={searchValue}
         onSearchChange={setSearchValue}
-        onNewAgent={() =>
-          setEditor({
-            mode: "create",
-            slug: null,
-            draft: EMPTY_DRAFT,
-            error: null,
-            saving: false,
-          })
-        }
-        selectedSlug={editor?.slug ?? null}
+        onNewAgent={() => setEditor(NEW_AGENT_EDITOR)}
         editor={editorProps}
         containerRef={containerRef}
         actions={{
-          onSelect: openEditor,
-          onEdit: openEditor,
+          onOpen: openEditor,
           onOpenFolder: (slug) => {
             const record = records.find((entry) => entry.agent.slug === slug);
             if (record) revealFolderInExplorer(app, record.folderPath);
           },
-          onOpenMemory: (slug) => {
-            const record = records.find((entry) => entry.agent.slug === slug);
-            if (record) openNote(record.memoryPath);
-          },
-          onOpenTodaysNotes: handleOpenTodaysNotes,
-          onConsolidateMemory: handleConsolidate,
-          onClearMemory: handleClearMemory,
           onDelete: handleDelete,
         }}
       />

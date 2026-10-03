@@ -21,24 +21,19 @@ const effortOptions = [
   { value: "high", label: "High" },
 ];
 
-const agentRows = [
-  {
-    slug: BUILTIN_AGENT_SLUG,
-    name: "Copilot",
-    icon: "✦",
-    description: "Your vault instructions, no persona, no memory.",
-    modelKey: null,
-    effort: null,
-  },
-  {
-    slug: "jennifer",
-    name: "Jennifer",
-    icon: "🪶",
-    description: "Skeptical editor.",
-    modelKey: "sonnet|agent",
-    effort: "high",
-  },
-];
+const COPILOT_AGENT = {
+  slug: BUILTIN_AGENT_SLUG,
+  name: "Copilot",
+  avatarSrc: null,
+  showLabel: false,
+};
+
+const JENNIFER_AGENT = {
+  slug: "jennifer",
+  name: "Jennifer",
+  avatarSrc: null,
+  showLabel: true,
+};
 
 function composer(): ChatInputProps {
   return {
@@ -67,60 +62,47 @@ function composer(): ChatInputProps {
       effortOptionsByModelKey: { "sonnet|agent": effortOptions },
       commitSelection: jest.fn(),
     },
-    agentPicker: {
-      rows: agentRows,
-      selectedSlug: BUILTIN_AGENT_SLUG,
-      onSelect: jest.fn(),
-    },
+    agent: COPILOT_AGENT,
   } as unknown as ChatInputProps;
 }
 
 describe("ChatInput", () => {
   describe("ChatInput()", () => {
-    it("stands the agent picker between the Add Context button and the model picker (designdocs/CUSTOM_AGENTS.md §3)", () => {
+    it("offers no agent control on a new chat, where the agent is chosen on the landing above (designdocs/CUSTOM_AGENTS.md §3)", () => {
       render(<ChatInput {...composer()} />);
 
+      expect(screen.queryByLabelText(/This chat is with/)).toBeNull();
+      expect(screen.getByTitle("Model · effort")).toBeTruthy();
+    });
+
+    it("names a started chat's agent beside Add Context as a label, not a button", () => {
+      render(<ChatInput {...composer()} agent={JENNIFER_AGENT} />);
+
       const addContext = screen.getByLabelText("Add context");
-      const agent = screen.getByTitle("Agent");
-      const model = screen.getByTitle("Model · effort");
+      const label = screen.getByLabelText(/This chat is with Jennifer/);
 
-      expect(agent.textContent).toBe("✦Copilot");
-      expect(
-        addContext.compareDocumentPosition(agent) & Node.DOCUMENT_POSITION_FOLLOWING
-      ).toBeTruthy();
-      expect(agent.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(agent.parentElement).toBe(addContext.parentElement);
-      expect(agent.parentElement).toBe(model.parentElement);
+      expect(label.textContent).toBe("JJennifer");
+      expect(label.closest("button")).toBeNull();
+      expect(label.parentElement).toBe(addContext.parentElement);
     });
 
-    it("drops the model picker while a custom agent answers, whose model and effort come from its own config (designdocs/CUSTOM_AGENTS.md §3)", () => {
-      const props = composer();
-      render(
-        <ChatInput {...props} agentPicker={{ ...props.agentPicker!, selectedSlug: "jennifer" }} />
-      );
-
-      const agent = screen.getByTitle("Agent");
-
-      expect(agent.textContent).toBe("🪶Jennifer");
-      expect(screen.queryByTitle("Model · effort")).toBeNull();
-    });
-
-    it("brings the model picker back when the chat returns to Copilot, which pins nothing", () => {
-      const props = composer();
-      const { rerender } = render(
-        <ChatInput {...props} agentPicker={{ ...props.agentPicker!, selectedSlug: "jennifer" }} />
-      );
-      expect(screen.queryByTitle("Model · effort")).toBeNull();
-
-      rerender(<ChatInput {...props} />);
+    it("keeps the model picker while a custom agent answers, so a chat can switch models without changing the agent's own (designdocs/CUSTOM_AGENTS.md §3)", () => {
+      render(<ChatInput {...composer()} agent={JENNIFER_AGENT} />);
 
       expect(screen.getByTitle("Model · effort")).toBeTruthy();
     });
 
-    it("renders no agent picker when the caller supplies no roster, as Quick Chat does", () => {
-      render(<ChatInput {...composer()} agentPicker={undefined} />);
+    it("keeps the model picker for Copilot, which pins nothing, even once its chat has started", () => {
+      render(<ChatInput {...composer()} agent={{ ...COPILOT_AGENT, showLabel: true }} />);
 
-      expect(screen.queryByTitle("Agent")).toBeNull();
+      expect(screen.getByLabelText(/This chat is with Copilot/)).toBeTruthy();
+      expect(screen.getByTitle("Model · effort")).toBeTruthy();
+    });
+
+    it("renders no agent label and keeps the model picker when the caller names no agent, as Quick Chat does", () => {
+      render(<ChatInput {...composer()} agent={undefined} />);
+
+      expect(screen.queryByLabelText(/This chat is with/)).toBeNull();
       expect(screen.getByTitle("Model · effort")).toBeTruthy();
     });
   });

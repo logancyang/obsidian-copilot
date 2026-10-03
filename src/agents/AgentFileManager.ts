@@ -14,7 +14,12 @@ import {
   getAgentMemoryPath,
   parseAgentDailyNoteDate,
 } from "@/agents/agentPaths";
-import { AGENT_FILE_NAME } from "@/agents/constants";
+import {
+  AGENT_AVATAR_BASENAME,
+  AGENT_AVATAR_EXTENSIONS,
+  AGENT_AVATAR_UPLOAD_EXTENSION,
+  AGENT_FILE_NAME,
+} from "@/agents/constants";
 import type { AgentDraft, AgentRecord, CustomAgent } from "@/agents/types";
 import { logInfo, logWarn } from "@/logger";
 import { deriveAgentsFolder } from "@/settings/copilotFolder";
@@ -179,6 +184,7 @@ export class AgentFileManager {
       memoryPath,
       memoryFolderPath: getAgentMemoryFolderPath(agentsFolder, slug),
       memoryBytes: 0,
+      avatarSrc: null,
     };
   }
 
@@ -227,6 +233,22 @@ export class AgentFileManager {
     logInfo(`[Agents] Cleared memory at ${record.memoryPath}`);
   }
 
+  public async setAvatar(slug: string, image: ArrayBuffer | null): Promise<void> {
+    const folderPath = getAgentFolderPath(this.agentsFolder(), slug);
+    const folder = this.vault.getAbstractFileByPath(folderPath);
+    if (!(folder instanceof TFolder)) throw new Error(`Agent not found: ${slug}`);
+
+    const uploadPath = `${folderPath}/${AGENT_AVATAR_BASENAME}.${AGENT_AVATAR_UPLOAD_EXTENSION}`;
+    let reused: TFile | null = null;
+    for (const file of listAvatarFiles(folder)) {
+      if (image && file.path === uploadPath) reused = file;
+      else await trashFile(this.app, file);
+    }
+    if (!image) return;
+    if (reused) await this.vault.modifyBinary(reused, image);
+    else await this.vault.createBinary(uploadPath, image);
+  }
+
   private async listSlugs(agentsFolder: string): Promise<string[]> {
     const folder = this.vault.getAbstractFileByPath(agentsFolder);
     if (!(folder instanceof TFolder)) return [];
@@ -248,13 +270,28 @@ export class AgentFileManager {
 
     const memoryPath = getAgentMemoryPath(agentsFolder, slug);
     const memoryFile = this.vault.getAbstractFileByPath(memoryPath);
+    const folderPath = getAgentFolderPath(agentsFolder, slug);
+    const folder = this.vault.getAbstractFileByPath(folderPath);
+    const avatarFile = folder instanceof TFolder ? (listAvatarFiles(folder)[0] ?? null) : null;
     return {
       agent: parseAgentFile(slug, raw),
-      folderPath: getAgentFolderPath(agentsFolder, slug),
+      avatarSrc: avatarFile ? this.vault.getResourcePath(avatarFile) : null,
+      folderPath,
       filePath,
       memoryPath,
       memoryFolderPath: getAgentMemoryFolderPath(agentsFolder, slug),
       memoryBytes: memoryFile instanceof TFile ? memoryFile.stat.size : 0,
     };
   }
+}
+
+function listAvatarFiles(folder: TFolder): TFile[] {
+  const files = folder.children.filter(
+    (child): child is TFile =>
+      child instanceof TFile &&
+      child.basename === AGENT_AVATAR_BASENAME &&
+      AGENT_AVATAR_EXTENSIONS.includes(child.extension.toLowerCase())
+  );
+  const rank = (file: TFile) => AGENT_AVATAR_EXTENSIONS.indexOf(file.extension.toLowerCase());
+  return files.sort((a, b) => rank(a) - rank(b));
 }

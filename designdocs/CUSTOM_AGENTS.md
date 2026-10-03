@@ -84,7 +84,6 @@ persona's standing instructions:
 ---
 copilot-agent-name: Jennifer
 copilot-agent-description: Skeptical editor. Cuts fluff, argues for the reader.
-copilot-agent-icon: 🪶
 copilot-agent-backend: claude # optional; omit to use the session's backend
 copilot-agent-model: # optional; omit to use the backend's default
 copilot-agent-effort: # optional; omit to use the session's effort
@@ -101,6 +100,12 @@ Rules, mirroring how projects and `AGENTS.md` already work:
 - The folder name is the slug. The slug is the stable id used in chat
   frontmatter and in `@` mentions. Renaming the display name does not move the
   folder.
+- An optional `avatar.<ext>` image (webp, png, jpg, jpeg, gif, or svg) in the
+  folder is the agent's profile picture. It is found by name, so dropping one
+  in by hand works the same as uploading one in Settings, which stores a
+  256px centered square as `avatar.webp`. An agent with no image shows the
+  first letter of its name; Copilot shows its brand mark. Agents carry no
+  emoji anywhere in the UI.
 - `agent.md` and `MEMORY.md` are excluded from retrieval and semantic search,
   the same way `AGENTS.md` is, because the agent already receives them.
 - The `agents` subfolder is a new entry in `COPILOT_SUBFOLDER` and derives from
@@ -120,40 +125,29 @@ else, so the feature is invisible until they create an agent.
 
 ### 3. Choosing who you are talking to
 
-The agent is chosen from its own picker in the chat composer's bottom row,
-between the Add Context button and the model picker. The trigger shows only
-the current agent's icon and name, **Copilot** by default, so the user can
-always see who is handling the chat and can change it in one click. Clicking
-it opens a list of Copilot and every custom agent with icon, name, and
-description, the current one shown with the selected row color, and a search
-field once there are more than six entries. The model picker is the model
-picker: it lists models and effort only and carries no agent section.
+The agent is chosen at the top of a new chat, under the heading "Who do you
+want to talk to?", and nowhere else. The chosen agent is shown large: its
+profile picture, name, and a one-line description that ellipsizes rather than
+wraps, so switching agents never moves anything below it. Clicking a custom
+agent's picture opens its page in Settings.
 
-Picking an agent that pins a backend, model, or effort switches the model
-picker to those values at once, so the session runs on what the agent asks
-for. An agent with no pins leaves the current model and effort alone.
+Under it, one row: Copilot first, then as many agents as the pane fits, then a
+**+N** entry holding the rest, then **New**, which opens Settings on a blank
+create form. The row never scrolls; the narrowest row is Copilot, +N, New. The
++N entry opens a menu of the agents that did not fit, and the chosen agent
+always keeps an inline place, swapped in the way the active chat tab is. Each
+face carries a tooltip with the agent's name in bold over its description.
 
-While a custom agent is answering, the composer shows no model picker at all:
-the agent's config is the one place its model and effort are set, and offering
-a second one in the composer would let the two disagree about what the agent
-runs on. Copilot pins nothing, so a Copilot chat keeps the picker, and so does
-every surface with no agent roster of its own.
+Picking an agent on the empty chat in front of the user reopens that chat on
+the agent's own backend, model, and effort, so the composer's model picker
+shows what the agent runs on at once; Copilot reopens on the saved default.
+The model picker stays for every agent: a pick there changes that chat only
+and never the agent's config or the saved default.
 
-The section is a chooser and nothing else. An agent's memory actions live on
-its row in Settings, where the agent is edited, and the chat tab menu keeps
-"Update memory now" for the chat in front of the user; a list of who can
-answer is not the place for file actions.
-
-The composer's trigger keeps reading as the model and effort alone. The chat
-tab already carries the agent's icon and name, and in a sidebar narrow enough
-to matter the agent's name would push the model out of the trigger entirely —
-which is the one thing the trigger exists to say.
-
-Choosing an agent applies to the _next_ new chat and to any chat that has not
-yet sent a message. A chat that already has messages keeps the agent it
-started with. The active chat tab shows the agent's icon and name so the user
-always knows who is answering. There is no agent control in the Agent Home
-header.
+Once the chat has a message it keeps its agent. The composer then names the
+agent as a plain label beside Add Context, not a control, and its tooltip says
+to start a new chat or `@`-mention to talk to someone else. The chat tab and
+Recent Chats show the agent's face and name.
 
 Scope and agent are orthogonal. You can DM Jennifer at the vault root or inside
 a project. The working directory, project context block, and Recent Chats
@@ -347,25 +341,27 @@ row that opens the Agents tab.
 
 ### 7. Settings: the Agents tab
 
-A new tab, **Agents**, after Skills. Desktop-only panel like Skills. Layout
-mirrors the Skills tab: a list with search on the left, an editor on the right.
+A new tab, **Agents**, after Skills. Desktop-only panel like Skills. It shows
+either the roster or one agent's own page, never both.
 
-List row: icon, name, description, backend badge if pinned, memory size, and
-a `⋯` menu with Edit, Open folder, Open memory, Clear memory, Delete. A pin to a
-backend that cannot be self-hosted also carries the cloud-egress marker the
-model pickers use, but only while Self-Host Mode is on.
+List row: profile picture, name, description, backend badge if pinned, memory
+size, and a `⋯` menu with Edit, Open folder, Delete. The whole row opens the
+agent's page. A pin to a backend that cannot be self-hosted also carries the
+cloud-egress marker the model pickers use, but only while Self-Host Mode is on.
 
-Editor fields:
+The agent's page replaces the roster: a back link and Cancel and Save at the
+top, the profile picture with Upload, Change, and Remove, then titled sections.
 
-| Field         | Notes                                                                 |
-| ------------- | --------------------------------------------------------------------- |
-| Name          | Required. Slug is derived on create and shown read-only after.        |
-| Icon          | Single emoji or letter. Shown in picker, tab, typeahead, fan-out tab. |
-| Description   | One line. Shown in the picker and typeahead so the user can choose.   |
-| Instructions  | Multi-line body of `agent.md`. Also an "Open in editor" link.         |
-| Backend/model | Optional. Same picker components the session uses.                    |
-| Effort        | Optional. The levels the pinned model advertises; needs a model pin.  |
-| Memory        | Toggle. Off means the memory file is neither read nor written.        |
+| Section      | Contents                                                                     |
+| ------------ | ---------------------------------------------------------------------------- |
+| Profile      | Name (required; slug derived on create), description (one line).             |
+| Instructions | Multi-line body of `agent.md`, with an "Open agent.md" link.                 |
+| Model        | Optional backend, model, and effort pins; effort needs a model pin.          |
+| Memory       | Toggle, `MEMORY.md` size, Open MEMORY.md, Today's notes, Consolidate, Clear. |
+| Delete       | Moves the folder, memory included, to trash after a confirm.                 |
+
+A picked image is previewed until Save writes it. Settings does not edit
+`copilot-agent-icon`; a value a file already carries is kept on save.
 
 Create writes `agent.md` and an empty `MEMORY.md` skeleton with the fixed
 headings. Edits write `agent.md` frontmatter and body. Copilot never writes
@@ -375,7 +371,7 @@ headings. Edits write `agent.md` frontmatter and body. Copilot never writes
 
 Agent chats gain one frontmatter field, `agentSlug`, omitted for Copilot, plus
 `memorizedThroughTurn`, an integer, omitted when zero. Recent Chats shows the
-agent icon before the title when the field is set. Loading a chat whose slug no
+agent's face before the title when the field is set. Loading a chat whose slug no
 longer resolves falls back to Copilot and keeps the label for display.
 
 Fan-out composites already persist as the message body. Custom agent answer
@@ -476,3 +472,4 @@ together.
 | M9  | **Selection by color, not by marker.** Remove the checkmark column from the nested agent list and from the model list in the popover; the selected entry uses the design system's selected-row background and text color, and rows start at the popover's leading content edge. Stories and tests updated. E2E measures the leading-content x of agent rows, model rows, and the select row as equal.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | done (f0da7334; each list's current row takes the accent tint instead of a ✓, and every row starts 13px in from its popover's edge)                                                                                                                                               |
 | M10 | **Conversation index instead of whole daily notes.** The memory block carries `MEMORY.md` plus an index of the last fourteen days' conversations (date, time, title, the summary bullet, a link to the daily note), newest first, capped at forty lines, with a sentence telling the agent where the full notes and transcripts live. Whole daily notes are no longer injected. Per-turn refresh keys on the index window. Tests for the index builder (cap, ordering, days without notes, headings without bullets) and the refresh fingerprint; the tab-A-to-tab-B recall scenario passes through the index.                                                                                                                                                                                                                                                                                                                                                                                                                        | done (6c01ded7; re-injection keys on the rendered block, so a bullet the index does not show costs no turn a re-send)                                                                                                                                                             |
 | M11 | **Standalone agent picker in the composer.** Remove the Agent section from the model picker popover; the model picker lists models and effort only. Add an agent picker trigger between the Add Context button and the model picker showing the current agent's icon and name (Copilot by default); one click opens the existing agent list (icon, name, description, selected color, search past six) as its own popover. Choosing applies pins to the model picker as before. Stories for the trigger (Copilot, named agent, narrow) and the open list; tests for open, choose, pins, and that the model popover has no agent rows. E2E: one click to see and switch the agent; model picker unchanged.                                                                                                                                                                                                                                                                                                                             | done (827383dd; the composer names its agent and opens the roster in one click, and the model picker is models and effort again)                                                                                                                                                  |
+| M12 | **Agent-first landing and profile pictures.** Replace the composer agent picker with the landing roster of §3 (spotlight, fitted row, +N menu, New), a read-only agent label in a started chat, and the model picker kept for every agent. Upload profile images into the agent folder and drop emoji from the UI. Rebuild the Agents tab as a roster plus per-agent page (§7), reachable from the landing's faces and New. Stories for zero, three, and twelve agents and narrow widths; tests for the fitted row, the reopen-on-pick, uploads, and the settings handoff. E2E: pick each agent and see the model picker follow it; upload an image and see it on every surface.                                                                                                                                                                                                                                                                                                                                                      | done (picking an agent reopens the empty chat on its own pins rather than drafting picker rows, so it works before a backend's catalog loads)                                                                                                                                     |

@@ -176,7 +176,7 @@ const RecentChatRow = memo(function RecentChatRow({
       {/* Session ownership and active response are independent indicators.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/429 */}
       <ChatIconTile Icon={Icon} needsAttention={hasAttention} isSessionLive={isSessionOpen} />
-      <RecentChatTitle title={item.title} agentIcon={item.agentIcon} />
+      <RecentChatTitle title={item.title} agentFace={item.agentFace} />
 
       <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5">
         {projectName && <RecentChatProjectBadge name={projectName} />}

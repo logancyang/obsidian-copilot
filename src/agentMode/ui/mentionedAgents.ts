@@ -9,6 +9,12 @@ export function listMentionableAgents(
 ): ReadonlyArray<AgentMentionEntry> {
   const agents = entries
     .filter((entry) => entry.kind === "custom")
-    .map(({ slug, name, description, icon }) => ({ slug, name, description, icon }));
+    .map(({ slug, name, description, icon, avatarSrc }) => ({
+      slug,
+      name,
+      description,
+      icon,
+      avatarSrc,
+    }));
   return agents.length > 0 ? agents : EMPTY_AGENT_MENTIONS;
 }

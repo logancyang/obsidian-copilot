@@ -4329,7 +4329,11 @@ describe("AgentSessionManager", () => {
 });
 
 describe("AgentSessionManager talking-to selection", () => {
-  function buildAgentFiles(agents: CustomAgent[], memory = "## About the user\n\n- knows things") {
+  function buildAgentFiles(
+    agents: CustomAgent[],
+    memory = "## About the user\n\n- knows things",
+    avatars: Record<string, string> = {}
+  ) {
     const record = (agent: CustomAgent) => ({
       agent,
       folderPath: `copilot/agents/${agent.slug}`,
@@ -4337,6 +4341,7 @@ describe("AgentSessionManager talking-to selection", () => {
       memoryPath: `copilot/agents/${agent.slug}/MEMORY.md`,
       memoryFolderPath: `copilot/agents/${agent.slug}/memory`,
       memoryBytes: memory.length,
+      avatarSrc: avatars[agent.slug] ?? null,
     });
     return {
       listAgents: jest.fn(async () => agents.map(record)),
@@ -4411,6 +4416,32 @@ describe("AgentSessionManager talking-to selection", () => {
       modelId: null,
       effort: null,
     });
+  });
+
+  it("republishes the roster when an agent's image changes, so the landing shows the new face", async () => {
+    const avatars: Record<string, string> = {};
+    const manager = buildManager({ agentFiles: buildAgentFiles([jennifer()], undefined, avatars) });
+    await manager.refreshAgents();
+    const listener = jest.fn();
+    manager.subscribe(listener);
+
+    avatars.jennifer = "app://jennifer/avatar.webp?2";
+    await manager.refreshAgents();
+
+    expect(manager.getAgentEntries()[1].avatarSrc).toBe("app://jennifer/avatar.webp?2");
+    expect(listener).toHaveBeenCalled();
+  });
+
+  it("gives a chat bound to an agent that agent's image, for its tab", async () => {
+    const manager = buildManager({
+      agentFiles: buildAgentFiles([jennifer()], undefined, {
+        jennifer: "app://jennifer/avatar.webp?1",
+      }),
+    });
+    await manager.setSelectedAgent("jennifer");
+    const session = await manager.createSession();
+
+    expect(session.getAgent().avatarSrc).toBe("app://jennifer/avatar.webp?1");
   });
 
   it("applies a new selection to the next new chat and to chats with no message yet", async () => {
@@ -4527,6 +4558,47 @@ describe("AgentSessionManager talking-to selection", () => {
     await manager.createSession();
 
     expect(sessionCreateSpy.mock.calls[0][0].defaultModelSelection).toBeUndefined();
+  });
+
+  it("reopens the empty chat in front of the user on a picked agent's own model, so the model picker shows it at once", async () => {
+    const manager = buildManager({
+      agentFiles: buildAgentFiles([
+        jennifer({ backendId: "opencode", modelId: "big-pickle", effort: "high" }),
+      ]),
+    });
+    const landing = await manager.createSession();
+    sessionCreateSpy.mockClear();
+
+    await manager.setSelectedAgent("jennifer");
+
+    const active = manager.getActiveSession()!;
+    expect(active.internalId).not.toBe(landing.internalId);
+    expect(active.getAgent().slug).toBe("jennifer");
+    expect(sessionCreateSpy.mock.calls[0][0].defaultModelSelection).toEqual({
+      baseModelId: "big-pickle",
+      effort: "high",
+    });
+  });
+
+  it("does not reopen the chat when the agent picked is the one it already has", async () => {
+    const manager = buildManager({ agentFiles: buildAgentFiles([jennifer()]) });
+    await manager.setSelectedAgent("jennifer");
+    const landing = await manager.createSession();
+
+    await manager.setSelectedAgent("jennifer");
+
+    expect(manager.getActiveSession()?.internalId).toBe(landing.internalId);
+  });
+
+  it("leaves a chat that has started on its own session when another agent is picked", async () => {
+    const manager = buildManager({ agentFiles: buildAgentFiles([jennifer()]) });
+    const started = await manager.createSession();
+    getSessionTestHandle(started).setHasUserVisibleMessages(true);
+
+    await manager.setSelectedAgent("jennifer");
+
+    expect(manager.getActiveSession()?.internalId).toBe(started.internalId);
+    expect(started.getAgent().slug).toBeNull();
   });
 
   it("keeps the chat's agent when the user switches its backend mid-chat", async () => {

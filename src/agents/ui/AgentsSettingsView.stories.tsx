@@ -10,22 +10,24 @@ import type { AgentRowItem } from "./AgentRow";
 const noop = () => {};
 
 const actions: AgentRowActions = {
-  onSelect: noop,
-  onEdit: noop,
+  onOpen: noop,
   onOpenFolder: noop,
-  onOpenMemory: noop,
-  onOpenTodaysNotes: noop,
-  onConsolidateMemory: noop,
-  onClearMemory: noop,
   onDelete: noop,
 };
+
+function portrait(from: string, to: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs><rect width="64" height="64" fill="url(#g)"/><circle cx="32" cy="26" r="11" fill="#ffffffcc"/><ellipse cx="32" cy="58" rx="20" ry="16" fill="#ffffffcc"/></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+const JENNIFER_PORTRAIT = portrait("#5b3a7a", "#b48ad8");
 
 const AGENTS: AgentRowItem[] = [
   {
     slug: "jennifer",
     name: "Jennifer",
     description: "Skeptical editor. Cuts fluff, argues for the reader.",
-    icon: "🪶",
+    avatarSrc: JENNIFER_PORTRAIT,
     backendLabel: "Claude Code",
     cloudEgress: false,
     memoryLabel: "2.6 KB",
@@ -34,7 +36,7 @@ const AGENTS: AgentRowItem[] = [
     slug: "vancat",
     name: "Vancat",
     description: "Blunt systems reviewer. Asks what breaks at ten times the load.",
-    icon: "🐈",
+    avatarSrc: null,
     backendLabel: null,
     cloudEgress: false,
     memoryLabel: "412 B",
@@ -43,7 +45,7 @@ const AGENTS: AgentRowItem[] = [
     slug: "atlas",
     name: "Atlas",
     description: "Research librarian with no memory, for one-off lookups.",
-    icon: "A",
+    avatarSrc: null,
     backendLabel: "Codex",
     cloudEgress: false,
     memoryLabel: null,
@@ -76,15 +78,17 @@ function editor(overrides: Partial<AgentEditorProps>): AgentEditorProps {
     slug: null,
     draft: {
       name: "",
-      icon: "",
       description: "",
       instructions: "",
       backendId: "",
       modelId: "",
       effort: "",
       memoryEnabled: true,
+      avatarSrc: null,
     },
     onChange: noop,
+    onPickAvatar: noop,
+    onRemoveAvatar: noop,
     backendOptions: BACKEND_OPTIONS,
     modelOptions: MODEL_OPTIONS,
     effortOptions: EFFORT_OPTIONS,
@@ -103,7 +107,6 @@ const base: AgentsSettingsViewProps = {
   onSearchChange: noop,
   onNewAgent: noop,
   actions,
-  selectedSlug: null,
   editor: null,
 };
 
@@ -131,7 +134,6 @@ export const EditorCreate: StoryObj<AgentsSettingsViewProps> = {
     editor: editor({
       draft: {
         name: "Jennifer",
-        icon: "🪶",
         description: "Skeptical editor. Cuts fluff, argues for the reader.",
         instructions:
           "You are Jennifer, a developmental editor. You care about the reader more than the author. Push back on vague claims. Prefer short sentences.",
@@ -139,6 +141,7 @@ export const EditorCreate: StoryObj<AgentsSettingsViewProps> = {
         modelId: "sonnet",
         effort: "low",
         memoryEnabled: true,
+        avatarSrc: null,
       },
     }),
   },
@@ -149,42 +152,59 @@ export const EditorEdit: StoryObj<AgentsSettingsViewProps> = {
   args: {
     ...base,
     agents: AGENTS,
-    selectedSlug: "vancat",
     editor: editor({
       mode: "edit",
       slug: "vancat",
       draft: {
         name: "Vancat",
-        icon: "🐈",
         description: "Blunt systems reviewer. Asks what breaks at ten times the load.",
         instructions: "You are Vancat. Find the failure mode first, then say what you would do.",
         backendId: "",
         modelId: "",
         effort: "",
         memoryEnabled: true,
+        avatarSrc: null,
       },
       onOpenInEditor: noop,
+      memory: {
+        sizeLabel: "412 B",
+        onOpenMemory: noop,
+        onOpenTodaysNotes: noop,
+        onConsolidate: noop,
+        onClear: noop,
+      },
+      onDelete: noop,
     }),
   },
 };
 
-export const EditorRejectedIcon: StoryObj<AgentsSettingsViewProps> = {
-  name: "Editor — rejected icon",
+export const EditorWithImage: StoryObj<AgentsSettingsViewProps> = {
+  name: "Editor — agent with an uploaded image",
   args: {
     ...base,
     agents: AGENTS,
     editor: editor({
+      mode: "edit",
+      slug: "jennifer",
       draft: {
         name: "Jennifer",
-        icon: "ab",
-        description: "",
-        instructions: "",
-        backendId: "",
-        modelId: "",
+        description: "Skeptical editor. Cuts fluff, argues for the reader.",
+        instructions: "You are Jennifer, a developmental editor.",
+        backendId: "claude",
+        modelId: "sonnet",
         effort: "",
         memoryEnabled: true,
+        avatarSrc: JENNIFER_PORTRAIT,
       },
-      error: "The icon must be a single emoji or letter.",
+      onOpenInEditor: noop,
+      memory: {
+        sizeLabel: "2.6 KB",
+        onOpenMemory: noop,
+        onOpenTodaysNotes: noop,
+        onConsolidate: noop,
+        onClear: noop,
+      },
+      onDelete: noop,
     }),
   },
 };

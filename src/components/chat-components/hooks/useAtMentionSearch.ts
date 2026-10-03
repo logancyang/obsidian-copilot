@@ -138,7 +138,7 @@ export function useAtMentionSearch(
       category: "agents",
       data: agent.slug,
       content: undefined,
-      icon: React.createElement(AgentGlyph, { icon: agent.icon }),
+      icon: React.createElement(AgentGlyph, { name: agent.name, avatarSrc: agent.avatarSrc }),
       pillIcon: agent.icon,
       searchKeyword: `${agent.name} ${agent.slug}`,
     }));

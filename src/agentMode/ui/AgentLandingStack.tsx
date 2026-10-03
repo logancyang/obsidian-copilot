@@ -17,7 +17,7 @@ export function AgentLandingStack({
 }: AgentLandingStackProps): React.ReactElement {
   return (
     <>
-      <div className="tw-h-1/5 tw-shrink-0" />
+      <div className="tw-h-[8%] tw-shrink-0" />
       <div className="tw-shrink-0 tw-pb-7">{hero}</div>
       <div className="tw-shrink-0">{composer}</div>
       {floating ? <div className="tw-shrink-0">{floating}</div> : null}

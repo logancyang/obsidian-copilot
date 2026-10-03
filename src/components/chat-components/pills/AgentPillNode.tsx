@@ -93,14 +93,14 @@ export class AgentPillNode extends BasePillNode {
   }
 
   decorate(): JSX.Element {
-    return <AgentPillContent icon={this.__icon} label={this.__label || this.__value} />;
+    return <AgentPillContent label={this.__label || this.__value} />;
   }
 }
 
-export function AgentPillContent({ icon, label }: { icon: string; label: string }) {
+export function AgentPillContent({ label }: { label: string }) {
   return (
     <PillBadge>
-      <AgentGlyph icon={icon} className="tw-size-3" />
+      <AgentGlyph name={label} className="tw-size-3" />
       {label}
     </PillBadge>
   );

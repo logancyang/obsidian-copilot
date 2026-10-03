@@ -1,7 +1,6 @@
 import {
   AGENT_MEMORY_HEADINGS,
   buildAgentMemorySkeleton,
-  isValidAgentIcon,
   parseAgentFile,
   serializeAgentFile,
 } from "@/agents/agentFile";
@@ -53,28 +52,6 @@ describe("agentFile", () => {
 
     it("titles the file 'Agent' when the name is blank", () => {
       expect(buildAgentMemorySkeleton("   ")).toContain("# Agent's memory");
-    });
-  });
-
-  describe("isValidAgentIcon()", () => {
-    it("accepts a single letter", () => {
-      expect(isValidAgentIcon("J")).toBe(true);
-    });
-
-    it("accepts a single emoji, including multi-code-point ones", () => {
-      expect(isValidAgentIcon("🪶")).toBe(true);
-      expect(isValidAgentIcon("👩🏽‍🚀")).toBe(true);
-      expect(isValidAgentIcon("🇯🇵")).toBe(true);
-    });
-
-    it("rejects two characters", () => {
-      expect(isValidAgentIcon("JJ")).toBe(false);
-      expect(isValidAgentIcon("🪶🪶")).toBe(false);
-    });
-
-    it("rejects an empty or whitespace-only value", () => {
-      expect(isValidAgentIcon("")).toBe(false);
-      expect(isValidAgentIcon("   ")).toBe(false);
     });
   });
 
