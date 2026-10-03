@@ -292,6 +292,10 @@ export async function buildOpencodeConfig(
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/557
     const levels = info.reasoning ? (info.reasoningEfforts ?? []) : [];
     models[info.id] = {
+      // A looping model otherwise runs each agent step to OpenCode's 32k default, and every later
+      // step re-sends the loop. OpenCode merges this per key, so the context window is untouched.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/641
+      limit: origin.kind === "copilot-plus" ? { output: 16_384 } : undefined,
       capabilities: declaresCapabilities
         ? {
             tools: info.toolCall ?? true,
