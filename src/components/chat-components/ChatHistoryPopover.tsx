@@ -32,12 +32,6 @@ export interface ChatHistoryItem {
   backendId?: string;
   projectId?: string;
   needsAttention?: boolean;
-  /**
-   * Emoji of the custom agent this chat was held with, when it still resolves
-   * to an agent on disk. Recent Chats shows it before the title so a DM is
-   * recognizable at a glance (`designdocs/CUSTOM_AGENTS.md` §8). Absent for
-   * Copilot chats and for a chat whose agent was deleted.
-   */
   agentIcon?: string;
 }
 

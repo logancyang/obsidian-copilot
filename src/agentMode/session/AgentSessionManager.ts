@@ -154,9 +154,7 @@ const EMPTY_SESSIONS = Object.freeze([]) as unknown as AgentSession[];
 const EMPTY_HISTORY_ITEMS = Object.freeze([]) as unknown as ChatHistoryItem[];
 const EMPTY_RECENT_CHAT_IDS: ReadonlySet<string> = new Set();
 const EMPTY_CHAT_INPUT_IDS: readonly string[] = Object.freeze([]);
-/** The picker's list before any agent exists: the built-in entry alone. */
 const BUILTIN_ONLY_AGENT_ENTRIES: readonly AgentEntry[] = Object.freeze([BUILTIN_AGENT]);
-/** See AGENTS.md → "Referential stability". */
 const EMPTY_CUSTOM_AGENTS: readonly CustomAgent[] = Object.freeze([]);
 
 const RESUMED_SESSION_BEHIND_EPOCH = -1;
@@ -213,24 +211,11 @@ export interface AgentSessionManagerOptions {
   beforeBackendStart?: (id: BackendId) => Promise<void>;
   persistenceManager?: AgentChatPersistenceManager;
   sessionIndex?: AgentSessionIndex;
-  /**
-   * Reader for `copilot/agents/`, used to resolve the agent a chat is talking
-   * to and to load its persona and memory. Optional only so legacy callers
-   * (tests) can omit it; production wiring always supplies one via the barrel
-   * in `agentMode/index.ts`. Without it every chat runs as the built-in
-   * Copilot, and a chat that names an agent shows the name as a plain label.
-   */
   agentFileManager?: AgentFileManager;
 }
 
 const MEMORY_PASS_UNLOAD_GRACE_MS = 10_000;
 
-/**
- * Heading a fan-out answer is filed under in the answering agent's daily note.
- * A fan-out turn belongs to the asking chat, not to a conversation with the
- * answerer, so there is no chat title of its own to name
- * (`designdocs/CUSTOM_AGENTS.md` §6).
- */
 const FANOUT_FLUSH_HEADING = "Asked in passing";
 
 export class AgentSessionManager {
@@ -425,8 +410,6 @@ export class AgentSessionManager {
       const record = await files.readAgent(slug);
       if (!record) return gone;
       const { agent } = record;
-      // Read-only: a fan-out sub-session has no file tools, so it is not told
-      // to keep notes it could not write (`designdocs/CUSTOM_AGENTS.md` §5).
       const session = await loadSessionAgent(files, agent, { writable: false });
       const answeringOn = agent.backendId ?? sessionBackendId;
       return {
@@ -439,8 +422,6 @@ export class AgentSessionManager {
           answeringOn,
           this.getSeedSelection(answeringOn)
         ),
-        // One block for the sub-session's single message: who it is, and what
-        // it knows.
         personaBlock:
           [session.personaBlock, session.memory?.block]
             .filter((part): part is string => Boolean(part))
@@ -585,9 +566,6 @@ export class AgentSessionManager {
     if (!persistence && !index) return EMPTY_HISTORY_ITEMS;
 
     const liveAttentionPaths = this.collectLiveAttentionPaths();
-    // Rows show the agent's icon before the title, which needs the roster the
-    // slugs resolve against (`designdocs/CUSTOM_AGENTS.md` §8). Refreshing here
-    // also keeps the talking-to picker current whenever the landing reloads.
     await this.refreshAgents();
     const iconBySlug = new Map(this.agentRoster.map((agent) => [agent.slug, agent.icon]));
 
@@ -600,8 +578,6 @@ export class AgentSessionManager {
         files.map(async (file) => {
           const ref = await this.readSessionRefFromFile(file.path);
           const base = fileToHistoryItem(this.app, file, tracker);
-          // A slug with no icon (or none left, its agent deleted) simply gets no
-          // glyph; the row falls back to the backend brand icon it always had.
           const agentIcon = ref?.agentSlug ? iconBySlug.get(ref.agentSlug) : undefined;
           const item =
             liveAttentionPaths.has(base.id) || agentIcon
@@ -1328,10 +1304,6 @@ export class AgentSessionManager {
       agents.length === 0
         ? BUILTIN_ONLY_AGENT_ENTRIES
         : [BUILTIN_AGENT, ...agents.map(toAgentEntry)];
-    // Pins are compared alongside the display fields because the model picker's
-    // Agent section resolves each row's model and effort from them: an agent
-    // re-pinned in Settings has to reach the open picker, not just a renamed one
-    // (`designdocs/CUSTOM_AGENTS.md` §3).
     const unchanged =
       entries.length === this.agentEntries.length &&
       entries.every((entry, i) => {
@@ -1402,18 +1374,6 @@ export class AgentSessionManager {
     return (await this.bindSessionAgent(slug)).agent;
   }
 
-  /**
-   * Re-read what `slug` remembers into every open chat with it, so the next
-   * turn in each carries it.
-   *
-   * A chat mid-conversation gets this too, which is the point: the agent may
-   * have written a note during the turn that just ended, and consolidation may
-   * have rewritten the core while the chat sat open. Re-reading once per agent
-   * rather than once per chat keeps a busy vault to one folder read.
-   * See `designdocs/CUSTOM_AGENTS.md` §5 ("Reading").
-   *
-   * @param slug - Agent whose files changed.
-   */
   private async refreshAgentMemory(slug: string): Promise<void> {
     const files = this.opts.agentFileManager;
     if (!files) return;
@@ -1425,30 +1385,14 @@ export class AgentSessionManager {
     try {
       const record = await files.readAgent(slug);
       const memory = record ? await loadAgentMemoryInjection(files, record.agent) : null;
-      // Re-filtered after the read: a chat can have closed while it ran.
       for (const session of open()) session.setAgentMemory(memory);
     } catch (error) {
       logWarn(`[Agents] Could not refresh memory for "${slug}"`, error);
     }
   }
 
-  /**
-   * Fold this chat's new turns into its agent's daily note.
-   *
-   * Everything the pass needs is captured synchronously, so a chat that is
-   * closed, replaced, or navigated away from while the backend is still
-   * thinking still gets its notes written. Returns the pass, so a caller that
-   * genuinely has to wait (plugin unload) can, or null when there is nothing to
-   * do: a chat with the built-in Copilot, one with no new turns since its last
-   * flush, or one whose flush is still running.
-   *
-   * See `designdocs/CUSTOM_AGENTS.md` §5 ("Daily notes").
-   *
-   * @param session - The chat whose turns are being written down.
-   */
   private beginMemoryFlush(session: AgentSession): Promise<void> | null {
     const files = this.opts.agentFileManager;
-    // A chat with the built-in Copilot has no memory to write.
     if (!files || !session.getAgent().slug) return null;
     const internalId = session.internalId;
     if (this.memoryPassesInFlight.has(internalId)) return null;
@@ -1460,8 +1404,6 @@ export class AgentSessionManager {
     const agentSlug = session.getAgent().slug!;
     const sessionBackendId = session.backendId;
     const throughTurn = messages.length;
-    // The chat may be gone before the pass lands; its note is then the only
-    // place the marker can still be recorded.
     const notePath = this.sessionState.get(internalId)?.source?.path;
     this.memoryScheduler.cancelFlush(internalId);
 
@@ -1473,16 +1415,10 @@ export class AgentSessionManager {
         sessionBackendId,
         messages: newTurns,
         chatTitle: session.getLabel() ?? "",
-        // Nothing cancels a memory pass: the turns it reports on have already
-        // happened, and the pass bounds itself with its own deadline.
         signal: new AbortController().signal,
       }
     )
       .then((outcome) => {
-        // A pass that wrote nothing still covered these turns, so the marker
-        // advances: re-reading a conversation the agent already judged not
-        // worth keeping would only spend a model on the same answer. A failed
-        // or cancelled pass leaves them to be read again.
         if (outcome.status === "failed") return;
         if (outcome.status === "skipped" && outcome.reason === "no-turns") return;
         this.recordMemoryFlush(internalId, throughTurn, notePath, outcome);
@@ -1492,22 +1428,6 @@ export class AgentSessionManager {
     return pass;
   }
 
-  /**
-   * Fold a finished fan-out turn into the memory of every agent that answered
-   * it, because being consulted is a conversation with that agent too
-   * (`designdocs/CUSTOM_AGENTS.md` §6).
-   *
-   * Fire-and-forget: the turn is already on screen and the user has moved on,
-   * so nothing here is awaited and nothing here can fail the turn. An agent
-   * whose memory is off, whose folder is gone, or who produced no answer is
-   * skipped. The chat's own `memorizedThroughTurn` marker is deliberately
-   * untouched — a fan-out answer is the agent's conversation, not the chat's.
-   *
-   * @param answerers - The agents as the turn resolved them.
-   * @param turn - The settled turn, read for each agent's own answer.
-   * @param context - The question asked and the chat's backend, which an agent
-   *   that pins none of its own runs its memory pass on.
-   */
   private beginFanoutMemoryPasses(
     answerers: ReadonlyArray<FanoutAnswerer>,
     turn: FanoutTurn,
@@ -1531,8 +1451,6 @@ export class AgentSessionManager {
           sessionBackendId: answerer.backendId ?? context.sessionBackendId,
           messages: buildFanoutMemoryTranscript(context.originalPromptText, answer),
           chatTitle: FANOUT_FLUSH_HEADING,
-          // Nothing cancels a memory pass: the turn it reports on has already
-          // finished, and the pass bounds itself with its own deadline.
           signal: new AbortController().signal,
         }
       )
@@ -1544,11 +1462,6 @@ export class AgentSessionManager {
     }
   }
 
-  /**
-   * Land a finished flush: advance the chat's marker, show its trust line, and
-   * get the marker to disk. A chat that was closed while the pass ran has no
-   * session left to tell, so its saved note is patched directly.
-   */
   private recordMemoryFlush(
     internalId: string,
     throughTurn: number,
@@ -1558,8 +1471,6 @@ export class AgentSessionManager {
     const session = this.sessions.get(internalId);
     if (session) {
       session.setMemorizedThroughTurn(throughTurn);
-      // A pass that decided nothing was worth keeping wrote no file, so there
-      // is nothing to offer the user and no line to show.
       if (outcome.status === "written") {
         session.setMemoryNotice({
           kind: "flush",
@@ -1578,57 +1489,26 @@ export class AgentSessionManager {
     );
   }
 
-  /**
-   * End the conversation of whichever chat is active right now, because
-   * `incoming` is about to take its place — the user started a new chat or
-   * switched to another tab (`designdocs/CUSTOM_AGENTS.md` §5).
-   */
   private endConversationOfActiveSession(incoming: AgentSession): void {
     const activeId = this.activeSessionId;
     if (!activeId || activeId === incoming.internalId) return;
-    // A chat mid-replacement is interrupted, not ended; its replacement carries
-    // the same conversation on.
     if (this.continuingSessionIds.has(activeId)) return;
     const leaving = this.sessions.get(activeId);
     if (leaving) void this.beginMemoryFlush(leaving);
   }
 
-  /**
-   * Flush one chat on the user's say-so, from the chat menu's "Update memory
-   * now". Same pass as a conversation boundary, same guards — an empty chat, a
-   * chat with nothing new since the last flush, and a chat already mid-pass all
-   * do nothing (`designdocs/CUSTOM_AGENTS.md` §5).
-   *
-   * @param internalId - The chat to write down.
-   * @returns True when a pass was started.
-   */
   updateMemoryNow(internalId: string): boolean {
     const session = this.sessions.get(internalId);
     if (!session) return false;
     return this.beginMemoryFlush(session) !== null;
   }
 
-  /**
-   * Consolidate one agent's memory on the user's say-so, from its row menu in
-   * Settings.
-   *
-   * Unlike the idle trigger, this does not first check for unfolded notes: the
-   * user asked, and a pass with nothing to fold reports that itself.
-   *
-   * @param slug - Agent to consolidate.
-   * @returns What the pass did, so the caller can tell the user.
-   */
   async consolidateMemoryNow(slug: string): Promise<AgentMemoryConsolidationOutcome> {
     const files = this.opts.agentFileManager;
     if (!files) return { status: "skipped", reason: "no-agent" };
     return this.runConsolidation(files, slug);
   }
 
-  /**
-   * Consolidate every agent that has a daily note its `MEMORY.md` has not
-   * folded in yet, because the plugin has been idle long enough
-   * (`designdocs/CUSTOM_AGENTS.md` §5, "Consolidation").
-   */
   private async consolidateIdleAgents(): Promise<void> {
     const files = this.opts.agentFileManager;
     if (!files || this.disposed) return;
@@ -1643,11 +1523,6 @@ export class AgentSessionManager {
     }
   }
 
-  /**
-   * Catch up on consolidation at plugin load for any agent whose last one is
-   * more than a day old and which has written notes since
-   * (`designdocs/CUSTOM_AGENTS.md` §5, "Consolidation").
-   */
   async consolidateStaleAgentsOnLoad(): Promise<void> {
     const files = this.opts.agentFileManager;
     if (!files || this.disposed) return;
@@ -1666,10 +1541,6 @@ export class AgentSessionManager {
     }
   }
 
-  /**
-   * Run one agent's consolidation, at most one at a time per agent, and show
-   * its trust line in every open chat with that agent once it lands.
-   */
   private async runConsolidation(
     files: AgentFileManager,
     slug: string
@@ -1683,8 +1554,6 @@ export class AgentSessionManager {
         {
           agentSlug: slug,
           sessionBackendId: getSettings().agentMode?.activeBackend ?? "opencode",
-          // Nothing cancels a consolidation: it bounds itself with its own
-          // deadline, and its write is guarded by the file's content hash.
           signal: new AbortController().signal,
         }
       );
@@ -1698,13 +1567,6 @@ export class AgentSessionManager {
     }
   }
 
-  /**
-   * Queue the "consolidated their memory" line in every open chat with this
-   * agent, to appear under that chat's next turn rather than under whatever is
-   * on screen now — the file was rewritten in the background, and a line that
-   * appeared under an old exchange would read as a claim about it
-   * (`designdocs/CUSTOM_AGENTS.md` §5, "Trust surface").
-   */
   private showConsolidationNotice(slug: string, agentName: string, memoryPath: string): void {
     let shown = false;
     for (const session of this.sessions.values()) {
@@ -2261,11 +2123,7 @@ export class AgentSessionManager {
   async closeSession(id: string, options?: { releaseBackend: boolean }): Promise<void> {
     const session = this.sessions.get(id);
     if (!session) return;
-    // Closing a chat ends its conversation — unless the close is half of a
-    // replacement, in which case the same conversation continues next door.
     if (!this.continuingSessionIds.delete(id)) void this.beginMemoryFlush(session);
-    // A closed chat can no longer go idle, and its replacement (if any) keeps
-    // its own timer.
     this.memoryScheduler.cancelFlush(id);
     const closedScope = session.projectId;
     const scopeIdsBefore = this.getSessionIdsForScope(closedScope);
@@ -2359,9 +2217,6 @@ export class AgentSessionManager {
     const replaced = this.sessions.get(oldId);
     const replacedProjectId = replaced?.projectId ?? this.activeProjectId;
     const chatInputId = options.preserveChatInput ? replaced?.chatInputId : undefined;
-    // Marked before the replacement is created, because creating it is itself a
-    // conversation boundary for whatever is active — which is usually the very
-    // chat being replaced.
     this.continuingSessionIds.add(oldId);
     let created: AgentSession;
     try {
@@ -2602,8 +2457,6 @@ export class AgentSessionManager {
     session.setAgent(agent);
     session.loadDisplayMessages(loaded.messages);
     session.seedSessionUsage(loaded.usage);
-    // Absent for every chat saved before agents (and for one that has never been
-    // memorized), which then memorizes its whole transcript on its next boundary.
     if (loaded.memorizedThroughTurn) {
       session.setMemorizedThroughTurn(loaded.memorizedThroughTurn);
     }
@@ -3008,7 +2861,6 @@ export class AgentSessionManager {
       sessionId,
       projectId: session.projectId,
       usage: usage ?? undefined,
-      // Null for the built-in Copilot, which writes no frontmatter field.
       agentSlug: session.getAgent().slug,
       memorizedThroughTurn,
     });
@@ -3061,15 +2913,10 @@ export class AgentSessionManager {
         const wasRunning = prev === "running";
         const isRunning = next === "running";
         prev = next;
-        // A turn's edges drive both memory passes: an idle chat is flushed to
-        // its agent's daily note, and an idle plugin consolidates
-        // (`designdocs/CUSTOM_AGENTS.md` §5).
         if (isRunning && !wasRunning) this.memoryScheduler.noteTurnStarted(session.internalId);
         if (wasRunning && !isRunning) {
           this.memoryScheduler.noteTurnEnded(session.internalId);
           session.promotePendingMemoryNotice();
-          // The agent may have written a note with its own file tools during
-          // the turn, so what it remembers is re-read for the next one.
           const slug = session.getAgent().slug;
           if (slug) void this.refreshAgentMemory(slug);
         }
@@ -3345,8 +3192,6 @@ export class AgentSessionManager {
         this.retainedChatInputIds.add(replacement.chatInputId);
       }
       for (const session of affected) {
-        // A restart rebuilds these tabs on the far side, so their conversations
-        // are interrupted, not ended.
         this.continuingSessionIds.add(session.internalId);
         await this.closeSession(session.internalId);
       }

@@ -48,11 +48,8 @@ export function isDirectAnswerTurn(turn: FanoutTurn): boolean {
 export type AgentAnswerStatus = "running" | "done" | "error" | "cancelled";
 
 export interface AgentAnswer {
-  /** Slug of the answering agent; the brand id (`claude`, …) in a legacy composite. */
   agentSlug: string;
-  /** Name shown on the tab and written as the persisted section label. */
   name: string;
-  /** The agent's emoji; empty for an agent with no icon and for legacy composites. */
   icon: string;
   status: AgentAnswerStatus;
   text: string;
@@ -303,14 +300,12 @@ export function buildConversationHistoryBlock(
 
 export interface SucceededAnswer {
   agentSlug: string;
-  /** The agent's display name, which is how the summary attributes its points. */
   name: string;
   text: string;
 }
 
 export interface SummaryInputs {
   succeeded: SucceededAnswer[];
-  /** Slugs of the agents that errored or finished empty. */
   failed: string[];
 }
 
@@ -404,8 +399,6 @@ export function serializeFanoutComposite(turn: FanoutTurn): string {
   for (const slug of Object.keys(turn.answers)) {
     const slot = turn.answers[slug];
     const name = slot.name;
-    // The icon rides the marker so a reloaded tab keeps the agent's face even
-    // after the agent is renamed or deleted; a legacy composite has none.
     const identity =
       `id="${escapeMarkerAttr(slug)}" name="${escapeMarkerAttr(name)}"` +
       (slot.icon ? ` icon="${escapeMarkerAttr(slot.icon)}"` : "");

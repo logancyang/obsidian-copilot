@@ -623,8 +623,6 @@ export class AgentSession {
     ) {
       return;
     }
-    // A different agent has a different notebook; nothing sent so far speaks
-    // for it, so the next turn re-sends whatever this one remembers.
     if (agent.slug !== this.sessionAgent.slug) this.injectedMemoryFingerprint = null;
     this.sessionAgent = agent;
     this.notifyLabelChanged();
@@ -701,8 +699,6 @@ export class AgentSession {
       content: buildUserDisplayContent(displayText, promptContent),
     };
     const userMessageId = this.store.addMessage(userMessage);
-    // The line reports on a conversation that had ended; a new turn resumes it,
-    // so the line comes down rather than floating above the fresh exchange.
     this.memoryNotice = null;
 
     const turnStartedAtMs = Date.now();
@@ -791,9 +787,6 @@ export class AgentSession {
           this.priorDisplayMessages(userMessageId, placeholderId),
           FANOUT_HISTORY_MAX_CHARS
         );
-        // No persona block here: this prompt is SHARED, and each answerer leads
-        // it with its own persona and memory. The chat's own persona rides the
-        // summary instead (`designdocs/CUSTOM_AGENTS.md` §6).
         const promptBlocks = buildPromptBlocks(
           displayText,
           context,
@@ -938,8 +931,6 @@ export class AgentSession {
     const request: FanoutTurnRequest = {
       agentSlugs: this.lastMentionedAgents,
       sessionBackendId: this.backendId,
-      // The summary is written by this chat's own agent in a fresh sub-session,
-      // so it carries what that agent knows as well as who it is.
       summarizerPersonaBlock: this.buildSummarizerPersonaBlock(),
       prompt: withReadOnlyPreamble(promptBlocks),
       originalPromptText,
@@ -1752,8 +1743,6 @@ export function buildPromptBlocks(
   agentMemoryBlock?: string | null
 ): PromptContent[] {
   const sections = [
-    // Identity first: who the model is answering as frames everything after it,
-    // then what it already knows about the person it is answering.
     agentPersonaBlock?.trim() || null,
     agentMemoryBlock?.trim() || null,
     projectContextBlock?.trim() || null,

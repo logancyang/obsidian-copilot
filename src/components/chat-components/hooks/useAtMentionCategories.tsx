@@ -19,7 +19,6 @@ export interface AtMentionOption extends TypeaheadOption {
   category: AtMentionCategory;
   data: TFile | string | TFolder | WebTabContext;
   isAction?: boolean;
-  /** Emoji the inserted pill wears — set on agent rows, which have no icon component. */
   pillIcon?: string;
 }
 

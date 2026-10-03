@@ -25,12 +25,6 @@ export interface AgentModelPickerOverride {
   };
   effortOptionsByModelKey?: Record<string, { label: string; value: string | null }[]>;
   commitSelection?: (modelKey: string, effort: string | null) => void;
-  /**
-   * The composer's agent picker, which stands beside the model picker rather
-   * than inside it. Built here because an agent's pins only mean something
-   * against these very model rows, and picking one commits through the same
-   * `commitSelection` a hand pick uses (`designdocs/CUSTOM_AGENTS.md` §3).
-   */
   agentPicker?: AgentPickerSection;
 }
 

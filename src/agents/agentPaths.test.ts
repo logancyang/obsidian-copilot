@@ -39,8 +39,6 @@ describe("agentPaths", () => {
       expect(deriveAgentSlug("")).toBe("agent");
     });
 
-    // designdocs/CUSTOM_AGENTS.md §2: "Copilot" is the built-in entry and has
-    // no folder, so no agent folder may claim its slug.
     it("keeps the reserved built-in slug free by suffixing a name that derives it", () => {
       expect(deriveAgentSlug("Copilot")).toBe("copilot-agent");
     });
@@ -104,8 +102,6 @@ describe("agentPaths", () => {
       expect(parseAgentDailyNoteDate("2026-09-17.md")).toBe("2026-09-17");
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5: `memory/` is an ordinary vault folder, so
-    // a note the user put there themselves is not read as the agent's memory.
     it("ignores a file whose name is not a day", () => {
       expect(parseAgentDailyNoteDate("scratch.md")).toBeNull();
       expect(parseAgentDailyNoteDate("2026-09-17.txt")).toBeNull();

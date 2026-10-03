@@ -8,7 +8,6 @@ import React from "react";
 
 type AgentTabStripProps = React.ComponentProps<typeof AgentTabStrip>;
 
-/** The built-in answerer as a session holds it (fixture, not the constant). */
 const COPILOT: SessionAgent = {
   slug: null,
   name: "Copilot",
@@ -17,7 +16,6 @@ const COPILOT: SessionAgent = {
   memory: null,
 };
 
-/** One inert tab fixture: enough surface for the strip to render a session. */
 function tab(fields: { id: string; label: string | null; agent?: SessionAgent }): AgentSession {
   return {
     internalId: fields.id,
@@ -61,7 +59,6 @@ const meta = {
 } satisfies Meta<AgentTabStripProps>;
 export default meta;
 
-/** The strip needs a tooltip provider, which its production tree supplies. */
 function Strip({ sessions }: { sessions: AgentSession[] }): React.ReactElement {
   return (
     <TooltipProvider>
@@ -70,20 +67,14 @@ function Strip({ sessions }: { sessions: AgentSession[] }): React.ReactElement {
   );
 }
 
-/** A Copilot chat is unchanged: the backend's brand glyph and the chat title. */
 export const CopilotChat: StoryObj<AgentTabStripProps> = {
   render: () => <Strip sessions={[tab({ id: "a", label: "Grid storage explainer" })]} />,
 };
 
-/**
- * A fresh DM says who will answer before the chat has a title of its own
- * (`designdocs/CUSTOM_AGENTS.md` §3).
- */
 export const UntitledAgentChat: StoryObj<AgentTabStripProps> = {
   render: () => <Strip sessions={[tab({ id: "a", label: null, agent: JENNIFER })]} />,
 };
 
-/** Once the chat has a title, the agent's icon is what keeps the answerer visible. */
 export const TitledAgentChat: StoryObj<AgentTabStripProps> = {
   render: () => (
     <Strip

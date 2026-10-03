@@ -11,7 +11,6 @@ jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError:
 
 const MEMORY_MODIFIED_MS = new Date(2026, 8, 14, 15, 0, 0).getTime();
 const NOTE_MODIFIED_MS = new Date(2026, 8, 17, 9, 40, 0).getTime();
-/** The clock every read is taken against, so the index window is fixed. */
 const NOW = new Date(2026, 8, 17, 10, 0, 0);
 
 function jennifer(overrides: Partial<CustomAgent> = {}): CustomAgent {
@@ -42,7 +41,6 @@ function note(date: string, text: string, modifiedAtMs = NOTE_MODIFIED_MS): Dail
   return { date, path: `copilot/agents/jennifer/memory/${date}.md`, text, modifiedAtMs };
 }
 
-/** One day holding one conversation, written the way a flush writes it. */
 function dayWith(date: string, time: string, title: string, summary: string): DailyNoteRead {
   return note(date, `# ${date}\n\n## ${time} ${title}\n\n- ${summary}\n`);
 }
@@ -75,8 +73,6 @@ function buildFiles(
 
 describe("sessionAgent", () => {
   describe("loadAgentMemoryInjection()", () => {
-    // designdocs/CUSTOM_AGENTS.md §5: the block carries MEMORY.md plus an index
-    // of the conversations the recent daily notes record, not the notes.
     it("carries the curated core and an index line per recent conversation", async () => {
       const { files } = buildFiles({
         readDailyNotesAfter: jest.fn(async () => [
@@ -130,8 +126,6 @@ describe("sessionAgent", () => {
 
       expect(again?.fingerprint).toBe(first?.fingerprint);
 
-      // A flush in another tab appends a heading to the same day, which is what
-      // has to reach the next turn in this one.
       const flushed = buildFiles({
         readDailyNotesAfter: jest.fn(async () => [
           note(
@@ -147,8 +141,6 @@ describe("sessionAgent", () => {
     });
 
     it("keeps the fingerprint when a day outside the window changes, which it never reads", async () => {
-      // The window is enforced by the read, so an older day cannot reach the
-      // block at all — the same read returns the same index.
       const readDailyNotesAfter = jest.fn(async (_slug: string, after: string) =>
         after === "2026-09-03"
           ? [dayWith("2026-09-17", "09:40", "Grid Notes intro", "Cut the intro.")]
@@ -224,8 +216,6 @@ describe("sessionAgent", () => {
     });
 
     it("reports nothing rather than throwing when a memory file cannot be read", async () => {
-      // An unreadable notebook is not a reason to refuse the conversation; the
-      // agent answers in character with nothing recalled.
       const { files } = buildFiles({
         readMemoryDocument: jest.fn(async () => {
           throw new Error("EACCES");
@@ -248,8 +238,6 @@ describe("sessionAgent", () => {
       expect(agent.memory?.block).toContain("Writes a climate newsletter.");
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5: the persona block names today's note so
-    // the agent appends to it with its own file tools during a turn.
     it("tells a writable chat's agent where to keep its notes", async () => {
       const { files } = buildFiles();
 
@@ -282,8 +270,6 @@ describe("sessionAgent", () => {
 
   describe("missingSessionAgent()", () => {
     it("keeps the deleted agent's name as a label and sends no persona", () => {
-      // `designdocs/CUSTOM_AGENTS.md` §1: the chat opens, shows who it was held
-      // with, and runs as the default assistant.
       expect(missingSessionAgent("night-editor")).toEqual({
         slug: "night-editor",
         name: "Night Editor",

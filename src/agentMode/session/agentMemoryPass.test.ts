@@ -92,7 +92,6 @@ function buildHarness(
   return { files, subSessions, appended, prompts, backends };
 }
 
-/** 2026-09-17 09:40 local, so the note's name and heading are timezone-independent. */
 const FLUSHED_AT = new Date(2026, 8, 17, 9, 40, 0);
 
 function run(harness: Harness, overrides: Partial<Parameters<typeof runAgentMemoryFlush>[1]> = {}) {
@@ -182,8 +181,6 @@ describe("agentMemoryPass", () => {
       expect(harness.appended).toHaveLength(0);
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5: a day of notes should read as the
-    // conversations that mattered, not as one heading per exchange.
     it("leaves no heading behind when the conversation taught the agent nothing", async () => {
       const harness = buildHarness({ answer: "NOTHING" });
 
@@ -191,8 +188,6 @@ describe("agentMemoryPass", () => {
       expect(harness.appended).toHaveLength(0);
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5: the marker advances only past turns the
-    // agent actually read; a silent backend must not look like a judgement.
     it("reports a reply with no text as a failure, so the turns are flushed again later", async () => {
       const harness = buildHarness({ answer: "   " });
 
@@ -220,8 +215,6 @@ describe("agentMemoryPass", () => {
 
   describe("buildFanoutMemoryTranscript()", () => {
     it("carries the question and that agent's own answer, and nothing else", () => {
-      // designdocs/CUSTOM_AGENTS.md §6 — a consulted agent read only these two
-      // things, so its memory must not be fed the other agents or the summary.
       const transcript = buildFanoutMemoryTranscript("Which title is better?", "Vancat here!");
 
       expect(transcript).toHaveLength(2);

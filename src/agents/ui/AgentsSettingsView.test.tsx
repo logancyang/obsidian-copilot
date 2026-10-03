@@ -8,14 +8,10 @@ import {
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
-// The cloud-egress marker is a hover tooltip, so its copy is not in the tree
-// until the pointer arrives. Stand it in by test id, as the model pickers do.
 jest.mock("@/components/ui/SelfHostCloudWarningIcon", () => ({
   SelfHostCloudWarningIcon: () => <span data-testid="cloud-warning" />,
 }));
 
-// Radix's dropdown portals resolve `activeDocument` at render time and its
-// trigger relies on Pointer Capture, neither of which jsdom implements.
 beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
   if (!("PointerEvent" in window)) {

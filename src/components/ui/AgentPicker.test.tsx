@@ -20,7 +20,6 @@ const JENNIFER: AgentPickerRow = {
   effort: "high",
 };
 
-/** A roster of `count` agents after Copilot, all unpinned. */
 function roster(count: number): AgentPickerRow[] {
   return [
     COPILOT,
@@ -50,8 +49,6 @@ describe("AgentPicker", () => {
       handlers: { onSelect?: jest.Mock; onOpen?: jest.Mock } = {},
       selected = "copilot"
     ) {
-      // Selection is caller-owned state in production too: the session manager
-      // takes the pick and re-renders the picker with the new selectedSlug.
       const Harness = () => {
         const [selectedSlug, setSelectedSlug] = React.useState(selected);
         return (
@@ -71,7 +68,6 @@ describe("AgentPicker", () => {
       render(<Harness />);
     }
 
-    /** Open the roster from the composer trigger. */
     async function openRoster() {
       fireEvent.click(screen.getByTitle("Agent"));
       return within(await screen.findByRole("listbox", { name: "Agent" }));
@@ -308,7 +304,6 @@ describe("AgentPicker", () => {
       const [jennifer, vancat] = screen.getAllByRole("option");
       fireEvent.pointerMove(vancat);
       expect(onHighlight).toHaveBeenCalledWith(expect.objectContaining({ slug: "vancat" }));
-      // The row already highlighted reports nothing, so a still pointer never re-renders.
       fireEvent.pointerMove(jennifer);
       expect(onHighlight).toHaveBeenCalledTimes(1);
     });

@@ -24,8 +24,6 @@ describe("agentDisplay", () => {
 
   describe("formatMissingAgentLabel()", () => {
     it("reads a slug back as the name a deleted agent's chat still shows", () => {
-      // A chat persists only the slug, so a deleted agent's label is derived
-      // from it. See `designdocs/CUSTOM_AGENTS.md` §1 and §8.
       expect(formatMissingAgentLabel("jennifer")).toBe("Jennifer");
       expect(formatMissingAgentLabel("night-editor")).toBe("Night Editor");
     });

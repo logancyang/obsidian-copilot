@@ -30,12 +30,7 @@ interface AgentChatMessagesProps {
   pendingAskUserQuestions: AskUserQuestionPrompt[];
   chatBackend: AgentChatBackend;
   isLoading: boolean;
-  /**
-   * The agent's memory trust line, shown below the last turn, or null when the
-   * agent has written nothing since the user last spoke.
-   */
   memoryNotice?: AgentMemoryNotice | null;
-  /** Open the memory file the notice points at. */
   onOpenMemory?: (memoryPath: string) => void;
 }
 

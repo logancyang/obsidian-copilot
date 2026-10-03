@@ -20,13 +20,11 @@ import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
 import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-/** Sentinel for "no pin" in both selects; the empty string is the unset value. */
 const UNPINNED = "";
 const SESSION_BACKEND_OPTION: SelectOption = { label: "Session default", value: UNPINNED };
 const BACKEND_DEFAULT_MODEL_OPTION: SelectOption = { label: "Backend default", value: UNPINNED };
 const MODEL_DEFAULT_EFFORT_OPTION: SelectOption = { label: "Model default", value: UNPINNED };
 
-/** A blank agent, used as the starting point of every create. */
 const EMPTY_DRAFT: AgentEditorDraft = Object.freeze({
   name: "",
   icon: "",
@@ -38,7 +36,6 @@ const EMPTY_DRAFT: AgentEditorDraft = Object.freeze({
   memoryEnabled: true,
 });
 
-/** Open editor: which agent (none, while creating) and the fields as typed. */
 interface EditorState {
   mode: "create" | "edit";
   slug: string | null;
@@ -47,17 +44,10 @@ interface EditorState {
   saving: boolean;
 }
 
-/**
- * Agents tab container. Owns the roster read from the vault, the open editor,
- * and every write, delegating rendering to {@link AgentsSettingsView} so the
- * panel's states stay renderable from fixtures in the gallery.
- */
 export const AgentsSettings: React.FC = () => {
   const app = useApp();
   const plugin = usePlugin();
   const settings = useSettingsValue();
-  // Agents live under the single configurable Copilot root, so the folder is
-  // derived rather than configured here; it also keys the reload effect.
   const agentsFolder = deriveAgentsFolder(settings);
   const manager = useMemo(() => new AgentFileManager(app), [app]);
 
@@ -65,8 +55,6 @@ export const AgentsSettings: React.FC = () => {
   const [searchValue, setSearchValue] = useState("");
   const [editor, setEditor] = useState<EditorState | null>(null);
 
-  // Anchor for Radix portals on this tab (the row overflow menus), keeping them
-  // inside Obsidian's Settings modal focus scope.
   const containerRef = useRef<HTMLDivElement>(null);
 
   const reload = useCallback(async () => {
@@ -77,9 +65,6 @@ export const AgentsSettings: React.FC = () => {
     }
   }, [manager]);
 
-  // Refresh on mount, when the Copilot root moves, and whenever this Settings
-  // window regains focus: `agent.md` and `MEMORY.md` are ordinary notes the
-  // user may have just edited in another window or had changed by sync.
   useEffect(() => {
     void reload();
     const hostWindow = containerRef.current?.win;
@@ -107,9 +92,6 @@ export const AgentsSettings: React.FC = () => {
       })),
     ];
   }, [descriptors, editor?.draft.backendId, settings]);
-  // The same levels the composer's effort stepper offers for this model, read
-  // from the session manager's probed catalog, so an agent can only pin an
-  // effort its model actually advertises (`designdocs/CUSTOM_AGENTS.md` §7).
   const effortOptions = useMemo<SelectOption[]>(() => {
     const backendId = editor?.draft.backendId;
     const modelId = editor?.draft.modelId;
@@ -166,7 +148,6 @@ export const AgentsSettings: React.FC = () => {
     [records]
   );
 
-  /** Close Settings first, or the note opens behind the modal. */
   const openNote = useCallback(
     (path: string) => {
       (app as unknown as { setting: { close: () => void } }).setting.close();
@@ -178,8 +159,6 @@ export const AgentsSettings: React.FC = () => {
   const handleSave = useCallback(() => {
     if (!editor) return;
     const { draft } = editor;
-    // The Save button stays disabled until the name is non-blank, so the only
-    // field that can still be wrong here is the icon.
     const name = draft.name.trim();
     if (draft.icon.trim().length > 0 && !isValidAgentIcon(draft.icon)) {
       setEditor({ ...editor, error: "The icon must be a single emoji or letter." });
@@ -225,8 +204,6 @@ export const AgentsSettings: React.FC = () => {
     (slug: string) => {
       const record = records.find((entry) => entry.agent.slug === slug);
       if (!record) return;
-      // Clearing takes the daily notes as well as the curated file, so it is
-      // confirmed the same way a delete is (`designdocs/CUSTOM_AGENTS.md` §5).
       new AgentClearMemoryConfirmModal(
         app,
         record.agent.name,
@@ -245,11 +222,6 @@ export const AgentsSettings: React.FC = () => {
     [app, manager, records, reload]
   );
 
-  /**
-   * Open the day the agent is writing to right now, creating nothing: a day it
-   * has not written to has no note, and an empty one would only be noise in the
-   * vault.
-   */
   const handleOpenTodaysNotes = useCallback(
     (slug: string) => {
       const path = manager.getDailyNotePath(slug, formatMemoryEntryDate(new Date()));

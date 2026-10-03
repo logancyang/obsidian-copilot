@@ -19,29 +19,18 @@ import {
 } from "lucide-react";
 import React from "react";
 
-/** What one row needs to render, already formatted by the container. */
 export interface AgentRowItem {
   slug: string;
   name: string;
   description: string;
-  /** Single emoji or letter; an empty string falls back to the name's initial. */
   icon: string;
-  /** Display name of the pinned backend, or null when the agent pins none. */
   backendLabel: string | null;
-  /**
-   * True when this agent is pinned to a backend that cannot be self-hosted
-   * while the vault is in Self-Host Mode. A pinned backend is the one part of
-   * an agent that sends prompts somewhere the session's own model picker does
-   * not speak for, so the roster is where that has to be visible.
-   */
   cloudEgress: boolean;
-  /** Human-readable size of `MEMORY.md`, or null when memory is off. */
   memoryLabel: string | null;
 }
 
 export interface AgentRowProps {
   agent: AgentRowItem;
-  /** True while this agent is the one open in the editor. */
   selected: boolean;
   onSelect: () => void;
   onEdit: () => void;
@@ -51,14 +40,9 @@ export interface AgentRowProps {
   onConsolidateMemory: () => void;
   onClearMemory: () => void;
   onDelete: () => void;
-  /**
-   * Tab-body element the overflow menu portals into, so the menu stays inside
-   * Obsidian's Settings focus scope and Radix's focus-follows-hover works.
-   */
   containerRef?: React.RefObject<HTMLElement>;
 }
 
-/** One agent in the Agents list: identity, what it is pinned to, and its actions. */
 export const AgentRow: React.FC<AgentRowProps> = ({
   agent,
   selected,
@@ -92,8 +76,6 @@ export const AgentRow: React.FC<AgentRowProps> = ({
         type="button"
         onClick={onSelect}
         aria-pressed={selected}
-        // Preflight is off: zero the native button chrome so the row body reads
-        // as part of the card rather than as a beveled grey control.
         className={cn(
           "tw-appearance-none tw-border-0 tw-bg-transparent tw-p-0",
           "tw-flex tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-items-center tw-gap-3 tw-text-left"
@@ -133,8 +115,6 @@ export const AgentRow: React.FC<AgentRowProps> = ({
       <span className="tw-shrink-0 tw-text-ui-smaller tw-text-faint">
         {agent.memoryLabel ?? "Memory off"}
       </span>
-      {/* Non-modal menu: a modal Radix menu locks body scroll, and "Open folder"
-          moves focus out of Settings mid-teardown, which strands that lock. */}
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
         <DropdownMenuTrigger asChild>
           <Button
@@ -188,7 +168,6 @@ export const AgentRow: React.FC<AgentRowProps> = ({
   );
 };
 
-/** Pinned-backend marker, styled like the Skills tab's row chips. */
 const Chip: React.FC<{ label: string }> = ({ label }) => (
   <span
     className={cn(

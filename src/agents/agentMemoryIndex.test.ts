@@ -4,20 +4,16 @@ import {
   buildAgentMemoryIndex,
 } from "@/agents/agentMemoryIndex";
 
-/** One daily note, written the way a flush writes it. */
 function note(date: string, ...sections: string[]) {
   return { date, text: `# ${date}\n\n${sections.join("\n\n")}\n` };
 }
 
-/** One conversation section: a heading and its bullets. */
 function conversation(time: string, title: string, ...bullets: string[]) {
   return [`## ${time} ${title}`, "", ...bullets.map((bullet) => `- ${bullet}`)].join("\n");
 }
 
 describe("agentMemoryIndex", () => {
   describe("agentMemoryIndexCutoff()", () => {
-    // The cutoff is exclusive, so a fourteen-day window is "after today minus
-    // fourteen" and holds exactly fourteen days counting today.
     it("names the day before a fourteen-day window ending today", () => {
       expect(agentMemoryIndexCutoff(new Date(2026, 8, 17, 10, 0, 0))).toBe("2026-09-03");
     });

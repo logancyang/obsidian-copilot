@@ -89,7 +89,6 @@ describe("ChatInput", () => {
         addContext.compareDocumentPosition(agent) & Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
       expect(agent.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      // One row, so the three controls share a baseline and the row's own gap.
       expect(agent.parentElement).toBe(addContext.parentElement);
       expect(agent.parentElement).toBe(model.parentElement);
     });

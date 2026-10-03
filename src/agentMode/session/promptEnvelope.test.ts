@@ -66,8 +66,6 @@ describe("promptEnvelope", () => {
   });
 
   describe("buildAgentPersonaBlock()", () => {
-    // The persona block is how an identity reaches the model; see
-    // `designdocs/CUSTOM_AGENTS.md` §4 ("How the persona reaches the model").
     const JENNIFER = {
       name: "Jennifer",
       instructions: "You are Jennifer, a developmental editor.",
@@ -83,8 +81,6 @@ describe("promptEnvelope", () => {
       );
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5: the agent appends to today's note with
-    // its own file tools, and consolidation owns MEMORY.md.
     it("names today's note and the folder, and forbids editing MEMORY.md, when it can write", () => {
       const block = buildAgentPersonaBlock({ ...JENNIFER, writeTargets: TARGETS });
 
@@ -94,8 +90,6 @@ describe("promptEnvelope", () => {
       expect(block).toContain("Never edit your MEMORY.md.");
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5: a read-only fan-out sub-session has no
-    // file tools, so a note-keeping instruction could only produce a refusal.
     it("says nothing about notes for a read-only answerer", () => {
       expect(buildAgentPersonaBlock({ ...JENNIFER, writeTargets: null })).not.toContain(
         "Keeping your own notes"
@@ -131,14 +125,11 @@ describe("promptEnvelope", () => {
   });
 
   describe("buildAgentMemoryBlock()", () => {
-    // 2026-09-14T15:00:00 local, so the rendered day is timezone-independent.
     const MEMORY_MODIFIED_MS = new Date(2026, 8, 14, 15, 0, 0).getTime();
     const CORE = "## About the user\n\n- Writes a climate newsletter.";
     const INDEX =
       "- 2026-09-14 16:20 Newsletter intro · Renamed the newsletter. [[memory/2026-09-14]]";
 
-    // designdocs/CUSTOM_AGENTS.md §5: the block carries the curated core and the
-    // conversation index, each labeled so the model can weigh them.
     it("labels the core and the index and dates the block by the newest file it read", () => {
       const block = buildAgentMemoryBlock("Jennifer", {
         core: CORE,
@@ -152,9 +143,6 @@ describe("promptEnvelope", () => {
       expect(block?.endsWith("</agent_memory>")).toBe(true);
     });
 
-    // A one-line summary the agent reads as the whole of a conversation is worse
-    // than no line: asked what was decided, it would answer from the line rather
-    // than open the day (`designdocs/CUSTOM_AGENTS.md` §5, "Reading").
     it("says the index is a table of contents and where the rest of a conversation is", () => {
       const block = buildAgentMemoryBlock("Jennifer", {
         core: CORE,
@@ -168,9 +156,6 @@ describe("promptEnvelope", () => {
       expect(block).toContain("only when a question reaches back");
     });
 
-    // A model asked what was decided today otherwise answers from the longer,
-    // more confident-sounding summary and reports the day's own decision as
-    // still open (`designdocs/CUSTOM_AGENTS.md` §5, "Reading").
     it("says the recent conversations outrank the consolidated summary where they differ", () => {
       const block = buildAgentMemoryBlock("Jennifer", {
         core: CORE,

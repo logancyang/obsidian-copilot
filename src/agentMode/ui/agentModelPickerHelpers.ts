@@ -527,8 +527,6 @@ export function buildAgentModelPicker(args: {
           effortOptionsByModelKey,
         });
         if (!commit) return;
-        // A pinned model goes through the same atomic commit a hand pick uses;
-        // an effort-only pin rides the model already selected.
         if (commit.modelKey) commitSelection(commit.modelKey, commit.effort);
         else effort?.onChange(commit.effort);
       },

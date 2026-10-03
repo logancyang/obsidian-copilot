@@ -496,8 +496,6 @@ describe("AgentChatPersistenceManager", () => {
     });
 
     it("writes no field for a Copilot chat, so it matches one saved before agents existed", async () => {
-      // `designdocs/CUSTOM_AGENTS.md` §8: the field is omitted for the built-in
-      // assistant, which is what keeps older chats loading unchanged.
       const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
         agentSlug: null,
       });

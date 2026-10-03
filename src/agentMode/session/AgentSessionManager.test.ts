@@ -17,7 +17,6 @@ import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
 import { FanoutOrchestrator } from "./fanout/FanoutOrchestrator";
 import type { FanoutAnswerer, FanoutTurn } from "./fanout/fanoutTypes";
-import { ProjectContentTracker } from "@/context/projectContentTracker";
 import { GLOBAL_SCOPE } from "./scope";
 import {
   getSettings as mockedGetSettings,
@@ -4330,7 +4329,6 @@ describe("AgentSessionManager", () => {
 });
 
 describe("AgentSessionManager talking-to selection", () => {
-  /** An agent folder reader over a fixed roster, standing in for the vault. */
   function buildAgentFiles(agents: CustomAgent[], memory = "## About the user\n\n- knows things") {
     const record = (agent: CustomAgent) => ({
       agent,
@@ -4401,9 +4399,6 @@ describe("AgentSessionManager talking-to selection", () => {
   });
 
   it("republishes the roster when an agent's pins change, since the picker resolves rows from them", async () => {
-    // Found live: re-pinning Jennifer in Settings left the open model picker
-    // applying her old model and effort (`designdocs/CUSTOM_AGENTS.md` §3).
-    // A fresh record each read, as a re-read of the folder really produces.
     const roster = [jennifer({ modelId: "opus", effort: "max" })];
     const manager = buildManager({ agentFiles: buildAgentFiles(roster) });
     await manager.refreshAgents();
@@ -4419,8 +4414,6 @@ describe("AgentSessionManager talking-to selection", () => {
   });
 
   it("applies a new selection to the next new chat and to chats with no message yet", async () => {
-    // The rule from `designdocs/CUSTOM_AGENTS.md` §3: a conversation already in
-    // character keeps its agent; an untouched one follows the picker.
     const manager = buildManager({ agentFiles: buildAgentFiles([jennifer()]) });
     const started = await manager.createSession();
     getSessionTestHandle(started).setHasUserVisibleMessages(true);
@@ -4531,8 +4524,6 @@ describe("AgentSessionManager talking-to selection", () => {
     await manager.setSelectedAgent("jennifer");
     sessionCreateSpy.mockClear();
 
-    // The pinned backend is not registered here, so the create degrades to
-    // opencode — and must not carry claude's model id onto it.
     await manager.createSession();
 
     expect(sessionCreateSpy.mock.calls[0][0].defaultModelSelection).toBeUndefined();
@@ -4559,7 +4550,6 @@ describe("AgentSessionManager talking-to selection", () => {
     const copilotChat = await manager.createSession();
     getSessionTestHandle(copilotChat).setHasUserVisibleMessages(true);
 
-    // Reopening the older chat must say who is answering it, the way its tab does.
     manager.setActiveSession(jenniferChat.internalId);
     expect(manager.getTalkingToSlug()).toBe("jennifer");
     expect(manager.getSelectedAgentSlug()).toBe(BUILTIN_AGENT_SLUG);
@@ -4581,7 +4571,6 @@ describe("AgentSessionManager talking-to selection", () => {
   });
 
   describe("self-maintained memory", () => {
-    /** A manager with one agent, plus a chat with it that has said something. */
     async function buildAgentChat(options: { messages?: { message: string }[] } = {}) {
       const manager = buildManager({ agentFiles: buildAgentFiles([jennifer()]) });
       await manager.setSelectedAgent("jennifer");
@@ -4721,8 +4710,6 @@ describe("AgentSessionManager talking-to selection", () => {
       expect(chat.getMemorizedThroughTurn()).toBe(1);
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5 ("Reading"): a chat re-sends what its agent
-    // knows whenever the files change, so a chat mid-conversation gets this too.
     it("re-reads what the agent knows into every open chat with it once a flush lands", async () => {
       const files = buildAgentFiles([jennifer()]);
       const manager = buildManager({ agentFiles: files });
@@ -4731,11 +4718,8 @@ describe("AgentSessionManager talking-to selection", () => {
       getSessionTestHandle(chat).setMessages([{ message: "hello" }]);
       const other = await manager.createSession();
       getSessionTestHandle(other).setHasUserVisibleMessages(true);
-      // Creating the second chat is itself a boundary; let its pass settle so
-      // the one-pass-per-chat guard is clear before the explicit flush below.
       await waitFor(() => expect(mockRunAgentMemoryFlush).toHaveBeenCalledTimes(1));
       expect(other.getAgent().memory?.block).toContain("knows things");
-      // The flush appended to the note on disk; the refresh must pick that up.
       (files as unknown as { readMemoryDocument: jest.Mock }).readMemoryDocument.mockResolvedValue({
         text: "## About the user\n\n- cut the hydrogen section",
         body: "## About the user\n\n- cut the hydrogen section",
@@ -4763,8 +4747,6 @@ describe("AgentSessionManager talking-to selection", () => {
       expect(chat.getMemoryNotice()).toBeNull();
     });
 
-    // A conversation the agent judged not worth keeping is still covered, so
-    // re-reading it would only spend a model on the same answer.
     it("advances the marker but shows no line when nothing was worth keeping", async () => {
       const { manager, chat } = await buildAgentChat();
       mockRunAgentMemoryFlush.mockResolvedValue({ status: "skipped", reason: "nothing-to-keep" });
@@ -4824,8 +4806,6 @@ describe("AgentSessionManager talking-to selection", () => {
       expect(mockRunAgentMemoryFlush.mock.calls[0][1].chatTitle).toBe("Newsletter rename");
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5: a chat that stays open is flushed after
-    // two minutes idle, without waiting for a conversation boundary.
     it("flushes a chat that has sat idle since its turn ended", async () => {
       jest.useFakeTimers();
       try {
@@ -4903,8 +4883,6 @@ describe("AgentSessionManager talking-to selection", () => {
       await first;
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5: a consolidation lands in the background,
-    // so its line waits for that chat's next turn.
     it("holds the consolidation trust line until a chat's next turn ends", async () => {
       const manager = buildManager({ agentFiles: buildAgentFiles([jennifer()]) });
       await manager.setSelectedAgent("jennifer");
@@ -5055,8 +5033,6 @@ describe("AgentSessionManager talking-to selection", () => {
     });
 
     it("opens a chat whose agent was deleted as Copilot, keeping the name as a plain label", async () => {
-      // `designdocs/CUSTOM_AGENTS.md` §1: the chat still opens, shows the name,
-      // and runs as the default assistant — no persona reaches the model.
       const persistence = buildPersistence({ agentSlug: "jennifer" });
       const manager = buildManager({ persistence, agentFiles: buildAgentFiles([]) });
 
@@ -5086,7 +5062,6 @@ describe("AgentSessionManager talking-to selection", () => {
   });
 
   describe("runFanoutTurn()", () => {
-    /** Capture what the manager resolved, and answer for each agent it hands over. */
     function stubOrchestrator(answerText: (slug: string) => string | null) {
       const resolved: FanoutAnswerer[][] = [];
       jest.spyOn(FanoutOrchestrator.prototype, "run").mockImplementation(async (input) => {
@@ -5131,8 +5106,6 @@ describe("AgentSessionManager talking-to selection", () => {
     afterEach(() => jest.restoreAllMocks());
 
     it("hands each mentioned agent over with its persona, memory, icon and pinned backend", async () => {
-      // designdocs/CUSTOM_AGENTS.md §6 — resolved at send time, so the agent
-      // answers with what its folder holds now.
       const manager = buildManager({
         agentFiles: buildAgentFiles([jennifer({ backendId: "claude" }), vancat()]),
       });
@@ -5144,7 +5117,6 @@ describe("AgentSessionManager talking-to selection", () => {
       expect(resolved[0][0]).toMatchObject({ name: "Jennifer", icon: "🪶", backendId: "claude" });
       expect(resolved[0][0].personaBlock).toContain('<agent_persona name="Jennifer">');
       expect(resolved[0][0].personaBlock).toContain("<agent_memory");
-      // Vancat pins nothing, so the orchestrator falls back to the chat's backend.
       expect(resolved[0][1]).toMatchObject({ name: "Vancat", icon: "🐱", backendId: null });
     });
 
@@ -5160,7 +5132,6 @@ describe("AgentSessionManager talking-to selection", () => {
       await manager.runFanoutTurn(request(["jennifer", "vancat"]));
 
       expect(resolved[0][0].selection).toEqual({ baseModelId: "pinned-model", effort: "high" });
-      // Vancat pins nothing, so its sub-session keeps the backend's own default.
       expect(resolved[0][1].selection).toBeNull();
     });
 
@@ -5174,7 +5145,6 @@ describe("AgentSessionManager talking-to selection", () => {
     });
 
     it("folds the turn into each answering agent's memory, feeding it only its own answer", async () => {
-      // designdocs/CUSTOM_AGENTS.md §6 — being consulted is a conversation too.
       const manager = buildManager({ agentFiles: buildAgentFiles([jennifer(), vancat()]) });
       stubOrchestrator((slug) => `${slug} answered`);
       mockRunAgentMemoryFlush.mockResolvedValue({ status: "skipped", reason: "no-turns" });
@@ -5190,8 +5160,6 @@ describe("AgentSessionManager talking-to selection", () => {
         expect.objectContaining({ sender: "user", message: "which title is better?" }),
         expect.objectContaining({ sender: "ai", message: "jennifer answered" }),
       ]);
-      // A fan-out turn belongs to the asking chat, so the answerer's note files
-      // it under a heading of its own (`designdocs/CUSTOM_AGENTS.md` §6).
       expect(mockRunAgentMemoryFlush.mock.calls[0][1].chatTitle).toBe("Asked in passing");
     });
 
@@ -5208,8 +5176,6 @@ describe("AgentSessionManager talking-to selection", () => {
     });
 
     it("never advances the chat's memorized-through marker for a fan-out answer", async () => {
-      // The exchange belongs to the answering agent, not to this chat's own
-      // conversation with its own agent (`designdocs/CUSTOM_AGENTS.md` §6).
       const manager = buildManager({ agentFiles: buildAgentFiles([jennifer()]) });
       await manager.setSelectedAgent("jennifer");
       const chat = await manager.createSession();

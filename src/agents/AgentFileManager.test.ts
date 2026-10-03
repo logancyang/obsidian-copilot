@@ -13,10 +13,8 @@ jest.mock("@/utils/vaultAdapterUtils", () => ({
 
 const AGENTS_ROOT = "copilot/agents";
 
-/** Fixed mtime for every seeded file, so memory-timestamp assertions are exact. */
 const MEMORY_MTIME_MS = new Date(2026, 8, 14, 15, 0, 0).getTime();
 
-// The Obsidian mock's TFile/TFolder take a path; the published types do not.
 const FileCtor = TFile as unknown as new (path: string) => TFile;
 const FolderCtor = TFolder as unknown as new (path: string) => TFolder;
 
@@ -31,10 +29,6 @@ const DRAFT: AgentDraft = {
   memoryEnabled: true,
 };
 
-/**
- * Minimal in-memory stand-in for the parts of the vault the manager touches:
- * a path→content map with folders materialized from the paths that exist.
- */
 class FakeVault {
   public readonly files = new Map<string, string>();
   public readonly folders = new Set<string>([AGENTS_ROOT]);
@@ -42,7 +36,6 @@ class FakeVault {
   getAbstractFileByPath(path: string): TFile | TFolder | null {
     if (this.files.has(path)) {
       const file = new FileCtor(path);
-      // The list row reports memory size, which the real TFile carries in `stat`.
       (file as unknown as { stat: { size: number; mtime: number } }).stat = {
         size: Buffer.byteLength(this.files.get(path) ?? "", "utf8"),
         mtime: MEMORY_MTIME_MS,
@@ -83,7 +76,6 @@ class FakeVault {
     return Promise.resolve(content);
   }
 
-  /** Seed an agent folder the way a previous create (or a hand edit) would leave it. */
   seedAgent(slug: string, agent: Partial<CustomAgent> & { name: string }, memory = ""): void {
     this.folders.add(`${AGENTS_ROOT}/${slug}`);
     this.files.set(
@@ -104,7 +96,6 @@ class FakeVault {
     this.files.set(`${AGENTS_ROOT}/${slug}/MEMORY.md`, memory);
   }
 
-  /** Seed one day of daily notes, as a flush or the agent itself would leave it. */
   seedDailyNote(slug: string, date: string, text: string): void {
     this.folders.add(`${AGENTS_ROOT}/${slug}/memory`);
     this.files.set(`${AGENTS_ROOT}/${slug}/memory/${date}.md`, text);
@@ -231,8 +222,6 @@ describe("AgentFileManager", () => {
       );
     });
 
-    // designdocs/CUSTOM_AGENTS.md §1: the folder name is the stable id, so a
-    // display-name change must not move it — saved chats resolve by slug.
     it("leaves the folder where it is when the display name changes", async () => {
       const { manager, vault } = buildManager();
       vault.seedAgent("jennifer", { name: "Jennifer" });
@@ -306,8 +295,6 @@ describe("AgentFileManager", () => {
       expect(read?.hash).toEqual(expect.any(String));
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5: files written before consolidation
-    // existed carry no frontmatter and must still load.
     it("loads a memory file that has no frontmatter as never consolidated", async () => {
       const { manager, vault } = buildManager();
       vault.seedAgent("jennifer", { name: "Jennifer" }, "# Jennifer's memory\n");
@@ -360,8 +347,6 @@ describe("AgentFileManager", () => {
       expect(manager.listDailyNoteDates("jennifer")).toEqual(["2026-09-15", "2026-09-17"]);
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5: `memory/` is an ordinary vault folder the
-    // user may keep their own notes in.
     it("skips a file in the folder whose name is not a day", () => {
       const { manager, vault } = buildManager();
       vault.seedAgent("jennifer", { name: "Jennifer" });
@@ -398,8 +383,6 @@ describe("AgentFileManager", () => {
       vault.seedAgent("jennifer", { name: "Jennifer" });
       vault.seedDailyNote("jennifer", "2026-09-15", "old");
 
-      // The full read travels, so the index window can date the memory block by
-      // the newest note it carries.
       expect(await manager.readDailyNotesAfter("jennifer", null)).toMatchObject([
         { date: "2026-09-15", path: "copilot/agents/jennifer/memory/2026-09-15.md", text: "old" },
       ]);
@@ -461,8 +444,6 @@ describe("AgentFileManager", () => {
       expect(written).toContain("Writes.");
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5: the user's edits are always the new
-    // baseline, so a file edited while the pass ran is left exactly as it is.
     it("discards the pass when the user edited MEMORY.md while it ran", async () => {
       const { manager, vault } = buildManager();
       vault.seedAgent("jennifer", { name: "Jennifer" }, "old\n");
@@ -527,8 +508,6 @@ describe("AgentFileManager", () => {
       expect(vault.files.get("copilot/agents/jennifer/MEMORY.md")).toContain("# Jennifer's memory");
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5: clearing only the core would leave the
-    // next consolidation to write it straight back from the daily notes.
     it("also moves the daily-notes folder to trash", async () => {
       const { manager, vault } = buildManager();
       vault.seedAgent("jennifer", { name: "Jennifer" });

@@ -38,11 +38,9 @@ export interface ModelEffortPickerOverride {
 interface ModelEffortPickerProps {
   override: ModelEffortPickerOverride;
   className?: string;
-  /** Opens the popover on mount, so a story can show the list it holds. */
   defaultOpen?: boolean;
 }
 
-/** Section heading above a group of model rows. */
 const GROUP_HEADING_CLASS = "tw-px-3 tw-pb-1 tw-pt-2 tw-text-xs tw-uppercase tw-tracking-wide";
 
 interface EffortOpt {
@@ -259,8 +257,6 @@ export function ModelEffortPicker({ override, className, defaultOpen }: ModelEff
                         : undefined
                     }
                     onPointerMove={() => {
-                      // Hover moves the highlight, so the mouse and the arrow keys
-                      // paint the same single row.
                       if (!isHighlight && !itemDisabled) setHighlightKey(key);
                     }}
                     onAuxClick={(event) => {

@@ -47,16 +47,12 @@ describe("useAtMentionSearch", () => {
     });
 
     it("offers a create row instead of an empty list when the user has no agents yet", () => {
-      // designdocs/CUSTOM_AGENTS.md §6 — fan-out has no answerers until an agent
-      // exists, so the group is the way to make one rather than a dead end.
       const rows = agentRows({ entries: [], enabled: true, onCreateAgent: jest.fn() });
 
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({
         key: CREATE_AGENT_OPTION_KEY,
         title: "Create an agent",
-        // Short enough to survive the composer's narrowest menu, and it names
-        // where the row leads rather than describing what an agent is.
         subtitle: "Set one up in Settings",
         isAction: true,
       });

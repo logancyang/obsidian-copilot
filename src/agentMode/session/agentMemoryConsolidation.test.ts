@@ -24,7 +24,6 @@ const JENNIFER: CustomAgent = {
   instructions: "You are Jennifer.",
 };
 
-/** A well-formed memory body: the title, the four headings, one entry each. */
 function memoryBody(entry = "- (2026-09-10) Writes a weekly newsletter. [[memory/2026-09-10]]") {
   return [
     "# Jennifer's memory",
@@ -220,8 +219,6 @@ describe("agentMemoryConsolidation", () => {
       expect(harness.writes).toHaveLength(0);
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5: the hash is captured with the input and
-    // re-checked at the write, so the user's edits are the new baseline.
     it("re-checks the hash it was handed and reports a file edited meanwhile", async () => {
       const harness = buildHarness({ write: "conflict" });
 
@@ -294,8 +291,6 @@ describe("agentMemoryConsolidation", () => {
       );
     });
 
-    // Otherwise a second conversation on an already-consolidated day would
-    // never reach MEMORY.md (`designdocs/CUSTOM_AGENTS.md` §5).
     it("is true when today's note was appended to after the core was written", async () => {
       const appendedSince = files(["2026-09-17"], "2026-09-17", { memory: 1000, note: 2000 });
 

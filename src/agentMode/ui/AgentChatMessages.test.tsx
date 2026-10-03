@@ -19,7 +19,6 @@ const mockScrollState = { paused: false, onResume: jest.fn() };
 jest.mock("@/hooks/useChatScrolling", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useChatScrolling: () => ({
-    // Non-zero so the scroll headroom the last turn reserves is observable.
     containerMinHeight: 480,
     scrollContainerCallbackRef: jest.fn(),
     contentCallbackRef: jest.fn(),
@@ -142,8 +141,6 @@ function renderMessages(
   return { ...render(<AgentChatMessages {...props} />), props };
 }
 
-/** The wrapper around the transcript's last message — the block that carries
- *  the scroll headroom. */
 function lastMessageBlock(container: HTMLElement): HTMLElement {
   const blocks = container.querySelectorAll<HTMLElement>("[data-message-key]");
   return blocks[blocks.length - 1];

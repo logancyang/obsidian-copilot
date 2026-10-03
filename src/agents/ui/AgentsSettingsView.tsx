@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import { Plus, Search, Users } from "lucide-react";
 import React from "react";
 
-/** Per-agent callbacks the list rows fan out to, keyed by slug at call time. */
 export interface AgentRowActions {
   onSelect: (slug: string) => void;
   onEdit: (slug: string) => void;
@@ -19,26 +18,17 @@ export interface AgentRowActions {
 }
 
 export interface AgentsSettingsViewProps {
-  /** Vault-relative agents folder, shown so the user can find the files. */
   agentsFolder: string;
-  /** Every agent on disk, already formatted and ordered. */
   agents: readonly AgentRowItem[];
   searchValue: string;
   onSearchChange: (value: string) => void;
   onNewAgent: () => void;
   actions: AgentRowActions;
-  /** Slug currently open in the editor, or null while creating or idle. */
   selectedSlug: string | null;
-  /** The open editor, or null when no agent is being created or edited. */
   editor: AgentEditorProps | null;
   containerRef?: React.RefObject<HTMLElement>;
 }
 
-/**
- * The Agents settings tab: a searchable roster, with the agent being created or
- * edited opened beneath it. Presentational — every value and callback comes from
- * the container, so the gallery can render each state from fixtures.
- */
 export const AgentsSettingsView: React.FC<AgentsSettingsViewProps> = ({
   agentsFolder,
   agents,
@@ -70,7 +60,6 @@ export const AgentsSettingsView: React.FC<AgentsSettingsViewProps> = ({
           </div>
         </div>
 
-        {/* Toolbar — search + count + create, matching the Skills tab's row. */}
         <div className="tw-mt-4 tw-flex tw-items-center tw-gap-2">
           <div className="tw-relative tw-flex-1 sm:tw-flex-initial">
             <Search
@@ -99,10 +88,6 @@ export const AgentsSettingsView: React.FC<AgentsSettingsViewProps> = ({
             <AgentsEmptyPlaceholder folder={agentsFolder} />
           </div>
         ) : (
-          // The roster and the open agent stack rather than sitting side by
-          // side: Obsidian caps this panel's width well below what a list plus a
-          // 380px editor column needs, and splitting it there squeezes every row
-          // down to its first few words.
           <div className="tw-mt-4 tw-flex tw-flex-col tw-gap-4">
             <div role="region" aria-label="Your agents" className="tw-flex tw-flex-col tw-gap-1.5">
               {visible.length === 0 ? (
@@ -149,10 +134,6 @@ export const AgentsSettingsView: React.FC<AgentsSettingsViewProps> = ({
   );
 };
 
-/**
- * The Agents tab's empty state, mirroring the Skills tab's placeholder so the
- * two sibling tabs read as one surface.
- */
 const AgentsEmptyPlaceholder: React.FC<{ folder: string }> = ({ folder }) => (
   <div
     className={cn(

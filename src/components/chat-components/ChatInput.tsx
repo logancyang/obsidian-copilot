@@ -637,11 +637,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     setIncludeActiveWebTab(false);
   }, [setIncludeActiveWebTab]);
 
-  // A custom agent carries its own model and effort from its config, so the
-  // composer stops offering a second place to set them: one agent, one answer
-  // to what it runs on, changed where the agent itself is edited
-  // (`designdocs/CUSTOM_AGENTS.md` §3). Copilot pins nothing, so its chats keep
-  // the picker, as does every surface that supplies no roster at all.
   const showModelPicker = !agentPicker || agentPicker.selectedSlug === BUILTIN_AGENT_SLUG;
 
   return (

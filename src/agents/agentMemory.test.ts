@@ -10,7 +10,6 @@ import {
   reviewMemoryUpdate,
 } from "@/agents/agentMemory";
 
-/** A well-formed memory file: the title, the four headings, one entry each. */
 function memoryFile(entry = "- (2026-09-10) Writes a weekly newsletter."): string {
   return [
     "# Jennifer's memory",

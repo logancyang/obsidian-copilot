@@ -19,8 +19,6 @@ describe("agentMemoryFile", () => {
       });
     });
 
-    // designdocs/CUSTOM_AGENTS.md §5: every MEMORY.md written before
-    // consolidation existed has no frontmatter, and must still load.
     it("reads a file with no frontmatter as a body that has never been consolidated", () => {
       expect(parseAgentMemoryFile("# Jennifer's memory\n\n## About the user\n")).toEqual({
         body: "# Jennifer's memory\n\n## About the user\n",
@@ -141,8 +139,6 @@ describe("agentMemoryFile", () => {
   });
 
   describe("parseDailyNoteConversations()", () => {
-    // designdocs/CUSTOM_AGENTS.md §5: the index is built from these headings and
-    // the first bullet under each, which is the one saying what it was about.
     it("reads each timed heading with the first bullet under it", () => {
       const text = [
         "# 2026-09-17",

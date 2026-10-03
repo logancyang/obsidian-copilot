@@ -21,11 +21,6 @@ export function RecentChatProjectBadge({ name }: RecentChatProjectBadgeProps): R
 
 export interface RecentChatTitleProps {
   title: string;
-  /**
-   * Emoji of the agent this chat was held with, rendered before the title so a
-   * DM is recognizable in the list (`designdocs/CUSTOM_AGENTS.md` §8). Omitted
-   * for Copilot chats, which keep the plain title they always had.
-   */
   agentIcon?: string;
   className?: string;
 }

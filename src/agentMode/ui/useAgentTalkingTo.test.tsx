@@ -5,8 +5,6 @@ import { act, renderHook } from "@testing-library/react";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
-// Stable reference, as the manager's own getter is: `useSyncExternalStore`
-// loops forever on a snapshot that allocates.
 const ENTRIES = [BUILTIN_AGENT];
 
 function buildManager(overrides: Partial<Record<string, unknown>> = {}) {
@@ -55,8 +53,6 @@ describe("useAgentTalkingTo", () => {
     });
 
     it("survives a failed folder read instead of tearing down the composer", async () => {
-      // The roster feeds the composer's agent picker, so a vault read that
-      // throws must leave it rendered on the last roster it had.
       const manager = buildManager({
         refreshAgents: jest.fn(async () => {
           throw new Error("EACCES");

@@ -68,8 +68,6 @@ describe("mentionedAgents", () => {
 
   describe("isFanout()", () => {
     it("collapses a lone mention of the chat's own persona to the single-agent path", () => {
-      // designdocs/CUSTOM_AGENTS.md §6 — the chat's own agent must never both
-      // answer through a sub-session and summarize itself.
       expect(isFanout([], "jennifer")).toBe(false);
       expect(isFanout(["jennifer"], "jennifer")).toBe(false);
     });

@@ -364,9 +364,6 @@ describe("fanoutTypes", () => {
     });
 
     it("still renders a turn saved before agents replaced backend brands as answerers", () => {
-      // designdocs/CUSTOM_AGENTS.md §6 — the composite is persisted as message
-      // text and the parser keys sections by their marker, so an existing chat
-      // whose sections are `claude` / `codex` opens unchanged.
       const legacy = [
         "<!--copilot:multi-agent v=1-->",
         "<!--copilot:summary-->",

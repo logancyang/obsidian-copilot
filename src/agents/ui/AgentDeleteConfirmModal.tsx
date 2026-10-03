@@ -10,17 +10,11 @@ import { Root } from "react-dom/client";
 
 export interface AgentDeleteConfirmProps {
   name: string;
-  /** Vault-relative agent folder, so the user can see exactly what is going. */
   folderPath: string;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
-/**
- * Body of the delete confirmation. It names the memory file explicitly: an
- * agent's memory is the part the user cannot recreate, and deleting the agent
- * takes it, so the dialog has to say so before they confirm.
- */
 export const AgentDeleteConfirmBody: React.FC<AgentDeleteConfirmProps> = ({
   name,
   folderPath,
@@ -78,11 +72,6 @@ export const AgentDeleteConfirmBody: React.FC<AgentDeleteConfirmProps> = ({
   );
 };
 
-/**
- * Native Obsidian confirm modal for deleting an agent. Built on Obsidian's
- * `Modal` for popout-window safety, native header chrome, and ESC handling,
- * matching the Skills tab's delete flow.
- */
 export class AgentDeleteConfirmModal extends Modal {
   private root: Root | null = null;
 
@@ -93,7 +82,6 @@ export class AgentDeleteConfirmModal extends Modal {
     private readonly onConfirmDelete: () => void | Promise<void>
   ) {
     super(app);
-    // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
     this.setTitle(`Delete ${name}?`);
   }

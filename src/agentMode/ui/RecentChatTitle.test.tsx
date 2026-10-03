@@ -22,8 +22,6 @@ describe("RecentChatTitle", () => {
     });
 
     it("puts the agent's icon before the title of a chat held with one", () => {
-      // `designdocs/CUSTOM_AGENTS.md` §8 — the icon is how a DM is recognized
-      // in the list; the title itself is unchanged.
       const { container } = render(<RecentChatTitle title="Newsletter intro" agentIcon="🪶" />);
 
       expect(container.textContent).toBe("🪶Newsletter intro");

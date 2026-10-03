@@ -53,7 +53,6 @@ describe("fanoutDropdown", () => {
   describe("agentStateForAnswer()", () => {
     it("maps a done slot with text to answer, but a done slot with no text to empty", () => {
       expect(agentStateForAnswer(answer("vancat", "done", "hi"))).toBe("answer");
-      // The bug: a finished-but-empty slot must NOT read as a success check.
       expect(agentStateForAnswer(answer("vancat", "done", "   "))).toBe("empty");
     });
 
@@ -102,8 +101,6 @@ describe("fanoutDropdown", () => {
     });
 
     it("labels a legacy brand answer from the name the composite saved, with no icon", () => {
-      // A turn persisted before agents replaced backend brands as answerers.
-      // designdocs/CUSTOM_AGENTS.md §6.
       const options = buildFanoutOptions(
         turn([answer("claude", "done", "x", { name: "Claude", icon: "" })])
       );

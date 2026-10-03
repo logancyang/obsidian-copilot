@@ -133,8 +133,6 @@ export function AtMentionCommandPlugin({
             type: option.category as PillData["type"],
             title: option.title,
             data: option.data,
-            // An agent pill wears its agent's face, captured at insert time so
-            // the editor needs no roster to render it.
             icon: option.pillIcon,
           };
 

@@ -10,20 +10,11 @@ import { Root } from "react-dom/client";
 
 export interface AgentClearMemoryConfirmProps {
   name: string;
-  /** Vault-relative `memory/` folder, so the user can see what else goes. */
   memoryFolderPath: string;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
-/**
- * Body of the clear-memory confirmation.
- *
- * It names the daily-notes folder as well as the file, because clearing only
- * the curated core would leave the next consolidation to write it straight back
- * from the notes — so the notes go too, and the user has to know that before
- * they confirm. See `designdocs/CUSTOM_AGENTS.md` §5 ("Settings and menus").
- */
 export const AgentClearMemoryConfirmBody: React.FC<AgentClearMemoryConfirmProps> = ({
   name,
   memoryFolderPath,
@@ -70,10 +61,6 @@ export const AgentClearMemoryConfirmBody: React.FC<AgentClearMemoryConfirmProps>
   </div>
 );
 
-/**
- * Native Obsidian confirm modal for clearing an agent's memory, built on the
- * same `Modal` host as the delete flow so both read as one dialog family.
- */
 export class AgentClearMemoryConfirmModal extends Modal {
   private root: Root | null = null;
 
@@ -84,7 +71,6 @@ export class AgentClearMemoryConfirmModal extends Modal {
     private readonly onConfirmClear: () => void | Promise<void>
   ) {
     super(app);
-    // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
     this.setTitle(`Clear ${name}'s memory?`);
   }

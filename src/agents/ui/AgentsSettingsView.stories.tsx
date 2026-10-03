@@ -189,12 +189,6 @@ export const EditorRejectedIcon: StoryObj<AgentsSettingsViewProps> = {
   },
 };
 
-/**
- * Self-Host Mode on: an agent pinned to a backend that cannot be self-hosted
- * carries the same cloud-egress marker the model pickers use, because its
- * pinned backend is the one thing about it the session's model picker does not
- * speak for.
- */
 export const SelfHostCloudPin: StoryObj<AgentsSettingsViewProps> = {
   name: "List with a cloud-pinned agent in Self-Host Mode",
   args: {

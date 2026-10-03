@@ -75,7 +75,6 @@ describe("agentMemoryScheduler", () => {
         scheduler.noteTurnStarted("chat-b");
         scheduler.noteTurnEnded("chat-a");
 
-        // `chat-b` is still running, so no window is open yet.
         jest.advanceTimersByTime(CONSOLIDATE_MS);
         expect(consolidate).not.toHaveBeenCalled();
 

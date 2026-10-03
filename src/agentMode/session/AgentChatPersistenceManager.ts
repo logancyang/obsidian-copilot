@@ -65,21 +65,7 @@ export interface LoadedAgentChat {
   sessionId?: string;
   projectId: string;
   usage?: SessionUsage;
-  /**
-   * Custom agent this chat was held with, or `undefined` for a chat with the
-   * built-in Copilot — which writes no field, so every chat saved before agents
-   * existed loads unchanged. A slug that no longer resolves still loads: the
-   * session layer falls back to Copilot and keeps the name as a plain label.
-   * See `designdocs/CUSTOM_AGENTS.md` §8.
-   */
   agentSlug?: string;
-  /**
-   * How many transcript messages this chat's agent has already folded into its
-   * memory file, so reopening and continuing the chat memorizes only what is
-   * new. Absent (and omitted on save) when nothing has been memorized, which is
-   * every chat written before agents existed.
-   * See `designdocs/CUSTOM_AGENTS.md` §5 and §8.
-   */
   memorizedThroughTurn?: number;
 }
 
@@ -120,15 +106,7 @@ export class AgentChatPersistenceManager {
       sessionId?: string | null;
       projectId?: string;
       usage?: SessionUsage;
-      /**
-       * Slug of the custom agent this chat is held with. Omit for the built-in
-       * Copilot, which writes no field at all.
-       */
       agentSlug?: string | null;
-      /**
-       * Transcript messages already covered by the agent's memory file. Omit or
-       * pass 0 for a chat that has never been memorized, which writes no field.
-       */
       memorizedThroughTurn?: number;
     }
   ): Promise<{ path: string } | null> {
@@ -177,11 +155,7 @@ export class AgentChatPersistenceManager {
         sessionId: options?.sessionId ?? existingMeta.sessionId,
         projectId: coerceProjectId(options?.projectId) ?? existingMeta.projectId,
         usage: options?.usage ?? existingMeta.usage,
-        // Round-trip the persisted slug when the caller doesn't re-supply it,
-        // so an autosave can never quietly demote a persona chat to Copilot.
         agentSlug: options?.agentSlug ?? existingMeta.agentSlug,
-        // Round-trip the persisted marker the same way, so an autosave that
-        // does not re-supply it cannot make the agent re-read memorized turns.
         memorizedThroughTurn: options?.memorizedThroughTurn ?? existingMeta.memorizedThroughTurn,
       });
 
@@ -509,11 +483,7 @@ export class AgentChatPersistenceManager {
       lines.push(`projectId: "${escapeYamlString(projectId)}"`);
     }
     if (args.sessionId) lines.push(`sessionId: "${escapeYamlString(args.sessionId)}"`);
-    // Omitted for the built-in Copilot, so a chat with no persona stays
-    // byte-identical to one saved before agents existed.
     if (args.agentSlug) lines.push(`agentSlug: "${escapeYamlString(args.agentSlug)}"`);
-    // Omitted when zero, so a chat whose agent has memorized nothing stays
-    // byte-identical to one saved before the field existed.
     if (args.memorizedThroughTurn) {
       lines.push(`memorizedThroughTurn: ${args.memorizedThroughTurn}`);
     }

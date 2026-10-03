@@ -46,8 +46,6 @@ jest.mock("@/agentMode", () => ({
       : [],
 }));
 
-// The cloud-egress marker is a hover tooltip, so its copy is not in the tree
-// until the pointer arrives. Stand it in by test id, as the model pickers do.
 jest.mock("@/components/ui/SelfHostCloudWarningIcon", () => ({
   SelfHostCloudWarningIcon: () => <span data-testid="cloud-warning" />,
 }));
@@ -72,8 +70,6 @@ jest.mock("@/utils/revealFolderInExplorer", () => ({
   },
 }));
 
-// Capture what the confirm modal was told and let the test fire its callback,
-// standing in for the user pressing "Delete agent".
 let confirmDelete: (() => void | Promise<void>) | null = null;
 let confirmArgs: { name: string; folderPath: string } | null = null;
 jest.mock("@/agents/ui/AgentDeleteConfirmModal", () => ({
@@ -90,7 +86,6 @@ jest.mock("@/agents/ui/AgentDeleteConfirmModal", () => ({
     open = jest.fn();
   },
 }));
-// Same stand-in for the clear-memory confirm, which takes the notes folder.
 let confirmClear: (() => void | Promise<void>) | null = null;
 let clearConfirmArgs: { name: string; memoryFolderPath: string } | null = null;
 jest.mock("@/agents/ui/AgentClearMemoryConfirmModal", () => ({
@@ -148,8 +143,6 @@ function nameInput(): HTMLInputElement {
 
 const closeSettings = jest.fn();
 const app = { setting: { close: closeSettings } } as unknown as App;
-// The effort levels a model advertises are probed by the session manager, so the
-// panel reads them off the plugin the way the backend settings panels do.
 const plugin = { agentSessionManager: {} } as unknown as Parameters<
   typeof PluginProvider
 >[0]["plugin"];
@@ -214,7 +207,6 @@ describe("AgentsSettings", () => {
         memoryEnabled: true,
       })
     );
-    // The reload after the write is what makes the new row appear.
     expect(listAgents).toHaveBeenCalledTimes(2);
   });
 

@@ -17,9 +17,6 @@ function renderBody(overrides: { onCancel?: () => void; onConfirm?: () => void }
 }
 
 describe("AgentDeleteConfirmBody", () => {
-  // designdocs/CUSTOM_AGENTS.md §1: deleting an agent trashes the folder with a
-  // confirm dialog that says the memory file goes too — it is the part the user
-  // cannot recreate.
   it("warns that the agent's memory goes with it", () => {
     renderBody();
     expect(screen.getByText(/Everything Jennifer remembers goes with it/)).toBeTruthy();

@@ -19,11 +19,6 @@ import {
 import { getEffectiveCustomPromptsFolder } from "@/settings/copilotFolder";
 import { AgentGlyph } from "@/components/ui/AgentGlyph";
 
-/**
- * Key of the row a user with no agents gets in place of a mention list. Selecting
- * it opens Settings → Agents rather than inserting a pill
- * (`designdocs/CUSTOM_AGENTS.md` §6).
- */
 export const CREATE_AGENT_OPTION_KEY = "agent-create";
 
 const MAX_SEARCH_RESULTS = 30;

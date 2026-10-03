@@ -138,9 +138,6 @@ describe("copilotFolder", () => {
   });
 
   describe("deriveAgentsFolder()", () => {
-    // designdocs/CUSTOM_AGENTS.md §1 ("Agents live in the vault"): the agents
-    // sub-folder derives from the single Copilot root, with no path setting of
-    // its own.
     it("derives copilot/agents for the default root", () => {
       expect(deriveAgentsFolder(settingsWithRoot("copilot"))).toBe("copilot/agents");
     });

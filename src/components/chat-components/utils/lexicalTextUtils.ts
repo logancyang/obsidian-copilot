@@ -45,7 +45,6 @@ export interface PillData {
   type: PillType;
   title?: string;
   data?: PillDataValue;
-  /** Agent pills only: the agent's emoji, captured at insert time. */
   icon?: string;
 }
 

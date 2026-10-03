@@ -8,47 +8,32 @@ import { cn } from "@/lib/utils";
 import { ExternalLink } from "lucide-react";
 import React from "react";
 
-/** The editable fields, as the form holds them. */
 export interface AgentEditorDraft {
   name: string;
   icon: string;
   description: string;
   instructions: string;
-  /** Empty string means "use the session's backend". */
   backendId: string;
-  /** Empty string means "use the backend's default model". */
   modelId: string;
-  /** Empty string means "use whatever effort the session would run at". */
   effort: string;
   memoryEnabled: boolean;
 }
 
 export interface AgentEditorProps {
-  /** "create" derives the slug on save; "edit" shows the settled one read-only. */
   mode: "create" | "edit";
-  /** Folder name of the agent being edited; null while creating. */
   slug: string | null;
   draft: AgentEditorDraft;
   onChange: (patch: Partial<AgentEditorDraft>) => void;
-  /** "Session default" plus one entry per installed backend. */
   backendOptions: readonly SelectOption[];
-  /** "Backend default" plus the chosen backend's enabled models. */
   modelOptions: readonly SelectOption[];
-  /** "Model default" plus the effort levels the pinned model advertises. */
   effortOptions: readonly SelectOption[];
-  /** Blocking message shown above the buttons, e.g. a rejected icon or a failed write. */
   error: string | null;
   saving: boolean;
   onSave: () => void;
   onCancel: () => void;
-  /** Open `agent.md` as a note, for editing the instructions at full width. */
   onOpenInEditor?: () => void;
 }
 
-/**
- * The whole of an agent's `agent.md` as a form. Presentational — the container
- * owns the draft, the validation outcome, and persistence.
- */
 export const AgentEditor: React.FC<AgentEditorProps> = ({
   mode,
   slug,
@@ -65,9 +50,6 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({
 }) => {
   const canSave = draft.name.trim().length > 0 && !saving;
   const backendPinned = draft.backendId.length > 0;
-  // Effort levels belong to a model, so there is nothing to choose between
-  // until one is pinned, and only one level to offer once it is
-  // (`designdocs/CUSTOM_AGENTS.md` §7).
   const modelPinned = backendPinned && draft.modelId.length > 0;
 
   return (
@@ -135,8 +117,6 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({
         <button
           type="button"
           onClick={onOpenInEditor}
-          // Preflight is off: zero the native chrome so this reads as the link
-          // it is rather than as a second command button under the textarea.
           className={cn(
             "tw-appearance-none tw-border-0 tw-bg-transparent tw-p-0",
             "tw--mt-2 tw-flex tw-w-fit tw-cursor-pointer tw-items-center tw-gap-1.5",
@@ -167,8 +147,6 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({
               value={draft.modelId}
               onChange={(event) => onChange({ modelId: event.target.value, effort: "" })}
               options={[...modelOptions]}
-              // A model belongs to a backend, so there is nothing to choose
-              // between until one is pinned.
               disabled={!backendPinned}
               aria-label="Model"
             />

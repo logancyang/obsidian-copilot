@@ -50,7 +50,6 @@ const LONG_NAME_ROW: AgentPickerRow = {
   effort: null,
 };
 
-/** Filler agents, so the roster can be seen at the sizes real teams reach. */
 const teamOf = (count: number): AgentPickerRow[] =>
   Array.from({ length: count }, (_, i) => ({
     slug: `agent-${i + 1}`,
@@ -68,25 +67,18 @@ const section = (rows: AgentPickerRow[], selectedSlug: string): Props["section"]
   onOpen: () => undefined,
 });
 
-/** A vault with no agents yet: the default assistant, named. */
 export const TriggerCopilot: StoryObj<Props> = {
   args: { section: section([COPILOT_ROW], "copilot") },
 };
 
-/** A chat held with an agent reads as that agent, icon first. */
 export const TriggerNamedAgent: StoryObj<Props> = {
   args: { section: section([COPILOT_ROW, JENNIFER_ROW, VANCAT_ROW], "jennifer") },
 };
 
-/**
- * A name longer than the composer row is wide truncates rather than pushing the
- * model picker off the row; check it against the gallery's narrow widths.
- */
 export const TriggerLongName: StoryObj<Props> = {
   args: { section: section([COPILOT_ROW, LONG_NAME_ROW], "the-long-winded-developmental-editor") },
 };
 
-/** The roster one click opens, as a vault with two agents holds it. */
 export const RosterTwoAgents: StoryObj<Props> = {
   args: {
     defaultOpen: true,
@@ -94,7 +86,6 @@ export const RosterTwoAgents: StoryObj<Props> = {
   },
 };
 
-/** Six entries: the largest roster that still reads without a search field. */
 export const RosterSixAgents: StoryObj<Props> = {
   args: {
     defaultOpen: true,
@@ -102,7 +93,6 @@ export const RosterSixAgents: StoryObj<Props> = {
   },
 };
 
-/** Twelve entries: past six the list scrolls, so a search field heads it. */
 export const RosterSearchable: StoryObj<Props> = {
   args: {
     defaultOpen: true,
@@ -110,7 +100,6 @@ export const RosterSearchable: StoryObj<Props> = {
   },
 };
 
-/** A description longer than the list is wide wraps to two lines, then clamps. */
 export const RosterLongDescription: StoryObj<Props> = {
   args: {
     defaultOpen: true,
@@ -145,13 +134,6 @@ const MODEL_OVERRIDE: ComponentProps<typeof ModelEffortPicker>["override"] = {
   commitSelection: () => undefined,
 };
 
-/**
- * The composer's bottom row as Agent Mode draws it: Add Context, then who is
- * answering, then what they answer on — one click each
- * (`designdocs/CUSTOM_AGENTS.md` §3). Narrow the canvas to watch the two
- * triggers share the row. The "+" is the same primitive the production button
- * is built from, which the gallery's import fence keeps out of reach.
- */
 export const ComposerRow: StoryObj<Props> = {
   render: () => (
     <div className="tw-flex tw-h-7 tw-justify-between tw-gap-1 tw-px-1">

@@ -59,7 +59,6 @@ interface AgentChatInputProps {
   isLoading: boolean;
   hasPendingPlanPermission: boolean;
   modelPickerOverride: ChatInputProps["modelPickerOverride"];
-  /** Roster for the composer's agent picker (`designdocs/CUSTOM_AGENTS.md` §3). */
   agentPicker: ChatInputProps["agentPicker"];
   modePickerOverride: ChatInputProps["modePickerOverride"];
   onCycleMode: () => void;

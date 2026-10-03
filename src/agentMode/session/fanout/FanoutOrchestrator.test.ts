@@ -781,8 +781,6 @@ describe("FanoutOrchestrator", () => {
       });
 
       it("leads each answerer's prompt with its own persona and memory, on the backend it pinned", async () => {
-        // designdocs/CUSTOM_AGENTS.md §6 — an agent answers in character, and an
-        // agent that pins no backend answers on the chat's own.
         const { host, procs } = makeHost({
           claude: { sessionId: "s-claude" },
           codex: { sessionId: "s-codex" },
@@ -813,8 +811,6 @@ describe("FanoutOrchestrator", () => {
         expect((jenniferPrompt.prompt[0] as { text: string }).text).toBe(
           "<agent_persona>Jennifer</agent_persona>\n\nq"
         );
-        // Vancat pins nothing, so it answers on the chat's backend — which is
-        // also where the summary later runs.
         const vancatPrompt = jest.mocked(procs.get("claude")!.proc.prompt).mock.calls[0][0];
         expect((vancatPrompt.prompt[0] as { text: string }).text).toBe(
           "<agent_persona>Vancat</agent_persona>\n\nq"
@@ -822,8 +818,6 @@ describe("FanoutOrchestrator", () => {
       });
 
       it("has the chat's own persona write the summary, in its own voice", async () => {
-        // designdocs/CUSTOM_AGENTS.md §6 — a DM with Jennifer that fans out to
-        // Vancat is summarized by Jennifer, not by the anonymous assistant.
         const { host, procs } = makeHost({
           claude: { sessionId: "s-claude" },
           codex: { sessionId: "s-codex" },
@@ -848,7 +842,6 @@ describe("FanoutOrchestrator", () => {
       });
 
       it("reports an agent deleted between composing and sending instead of answering as nobody", async () => {
-        // designdocs/CUSTOM_AGENTS.md §1 — a chat outlives the agent it names.
         const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
 
         const turn = await new FanoutOrchestrator(host).run(

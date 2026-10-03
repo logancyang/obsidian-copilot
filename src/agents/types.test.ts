@@ -41,8 +41,6 @@ describe("agents/types", () => {
       expect(resolveAgentEntry("copilot", [JENNIFER])).toBe(BUILTIN_AGENT);
     });
 
-    // designdocs/CUSTOM_AGENTS.md §1: a chat that referenced a deleted agent
-    // still has to open, running as the default assistant.
     it("falls back to the built-in entry when the named agent was deleted", () => {
       expect(resolveAgentEntry("vancat", [JENNIFER])).toBe(BUILTIN_AGENT);
     });

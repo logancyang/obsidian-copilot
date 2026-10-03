@@ -90,17 +90,12 @@ function useSessionDisplay(session: AgentSession) {
   );
   const label = session.getLabel();
   const descriptor = backendRegistry[session.backendId] as BackendDescriptor | undefined;
-  // Who is answering replaces the backend brand on both the glyph and the
-  // untitled-chat fallback, so a DM reads as the agent rather than the harness
-  // it happens to run on (`designdocs/CUSTOM_AGENTS.md` §3). A chat with the
-  // built-in Copilot is unchanged.
   const agent = session.getAgent();
   return {
     status: session.getStatus(),
     label,
     needsAttention: session.getNeedsAttention(),
     descriptor,
-    // Only a chat held with a named agent has a memory file to update.
     hasAgentMemory: agent.slug !== null,
     agentIcon: agent.slug ? agent.icon : "",
     displayLabel: label ?? (agent.slug ? agent.name : (descriptor?.displayName ?? "Session")),
@@ -159,9 +154,6 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
       .catch((e) => logError("[AgentMode] createSession failed", e));
   }, [manager]);
 
-  // "Update memory now" for users who don't want to wait for the chat to end
-  // (`designdocs/CUSTOM_AGENTS.md` §5). A chat with nothing new since its last
-  // update is a no-op, which is why nothing is reported on the false branch.
   const handleUpdateMemory = React.useCallback(
     (id: string) => {
       if (manager.updateMemoryNow(id)) new Notice("Updating memory…");
@@ -367,7 +359,6 @@ const RenameInput: React.FC<RenameInputProps> = ({ initialValue, onSubmit, onCan
 
 interface BrandIconProps {
   descriptor: BackendDescriptor | undefined;
-  /** The agent's emoji, shown instead of the brand glyph. Empty for Copilot. */
   agentIcon?: string;
   status: AgentSessionStatus;
   needsAttention?: boolean;

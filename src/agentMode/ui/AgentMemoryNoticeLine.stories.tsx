@@ -12,20 +12,16 @@ const meta = {
 } satisfies Meta<AgentMemoryNoticeLineProps>;
 export default meta;
 
-/** What the chat shows once the agent has jotted the turn down: one line, no modal. */
 export const AfterAFlush: StoryObj<AgentMemoryNoticeLineProps> = {};
 
-/** After the background pass rebuilt the curated file the agent carries everywhere. */
 export const AfterAConsolidation: StoryObj<AgentMemoryNoticeLineProps> = {
   args: { kind: "consolidation" },
 };
 
-/** A long agent name truncates rather than pushing the open link out of reach. */
 export const LongAgentName: StoryObj<AgentMemoryNoticeLineProps> = {
   args: { agentName: "The Long-Winded Developmental Editor Who Reads Every Draft Twice" },
 };
 
-/** In place under the last turn, where the conversation ended. */
 export const BelowTheLastTurn: StoryObj<AgentMemoryNoticeLineProps> = {
   render: () => (
     <div className="tw-flex tw-flex-col tw-gap-1">

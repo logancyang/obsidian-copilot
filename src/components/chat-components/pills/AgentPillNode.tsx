@@ -14,7 +14,6 @@ import { PillBadge } from "./PillBadge";
 export interface SerializedAgentPillNode extends SerializedBasePillNode {
   type: "agent-pill";
   label: string;
-  /** The agent's emoji, captured with the name; "" when it set none. */
   icon?: string;
 }
 

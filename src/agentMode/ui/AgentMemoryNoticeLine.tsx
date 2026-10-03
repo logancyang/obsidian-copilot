@@ -5,26 +5,12 @@ import { BookOpen, NotebookPen } from "lucide-react";
 import React from "react";
 
 export interface AgentMemoryNoticeLineProps {
-  /** Which pass this line reports on; decides the wording and the icon. */
   kind: AgentMemoryNoticeKind;
-  /** Agent that wrote the file, named in the line. */
   agentName: string;
-  /** Open the file so the user can read what was written about them. */
   onOpen: () => void;
   className?: string;
 }
 
-/**
- * The one quiet line a chat shows after its agent has written memory, placed
- * where the conversation ended.
- *
- * It says what happened and offers the file, and nothing more: an agent that
- * keeps notes on the user has to be inspectable, but a modal or a badge would
- * turn a background housekeeping step into something the user has to dismiss.
- * The agent is referred to by name rather than by a pronoun, because the user
- * named it and we do not know what it is. See `designdocs/CUSTOM_AGENTS.md` §5
- * ("Trust surface").
- */
 export const AgentMemoryNoticeLine: React.FC<AgentMemoryNoticeLineProps> = ({
   kind,
   agentName,
