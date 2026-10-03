@@ -634,10 +634,29 @@ describe("OpencodeBackend", () => {
       });
       expect(cp.models).toEqual({
         "copilot-plus-flash": {
+          limit: { output: 16_384 },
           capabilities: { tools: true, input: ["text"], output: ["text"] },
           variants: [],
         },
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/641 caps Copilot Plus output per step while bring-your-own-key models keep OpenCode's limits", async () => {
+      const byok = makeProvider("p-anthropic", { kind: "byok", catalogProviderId: "anthropic" });
+      const deps = makeDeps({
+        resolved: [
+          okEntry(makePlusProvider(), makePlusReasoningModel("copilot-plus-flash", ["high"])),
+          okEntry(byok, makeModel("p-anthropic", "claude-sonnet-4-5")),
+        ],
+        keys: { "p-plus": "plus-token-123", "p-anthropic": "sk-ant" },
+      });
+
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+      expect(cfg.providers["copilot-plus"].models?.["copilot-plus-flash"]?.limit).toStrictEqual({
+        output: 16_384,
+      });
+      expect(cfg.providers.anthropic.models?.["claude-sonnet-4-5"]?.limit).toBeUndefined();
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 offers only the effort levels Copilot Plus published", async () => {
@@ -650,6 +669,7 @@ describe("OpencodeBackend", () => {
       const cfg = await buildOpencodeConfig(getSettings(), deps);
 
       expect(cfg.providers["copilot-plus"].models?.["copilot-plus-flash"]).toEqual({
+        limit: { output: 16_384 },
         capabilities: { tools: true, input: ["text"], output: ["text"] },
         variants: [
           { id: "high", settings: { reasoningEffort: "high" } },
@@ -667,6 +687,7 @@ describe("OpencodeBackend", () => {
       const cfg = await buildOpencodeConfig(getSettings(), deps);
 
       expect(cfg.providers["copilot-plus"].models?.["honors-no-level"]).toEqual({
+        limit: { output: 16_384 },
         capabilities: { tools: true, input: ["text"], output: ["text"] },
         variants: [],
       });
@@ -698,6 +719,7 @@ describe("OpencodeBackend", () => {
       const cfg = await buildOpencodeConfig(getSettings(), deps);
 
       expect(cfg.providers["copilot-plus"].models?.["copilot-plus-flash"]).toEqual({
+        limit: { output: 16_384 },
         capabilities: { tools: true, input: ["text"], output: ["text"] },
         variants: [],
       });
