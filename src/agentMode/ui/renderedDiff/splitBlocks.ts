@@ -1,4 +1,4 @@
-export type MarkdownBlockType = "code" | "heading" | "table" | "thematicBreak" | "text";
+export type MarkdownBlockType = "code" | "heading" | "table" | "text";
 
 export interface MarkdownBlock {
   type: MarkdownBlockType;
@@ -12,25 +12,21 @@ export interface FrontmatterSplit {
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const HEADING = /^ {0,3}#{1,6}(?:\s|$)/;
-const THEMATIC_BREAK = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
-const TABLE_DELIMITER = /^[ \t]*\|?[\s:|-]*-[\s:|-]*\|?[ \t]*$/;
+const DELIMITER_CELL = /^[ \t]*:?-+:?[ \t]*$/;
+const FRONTMATTER_FENCE = /^---[ \t]*$/;
+const EMPTY_BLOCKS: readonly MarkdownBlock[] = Object.freeze([]);
 
 // Frontmatter is split off first: a diff marker beside a `---` fence turns it into a thematic break
 // and spills its keys into the body.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
 export function splitFrontmatter(source: string): FrontmatterSplit {
   const lines = source.split("\n");
-  // Recognise CRLF fences so unchanged properties stay out of the body, retaining source bytes.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
-  if (!/^---\r?$/.test(lines[0])) return { frontmatter: null, body: source };
+  if (!FRONTMATTER_FENCE.test(lines[0])) return { frontmatter: null, body: source };
   for (let index = 1; index < lines.length; index++) {
-    if (!/^---\r?$/.test(lines[index])) continue;
+    if (!FRONTMATTER_FENCE.test(lines[index])) continue;
     return {
       frontmatter: lines.slice(0, index + 1).join("\n"),
-      body: lines
-        .slice(index + 1)
-        .join("\n")
-        .replace(/^(?:\r?\n)+/, ""),
+      body: lines.slice(index + 1).join("\n"),
     };
   }
   return { frontmatter: null, body: source };
@@ -39,7 +35,7 @@ export function splitFrontmatter(source: string): FrontmatterSplit {
 // Blocks come from a line-based splitter, not a parser: re-serialising an AST loses Obsidian-flavoured
 // syntax (callouts, embeds, Dataview) the diff must preserve verbatim.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-export function splitBlocks(body: string): MarkdownBlock[] {
+export function splitBlocks(body: string): readonly MarkdownBlock[] {
   const lines = body.split("\n");
   const blocks: MarkdownBlock[] = [];
   let index = 0;
@@ -61,11 +57,6 @@ export function splitBlocks(body: string): MarkdownBlock[] {
       index++;
       continue;
     }
-    if (THEMATIC_BREAK.test(line)) {
-      blocks.push({ type: "thematicBreak", text: line });
-      index++;
-      continue;
-    }
     if (startsTable(lines, index)) {
       const start = index;
       index += 2;
@@ -79,13 +70,11 @@ export function splitBlocks(body: string): MarkdownBlock[] {
     while (index < lines.length && continuesTextBlock(lines, index)) index++;
     blocks.push({ type: "text", text: lines.slice(start, index).join("\n") });
   }
-  return blocks;
+  return blocks.length === 0 ? EMPTY_BLOCKS : blocks;
 }
 
 function skipFencedCode(lines: string[], start: number, marker: string): number {
-  // CRLF closing fences must not swallow following prose; keep the captured code unchanged.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
-  const closing = new RegExp(`^ {0,3}${marker[0]}{${marker.length},}[ \\t]*\\r?$`);
+  const closing = new RegExp(`^ {0,3}${marker[0]}{${marker.length},}[ \\t]*$`);
   let index = start + 1;
   while (index < lines.length && !closing.test(lines[index])) index++;
   return Math.min(index + 1, lines.length);
@@ -97,17 +86,17 @@ function startsTable(lines: string[], index: number): boolean {
     lines[index].includes("|") &&
     delimiter !== undefined &&
     delimiter.includes("|") &&
-    TABLE_DELIMITER.test(delimiter)
+    delimiter
+      .trim()
+      .replace(/^\||\|$/g, "")
+      .split("|")
+      .every((cell) => DELIMITER_CELL.test(cell))
   );
 }
 
 function continuesTextBlock(lines: string[], index: number): boolean {
   const line = lines[index];
   return (
-    line.trim() !== "" &&
-    !HEADING.test(line) &&
-    !THEMATIC_BREAK.test(line) &&
-    !FENCE.test(line) &&
-    !startsTable(lines, index)
+    line.trim() !== "" && !HEADING.test(line) && !FENCE.test(line) && !startsTable(lines, index)
   );
 }
