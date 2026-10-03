@@ -31,6 +31,15 @@ describe("AgentMessageStore", () => {
     summary: { status: "done", text: summaryText },
   });
 
+  describe("addMessage()", () => {
+    it("keeps a null timestamp so a replayed message does not show the time it was loaded", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage({ ...placeholder(), timestamp: null });
+
+      expect(store.getMessage(id)?.timestamp).toBeNull();
+    });
+  });
+
   describe("appendDisplayText()", () => {
     it("accumulates streaming chunks", () => {
       const store = new AgentMessageStore();

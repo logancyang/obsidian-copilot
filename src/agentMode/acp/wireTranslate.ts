@@ -218,7 +218,7 @@ export function acpNotificationToEvents(
   todoToolCallIds?: Set<string>
 ): SessionEvent[] {
   const kind = n.update.sessionUpdate;
-  if (kind === "user_message_chunk" || kind === "plan_update" || kind === "plan_removed") {
+  if (kind === "plan_update" || kind === "plan_removed") {
     return [];
   }
   const sessionId = sessionIdFromAcp(n.sessionId);
@@ -273,15 +273,11 @@ function todoToolPlanFromAcp(
 
 function acpUpdateToSessionUpdate(update: SessionNotification["update"]): SessionUpdate {
   switch (update.sessionUpdate) {
+    case "user_message_chunk":
     case "agent_message_chunk":
-      return {
-        sessionUpdate: "agent_message_chunk",
-        content: promptContentFromAcp(update.content) ?? { type: "text", text: "" },
-        messageId: update.messageId ?? undefined,
-      };
     case "agent_thought_chunk":
       return {
-        sessionUpdate: "agent_thought_chunk",
+        sessionUpdate: update.sessionUpdate,
         content: promptContentFromAcp(update.content) ?? { type: "text", text: "" },
         messageId: update.messageId ?? undefined,
       };

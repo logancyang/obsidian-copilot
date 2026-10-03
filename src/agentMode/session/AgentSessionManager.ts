@@ -2204,57 +2204,16 @@ export class AgentSessionManager {
       this.finishPendingCreate();
       return null;
     }
-    let resumeResult: LoadSessionOutput | null = null;
-    try {
-      resumeResult = await backend.loadSession({
-        sessionId,
-        cwd,
-        projectId,
-        additionalDirectories,
-      });
-    } catch (err) {
-      if (!(err instanceof MethodUnsupportedError)) {
-        logWarn(`[AgentMode] loadSession failed for ${sessionId}`, err);
-        this.finishPendingCreate();
-        return null;
-      }
-    }
-
-    if (!resumeResult) {
-      try {
-        resumeResult = await backend.resumeSession({
-          sessionId,
-          cwd,
-          projectId,
-          additionalDirectories,
-        });
-      } catch (err) {
-        if (err instanceof MethodUnsupportedError) {
-          logInfo(
-            `[AgentMode] backend ${backendId} does not support session resume; falling back to fresh session`
-          );
-        } else {
-          logWarn(`[AgentMode] resumeSession failed for ${sessionId}`, err);
-        }
-        this.finishPendingCreate();
-        return null;
-      }
-    }
-
-    if (this.disposed) {
-      this.finishPendingCreate();
-      return null;
-    }
-
     const internalId = uuidv4();
+    // The chat attaches before the backend replays its history, so replayed frames are never in flight without a handler.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/602
     const session = new AgentSession({
       backend,
-      backendSessionId: resumeResult.sessionId,
+      backendSessionId: sessionId,
       internalId,
       chatInputId,
       backendId,
       projectId,
-      initialState: resumeResult.state,
       defaultModelSelection: seedSelection,
       defaultMode: this.getDefaultMode(backendId),
       cwd,
@@ -2271,13 +2230,47 @@ export class AgentSessionManager {
         : {}),
     });
 
+    const openInput = { sessionId, cwd, projectId, additionalDirectories };
+    let resumeResult: LoadSessionOutput | null = null;
+    try {
+      resumeResult = await backend.loadSession(openInput);
+    } catch (err) {
+      if (!(err instanceof MethodUnsupportedError)) {
+        logWarn(`[AgentMode] loadSession failed for ${sessionId}`, err);
+        await session.dispose();
+        this.finishPendingCreate();
+        return null;
+      }
+    }
+
+    if (!resumeResult) {
+      try {
+        resumeResult = await backend.resumeSession(openInput);
+      } catch (err) {
+        if (err instanceof MethodUnsupportedError) {
+          logInfo(
+            `[AgentMode] backend ${backendId} does not support session resume; falling back to fresh session`
+          );
+        } else {
+          logWarn(`[AgentMode] resumeSession failed for ${sessionId}`, err);
+        }
+        await session.dispose();
+        this.finishPendingCreate();
+        return null;
+      }
+    }
+
+    if (this.disposed) {
+      await session.dispose();
+      this.finishPendingCreate();
+      return null;
+    }
+
+    session.completeResume(resumeResult.state);
+
     // Apply the seed before replaying backend-specific startup config.
     // https://github.com/logancyang/obsidian-copilot/issues/3319
     await session.ready;
-
-    if (resumeResult.transcript?.length) {
-      session.loadDisplayMessages(resumeResult.transcript);
-    }
 
     if (descriptor.applyInitialSessionConfig) {
       try {

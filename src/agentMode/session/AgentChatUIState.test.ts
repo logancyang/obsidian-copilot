@@ -46,15 +46,15 @@ describe("AgentChatUIState", () => {
       backendSessionId: "codex-session",
       internalId: "plan-review",
       backendId: "codex",
-      initialState: {
-        model: null,
-        mode: {
-          current: "plan",
-          options: [{ value: "plan", label: "Plan" }],
-          apply: {},
-        },
-      },
       getDescriptor: () => descriptor,
+    });
+    session.completeResume({
+      model: null,
+      mode: {
+        current: "plan",
+        options: [{ value: "plan", label: "Plan" }],
+        apply: {},
+      },
     });
     const chat = new AgentChatUIState(session);
     const firstTurn = chat.sendMessage("Draft a plan").turn;

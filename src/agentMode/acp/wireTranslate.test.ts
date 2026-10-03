@@ -15,15 +15,25 @@ const VALID_TODOS = [
 ];
 
 const testAcpNotificationToEvents = () => {
-  it("drops a user message chunk instead of reporting it as a titleless session update", () => {
+  it("translates a user message chunk into a user_message_chunk event carrying its text and message id", () => {
     const events = acpNotificationToEvents(
       notification({
         sessionUpdate: "user_message_chunk",
+        messageId: "msg-1",
         content: { type: "text", text: "hi" },
       })
     );
 
-    expect(events).toEqual([]);
+    expect(events).toEqual([
+      {
+        sessionId: SESSION_ID,
+        update: {
+          sessionUpdate: "user_message_chunk",
+          content: { type: "text", text: "hi" },
+          messageId: "msg-1",
+        },
+      },
+    ]);
   });
 
   it.each([

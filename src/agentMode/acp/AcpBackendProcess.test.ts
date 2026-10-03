@@ -33,6 +33,17 @@ jest.mock("@agentclientprotocol/sdk", () => {
       this.name = "RequestError";
     }
   }
+  let inbound: ReadableStreamDefaultController<unknown> | null = null;
+  function ndJsonStream() {
+    return {
+      readable: new ReadableStream<unknown>({
+        start(controller) {
+          inbound = controller;
+        },
+      }),
+      writable: new WritableStream<unknown>(),
+    };
+  }
   function client() {
     const handlers: Record<
       string,
@@ -47,7 +58,9 @@ jest.mock("@agentclientprotocol/sdk", () => {
         handlers[method] = handler;
         return builder;
       },
-      connect() {
+      connect(stream: { readable: ReadableStream<unknown> }) {
+        const source = inbound!;
+        const reader = stream.readable.getReader();
         const prompt = jest.fn(async () => ({ stopReason: "end_turn" }));
         const requests: Record<string, (params: unknown) => unknown> = {
           initialize: async (params: unknown) => {
@@ -66,14 +79,23 @@ jest.mock("@agentclientprotocol/sdk", () => {
         return {
           prompt,
           _client: {
-            sessionUpdate: (params: unknown) => handlers["session/update"]({ params }),
+            sessionUpdate: async (params: unknown) => {
+              source.enqueue({ jsonrpc: "2.0", method: "session/update", params });
+              source.enqueue({ jsonrpc: "2.0", id: "after-update", result: null });
+              await reader.read();
+            },
             requestPermission: (params: unknown) =>
               handlers["session/request_permission"]({ params }),
             createElicitation: (params: unknown, requestId: string, signal: AbortSignal) =>
               handlers["elicitation/create"]({ params, requestId, signal }),
           },
           agent: {
-            request: (method: string, params: unknown) => requests[method](params),
+            request: async (method: string, params: unknown) => {
+              const result = await requests[method](params);
+              source.enqueue({ jsonrpc: "2.0", id: method, result });
+              await reader.read();
+              return result;
+            },
             notify: jest.fn(async () => undefined),
           },
         };
@@ -84,7 +106,7 @@ jest.mock("@agentclientprotocol/sdk", () => {
   return {
     RequestError,
     client,
-    ndJsonStream: jest.fn(() => ({})),
+    ndJsonStream,
     PROTOCOL_VERSION: 1,
   };
 });
@@ -1271,8 +1293,20 @@ describe("AcpBackendProcess", () => {
         expect(req.additionalDirectories).toEqual(["/abs/context-a", "/abs/context-b"]);
       });
 
-      it("returns the conversation the agent replays during the call", async () => {
+      it("returns the session id and the state the agent reports", async () => {
         const backend = await startLoadCapableBackend();
+        mockLoadSession.mockResolvedValueOnce({});
+
+        const result = await backend.loadSession({ sessionId: "ses_load", cwd: "/vault" });
+
+        expect(result.sessionId).toBe("ses_load");
+        expect(result).not.toHaveProperty("transcript");
+      });
+
+      it("resolves only after the frames the agent replays ahead of its response reach the session's handler (https://github.com/Brevilabs/obsidian-copilot-private/issues/602)", async () => {
+        const backend = await startLoadCapableBackend();
+        const handler = jest.fn();
+        backend.registerSessionHandler("ses_load", handler);
         mockLoadSession.mockImplementationOnce(async () => {
           const push = replayer(backend);
           push({
@@ -1288,75 +1322,12 @@ describe("AcpBackendProcess", () => {
           return {};
         });
 
-        const result = await backend.loadSession({ sessionId: "ses_load", cwd: "/vault" });
-
-        expect(result.transcript?.map((m) => m.message)).toEqual(["hi", "hello"]);
-      });
-
-      it("collects a replay longer than the pending-update buffer allows", async () => {
-        const backend = await startLoadCapableBackend();
-        mockLoadSession.mockImplementationOnce(async () => {
-          const push = replayer(backend);
-          for (let i = 0; i < 40; i++) {
-            push({
-              sessionUpdate: "user_message_chunk",
-              messageId: `u${i}`,
-              content: { type: "text", text: `ask ${i}` },
-            });
-            push({
-              sessionUpdate: "agent_message_chunk",
-              messageId: `a${i}`,
-              content: { type: "text", text: `answer ${i}` },
-            });
-          }
-          return {};
-        });
-
-        const result = await backend.loadSession({ sessionId: "ses_load", cwd: "/vault" });
-
-        expect(result.transcript).toHaveLength(80);
-        expect(result.transcript?.[79].message).toBe("answer 39");
-      });
-
-      it("keeps routing session-level updates to the handler while replaying", async () => {
-        const backend = await startLoadCapableBackend();
-        const handler = jest.fn();
-        backend.registerSessionHandler("ses_load", handler);
-        mockLoadSession.mockImplementationOnce(async () => {
-          replayer(backend)({ sessionUpdate: "usage_update", used: 19_545, size: 200_000 });
-          return {};
-        });
-
         await backend.loadSession({ sessionId: "ses_load", cwd: "/vault" });
 
-        expect(handler.mock.calls.map((c) => c[0].update.sessionUpdate)).toContain("usage_update");
-      });
-
-      it("omits the transcript when the agent replays nothing", async () => {
-        const backend = await startLoadCapableBackend();
-        mockLoadSession.mockResolvedValueOnce({});
-
-        const result = await backend.loadSession({ sessionId: "ses_load", cwd: "/vault" });
-
-        expect(result.transcript).toBeUndefined();
-      });
-
-      it("stops accumulating once the call fails", async () => {
-        const backend = await startLoadCapableBackend();
-        mockLoadSession.mockRejectedValueOnce(new Error("load blew up"));
-        await expect(backend.loadSession({ sessionId: "ses_load", cwd: "/vault" })).rejects.toThrow(
-          "load blew up"
-        );
-
-        const handler = jest.fn();
-        backend.registerSessionHandler("ses_load", handler);
-        replayer(backend)({
-          sessionUpdate: "agent_message_chunk",
-          messageId: "late",
-          content: { type: "text", text: "stray" },
-        });
-
-        expect(handler).toHaveBeenCalledTimes(1);
+        expect(handler.mock.calls.map((c) => c[0].update.sessionUpdate)).toEqual([
+          "user_message_chunk",
+          "agent_message_chunk",
+        ]);
       });
     });
 

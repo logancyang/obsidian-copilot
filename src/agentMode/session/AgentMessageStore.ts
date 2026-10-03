@@ -199,7 +199,8 @@ export class AgentMessageStore {
 
   addMessage(message: NewAgentChatMessage): string {
     const id = message.id || this.generateId();
-    const timestamp = message.timestamp || formatDateTime(new Date());
+    const timestamp =
+      message.timestamp === null ? null : message.timestamp || formatDateTime(new Date());
     this.messages.push({
       id,
       displayText: message.message,

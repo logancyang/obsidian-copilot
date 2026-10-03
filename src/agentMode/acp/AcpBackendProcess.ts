@@ -45,18 +45,13 @@ import type {
 } from "@/agentMode/session/types";
 import { wrapStreamsForDebug } from "./debugTap";
 import { formToQuestionPrompt } from "./elicitation";
+import { deliverSessionUpdatesInWireOrder } from "./sessionUpdateWireOrder";
 import { AcpBackend } from "./types";
 import {
   withoutExpiredWindows,
   type PlanUsage,
   type PlanUsageReading,
 } from "@/agentMode/session/planUsage";
-import {
-  consumeReplayUpdate,
-  createReplayTranscriptState,
-  finishReplayTranscript,
-  type ReplayTranscriptState,
-} from "./replayTranscript";
 import {
   acpNotificationToEvents,
   acpPermissionRequestToPrompt,
@@ -114,7 +109,6 @@ export class AcpBackendProcess implements BackendProcess {
   private readonly sessionWireState = new Map<SessionId, SessionWireState>();
   private readonly todoToolCallIdsBySession = new Map<SessionId, Set<string>>();
   private readonly sawLiveUsage = new Set<SessionId>();
-  private readonly loadSessionCollectors = new Map<SessionId, ReplayTranscriptState>();
   private lastPlanUsage: PlanUsage | null = null;
   private planUsageRead: Promise<void> | null = null;
   private planUsageReadQueued = false;
@@ -158,7 +152,6 @@ export class AcpBackendProcess implements BackendProcess {
       this.sessionWireState.clear();
       this.todoToolCallIdsBySession.clear();
       this.sawLiveUsage.clear();
-      this.loadSessionCollectors.clear();
       this.permissionPrompter = null;
       this.askUserQuestionPrompter = null;
       this.capabilities.clear();
@@ -174,11 +167,14 @@ export class AcpBackendProcess implements BackendProcess {
       }
     });
 
-    const stream = ndJsonStream(stdin, stdout);
     const client = new VaultClient(this.app, {
       onSessionUpdate: (sessionId, update) => this.routeSessionUpdate(sessionId, update),
       requestPermission: (req) => this.handlePermission(req),
     });
+    const stream = deliverSessionUpdatesInWireOrder(
+      ndJsonStream(stdin, stdout),
+      (notification) => void client.sessionUpdate(notification)
+    );
     this.connection = createClient()
       .onRequest("fs/read_text_file", ({ params }) => client.readTextFile(params))
       .onRequest("fs/write_text_file", ({ params }) => client.writeTextFile(params))
@@ -186,7 +182,6 @@ export class AcpBackendProcess implements BackendProcess {
       .onRequest("elicitation/create", ({ params, requestId, signal }) =>
         this.handleElicitation(params, String(requestId), signal)
       )
-      .onNotification("session/update", ({ params }) => client.sessionUpdate(params))
       .connect(stream);
 
     try {
@@ -581,36 +576,23 @@ export class AcpBackendProcess implements BackendProcess {
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
     const sessionId = params.sessionId;
-    const collector = createReplayTranscriptState();
-    this.loadSessionCollectors.set(sessionId, collector);
-
-    try {
-      const wireResp = await this.dispatchCapability(
-        "session/load",
-        (c) =>
-          c.agent.request("session/load", {
-            sessionId: sessionIdToAcp(sessionId),
-            cwd: params.cwd,
-            mcpServers: [],
-            ...this.additionalDirectoriesField(params.additionalDirectories),
-          }),
-        { mustBeAdvertised: true }
-      );
-      this.hasServedSession = true;
-      this.recordWireState(sessionIdToAcp(sessionId), {
-        modes: wireResp.modes ?? null,
-        configOptions: wireResp.configOptions ?? null,
-      });
-      return {
-        sessionId,
-        state: this.computeState(sessionIdToAcp(sessionId)),
-        transcript: finishReplayTranscript(collector),
-      };
-    } finally {
-      if (this.loadSessionCollectors.get(sessionId) === collector) {
-        this.loadSessionCollectors.delete(sessionId);
-      }
-    }
+    const wireResp = await this.dispatchCapability(
+      "session/load",
+      (c) =>
+        c.agent.request("session/load", {
+          sessionId: sessionIdToAcp(sessionId),
+          cwd: params.cwd,
+          mcpServers: [],
+          ...this.additionalDirectoriesField(params.additionalDirectories),
+        }),
+      { mustBeAdvertised: true }
+    );
+    this.hasServedSession = true;
+    this.recordWireState(sessionIdToAcp(sessionId), {
+      modes: wireResp.modes ?? null,
+      configOptions: wireResp.configOptions ?? null,
+    });
+    return { sessionId, state: this.computeState(sessionIdToAcp(sessionId)) };
   }
 
   async shutdown(): Promise<void> {
@@ -619,7 +601,6 @@ export class AcpBackendProcess implements BackendProcess {
     this.pendingUpdates.clear();
     this.sessionWireState.clear();
     this.todoToolCallIdsBySession.clear();
-    this.loadSessionCollectors.clear();
     this.sawLiveUsage.clear();
     this.permissionPrompter = null;
     this.askUserQuestionPrompter = null;
@@ -698,9 +679,6 @@ export class AcpBackendProcess implements BackendProcess {
 
   private routeSessionUpdate(acpSessionId: AcpSessionId, update: SessionNotification): void {
     const sessionId = sessionIdFromAcp(acpSessionId);
-
-    const collector = this.loadSessionCollectors.get(sessionId);
-    if (collector && consumeReplayUpdate(collector, update.update)) return;
 
     const wire = this.sessionWireState.get(sessionId);
     if (wire) {
