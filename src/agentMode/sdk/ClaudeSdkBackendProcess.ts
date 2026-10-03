@@ -13,12 +13,10 @@ import {
 import { App } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
-import { parseClaudeTranscript } from "./claudeSessionTranscript";
 import { readClaudePlanUsage } from "./claudePlanUsage";
 import { withoutExpiredWindows } from "@/agentMode/session/planUsage";
 import type {
   PlanUsage,
-  AgentChatMessage,
   BackendConfigOption,
   BackendDescriptor,
   BackendProcess,
@@ -48,7 +46,12 @@ import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/e
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { createClaudeTaskPlanState, type ClaudeTaskPlanState } from "./claudeTodoPlan";
 import { ClaudeBackgroundTaskStateMachine } from "./claudeTaskProtocol";
-import { createTranslatorState, mapStopReason, translateSdkMessage } from "./sdkMessageTranslator";
+import {
+  createTranslatorState,
+  mapStopReason,
+  replayClaudeTranscript,
+  translateSdkMessage,
+} from "./sdkMessageTranslator";
 import { PermissionBridge, type AskUserQuestionPrompter } from "./permissionBridge";
 import {
   getCachedSdkCatalog,
@@ -486,21 +489,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     throw new MethodUnsupportedError("session/list");
   }
 
-  async readPersistedTranscript(params: {
-    sessionId: SessionId;
-    cwd: string;
-  }): Promise<AgentChatMessage[]> {
-    try {
-      const { readFile } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
-      const file = await this.claudeTranscriptPath(params.sessionId, params.cwd);
-      const text = await readFile(file, "utf8");
-      return parseClaudeTranscript(text);
-    } catch (err) {
-      logWarn(`[AgentMode] could not read Claude transcript for ${params.sessionId}`, err);
-      return [];
-    }
-  }
-
   async sessionExistsLocally(params: { sessionId: SessionId; cwd: string }): Promise<boolean> {
     try {
       const { access } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
@@ -535,8 +523,26 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   }
 
   async resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput> {
+    return this.reopenSession("resumeSession", params, createClaudeTaskPlanState());
+  }
+
+  async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
+    const claudeTaskPlan = createClaudeTaskPlanState();
+    const opened = await this.reopenSession("loadSession", params, claudeTaskPlan);
+    const transcript = await this.readTranscript(params.sessionId, params.cwd);
+    for (const event of replayClaudeTranscript(transcript, params.sessionId, claudeTaskPlan)) {
+      this.dispatchEvent(event);
+    }
+    return opened;
+  }
+
+  private async reopenSession(
+    method: "resumeSession" | "loadSession",
+    params: ResumeSessionInput,
+    claudeTaskPlan: ClaudeTaskPlanState
+  ): Promise<ResumeSessionOutput> {
     logSdkOutbound(
-      "resumeSession",
+      method,
       { cwd: params.cwd, projectId: params.projectId ?? null },
       params.sessionId
     );
@@ -553,21 +559,28 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       model: seedModelId,
       additionalDirectories: params.additionalDirectories,
       systemPromptAppend: this.resolveSystemPromptAppend(),
-      claudeTaskPlan: createClaudeTaskPlanState(),
+      claudeTaskPlan,
       backgroundTasks: new ClaudeBackgroundTaskStateMachine(),
     });
 
     const state = this.computeState(params.sessionId);
     logSdkOutboundResult(
-      "resumeSession",
+      method,
       { currentModelId: seedModelId ?? null, hasEffort: state.model !== null },
       params.sessionId
     );
     return { sessionId: params.sessionId, state };
   }
 
-  async loadSession(_params: LoadSessionInput): Promise<LoadSessionOutput> {
-    throw new MethodUnsupportedError("session/load");
+  private async readTranscript(sessionId: SessionId, cwd: string): Promise<string> {
+    try {
+      const { readFile } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
+      return await readFile(await this.claudeTranscriptPath(sessionId, cwd), "utf8");
+    } catch (err) {
+      // An unreadable transcript still reopens the chat, empty, so the user can keep talking to it. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
+      logWarn(`[AgentMode] could not read Claude transcript for ${sessionId}`, err);
+      return "";
+    }
   }
 
   supportsAdditionalDirectories(): boolean {
