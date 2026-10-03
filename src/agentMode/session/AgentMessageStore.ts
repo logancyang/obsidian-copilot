@@ -468,7 +468,7 @@ export class AgentMessageStore {
       parts: m.parts,
       turnStopReason: m.turnStopReason,
       turnDurationMs: m.turnDurationMs,
-      ...(m.fileChanges ? { fileChanges: m.fileChanges } : {}),
+      fileChanges: m.fileChanges,
       ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),
     };
   }
