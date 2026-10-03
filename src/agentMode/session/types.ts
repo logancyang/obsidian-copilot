@@ -272,6 +272,7 @@ export interface SessionUsage {
 export interface SessionEvent {
   sessionId: SessionId;
   update: SessionUpdate;
+  occurredAt?: number;
 }
 
 export type PermissionOptionKind = "allow_once" | "allow_always" | "reject_once" | "reject_always";
@@ -417,10 +418,6 @@ export interface BackendProcess {
   listSessions(params: ListSessionsInput): Promise<ListSessionsOutput>;
   resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput>;
   loadSession(params: LoadSessionInput): Promise<LoadSessionOutput>;
-  readPersistedTranscript?(params: {
-    sessionId: SessionId;
-    cwd: string;
-  }): Promise<AgentChatMessage[]>;
   sessionExistsLocally?(params: { sessionId: SessionId; cwd: string }): Promise<boolean>;
   supportsAdditionalDirectories?(): boolean;
   shutdown(): Promise<void>;

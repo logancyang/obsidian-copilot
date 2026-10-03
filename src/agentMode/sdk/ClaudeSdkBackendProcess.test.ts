@@ -1161,6 +1161,187 @@ describe("ClaudeSdkBackendProcess", () => {
       });
     });
 
+    describe("resumeSession()", () => {
+      it("reopens the session with the seeded model state and sends its next prompt as a resume, replaying nothing", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProc();
+        const sessionId = "resumed-session";
+        const events = registerCollector(proc, sessionId);
+
+        const resp = await proc.resumeSession({ sessionId, cwd: "/vault" });
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "continue" }] });
+
+        expect(resp.sessionId).toBe(sessionId);
+        expect(resp.state.model?.current.baseModelId).toBe("claude-fake-pro");
+        expect(events).toEqual([]);
+        const { options } = getPromptQueryCalls()[0][0] as { options: Record<string, unknown> };
+        expect(options.resume).toBe(sessionId);
+        expect(options.sessionId).toBeUndefined();
+      });
+    });
+
+    describe("loadSession()", () => {
+      const ISSUE_643 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/643";
+      const cwd = "/vault";
+      const sessionId = "11111111-2222-3333-4444-555555555555";
+      let configDir: string;
+
+      beforeEach(async () => {
+        configDir = await mkdtemp(path.join(os.tmpdir(), "claude-config-"));
+      });
+      afterEach(async () => {
+        await rm(configDir, { recursive: true, force: true });
+      });
+
+      function makeProcWithConfigDir(): ClaudeSdkBackendProcess {
+        return makeProc({ getEnvOverrides: () => ({ CLAUDE_CONFIG_DIR: configDir }) });
+      }
+
+      async function writeTranscript(...entries: object[]): Promise<void> {
+        const dir = path.join(configDir, "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"));
+        await mkdir(dir, { recursive: true });
+        await writeFile(
+          path.join(dir, `${sessionId}.jsonl`),
+          entries.map((entry) => `${JSON.stringify(entry)}\n`).join("")
+        );
+      }
+
+      it("delivers the transcript's prompt, thinking, reply, and tool call with its result to the session handler, in order, before it resolves", async () => {
+        await writeTranscript(
+          { type: "user", uuid: "u-1", message: { role: "user", content: "rename the note" } },
+          {
+            type: "assistant",
+            message: { role: "assistant", content: [{ type: "thinking", thinking: "Use mv." }] },
+          },
+          {
+            type: "assistant",
+            message: {
+              role: "assistant",
+              content: [
+                {
+                  type: "tool_use",
+                  id: "tool-mv",
+                  name: "Bash",
+                  input: { command: "mv a.md b.md" },
+                },
+              ],
+            },
+          },
+          {
+            type: "user",
+            uuid: "u-2",
+            message: {
+              role: "user",
+              content: [{ type: "tool_result", tool_use_id: "tool-mv", content: "" }],
+            },
+          },
+          {
+            type: "assistant",
+            message: { role: "assistant", content: [{ type: "text", text: "Renamed." }] },
+          }
+        );
+        const proc = makeProcWithConfigDir();
+        const events = registerCollector(proc, sessionId);
+
+        const deliveredAtResolve = await proc
+          .loadSession({ sessionId, cwd })
+          .then(() => events.map((e) => [e.update.sessionUpdate, e.sessionId]));
+
+        expect(deliveredAtResolve).toEqual([
+          ["user_message_chunk", sessionId],
+          ["agent_thought_chunk", sessionId],
+          ["tool_call", sessionId],
+          ["tool_call_update", sessionId],
+          ["agent_message_chunk", sessionId],
+        ]);
+        expect(events[3].update).toMatchObject({ toolCallId: "tool-mv", status: "completed" });
+      });
+
+      it("returns the same session id and model state resumeSession returns and sends its next prompt as a resume", async () => {
+        await writeTranscript({ type: "user", uuid: "u-1", message: { content: "hello" } });
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const resumed = await makeProcWithConfigDir().resumeSession({ sessionId, cwd });
+        const proc = makeProcWithConfigDir();
+        registerCollector(proc, sessionId);
+
+        const loaded = await proc.loadSession({ sessionId, cwd });
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "continue" }] });
+
+        expect(loaded).toEqual(resumed);
+        const { options } = getPromptQueryCalls()[0][0] as { options: Record<string, unknown> };
+        expect(options.resume).toBe(sessionId);
+      });
+
+      it("carries the replayed task list into the next live turn so a TaskUpdate updates a task created before reopening", async () => {
+        await writeTranscript(
+          {
+            type: "assistant",
+            message: {
+              content: [
+                {
+                  type: "tool_use",
+                  id: "create-1",
+                  name: "TaskCreate",
+                  input: { subject: "Collect sources" },
+                },
+              ],
+            },
+          },
+          {
+            type: "user",
+            uuid: "u-1",
+            message: {
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: "create-1",
+                  content: "Task #1 created successfully: Collect sources",
+                },
+              ],
+            },
+          }
+        );
+        queryMock.mockImplementation(() =>
+          makeQuery([
+            streamEvent({ type: "message_start", message: {} }),
+            streamEvent({
+              type: "content_block_start",
+              index: 0,
+              content_block: {
+                type: "tool_use",
+                id: "update-1",
+                name: "TaskUpdate",
+                input: { taskId: "1", status: "completed" },
+              },
+            }),
+            resultMessage(),
+          ])
+        );
+        const proc = makeProcWithConfigDir();
+        const events = registerCollector(proc, sessionId);
+        await proc.loadSession({ sessionId, cwd });
+        events.length = 0;
+
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "mark it done" }] });
+
+        expect(events.map((e) => e.update)).toContainEqual({
+          sessionUpdate: "plan",
+          entries: [{ content: "Collect sources", status: "completed", priority: "medium" }],
+        });
+      });
+
+      it(`reopens the session with no replayed history when its transcript is missing (${ISSUE_643})`, async () => {
+        const proc = makeProcWithConfigDir();
+        const events = registerCollector(proc, sessionId);
+
+        const loaded = await proc.loadSession({ sessionId, cwd });
+
+        expect(loaded.sessionId).toBe(sessionId);
+        expect(loaded.state.model?.current.baseModelId).toBe("claude-fake-pro");
+        expect(events).toEqual([]);
+      });
+    });
+
     describe("sessionExistsLocally()", () => {
       const cwd = "/vault";
       const projectDir = cwd.replace(/[^a-zA-Z0-9]/g, "-");

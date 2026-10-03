@@ -2,7 +2,13 @@ import fs from "fs";
 import path from "path";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { SessionEvent, SessionUpdate, SessionUsage } from "@/agentMode/session/types";
-import { createTranslatorState, mapStopReason, translateSdkMessage } from "./sdkMessageTranslator";
+import {
+  createTranslatorState,
+  mapStopReason,
+  replayClaudeTranscript,
+  translateSdkMessage,
+} from "./sdkMessageTranslator";
+import { createClaudeTaskPlanState } from "./claudeTodoPlan";
 
 const SESSION_ID = "session-test-1";
 
@@ -1307,6 +1313,272 @@ describe("sdkMessageTranslator", () => {
         expect(update.usage.usedTokens).toBe(12);
         expect(update.usage.contextWindow).toBeUndefined();
       });
+    });
+  });
+
+  describe("replayClaudeTranscript()", () => {
+    const ISSUE_643 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/643";
+
+    function transcript(...entries: object[]): string {
+      return entries.map((entry) => JSON.stringify(entry)).join("\n");
+    }
+
+    function userEntry(uuid: string, content: unknown, extra: object = {}): object {
+      return { type: "user", uuid, message: { role: "user", content }, ...extra };
+    }
+
+    function assistantEntry(content: unknown[], extra: object = {}): object {
+      return { type: "assistant", message: { role: "assistant", content }, ...extra };
+    }
+
+    function replay(jsonl: string, claudeTasks = createClaudeTaskPlanState()): SessionUpdate[] {
+      return replayClaudeTranscript(jsonl, SESSION_ID, claudeTasks).map((e) => e.update);
+    }
+
+    it("replays a turn's prompt, thinking, reply, and tool call with its result as live-shaped updates in transcript order", () => {
+      const jsonl = transcript(
+        userEntry("u-1", "<user-message>\nlist the notes\n</user-message>"),
+        assistantEntry([{ type: "thinking", thinking: "I should list them.", signature: "sig" }]),
+        assistantEntry([{ type: "text", text: "Listing now." }]),
+        assistantEntry([
+          { type: "tool_use", id: "tool-ls", name: "Bash", input: { command: "ls notes" } },
+        ]),
+        userEntry("u-2", [
+          { type: "tool_result", tool_use_id: "tool-ls", content: "a.md\nb.md", is_error: false },
+        ]),
+        assistantEntry([{ type: "text", text: "You have two notes." }])
+      );
+
+      const events = replayClaudeTranscript(jsonl, SESSION_ID, createClaudeTaskPlanState());
+
+      expect(events.every((e) => e.sessionId === SESSION_ID)).toBe(true);
+      expect(events.map((e) => e.update)).toEqual([
+        {
+          sessionUpdate: "user_message_chunk",
+          content: { type: "text", text: "<user-message>\nlist the notes\n</user-message>" },
+          messageId: "u-1",
+        },
+        {
+          sessionUpdate: "agent_thought_chunk",
+          content: { type: "text", text: "I should list them." },
+        },
+        { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Listing now." } },
+        {
+          sessionUpdate: "tool_call",
+          toolCallId: "tool-ls",
+          title: "Bash: ls notes",
+          kind: "execute",
+          status: "in_progress",
+          rawInput: { command: "ls notes" },
+          mcpServer: undefined,
+          vendorToolName: "Bash",
+        },
+        {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-ls",
+          status: "completed",
+          content: [{ type: "content", content: { type: "text", text: "a.md\nb.md" } }],
+        },
+        {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "You have two notes." },
+        },
+      ]);
+    });
+
+    it(`stamps every update with the time of the transcript entry it came from, and leaves it unstamped when that time is missing or unreadable (${ISSUE_643})`, () => {
+      const jsonl = transcript(
+        userEntry("u-1", "read it", { timestamp: "2026-10-03T19:31:18.348Z" }),
+        assistantEntry(
+          [
+            { type: "text", text: "Reading." },
+            { type: "tool_use", id: "tool-read", name: "Read", input: { file_path: "a.md" } },
+          ],
+          { timestamp: "2026-10-03T19:31:22.374Z" }
+        ),
+        userEntry("u-2", [{ type: "tool_result", tool_use_id: "tool-read", content: "hi" }]),
+        assistantEntry([{ type: "text", text: "Done." }], { timestamp: "not a date" })
+      );
+
+      const events = replayClaudeTranscript(jsonl, SESSION_ID, createClaudeTaskPlanState());
+
+      expect(events.map((e) => [e.update.sessionUpdate, e.occurredAt])).toEqual([
+        ["user_message_chunk", Date.parse("2026-10-03T19:31:18.348Z")],
+        ["agent_message_chunk", Date.parse("2026-10-03T19:31:22.374Z")],
+        ["tool_call", Date.parse("2026-10-03T19:31:22.374Z")],
+        ["tool_call_update", undefined],
+        ["agent_message_chunk", undefined],
+      ]);
+    });
+
+    it("gives each user prompt its own message id and joins the text blocks of a multimodal prompt without its images", () => {
+      const jsonl = transcript(
+        userEntry("u-1", [
+          { type: "text", text: "what is in" },
+          { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
+          { type: "text", text: "this picture?" },
+        ]),
+        userEntry("u-2", "and this one?")
+      );
+
+      expect(replay(jsonl)).toEqual([
+        {
+          sessionUpdate: "user_message_chunk",
+          content: { type: "text", text: "what is in\n\nthis picture?" },
+          messageId: "u-1",
+        },
+        {
+          sessionUpdate: "user_message_chunk",
+          content: { type: "text", text: "and this one?" },
+          messageId: "u-2",
+        },
+      ]);
+    });
+
+    it("marks a tool call whose result is an error as failed and keeps the error text as its output", () => {
+      const jsonl = transcript(
+        assistantEntry([
+          { type: "tool_use", id: "tool-read", name: "Read", input: { file_path: "/x.md" } },
+        ]),
+        userEntry("u-1", [
+          {
+            type: "tool_result",
+            tool_use_id: "tool-read",
+            content: [{ type: "text", text: "File does not exist." }],
+            is_error: true,
+          },
+        ])
+      );
+
+      expect(replay(jsonl)[1]).toEqual({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "tool-read",
+        status: "failed",
+        content: [{ type: "content", content: { type: "text", text: "File does not exist." } }],
+      });
+    });
+
+    it("replays a TodoWrite call as the todo plan it set", () => {
+      const jsonl = transcript(
+        assistantEntry([
+          {
+            type: "tool_use",
+            id: "todo-1",
+            name: "TodoWrite",
+            input: { todos: [{ content: "Draft outline", status: "in_progress" }] },
+          },
+        ])
+      );
+
+      expect(replay(jsonl)).toContainEqual({
+        sessionUpdate: "plan",
+        entries: [{ content: "Draft outline", status: "in_progress", priority: "medium" }],
+      });
+    });
+
+    it("seeds the session's task plan so a live TaskUpdate after reopening updates a task created in a replayed turn", () => {
+      const claudeTasks = createClaudeTaskPlanState();
+      replayClaudeTranscript(
+        transcript(
+          assistantEntry([
+            {
+              type: "tool_use",
+              id: "create-1",
+              name: "TaskCreate",
+              input: { subject: "Collect sources" },
+            },
+          ]),
+          userEntry("u-1", [
+            {
+              type: "tool_result",
+              tool_use_id: "create-1",
+              content: "Task #1 created successfully: Collect sources",
+            },
+          ])
+        ),
+        SESSION_ID,
+        claudeTasks
+      );
+
+      const live = translateSdkMessage(
+        streamEvent({
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "tool_use",
+            id: "update-1",
+            name: "TaskUpdate",
+            input: { taskId: "1", status: "completed" },
+          },
+        }),
+        SESSION_ID,
+        createTranslatorState(claudeTasks)
+      );
+
+      expect(live.map((e) => e.update)).toContainEqual({
+        sessionUpdate: "plan",
+        entries: [{ content: "Collect sources", status: "completed", priority: "medium" }],
+      });
+    });
+
+    it(`skips meta, sidechain, compaction-summary, and non-conversation entries so they never become bubbles (${ISSUE_643})`, () => {
+      const jsonl = transcript(
+        { type: "queue-operation" },
+        { type: "attachment", uuid: "att-1" },
+        userEntry("meta-1", "<local-command-caveat>ignore</local-command-caveat>", {
+          isMeta: true,
+        }),
+        assistantEntry([{ type: "text", text: "subagent step" }], { isSidechain: true }),
+        userEntry("summary-1", "This session is being continued from a previous conversation.", {
+          isCompactSummary: true,
+        }),
+        userEntry("u-1", "real prompt")
+      );
+
+      expect(replay(jsonl)).toEqual([
+        {
+          sessionUpdate: "user_message_chunk",
+          content: { type: "text", text: "real prompt" },
+          messageId: "u-1",
+        },
+      ]);
+    });
+
+    it(`finishes a replayed background task's tool call from its launch result instead of leaving it running (${ISSUE_643})`, () => {
+      const jsonl = transcript(
+        assistantEntry([
+          {
+            type: "tool_use",
+            id: "bg-1",
+            name: "Bash",
+            input: { command: "npm test", run_in_background: true },
+          },
+        ]),
+        userEntry("u-1", [
+          {
+            type: "tool_result",
+            tool_use_id: "bg-1",
+            content: "Command running in background with ID: shell-1",
+          },
+        ])
+      );
+
+      expect(replay(jsonl).map((u) => [u.sessionUpdate, "status" in u ? u.status : null])).toEqual([
+        ["tool_call", "in_progress"],
+        ["tool_call_update", "completed"],
+      ]);
+    });
+
+    it(`skips a line that is not complete JSON, such as one still being written (${ISSUE_643})`, () => {
+      const jsonl = `${transcript(userEntry("u-1", "first prompt"))}\n{"type":"assistant","mess`;
+
+      expect(replay(jsonl)).toEqual([
+        {
+          sessionUpdate: "user_message_chunk",
+          content: { type: "text", text: "first prompt" },
+          messageId: "u-1",
+        },
+      ]);
     });
   });
 
