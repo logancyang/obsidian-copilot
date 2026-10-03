@@ -11,12 +11,13 @@ export const INS_CLASS = "copilot-diff-ins";
 export const DEL_CLASS = "copilot-diff-del";
 export const ROW_INS_CLASS = "copilot-diff-row-ins";
 export const ROW_DEL_CLASS = "copilot-diff-row-del";
-export const TASK_INS_CLASS = "copilot-diff-task-ins";
+const DEL_END_CLASS = "copilot-diff-del-end";
 
 const SENTINEL = new RegExp(`[${INS_OPEN}-${DEL_CLOSE}]`);
 
 type Mode = "ins" | "del" | null;
-type CellChange = "ins" | "del" | "empty" | "mixed";
+
+const BLOCK_SELECTOR = "p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, pre, dt, dd, div";
 
 export function applySentinels(root: HTMLElement): void {
   const doc = root.ownerDocument;
@@ -27,16 +28,27 @@ export function applySentinels(root: HTMLElement): void {
   }
 
   let mode: Mode = null;
+  let lastDeleted = null as HTMLElement | null;
+  let block: Element | null = null;
   for (const node of textNodes) {
+    const nodeBlock = node.parentElement?.closest(BLOCK_SELECTOR) ?? null;
+    // Marks never span lines, so a closing sentinel the renderer swallowed (comment, math, callout table)
+    // must not leak the mark into every block after it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+    if (nodeBlock !== block) mode = null;
+    block = nodeBlock;
     const value = node.nodeValue ?? "";
     if (mode === null && !SENTINEL.test(value)) continue;
     const fragment = doc.win.createFragment();
     let buffer = "";
     const flush = (): void => {
       if (buffer === "") return;
-      fragment.appendChild(
-        mode === null ? doc.createTextNode(buffer) : markedElement(doc, mode, buffer)
-      );
+      if (mode === null) fragment.appendChild(doc.createTextNode(buffer));
+      else {
+        const element = markedElement(doc, mode, buffer);
+        if (mode === "del") lastDeleted = element;
+        fragment.appendChild(element);
+      }
       buffer = "";
     };
     for (const character of value) {
@@ -47,6 +59,7 @@ export function applySentinels(root: HTMLElement): void {
       }
       if (character === INS_CLOSE || character === DEL_CLOSE) {
         flush();
+        if (mode === "del") lastDeleted?.classList.add(DEL_END_CLASS);
         mode = null;
         continue;
       }
@@ -56,8 +69,10 @@ export function applySentinels(root: HTMLElement): void {
     node.parentNode?.replaceChild(fragment, node);
   }
 
-  tagFullyChangedRows(root);
-  tagInsertedTasks(root);
+  for (const row of Array.from(root.querySelectorAll("tbody tr"))) {
+    const change = rowChange(row);
+    if (change !== null) row.classList.add(change === "ins" ? ROW_INS_CLASS : ROW_DEL_CLASS);
+  }
 }
 
 function markedElement(doc: Document, mode: Exclude<Mode, null>, text: string): HTMLElement {
@@ -67,46 +82,16 @@ function markedElement(doc: Document, mode: Exclude<Mode, null>, text: string): 
   return element;
 }
 
-function tagFullyChangedRows(root: HTMLElement): void {
-  for (const row of Array.from(root.querySelectorAll("tr"))) {
-    const cells = Array.from(row.querySelectorAll("td, th"));
-    if (cells.length === 0) continue;
-    const changes = cells.map(cellChange);
-    if (changes.some((change) => change === "mixed")) continue;
-    const changed = changes.filter((change) => change !== "empty");
-    if (changed.length === 0) continue;
-    if (changed.every((change) => change === "ins")) row.classList.add(ROW_INS_CLASS);
-    else if (changed.every((change) => change === "del")) row.classList.add(ROW_DEL_CLASS);
-  }
-}
-
-function tagInsertedTasks(root: HTMLElement): void {
-  for (const item of Array.from(root.querySelectorAll("li.task-list-item.is-checked"))) {
-    // Nested task insertions must not remove an untouched parent's completion strike.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-    const hasOwnInsertion = Array.from(item.querySelectorAll(`ins.${INS_CLASS}`)).some(
-      (insertion) => insertion.closest("li") === item
-    );
-    if (!hasOwnInsertion) continue;
-    item.classList.add(TASK_INS_CLASS);
-  }
-}
-
-function cellChange(cell: Element): CellChange {
-  let sawIns = false;
-  let sawDel = false;
-  const walker = cell.ownerDocument.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+function rowChange(row: Element): Mode {
+  let change: Mode = null;
+  const walker = row.ownerDocument.createTreeWalker(row, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
     if ((node.nodeValue ?? "").trim() === "") continue;
-    const marked = (node.parentElement as Element | null)?.closest(
-      `ins.${INS_CLASS}, del.${DEL_CLASS}`
-    );
-    if (marked === null || marked === undefined || !cell.contains(marked)) return "mixed";
-    if (marked.tagName === "INS") sawIns = true;
-    else sawDel = true;
+    const marked = node.parentElement?.closest(`ins.${INS_CLASS}, del.${DEL_CLASS}`);
+    if (!marked) return null;
+    const kind = marked.tagName === "INS" ? "ins" : "del";
+    if (change !== null && change !== kind) return null;
+    change = kind;
   }
-  if (sawIns && sawDel) return "mixed";
-  if (sawIns) return "ins";
-  if (sawDel) return "del";
-  return "empty";
+  return change;
 }

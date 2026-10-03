@@ -2,8 +2,6 @@ import {
   alignBlocks,
   alignSequences,
   diceSimilarity,
-  pairRuns,
-  PAIR_SIMILARITY_THRESHOLD,
 } from "@/agentMode/ui/renderedDiff/alignBlocks";
 import type { MarkdownBlock } from "@/agentMode/ui/renderedDiff/splitBlocks";
 
@@ -16,20 +14,17 @@ describe("alignBlocks", () => {
       expect(diceSimilarity("The pilot runs.", "The pilot runs.")).toBe(1);
     });
 
-    it("scores a lightly reworded sentence above the pairing threshold", () => {
+    it("scores a lightly reworded sentence by the share of character bigrams the two versions keep", () => {
       const score = diceSimilarity(
         "The pilot runs for six weeks with two design partners.",
         "The pilot runs for eight weeks with three design partners."
       );
 
-      expect(score).toBeGreaterThan(PAIR_SIMILARITY_THRESHOLD);
-      expect(score).toBeLessThan(1);
+      expect(score).toBeCloseTo(0.836, 3);
     });
 
-    it("scores unrelated sentences below the pairing threshold", () => {
-      expect(diceSimilarity("Budget is fixed.", "Ship the migration runbook")).toBeLessThan(
-        PAIR_SIMILARITY_THRESHOLD
-      );
+    it("scores sentences sharing no bigram 0", () => {
+      expect(diceSimilarity("Budget is fixed.", "Ship the migration runbook")).toBe(0);
     });
 
     it("scores text shorter than one bigram 0 because it carries no bigrams to compare", () => {
@@ -37,43 +32,53 @@ describe("alignBlocks", () => {
     });
   });
 
-  describe("pairRuns()", () => {
-    it("pairs a removed element with the similar added element that follows it", () => {
-      const pairings = pairRuns(["six weeks"], ["eight weeks"], diceSimilarity);
+  describe("alignSequences()", () => {
+    const rules = {
+      isEqual: (left: string, right: string) => left === right,
+      similarity: diceSimilarity,
+    };
 
-      expect(pairings).toEqual([{ kind: "modified", before: "six weeks", after: "eight weeks" }]);
+    it("reports elements present on both sides as unchanged", () => {
+      expect(alignSequences(["a", "b"], ["a", "b"], rules)).toEqual([
+        { kind: "unchanged", before: "a", after: "a" },
+        { kind: "unchanged", before: "b", after: "b" },
+      ]);
+    });
+
+    it("pairs a removed element with the similar added element that replaces it", () => {
+      expect(alignSequences(["six weeks"], ["eight weeks"], rules)).toEqual([
+        { kind: "modified", before: "six weeks", after: "eight weeks" },
+      ]);
     });
 
     it("leaves an element deleted when no added element is similar enough", () => {
-      const pairings = pairRuns(["six weeks"], ["Budget is fixed"], diceSimilarity);
-
-      expect(pairings).toEqual([
+      expect(alignSequences(["six weeks"], ["Budget is fixed"], rules)).toEqual([
         { kind: "deleted", before: "six weeks" },
         { kind: "inserted", after: "Budget is fixed" },
       ]);
     });
 
     it("emits the added elements that precede a pair before the pair itself", () => {
-      const pairings = pairRuns(["six weeks"], ["Budget is fixed", "eight weeks"], diceSimilarity);
-
-      expect(pairings).toEqual([
+      expect(alignSequences(["six weeks"], ["Budget is fixed", "eight weeks"], rules)).toEqual([
         { kind: "inserted", after: "Budget is fixed" },
         { kind: "modified", before: "six weeks", after: "eight weeks" },
       ]);
     });
-  });
 
-  describe("alignSequences()", () => {
-    it("reports elements present on both sides as unchanged", () => {
-      const pairings = alignSequences(["a", "b"], ["a", "b"], {
+    it("pairs every line of a 1,000-line run where each line changed while scoring each line against a bounded window of candidates (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      const before = Array.from({ length: 1000 }, (_, index) => `- item ${index} keeps its text`);
+      const after = Array.from({ length: 1000 }, (_, index) => `- item ${index} keeps new text`);
+      const similarity = jest.fn(diceSimilarity);
+
+      const pairings = alignSequences(before, after, {
         isEqual: (left, right) => left === right,
-        similarity: diceSimilarity,
+        similarity,
       });
 
-      expect(pairings).toEqual([
-        { kind: "unchanged", before: "a", after: "a" },
-        { kind: "unchanged", before: "b", after: "b" },
-      ]);
+      expect(pairings).toEqual(
+        before.map((line, index) => ({ kind: "modified", before: line, after: after[index] }))
+      );
+      expect(similarity.mock.calls.length).toBeLessThanOrEqual(1000 * 32);
     });
   });
 
