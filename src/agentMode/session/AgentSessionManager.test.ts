@@ -2441,6 +2441,36 @@ describe("AgentSessionManager", () => {
         expect(mgr.getSessions()).toHaveLength(1);
       });
 
+      it("rebuilds the replaced tab with the tool calls its backend replays during load (https://github.com/Brevilabs/obsidian-copilot-private/issues/643)", async () => {
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "list the notes", "u1"));
+            emit({
+              sessionUpdate: "tool_call",
+              toolCallId: "tool-ls",
+              title: "Bash: ls",
+              kind: "execute",
+              status: "in_progress",
+            });
+            emit({ sessionUpdate: "tool_call_update", toolCallId: "tool-ls", status: "completed" });
+          },
+        });
+        const mgr = buildManager({
+          descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
+        });
+        await mgr.createSession();
+
+        await mgr.restartBackend("opencode", "managed skills changed");
+
+        expect(senderAndText(mgr.getActiveSession()!)).toEqual([
+          [USER_SENDER, "list the notes"],
+          [AI_SENDER, ""],
+        ]);
+        expect(mgr.getActiveSession()!.store.getDisplayMessages()[1].parts).toMatchObject([
+          { kind: "tool_call", id: "tool-ls", status: "completed" },
+        ]);
+      });
+
       it("keeps the replaced tab's title across the restart (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const mgr = buildManagerWithReplay();
         const first = await mgr.createSession();
@@ -3742,6 +3772,43 @@ describe("AgentSessionManager", () => {
           [USER_SENDER, "test"],
           [AI_SENDER, "first "],
         ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/643 shows a reopened Claude chat's thinking, tool call with its result, todo plan, and reply from the frames its backend replays during load", async () => {
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "rename the note", "u1"));
+            emit({ sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "mv" } });
+            emit({
+              sessionUpdate: "tool_call",
+              toolCallId: "tool-mv",
+              title: "Bash: mv a.md b.md",
+              kind: "execute",
+              status: "in_progress",
+            });
+            emit({ sessionUpdate: "tool_call_update", toolCallId: "tool-mv", status: "completed" });
+            emit({
+              sessionUpdate: "plan",
+              entries: [{ content: "Rename the note", status: "completed", priority: "medium" }],
+            });
+            emit(replayChunk("agent_message_chunk", "Renamed.", "a1"));
+          },
+        });
+        const { manager } = buildHistoryHarness({
+          backendId: "claude",
+          createBackendProcess: jest.fn(() => replay.backend),
+        });
+
+        const session = await manager.loadNativeSessionFromHistory("claude", "saved-chat");
+
+        const [user, reply] = session.store.getDisplayMessages();
+        expect(session.store.getDisplayMessages()).toHaveLength(2);
+        expect([user.sender, user.message]).toEqual([USER_SENDER, "rename the note"]);
+        expect(reply.parts?.map((p) => p.kind)).toEqual(["thought", "tool_call", "plan", "text"]);
+        expect(reply.parts?.find((p) => p.kind === "tool_call")).toMatchObject({
+          id: "tool-mv",
+          status: "completed",
+        });
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 registers the chat's handler before asking the backend to load the session", async () => {
