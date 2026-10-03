@@ -3,6 +3,7 @@ import { AskUserQuestionCard } from "@/agentMode/ui/AskUserQuestionCard";
 import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
+import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
@@ -16,6 +17,7 @@ import type {
   PermissionPrompt,
 } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
+import { logError } from "@/logger";
 import { App } from "obsidian";
 import React, { memo, useMemo } from "react";
 
@@ -128,6 +130,12 @@ const AgentMessageRow = memo(function AgentMessageRow({
             timestamp={message.timestamp?.display}
             app={app}
             turnStopReason={message.turnStopReason}
+            fileChanges={message.fileChanges}
+            onOpenFileChange={(change) =>
+              void openTurnDiff(app, change, message.id).catch((error: unknown) =>
+                logError("[AgentChatMessages] failed to open the turn diff", error)
+              )
+            }
           />
         </div>
       ) : (

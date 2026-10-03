@@ -106,14 +106,19 @@ module.exports = {
       read: jest.fn(),
     },
   })),
-  ItemView: jest.fn().mockImplementation(function () {
-    this.containerEl = window.document.createElement("div");
-    this.onOpen = jest.fn();
-    this.onClose = jest.fn();
-    this.getDisplayText = jest.fn().mockReturnValue("Mock View");
-    this.getViewType = jest.fn().mockReturnValue("mock-view");
-    this.getIcon = jest.fn().mockReturnValue("document");
-  }),
+  ItemView: class ItemView {
+    constructor(leaf) {
+      this.leaf = leaf;
+      this.app = leaf?.app;
+      this.containerEl = window.document.createElement("div");
+      this.containerEl.createDiv({ cls: "view-header" });
+      this.containerEl.createDiv({ cls: "view-content" });
+      this.registered = [];
+    }
+    register(cb) {
+      this.registered.push(cb);
+    }
+  },
   Notice: jest.fn().mockImplementation(function (message) {
     this.message = message;
     this.noticeEl = window.document.createElement("div");
