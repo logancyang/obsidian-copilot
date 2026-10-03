@@ -54,10 +54,11 @@ import {
   editTargetPaths,
   isCapturableVaultPath,
   primaryEditTargetPath,
+  toVaultTargetPath,
 } from "@/agentMode/session/editTargets";
 import { buildTurnFileChange } from "@/agentMode/session/turnFileChanges";
 import { revertReportedEdits, type ReportedEdit } from "@/agentMode/session/reportedEdits";
-import { getVaultBase, toVaultRelative } from "@/utils/vaultPath";
+import { getVaultBase } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
 import { ContextProcessor } from "@/contextProcessor";
 import type { ContextMaterializationResult } from "@/context/projectContextMaterializer";
@@ -102,37 +103,28 @@ interface TurnFileCapture {
   snapshotRead: Promise<void>;
   reportedBefore?: string | null;
   firstToolCallId: string;
-  edits: Map<string, ReportedEdit>;
+  edits: Map<string, ReportedEdit[]>;
 }
-
-const VAULT_CHANGING_KINDS: ReadonlySet<AgentToolKind> = new Set<AgentToolKind>(["edit", "delete"]);
-
-const CAPTURED_KINDS: ReadonlySet<AgentToolKind> = new Set<AgentToolKind>([
-  "edit",
-  "delete",
-  "read",
-]);
-
-const EMPTY_REPORTED_EDITS: ReadonlyMap<string, ReportedEdit> = new Map();
 
 function reportedEditsByPath(
   call: ToolCallSnapshot | ToolCallDelta,
   vaultBase: string | null
-): ReadonlyMap<string, ReportedEdit> {
-  const edits = new Map<string, ReportedEdit>();
+): ReadonlyMap<string, ReportedEdit[]> {
+  const edits = new Map<string, ReportedEdit[]>();
+  for (const item of call.content ?? []) {
+    if (item.type !== "diff") continue;
+    const path = toVaultTargetPath(item.path, vaultBase);
+    edits.set(path, [
+      ...(edits.get(path) ?? []),
+      { oldText: item.oldText ?? null, newText: item.newText },
+    ]);
+  }
   const input = call.rawInput as Record<string, unknown> | null | undefined;
   const oldText = firstString(input, ["old_string", "oldString"]);
   const newText = firstString(input, ["new_string", "newString"]);
   if (oldText !== null && newText !== null) {
     const path = primaryEditTargetPath({ input: call.rawInput }, vaultBase);
-    if (path) edits.set(path, { oldText, newText });
-  }
-  for (const item of call.content ?? []) {
-    if (item.type !== "diff") continue;
-    edits.set(toVaultRelative(item.path, vaultBase), {
-      oldText: item.oldText ?? null,
-      newText: item.newText,
-    });
+    if (path && !edits.has(path)) edits.set(path, [{ oldText, newText }]);
   }
   return edits;
 }
@@ -155,7 +147,7 @@ function resolveBefore(
 ): string | null {
   if (capture.reportedBefore !== undefined) return capture.reportedBefore;
   if (capture.edits.size > 0) {
-    const reverted = revertReportedEdits([...capture.edits.values()], after);
+    const reverted = revertReportedEdits([...capture.edits.values()].flat(), after);
     if (reverted) return reverted.text;
   }
   if (appearedDuringTurn) return null;
@@ -265,7 +257,6 @@ export class AgentSession {
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private placeholderId: string | null = null;
   private turnFiles = new Map<string, TurnFileCapture>();
-  private turnPathsByToolCall = new Map<string, Set<string>>();
   private turnCreatedPaths = new Set<string>();
   private turnCreateWatcher: EventRef | null = null;
   private currentTurnHadRoutedToolActivity = false;
@@ -723,8 +714,7 @@ export class AgentSession {
     this.currentMessageIds = new Set();
     this.currentTurnHadRoutedToolActivity = false;
     this.turnFiles = new Map();
-    this.turnPathsByToolCall = new Map();
-    this.watchVaultCreations();
+    this.turnCreatedPaths = new Set();
     this.notifyMessages();
 
     if (this.label === null && !this.backendSummarizesTitle()) {
@@ -825,6 +815,7 @@ export class AgentSession {
       const promptStarted = !signal.aborted;
       let resp: PromptOutput = { stopReason: "cancelled" };
       if (promptStarted) {
+        this.watchVaultCreations();
         const backingPrompt = this.backend.prompt(req);
         resp = await Promise.race([
           backingPrompt,
@@ -973,7 +964,6 @@ export class AgentSession {
         this.pendingFanoutContext.push({ question: originalPromptText, summary: replay });
       }
     }
-    await this.finalizeTurnFileChanges(placeholderId);
     if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAtMs)) {
       this.notifyMessages();
     }
@@ -1477,11 +1467,15 @@ export class AgentSession {
         if (targetMessageId !== placeholderId) this.currentTurnHadRoutedToolActivity = true;
         const existing = this.findToolCallPart(targetMessageId, update.toolCallId);
         const merged = mergeToolCallUpdate(existing, update);
-        this.observeToolCall(
-          update,
-          update.kind ?? (merged.kind === "tool_call" ? merged.toolKind : undefined)
-        );
-        this.applyReportedPreEditContent(update);
+        // A late update to an earlier turn's call must not count as this turn's edit.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+        if (!isPriorToolUpdate) {
+          this.observeToolCall(
+            update,
+            update.kind ?? (merged.kind === "tool_call" ? merged.toolKind : undefined)
+          );
+          this.applyReportedPreEditContent(update);
+        }
         if (merged.kind === "tool_call") {
           const exitPlan = tryReadExitPlanModeCall({
             kind: update.kind ?? merged.toolKind,
@@ -1536,8 +1530,6 @@ export class AgentSession {
   // the create event is the only witness.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
   private watchVaultCreations(): void {
-    this.unwatchVaultCreations();
-    this.turnCreatedPaths = new Set();
     const vault = this.getApp?.()?.vault;
     if (!vault) return;
     this.turnCreateWatcher = vault.on("create", (file) => {
@@ -1562,13 +1554,13 @@ export class AgentSession {
       this.discardReportedEdits(call.toolCallId);
       return;
     }
-    if (!kind || !CAPTURED_KINDS.has(kind)) return;
+    const changes = kind === "edit" || kind === "delete";
+    if (!changes && kind !== "read") return;
     const app = this.getApp?.();
     const adapter = this.vaultAdapter();
     if (!app || !adapter) return;
     const vaultBase = getVaultBase(app);
-    const changes = VAULT_CHANGING_KINDS.has(kind);
-    const reported = changes ? reportedEditsByPath(call, vaultBase) : EMPTY_REPORTED_EDITS;
+    const reported = changes ? reportedEditsByPath(call, vaultBase) : undefined;
     const paths = editTargetPaths(
       {
         locations: call.locations,
@@ -1579,12 +1571,6 @@ export class AgentSession {
     );
     for (const path of paths) {
       if (!isCapturableVaultPath(path)) continue;
-      let owned = this.turnPathsByToolCall.get(call.toolCallId);
-      if (!owned) {
-        owned = new Set();
-        this.turnPathsByToolCall.set(call.toolCallId, owned);
-      }
-      owned.add(path);
       let capture = this.turnFiles.get(path);
       if (!capture) {
         capture = {
@@ -1604,7 +1590,7 @@ export class AgentSession {
       }
       if (!changes) continue;
       capture.edited = true;
-      const edit = reported.get(path);
+      const edit = reported?.get(path);
       if (edit) capture.edits.set(call.toolCallId, edit);
     }
   }
@@ -1612,43 +1598,34 @@ export class AgentSession {
   // Keep snapshots and other calls' evidence so partial writes still appear.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
   private discardReportedEdits(toolCallId: string): void {
-    const paths = this.turnPathsByToolCall.get(toolCallId);
-    if (!paths) return;
-    for (const path of paths) this.turnFiles.get(path)?.edits.delete(toolCallId);
+    for (const capture of this.turnFiles.values()) capture.edits.delete(toolCallId);
   }
 
   private applyReportedPreEditContent(update: ToolCallDelta): void {
-    const raw = update.rawOutput as { originalFile?: unknown } | null | undefined;
-    const originalFile = raw?.originalFile;
-    if (typeof originalFile !== "string") return;
-    const owned = this.turnPathsByToolCall.get(update.toolCallId);
-    if (!owned || owned.size !== 1) return;
-    const [path] = owned;
-    const capture = this.turnFiles.get(path);
-    // Only the call that first named the file saw the turn's starting content.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
-    if (!capture || capture.firstToolCallId !== update.toolCallId) return;
-    capture.reportedBefore = originalFile;
+    if (update.originalFile === undefined) return;
+    for (const capture of this.turnFiles.values()) {
+      // Only the call that first named the file saw the turn's starting content.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+      if (capture.firstToolCallId === update.toolCallId) {
+        capture.reportedBefore = update.originalFile;
+      }
+    }
   }
 
   private async finalizeTurnFileChanges(messageId: string): Promise<void> {
-    const files = this.turnFiles;
-    const created = this.turnCreatedPaths;
-    this.unwatchVaultCreations();
+    const edited = [...this.turnFiles].filter(([, capture]) => capture.edited);
     this.turnFiles = new Map();
-    this.turnPathsByToolCall = new Map();
-    this.turnCreatedPaths = new Set();
     const adapter = this.vaultAdapter();
-    if (files.size === 0 || !adapter) return;
-    await Promise.all([...files.values()].map((capture) => capture.snapshotRead));
-    const changes: TurnFileChange[] = [];
-    for (const [path, capture] of files) {
-      if (!capture.edited) continue;
-      const after = await readVaultText(adapter, path);
-      const before = resolveBefore(capture, after, created.has(path));
-      const change = buildTurnFileChange(path, before, after);
-      if (change) changes.push(change);
-    }
+    if (edited.length === 0 || !adapter) return;
+    const created = this.turnCreatedPaths;
+    const changes = (
+      await Promise.all(
+        edited.map(async ([path, capture]) => {
+          const [after] = await Promise.all([readVaultText(adapter, path), capture.snapshotRead]);
+          return buildTurnFileChange(path, resolveBefore(capture, after, created.has(path)), after);
+        })
+      )
+    ).filter((change): change is TurnFileChange => change !== null);
     if (changes.length === 0) return;
     if (this.store.setFileChanges(messageId, changes)) this.notifyMessages();
   }
