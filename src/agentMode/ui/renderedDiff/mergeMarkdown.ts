@@ -17,12 +17,10 @@ export type DiffSegment =
   | { kind: "block"; change: "deleted" | "inserted"; markdown: string }
   | { kind: "code"; lines: CodeDiffLine[] };
 
-const MARKDOWN_EXTENSIONS = new Set(["md", "markdown"]);
+const SENTINEL_MARK = /[\uE000-\uE003]/;
 
 export function isMarkdownPath(path: string): boolean {
-  const name = path.split("/").pop() ?? "";
-  if (!name.includes(".")) return false;
-  return MARKDOWN_EXTENSIONS.has(name.split(".").pop()?.toLowerCase() ?? "");
+  return /\.(md|markdown)$/i.test(path);
 }
 
 export function diffCodeLines(before: string, after: string): CodeDiffLine[] {
@@ -42,26 +40,19 @@ export function diffCodeLines(before: string, after: string): CodeDiffLine[] {
   return lines;
 }
 
-export interface RenderedDiffOptions {
-  markdown?: boolean;
-}
-
 export function buildRenderedDiffPlan(
   before: string | null,
   after: string | null,
-  options: RenderedDiffOptions = {}
+  markdown: boolean
 ): DiffSegment[] {
-  const beforeText = before ?? "";
-  const afterText = after ?? "";
+  // A CRLF-to-LF conversion would otherwise mark every line changed; the engine assumes LF.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+  const beforeText = (before ?? "").replace(/\r\n/g, "\n");
+  const afterText = (after ?? "").replace(/\r\n/g, "\n");
   // Raw sentinel characters would be consumed as diff markup, corrupting note text.
   // Preserve them verbatim: https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-  if (
-    options.markdown === false ||
-    /[\uE000-\uE003]/.test(beforeText) ||
-    /[\uE000-\uE003]/.test(afterText)
-  ) {
-    const lines = diffCodeLines(beforeText, afterText);
-    return lines.length === 0 ? [] : [{ kind: "code", lines }];
+  if (!markdown || SENTINEL_MARK.test(beforeText) || SENTINEL_MARK.test(afterText)) {
+    return verbatimPlan(beforeText, afterText);
   }
 
   const beforeSplit = splitFrontmatter(beforeText);
@@ -93,7 +84,20 @@ export function buildRenderedDiffPlan(
         );
     }
   }
-  return collapseMarkdown(segments);
+  const collapsed = collapseMarkdown(segments);
+  // Rendering hides whitespace-only edits such as blank lines, so show those verbatim.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+  const rendersChange = collapsed.some(
+    (segment) => segment.kind !== "markdown" || SENTINEL_MARK.test(segment.markdown)
+  );
+  return rendersChange || beforeText === afterText
+    ? collapsed
+    : verbatimPlan(beforeText, afterText);
+}
+
+function verbatimPlan(before: string, after: string): DiffSegment[] {
+  const lines = diffCodeLines(before, after);
+  return lines.length === 0 ? [] : [{ kind: "code", lines }];
 }
 
 function modifiedSegments(type: MarkdownBlockType, before: string, after: string): DiffSegment[] {
@@ -116,7 +120,6 @@ function collapseMarkdown(segments: readonly DiffSegment[]): DiffSegment[] {
       collapsed.push(segment);
       continue;
     }
-    if (segment.markdown.trim() === "") continue;
     const previous = collapsed[collapsed.length - 1];
     if (previous?.kind === "markdown") {
       collapsed[collapsed.length - 1] = {

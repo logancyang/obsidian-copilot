@@ -67,42 +67,59 @@ describe("mergeMarkdown", () => {
   });
 
   describe("buildRenderedDiffPlan()", () => {
-    it.each(["\uE000", "\uE001", "\uE002", "\uE003"])(
-      "preserves an unchanged note containing raw marker %s without highlighting it (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)",
-      (marker) => {
-        const text = `Keep ${marker} literal.`;
-        expect(buildRenderedDiffPlan(text, text)).toEqual([
-          { kind: "code", lines: [{ change: "unchanged", text }] },
-        ]);
-      }
-    );
+    it("preserves raw markers in an unchanged note verbatim without highlighting them (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      const text = "Keep \uE000 literal \uE003.";
+      expect(buildRenderedDiffPlan(text, text, true)).toEqual([
+        { kind: "code", lines: [{ change: "unchanged", text }] },
+      ]);
+    });
 
-    it.each([
-      ["created", null, "\uE000added\uE001\uE002removed\uE003"],
-      ["deleted", "\uE000added\uE001\uE002removed\uE003", null],
-      ["marker removed", "\uE000added\uE001\uE002removed\uE003", "plain"],
-      ["marker added", "plain", "\uE000added\uE001\uE002removed\uE003"],
-    ])(
-      "preserves raw markers in a %s note as verbatim changed lines (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)",
-      (_name, before, after) => {
-        const lines = [];
-        if (before !== null) lines.push({ change: "deleted", text: before });
-        if (after !== null) lines.push({ change: "inserted", text: after });
-        expect(buildRenderedDiffPlan(before, after)).toEqual([{ kind: "code", lines }]);
-      }
-    );
+    it("preserves raw markers in a changed note as verbatim changed lines (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      const marked = "\uE000added\uE001\uE002removed\uE003";
+      expect(buildRenderedDiffPlan(marked, "plain", true)).toEqual([
+        {
+          kind: "code",
+          lines: [
+            { change: "deleted", text: marked },
+            { change: "inserted", text: "plain" },
+          ],
+        },
+      ]);
+    });
+
+    it("renders a CRLF-to-LF conversion as unchanged instead of marking every line changed (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      expect(buildRenderedDiffPlan("# Alpha\r\n\r\nBody\r\n", "# Alpha\n\nBody\n", true)).toEqual([
+        { kind: "markdown", markdown: "# Alpha\n\nBody" },
+      ]);
+    });
+
+    it("falls back to a verbatim line diff when the only change is blank lines rendering would hide (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      expect(buildRenderedDiffPlan("Alpha\n\nBeta\n", "Alpha\n\n\nBeta\n", true)).toEqual([
+        {
+          kind: "code",
+          lines: [
+            { change: "unchanged", text: "Alpha" },
+            { change: "unchanged", text: "" },
+            { change: "inserted", text: "" },
+            { change: "unchanged", text: "Beta" },
+          ],
+        },
+      ]);
+    });
 
     it("shows a non-Markdown file as a single verbatim line diff", () => {
-      const plan = buildRenderedDiffPlan(NON_MARKDOWN_FILE.before, NON_MARKDOWN_FILE.after, {
-        markdown: false,
-      });
+      const plan = buildRenderedDiffPlan(NON_MARKDOWN_FILE.before, NON_MARKDOWN_FILE.after, false);
 
       expect(plan).toHaveLength(1);
       expect(plan[0].kind).toBe("code");
     });
 
     it("diffs frontmatter as a line diff ahead of the body so no marker touches its fence", () => {
-      const plan = buildRenderedDiffPlan(FRONTMATTER_TAG_ADDED.before, FRONTMATTER_TAG_ADDED.after);
+      const plan = buildRenderedDiffPlan(
+        FRONTMATTER_TAG_ADDED.before,
+        FRONTMATTER_TAG_ADDED.after,
+        true
+      );
 
       expect(plan[0]).toEqual({
         kind: "code",
@@ -121,7 +138,8 @@ describe("mergeMarkdown", () => {
     it("omits the frontmatter block entirely when the turn changed only the body", () => {
       const plan = buildRenderedDiffPlan(
         FRONTMATTER_UNCHANGED_BODY_EDIT.before,
-        FRONTMATTER_UNCHANGED_BODY_EDIT.after
+        FRONTMATTER_UNCHANGED_BODY_EDIT.after,
+        true
       );
 
       expect(plan.every((segment) => segment.kind !== "code")).toBe(true);
@@ -131,7 +149,8 @@ describe("mergeMarkdown", () => {
     it("diffs a fenced code block line by line instead of rendering it", () => {
       const plan = buildRenderedDiffPlan(
         CODE_BLOCK_LINE_CHANGE.before,
-        CODE_BLOCK_LINE_CHANGE.after
+        CODE_BLOCK_LINE_CHANGE.after,
+        true
       );
 
       expect(plan.map((segment) => segment.kind)).toEqual(["markdown", "code"]);
@@ -148,7 +167,7 @@ describe("mergeMarkdown", () => {
     });
 
     it("renders a created file as inserted blocks only", () => {
-      const plan = buildRenderedDiffPlan(FILE_CREATED.before, FILE_CREATED.after);
+      const plan = buildRenderedDiffPlan(FILE_CREATED.before, FILE_CREATED.after, true);
 
       expect(
         plan.every((segment) => segment.kind === "block" && segment.change === "inserted")
@@ -156,7 +175,7 @@ describe("mergeMarkdown", () => {
     });
 
     it("renders an emptied file as deleted blocks only", () => {
-      const plan = buildRenderedDiffPlan(FILE_EMPTIED.before, FILE_EMPTIED.after);
+      const plan = buildRenderedDiffPlan(FILE_EMPTIED.before, FILE_EMPTIED.after, true);
 
       expect(
         plan.every((segment) => segment.kind === "block" && segment.change === "deleted")
@@ -164,7 +183,7 @@ describe("mergeMarkdown", () => {
     });
 
     it("shows a moved block as a deletion where it was and an insertion where it went", () => {
-      const plan = buildRenderedDiffPlan(BLOCK_MOVED.before, BLOCK_MOVED.after);
+      const plan = buildRenderedDiffPlan(BLOCK_MOVED.before, BLOCK_MOVED.after, true);
 
       expect(plan).toEqual([
         { kind: "block", change: "deleted", markdown: "Budget is fixed for the quarter." },
@@ -177,13 +196,17 @@ describe("mergeMarkdown", () => {
     });
 
     it("renders neighbouring Markdown blocks in one pass so their structure survives", () => {
-      const plan = buildRenderedDiffPlan("# Alpha\n\n- One\n- Two\n", "# Alpha\n\n- One\n- Two\n");
+      const plan = buildRenderedDiffPlan(
+        "# Alpha\n\n- One\n- Two\n",
+        "# Alpha\n\n- One\n- Two\n",
+        true
+      );
 
       expect(plan).toEqual([{ kind: "markdown", markdown: "# Alpha\n\n- One\n- Two" }]);
     });
 
-    it("returns nothing for a file that did not change", () => {
-      expect(buildRenderedDiffPlan("", "")).toEqual([]);
+    it("returns nothing for two empty texts", () => {
+      expect(buildRenderedDiffPlan("", "", true)).toEqual([]);
     });
   });
 });

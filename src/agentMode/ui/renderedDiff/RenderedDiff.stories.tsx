@@ -72,14 +72,6 @@ export const FileEmptied: StoryObj<RenderedDiffProps> = story(FILE_EMPTIED);
 
 export const NonMarkdownFile: StoryObj<RenderedDiffProps> = story(NON_MARKDOWN_FILE);
 
-export const FinalNewlineAdded: StoryObj<RenderedDiffProps> = {
-  args: { path: "config.json", before: '{"ready":true}', after: '{"ready":true}\n' },
-};
-
-export const FinalNewlineRemoved: StoryObj<RenderedDiffProps> = {
-  args: { path: "config.json", before: '{"ready":true}\n', after: '{"ready":true}' },
-};
-
 export const ReservedMarkerFallback: StoryObj<RenderedDiffProps> = {
   args: {
     path: "notes/Imported symbols.md",
