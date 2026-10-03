@@ -1071,3 +1071,54 @@ If your plugin does not need CSS, delete this file.
 .copilot-fade-mask-bottom {
   background: linear-gradient(to top, var(--background-primary), transparent);
 }
+
+/*
+ * Rendered inline diff decorations.
+ *
+ * The ins/del elements and the table rows these rules target are produced by a
+ * post-pass over markup that the Obsidian Markdown renderer emitted, so React
+ * never owns those nodes and cannot carry Tailwind classes on them. The tints
+ * come from Obsidian theme variables and therefore track the active theme.
+ */
+.copilot-diff-ins {
+  background: rgb(var(--color-green-rgb), 0.18);
+
+  /* The green wash is the whole signal; the underline browsers put on `ins`
+     makes plain insertions look like links and doubles up on real ones. */
+  text-decoration: none;
+}
+
+.copilot-diff-del {
+  background: rgb(var(--color-red-rgb), 0.18);
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+/* A replacement renders as the old text immediately followed by the new one.
+   Without a gap the two run together as one word. The margin sits on the last
+   segment of the deletion, not on an adjacent-sibling insertion, because the two
+   are often not siblings: replacing a link puts each inside its own anchor. */
+.copilot-diff-del-end {
+  margin-inline-end: 0.25em;
+}
+
+/* A row that changed as a whole is tinted on its cells, not on the row: the
+   reading-view stylesheet paints an alternating background on every even column
+   with a higher specificity than a row-level rule, which would leave those
+   columns untinted and break the band into stripes. */
+.markdown-rendered tbody tr.copilot-diff-row-ins > td {
+  background: rgb(var(--color-green-rgb), 0.18);
+}
+
+.markdown-rendered tbody tr.copilot-diff-row-del > td {
+  background: rgb(var(--color-red-rgb), 0.18);
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+/* Inside such a row the per-word tint would stack on the cell tint and break the
+   band into patches, so only the cell carries the color. */
+tr.copilot-diff-row-ins .copilot-diff-ins,
+tr.copilot-diff-row-del .copilot-diff-del {
+  background: none;
+}
