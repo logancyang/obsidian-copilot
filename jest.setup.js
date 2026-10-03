@@ -1,5 +1,13 @@
 import "web-streams-polyfill/dist/polyfill.min.js";
 import { TextEncoder, TextDecoder } from "util";
+import { Settings } from "luxon";
+
+Settings.defaultLocale = "en-US";
+
+const origNumberToLocaleString = Number.prototype.toLocaleString;
+Number.prototype.toLocaleString = function (locales = "en-US", options) {
+  return origNumberToLocaleString.call(this, locales, options);
+};
 
 window.TextEncoder = TextEncoder;
 window.TextDecoder = TextDecoder;

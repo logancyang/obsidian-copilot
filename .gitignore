@@ -40,3 +40,9 @@ copilot/acp-frames.old.ndjson
 # Models.dev catalog cache (disposable runtime cache under .copilot/)
 .copilot/model-catalog-cache.json
 .otacon/
+
+companion-*.cjs
+COMPANION-LICENSE
+COMPANION-PROVENANCE.md
+.cache/
+MUSE-SDK-LICENSE

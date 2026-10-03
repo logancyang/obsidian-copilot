@@ -616,6 +616,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         </div>
       </div>
       <AgentTabStrip manager={manager} />
+      {descriptor.executionNotice && (
+        <p role="status" className="tw-m-0 tw-px-4 tw-py-2 tw-text-sm tw-text-muted">
+          {descriptor.executionNotice}
+        </p>
+      )}
       {createAnchor && (
         <CreateProjectPanel
           anchorEl={createAnchor}

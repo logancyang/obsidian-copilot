@@ -201,6 +201,7 @@ export default [
     ignores: [
       "node_modules/**",
       "main.js",
+      "companion-*.cjs",
       "styles.css",
       "dev/gallery/main.js",
       "dev/gallery/styles.css",
@@ -462,6 +463,7 @@ export default [
     files: [
       "*.{js,mjs,cjs}",
       "scripts/**",
+      "adapters/**",
       "dev/gallery/esbuild.config.mjs",
       "esbuild.config.mjs",
       "version-bump.mjs",
@@ -675,6 +677,30 @@ export default [
     rules: {
       "obsidianmd/prefer-create-el": "off",
       "obsidianmd/no-nodejs-modules": "off",
+    },
+  },
+  {
+    files: ["adapters/**/*.{ts,mts}"],
+    languageOptions: {
+      parserOptions: {
+        project: "./tsconfig.companion-adapters.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+      globals: globals.node,
+    },
+    rules: { "obsidianmd/no-nodejs-modules": "off", "obsidianmd/prefer-window-timers": "off" },
+  },
+  {
+    files: [
+      "adapters/companions/antigravity.ts",
+      "adapters/companions/muse/session.mts",
+      "adapters/companions/muse/projection.mts",
+    ],
+    rules: {
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
     },
   },
 ];

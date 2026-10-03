@@ -110,7 +110,7 @@ function makeRealRuntime(tmpBase: string): NodeRuntime {
         isSymbolicLink: st.isSymbolicLink(),
       };
     },
-    getuid: process.getuid ? () => process.getuid() : undefined,
+    getuid: process.getuid?.bind(process),
     openPath: async () => "",
   };
 }

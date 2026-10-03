@@ -1,6 +1,6 @@
 import type { ModelInfo, ProviderType } from "./catalog";
 
-export type AgentType = "opencode" | "claude" | "codex";
+export type AgentType = "opencode" | "claude" | "codex" | "grok" | "antigravity" | "muse";
 
 export type BackendType = AgentType | "chat";
 

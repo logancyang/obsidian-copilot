@@ -289,6 +289,21 @@ export class AgentSessionManager {
   }
 
   private onDefaultSelectionsChanged(prev: CopilotSettings, next: CopilotSettings): void {
+    const backendIds = new Set([
+      ...Object.keys(prev.backends ?? {}),
+      ...Object.keys(next.backends ?? {}),
+    ]);
+    for (const id of backendIds) {
+      const backendId = id;
+      const descriptor = this.opts.resolveDescriptor(backendId);
+      if (
+        descriptor?.prefetchEffortCatalog &&
+        JSON.stringify(prev.backends?.[id as keyof CopilotSettings["backends"]]?.enabledModels) !==
+          JSON.stringify(next.backends?.[id as keyof CopilotSettings["backends"]]?.enabledModels)
+      ) {
+        this.refreshEffortCatalog(backendId);
+      }
+    }
     const prevBackends = prev.agentMode?.backends as
       | Record<string, { defaultModel?: ModelSelection | null } | undefined>
       | undefined;
@@ -1554,7 +1569,7 @@ export class AgentSessionManager {
   async restartBackend(
     backendId: BackendId,
     reason: string,
-    options?: { deferWhileBusy?: boolean }
+    options?: { deferWhileBusy?: boolean; maintenance?: () => Promise<void> }
   ): Promise<boolean> {
     if (this.disposed) return false;
     const inflight = this.starting.get(backendId);
@@ -1562,7 +1577,10 @@ export class AgentSessionManager {
       await inflight.catch(() => undefined);
     }
     const backend = this.backends.get(backendId);
-    if (!backend) return this.refreshWarmProbe(backendId, reason);
+    if (!backend) {
+      await options?.maintenance?.();
+      return this.refreshWarmProbe(backendId, reason);
+    }
     // Most config changes preserve the current turn. A Search scope change may
     // opt out so no later tool call uses the prior privacy boundary.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
@@ -1579,7 +1597,12 @@ export class AgentSessionManager {
       this.notify();
       return true;
     }
-    await this.restartBackendNow(backendId, reason, options?.deferWhileBusy === false);
+    await this.restartBackendNow(
+      backendId,
+      reason,
+      options?.deferWhileBusy === false,
+      options?.maintenance
+    );
     return true;
   }
 
@@ -1685,6 +1708,14 @@ export class AgentSessionManager {
           .join("|")
       : "";
     return `${status}#${catalog}#${effortSig}`;
+  }
+
+  refreshEffortCatalog(backendId: BackendId): void {
+    if (this.disposed || !this.isBackendInstalled(backendId)) return;
+    this.registerPreload(
+      backendId,
+      this.preloader.refresh(backendId) ?? this.preloader.preload(backendId)
+    );
   }
 
   preloadModels(backendId: BackendId): Promise<void> {
@@ -2693,14 +2724,24 @@ export class AgentSessionManager {
         return resumed;
       }
     }
+    if (
+      resumableSessionId &&
+      this.resolveDescriptor(backendId).requiresExplicitNewSessionOnResumeFailure
+    )
+      throw new Error(
+        "The previous conversation could not be resumed. Open its saved history or explicitly start a new chat."
+      );
     return this.createSession(backendId, projectId, seedSelection, chatInputId);
   }
 
   private async restartBackendNow(
     backendId: BackendId,
     reason: string,
-    immediate = false
+    immediate = false,
+    maintenance?: () => Promise<void>
   ): Promise<void> {
+    if (maintenance && this.restartingBackends.has(backendId))
+      throw new Error("Backend maintenance is already running.");
     if (this.restartingBackends.has(backendId)) {
       const prev = this.pendingBackendRestarts.get(backendId);
       this.pendingBackendRestarts.set(backendId, {
@@ -2722,6 +2763,7 @@ export class AgentSessionManager {
     this.heldConfigChanges.delete(backendId);
     logInfo(`[AgentMode] restarting ${backendId} backend: ${reason}`);
     const retainedChatInputIds: string[] = [];
+    let maintenanceFailure: unknown;
     try {
       const affected = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
       const activeSessionId = this.activeSessionId;
@@ -2755,6 +2797,11 @@ export class AgentSessionManager {
       await proc.shutdown();
       if (this.backends.get(backendId) === proc) {
         this.backends.delete(backendId);
+      }
+      try {
+        await maintenance?.();
+      } catch (error) {
+        maintenanceFailure = error;
       }
       this.preloader.clearCached(backendId);
       new Notice(`${this.resolveDescriptor(backendId).displayName} refreshed.`);
@@ -2798,6 +2845,10 @@ export class AgentSessionManager {
       for (const id of retainedChatInputIds) this.retainedChatInputIds.delete(id);
       this.notify();
     }
+    if (maintenanceFailure !== undefined)
+      throw maintenanceFailure instanceof Error
+        ? maintenanceFailure
+        : new Error(err2String(maintenanceFailure));
     const queued = this.pendingBackendRestarts.get(backendId);
     if (queued !== undefined && !this.disposed) {
       this.pendingBackendRestarts.delete(backendId);

@@ -119,7 +119,7 @@ function run(command: string, args: string[], signal: AbortSignal): Promise<stri
         windowsHide: true,
         maxBuffer: 1024 * 1024,
       },
-      (error, stdout) => (error ? reject(error) : resolve(stdout))
+      (error, stdout) => (error ? reject(new Error(error.message)) : resolve(stdout))
     );
   });
 }

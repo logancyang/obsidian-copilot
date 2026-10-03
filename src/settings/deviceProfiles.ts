@@ -1,7 +1,11 @@
 // Device-specific fields live in per-device segments because `data.json` syncs across devices:
 // https://github.com/logancyang/obsidian-copilot/issues/2539
 
-import type { CopilotSettings, DeviceAgentProfile } from "@/settings/model";
+import {
+  COMPANION_BACKEND_IDS,
+  type CopilotSettings,
+  type DeviceAgentProfile,
+} from "@/settings/model";
 
 type AgentMode = CopilotSettings["agentMode"];
 type Backends = AgentMode["backends"];
@@ -62,6 +66,18 @@ function buildProfileFromFlat(agentMode: AgentMode): DeviceAgentProfile {
     profile.claude = { envOverrides: claudeSrc.envOverrides };
   }
 
+  for (const id of COMPANION_BACKEND_IDS) {
+    const source = agentMode.backends?.[id];
+    if (source) {
+      const fields = Object.fromEntries(
+        CODEX_DEVICE_KEYS.filter((key) => source[key] !== undefined).map((key) => [
+          key,
+          source[key],
+        ])
+      );
+      if (hasOwnKeys(fields)) profile[id] = fields;
+    }
+  }
   return profile;
 }
 
@@ -80,6 +96,12 @@ function stripDeviceFieldsFromBackends(backends: Backends | undefined): Backends
   if (backends.opencode) {
     const synced = omitKeys(backends.opencode, OPENCODE_DEVICE_KEYS);
     if (hasOwnKeys(synced)) out.opencode = synced;
+  }
+  for (const id of COMPANION_BACKEND_IDS) {
+    if (backends[id]) {
+      const synced = omitKeys(backends[id], CODEX_DEVICE_KEYS);
+      if (hasOwnKeys(synced)) out[id] = synced;
+    }
   }
   return out;
 }
@@ -115,6 +137,9 @@ export function hydrateDeviceProfile(settings: CopilotSettings, deviceId: string
   if (profile?.opencode) nextBackends.opencode = { ...nextBackends.opencode, ...profile.opencode };
   if (profile?.claude) nextBackends.claude = { ...nextBackends.claude, ...profile.claude };
 
+  for (const id of COMPANION_BACKEND_IDS) {
+    if (profile?.[id]) nextBackends[id] = { ...nextBackends[id], ...profile[id] };
+  }
   const nextAgentMode: AgentMode = {
     ...agentMode,
     backends: nextBackends,

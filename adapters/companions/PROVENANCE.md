@@ -1,0 +1,5 @@
+# Source provenance
+
+Antigravity and Muse adapters and diff synthesis were ported from https://github.com/zfzfg/all-your-companions (commit `91d216aaa8c680811034abd44e4be9eb8cee178e`). Author and license notices are preserved in AYC-LICENSE. Adaptations remove VS Code host coupling and automatic global rule-file edits and expose standard ACP config options. Copilot remains AGPL-3.0. The source license is FSL-1.1-MIT; do not assume the port is MIT licensed before its applicable conversion date.
+
+The standalone Node adapters use their own strict TypeScript project. The three upstream JSON projection/session files retain AYC's dynamically typed vendor payloads; their ESLint policy permits those payload accesses. Newly written bridges and the plugin-facing integration retain the normal type-aware lint checks. Obsidian's mobile and renderer restrictions apply to plugin source; Node built-ins and timers are intentional in separately launched adapter processes. Protocol fixture tests additionally validate messages through Copilot's actual ACP SDK.

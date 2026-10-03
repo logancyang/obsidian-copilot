@@ -103,7 +103,12 @@ jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(mockDefaultSettings),
   setSettings: jest.fn(),
   subscribeToSettingsChange: jest.fn(
-    (cb: (prev: { agentMode: unknown }, next: { agentMode: unknown }) => void) => {
+    (
+      cb: (
+        prev: { agentMode: unknown; backends?: unknown },
+        next: { agentMode: unknown; backends?: unknown }
+      ) => void
+    ) => {
       settingsChangeCallbacks.add(cb);
       return () => settingsChangeCallbacks.delete(cb);
     }
@@ -111,7 +116,10 @@ jest.mock("@/settings/model", () => ({
   settingsStore: { get: jest.fn(() => ({})), set: jest.fn() },
 }));
 
-function emitSettingsChange(prev: { agentMode: unknown }, next: { agentMode: unknown }): void {
+function emitSettingsChange(
+  prev: { agentMode: unknown; backends?: unknown },
+  next: { agentMode: unknown; backends?: unknown }
+): void {
   for (const cb of settingsChangeCallbacks) cb(prev, next);
 }
 
@@ -2604,12 +2612,47 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()?.getBackendSessionId()).not.toBe(first.getBackendSessionId());
         expect(mgr.getActiveSession()?.store.getDisplayMessages()).toEqual([]);
       });
+
+      it("performs installer maintenance only after shutting down the backend", async () => {
+        const mgr = buildManager();
+        await mgr.createSession();
+        await mgr.restartBackend("opencode", "CLI update", {
+          deferWhileBusy: false,
+          maintenance: async () => {
+            expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+          },
+        });
+        expect(mgr.getSessions()).toHaveLength(1);
+      });
+
+      it("restores sessions and reports an installer failure", async () => {
+        const mgr = buildManager();
+        await mgr.createSession();
+        await expect(
+          mgr.restartBackend("opencode", "CLI update", {
+            deferWhileBusy: false,
+            maintenance: async () => {
+              throw new Error("Download failed");
+            },
+          })
+        ).rejects.toThrow("Download failed");
+        expect(mgr.getSessions()).toHaveLength(1);
+      });
+
+      it("runs maintenance when no process has started", async () => {
+        const mgr = buildManager();
+        const maintenance = jest.fn(async () => undefined);
+        await mgr.restartBackend("opencode", "CLI install", { deferWhileBusy: false, maintenance });
+        expect(maintenance).toHaveBeenCalledTimes(1);
+      });
     });
 
     describe("onInstallStateChanged()", () => {
       function buildInstallStateManager(opts: {
         installState: InstallState;
         refreshResult?: Promise<void> | null;
+        prefetch?: boolean;
+        backendId?: BackendId;
       }) {
         let installState = opts.installState;
         const preloader = {
@@ -2618,7 +2661,11 @@ describe("AgentSessionManager", () => {
           clearCached: jest.fn(),
         };
         const mgr = buildManager({
-          descriptor: buildDescriptor({ getInstallState: jest.fn(() => installState) }),
+          descriptor: buildDescriptor({
+            getInstallState: jest.fn(() => installState),
+            prefetchEffortCatalog: opts.prefetch ? jest.fn() : undefined,
+            id: opts.backendId ?? "opencode",
+          }),
           preloader,
         });
         return {
@@ -2627,6 +2674,25 @@ describe("AgentSessionManager", () => {
           setInstallState: (state: InstallState) => (installState = state),
         };
       }
+
+      it("re-probes a model enabled after initial discovery, including while a probe is pending", async () => {
+        const { mgr, preloader } = buildInstallStateManager({
+          installState: { kind: "ready", source: "custom" },
+          prefetch: true,
+          backendId: "codex",
+          refreshResult: Promise.resolve(),
+        });
+        const previous = { agentMode: {}, backends: { codex: { enabledModels: [] } } };
+        const next = { agentMode: {}, backends: { codex: { enabledModels: ["gpt-6.1-sol"] } } };
+        emitSettingsChange(previous, next);
+        expect(preloader.refresh).toHaveBeenCalledTimes(1);
+        emitSettingsChange(next, {
+          ...next,
+          backends: { codex: { enabledModels: ["gpt-6.1-sol", "gemini-3.7-flash"] } },
+        });
+        expect(preloader.refresh).toHaveBeenCalledTimes(2);
+        expect(mgr.getPreloadStatus("codex")).toBe("pending");
+      });
 
       it("preloads a freshly-installed backend that was never probed", async () => {
         const { mgr, preloader } = buildInstallStateManager({
@@ -2727,6 +2793,50 @@ describe("AgentSessionManager", () => {
 
         expect(mockBackendShutdown).not.toHaveBeenCalled();
         expect(preloader.clearCached).not.toHaveBeenCalled();
+        expect(preloader.refresh).not.toHaveBeenCalled();
+        expect(preloader.preload).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("refreshEffortCatalog()", () => {
+      function buildInstallStateManager(opts: {
+        installState: InstallState;
+        refreshResult?: Promise<void> | null;
+      }) {
+        let installState = opts.installState;
+        const preloader = {
+          preload: jest.fn(async () => undefined),
+          refresh: jest.fn(() => opts.refreshResult ?? null),
+          clearCached: jest.fn(),
+        };
+        const mgr = buildManager({
+          descriptor: buildDescriptor({
+            getInstallState: jest.fn(() => installState),
+            id: "opencode",
+          }),
+          preloader,
+        });
+        return { mgr, preloader };
+      }
+
+      it("refreshes effort discovery in a separate probe without closing live chats", async () => {
+        const { mgr, preloader } = buildInstallStateManager({
+          installState: { kind: "ready", source: "custom" },
+          refreshResult: Promise.resolve(),
+        });
+        await mgr.createSession();
+        mockBackendShutdown.mockClear();
+        mgr.refreshEffortCatalog("opencode");
+        expect(preloader.refresh).toHaveBeenCalledWith("opencode");
+        expect(mockBackendShutdown).not.toHaveBeenCalled();
+        expect(mgr.getPreloadStatus("opencode")).toBe("pending");
+        await Promise.resolve();
+        expect(mgr.getPreloadStatus("opencode")).toBe("ready");
+      });
+
+      it("does not start an effort probe for an unavailable backend", () => {
+        const { mgr, preloader } = buildInstallStateManager({ installState: { kind: "absent" } });
+        mgr.refreshEffortCatalog("opencode");
         expect(preloader.refresh).not.toHaveBeenCalled();
         expect(preloader.preload).not.toHaveBeenCalled();
       });

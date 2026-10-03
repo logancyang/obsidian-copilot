@@ -1,3 +1,4 @@
+import type { EffortDiscoveryStatus } from "@/lib/model-effort";
 import { ChatSendButton } from "@/components/ui/ChatSendButton";
 import { useChainType, useModelKey } from "@/aiParams";
 import { Button } from "@/components/ui/button";
@@ -94,6 +95,8 @@ export interface ChatInputProps {
       disabled?: boolean;
     };
     effortOptionsByModelKey?: Record<string, { label: string; value: string | null }[]>;
+    effortStatusByModelKey?: Record<string, EffortDiscoveryStatus>;
+    onOpen?: () => void;
     commitSelection?: (modelKey: string, effort: string | null) => void;
   };
   modePickerOverride?: {
@@ -745,6 +748,8 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                 disabled: modelPickerOverride.disabled,
                 effort: modelPickerOverride.effort,
                 effortOptionsByModelKey: modelPickerOverride.effortOptionsByModelKey,
+                effortStatusByModelKey: modelPickerOverride.effortStatusByModelKey,
+                onOpen: modelPickerOverride.onOpen,
                 commitSelection: modelPickerOverride.commitSelection,
               }}
               className="tw-min-w-0 tw-max-w-full tw-truncate"
