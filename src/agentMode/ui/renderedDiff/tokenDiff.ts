@@ -1,33 +1,33 @@
+import { alignSequences, diceSimilarity } from "@/agentMode/ui/renderedDiff/alignBlocks";
 import {
   DEL_CLOSE,
   DEL_OPEN,
   INS_CLOSE,
   INS_OPEN,
 } from "@/agentMode/ui/renderedDiff/applySentinels";
-import { diffArrays, diffLines } from "diff";
+import { diffArrays, type ArrayChange } from "diff";
 
 export interface StructuralLine {
   prefix: string;
   content: string;
 }
 
-export const NEARBY_MERGE_MAX_CHARS = 3;
-
 const STRUCTURAL_PREFIX =
-  /^([ \t]*(?:>[ \t]?)*)((?:[-*+]|\d{1,9}[.)])[ \t]+)?(\[[ xX]\][ \t]+)?(#{1,6}[ \t]+)?/;
+  /^([ \t]*(?:>[ \t]?)*)(\[![^\]]*\][+-]?[ \t]*)?((?:[-*+]|\d{1,9}[.)])[ \t]+)?(\[.\][ \t]+)?(#{1,6}[ \t]+)?/;
 
+const EMPHASIS_DELIMITER = /^(?:\*{1,3}|_{1,3}|~~|==)/;
+
+// Obsidian comments and inline math render as hidden text or TeX, where a marker inside would break them.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/349
 const TOKEN_PATTERNS: readonly RegExp[] = [
-  /^!?\[\[[^\]\n]*\]\]/,
-  /^(?:\*{1,3}|_{1,3}|~~|==)/,
+  /^!?\[\[[^\]]*\]\]/,
+  /^%%.*?%%/,
+  /^\$[^$\n]+\$(?!\$)/,
+  EMPHASIS_DELIMITER,
   /^[ \t]+/,
 ];
 
 const TAG = /^#[^\s#[\]()]+/;
-
-interface Segment {
-  kind: "equal" | "deleted" | "inserted";
-  text: string;
-}
 
 export function splitStructuralPrefix(line: string): StructuralLine {
   const prefix = STRUCTURAL_PREFIX.exec(line)?.[0] ?? "";
@@ -75,24 +75,22 @@ function matchToken(text: string, index: number): string | null {
   const rest = text.slice(index);
   for (const pattern of TOKEN_PATTERNS) {
     const match = pattern.exec(rest);
-    if (match !== null && match[0].length > 0) return match[0];
+    if (match !== null) return match[0];
   }
   const previous = index === 0 ? "" : text[index - 1];
   // Partial delimiters let diff markers corrupt link destinations and code spans.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-  const link = /^!?\[[^\]\r\n]*\]\(/.exec(rest);
+  const link = /^!?\[[^\]]*\]\(/.exec(rest);
   if (link !== null) {
     let depth = 1;
-    for (const part of rest.slice(link[0].length).matchAll(/\\[^\r\n]|[()\r\n]/g)) {
-      if (/[\r\n]/.test(part[0])) break;
+    for (const part of rest.slice(link[0].length).matchAll(/\\.|[()]/g)) {
       if (part[0] === "(") depth++;
       if (part[0] === ")" && --depth === 0) return rest.slice(0, link[0].length + part.index + 1);
     }
   }
   const opening = /^`+/.exec(rest)?.[0];
   if (opening !== undefined && previous !== "`") {
-    for (const closing of rest.slice(opening.length).matchAll(/`+|[\r\n]/g)) {
-      if (/[\r\n]/.test(closing[0])) break;
+    for (const closing of rest.slice(opening.length).matchAll(/`+/g)) {
       if (closing[0].length === opening.length)
         return rest.slice(0, opening.length + closing.index + closing[0].length);
     }
@@ -105,58 +103,18 @@ function matchToken(text: string, index: number): string | null {
 }
 
 export function diffInline(before: string, after: string): string {
-  const parts = diffArrays(tokenizeInline(before), tokenizeInline(after));
-  const segments: Segment[] = [];
-  for (const part of parts) {
-    const text = part.value.join("");
-    if (text === "") continue;
-    segments.push({ kind: part.added ? "inserted" : part.removed ? "deleted" : "equal", text });
-  }
-  return emitSegments(mergeNearbyRuns(segments));
+  return renderInline(diffArrays(tokenizeInline(before), tokenizeInline(after)));
 }
 
-function mergeNearbyRuns(segments: readonly Segment[]): Segment[] {
-  const merged: Segment[] = [];
-  for (let index = 0; index < segments.length; index++) {
-    const segment = segments[index];
-    const bridges =
-      segment.kind === "equal" &&
-      segment.text.length <= NEARBY_MERGE_MAX_CHARS &&
-      segments[index - 1] !== undefined &&
-      segments[index + 1] !== undefined &&
-      segments[index - 1].kind !== "equal" &&
-      segments[index + 1].kind !== "equal";
-    if (bridges) {
-      merged.push(
-        { kind: "deleted", text: segment.text },
-        { kind: "inserted", text: segment.text }
-      );
-      continue;
-    }
-    merged.push(segment);
-  }
-  return merged;
-}
-
-function emitSegments(segments: readonly Segment[]): string {
-  let output = "";
-  let index = 0;
-  while (index < segments.length) {
-    if (segments[index].kind === "equal") {
-      output += segments[index].text;
-      index++;
-      continue;
-    }
-    let deleted = "";
-    let inserted = "";
-    for (; index < segments.length && segments[index].kind !== "equal"; index++) {
-      if (segments[index].kind === "deleted") deleted += segments[index].text;
-      else inserted += segments[index].text;
-    }
-    if (deleted !== "") output += DEL_OPEN + deleted + DEL_CLOSE;
-    if (inserted !== "") output += INS_OPEN + inserted + INS_CLOSE;
-  }
-  return output;
+function renderInline(parts: readonly ArrayChange<string>[]): string {
+  return parts
+    .map((part) => {
+      const text = part.value.join("");
+      if (part.removed) return DEL_OPEN + text + DEL_CLOSE;
+      if (part.added) return INS_OPEN + text + INS_CLOSE;
+      return text;
+    })
+    .join("");
 }
 
 export function markDeletedLine(line: string): string {
@@ -173,52 +131,49 @@ function markLine(line: string, open: string, close: string): string {
   return prefix + open + content + close;
 }
 
-// Lines whose structural prefixes differ (checkbox, heading level, item number) become a deleted plus an
+// Lines whose structural prefixes differ (checkbox, heading level, callout type) become a deleted plus an
 // inserted line: the renderer consumes that syntax, so no inline marker could show it.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
 export function diffTextBlock(before: string, after: string): string {
-  const groups = diffLines(withTrailingNewline(before), withTrailingNewline(after)).map((part) => ({
-    kind: part.added ? "inserted" : part.removed ? "deleted" : "equal",
-    lines: part.value.split("\n").slice(0, -1),
-  }));
-  const lines: string[] = [];
-  for (let index = 0; index < groups.length; index++) {
-    const group = groups[index];
-    if (group.kind === "equal") {
-      lines.push(...group.lines);
-      continue;
-    }
-    const next = groups[index + 1];
-    if (group.kind === "deleted" && next?.kind === "inserted") {
-      lines.push(...pairLines(group.lines, next.lines));
-      index++;
-      continue;
-    }
-    lines.push(...group.lines.map(group.kind === "deleted" ? markDeletedLine : markInsertedLine));
-  }
-  return lines.join("\n");
+  return alignSequences(before.split("\n"), after.split("\n"), {
+    isEqual: (left, right) => left === right,
+    similarity: diceSimilarity,
+  })
+    .flatMap((pairing) => {
+      if (pairing.kind === "unchanged") return [pairing.after];
+      if (pairing.kind === "deleted") return [markDeletedLine(pairing.before)];
+      if (pairing.kind === "inserted") return [markInsertedLine(pairing.after)];
+      return [diffModifiedLine(pairing.before, pairing.after)];
+    })
+    .join("\n");
 }
 
-function pairLines(removed: readonly string[], added: readonly string[]): string[] {
-  const lines: string[] = [];
-  const paired = Math.min(removed.length, added.length);
-  for (let index = 0; index < paired; index++) {
-    const before = splitStructuralPrefix(removed[index]);
-    const after = splitStructuralPrefix(added[index]);
-    if (before.prefix !== after.prefix) {
-      lines.push(markDeletedLine(removed[index]), markInsertedLine(added[index]));
-      continue;
-    }
-    lines.push(after.prefix + diffInline(before.content, after.content));
-  }
-  for (let index = paired; index < removed.length; index++)
-    lines.push(markDeletedLine(removed[index]));
-  for (let index = paired; index < added.length; index++)
-    lines.push(markInsertedLine(added[index]));
-  return lines;
+function visibleLength(text: string): number {
+  return text.replace(/\s/g, "").length;
 }
 
-function withTrailingNewline(value: string): string {
-  if (value === "") return value;
-  return value.endsWith("\n") ? value : `${value}\n`;
+function diffModifiedLine(beforeLine: string, afterLine: string): string {
+  const before = splitStructuralPrefix(beforeLine);
+  const after = splitStructuralPrefix(afterLine);
+  const parts = diffArrays(tokenizeInline(before.content), tokenizeInline(after.content));
+  // Renumbering an ordered list is not a content change, so item numbers are ignored when comparing prefixes.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+  const samePrefix = before.prefix.replace(/\d+/g, "") === after.prefix.replace(/\d+/g, "");
+  // Markers around a bare emphasis delimiter render as empty marks around restyled text, so a
+  // formatting edit is shown as the whole old line and the whole new line.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+  const changesEmphasis = parts.some(
+    (part) =>
+      (part.added || part.removed) && part.value.some((token) => EMPHASIS_DELIMITER.test(token))
+  );
+  // Interleaved word marks are unreadable once most of a line is rewritten, so such a line is shown whole twice.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+  const keptLength = visibleLength(
+    parts.flatMap((part) => (part.added || part.removed ? [] : part.value)).join("")
+  );
+  const mostlyRewritten =
+    keptLength * 2 < Math.max(visibleLength(before.content), visibleLength(after.content));
+  if (!samePrefix || changesEmphasis || mostlyRewritten)
+    return `${markDeletedLine(beforeLine)}\n${markInsertedLine(afterLine)}`;
+  return after.prefix + renderInline(parts);
 }
