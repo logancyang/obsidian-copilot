@@ -58,6 +58,20 @@ describe("tokenDiff", () => {
       });
     });
 
+    it("keeps a custom task status in the prefix so the renderer still sees a task", () => {
+      expect(splitStructuralPrefix("- [/] Draft the runbook")).toEqual({
+        prefix: "- [/] ",
+        content: "Draft the runbook",
+      });
+    });
+
+    it("keeps a callout declaration and its fold marker in the prefix so its title stays content", () => {
+      expect(splitStructuralPrefix("> [!warning]- Rollout risks")).toEqual({
+        prefix: "> [!warning]- ",
+        content: "Rollout risks",
+      });
+    });
+
     it("treats a tag at the start of a paragraph as content, not as heading syntax", () => {
       expect(splitStructuralPrefix("#rollout is the tag")).toEqual({
         prefix: "",
@@ -87,17 +101,13 @@ describe("tokenDiff", () => {
       expect(tokenizeInline("**bold**")).toEqual(["**", "bold", "**"]);
     });
 
+    it("does not read a $$ display-math delimiter as inline math (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)", () => {
+      expect(tokenizeInline("$$x$$")).toEqual(["$$x$$"]);
+    });
+
     it("splits CJK text per character because it carries no word spaces", () => {
       expect(tokenizeInline("发布准备")).toEqual(["发", "布", "准", "备"]);
     });
-
-    it.each(atomicEdits)(
-      "keeps %s atomic so diff markers cannot split syntax (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)",
-      (_name, before, after) => {
-        expect(tokenizeInline(`See ${before} first.`)).toEqual(["See", " ", before, " ", "first."]);
-        expect(tokenizeInline(`See ${after} first.`)).toEqual(["See", " ", after, " ", "first."]);
-      }
-    );
 
     it.each(["``", "```", "````"])(
       "does not shorten an unmatched %s opener to manufacture a code span (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)",
@@ -133,22 +143,20 @@ describe("tokenDiff", () => {
       );
     });
 
-    it("merges two change runs separated by at most three unchanged characters into one replacement", () => {
-      const merged = diffInline("alpha, beta", "gamma, delta");
-
-      expect(merged).toBe(`${deleted("alpha, beta")}${inserted("gamma, delta")}`);
+    it("returns the line untouched when nothing changed", () => {
+      expect(diffInline("The pilot runs.", "The pilot runs.")).toBe("The pilot runs.");
     });
 
-    it("keeps change runs apart when more than three unchanged characters sit between them", () => {
-      const merged = diffInline("alpha until beta", "gamma until delta");
-
-      expect(merged).toBe(
-        `${deleted("alpha")}${inserted("gamma")} until ${deleted("beta")}${inserted("delta")}`
+    it("replaces an edited Obsidian comment whole so no marker lands inside the hidden text (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)", () => {
+      expect(diffInline("Ship it %%draft note%% today.", "Ship it %%final note%% today.")).toBe(
+        `Ship it ${deleted("%%draft note%%")}${inserted("%%final note%%")} today.`
       );
     });
 
-    it("returns the line untouched when nothing changed", () => {
-      expect(diffInline("The pilot runs.", "The pilot runs.")).toBe("The pilot runs.");
+    it("replaces edited inline math whole so no marker lands inside the TeX (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)", () => {
+      expect(diffInline("Area is $\\pi r^2$ here.", "Area is $\\pi d^2$ here.")).toBe(
+        `Area is ${deleted("$\\pi r^2$")}${inserted("$\\pi d^2$")} here.`
+      );
     });
 
     it.each(atomicEdits)(
@@ -186,6 +194,24 @@ describe("tokenDiff", () => {
       expect(merged).toBe(`- One\n- Two\n- ${inserted("Three")}`);
     });
 
+    it("shows a mostly reworded line as the whole old line and the whole new line https://github.com/Brevilabs/obsidian-copilot-private/issues/349", () => {
+      const before = "Watering should happen in the morning to reduce evaporation.";
+      const after = "Water the beds early in the morning so less moisture evaporates.";
+
+      expect(diffTextBlock(before, after)).toBe(`${deleted(before)}\n${inserted(after)}`);
+    });
+
+    it("keeps word marks inside a line whose wording mostly survives", () => {
+      const merged = diffTextBlock(
+        "The pilot runs for six weeks with two design partners.",
+        "The pilot runs for eight weeks with three design partners."
+      );
+
+      expect(merged).toBe(
+        `The pilot runs for ${deleted("six")}${inserted("eight")} weeks with ${deleted("two")}${inserted("three")} design partners.`
+      );
+    });
+
     it("marks a removed list item in place so the reader sees where it was", () => {
       const merged = diffTextBlock("- One\n- Two\n- Three", "- One\n- Three");
 
@@ -213,6 +239,55 @@ describe("tokenDiff", () => {
       const merged = diffTextBlock("## Rollout plan", "### Rollout plan");
 
       expect(merged).toBe(`## ${deleted("Rollout plan")}\n### ${inserted("Rollout plan")}`);
+    });
+
+    it("marks an item added above an edited item as inserted instead of pairing it with the edit", () => {
+      const merged = diffTextBlock("- Banana\n- Cherry", "- Apple\n- Banana bread\n- Cherry");
+
+      expect(merged).toBe(`- ${inserted("Apple")}\n- Banana${inserted(" bread")}\n- Cherry`);
+    });
+
+    it("marks a new first line of a paragraph as inserted and diffs the edited line it precedes", () => {
+      const merged = diffTextBlock(
+        "The pilot runs for six weeks.",
+        "Summary first.\nThe pilot runs for ten weeks."
+      );
+
+      expect(merged).toBe(
+        `${inserted("Summary first.")}\nThe pilot runs for ${deleted("six")}${inserted("ten")} weeks.`
+      );
+    });
+
+    it.each([
+      ["removed", "**bold** stays", "bold stays"],
+      ["added", "bold stays", "**bold** stays"],
+    ])(
+      "emits a line whose emphasis was %s as a removed line and an added line because markers around bare delimiters render nothing (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)",
+      (_change, before, after) => {
+        expect(diffTextBlock(before, after)).toBe(`${deleted(before)}\n${inserted(after)}`);
+      }
+    );
+
+    it("emits a toggled custom task status as a removed line and an added line", () => {
+      const merged = diffTextBlock("- [ ] Draft the runbook", "- [/] Draft the runbook");
+
+      expect(merged).toBe(
+        `- [ ] ${deleted("Draft the runbook")}\n- [/] ${inserted("Draft the runbook")}`
+      );
+    });
+
+    it("emits a callout whose type changed as a removed line and an added line so the callout still renders", () => {
+      const merged = diffTextBlock("> [!note] Risks\n> Body", "> [!warning] Risks\n> Body");
+
+      expect(merged).toBe(
+        `> [!note] ${deleted("Risks")}\n> [!warning] ${inserted("Risks")}\n> Body`
+      );
+    });
+
+    it("keeps renumbered ordered-list items unmarked when only their numbers changed (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      const merged = diffTextBlock("1. Draft\n2. Review", "1. Plan\n2. Draft\n3. Review");
+
+      expect(merged).toBe(`1. ${inserted("Plan")}\n2. Draft\n3. Review`);
     });
   });
 });
