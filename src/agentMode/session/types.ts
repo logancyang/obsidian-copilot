@@ -272,6 +272,7 @@ export interface SessionUsage {
 export interface SessionEvent {
   sessionId: SessionId;
   update: SessionUpdate;
+  occurredAt?: number;
 }
 
 export type PermissionOptionKind = "allow_once" | "allow_always" | "reject_once" | "reject_always";

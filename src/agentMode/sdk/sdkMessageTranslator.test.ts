@@ -1386,6 +1386,31 @@ describe("sdkMessageTranslator", () => {
       ]);
     });
 
+    it(`stamps every update with the time of the transcript entry it came from, and leaves it unstamped when that time is missing or unreadable (${ISSUE_643})`, () => {
+      const jsonl = transcript(
+        userEntry("u-1", "read it", { timestamp: "2026-10-03T19:31:18.348Z" }),
+        assistantEntry(
+          [
+            { type: "text", text: "Reading." },
+            { type: "tool_use", id: "tool-read", name: "Read", input: { file_path: "a.md" } },
+          ],
+          { timestamp: "2026-10-03T19:31:22.374Z" }
+        ),
+        userEntry("u-2", [{ type: "tool_result", tool_use_id: "tool-read", content: "hi" }]),
+        assistantEntry([{ type: "text", text: "Done." }], { timestamp: "not a date" })
+      );
+
+      const events = replayClaudeTranscript(jsonl, SESSION_ID, createClaudeTaskPlanState());
+
+      expect(events.map((e) => [e.update.sessionUpdate, e.occurredAt])).toEqual([
+        ["user_message_chunk", Date.parse("2026-10-03T19:31:18.348Z")],
+        ["agent_message_chunk", Date.parse("2026-10-03T19:31:22.374Z")],
+        ["tool_call", Date.parse("2026-10-03T19:31:22.374Z")],
+        ["tool_call_update", undefined],
+        ["agent_message_chunk", undefined],
+      ]);
+    });
+
     it("gives each user prompt its own message id and joins the text blocks of a multimodal prompt without its images", () => {
       const jsonl = transcript(
         userEntry("u-1", [

@@ -43,7 +43,7 @@ import {
   isWebSelectedTextContext,
   MessageContext,
 } from "@/types/message";
-import { err2String, formatDateTime } from "@/utils";
+import { err2String, formatDateTime, type FormattedDateTime } from "@/utils";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
 import type { App } from "obsidian";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
@@ -200,8 +200,10 @@ export class AgentSession {
   private resumeMode: CopilotMode | null | undefined;
   private settleReady: () => void = () => {};
   private historyOpen = false;
-  private historyUser: { wireId: string | undefined; raw: string } | null = null;
+  private historyUser: { wireId: string | undefined; raw: string; occurredAt?: number } | null =
+    null;
   private historyAiId: string | null = null;
+  private historyTurnStartedAt: number | undefined;
   private pendingPlanResolvers = new Map<
     string,
     {
@@ -1260,7 +1262,10 @@ export class AgentSession {
     const update = event.update;
     // A user message echoed outside the replay is already shown from the prompt that sent it. https://github.com/Brevilabs/obsidian-copilot-private/issues/602
     if (update.sessionUpdate === "user_message_chunk" && !this.historyOpen) return;
-    if (this.historyOpen && this.appendHistory(update)) return;
+    if (this.historyOpen && this.appendHistory(update, event.occurredAt)) {
+      this.extendHistoryTurn(event.occurredAt);
+      return;
+    }
     const toolOwnerMessageId =
       update.sessionUpdate === "tool_call_update"
         ? this.store.findMessageIdWithToolCall(update.toolCallId)
@@ -1415,7 +1420,7 @@ export class AgentSession {
   }
 
   // Frames replayed before the load response are the chat's past turns, not a turn in flight. https://github.com/Brevilabs/obsidian-copilot-private/issues/602
-  private appendHistory(update: SessionEvent["update"]): boolean {
+  private appendHistory(update: SessionEvent["update"], occurredAt: number | undefined): boolean {
     switch (update.sessionUpdate) {
       case "user_message_chunk": {
         const text = extractText(update.content);
@@ -1427,14 +1432,15 @@ export class AgentSession {
         if (!text.trim()) return true;
         this.flushHistoryUser();
         this.historyAiId = null;
-        this.historyUser = { wireId: update.messageId, raw: text };
+        this.historyUser = { wireId: update.messageId, raw: text, occurredAt };
+        this.historyTurnStartedAt = occurredAt;
         return true;
       }
       case "agent_message_chunk":
       case "agent_thought_chunk": {
         const text = extractText(update.content);
         if (!text) return true;
-        const id = this.historyAiBubbleId();
+        const id = this.historyAiBubbleId(occurredAt);
         const appended =
           update.sessionUpdate === "agent_message_chunk"
             ? this.store.appendAgentText(id, text)
@@ -1443,19 +1449,22 @@ export class AgentSession {
         return true;
       }
       case "tool_call":
-        if (this.store.upsertAgentPart(this.historyAiBubbleId(), toolCallToPart(update))) {
+        if (
+          this.store.upsertAgentPart(this.historyAiBubbleId(occurredAt), toolCallToPart(update))
+        ) {
           this.scheduleNotifyMessages();
         }
         return true;
       case "tool_call_update": {
         const id =
-          this.store.findMessageIdWithToolCall(update.toolCallId) ?? this.historyAiBubbleId();
+          this.store.findMessageIdWithToolCall(update.toolCallId) ??
+          this.historyAiBubbleId(occurredAt);
         const merged = mergeToolCallUpdate(this.findToolCallPart(id, update.toolCallId), update);
         if (this.store.upsertAgentPart(id, merged)) this.scheduleNotifyMessages();
         return true;
       }
       case "plan":
-        if (this.store.upsertAgentPart(this.historyAiBubbleId(), planToPart(update))) {
+        if (this.store.upsertAgentPart(this.historyAiBubbleId(occurredAt), planToPart(update))) {
           this.scheduleNotifyMessages();
         }
         return true;
@@ -1472,29 +1481,44 @@ export class AgentSession {
     this.store.addMessage({
       message: stripUserMessageWrapper(pending.raw),
       sender: USER_SENDER,
-      timestamp: null,
+      timestamp: historyTimestamp(pending.occurredAt),
       isVisible: true,
     });
     this.scheduleNotifyMessages();
   }
 
-  private historyAiBubbleId(): string {
+  private historyAiBubbleId(occurredAt: number | undefined): string {
     if (this.historyAiId) return this.historyAiId;
     this.flushHistoryUser();
+    const startedAt = this.historyTurnStartedAt;
     this.historyAiId = this.store.addMessage({
       message: "",
       sender: AI_SENDER,
-      timestamp: null,
+      timestamp: historyTimestamp(occurredAt),
       isVisible: true,
       parts: [],
+      turnDurationMs:
+        startedAt === undefined || occurredAt === undefined
+          ? undefined
+          : Math.max(0, occurredAt - startedAt),
     });
     return this.historyAiId;
+  }
+
+  // A replayed turn lasts from its prompt to its last timed frame; frames from an agent that sends no times leave it untimed. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
+  private extendHistoryTurn(occurredAt: number | undefined): void {
+    const startedAt = this.historyTurnStartedAt;
+    if (!this.historyAiId || startedAt === undefined || occurredAt === undefined) return;
+    if (this.store.extendTurnDuration(this.historyAiId, occurredAt - startedAt)) {
+      this.scheduleNotifyMessages();
+    }
   }
 
   private endHistory(): void {
     this.flushHistoryUser();
     this.historyOpen = false;
     this.historyAiId = null;
+    this.historyTurnStartedAt = undefined;
   }
 
   private resolveContentTarget(messageId: string | undefined): string | null {
@@ -1957,4 +1981,8 @@ function planToPart(plan: PlanSummary & { sessionUpdate?: "plan" }): AgentMessag
       status: e.status,
     })),
   };
+}
+
+function historyTimestamp(occurredAt: number | undefined): FormattedDateTime | null {
+  return occurredAt === undefined ? null : formatDateTime(new Date(occurredAt));
 }
