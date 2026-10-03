@@ -30,14 +30,6 @@ export const SingleFile: StoryObj<FilesChangedCardProps> = {
   args: { changes: [change("projects/Alpha/Project brief.md", 30, 2)] },
 };
 
-export const SingleFileAtRoot: StoryObj<FilesChangedCardProps> = {
-  args: { changes: [change("README.md", 4, 1)] },
-};
-
-export const SingleFileCreated: StoryObj<FilesChangedCardProps> = {
-  args: { changes: [change("Meeting 2026-09-16.md", 12, 0, "created")] },
-};
-
 export const MixedTurn: StoryObj<FilesChangedCardProps> = {
   args: {
     changes: [
@@ -85,11 +77,5 @@ export const LongPaths: StoryObj<FilesChangedCardProps> = {
       ),
       change("Areas/Personal knowledge management/Weekly review template v2 (revised).md", 9, 0),
     ],
-  },
-};
-
-export const ZeroCounts: StoryObj<FilesChangedCardProps> = {
-  args: {
-    changes: [change("notes/diff-demo/beta.md", 15, 0), change("notes/diff-demo/gamma.md", 0, 15)],
   },
 };
