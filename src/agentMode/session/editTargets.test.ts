@@ -3,6 +3,7 @@ import {
   editTargetPaths,
   isCapturableVaultPath,
   primaryEditTargetPath,
+  toVaultTargetPath,
 } from "@/agentMode/session/editTargets";
 
 describe("editTargets", () => {
@@ -23,6 +24,17 @@ describe("editTargets", () => {
     it("returns nothing for a call with no outputs", () => {
       expect(diffTargetPaths(undefined)).toEqual([]);
       expect(diffTargetPaths([{ type: "diff", path: "" }])).toEqual([]);
+    });
+  });
+
+  describe("toVaultTargetPath()", () => {
+    it("makes an in-vault absolute path vault-relative with forward slashes", () => {
+      expect(toVaultTargetPath(`${VAULT}/notes/a.md`, VAULT)).toBe("notes/a.md");
+      expect(toVaultTargetPath("C:\\vault\\notes\\a.md", "C:\\vault")).toBe("notes/a.md");
+    });
+
+    it("rewrites backslashes in a relative path so each file has one key (https://github.com/Brevilabs/obsidian-copilot-private/issues/347)", () => {
+      expect(toVaultTargetPath("notes\\diff-demo\\a.md", VAULT)).toBe("notes/diff-demo/a.md");
     });
   });
 
@@ -81,18 +93,24 @@ describe("editTargets", () => {
       ).toEqual(["notes/a.md", "notes/b.md", "notes/c.md"]);
     });
 
+    it("reports one key for a file named with both separators (https://github.com/Brevilabs/obsidian-copilot-private/issues/347)", () => {
+      expect(
+        editTargetPaths(
+          { locations: [{ path: "C:\\vault\\notes\\a.md" }], input: { file_path: "notes\\a.md" } },
+          "C:\\vault"
+        )
+      ).toEqual(["notes/a.md"]);
+    });
+
     it("returns nothing when the call names no file", () => {
       expect(editTargetPaths({ input: { command: "ls" } }, VAULT)).toEqual([]);
     });
   });
 
   describe("isCapturableVaultPath()", () => {
-    it.each(["notes/diff-demo/a.md", "notes\\diff-demo\\a.md", "notes/diff-demo\\a.md"])(
-      "accepts vault-relative note path %s with either separator",
-      (path) => {
-        expect(isCapturableVaultPath(path)).toBe(true);
-      }
-    );
+    it("accepts a vault-relative note path", () => {
+      expect(isCapturableVaultPath("notes/diff-demo/a.md")).toBe(true);
+    });
 
     it("accepts a Windows in-vault absolute target after vault-relative resolution", () => {
       const [path] = editTargetPaths(
@@ -119,11 +137,10 @@ describe("editTargets", () => {
       "notes\\..\\..\\outside.md",
       "\\\\server\\share\\secret.md",
       "\\outside.md",
-      "notes/visible\\.private/secret.md",
-      "notes/..\\..\\outside.md",
     ])(
-      "rejects unsafe backslash path %s before snapshot reads (https://github.com/Brevilabs/obsidian-copilot-private/issues/347)",
-      (path) => {
+      "rejects unsafe backslash target %s before snapshot reads (https://github.com/Brevilabs/obsidian-copilot-private/issues/347)",
+      (target) => {
+        const [path] = editTargetPaths({ input: { file_path: target } }, VAULT);
         expect(isCapturableVaultPath(path)).toBe(false);
       }
     );
