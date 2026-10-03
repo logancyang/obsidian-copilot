@@ -1,10 +1,15 @@
 import { FileSystemAdapter, App } from "obsidian";
+import { getSettings } from "@/settings/model";
 import { sliceLines, VaultClient } from "./VaultClient";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
   logError: jest.fn(),
+}));
+
+jest.mock("@/settings/model", () => ({
+  getSettings: jest.fn(() => ({ copilotFolder: "copilot" })),
 }));
 
 type MockAdapter = { read: jest.Mock; exists: jest.Mock; mkdir: jest.Mock; write: jest.Mock };
@@ -111,6 +116,54 @@ describe("VaultClient", () => {
             path: ".obsidian/plugins/copilot/data.json",
           })
         ).rejects.toThrow(/hidden directory/);
+      });
+
+      it("allows the configured hidden Copilot root while keeping other hidden roots blocked for https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
+        jest
+          .mocked(getSettings)
+          .mockReturnValue({ copilotFolder: ".copilot-logs" } as ReturnType<typeof getSettings>);
+        const { app, adapter } = buildApp("/Users/me/vault");
+        adapter.read.mockResolvedValue("skill content");
+        const client = buildClient(app);
+
+        await expect(
+          client.readTextFile({ sessionId: "s1", path: ".copilot-logs/skills/example.md" })
+        ).resolves.toEqual({ content: "skill content" });
+        await expect(
+          client.readTextFile({ sessionId: "s1", path: ".other-private-folder/notes.md" })
+        ).rejects.toThrow(/hidden directory/);
+      });
+
+      it("keeps denying the vault config folder even when it is set as the Copilot folder for https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
+        const configDir = ".custom-config";
+        jest
+          .mocked(getSettings)
+          .mockReturnValue({ copilotFolder: configDir } as ReturnType<typeof getSettings>);
+        const { app, adapter } = buildApp("/Users/me/vault");
+        (app.vault as unknown as { configDir: string }).configDir = configDir;
+        adapter.read.mockResolvedValue("secret");
+
+        await expect(
+          buildClient(app).readTextFile({ sessionId: "s1", path: `${configDir}/plugins/data.json` })
+        ).rejects.toThrow(/hidden directory/);
+        expect(adapter.read).not.toHaveBeenCalled();
+      });
+
+      it("keeps denying a nested vault config folder when an ancestor is set as the Copilot folder for https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
+        jest
+          .mocked(getSettings)
+          .mockReturnValue({ copilotFolder: ".config" } as ReturnType<typeof getSettings>);
+        const { app, adapter } = buildApp("/Users/me/vault");
+        (app.vault as unknown as { configDir: string }).configDir = ".config/custom";
+        adapter.read.mockResolvedValue("content");
+        const client = buildClient(app);
+
+        await expect(
+          client.readTextFile({ sessionId: "s1", path: ".config/custom/plugins/data.json" })
+        ).rejects.toThrow(/hidden directory/);
+        await expect(
+          client.readTextFile({ sessionId: "s1", path: ".config/skills/example.md" })
+        ).resolves.toEqual({ content: "content" });
       });
     });
 

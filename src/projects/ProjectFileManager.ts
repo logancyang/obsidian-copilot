@@ -107,7 +107,8 @@ export class ProjectFileManager {
       } else if (await this.vault.adapter.exists(folderPath)) {
         const listing = await this.vault.adapter.list(folderPath);
         if (listing.files.length === 0 && listing.folders.length === 0) {
-          await this.vault.adapter.rmdir(folderPath, false);
+          // Obsidian's desktop adapter rejects non-recursive rmdir even for an empty folder. https://github.com/logancyang/obsidian-copilot/issues/3075
+          await this.vault.adapter.rmdir(folderPath, true);
         }
       }
     } catch (rollbackError) {
@@ -207,13 +208,21 @@ export class ProjectFileManager {
           ? project.UsageTimestamps
           : 0;
 
-      const file = await this.vault.create(filePath, project.systemPrompt || "");
-
       try {
-        await writeProjectFrontmatter(this.app, file, project, folderName, {
-          createdMs,
-          lastUsedMs,
-        });
+        if (isInVaultCache(this.app, folderPath)) {
+          const file = await this.vault.create(filePath, project.systemPrompt || "");
+          await writeProjectFrontmatter(this.app, file, project, folderName, {
+            createdMs,
+            lastUsedMs,
+          });
+        } else {
+          // Hidden folders are not indexed, so processFrontMatter cannot create their project metadata.
+          // https://github.com/logancyang/obsidian-copilot/issues/3075
+          await this.vault.adapter.write(
+            filePath,
+            this.buildProjectFileContent(project, folderName, { createdMs, lastUsedMs })
+          );
+        }
       } catch (fmError) {
         await this.rollbackCreatedFile(filePath, folderPath);
         throw fmError;
@@ -340,33 +349,30 @@ export class ProjectFileManager {
 
       const projectForWrite = { ...nextProject, created: createdMs, UsageTimestamps: lastUsedMs };
 
-      if (isInVaultCache(this.app, filePath)) {
-        try {
-          await writeProjectFrontmatter(this.app, file, projectForWrite, folderName, {
-            createdMs,
-            lastUsedMs,
-          });
-        } catch (fmError) {
-          if (materialized) await this.rollbackCreatedFile(filePath, projectFolderIn(folderName));
-          throw fmError;
-        }
-
-        const rawWithFrontmatter = await this.vault.read(file);
-        const frontmatterBlock = this.getLeadingFrontmatterBlock(rawWithFrontmatter);
-        if (!frontmatterBlock) {
-          throw new Error(`Expected frontmatter block after update: ${file.path}`);
-        }
-        const separator = frontmatterBlock.endsWith("\n") ? "" : "\n";
-        await this.vault.modify(
-          file,
-          frontmatterBlock + separator + (nextProject.systemPrompt || "")
-        );
-      } else {
-        const content = this.buildProjectFileContent(projectForWrite, folderName, {
+      try {
+        await writeProjectFrontmatter(this.app, file, projectForWrite, folderName, {
           createdMs,
           lastUsedMs,
         });
-        await this.vault.adapter.write(filePath, content);
+      } catch (fmError) {
+        if (materialized) await this.rollbackCreatedFile(filePath, projectFolderIn(folderName));
+        throw fmError;
+      }
+
+      const isIndexed = isInVaultCache(this.app, filePath);
+      const rawWithFrontmatter = isIndexed
+        ? await this.vault.read(file)
+        : await this.vault.adapter.read(filePath);
+      const frontmatterBlock = this.getLeadingFrontmatterBlock(rawWithFrontmatter);
+      if (!frontmatterBlock) {
+        throw new Error(`Expected frontmatter block after update: ${file.path}`);
+      }
+      const separator = frontmatterBlock.endsWith("\n") ? "" : "\n";
+      const nextContent = frontmatterBlock + separator + (nextProject.systemPrompt || "");
+      if (isIndexed) {
+        await this.vault.modify(file, nextContent);
+      } else {
+        await this.vault.adapter.write(filePath, nextContent);
       }
 
       const updated: ProjectFileRecord = {
@@ -438,7 +444,8 @@ export class ProjectFileManager {
         } else if (await this.vault.adapter.exists(folderPath)) {
           const listing = await this.vault.adapter.list(folderPath);
           if (listing.files.length === 0 && listing.folders.length === 0) {
-            await this.vault.adapter.rmdir(folderPath, false);
+            // Obsidian's desktop adapter rejects non-recursive rmdir even for an empty folder. https://github.com/logancyang/obsidian-copilot/issues/3075
+            await this.vault.adapter.rmdir(folderPath, true);
           }
         }
       } catch (cleanupError) {

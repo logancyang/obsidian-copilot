@@ -79,7 +79,7 @@ Quick Command is also unavailable in Source mode.
 
 ## Where commands are stored
 
-Each command is a Markdown file in `<Copilot folder>/copilot-custom-prompts/`. The filename is the command name, and Copilot keeps file changes and the **Command** settings tab in sync. Change the root under [**Settings → Copilot → Basic → Copilot folder location**](settings.md#basic).
+Each command is a Markdown file in `<Copilot folder>/copilot-custom-prompts/`. The filename is the command name, and Copilot keeps file changes and the **Command** settings tab in sync. Change the root under [**Settings → Copilot → Basic → Copilot folder location**](settings.md#basic). If the Copilot folder is hidden, such as `.copilot`, Obsidian does not watch it, so edits made outside Copilot appear after you reload Obsidian.
 
 When upgrading from older command settings, Copilot migrates supported commands to these files. If a name cannot be migrated, Copilot keeps it under the `unsupported/` subfolder and shows a startup notice.
 
