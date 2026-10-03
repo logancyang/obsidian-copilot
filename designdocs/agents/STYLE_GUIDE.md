@@ -100,6 +100,32 @@ human or agent. Names, types, and tests carry **what** the code does; a GitHub i
   border, radius, padding, text color, hover/focus/disabled states, etc.) so
   Obsidian/browser defaults do not leak into the UI.
 
+## Async ordering
+
+Never make one async operation wait for another by counting ticks or sleeping. A
+`setTimeout(fn, 0)`, `setTimeout(fn, n)`, `queueMicrotask`, `await Promise.resolve()`, or
+chain of `.then()` hops used to "let pending work land" depends on how many hops that
+work takes today. A dependency upgrade, a different runtime, or a slower machine changes
+the hop count, and the wait silently stops covering the work.
+
+Wait on an event that is ordered with the work by construction:
+
+- **Await the work itself.** Keep and return the promise the work produces, or resolve a
+  deferred at the exact point the work completes.
+- **Move the work to where the order is defined.** When a library reorders events you
+  need in sequence (for example, it settles a response before dispatching notifications
+  read earlier), handle those events at the layer that still sees the original order.
+  For example, routing ACP `session/update` notifications off the inbound message stream
+  delivers every update that precedes a response on the wire before the SDK can read that
+  response.
+- **Signal completion explicitly.** Emit an event, bump a sequence number, or resolve a
+  promise when the state you depend on is ready, and wait on that.
+
+Yielding to keep the UI responsive during a long loop (`await` a timer between batches)
+is fine, because nothing depends on what else runs during the yield. Tests follow the
+same rule: await the promise under test or use Jest fake timers, never a "flush" helper
+sized to the current hop count.
+
 ## Writing testable code (dependency injection)
 
 Structure new code so it can be tested by calling it directly with plain
