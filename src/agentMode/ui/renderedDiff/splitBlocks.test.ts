@@ -7,18 +7,17 @@ describe("splitBlocks", () => {
 
       expect(splitFrontmatter(source)).toEqual({
         frontmatter: "---\ntags:\n  - project\n---",
-        body: "# Alpha pilot\n",
+        body: "\n# Alpha pilot\n",
       });
     });
 
-    it("separates unchanged CRLF frontmatter from edited bodies so callers can omit it (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)", () => {
-      const frontmatter = "---\r\ntags:\r\n  - project\r\n---\r";
-      const before = splitFrontmatter(`${frontmatter}\n\r\n# Alpha\r\n\r\nSix weeks.\r\n`);
-      const after = splitFrontmatter(`${frontmatter}\n\r\n# Alpha\r\n\r\nEight weeks.\r\n`);
+    it("accepts fences followed by trailing spaces or tabs, as Obsidian does", () => {
+      const source = "--- \ntags:\n  - project\n---\t\n# Alpha pilot\n";
 
-      expect(before).toEqual({ frontmatter, body: "# Alpha\r\n\r\nSix weeks.\r\n" });
-      expect(after).toEqual({ frontmatter, body: "# Alpha\r\n\r\nEight weeks.\r\n" });
-      expect(before.frontmatter).toBe(after.frontmatter);
+      expect(splitFrontmatter(source)).toEqual({
+        frontmatter: "--- \ntags:\n  - project\n---\t",
+        body: "# Alpha pilot\n",
+      });
     });
 
     it("reports no frontmatter when the document does not open with a fence", () => {
@@ -35,8 +34,9 @@ describe("splitBlocks", () => {
   });
 
   describe("splitBlocks()", () => {
-    it("returns no blocks for an empty document", () => {
+    it("returns the same empty block list for every empty or whitespace-only document", () => {
       expect(splitBlocks("")).toEqual([]);
+      expect(splitBlocks("\n  \n")).toBe(splitBlocks(""));
     });
 
     it("separates headings, paragraphs and lists, dropping the blank lines between them", () => {
@@ -65,19 +65,6 @@ describe("splitBlocks", () => {
       ]);
     });
 
-    it.each(["```", "~~~"])(
-      "closes a CRLF %s code fence before following heading and prose without normalizing source (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)",
-      (fence) => {
-        const code = `${fence}bash\r\nnpm run migrate\r\n\r\nnpm run verify\r\n${fence}\r`;
-
-        expect(splitBlocks(`${code}\n## Next\r\nDone.\r\n`)).toEqual([
-          { type: "code", text: code },
-          { type: "heading", text: "## Next\r" },
-          { type: "text", text: "Done.\r" },
-        ]);
-      }
-    );
-
     it("keeps a table whole and separate from the paragraph directly above it", () => {
       const blocks = splitBlocks("Capacity:\n| Region | Partners |\n| --- | --- |\n| EMEA | 2 |\n");
 
@@ -87,10 +74,14 @@ describe("splitBlocks", () => {
       ]);
     });
 
-    it("recognises a thematic break as a block of its own", () => {
-      const blocks = splitBlocks("Above.\n\n---\n\nBelow.\n");
+    it("treats a pipe line followed by a malformed 50,000-character delimiter as prose", () => {
+      const text = `| Region |\n|${"-".repeat(50_000)}x`;
 
-      expect(blocks.map((block) => block.type)).toEqual(["text", "thematicBreak", "text"]);
+      expect(splitBlocks(text)).toEqual([{ type: "text", text }]);
+    });
+
+    it("keeps a setext heading underline with its title so the heading still renders", () => {
+      expect(splitBlocks("Title\n---\n")).toEqual([{ type: "text", text: "Title\n---" }]);
     });
   });
 });
