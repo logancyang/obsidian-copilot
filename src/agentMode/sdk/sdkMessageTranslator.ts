@@ -516,6 +516,7 @@ function couldBeCompleteJson(raw: string): boolean {
 interface ClaudeTranscriptEntry {
   type?: string;
   uuid?: string;
+  timestamp?: unknown;
   isMeta?: boolean;
   isSidechain?: boolean;
   isCompactSummary?: boolean;
@@ -534,11 +535,14 @@ export function replayClaudeTranscript(
     // Meta, subagent, and compaction entries are transcript bookkeeping the live chat never showed. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
     if (!entry || entry.isMeta || entry.isSidechain || entry.isCompactSummary) continue;
     const content = entry.message?.content;
-    if (entry.type === "assistant") {
-      out.push(...replayAssistantContent(content, sessionId, state));
-    } else if (entry.type === "user") {
-      out.push(...replayUserContent(content, entry.uuid, sessionId, state));
-    }
+    const events =
+      entry.type === "assistant"
+        ? replayAssistantContent(content, sessionId, state)
+        : entry.type === "user"
+          ? replayUserContent(content, entry.uuid, sessionId, state)
+          : [];
+    const occurredAt = typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
+    for (const e of events) out.push(Number.isFinite(occurredAt) ? { ...e, occurredAt } : e);
   }
   return out;
 }
