@@ -73,6 +73,7 @@ import {
   isPlusEnabled,
   isSelfHostModeValid,
   markPaidPendingEntitlement,
+  navigateToPlusPage,
   turnOffPaid,
   useIsSelfHostEligible,
   useLicenseState,
@@ -156,6 +157,24 @@ describe("plusUtils", () => {
     settingsListeners.clear();
     mockGetSettings.mockReturnValue(buildSettings({ entitlementToken: "" }));
     await verifyCachedEntitlement();
+  });
+
+  describe("navigateToPlusPage()", () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it.each(["settings", "multi_agent", "chat_mode_select", "expired_modal"] as const)(
+      "opens pricing with the %s placement and shared source — https://github.com/Brevilabs/obsidian-copilot-private/issues/640",
+      (medium) => {
+        const open = jest.spyOn(window, "open").mockImplementation(() => null);
+
+        navigateToPlusPage(medium);
+
+        expect(open).toHaveBeenCalledWith(
+          `https://www.obsidiancopilot.com/pricing?utm_source=obsidian_copilot&utm_medium=${medium}`,
+          "_blank"
+        );
+      }
+    );
   });
 
   describe("applyLicenseSettings()", () => {

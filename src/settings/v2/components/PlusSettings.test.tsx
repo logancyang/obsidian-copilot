@@ -56,6 +56,14 @@ describe("PlusSettings", () => {
       ).toBe("https://www.miyo.md/?utm_source=obsidian_copilot&utm_medium=pairing");
     });
 
+    it("sends the paid plans link to pricing with settings attribution — https://github.com/Brevilabs/obsidian-copilot-private/issues/640", () => {
+      render(<PlusSettings />);
+
+      expect(screen.getByRole("link", { name: "Copilot paid plans" }).getAttribute("href")).toBe(
+        "https://www.obsidiancopilot.com/pricing?utm_source=obsidian_copilot&utm_medium=settings"
+      );
+    });
+
     it("names a lifetime purchase Lifetime rather than its stored plan", () => {
       mockLicenseState = { status: "active", plan: "believer" };
       mockIsPaidUser = true;

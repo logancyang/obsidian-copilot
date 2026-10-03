@@ -43,7 +43,7 @@ export function PlusSettings() {
       <div className="tw-flex tw-flex-col tw-gap-2 tw-text-sm tw-text-muted">
         <div>
           <a
-            href={createProductUrl(PRODUCT_URLS.COPILOT, "settings")}
+            href={createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "settings")}
             target="_blank"
             rel="noopener noreferrer"
             className="tw-font-semibold tw-text-accent"
