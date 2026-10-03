@@ -9,10 +9,6 @@ const meta = {
 } satisfies Meta<FileChangeCountsProps>;
 export default meta;
 
-export const Counts: StoryObj<FileChangeCountsProps> = {
-  args: { additions: 30, deletions: 2 },
-};
-
 export const CountColumns: StoryObj<FileChangeCountsProps> = {
   render: () => (
     <div className="tw-flex tw-w-64 tw-flex-col tw-gap-1">
