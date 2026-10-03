@@ -352,6 +352,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
           CopilotAgentView,
           PlanPreviewView,
           TurnDiffView,
+          closeRestoredTurnDiffs,
           acpFrameSink,
           createAgentSessionManager,
           setFrameSinkVaultBasePath,
@@ -362,6 +363,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       this.CopilotAgentView = CopilotAgentView;
       this.PlanPreviewView = PlanPreviewView;
       this.TurnDiffView = TurnDiffView;
+      closeRestoredTurnDiffs(this.app.workspace);
 
       const adapter = this.app.vault.adapter;
       setFrameSinkVaultBasePath(
