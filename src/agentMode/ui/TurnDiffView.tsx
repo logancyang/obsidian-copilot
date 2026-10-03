@@ -1,13 +1,18 @@
 import type { TurnFileChange } from "@/agentMode/session/types";
-import { RenderedDiff } from "@/agentMode/ui/renderedDiff";
+import { RenderedDiff } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import { TurnDiffHeader } from "@/agentMode/ui/TurnDiffHeader";
 import { useApp } from "@/context";
-import { openVaultPath } from "@/utils/openVaultPath";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
-import { App, ItemView, WorkspaceLeaf } from "obsidian";
+import { App, ItemView, Notice, TFile, Workspace, WorkspaceLeaf } from "obsidian";
 import React, { type ReactNode } from "react";
 
 export const TURN_DIFF_VIEW_TYPE = "copilot-turn-diff-view";
+
+// A diff tab's capture lives only in memory, so tabs restored after a restart or plugin reload are empty.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+export function closeRestoredTurnDiffs(workspace: Workspace): void {
+  workspace.onLayoutReady(() => workspace.detachLeavesOfType(TURN_DIFF_VIEW_TYPE));
+}
 
 export interface TurnDiffViewState extends TurnFileChange {
   turnId: string;
@@ -38,9 +43,12 @@ export class TurnDiffView extends ItemView {
   }
 
   async setState(state: TurnDiffViewState): Promise<void> {
-    // Obsidian calls setState with an empty object while rehydrating a workspace; that
-    // must not blank a tab already showing a diff. https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-    if (!state?.path) return;
+    // Obsidian rebuilds a tab with empty state after a plugin reload, and the in-memory capture is gone.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+    if (!state?.path) {
+      this.leaf.detach();
+      return;
+    }
     this.state = state;
     this.refreshTitle();
     this.viewRoot?.rerender();
@@ -51,21 +59,8 @@ export class TurnDiffView extends ItemView {
     titleEl?.setText(this.getDisplayText());
   }
 
-  // The captured before/after is session-scoped, so publishing state would restore a
-  // tab that can never show its content again. https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-  getState(): Record<string, unknown> {
-    return {};
-  }
-
   async onOpen(): Promise<void> {
     this.viewRoot = mountPluginViewRoot(this.containerEl, this.app, () => this.renderTree());
-    // A plugin reload rebuilds this leaf with no state; close it instead of leaving an
-    // empty tab. A tab being opened for real has its state by the time this runs. https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-    const win = this.containerEl.win;
-    const pending = win.setTimeout(() => {
-      if (!this.state) this.leaf.detach();
-    }, 0);
-    this.register(() => win.clearTimeout(pending));
   }
 
   async onClose(): Promise<void> {
@@ -91,11 +86,7 @@ const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state }) => {
         status={state.status}
         additions={state.additions}
         deletions={state.deletions}
-        onOpenNote={
-          state.status === "deleted"
-            ? undefined
-            : () => openVaultPath(app, state.path, { newLeaf: true })
-        }
+        onOpenNote={state.status === "deleted" ? undefined : () => openNote(app, state.path)}
       />
       <div className="tw-flex-1 tw-overflow-y-auto tw-p-[var(--file-margins)]">
         <div className="markdown-rendered tw-mx-auto tw-max-w-[var(--file-line-width)]">
@@ -114,7 +105,7 @@ export async function openTurnDiff(
   const key = turnDiffKey(turnId, change.path);
   const existing = app.workspace
     .getLeavesOfType(TURN_DIFF_VIEW_TYPE)
-    .find((leaf) => readDiffKey(leaf.view) === key);
+    .find((leaf) => leaf.view instanceof TurnDiffView && leaf.view.getDiffKey() === key);
   if (existing) {
     app.workspace.revealLeaf(existing);
     return;
@@ -132,11 +123,15 @@ function turnDiffKey(turnId: string, path: string): string {
   return `${turnId}\n${path}`;
 }
 
-function readDiffKey(view: unknown): string | undefined {
-  const maybeView = view as { getDiffKey?: () => unknown };
-  if (typeof maybeView?.getDiffKey !== "function") return undefined;
-  const result = maybeView.getDiffKey();
-  return typeof result === "string" ? result : undefined;
+function openNote(app: App, path: string): void {
+  const file = app.vault.getAbstractFileByPath(path);
+  // Opening a path whose file was renamed or deleted after the turn would create an empty note.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+  if (!(file instanceof TFile)) {
+    new Notice(`${path} no longer exists.`);
+    return;
+  }
+  void app.workspace.getLeaf(true).openFile(file);
 }
 
 function basename(path: string): string {

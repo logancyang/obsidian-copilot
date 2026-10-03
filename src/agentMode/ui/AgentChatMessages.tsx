@@ -17,6 +17,7 @@ import type {
   PermissionPrompt,
 } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
+import { logError } from "@/logger";
 import { App } from "obsidian";
 import React, { memo, useMemo } from "react";
 
@@ -130,7 +131,11 @@ const AgentMessageRow = memo(function AgentMessageRow({
             app={app}
             turnStopReason={message.turnStopReason}
             fileChanges={message.fileChanges}
-            onOpenFileChange={(change) => void openTurnDiff(app, change, message.id)}
+            onOpenFileChange={(change) =>
+              void openTurnDiff(app, change, message.id).catch((error: unknown) =>
+                logError("[AgentChatMessages] failed to open the turn diff", error)
+              )
+            }
           />
         </div>
       ) : (

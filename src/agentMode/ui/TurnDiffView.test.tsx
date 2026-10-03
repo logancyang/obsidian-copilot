@@ -1,15 +1,14 @@
 import type { TurnFileChange } from "@/agentMode/session/types";
 import {
+  closeRestoredTurnDiffs,
   openTurnDiff,
   TurnDiffView,
   TURN_DIFF_VIEW_TYPE,
   type TurnDiffViewState,
 } from "@/agentMode/ui/TurnDiffView";
-import { openVaultPath } from "@/utils/openVaultPath";
 import { act, fireEvent, within } from "@testing-library/react";
-import { App, WorkspaceLeaf } from "obsidian";
+import { App, Notice, TFile, Workspace, WorkspaceLeaf } from "obsidian";
 
-jest.mock("@/utils/openVaultPath", () => ({ openVaultPath: jest.fn() }));
 jest.mock("@/utils/renderMarkdown", () => ({
   renderMarkdown: jest.fn((_app, markdown: string, el: HTMLElement) => {
     el.textContent = markdown;
@@ -33,24 +32,22 @@ function change(path: string, overrides: Partial<TurnFileChange> = {}): TurnFile
   };
 }
 
-function fakeApp(): App {
+function fakeApp(files: TFile[] = []): App {
   return {
-    workspace: { getActiveFile: () => null },
-    vault: { getAbstractFileByPath: () => null },
+    workspace: { getActiveFile: () => null, getLeaf: jest.fn(() => ({ openFile: jest.fn() })) },
+    vault: {
+      getAbstractFileByPath: (path: string) => files.find((file) => file.path === path) ?? null,
+    },
   } as unknown as App;
 }
 
 async function openView(app: App = fakeApp()): Promise<TurnDiffView> {
-  const view = new TurnDiffView({ app, detach: jest.fn() } as unknown as WorkspaceLeaf);
+  const view = new TurnDiffView({ app } as unknown as WorkspaceLeaf);
   openViews.push(view);
   await act(async () => {
     await view.onOpen();
   });
   return view;
-}
-
-function detachCalls(view: TurnDiffView): number {
-  return (view.leaf as unknown as { detach: jest.Mock }).detach.mock.calls.length;
 }
 
 async function hydrate(view: TurnDiffView, state: TurnDiffViewState): Promise<void> {
@@ -92,15 +89,6 @@ describe("TurnDiffView", () => {
       });
     });
 
-    describe("getState()", () => {
-      it("publishes no state, so a workspace reload cannot restore a tab whose capture is gone", async () => {
-        const view = await openView();
-        await hydrate(view, { ...change("notes/diff-demo/alpha.md"), turnId: "turn-1" });
-
-        expect(view.getState()).toEqual({});
-      });
-    });
-
     describe("setState()", () => {
       it("shows the vault path, the line counts and the rendered before/after of the change", async () => {
         const view = await openView();
@@ -129,14 +117,18 @@ describe("TurnDiffView", () => {
         expect(within(header(view)).getByText("new")).toBeTruthy();
       });
 
-      it("keeps the hydrated diff on screen when Obsidian replays an empty rehydration state", async () => {
-        const view = await openView();
-        await hydrate(view, { ...change("notes/diff-demo/alpha.md"), turnId: "turn-1" });
+      it("closes its tab when Obsidian rebuilds it with empty state after a plugin reload https://github.com/Brevilabs/obsidian-copilot-private/issues/348", async () => {
+        const detach = jest.fn();
+        const view = new TurnDiffView({ app: fakeApp(), detach } as unknown as WorkspaceLeaf);
+        openViews.push(view);
+        await act(async () => {
+          await view.onOpen();
+        });
 
         await hydrate(view, {} as TurnDiffViewState);
 
-        expect(view.getDisplayText()).toBe("alpha.md");
-        expect(view.containerEl.textContent).toContain("red");
+        expect(detach).toHaveBeenCalledTimes(1);
+        expect(view.getDisplayText()).toBe("File diff");
       });
 
       it("renders a non-markdown file as a whole-file line diff rather than as markdown", async () => {
@@ -150,44 +142,12 @@ describe("TurnDiffView", () => {
           turnId: "turn-1",
         });
 
-        const lineDiff = view.containerEl.querySelector("pre.copilot-diff-code");
+        const lineDiff = view.containerEl.querySelector("pre");
         expect(lineDiff).not.toBeNull();
-        expect(lineDiff!.querySelector(".diff-line-del")?.textContent).toBe('{"nodes": []}');
-        expect(lineDiff!.querySelector(".diff-line-ins")?.textContent).toBe('{"nodes": [1]}');
-      });
-    });
-
-    describe("onOpen()", () => {
-      it("closes the tab when a plugin reload rebuilds it without a capture to show", async () => {
-        jest.useFakeTimers();
-        try {
-          const view = await openView();
-
-          await act(async () => {
-            await view.setState({} as TurnDiffViewState);
-            jest.runAllTimers();
-          });
-
-          expect(detachCalls(view)).toBe(1);
-        } finally {
-          jest.useRealTimers();
-        }
-      });
-
-      it("keeps the tab open once a change has been handed to it", async () => {
-        jest.useFakeTimers();
-        try {
-          const view = await openView();
-
-          await act(async () => {
-            await view.setState({ ...change("notes/diff-demo/alpha.md"), turnId: "turn-1" });
-            jest.runAllTimers();
-          });
-
-          expect(detachCalls(view)).toBe(0);
-        } finally {
-          jest.useRealTimers();
-        }
+        expect(lineDiff!.querySelector("[data-change=deleted]")?.textContent).toBe('{"nodes": []}');
+        expect(lineDiff!.querySelector("[data-change=inserted]")?.textContent).toBe(
+          '{"nodes": [1]}'
+        );
       });
     });
 
@@ -212,15 +172,27 @@ describe("TurnDiffView", () => {
 
     describe("Open note", () => {
       it("opens the changed file in its own tab, leaving the diff tab in place", async () => {
+        const file = Object.assign(new TFile(), { path: "notes/diff-demo/alpha.md" });
+        const app = fakeApp([file]);
+        const view = await openView(app);
+        await hydrate(view, { ...change("notes/diff-demo/alpha.md"), turnId: "turn-1" });
+
+        fireEvent.click(within(header(view)).getByText("Open note"));
+
+        expect(app.workspace.getLeaf).toHaveBeenCalledWith(true);
+        const leaf = jest.mocked(app.workspace.getLeaf).mock.results[0].value;
+        expect(leaf.openFile).toHaveBeenCalledWith(file);
+      });
+
+      it("tells the user the note is gone instead of creating an empty one when the file moved after the turn https://github.com/Brevilabs/obsidian-copilot-private/issues/348", async () => {
         const app = fakeApp();
         const view = await openView(app);
         await hydrate(view, { ...change("notes/diff-demo/alpha.md"), turnId: "turn-1" });
 
         fireEvent.click(within(header(view)).getByText("Open note"));
 
-        expect(openVaultPath).toHaveBeenCalledWith(app, "notes/diff-demo/alpha.md", {
-          newLeaf: true,
-        });
+        expect(app.workspace.getLeaf).not.toHaveBeenCalled();
+        expect(Notice).toHaveBeenCalledWith("notes/diff-demo/alpha.md no longer exists.");
       });
 
       it("offers no Open note for a deleted file, which the vault could only recreate", async () => {
@@ -237,10 +209,27 @@ describe("TurnDiffView", () => {
     });
   });
 
+  describe("closeRestoredTurnDiffs()", () => {
+    it("closes every diff tab once the layout is ready, since a restored tab has no capture to show https://github.com/Brevilabs/obsidian-copilot-private/issues/348", () => {
+      const readyCallbacks: (() => void)[] = [];
+      const detachLeavesOfType = jest.fn();
+      const workspace = {
+        onLayoutReady: (callback: () => void) => readyCallbacks.push(callback),
+        detachLeavesOfType,
+      } as unknown as Workspace;
+
+      closeRestoredTurnDiffs(workspace);
+      expect(detachLeavesOfType).not.toHaveBeenCalled();
+      for (const callback of readyCallbacks) callback();
+
+      expect(detachLeavesOfType).toHaveBeenCalledWith(TURN_DIFF_VIEW_TYPE);
+    });
+  });
+
   describe("openTurnDiff()", () => {
     interface FakeWorkspace {
       app: App;
-      leaves: { view: { getDiffKey: () => string | undefined } }[];
+      leaves: { view: TurnDiffView }[];
       revealed: unknown[];
       opened: number;
     }
@@ -308,15 +297,6 @@ describe("TurnDiffView", () => {
       await openTurnDiff(workspace.app, change("notes/diff-demo/alpha.md"), "turn-2");
 
       expect(workspace.opened).toBe(2);
-    });
-
-    it("opens a fresh tab when a stale view from a previous plugin lifecycle cannot report its file", async () => {
-      const workspace = fakeWorkspace();
-      workspace.leaves.push({ view: {} as { getDiffKey: () => string | undefined } });
-
-      await openTurnDiff(workspace.app, change("notes/diff-demo/alpha.md"), "turn-1");
-
-      expect(workspace.opened).toBe(1);
     });
   });
 });
