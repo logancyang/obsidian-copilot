@@ -126,38 +126,69 @@ describe("applySentinels", () => {
       expect(marked(root, "ins.copilot-diff-ins")).toEqual(["3"]);
     });
 
-    it("marks a completed task line the diff added so its reading-view strike can be dropped", () => {
-      const item = el("li", `${INS_OPEN}Draft the runbook${INS_CLOSE}`);
-      item.className = "task-list-item is-checked";
-      const root = el("div", el("ul", item));
+    it("leaves a fully inserted header row untagged so its words keep their own tint", () => {
+      const root = el(
+        "div",
+        el(
+          "table",
+          el(
+            "thead",
+            el(
+              "tr",
+              el("th", `${INS_OPEN}Region${INS_CLOSE}`),
+              el("th", `${INS_OPEN}Owner${INS_CLOSE}`)
+            )
+          )
+        )
+      );
 
       applySentinels(root);
 
-      expect(item.classList.contains("copilot-diff-task-ins")).toBe(true);
+      expect(root.querySelector("tr")?.className).toBe("");
+      expect(marked(root, "ins.copilot-diff-ins")).toEqual(["Region", "Owner"]);
     });
 
-    it("leaves an untouched completed task unmarked so it still reads as completed", () => {
-      const item = el("li", "Draft the runbook");
-      item.className = "task-list-item is-checked";
-      const root = el("div", el("ul", item));
+    it("leaves a row mixing inserted and deleted cells untagged so each cell keeps its own tint", () => {
+      const root = el(
+        "div",
+        el(
+          "table",
+          el(
+            "tbody",
+            el("tr", el("td", `${DEL_OPEN}APAC${DEL_CLOSE}`), el("td", `${INS_OPEN}4${INS_CLOSE}`))
+          )
+        )
+      );
 
       applySentinels(root);
 
-      expect(item.classList.contains("copilot-diff-task-ins")).toBe(false);
+      expect(root.querySelector("tr")?.className).toBe("");
     });
 
-    it("marks an inserted nested task without marking its untouched checked parent https://github.com/Brevilabs/obsidian-copilot-private/issues/348", () => {
-      const child = el("li", el("strong", `${INS_OPEN}Check the links${INS_CLOSE}`));
-      child.className = "task-list-item is-checked";
-      const parent = el("li", "Draft the runbook", el("ul", child));
-      parent.className = "task-list-item is-checked";
-      const root = el("div", el("ul", parent));
+    it("marks only the last segment of a deletion split by inline markup as its end so one gap separates it from what follows", () => {
+      const root = el(
+        "div",
+        el(
+          "p",
+          `${DEL_OPEN}un`,
+          el("strong", "believ"),
+          `able${DEL_CLOSE}${INS_OPEN}great${INS_CLOSE}`
+        )
+      );
 
       applySentinels(root);
 
-      expect(parent.classList.contains("copilot-diff-task-ins")).toBe(false);
-      expect(child.classList.contains("copilot-diff-task-ins")).toBe(true);
-      expect(marked(child, "ins.copilot-diff-ins")).toEqual(["Check the links"]);
+      expect(marked(root, "del.copilot-diff-del")).toEqual(["un", "believ", "able"]);
+      expect(marked(root, "del.copilot-diff-del-end")).toEqual(["able"]);
+    });
+
+    it("ends a mark whose closing sentinel the renderer swallowed at the end of its block so the next block stays unmarked (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      const root = el("div", el("p", `Kept ${INS_OPEN}added`), el("p", "Next paragraph."));
+
+      applySentinels(root);
+
+      expect(marked(root, "ins.copilot-diff-ins")).toEqual(["added"]);
+      expect(root.textContent).toBe("Kept addedNext paragraph.");
     });
 
     it("leaves a fragment without sentinels exactly as the renderer produced it", () => {

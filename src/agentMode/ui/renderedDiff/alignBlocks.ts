@@ -7,7 +7,10 @@ export type Pairing<T> =
   | { kind: "inserted"; after: T }
   | { kind: "modified"; before: T; after: T };
 
-export const PAIR_SIMILARITY_THRESHOLD = 0.5;
+const PAIR_SIMILARITY_THRESHOLD = 0.5;
+// Scoring every removed line against every added line made large rewrites freeze rendering for seconds.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+const PAIR_LOOKAHEAD = 32;
 
 export function diceSimilarity(before: string, after: string): number {
   if (before === after) return 1;
@@ -15,7 +18,7 @@ export function diceSimilarity(before: string, after: string): number {
   const counts = bigramCounts(before);
   let overlap = 0;
   for (let index = 0; index < after.length - 1; index++) {
-    const bigram = after.slice(index, index + 2);
+    const bigram = bigramAt(after, index);
     const remaining = counts.get(bigram) ?? 0;
     if (remaining === 0) continue;
     counts.set(bigram, remaining - 1);
@@ -24,10 +27,14 @@ export function diceSimilarity(before: string, after: string): number {
   return (2 * overlap) / (before.length - 1 + (after.length - 1));
 }
 
-function bigramCounts(value: string): Map<string, number> {
-  const counts = new Map<string, number>();
+function bigramAt(value: string, index: number): number {
+  return value.charCodeAt(index) * 0x10000 + value.charCodeAt(index + 1);
+}
+
+function bigramCounts(value: string): Map<number, number> {
+  const counts = new Map<number, number>();
   for (let index = 0; index < value.length - 1; index++) {
-    const bigram = value.slice(index, index + 2);
+    const bigram = bigramAt(value, index);
     counts.set(bigram, (counts.get(bigram) ?? 0) + 1);
   }
   return counts;
@@ -38,7 +45,7 @@ export interface AlignmentRules<T> {
   similarity: (before: T, after: T) => number;
 }
 
-export function pairRuns<T>(
+function pairRuns<T>(
   removed: readonly T[],
   added: readonly T[],
   similarity: (before: T, after: T) => number
@@ -48,7 +55,8 @@ export function pairRuns<T>(
   for (const before of removed) {
     let bestIndex = -1;
     let bestScore = 0;
-    for (let candidate = next; candidate < added.length; candidate++) {
+    const end = Math.min(added.length, next + PAIR_LOOKAHEAD);
+    for (let candidate = next; candidate < end; candidate++) {
       const score = similarity(before, added[candidate]);
       if (score < PAIR_SIMILARITY_THRESHOLD || score <= bestScore) continue;
       bestScore = score;
@@ -85,11 +93,6 @@ export function alignSequences<T>(
     const next = parts[index + 1];
     if (part.removed && next?.added) {
       pairings.push(...pairRuns(part.value, next.value, rules.similarity));
-      index++;
-      continue;
-    }
-    if (part.added && next?.removed) {
-      pairings.push(...pairRuns(next.value, part.value, rules.similarity));
       index++;
       continue;
     }
