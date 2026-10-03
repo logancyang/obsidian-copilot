@@ -13,13 +13,76 @@ release into `runtime-tests/.opencode/` (`bin/fetchOpencode.ts`), and runs
 `features/` with Cucumber. It needs no credentials and makes no inference
 requests. It runs on macOS and Linux.
 
+## Scenarios
+
+Every scenario runs in one evidence environment, the scripted runtime:
+production Copilot code driving the real pinned opencode process, with only
+remote inference replaced by the scripted provider. A pass says nothing about a
+hosted model's behavior or about Obsidian's UI.
+
+| Scenario                                                                                                                       | Behavior it protects                                                                                                                                                                                                                                                                                                                                              | Origin                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `streaming.feature`: A streamed answer appears in the conversation word by word and then completes                             | Streamed text reaches the conversation in order, and the turn ends only after its last word.                                                                                                                                                                                                                                                                      | —                                                                                                                                                                  |
+| `model-selection.feature`: A model picked mid-conversation at `<effort>` effort reaches that model's endpoint with that effort | The model picker offers exactly the enabled models and the effort levels opencode advertises; a pick is confirmed by opencode; the next turn goes to the picked model on its own provider's endpoint with that effort. One example per level, because each checks opencode's own mapping of that level onto the request, which the OpenCode V2 migration changes. | [#2898](https://github.com/logancyang/obsidian-copilot/issues/2898), [private #76](https://github.com/Brevilabs/obsidian-copilot-private/issues/76)                |
+| `model-selection.feature`: The mode picked in a conversation is confirmed and the next new conversation switches to it         | opencode confirms the picked mode, and the next new conversation switches to it once it is ready.                                                                                                                                                                                                                                                                 | [private #71](https://github.com/Brevilabs/obsidian-copilot-private/issues/71)                                                                                     |
+| `model-selection.feature`: A conversation continues on the model and effort of its last turn after opencode restarts           | The effort picker changes effort alone; after a pick made before the chat's last turn, the chat's Reload action resumes the conversation, which keeps its transcript and shows and uses the model and effort of its last turn.                                                                                                                                    | [private #475](https://github.com/Brevilabs/obsidian-copilot-private/issues/475)                                                                                   |
+| `model-selection.feature`: A new conversation starts on the default model and effort saved in settings                         | The saved default model and effort are applied before a new chat can send, and its first request uses them.                                                                                                                                                                                                                                                       | [private #201](https://github.com/Brevilabs/obsidian-copilot-private/issues/201)                                                                                   |
+| `model-selection.feature`: A saved default model that is turned off gives way to an enabled model, and the user is told        | After opencode restarts on the new model list, a new chat starts on an enabled model instead, one notice names the model that is gone, and the saved default is kept.                                                                                                                                                                                             | [private #474](https://github.com/Brevilabs/obsidian-copilot-private/issues/474)                                                                                   |
+| `model-selection.feature`: A saved effort on a default model with no effort levels is dropped instead of changing the model    | The saved model is still applied, no effort is sent, and the saved default drops the effort.                                                                                                                                                                                                                                                                      | [private #364](https://github.com/Brevilabs/obsidian-copilot-private/issues/364), [private #219](https://github.com/Brevilabs/obsidian-copilot-private/issues/219) |
+
+What the pinned opencode advertises and sends, as observed by running it:
+
+- **Effort.** For an OpenAI-compatible model whose Copilot row declares
+  `reasoning`, opencode offers `low`, `medium`, `high`, and `default`. The
+  first three are sent as the request's `reasoning_effort`; `default` sends
+  none. A model that does not declare `reasoning` gets no effort control and
+  no field. Copilot starts a new chat whose saved effort is empty at the
+  lowest level offered.
+- **Mode.** opencode offers Default (`copilot-build`) and Auto (`build`). A
+  text turn's request is the same in both, with the same tools and system
+  prompt, so the mode scenario asserts the confirmed state. What the mode
+  changes, whether an edit asks first, is a file-edit behavior.
+
+### Known gaps (unverified)
+
+These behaviors do not hold in the scripted runtime, so no scenario asserts
+them. Each was observed with a scenario run outside the suite.
+
+- **A pick made after the chat's last turn is lost on the Reload action.** The
+  resumed chat comes back on the model and effort of its last turn: after a
+  turn on `alpha/model-a`, picking `bravo/model-b` at `high` effort, and Reload,
+  the picker shows `alpha/model-a` and the next message goes to `model-a` on
+  the `alpha` endpoint. The user's next message runs on a model and provider
+  they did not pick, and nothing on screen says so.
+  [#3319](https://github.com/logancyang/obsidian-copilot/issues/3319); open
+  fix [#3323](https://github.com/logancyang/obsidian-copilot/pull/3323);
+  [private #540](https://github.com/Brevilabs/obsidian-copilot-private/issues/540).
+- **A chat with no turns comes back on OpenCode Zen/Big Pickle after the Reload
+  action.** With `bravo/model-b` at `high` effort saved as the default, the
+  resumed chat shows `OpenCode Zen/Big Pickle`, and its first message goes to
+  `opencode.ai`, which the egress proxy refuses. A BYOK user's prompt goes to a
+  hosted service they never configured.
+  [#3319](https://github.com/logancyang/obsidian-copilot/issues/3319); open
+  fix [#3323](https://github.com/logancyang/obsidian-copilot/pull/3323);
+  [private #540](https://github.com/Brevilabs/obsidian-copilot-private/issues/540).
+- **A new chat can take a message before its saved mode is applied.** Copilot
+  asks opencode for the saved mode only once the chat is ready: with Auto
+  saved, a new chat shows Default when it can first take a message, and a
+  message sent then goes out before opencode confirms Auto. Whether that first
+  message runs in Auto, or in Default and asks before an edit the user expected
+  to happen without asking, depends on opencode's ordering, which no scenario
+  checks. The mode scenario therefore waits for the switch.
+
 ## Test boundary
 
 A scenario talks to Copilot the way the Agent Chat view does: it creates a chat
 through `AgentSessionManager.createSession`, sends through
 `AgentChatUIState.sendMessage`, and reads the conversation from
-`AgentChatUIState.getMessages()` as it changes. Everything from there to the
-model is production code or the real runtime.
+`AgentChatUIState.getMessages()` as it changes. It picks a model, effort, or mode
+through the callbacks of the pickers the chat input renders, which production
+`buildAgentModelPicker` and `buildAgentModePicker` build from the running
+opencode's reported state, and reads what those pickers show. Everything from
+there to the model is production code or the real runtime.
 
 **Real:** `AgentSessionManager`, `AgentModelPreloader` (the plugin-load probe
 whose warm process the first chat adopts), `AgentSession`, `AgentMessageStore`,
@@ -32,11 +95,22 @@ and backend registries), `KeychainService`, the opencode binary, and opencode's
 own `@ai-sdk/openai-compatible` provider adapter talking HTTP.
 
 Copilot is configured through its normal paths: the BYOK wizard's
-`setup.byok.setupProvider` adds an OpenAI-compatible provider with a key and
-enables its model for opencode, the Default model picker's
-`persistDefaultSelection` makes it the default, and the env-overrides setting
-passes one runtime flag. `buildOpencodeConfig` turns that into opencode's
-config, so config generation is under test.
+`setup.byok.setupProvider` adds each OpenAI-compatible provider with a key and
+enables its models for opencode, the Default model setting's
+`persistDefaultSelection` saves the default model and effort, the opencode
+tab's model toggle (`backendConfigRegistry.disableModel`) turns a model off,
+and the env-overrides setting passes one runtime flag. `buildOpencodeConfig`
+turns that into opencode's config, so config generation is under test.
+
+Two session-lifecycle paths are driven the way the product drives them:
+
+- **Settings change.** `AgentSessionManager.noteSpawnConfigChanged` is the call
+  the settings subscriptions make when a spawn-time setting changes, such as a
+  model turned off. With no chat open it restarts opencode's warm probe on the
+  new config at once.
+- **Reload action.** With a chat open, `noteSpawnConfigChanged` holds the
+  restart; `applyHeldConfigChange`, the chat's Reload action, restarts opencode
+  and resumes each open chat through `session/load`.
 
 **Substituted:**
 
@@ -47,6 +121,7 @@ config, so config generation is under test.
 | `obsidianShim.ts` → `Platform`          | Obsidian's platform flags               | `requireNodeModule` loads Node built-ins only on desktop.                                                                                                                                                               |
 | `obsidianShim.ts` → `normalizePath`     | Obsidian's path normalizer              | Same rule; path helpers depend on it.                                                                                                                                                                                   |
 | `obsidianShim.ts` → `requestUrl`        | Obsidian's HTTP helper                  | Throws in scenarios, so a remote call from Copilot code fails by name. Only the fetcher enables it.                                                                                                                     |
+| `obsidianShim.ts` → `Notice`            | Obsidian's toast                        | Records each message, so a scenario can assert what the user was told.                                                                                                                                                  |
 | Generated inert classes                 | Every other `obsidian` export           | `build.mjs` emits an empty class per name in `obsidian.d.ts` the shim lacks. Imported modules only subclass or type against them on this path.                                                                          |
 | `harness/obsidianApp.ts` → `vault`      | Obsidian's `Vault`                      | `adapter` and `getName` feed the spawn; `getAbstractFileByPath` answers the empty index (callers fall back to the adapter); `on`/`offref` accept the project content tracker's subscriptions, and no vault event fires. |
 | `obsidianApp.ts` → `metadataCache`      | Obsidian's `MetadataCache`              | Same tracker subscription; nothing fires.                                                                                                                                                                               |
@@ -62,7 +137,7 @@ code catches the error. Removing any one member of `harness/obsidianApp.ts`
 makes the scenario fail.
 
 **Not wired:** everything else `createAgentSessionManager` and `main.ts` set up
-around the manager. None of it is on the streaming path:
+around the manager. None of it is on the paths the scenarios drive:
 
 - chat persistence (`AgentChatPersistenceManager`) and the session index
   (`AgentSessionIndex`);
@@ -73,7 +148,9 @@ around the manager. None of it is on the streaming path:
   for it (for opencode, the install reconcile and auto-upgrade; the suite sets
   the binary path directly);
 - the subscriptions that restart or refresh a backend when provider, model,
-  env-override, system-prompt, managed-env, skill, or install settings change;
+  env-override, system-prompt, managed-env, skill, or install settings change.
+  The scenarios that turn a model off or use the Reload action call
+  `noteSpawnConfigChanged` in their place;
 - `wireAgentModelDiscovery` and the ACP frame-log sink;
 - settings persistence (`plugin.saveData`): settings live in the in-memory
   store;
@@ -98,8 +175,11 @@ the scenario's duration the harness points `HOME` and the four `XDG_*` roots at
 the agent home and moves the working directory to the temp root, so neither
 Copilot, the opencode it spawns, nor the `opencode --version` probe that runs
 before every spawn reads or writes the developer's state or the repository's
-project config. The key is synthetic, the keychain is in memory, settings live
-in the in-memory store, and all of it is reset on teardown.
+project config. The key is synthetic, the keychain is in memory, and settings
+live in the in-memory store. Each scenario starts from `DEFAULT_SETTINGS`, a
+fresh install's settings, and teardown returns to them; the settings tab's
+reset (`resetSettings`) keeps every provider that has a key, so it would carry
+one scenario's providers into the next.
 
 Teardown runs in an `After` hook, so a failed assertion still cleans up. It
 waits for any process startup still in flight (`AgentSessionManager.shutdown`
@@ -127,10 +207,10 @@ is reachable.
   in the env-overrides setting. No setting disables the plugin install.
 - **Reported:** any refused destination other than `registry.npmjs.org:443`
   fails the scenario, as does any request the scripted provider refuses: a
-  path other than the configured `/v1/chat/completions`, a missing or wrong
-  key, a model other than the scripted one, an agent turn whose last user
-  message is not the text sent, or a turn with no scripted answer. Copilot's
-  own `requestUrl` throws.
+  path other than a configured provider row's `/<name>/v1/chat/completions`, a
+  missing or wrong key, a model that row does not serve, an agent turn whose
+  last user message is not the text sent, or a turn with no scripted answer.
+  Copilot's own `requestUrl` throws.
 - **Unconstrained:** a connection that ignores the proxy variables. None was
   observed: sampling `lsof` every 50 ms across three runs saw only loopback
   sockets on the opencode process, while the same probe without the proxy saw
@@ -153,7 +233,10 @@ The run fails, each checked by trying it, when:
 - Copilot logs a `WARN` or `ERROR` line during the scenario. The check runs
   before teardown, because a clean shutdown right after a turn logs two
   warnings of its own: `backend opencode exited`, and a `session/list` title
-  poll cut off by the closing connection;
+  poll cut off by the closing connection. A restart inside a scenario, from a
+  settings change or the Reload action, logs the same two, which are expected
+  only while that restart runs. A settings change stops the warm probe without
+  waiting for it to exit, so the harness also waits for that exit;
 - no scenario runs, for example after a path typo (the `AfterAll` hook;
   Cucumber alone exits 0).
 
@@ -186,6 +269,9 @@ version.
 | Startup                | 30 s   | Spawn, ACP `initialize`, `session/new`, default model |
 | Turn                   | 20 s   | Send until the session reports its stop reason        |
 | Streamed chunk visible | 10 s   | The scripted provider's pace barrier                  |
+| Selection confirmed    | 10 s   | A pick, or a new chat's saved mode, until shown       |
+| Settings change        | 30 s   | Old warm probe exits and the new one is warm          |
+| Reload action          | 30 s   | Restart until the resumed chat can take a message     |
 | Teardown wait          | 30 s   | In-flight startups before shutdown                    |
 | Cucumber step          | 60 s   | `setDefaultTimeout`, above the harness bounds         |
 | CI job                 | 10 min | `timeout-minutes` on the runtime job                  |
@@ -193,20 +279,20 @@ version.
 A scenario is bounded by its steps; the longest (open plus send) is bounded by
 50 s of harness waits.
 
-Measured durations:
+Measured durations, with the pinned binary already cached:
 
-| Where                                      | Cache | Scenario | `test:runtime` / install          | Whole job |
-| ------------------------------------------ | ----- | -------- | --------------------------------- | --------- |
-| Apple M-series Mac, darwin-arm64, Node 26  | Cold  | 2.8 s    | 10.5 s, including a 5.4 s install | —         |
-| Apple M-series Mac, darwin-arm64, Node 26  | Warm  | 2.8 s    | 7.0 s                             | —         |
-| GitHub `ubuntu-latest`, linux-x64, Node 22 | Cold  | 4.7 s    | 9 s, after a 6 s install          | 52 s      |
-| GitHub `ubuntu-latest`, linux-x64, Node 22 | Warm  | 4.0 s    | 8 s, after a 2 s cached install   | 42 s      |
+| Where                                      | Scenario    | `test:runtime`            | Whole job |
+| ------------------------------------------ | ----------- | ------------------------- | --------- |
+| Apple M-series Mac, darwin-arm64, Node 26  | 1.6 – 4.8 s | 32 s                      | —         |
+| GitHub `ubuntu-latest`, linux-x64, Node 22 | 4.7 s mean  | 51 s, after a 2 s install | 87 s      |
 
-Locally, startup through a ready session takes about 1.2 s and the turn about
-1 s. In CI, `npm ci` takes 16-20 s of the job; the CI numbers come from the
-job's first run and a rerun that hit the binary cache. The startup and turn
-bounds are over fifteen times their local durations and at least four times the
-whole cold CI scenario; the job bound is over ten times the cold CI job.
+Locally, startup through a ready session takes about 1.2 s and a turn about
+1 s; the longest scenario, the Reload action, takes 4.8 s. In CI, `npm ci`
+takes 14-20 s of the job, and the report of a passing run is not uploaded, so
+the CI scenario time is the suite's time over its ten scenarios. On a cache
+miss the CI install step downloads the release in 5 s, against 1-2 s after a
+2-3 s cache restore on a hit. The startup and turn bounds are over fifteen
+times their local durations; the job bound is over six times the CI job.
 
 ## Failure report
 
@@ -226,7 +312,10 @@ directory as the `runtime-report` artifact when the job fails.
 
 `harness/` carries no test-runner vocabulary, so any test format can drive it.
 `Runtime` owns the temp dirs, the scripted provider, the egress proxy, and the
-session manager; `Conversation` wraps one chat's `AgentChatUIState` and records
-every distinct state of the latest answer. The scripted provider streams each
-word only after the previous one is visible in the conversation, so a scenario
-can assert the order text arrives in without timing assumptions.
+session manager, and restarts opencode the way the product does;
+`Conversation` wraps one chat's `AgentChatUIState` and records every distinct
+state of the latest answer. The scripted provider serves each
+configured provider row at its own base path, records the endpoint, model,
+and `reasoning_effort` of every request, and streams each word only after the
+previous one is visible in the conversation, so a scenario can assert the
+order text arrives in without timing assumptions.
