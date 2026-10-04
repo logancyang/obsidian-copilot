@@ -250,6 +250,23 @@ describe("OpencodeBackend", () => {
       });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/644 preserves OpenCode catalog limits for a BYOK model with stored limits", async () => {
+      const provider = makeProvider("p-anthropic", {
+        kind: "byok",
+        catalogProviderId: "anthropic",
+      });
+      const model = makeModel("p-anthropic", "claude-sonnet-4-6");
+      model.info.limits = { context: 200_000 };
+      const deps = makeDeps({
+        resolved: [okEntry(provider, model)],
+        keys: { "p-anthropic": "anth-123" },
+      });
+
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+      expect(cfg.providers.anthropic.models?.["claude-sonnet-4-6"]).toEqual({});
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 declares image input with OpenCode 2 capabilities for a vision model", async () => {
       const provider = makeProvider("p-anthropic", {
         kind: "byok",
@@ -637,6 +654,23 @@ describe("OpencodeBackend", () => {
           capabilities: { tools: true, input: ["text"], output: ["text"] },
           variants: [],
         },
+      });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/644 passes a published 1M context window to OpenCode for a Copilot Plus model", async () => {
+      const model = makeModel("p-plus", "deepseek-v4-pro");
+      model.info.limits = { context: 1024 * 1024 };
+      const deps = makeDeps({
+        resolved: [okEntry(makePlusProvider(), model)],
+        keys: { "p-plus": "plus-token-123" },
+      });
+
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+      expect(cfg.providers["copilot-plus"].models?.["deepseek-v4-pro"]).toEqual({
+        capabilities: { tools: true, input: ["text"], output: ["text"] },
+        limit: { context: 1024 * 1024 },
+        variants: [],
       });
     });
 
