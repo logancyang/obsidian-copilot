@@ -35,7 +35,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
         targetPath ? (
           <a
             href="#"
-            className="tw-min-w-0 tw-truncate tw-text-inherit hover:tw-text-accent hover:tw-underline"
+            className="tw-min-w-0 tw-truncate tw-text-normal hover:tw-text-accent hover:tw-underline"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
