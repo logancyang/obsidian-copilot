@@ -50,9 +50,7 @@ export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
             )}
           </span>
           {!isActive ? (
-            <span className="tw-font-normal tw-text-muted">
-              {formatDuration(elapsedSeconds * 1000)}
-            </span>
+            <span className="tw-font-normal">{formatDuration(elapsedSeconds * 1000)}</span>
           ) : null}
         </>
       }

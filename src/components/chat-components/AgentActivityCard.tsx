@@ -31,7 +31,7 @@ export const AgentActivityCard: React.FC<AgentActivityCardProps> = ({
       <div
         data-agent-activity-card-header
         className={cn(
-          "tw-flex tw-w-full tw-items-center tw-gap-1.5 tw-pl-1 tw-text-left tw-text-sm tw-text-muted",
+          "tw-flex tw-w-full tw-items-center tw-gap-1.5 tw-pl-1 tw-text-left tw-text-sm tw-text-faint",
           canToggle ? "tw-cursor-pointer hover:tw-text-normal" : "tw-cursor-default"
         )}
         role={canToggle ? "button" : undefined}
@@ -50,7 +50,7 @@ export const AgentActivityCard: React.FC<AgentActivityCardProps> = ({
         }
       >
         <span className="tw-flex tw-size-3.5 tw-shrink-0 tw-items-center tw-justify-center">
-          <Icon className="tw-size-3.5 tw-text-muted" />
+          <Icon className="tw-size-3.5" />
         </span>
         <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1 tw-truncate tw-font-medium">
           {label}
@@ -58,10 +58,7 @@ export const AgentActivityCard: React.FC<AgentActivityCardProps> = ({
         {trailing}
         {canToggle ? (
           <ChevronRight
-            className={cn(
-              "tw-size-3 tw-shrink-0 tw-text-muted tw-transition-transform",
-              open && "tw-rotate-90"
-            )}
+            className={cn("tw-size-3 tw-shrink-0 tw-transition-transform", open && "tw-rotate-90")}
           />
         ) : null}
       </div>
