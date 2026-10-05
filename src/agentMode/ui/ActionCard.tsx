@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { Loader2, Check, X } from "lucide-react";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolStatus } from "@/agentMode/session/types";
-import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
+import { displayTargetFromPath, lookupToolSummary } from "@/agentMode/ui/toolSummaries";
 import { renderDiff } from "@/agentMode/ui/diffRender";
 import { getVaultBase } from "@/utils/vaultPath";
 import { openVaultPath } from "@/utils/openVaultPath";
@@ -27,23 +27,31 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
   const expandable = outputs.length > 0 || details !== null;
   const targetPath =
     part.status === "completed" ? (summary.targetPath?.(part, summaryCtx) ?? null) : null;
+  const link = targetPath
+    ? { path: targetPath, label: displayTargetFromPath(part, summaryCtx.vaultBase) ?? targetPath }
+    : null;
 
   return (
     <AgentActivityCard
       icon={Icon}
       label={
-        targetPath ? (
-          <a
-            href="#"
-            className="tw-min-w-0 tw-truncate tw-text-inherit hover:tw-text-accent hover:tw-underline"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              openVaultPath(app, targetPath, { newLeaf: true });
-            }}
-          >
-            {line}
-          </a>
+        link ? (
+          <>
+            <span className="tw-shrink-0">
+              {line.slice(0, line.lastIndexOf(link.label)).trimEnd()}
+            </span>
+            <a
+              href="#"
+              className="tw-min-w-0 tw-truncate tw-text-normal hover:tw-text-accent hover:tw-underline"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openVaultPath(app, link.path, { newLeaf: true });
+              }}
+            >
+              {link.label}
+            </a>
+          </>
         ) : (
           <span className="tw-truncate">{line}</span>
         )
