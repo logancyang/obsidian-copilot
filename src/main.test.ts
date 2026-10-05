@@ -521,6 +521,37 @@ describe("main", () => {
       });
     });
 
+    describe("onload()", () => {
+      beforeEach(() => jest.clearAllMocks());
+
+      it("registers nothing once Obsidian unloads the plugin while settings are still loading https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        const plugin = createPluginUnderTest([]);
+        let finishLoadingSettings: () => void = () => undefined;
+        const registrations = {
+          register: jest.fn(),
+          registerObsidianProtocolHandler: jest.fn(),
+          addSettingTab: jest.fn(),
+        };
+        Object.assign(plugin, registrations, {
+          app: { vault: { adapter: {} }, workspace: { getLeavesOfType: jest.fn(() => []) } },
+          manifest: { version: "4.0.13" },
+          pluginLifecycleActive: true,
+          loadSettings: jest.fn(
+            () => new Promise<void>((resolve) => (finishLoadingSettings = resolve))
+          ),
+        });
+
+        const loading = plugin.onload();
+        plugin.onunload();
+        finishLoadingSettings();
+        await expect(loading).resolves.toBeUndefined();
+
+        expect(registrations.register).not.toHaveBeenCalled();
+        expect(registrations.registerObsidianProtocolHandler).not.toHaveBeenCalled();
+        expect(registrations.addSettingTab).not.toHaveBeenCalled();
+      });
+    });
+
     describe("onunload()", () => {
       beforeEach(() => {
         jest.clearAllMocks();

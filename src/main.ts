@@ -186,6 +186,10 @@ export default class CopilotPlugin extends Plugin {
     KeychainService.resetInstance();
     KeychainService.getInstance(this.app);
     await this.loadSettings();
+    // Obsidian can unload the plugin while onload awaits; resuming would register onto a dead
+    // instance and leak app-wide handlers that break every later enable.
+    // https://github.com/logancyang/obsidian-copilot/issues/3518
+    if (!this.pluginLifecycleActive) return;
     this.modelManagement = createModelManagement({
       app: this.app,
     });
@@ -221,6 +225,7 @@ export default class CopilotPlugin extends Plugin {
       )
     );
     await runSettingsMigrations(this.modelManagement);
+    if (!this.pluginLifecycleActive) return;
     void cleanupLegacyIndexArtifacts({
       adapter: this.app.vault.adapter,
       configDir: this.app.vault.configDir,
@@ -278,6 +283,7 @@ export default class CopilotPlugin extends Plugin {
         SkillManager,
       } = await import("@/agentMode");
       const { wireAgentModelDiscovery } = await import("@/agentMode/agentModelDiscovery");
+      if (!this.pluginLifecycleActive) return;
       this.CopilotAgentView = CopilotAgentView;
       this.PlanPreviewView = PlanPreviewView;
       this.planPreviewViewType = PLAN_PREVIEW_VIEW_TYPE;
@@ -372,6 +378,7 @@ export default class CopilotPlugin extends Plugin {
     } catch (error) {
       logError("Failed to move the Symposium publishing folder to .openartifacts.", error);
     }
+    if (!this.pluginLifecycleActive) return;
     const openArtifactsPublisher = new OpenArtifactsPublisher(this.app);
     const publishFile = (file: TFile): void => {
       void openArtifactsPublisher
