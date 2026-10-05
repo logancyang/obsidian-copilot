@@ -39,10 +39,14 @@ export const Paused: StoryObj<ChatTranscriptViewportProps> = {
   ),
 };
 
+const markAsObsidianMarkdown = (element: HTMLDivElement | null): void => {
+  element?.classList.add("markdown-rendered");
+};
+
 const wideTableTranscript = (
   <div className="tw-space-y-4 tw-p-3 tw-text-sm tw-text-normal">
     <p>The paragraphs wrap at the chat width while the table scrolls on its own.</p>
-    <div className="markdown-rendered">
+    <div ref={markAsObsidianMarkdown}>
       <table>
         <thead>
           <tr>
