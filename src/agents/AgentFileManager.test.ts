@@ -401,6 +401,42 @@ describe("AgentFileManager", () => {
     });
   });
 
+  describe("getAgentFolderPath()", () => {
+    it("resolves the agent's own folder under the configured Copilot root", () => {
+      const { manager } = buildManager();
+
+      expect(manager.getAgentFolderPath("jennifer")).toBe("copilot/agents/jennifer");
+    });
+  });
+
+  describe("getScratchpadPath()", () => {
+    it("resolves the agent's scratchpad inside its own folder", () => {
+      const { manager } = buildManager();
+
+      expect(manager.getScratchpadPath("jennifer")).toBe("copilot/agents/jennifer/Scratchpad.md");
+    });
+  });
+
+  describe("readScratchpad()", () => {
+    it("reads the scratchpad the agent keeps, with when it last changed", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.files.set("copilot/agents/jennifer/Scratchpad.md", "# Jennifer's scratchpad\n");
+
+      expect(await manager.readScratchpad("jennifer")).toEqual({
+        text: "# Jennifer's scratchpad\n",
+        modifiedAtMs: MEMORY_MTIME_MS,
+      });
+    });
+
+    it("reports nothing for an agent that has not started a scratchpad", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+
+      expect(await manager.readScratchpad("jennifer")).toBeNull();
+    });
+  });
+
   describe("readDailyNote()", () => {
     it("reads one day of notes with where it lives, so a trust line can offer it", async () => {
       const { manager, vault } = buildManager();

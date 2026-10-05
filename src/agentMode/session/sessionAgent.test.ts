@@ -49,25 +49,32 @@ interface Stubs {
   files: AgentFileManager;
   readMemoryDocument: jest.Mock;
   readDailyNotesAfter: jest.Mock;
+  readScratchpad: jest.Mock;
 }
 
 function buildFiles(
   overrides: {
     readMemoryDocument?: jest.Mock;
     readDailyNotesAfter?: jest.Mock;
+    readScratchpad?: jest.Mock;
   } = {}
 ): Stubs {
   const readMemoryDocument = overrides.readMemoryDocument ?? jest.fn(async () => CORE);
   const readDailyNotesAfter = overrides.readDailyNotesAfter ?? jest.fn(async () => []);
+  const readScratchpad = overrides.readScratchpad ?? jest.fn(async () => null);
   return {
     files: {
       readMemoryDocument,
       readDailyNotesAfter,
+      readScratchpad,
       getDailyNotePath: (slug: string, date: string) => `copilot/agents/${slug}/memory/${date}.md`,
       getMemoryFolderPath: (slug: string) => `copilot/agents/${slug}/memory`,
+      getScratchpadPath: (slug: string) => `copilot/agents/${slug}/Scratchpad.md`,
+      getAgentFolderPath: (slug: string) => `copilot/agents/${slug}`,
     } as unknown as AgentFileManager,
     readMemoryDocument,
     readDailyNotesAfter,
+    readScratchpad,
   };
 }
 
@@ -171,14 +178,39 @@ describe("sessionAgent", () => {
       );
     });
 
+    it("shows the agent its scratchpad and dates the block by it when it changed last", async () => {
+      const { files } = buildFiles({
+        readScratchpad: jest.fn(async () => ({
+          text: "Focus: the Grid Notes launch.",
+          modifiedAtMs: NOTE_MODIFIED_MS,
+        })),
+      });
+
+      const memory = await loadAgentMemoryInjection(files, jennifer(), NOW);
+
+      expect(memory?.block).toContain("## Your scratchpad\nFocus: the Grid Notes launch.");
+      expect(memory?.block).toContain('updated="2026-09-17"');
+    });
+
+    it("gives an edited scratchpad a new fingerprint", async () => {
+      const scratchpad = (text: string) =>
+        buildFiles({ readScratchpad: jest.fn(async () => ({ text, modifiedAtMs: 0 })) }).files;
+
+      const first = await loadAgentMemoryInjection(scratchpad("- [ ] Draft"), jennifer(), NOW);
+      const second = await loadAgentMemoryInjection(scratchpad("- [x] Draft"), jennifer(), NOW);
+
+      expect(second?.fingerprint).not.toBe(first?.fingerprint);
+    });
+
     it("never reads a file when the agent's memory toggle is off", async () => {
-      const { files, readMemoryDocument, readDailyNotesAfter } = buildFiles();
+      const { files, readMemoryDocument, readDailyNotesAfter, readScratchpad } = buildFiles();
 
       expect(
         await loadAgentMemoryInjection(files, jennifer({ memoryEnabled: false }), NOW)
       ).toBeNull();
       expect(readMemoryDocument).not.toHaveBeenCalled();
       expect(readDailyNotesAfter).not.toHaveBeenCalled();
+      expect(readScratchpad).not.toHaveBeenCalled();
     });
 
     it("carries the index alone for an agent whose MEMORY.md is missing", async () => {
@@ -246,6 +278,15 @@ describe("sessionAgent", () => {
       expect(agent.personaBlock).toContain("copilot/agents/jennifer/memory/");
       expect(agent.personaBlock).toContain("open a day's file when a question reaches past");
       expect(agent.personaBlock).toContain("Never edit your MEMORY.md.");
+    });
+
+    it("tells a writable chat's agent where its scratchpad and its own folder are", async () => {
+      const { files } = buildFiles();
+
+      const agent = await loadSessionAgent(files, jennifer());
+
+      expect(agent.personaBlock).toContain("`copilot/agents/jennifer/Scratchpad.md`");
+      expect(agent.personaBlock).toContain("Keep them in `copilot/agents/jennifer`");
     });
 
     it("says nothing about notes for a read-only fan-out answerer", async () => {

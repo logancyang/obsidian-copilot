@@ -150,7 +150,6 @@ function inputNode(
       isLoading={draft.loading}
       hasPendingPlanPermission={false}
       modelPickerOverride={undefined}
-      agent={undefined}
       modePickerOverride={undefined}
       onCycleMode={jest.fn()}
       {...extraProps}

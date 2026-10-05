@@ -1526,6 +1526,10 @@ export class AgentSessionManager {
     return this.beginMemoryFlush(session) !== null;
   }
 
+  getAgentScratchpadPath(slug: string): string | null {
+    return this.opts.agentFileManager?.getScratchpadPath(slug) ?? null;
+  }
+
   async consolidateMemoryNow(slug: string): Promise<AgentMemoryConsolidationOutcome> {
     const files = this.opts.agentFileManager;
     if (!files) return { status: "skipped", reason: "no-agent" };

@@ -168,6 +168,7 @@ export const EditorEdit: StoryObj<AgentsSettingsViewProps> = {
       onOpenInEditor: noop,
       memory: {
         sizeLabel: "412 B",
+        onOpenScratchpad: noop,
         onOpenMemory: noop,
         onOpenTodaysNotes: noop,
         onConsolidate: noop,
@@ -199,6 +200,7 @@ export const EditorWithImage: StoryObj<AgentsSettingsViewProps> = {
       onOpenInEditor: noop,
       memory: {
         sizeLabel: "2.6 KB",
+        onOpenScratchpad: noop,
         onOpenMemory: noop,
         onOpenTodaysNotes: noop,
         onConsolidate: noop,

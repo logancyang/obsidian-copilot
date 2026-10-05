@@ -12,6 +12,7 @@ import {
   getAgentFolderPath,
   getAgentMemoryFolderPath,
   getAgentMemoryPath,
+  getAgentScratchpadPath,
   parseAgentDailyNoteDate,
 } from "@/agents/agentPaths";
 import {
@@ -43,6 +44,11 @@ export interface DailyNoteRead {
   modifiedAtMs: number;
 }
 
+export interface AgentScratchpadRead {
+  text: string;
+  modifiedAtMs: number;
+}
+
 export class AgentFileManager {
   private readonly vault: Vault;
 
@@ -68,6 +74,20 @@ export class AgentFileManager {
     return records.sort((a, b) =>
       a.agent.name.localeCompare(b.agent.name, undefined, { sensitivity: "base" })
     );
+  }
+
+  public getAgentFolderPath(slug: string): string {
+    return getAgentFolderPath(this.agentsFolder(), slug);
+  }
+
+  public getScratchpadPath(slug: string): string {
+    return getAgentScratchpadPath(this.agentsFolder(), slug);
+  }
+
+  public async readScratchpad(slug: string): Promise<AgentScratchpadRead | null> {
+    const file = this.vault.getAbstractFileByPath(this.getScratchpadPath(slug));
+    if (!(file instanceof TFile)) return null;
+    return { text: await this.vault.read(file), modifiedAtMs: file.stat.mtime };
   }
 
   public getMemoryFolderPath(slug: string): string {

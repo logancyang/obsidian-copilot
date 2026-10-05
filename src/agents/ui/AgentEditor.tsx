@@ -11,6 +11,7 @@ import {
   BookOpen,
   Eraser,
   ExternalLink,
+  FileText,
   ImageUp,
   Layers,
   NotebookPen,
@@ -32,6 +33,7 @@ export interface AgentEditorDraft {
 
 export interface AgentEditorMemory {
   sizeLabel: string;
+  onOpenScratchpad: () => void;
   onOpenMemory: () => void;
   onOpenTodaysNotes: () => void;
   onConsolidate: () => void;
@@ -240,6 +242,10 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({
         </div>
         {memory && (
           <div className="tw-flex tw-flex-wrap tw-gap-2">
+            <Button variant="secondary" size="sm" onClick={memory.onOpenScratchpad}>
+              <FileText className="tw-size-3.5" aria-hidden="true" />
+              Scratchpad
+            </Button>
             <Button variant="secondary" size="sm" onClick={memory.onOpenMemory}>
               <BookOpen className="tw-size-3.5" aria-hidden="true" />
               Open MEMORY.md

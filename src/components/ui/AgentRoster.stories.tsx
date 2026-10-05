@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@/lib/story";
 import React, { useState } from "react";
-import { AgentLabel, AgentSpotlight, type AgentPickerRow } from "./AgentRoster";
+import { AgentSpotlight, type AgentPickerRow } from "./AgentRoster";
 
 function portrait(from: string, to: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs><rect width="64" height="64" fill="url(#g)"/><circle cx="32" cy="26" r="11" fill="#ffffffcc"/><ellipse cx="32" cy="58" rx="20" ry="16" fill="#ffffffcc"/></svg>`;
@@ -50,6 +50,12 @@ const MORE: AgentPickerRow[] = [
   ),
 ];
 
+const LONG_NAME = row(
+  "marguerite",
+  "Marguerite-Anastasia Featherstonehaugh, Chief of Household Logistics",
+  "Family scheduler. Knows the kids' activities and everyone's availability."
+);
+
 interface CanvasProps {
   rows: AgentPickerRow[];
   initial: string;
@@ -62,6 +68,7 @@ function SpotlightCanvas({ rows, initial }: CanvasProps) {
       section={{ rows, selectedSlug, onSelect: (picked) => setSelectedSlug(picked.slug) }}
       onCreateAgent={() => {}}
       onOpenAgent={() => {}}
+      onOpenScratchpad={() => {}}
     />
   );
 }
@@ -98,14 +105,7 @@ export const LongDescription: StoryObj<CanvasProps> = {
   args: { rows: [COPILOT, ...TEAM, ...MORE], initial: "atlas" },
 };
 
-export const ComposerLabel: StoryObj<CanvasProps> = {
-  name: "Composer label — chat in progress",
-  args: { rows: [COPILOT, ...TEAM], initial: "sage" },
-  render: () => (
-    <div className="tw-flex tw-flex-col tw-gap-2">
-      <AgentLabel name="Copilot" avatarSrc={null} builtin />
-      <AgentLabel name="Sage" avatarSrc={TEAM[0].avatarSrc} builtin={false} />
-      <AgentLabel name="Pip" avatarSrc={null} builtin={false} />
-    </div>
-  ),
+export const LongName: StoryObj<CanvasProps> = {
+  name: "Spotlight — long name truncates beside the scratchpad icon",
+  args: { rows: [COPILOT, ...TEAM, LONG_NAME], initial: "marguerite" },
 };

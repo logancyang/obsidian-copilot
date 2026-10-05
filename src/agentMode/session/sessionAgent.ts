@@ -38,14 +38,17 @@ export async function loadAgentMemoryInjection(
   try {
     const core = await files.readMemoryDocument(agent.slug);
     const notes = await files.readDailyNotesAfter(agent.slug, agentMemoryIndexCutoff(now));
+    const scratchpad = await files.readScratchpad(agent.slug);
     const modifiedAtMs = Math.max(
       core?.modifiedAtMs ?? 0,
+      scratchpad?.modifiedAtMs ?? 0,
       ...notes.map((note) => note.modifiedAtMs)
     );
 
     const block = buildAgentMemoryBlock(agent.name, {
       core: core?.body ?? null,
       index: buildAgentMemoryIndex(notes),
+      scratchpad: scratchpad?.text ?? null,
       modifiedAtMs,
     });
     return block ? { block, fingerprint: hashMemoryContent(block) } : null;
@@ -66,6 +69,8 @@ export async function loadSessionAgent(
       ? {
           dailyNotePath: files.getDailyNotePath(agent.slug, formatMemoryEntryDate(new Date())),
           memoryFolderPath: files.getMemoryFolderPath(agent.slug),
+          scratchpadPath: files.getScratchpadPath(agent.slug),
+          agentFolderPath: files.getAgentFolderPath(agent.slug),
         }
       : null;
   return {

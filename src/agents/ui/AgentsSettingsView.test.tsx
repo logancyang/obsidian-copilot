@@ -178,9 +178,10 @@ describe("AgentsSettingsView", () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the agent's folder, a Save button, and its memory and delete actions when editing", () => {
+  it("shows the agent's folder, a Save button, and its scratchpad, memory and delete actions when editing", () => {
     const memory = {
       sizeLabel: "2.6 KB",
+      onOpenScratchpad: jest.fn(),
       onOpenMemory: jest.fn(),
       onOpenTodaysNotes: jest.fn(),
       onConsolidate: jest.fn(),
@@ -214,9 +215,11 @@ describe("AgentsSettingsView", () => {
     expect(screen.getByRole("button", { name: "Open agent.md" })).toBeTruthy();
     expect(screen.getByText(/MEMORY\.md \(2\.6 KB\)/)).toBeTruthy();
 
+    fireEvent.click(screen.getByRole("button", { name: "Scratchpad" }));
     fireEvent.click(screen.getByRole("button", { name: "Consolidate now" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete agent…" }));
 
+    expect(memory.onOpenScratchpad).toHaveBeenCalledTimes(1);
     expect(memory.onConsolidate).toHaveBeenCalledTimes(1);
     expect(onDelete).toHaveBeenCalledTimes(1);
   });

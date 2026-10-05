@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
-import { AgentLabel, AgentSpotlight, countInlineAgents, type AgentPickerRow } from "./AgentRoster";
+import { AgentSpotlight, countInlineAgents, type AgentPickerRow } from "./AgentRoster";
 
 function row(slug: string, name: string, description = ""): AgentPickerRow {
   return { slug, name, avatarSrc: null, description };
@@ -69,6 +69,7 @@ describe("AgentRoster", () => {
           section={{ rows: [COPILOT, SAGE, REX], selectedSlug: "sage", onSelect: jest.fn() }}
           onCreateAgent={jest.fn()}
           onOpenAgent={jest.fn()}
+          onOpenScratchpad={jest.fn()}
         />
       );
 
@@ -86,6 +87,7 @@ describe("AgentRoster", () => {
           section={{ rows: [COPILOT, SAGE, REX], selectedSlug: "copilot", onSelect }}
           onCreateAgent={jest.fn()}
           onOpenAgent={jest.fn()}
+          onOpenScratchpad={jest.fn()}
         />
       );
 
@@ -100,6 +102,7 @@ describe("AgentRoster", () => {
           section={{ rows: [COPILOT, SAGE, REX], selectedSlug: "copilot", onSelect: jest.fn() }}
           onCreateAgent={jest.fn()}
           onOpenAgent={jest.fn()}
+          onOpenScratchpad={jest.fn()}
         />
       );
 
@@ -117,6 +120,7 @@ describe("AgentRoster", () => {
           }}
           onCreateAgent={jest.fn()}
           onOpenAgent={jest.fn()}
+          onOpenScratchpad={jest.fn()}
         />
       );
 
@@ -134,6 +138,7 @@ describe("AgentRoster", () => {
           }}
           onCreateAgent={jest.fn()}
           onOpenAgent={jest.fn()}
+          onOpenScratchpad={jest.fn()}
         />
       );
 
@@ -148,6 +153,7 @@ describe("AgentRoster", () => {
           section={{ rows: [COPILOT, SAGE, REX], selectedSlug: "copilot", onSelect }}
           onCreateAgent={jest.fn()}
           onOpenAgent={jest.fn()}
+          onOpenScratchpad={jest.fn()}
         />
       );
 
@@ -164,6 +170,7 @@ describe("AgentRoster", () => {
           section={{ rows: [COPILOT, SAGE], selectedSlug: "sage", onSelect: jest.fn() }}
           onCreateAgent={jest.fn()}
           onOpenAgent={onOpenAgent}
+          onOpenScratchpad={jest.fn()}
         />
       );
 
@@ -178,10 +185,40 @@ describe("AgentRoster", () => {
           section={{ rows: [COPILOT, SAGE], selectedSlug: "copilot", onSelect: jest.fn() }}
           onCreateAgent={jest.fn()}
           onOpenAgent={jest.fn()}
+          onOpenScratchpad={jest.fn()}
         />
       );
 
       expect(screen.queryByRole("button", { name: /^Edit / })).toBeNull();
+    });
+
+    it("opens a custom agent's scratchpad from the icon beside its name", () => {
+      const onOpenScratchpad = jest.fn();
+      render(
+        <AgentSpotlight
+          section={{ rows: [COPILOT, SAGE], selectedSlug: "sage", onSelect: jest.fn() }}
+          onCreateAgent={jest.fn()}
+          onOpenAgent={jest.fn()}
+          onOpenScratchpad={onOpenScratchpad}
+        />
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Open Sage's scratchpad" }));
+
+      expect(onOpenScratchpad).toHaveBeenCalledWith(SAGE);
+    });
+
+    it("offers no scratchpad for Copilot, which keeps none", () => {
+      render(
+        <AgentSpotlight
+          section={{ rows: [COPILOT, SAGE], selectedSlug: "copilot", onSelect: jest.fn() }}
+          onCreateAgent={jest.fn()}
+          onOpenAgent={jest.fn()}
+          onOpenScratchpad={jest.fn()}
+        />
+      );
+
+      expect(screen.queryByRole("button", { name: /scratchpad/ })).toBeNull();
     });
 
     it("opens agent creation from New", () => {
@@ -191,22 +228,13 @@ describe("AgentRoster", () => {
           section={{ rows: [COPILOT], selectedSlug: "copilot", onSelect: jest.fn() }}
           onCreateAgent={onCreateAgent}
           onOpenAgent={jest.fn()}
+          onOpenScratchpad={jest.fn()}
         />
       );
 
       fireEvent.click(screen.getByRole("button", { name: "Create an agent" }));
 
       expect(onCreateAgent).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe("AgentLabel()", () => {
-    it("names the chat's agent as plain text, with a hint on how to talk to someone else", () => {
-      render(<AgentLabel name="Sage" avatarSrc={null} builtin={false} />);
-
-      const label = screen.getByLabelText(/This chat is with Sage\. Start a new chat/);
-      expect(label.textContent).toBe("SSage");
-      expect(label.closest("button")).toBeNull();
     });
   });
 });

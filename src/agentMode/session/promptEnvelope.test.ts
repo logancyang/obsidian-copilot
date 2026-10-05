@@ -73,6 +73,8 @@ describe("promptEnvelope", () => {
     const TARGETS = {
       dailyNotePath: "copilot/agents/jennifer/memory/2026-09-17.md",
       memoryFolderPath: "copilot/agents/jennifer/memory",
+      scratchpadPath: "copilot/agents/jennifer/Scratchpad.md",
+      agentFolderPath: "copilot/agents/jennifer",
     };
 
     it("emits the standing instructions alone when the agent cannot write", () => {
@@ -90,10 +92,23 @@ describe("promptEnvelope", () => {
       expect(block).toContain("Never edit your MEMORY.md.");
     });
 
-    it("says nothing about notes for a read-only answerer", () => {
-      expect(buildAgentPersonaBlock({ ...JENNIFER, writeTargets: null })).not.toContain(
-        "Keeping your own notes"
-      );
+    it("tells a writing agent where its scratchpad is and to keep it a current index", () => {
+      const block = buildAgentPersonaBlock({ ...JENNIFER, writeTargets: TARGETS });
+
+      expect(block).toContain("## Keeping your scratchpad");
+      expect(block).toContain("`copilot/agents/jennifer/Scratchpad.md` is your scratchpad");
+      expect(block).toContain("shown it at the start of every conversation");
+      expect(block).toContain("as a checklist");
+      expect(block).toContain("Keep them in `copilot/agents/jennifer`");
+      expect(block).toContain("Link the daily notes behind an open thread");
+      expect(block).toContain("Bases view");
+    });
+
+    it("says nothing about notes or the scratchpad for a read-only answerer", () => {
+      const block = buildAgentPersonaBlock({ ...JENNIFER, writeTargets: null });
+
+      expect(block).not.toContain("Keeping your own notes");
+      expect(block).not.toContain("Keeping your scratchpad");
     });
 
     it("still carries the note-keeping instruction when the instructions body is empty", () => {
@@ -129,11 +144,13 @@ describe("promptEnvelope", () => {
     const CORE = "## About the user\n\n- Writes a climate newsletter.";
     const INDEX =
       "- 2026-09-14 16:20 Newsletter intro · Renamed the newsletter. [[memory/2026-09-14]]";
+    const SCRATCHPAD = "Focus: the Grid Notes launch.\n\n- [ ] Send the intro rewrite";
 
     it("labels the core and the index and dates the block by the newest file it read", () => {
       const block = buildAgentMemoryBlock("Jennifer", {
         core: CORE,
         index: INDEX,
+        scratchpad: null,
         modifiedAtMs: MEMORY_MODIFIED_MS,
       });
 
@@ -147,6 +164,7 @@ describe("promptEnvelope", () => {
       const block = buildAgentMemoryBlock("Jennifer", {
         core: CORE,
         index: INDEX,
+        scratchpad: null,
         modifiedAtMs: MEMORY_MODIFIED_MS,
       });
 
@@ -156,10 +174,37 @@ describe("promptEnvelope", () => {
       expect(block).toContain("only when a question reaches back");
     });
 
+    it("carries the scratchpad under its own heading ahead of the consolidated summary", () => {
+      const block = buildAgentMemoryBlock("Jennifer", {
+        core: CORE,
+        index: INDEX,
+        scratchpad: SCRATCHPAD,
+        modifiedAtMs: MEMORY_MODIFIED_MS,
+      });
+
+      expect(block).toContain(`## Your scratchpad\n${SCRATCHPAD}`);
+      expect(block!.indexOf("## Your scratchpad")).toBeLessThan(
+        block!.indexOf("## Your consolidated summary")
+      );
+    });
+
+    it("carries the scratchpad alone for an agent that has kept nothing else yet", () => {
+      const block = buildAgentMemoryBlock("Jennifer", {
+        core: null,
+        index: null,
+        scratchpad: SCRATCHPAD,
+        modifiedAtMs: MEMORY_MODIFIED_MS,
+      });
+
+      expect(block).toContain(SCRATCHPAD);
+      expect(block).not.toContain("Your consolidated summary");
+    });
+
     it("says the recent conversations outrank the consolidated summary where they differ", () => {
       const block = buildAgentMemoryBlock("Jennifer", {
         core: CORE,
         index: null,
+        scratchpad: null,
         modifiedAtMs: MEMORY_MODIFIED_MS,
       });
 
@@ -170,6 +215,7 @@ describe("promptEnvelope", () => {
       const block = buildAgentMemoryBlock("Jennifer", {
         core: CORE,
         index: "   \n\n",
+        scratchpad: null,
         modifiedAtMs: MEMORY_MODIFIED_MS,
       });
 
@@ -182,6 +228,7 @@ describe("promptEnvelope", () => {
       const block = buildAgentMemoryBlock("Jennifer", {
         core: null,
         index: INDEX,
+        scratchpad: null,
         modifiedAtMs: MEMORY_MODIFIED_MS,
       });
 
@@ -192,18 +239,26 @@ describe("promptEnvelope", () => {
     it("returns null when the agent has nothing to recall, rather than an empty notebook", () => {
       expect(buildAgentMemoryBlock("Jennifer", null)).toBeNull();
       expect(
-        buildAgentMemoryBlock("Jennifer", { core: null, index: null, modifiedAtMs: 0 })
+        buildAgentMemoryBlock("Jennifer", {
+          core: null,
+          index: null,
+          scratchpad: null,
+          modifiedAtMs: 0,
+        })
       ).toBeNull();
     });
 
     it("returns null when no agent is named, which is how the built-in Copilot sends nothing", () => {
-      expect(buildAgentMemoryBlock("", { core: CORE, index: null, modifiedAtMs: 0 })).toBeNull();
+      expect(
+        buildAgentMemoryBlock("", { core: CORE, index: null, scratchpad: null, modifiedAtMs: 0 })
+      ).toBeNull();
     });
 
     it("escapes a double quote in the agent name so it cannot break the attribute", () => {
       const block = buildAgentMemoryBlock('Jen "The Knife"', {
         core: CORE,
         index: null,
+        scratchpad: null,
         modifiedAtMs: MEMORY_MODIFIED_MS,
       });
 
@@ -214,6 +269,7 @@ describe("promptEnvelope", () => {
       const block = buildAgentMemoryBlock("Jennifer", {
         core: CORE,
         index: null,
+        scratchpad: null,
         modifiedAtMs: Number.NaN,
       });
 

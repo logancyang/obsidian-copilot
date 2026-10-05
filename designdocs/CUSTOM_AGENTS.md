@@ -129,7 +129,8 @@ The agent is chosen at the top of a new chat, under the heading "Who do you
 want to talk to?", and nowhere else. The chosen agent is shown large: its
 profile picture, name, and a one-line description that ellipsizes rather than
 wraps, so switching agents never moves anything below it. Clicking a custom
-agent's picture opens its page in Settings.
+agent's picture opens its page in Settings, and a small file icon beside its
+name opens its scratchpad (§5).
 
 Under it, one row: Copilot first, then as many agents as the pane fits, then a
 **+N** entry holding the rest, then **New**, which opens Settings on a blank
@@ -144,10 +145,10 @@ shows what the agent runs on at once; Copilot reopens on the saved default.
 The model picker stays for every agent: a pick there changes that chat only
 and never the agent's config or the saved default.
 
-Once the chat has a message it keeps its agent. The composer then names the
-agent as a plain label beside Add Context, not a control, and its tooltip says
-to start a new chat or `@`-mention to talk to someone else. The chat tab and
-Recent Chats show the agent's face and name.
+Once the chat has a message it keeps its agent. The composer does not name the
+agent; the chat tab and Recent Chats show its face and name. For a custom
+agent, the control row above the composer carries a scratchpad button beside
+New Chat, titled with the agent's name.
 
 Scope and agent are orthogonal. You can DM Jennifer at the vault root or inside
 a project. The working directory, project context block, and Recent Chats
@@ -202,6 +203,8 @@ copilot/agents/jennifer/
   agent.md              instructions, user-owned
   MEMORY.md             curated core: durable facts, always in context,
                         rewritten only by consolidation or by the user
+  Scratchpad.md         the agent's index page: focus, open threads, links
+                        to the files it maintains; always in context
   memory/
     2026-09-16.md       daily note: observations written during work
     2026-09-17.md
@@ -238,6 +241,24 @@ Two writers append to it:
 Daily notes are not capped. They are ordinary vault notes and stay searchable
 and readable by the agent on demand.
 
+**Scratchpad.** `Scratchpad.md` is the agent's working index, kept by the
+agent itself through its file tools. Memory answers "what do I know about this
+user"; the scratchpad answers "what am I working on, and where is it". The
+persona block of a writable chat names the scratchpad path and the agent's
+folder and asks the agent to keep the page current before it finishes any turn
+that changes it: a line on its current focus, open threads as a checklist,
+a link and a one-line purpose for every file it maintains (boards, drafts,
+designs, reports, kept in its own folder unless the user names another
+place), links to the daily notes behind an open thread rather than copies of
+them, and an embedded Bases view where a set of its files reads better as a
+table or board. It stays an index that reads in a minute, not a log. The page
+is for the user too: opening it shows what the agent is tracking. The plugin
+never writes it, and the agent creates it the first time it takes on
+something worth tracking. The user opens it from the file icon beside the
+agent's name on the landing, the scratchpad button beside New Chat in a
+started chat, or Scratchpad on the agent's Settings page; before the agent has
+written one, each says so in a notice instead of creating an empty page.
+
 **Consolidation.** The only writer of `MEMORY.md` besides the user. A
 read-only sub-session on the agent's backend receives the current `MEMORY.md`
 and every daily note newer than `consolidated-through`, bounded to the most
@@ -261,8 +282,9 @@ the write, and a mismatch (the user edited meanwhile) discards the result and
 reschedules. The user's edits are always the new baseline.
 
 **Reading.** The agent always has its memory in reach, but not every
-conversation in its context. `<agent_memory>` carries two things: the body of
-`MEMORY.md`, and a **conversation index** built from the daily notes. The
+conversation in its context. `<agent_memory>` carries three things: the
+agent's `Scratchpad.md` as written, the body of `MEMORY.md`, and a
+**conversation index** built from the daily notes. The
 index is one line per conversation heading in the last fourteen days, newest
 first, capped at forty lines: the date and time, the chat title, the first
 bullet under that heading (the one that says what the conversation was
@@ -274,7 +296,8 @@ the agent opens them with its file tools only when a question reaches back.
 
 Long chats refresh per turn: before each user message is sent, if the block the
 agent would be given now differs from the one this chat last sent — a
-consolidated core, or a conversation the index did not carry yet — a fresh
+consolidated core, an edited scratchpad, or a conversation the index did not
+carry yet — a fresh
 `<agent_memory>` block is prepended to that message. A bullet added below a
 conversation's first one is not in the block and so does not re-send it; it sits
 on disk, where the index says it is. The persona block names the `memory/`

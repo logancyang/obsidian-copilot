@@ -1,5 +1,6 @@
 export const AGENT_FILE_NAME = "agent.md";
 export const AGENT_MEMORY_FILE_NAME = "MEMORY.md";
+export const AGENT_SCRATCHPAD_FILE_NAME = "Scratchpad.md";
 
 export const AGENT_AVATAR_BASENAME = "avatar";
 

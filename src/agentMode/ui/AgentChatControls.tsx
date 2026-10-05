@@ -9,13 +9,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
 import { useSettingsValue } from "@/settings/model";
-import { Download, History, MessageCirclePlus, Sparkles } from "lucide-react";
+import { Download, FileText, History, MessageCirclePlus, Sparkles } from "lucide-react";
 import React from "react";
 
 const resolveHistoryIcon = (item: ChatHistoryItem) =>
   item.backendId ? backendRegistry[item.backendId]?.Icon : undefined;
 
 interface AgentChatControlsProps {
+  scratchpad?: { agentName: string; onOpen: () => void };
   onNewChat?: () => void;
   onSaveAsNote?: () => void | Promise<void>;
   chatHistoryItems?: ChatHistoryItem[];
@@ -33,6 +34,7 @@ interface AgentChatControlsProps {
 }
 
 export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
+  scratchpad,
   onNewChat,
   onSaveAsNote,
   chatHistoryItems,
@@ -76,6 +78,21 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
       </div>
       <div className="tw-flex tw-items-center tw-gap-1">
         {usageMeter}
+        {scratchpad && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost2"
+                size="icon"
+                title={`${scratchpad.agentName}'s scratchpad`}
+                onClick={scratchpad.onOpen}
+              >
+                <FileText className="tw-size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{`${scratchpad.agentName}'s scratchpad`}</TooltipContent>
+          </Tooltip>
+        )}
         {onNewChat && (
           <>
             <Tooltip>

@@ -6,6 +6,7 @@ import {
 } from "@/agents/agentAvatarImage";
 import { formatMemoryEntryDate } from "@/agents/agentMemory";
 import { formatMemorySize } from "@/agents/agentDisplay";
+import { openAgentScratchpad } from "@/agents/openAgentScratchpad";
 import type { AgentDraft, AgentRecord } from "@/agents/types";
 import { AgentClearMemoryConfirmModal } from "@/agents/ui/AgentClearMemoryConfirmModal";
 import { AgentDeleteConfirmModal } from "@/agents/ui/AgentDeleteConfirmModal";
@@ -312,6 +313,18 @@ export const AgentsSettings: React.FC = () => {
     [app, manager, openNote]
   );
 
+  const handleOpenScratchpad = useCallback(
+    (record: AgentRecord) => {
+      openAgentScratchpad(
+        app,
+        manager.getScratchpadPath(record.agent.slug),
+        record.agent.name,
+        openNote
+      );
+    },
+    [app, manager, openNote]
+  );
+
   const handleConsolidate = useCallback(
     (slug: string) => {
       const sessions = plugin.agentSessionManager;
@@ -378,6 +391,7 @@ export const AgentsSettings: React.FC = () => {
       memory: record
         ? {
             sizeLabel: formatMemorySize(record.memoryBytes),
+            onOpenScratchpad: () => handleOpenScratchpad(record),
             onOpenMemory: () => openNote(record.memoryPath),
             onOpenTodaysNotes: () => handleOpenTodaysNotes(record.agent.slug),
             onConsolidate: () => handleConsolidate(record.agent.slug),
@@ -394,6 +408,7 @@ export const AgentsSettings: React.FC = () => {
     handleClearMemory,
     handleConsolidate,
     handleDelete,
+    handleOpenScratchpad,
     handleOpenTodaysNotes,
     handlePickAvatar,
     handleRemoveAvatar,

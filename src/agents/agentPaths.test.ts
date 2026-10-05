@@ -4,6 +4,7 @@ import {
   getAgentFilePath,
   getAgentFolderPath,
   getAgentMemoryPath,
+  getAgentScratchpadPath,
   formatAgentDailyNoteLink,
   getAgentDailyNotePath,
   getAgentMemoryFolderPath,
@@ -77,6 +78,14 @@ describe("agentPaths", () => {
     it("names the memory file MEMORY.md inside the agent folder", () => {
       expect(getAgentMemoryPath("team/ai/agents", "vancat")).toBe(
         "team/ai/agents/vancat/MEMORY.md"
+      );
+    });
+  });
+
+  describe("getAgentScratchpadPath()", () => {
+    it("names the agent's index page Scratchpad.md inside the agent folder", () => {
+      expect(getAgentScratchpadPath("copilot/agents", "jennifer")).toBe(
+        "copilot/agents/jennifer/Scratchpad.md"
       );
     });
   });

@@ -36,8 +36,6 @@ import { AddContextButton } from "./AddContextButton";
 import { openImagePicker } from "./openImagePicker";
 import { shouldShowAtMentionTools } from "./hooks/useAtMentionCategories";
 import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
-import { AgentLabel, type AgentLabelProps } from "@/components/ui/AgentRoster";
-import { BUILTIN_AGENT_SLUG } from "@/agents/types";
 import { ModePicker } from "@/components/ui/ModePicker";
 import { $removePillsByPath } from "./pills/NotePillNode";
 import { $removeActiveNotePills } from "./pills/ActiveNotePillNode";
@@ -97,7 +95,6 @@ export interface ChatInputProps {
     effortOptionsByModelKey?: Record<string, { label: string; value: string | null }[]>;
     commitSelection?: (modelKey: string, effort: string | null) => void;
   };
-  agent?: Omit<AgentLabelProps, "builtin"> & { slug: string; showLabel: boolean };
   modePickerOverride?: {
     options: { label: string; value: CopilotMode }[];
     value: CopilotMode | null;
@@ -170,7 +167,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     setSelectedImages,
     disableModelSwitch,
     modelPickerOverride,
-    agent,
     modePickerOverride,
     selectedTextContexts,
     onRemoveSelectedText,
@@ -737,13 +733,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               showTools={showAtMentionTools}
               currentActiveFile={currentActiveNote}
               lexicalEditorRef={lexicalEditorRef}
-            />
-          )}
-          {agent?.showLabel && (
-            <AgentLabel
-              name={agent.name}
-              avatarSrc={agent.avatarSrc}
-              builtin={agent.slug === BUILTIN_AGENT_SLUG}
             />
           )}
           {modelPickerOverride?.effortOptionsByModelKey && modelPickerOverride.commitSelection ? (

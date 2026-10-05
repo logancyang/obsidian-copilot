@@ -59,7 +59,6 @@ interface AgentChatInputProps {
   isLoading: boolean;
   hasPendingPlanPermission: boolean;
   modelPickerOverride: ChatInputProps["modelPickerOverride"];
-  agent: ChatInputProps["agent"];
   modePickerOverride: ChatInputProps["modePickerOverride"];
   onCycleMode: () => void;
   activeProjectId?: string;
@@ -153,7 +152,6 @@ export const AgentChatInput = memo(function AgentChatInput({
   isLoading: loading,
   hasPendingPlanPermission,
   modelPickerOverride,
-  agent,
   modePickerOverride,
   onCycleMode,
   activeProjectId,
@@ -458,7 +456,6 @@ export const AgentChatInput = memo(function AgentChatInput({
           setSelectedImages={setSelectedImages}
           disableModelSwitch={!modelPickerOverride}
           modelPickerOverride={modelPickerOverride ?? undefined}
-          agent={agent}
           modePickerOverride={modePickerOverride ?? undefined}
           selectedTextContexts={selectedTextContexts}
           onRemoveSelectedText={removeSelectedTextContext}

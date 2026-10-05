@@ -64,6 +64,29 @@ describe("AgentChatControls", () => {
       expect(mockNavigateToPlusPage).toHaveBeenCalledWith("multi_agent");
     });
 
+    it("opens the chat agent's scratchpad from the button beside New Chat", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      const onOpen = jest.fn();
+      render(
+        <TooltipProvider>
+          <AgentChatControls onNewChat={() => {}} scratchpad={{ agentName: "Venkat", onOpen }} />
+        </TooltipProvider>
+      );
+
+      const button = screen.getByTitle("Venkat's scratchpad");
+      fireEvent.click(button);
+
+      expect(onOpen).toHaveBeenCalledTimes(1);
+      expect(button.nextElementSibling?.getAttribute("title")).toBe("New Chat");
+    });
+
+    it("offers no scratchpad button for a chat whose agent keeps none", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      renderControls();
+
+      expect(screen.queryByTitle(/scratchpad/)).toBeNull();
+    });
+
     it("does not show a lone link control before a session exists https://github.com/logancyang/obsidian-copilot/issues/3271", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       render(

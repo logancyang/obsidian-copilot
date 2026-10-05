@@ -11,7 +11,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { partitionOverflow } from "@/lib/partitionOverflow";
-import { Pencil, Plus } from "lucide-react";
+import { FileText, Pencil, Plus } from "lucide-react";
 import React, { useId, useLayoutEffect, useRef, useState } from "react";
 
 export interface AgentPickerRow {
@@ -31,6 +31,7 @@ export interface AgentSpotlightProps {
   section: AgentPickerSection;
   onCreateAgent: () => void;
   onOpenAgent: (row: AgentPickerRow) => void;
+  onOpenScratchpad: (row: AgentPickerRow) => void;
 }
 
 function builtinFallback(builtin: boolean, className: string): React.ReactNode {
@@ -46,6 +47,7 @@ export const AgentSpotlight: React.FC<AgentSpotlightProps> = ({
   section,
   onCreateAgent,
   onOpenAgent,
+  onOpenScratchpad,
 }) => {
   const current = section.rows.find((row) => row.slug === section.selectedSlug) ?? section.rows[0];
   const isBuiltin = current === section.rows[0];
@@ -86,8 +88,14 @@ export const AgentSpotlight: React.FC<AgentSpotlightProps> = ({
               </span>
             </BareButton>
           )}
-          <div className="tw-mt-1 tw-max-w-full tw-truncate tw-text-ui-larger tw-font-semibold tw-text-normal">
-            {current.name}
+          <div className="tw-mt-1 tw-flex tw-max-w-full tw-items-center tw-gap-1">
+            {!isBuiltin && <span aria-hidden="true" className="tw-w-6 tw-shrink-0" />}
+            <div className="tw-truncate tw-text-ui-larger tw-font-semibold tw-text-normal">
+              {current.name}
+            </div>
+            {!isBuiltin && (
+              <ScratchpadButton name={current.name} onOpen={() => onOpenScratchpad(current)} />
+            )}
           </div>
           <div
             title={current.description || undefined}
@@ -104,8 +112,28 @@ export const AgentSpotlight: React.FC<AgentSpotlightProps> = ({
 
 AgentSpotlight.displayName = "AgentSpotlight";
 
+const ScratchpadButton: React.FC<{ name: string; onOpen: () => void }> = ({ name, onOpen }) => (
+  <TooltipProvider delayDuration={300}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <BareButton
+          aria-label={`Open ${name}'s scratchpad`}
+          onClick={onOpen}
+          className={cn(
+            "tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-sm tw-text-muted",
+            "hover:!tw-bg-modifier-hover hover:tw-text-normal focus-visible:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-ring"
+          )}
+        >
+          <FileText className="tw-size-3.5" />
+        </BareButton>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">Scratchpad</TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+);
+
 const AgentStrip: React.FC<
-  Omit<AgentSpotlightProps, "onOpenAgent"> & {
+  Omit<AgentSpotlightProps, "onOpenAgent" | "onOpenScratchpad"> & {
     labelledBy: string;
   }
 > = ({ section, onCreateAgent, labelledBy }) => {
@@ -267,25 +295,3 @@ const StripButton = React.forwardRef<HTMLButtonElement, StripButtonProps>(
 );
 
 StripButton.displayName = "StripButton";
-
-export interface AgentLabelProps {
-  name: string;
-  avatarSrc: string | null;
-  builtin: boolean;
-}
-
-export const AgentLabel: React.FC<AgentLabelProps> = ({ name, avatarSrc, builtin }) => (
-  <span
-    aria-label={`This chat is with ${name}. Start a new chat to talk to someone else, or @-mention them.`}
-    className="tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-px-1 tw-text-muted"
-  >
-    <AgentGlyph
-      name={name}
-      avatarSrc={avatarSrc}
-      fallback={builtinFallback(builtin, "tw-size-3.5")}
-    />
-    <span className="tw-truncate tw-text-sm">{name}</span>
-  </span>
-);
-
-AgentLabel.displayName = "AgentLabel";
