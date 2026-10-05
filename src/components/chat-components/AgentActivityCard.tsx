@@ -32,7 +32,9 @@ export const AgentActivityCard: React.FC<AgentActivityCardProps> = ({
         data-agent-activity-card-header
         className={cn(
           "tw-flex tw-w-full tw-items-center tw-gap-1.5 tw-pl-1 tw-text-left tw-text-sm tw-text-faint",
-          canToggle ? "tw-cursor-pointer hover:tw-text-normal" : "tw-cursor-default"
+          canToggle
+            ? "tw-cursor-pointer hover:tw-text-normal focus-visible:tw-text-normal"
+            : "tw-cursor-default"
         )}
         role={canToggle ? "button" : undefined}
         tabIndex={canToggle ? 0 : undefined}
