@@ -25,7 +25,7 @@ export function ChatTranscriptViewport({
         ref={scrollContainerRef}
         onScroll={onScroll}
         data-testid="chat-messages"
-        className="tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)]"
+        className="tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-overflow-x-hidden tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] [&_.markdown-rendered_table]:tw-block [&_.markdown-rendered_table]:tw-overflow-x-auto"
       >
         <div ref={contentRef} className="tw-w-full">
           {children}
