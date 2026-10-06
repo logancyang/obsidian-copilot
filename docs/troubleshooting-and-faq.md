@@ -152,7 +152,7 @@ That deletion covers the uploaded copy only. The zip on your own computer is you
 
 ### Collecting logs by hand
 
-Run **Copilot: Create log file** from the command palette to save the regular chat log into your vault as a note and open it. The Agent Chat log can be opened or cleared under **Advanced → Debugging & support → Agent Mode activity log**.
+Run **Copilot: Create log file** from the command palette to save the Copilot log into your vault as a note and open it. The Agent Chat log can be opened or cleared under **Advanced → Debugging & support → Agent Mode activity log**.
 
 Logs and screenshots can contain prompts, note contents, paths, and tool inputs. Review them before attaching anything to a public issue.
 

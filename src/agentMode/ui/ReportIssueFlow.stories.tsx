@@ -13,9 +13,9 @@ const SOURCES: ReportSourceOption[] = [
   { id: "activityLog", label: "Agent Mode activity log", defaultChecked: true },
   {
     id: "chatLog",
-    label: "Regular chat log",
-    description: "copilot log file",
-    defaultChecked: false,
+    label: "Copilot log",
+    description: "includes Agent Mode backend errors",
+    defaultChecked: true,
   },
   {
     id: "opencodeLog",
@@ -47,7 +47,7 @@ const REPORT: PreparedReport = {
     },
     {
       id: "chatLog",
-      name: "copilot-chat-log.md",
+      name: "copilot-log.md",
       bytes: 0,
       included: false,
       note: "failed: EACCES",

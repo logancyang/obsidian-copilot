@@ -57,7 +57,7 @@ function renderFlow(overrides: Partial<ReportIssueFlowProps> = {}) {
         description: "Newest 2 MB of the log",
         defaultChecked: true,
       },
-      { id: "chatLog", label: "Regular chat log", defaultChecked: false },
+      { id: "chatLog", label: "Copilot log", defaultChecked: false },
       { id: "opencodeLog", label: "OpenCode backend log", defaultChecked: false },
     ],
     prepare: jest.fn().mockResolvedValue(prepared),
@@ -205,7 +205,7 @@ describe("ReportIssueFlow", () => {
             },
             {
               id: "chatLog",
-              name: "copilot-chat-log.md",
+              name: "copilot-log.md",
               bytes: 0,
               included: false,
               note: "failed: EACCES",
@@ -216,7 +216,7 @@ describe("ReportIssueFlow", () => {
         submit();
 
         await waitFor(() => expect(screen.getByText("acp-frames.ndjson.txt")).toBeTruthy());
-        expect(screen.getByText("copilot-chat-log.md")).toBeTruthy();
+        expect(screen.getByText("copilot-log.md")).toBeTruthy();
         expect(screen.getByText("failed: EACCES")).toBeTruthy();
         expect(screen.getByText("truncated to the newest entries of 40 MB")).toBeTruthy();
         expect(screen.getAllByText("2.0 KB").length).toBe(2);
