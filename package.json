@@ -139,7 +139,7 @@
     "openai": "^6.41.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-resizable-panels": "^3.0.2",
+    "react-resizable-panels": "^4.14.2",
     "tailwind-merge": "^2.5.5",
     "turndown": "^7.2.2",
     "uuid": "^11.1.0",

@@ -1,5 +1,5 @@
 import {
-  backendPickerAtomFamily,
+  chatBackendPickerAtom,
   providerRequiresApiKey,
   resolveChatModelSelectionId,
 } from "@/modelManagement";
@@ -18,7 +18,7 @@ export interface ChatBackendModelOptions {
 }
 
 export function useChatBackendModelOptions(fallbackToFirst = true): ChatBackendModelOptions {
-  const entries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
+  const entries = useAtomValue(chatBackendPickerAtom, { store: settingsStore });
   const options = useMemo(() => {
     const result: ChatBackendModelOption[] = [];
     for (const entry of entries) {

@@ -1193,8 +1193,8 @@ function ContextManage({
 
   return (
     <div className="tw-flex tw-h-full tw-flex-col">
-      <ResizablePanelGroup direction="horizontal" className="tw-flex-1">
-        <ResizablePanel defaultSize={isMobile ? 35 : 30} minSize={20} maxSize={40}>
+      <ResizablePanelGroup orientation="horizontal" className="tw-flex-1">
+        <ResizablePanel defaultSize={isMobile ? "35%" : "30%"} minSize="20%" maxSize="40%">
           <div className="tw-flex tw-h-full tw-flex-col">
             <div className="tw-border-b tw-p-4">
               <h2 className="tw-text-lg tw-font-semibold">File Context</h2>
@@ -1310,7 +1310,7 @@ function ContextManage({
 
         <ResizableHandle withHandle />
 
-        <ResizablePanel defaultSize={isMobile ? 65 : 70}>
+        <ResizablePanel defaultSize={isMobile ? "65%" : "70%"}>
           <div className="tw-flex tw-h-full tw-flex-col">
             <div className="tw-border-b tw-p-4">
               <SearchBar

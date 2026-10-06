@@ -1,5 +1,4 @@
 import { atom } from "jotai";
-import { atomFamily } from "jotai/utils";
 
 import { settingsAtom } from "@/settings/model";
 
@@ -62,22 +61,20 @@ export const visibleByokProvidersAtom = atom<readonly Provider[]>((get) => {
   return [...selfHosted, ...cloud];
 });
 
-export const backendPickerAtomFamily = atomFamily((backend: BackendType) =>
-  atom<readonly EnabledBackendEntry[]>((get) => {
-    const config = get(backendsAtom)[backend] ?? { enabledModels: [] };
-    const models = get(configuredModelsAtom);
-    const providers = get(providersAtom);
-    const enableSelfHostMode = get(selfHostModeAtom);
-    if (config.enabledModels.length === 0) return EMPTY_PICKER_ENTRIES;
-    return config.enabledModels.map<EnabledBackendEntry>((configuredModelId) => {
-      const configuredModel = models.find((m) => m.configuredModelId === configuredModelId);
-      const provider = configuredModel ? providers[configuredModel.providerId] : undefined;
-      if (configuredModel && provider) {
-        const needsSelfHostWarning =
-          enableSelfHostMode && providerNeedsSelfHostWarning(provider, { enableSelfHostMode });
-        return { configuredModelId, state: "ok", configuredModel, provider, needsSelfHostWarning };
-      }
-      return { configuredModelId, state: "broken" };
-    });
-  })
-);
+export const chatBackendPickerAtom = atom<readonly EnabledBackendEntry[]>((get) => {
+  const config = get(backendsAtom).chat ?? { enabledModels: [] };
+  const models = get(configuredModelsAtom);
+  const providers = get(providersAtom);
+  const enableSelfHostMode = get(selfHostModeAtom);
+  if (config.enabledModels.length === 0) return EMPTY_PICKER_ENTRIES;
+  return config.enabledModels.map<EnabledBackendEntry>((configuredModelId) => {
+    const configuredModel = models.find((m) => m.configuredModelId === configuredModelId);
+    const provider = configuredModel ? providers[configuredModel.providerId] : undefined;
+    if (configuredModel && provider) {
+      const needsSelfHostWarning =
+        enableSelfHostMode && providerNeedsSelfHostWarning(provider, { enableSelfHostMode });
+      return { configuredModelId, state: "ok", configuredModel, provider, needsSelfHostWarning };
+    }
+    return { configuredModelId, state: "broken" };
+  });
+});

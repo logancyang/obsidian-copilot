@@ -1,5 +1,5 @@
 import {
-  backendPickerAtomFamily,
+  chatBackendPickerAtom,
   capabilitiesFromConfiguredInfo,
   mapProviderTypeToChatModelProvider,
   providerRequiresApiKey,
@@ -36,7 +36,7 @@ export function useChatModelPicker(params: {
   onChange: (configuredModelId: string) => void;
 }): ChatModelPickerOverride {
   const { value, onChange, fallbackToFirst = true } = params;
-  const entries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
+  const entries = useAtomValue(chatBackendPickerAtom, { store: settingsStore });
   const settings = useSettingsValue();
 
   const lockedRows = React.useMemo(
