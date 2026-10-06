@@ -168,10 +168,10 @@ export class OpencodeBackend implements AcpBackend {
       env: {
         ...process.env,
         ...builtinSkillEnv,
-        // The private service logs at INFO by default; inherited stderr would
-        // flood Copilot's log during normal turns.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
-        OPENCODE_LOG_LEVEL: "WARN",
+        // OpenCode's level filters its file log and stderr together, and its
+        // server logs request-failure causes at INFO, so WARN hid every cause.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/650
+        OPENCODE_LOG_LEVEL: "INFO",
         ...envOverrides,
         OPENCODE_CONFIG_CONTENT: configContent,
       },

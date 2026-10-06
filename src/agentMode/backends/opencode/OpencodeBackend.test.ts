@@ -992,13 +992,22 @@ describe("OpencodeBackend", () => {
         const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
         expect(desc.command).toBe("/path/to/opencode");
         expect(desc.args).toEqual(["acp", "--print-logs"]);
-        expect(desc.env.OPENCODE_LOG_LEVEL).toBe("WARN");
         expect(desc.cwd).toBe("/vault/abs");
         expect(desc.env[OPENARTIFACTS_WORKSPACE_ROOT_ENV]).toBe("/vault/abs");
         expect(desc.env.OPENCODE_CONFIG_CONTENT).toBeDefined();
         const cfg: GeneratedOpencodeConfig = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
         expect(cfg.providers.anthropic.settings).toEqual({ apiKey: "anth-xyz" });
         expect(cfg.providers.anthropic.models).toEqual({ "claude-sonnet-4-6": {} });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/650 runs OpenCode at INFO so server failure causes reach its stderr and log file", async () => {
+        setOpencodeSettings({ binaryPath: "/path/to/opencode" });
+
+        const desc = await new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({
+          vaultBasePath: "/vault",
+        });
+
+        expect(desc.env.OPENCODE_LOG_LEVEL).toBe("INFO");
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 lets a user opt into more detailed OpenCode logs", async () => {
