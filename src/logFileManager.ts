@@ -176,9 +176,12 @@ class LogFileManager {
 
     const bufferSnapshot = [...this.buffer];
 
-    const sanitizedSettings = this.sanitizeSettingsForLog();
-    const settingsJson = JSON.stringify(sanitizedSettings, null, 2);
-    bufferSnapshot.push("", "## Settings", "```json", ...settingsJson.split("\n"), "```");
+    try {
+      const settingsJson = JSON.stringify(this.sanitizeSettingsForLog(), null, 2);
+      bufferSnapshot.push("", "## Settings", "```json", ...settingsJson.split("\n"), "```");
+    } catch (error) {
+      bufferSnapshot.push("", "## Settings", `Settings could not be serialized: ${String(error)}`);
+    }
 
     try {
       const content = bufferSnapshot.join("\n") + (bufferSnapshot.length ? "\n" : "");

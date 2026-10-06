@@ -1,11 +1,12 @@
 import { logFileManager } from "@/logFileManager";
+import { getSettings } from "@/settings/model";
 import { Notice, type App } from "obsidian";
 
 jest.mock("@/settings/copilotFolder", () => ({
   getEffectiveCopilotFolder: () => "copilot",
 }));
 jest.mock("@/settings/model", () => ({
-  getSettings: () => ({ debug: true, openAIApiKey: "sk-should-never-be-exported" }),
+  getSettings: jest.fn(() => ({ debug: true, openAIApiKey: "sk-should-never-be-exported" })),
 }));
 jest.mock("@/utils", () => ({
   ensureFolderExists: jest.fn().mockResolvedValue(undefined),
@@ -142,6 +143,18 @@ describe("logFileManager", () => {
 
         await logFileManager.openLogFile();
         expect(logFileManager.exportLogText()).not.toContain("## Settings");
+      });
+
+      it("still writes the buffered log when the settings cannot be serialized", async () => {
+        const { app, vault } = fakeApp(false);
+        jest.mocked(getSettings).mockReturnValueOnce({ debug: true, big: BigInt(1) } as never);
+        logFileManager.setApp(app);
+        await logFileManager.append("INFO", "hello");
+
+        await logFileManager.openLogFile();
+        const content = vault.create.mock.calls[0][1];
+        expect(content).toContain("hello");
+        expect(content).toContain("Settings could not be serialized: TypeError");
       });
 
       it("shows a notice when the note cannot be written, since the logger cannot log its own failure (https://github.com/Brevilabs/obsidian-copilot-private/issues/647)", async () => {

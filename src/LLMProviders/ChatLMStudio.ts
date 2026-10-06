@@ -36,8 +36,8 @@ function createLMStudioFetch(baseFetch?: typeof window.fetch): typeof window.fet
         if (modified) {
           init = { ...init, body: JSON.stringify(body) };
         }
-      } catch (error) {
-        logWarn("[ChatLMStudio] Sending a request body that is not JSON unchanged", error);
+      } catch {
+        logWarn("[ChatLMStudio] Sending a request body that is not JSON unchanged");
       }
     }
     return underlyingFetch(input, init);
