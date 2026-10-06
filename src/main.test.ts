@@ -707,6 +707,28 @@ describe("main", () => {
         }
       });
 
+      it("delays only the first start after a shutdown that never finishes https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        jest.useFakeTimers();
+        try {
+          (window as unknown as Record<symbol, unknown>)[pendingTeardown] = new Promise(
+            () => undefined
+          );
+          const first = createLoadingPlugin();
+          first.plugin.onload();
+          await jest.advanceTimersByTimeAsync(10_000);
+          await expect(first.finishStartup()).resolves.toBe(true);
+          const second = createLoadingPlugin();
+
+          first.plugin.onunload();
+          second.plugin.onload();
+          await jest.advanceTimersByTimeAsync(1);
+
+          expect(second.plugin.loadSettings).toHaveBeenCalledTimes(1);
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
       it("opens a copilot-chat link that arrives during startup once the chat managers exist https://github.com/logancyang/obsidian-copilot/issues/3271", async () => {
         const settings = deferred();
         const { plugin, finishStartup, openCopilotChatLink } = createLoadingPlugin(

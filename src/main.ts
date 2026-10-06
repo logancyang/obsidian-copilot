@@ -453,10 +453,11 @@ export default class CopilotPlugin extends Plugin {
   }
 
   // A disabled or updated copy may still be writing data.json or stopping Agent Mode backends;
-  // a hung shutdown must not keep this copy from starting.
+  // a hung shutdown must not keep this copy, or any later one, from starting.
   // https://github.com/logancyang/obsidian-copilot/issues/3518
   private async waitForPreviousTeardown(): Promise<void> {
-    const previousTeardown = (window as TeardownHandoff)[PENDING_TEARDOWN];
+    const handoff = window as TeardownHandoff;
+    const previousTeardown = handoff[PENDING_TEARDOWN];
     if (!previousTeardown) return;
     try {
       await withTimeout(
@@ -467,6 +468,7 @@ export default class CopilotPlugin extends Plugin {
     } catch (error) {
       logWarn("Copilot started before its previous copy finished shutting down.", error);
     }
+    if (handoff[PENDING_TEARDOWN] === previousTeardown) delete handoff[PENDING_TEARDOWN];
   }
 
   private async collectLegacyUpgradeRelocation(): Promise<StartupMigrationItem | null> {
