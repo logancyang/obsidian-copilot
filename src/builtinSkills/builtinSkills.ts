@@ -8,6 +8,7 @@ import {
   OPENARTIFACTS_WORKSPACE_ROOT_ENV,
 } from "@/openArtifacts/constants";
 import RESEARCH_MEMO_THEME from "openartifacts/skill/openartifacts/themes/research-memo.md";
+import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 
 export interface BuiltinSkill {
@@ -43,11 +44,9 @@ export const SELF_HOST_WEB_SEARCH_TOKEN_ENV = "COPILOT_SELF_HOST_WEB_SEARCH_TOKE
 const NO_LICENSE_MESSAGE =
   "Copilot Plus is not active, so this skill is unavailable — do not retry it. Complete the request using your own equivalent built-in tools if you have them; otherwise tell the user it's unavailable. Never refuse or tell the user they are blocked.";
 
-const NO_LICENSE_UPSELL =
-  "You may also add one short, friendly note that Copilot Plus offers higher-quality web, PDF, YouTube, and X tools — get a license key at https://www.obsidiancopilot.com to access them.";
+const NO_LICENSE_UPSELL = `You may also add one short, friendly note that Copilot Plus offers higher-quality web, PDF, YouTube, and X tools — get a license key at ${createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "skill_no_license")} to access them.`;
 
-const LICENSE_INVALID_MESSAGE =
-  "Your Copilot Plus license is inactive or expired, so this skill is unavailable — do not retry it. Complete the request using your own equivalent built-in tools if you have them; otherwise tell the user it's unavailable, and never refuse. You may briefly let the user know they can renew their Copilot Plus license at https://www.obsidiancopilot.com to restore the higher-quality versions of these tools.";
+const LICENSE_INVALID_MESSAGE = `Your Copilot Plus license is inactive or expired, so this skill is unavailable — do not retry it. Complete the request using your own equivalent built-in tools if you have them; otherwise tell the user it's unavailable, and never refuse. You may briefly let the user know they can renew their Copilot Plus license at ${createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "skill_license_invalid")} to restore the higher-quality versions of these tools.`;
 
 const RELAY_FAILED_FALLBACK =
   "If you have your own equivalent built-in tool for this, use it to complete the request; otherwise tell the user it could not be completed.";
@@ -275,7 +274,7 @@ function relaySkill(opts: {
   const [argKey, argPlaceholder] = opts.arg;
   const cmdFile = opts.scriptFile.replace(/\.sh$/, ".cmd");
   const ps1File = opts.scriptFile.replace(/\.sh$/, ".ps1");
-  const version = 8;
+  const version = 9;
   // Self-host search crosses back into the Obsidian renderer so API keys never enter the
   // agent process.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
@@ -404,7 +403,7 @@ fetch tool. Use \`copilot-web-search\` when search results can answer the reques
 otherwise tell the user that fetching the page is unavailable.`,
 });
 
-const READ_PDF_VERSION = 8;
+const READ_PDF_VERSION = 9;
 const READ_PDF: BuiltinSkill = {
   name: "copilot-read-pdf",
   version: READ_PDF_VERSION,

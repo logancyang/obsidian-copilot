@@ -122,9 +122,13 @@ describe("builtinSkills", () => {
         expect(sh).not.toContain("web tools");
         expect(sh).toContain("never refuse");
         expect(sh).toContain("$(( $$ % 4 ))");
-        expect(sh).toContain("get a license key at https://www.obsidiancopilot.com");
+        expect(sh).toContain(
+          "get a license key at https://www.obsidiancopilot.com/pricing?utm_source=obsidian_copilot&utm_medium=skill_no_license"
+        );
         expect(sh).toContain('401|403) die "$LICENSE_INVALID"');
-        expect(sh).toContain("renew their Copilot Plus license");
+        expect(sh).toContain(
+          "renew their Copilot Plus license at https://www.obsidiancopilot.com/pricing?utm_source=obsidian_copilot&utm_medium=skill_license_invalid"
+        );
         expect(sh).not.toContain("require Copilot Plus");
 
         expect(sh).toContain("$RELAY_FAILED_FALLBACK");
