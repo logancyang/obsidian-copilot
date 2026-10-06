@@ -4,7 +4,7 @@ import { useAtomValue } from "jotai";
 
 import type { CustomModel } from "@/aiParams";
 import {
-  backendPickerAtomFamily,
+  chatBackendPickerAtom,
   configuredModelToCustomModel,
   findChatBackendEntry,
 } from "@/modelManagement";
@@ -15,7 +15,7 @@ export function useResolvedChatBackendModel(
   app: App,
   configuredModelId: string | undefined
 ): CustomModel | null {
-  const entries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
+  const entries = useAtomValue(chatBackendPickerAtom, { store: settingsStore });
   return useMemo(() => {
     const target = findChatBackendEntry(entries, configuredModelId, false);
     if (!target) return null;

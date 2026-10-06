@@ -34,7 +34,7 @@ export { createModelManagement } from "./createModelManagement";
 export type { ModelManagementApi } from "./createModelManagement";
 
 export {
-  backendPickerAtomFamily,
+  chatBackendPickerAtom,
   backendsAtom,
   configuredModelsAtom,
   copilotPlusCatalogAtom,

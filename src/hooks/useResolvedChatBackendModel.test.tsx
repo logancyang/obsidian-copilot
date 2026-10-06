@@ -25,7 +25,7 @@ jest.mock("@/modelManagement", () => ({
   ...jest.requireActual<typeof import("@/modelManagement/chatModel/chatModelSelection")>(
     "@/modelManagement/chatModel/chatModelSelection"
   ),
-  backendPickerAtomFamily: () => "chat",
+  chatBackendPickerAtom: "chat",
   configuredModelToCustomModel: ({
     configuredModel,
   }: {

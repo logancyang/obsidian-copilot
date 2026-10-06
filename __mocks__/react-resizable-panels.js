@@ -6,6 +6,6 @@ const passthrough = (displayName) => {
   return Component;
 };
 
-export const PanelGroup = passthrough("PanelGroup");
+export const Group = passthrough("Group");
 export const Panel = passthrough("Panel");
-export const PanelResizeHandle = passthrough("PanelResizeHandle");
+export const Separator = passthrough("Separator");

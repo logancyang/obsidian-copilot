@@ -1,7 +1,7 @@
 import { getSettings, resetSettings, setSettings, settingsStore } from "@/settings/model";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
 
-import { backendPickerAtomFamily, byokProvidersAtom, visibleByokProvidersAtom } from "./atoms";
+import { chatBackendPickerAtom, byokProvidersAtom, visibleByokProvidersAtom } from "./atoms";
 
 function provider(id: string, origin: Provider["origin"], baseUrl?: string): Provider {
   return {
@@ -36,19 +36,19 @@ beforeEach(() => {
 });
 
 function pickerIds(): string[] {
-  return settingsStore.get(backendPickerAtomFamily("chat")).map((e) => e.configuredModelId);
+  return settingsStore.get(chatBackendPickerAtom).map((e) => e.configuredModelId);
 }
 
 function warningById(): Record<string, boolean> {
   const out: Record<string, boolean> = {};
-  for (const e of settingsStore.get(backendPickerAtomFamily("chat"))) {
+  for (const e of settingsStore.get(chatBackendPickerAtom)) {
     out[e.configuredModelId] = e.state === "ok" ? Boolean(e.needsSelfHostWarning) : false;
   }
   return out;
 }
 
 describe("atoms", () => {
-  describe("backendPickerAtomFamily", () => {
+  describe("chatBackendPickerAtom", () => {
     it("lists every enabled entry without a Self-Host warning when Self-Host Mode is off", () => {
       expect(pickerIds()).toEqual(["cloud-m", "local-m", "missing"]);
       expect(warningById()).toEqual({ "cloud-m": false, "local-m": false, missing: false });
@@ -75,8 +75,8 @@ describe("atoms", () => {
         backends: { chat: { enabledModels: [] } },
         enableSelfHostMode: true,
       });
-      const a = settingsStore.get(backendPickerAtomFamily("chat"));
-      const b = settingsStore.get(backendPickerAtomFamily("chat"));
+      const a = settingsStore.get(chatBackendPickerAtom);
+      const b = settingsStore.get(chatBackendPickerAtom);
       expect(a).toHaveLength(0);
       expect(a).toBe(b);
     });
