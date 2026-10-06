@@ -2,16 +2,11 @@ import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import { readdirSync, readFileSync } from "fs";
 import { join, relative } from "path";
 
-const UNTAGGED_BY_DESIGN = [
-  ["constants.ts"],
-  ["builtinSkills", "builtinSkills.ts"],
-  ["LLMProviders", "chatModelManager.ts"],
-];
+const UNTAGGED_BY_DESIGN = [["constants.ts"], ["LLMProviders", "chatModelManager.ts"]];
 
 describe("productLinks", () => {
   describe("createProductUrl()", () => {
     it.each([
-      [PRODUCT_URLS.COPILOT, "settings", "https://www.obsidiancopilot.com/"],
       [
         PRODUCT_URLS.COPILOT_PRICING,
         "model_picker_lock",

@@ -1,5 +1,4 @@
 export const PRODUCT_URLS = {
-  COPILOT: "https://www.obsidiancopilot.com/",
   COPILOT_PRICING: "https://www.obsidiancopilot.com/pricing",
   COPILOT_DASHBOARD: "https://www.obsidiancopilot.com/dashboard",
   MIYO: "https://www.miyo.md/",
@@ -22,7 +21,9 @@ export type ProductUtmMedium =
   | "multi_agent"
   | "model_picker_lock"
   | "model_settings_lock"
-  | "preview_hint";
+  | "preview_hint"
+  | "skill_no_license"
+  | "skill_license_invalid";
 
 export function createProductUrl(destination: ProductUrl, medium: ProductUtmMedium): string {
   const url = new URL(destination);
