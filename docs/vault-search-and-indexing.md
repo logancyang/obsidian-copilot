@@ -64,7 +64,7 @@ Use **Search scope** in the Miyo settings tab:
 
 With **Current vault** selected, the settings tab also lists the other folders registered in Miyo, such as a research folder or a second vault. Tick any of them to search them together with this vault. Synced ChatGPT and Claude chat folders are in the list too, tagged **Chat**. Quick Chat's vault search and the agents' Miyo search then cover this vault and the ticked folders, and no other folder.
 
-Searching several folders at once needs a Miyo version that supports it. An older Miyo searches only this vault until you update it. If this computer's Miyo doesn't have a ticked folder, for example after your settings sync from another computer, Quick Chat skips that folder and searches the rest. Agent searches fail until you untick it. The list marks it **Not in Miyo** so you can find it.
+Searching several folders at once needs a Miyo version that supports it. An older Miyo searches only this vault until you update it. If this computer's Miyo doesn't have a ticked folder, for example after your settings sync from another computer, Quick Chat skips that folder and searches the rest. Agents search only this vault until you untick it. The list marks it **Not in Miyo** so you can find it.
 
 In chat sources, a result from another folder shows that folder's name, and a result from a chat folder shows **Chat**. These results aren't notes in this vault, so you can't open them from the sources list.
 

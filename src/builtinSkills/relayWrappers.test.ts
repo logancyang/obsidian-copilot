@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -116,16 +116,33 @@ describe("relayWrappers", () => {
     expect(result.stdout.trim()).toBe(canned.body);
   });
 
+  const FAKE_MIYO = `#!/bin/sh
+printf '[%s]' "$@" >> "$HOME/calls.log"
+printf '\\n' >> "$HOME/calls.log"
+for ARG do
+  if [ "$ARG" = "\${FAKE_MIYO_UNREGISTERED:-}" ]; then
+    printf 'Error: Folder not registered: %s\\n' "$ARG" >&2
+    exit 1
+  fi
+done
+printf '[%s]\\n' "$@"
+`;
+
   function runMiyoSearch(env: Record<string, string>) {
     const bin = path.join(root, ".miyo", "bin");
     mkdirSync(bin, { recursive: true });
-    writeFileSync(path.join(bin, "miyo"), `#!/bin/sh\nprintf '[%s]\\n' "$@"\n`, { mode: 0o755 });
+    writeFileSync(path.join(bin, "miyo"), FAKE_MIYO, { mode: 0o755 });
     return run(
       "miyo-search",
       { HOME: root, [MIYO_SEARCH_SCOPE_ENV]: "current", ...env },
       "my * notes"
     );
   }
+
+  const miyoCalls = () => readFileSync(path.join(root, "calls.log"), "utf8").trim().split("\n");
+  const argv = (...args: string[]) => args.map((arg) => `[${arg}]`).join("");
+  const SCOPE_FAILED =
+    "Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. Details: ";
 
   (windows ? it.skip : it)(
     `${ISSUE_3508} hands Miyo each ticked folder verbatim, skips empty entries, and passes the vault last`,
@@ -172,6 +189,73 @@ describe("relayWrappers", () => {
           (arg) => `[${arg}]`
         )
       );
+    }
+  );
+
+  (windows ? it.skip : it)(
+    `${ISSUE_3508} skips ticked folders this Miyo lacks by retrying with the vault alone and noting why on stderr`,
+    async () => {
+      const result = await runMiyoSearch({
+        [MIYO_SEARCH_FOLDER_ENV]: "My Vault",
+        [MIYO_SEARCH_EXTRA_FOLDERS_ENV]: "Research/Gone",
+        FAKE_MIYO_UNREGISTERED: "Gone",
+      });
+
+      expect(miyoCalls()).toEqual([
+        argv(
+          "search",
+          "my * notes",
+          "-n",
+          "10",
+          "--folder",
+          "Research",
+          "--folder",
+          "Gone",
+          "--folder",
+          "My Vault",
+          "--json"
+        ),
+        argv("search", "my * notes", "-n", "10", "--folder", "My Vault", "--json"),
+      ]);
+      expect(result.status).toBe(0);
+      expect(result.stdout.trim().split("\n").join("")).toBe(
+        argv("search", "my * notes", "-n", "10", "--folder", "My Vault", "--json")
+      );
+      expect(result.stderr).toBe(
+        "Miyo search skipped the extra Miyo folders ticked in Copilot settings and searched only the active vault. Details: Error: Folder not registered: Gone\n"
+      );
+    }
+  );
+
+  (windows ? it.skip : it)(
+    `${ISSUE_3508} reports the Current vault scope failure when the vault-alone retry also fails`,
+    async () => {
+      const result = await runMiyoSearch({
+        [MIYO_SEARCH_FOLDER_ENV]: "My Vault",
+        [MIYO_SEARCH_EXTRA_FOLDERS_ENV]: "Research",
+        FAKE_MIYO_UNREGISTERED: "My Vault",
+      });
+
+      expect(miyoCalls()).toHaveLength(2);
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe(`${SCOPE_FAILED}Error: Folder not registered: My Vault\n`);
+    }
+  );
+
+  (windows ? it.skip : it)(
+    `${ISSUE_3508} fails a vault-only search without retrying when no folder is ticked`,
+    async () => {
+      const result = await runMiyoSearch({
+        [MIYO_SEARCH_FOLDER_ENV]: "My Vault",
+        FAKE_MIYO_UNREGISTERED: "My Vault",
+      });
+
+      expect(miyoCalls()).toEqual([
+        argv("search", "my * notes", "-n", "10", "--folder", "My Vault", "--json"),
+      ]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe(`${SCOPE_FAILED}Error: Folder not registered: My Vault\n`);
     }
   );
 });

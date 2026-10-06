@@ -929,7 +929,17 @@ case "\${${MIYO_SEARCH_SCOPE_ENV}:-current}" in
     done
     unset IFS
     set +f
-    OUT=$("$MIYO" search "$QUERY" -n 10 "$@" --folder "$${MIYO_SEARCH_FOLDER_ENV}" --json 2>&1) || die "Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. Details: $OUT" 1
+    OUT=$("$MIYO" search "$QUERY" -n 10 "$@" --folder "$${MIYO_SEARCH_FOLDER_ENV}" --json 2>&1)
+    STATUS=$?
+    # A ticked folder this Miyo lacks fails the whole search, so retry with the vault alone.
+    # https://github.com/logancyang/obsidian-copilot/issues/3508
+    if [ "$STATUS" -ne 0 ] && [ $# -gt 0 ]; then
+      SKIPPED=$OUT
+      OUT=$("$MIYO" search "$QUERY" -n 10 --folder "$${MIYO_SEARCH_FOLDER_ENV}" --json 2>&1)
+      STATUS=$?
+      [ "$STATUS" -ne 0 ] || printf '%s\n' "Miyo search skipped the extra Miyo folders ticked in Copilot settings and searched only the active vault. Details: $SKIPPED" >&2
+    fi
+    [ "$STATUS" -eq 0 ] || die "Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. Details: $OUT" 1
     ;;
   *)
     die "Miyo search received an invalid Search scope. Do not retry or run an unrestricted search." 4
@@ -963,13 +973,23 @@ if not defined ${MIYO_SEARCH_FOLDER_ENV} (
   exit /b 4
 )
 rem Copilot quotes the ticked folders, which go before the vault because a Miyo that
-rem searches one folder keeps only the last --folder.
+rem searches one folder keeps only the last --folder. The agent's words follow --, so
+rem they stay query text and cannot add a --folder. A ticked folder this Miyo lacks
+rem fails the whole search, so a failure retries with the vault alone.
 rem https://github.com/logancyang/obsidian-copilot/issues/3508
-"%MIYO%" search %* -n 10 %${MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV}% --folder "%${MIYO_SEARCH_FOLDER_ENV}%" --json
+"%MIYO%" search -n 10 %${MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV}% --folder "%${MIYO_SEARCH_FOLDER_ENV}%" --json -- %*
+if not errorlevel 1 exit /b 0
+if not defined ${MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV} (
+  echo Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. 1>&2
+  exit /b 1
+)
+"%MIYO%" search -n 10 --folder "%${MIYO_SEARCH_FOLDER_ENV}%" --json -- %*
 if errorlevel 1 (
   echo Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. 1>&2
   exit /b 1
 )
+echo Miyo search skipped the extra Miyo folders ticked in Copilot settings and searched only the active vault. 1>&2
+exit /b 0
 `;
 
 const MIYO_PARSE_SH = `#!/bin/sh
