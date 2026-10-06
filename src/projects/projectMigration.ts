@@ -52,7 +52,9 @@ async function saveFailedProjectToUnsupported(
             const backedUpProject = JSON.parse(jsonMatch[1]);
             if (JSON.stringify(backedUpProject) === JSON.stringify(project)) return false;
           }
-        } catch {}
+        } catch (error) {
+          logWarn(`[Projects] Could not compare with existing backup "${filePath}"`, error);
+        }
       }
       filePath = `${unsupportedFolder}/${baseName} - ${suffix}.md`;
       suffix++;

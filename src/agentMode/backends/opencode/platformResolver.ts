@@ -1,3 +1,4 @@
+import { logInfo } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
 export type OpencodePlatform = "darwin" | "linux" | "windows";
@@ -58,10 +59,11 @@ async function detectMusl(): Promise<boolean> {
     requireNodeModule<typeof import("node:child_process")>("child_process");
   const { promisify } = requireNodeModule<typeof import("node:util")>("util");
   const execFile = promisify(execFileCb);
-  try {
-    await fs.promises.access("/etc/alpine-release");
-    return true;
-  } catch {}
+  const isAlpine = await fs.promises.access("/etc/alpine-release").then(
+    () => true,
+    () => false
+  );
+  if (isAlpine) return true;
   try {
     const { stdout, stderr } = await execFile("ldd", ["--version"]);
     return /musl/i.test(`${stdout}\n${stderr}`);
@@ -94,7 +96,9 @@ async function detectAvx2(): Promise<boolean> {
       ]);
       return /true/i.test(stdout);
     }
-  } catch {}
+  } catch (error) {
+    logInfo("[opencode] AVX2 probe failed; assuming AVX2 support", error);
+  }
   return true;
 }
 

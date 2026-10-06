@@ -380,7 +380,9 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     const dirs: string[] = [];
     try {
       dirs.push(this.getDataDir());
-    } catch {}
+    } catch (error) {
+      logInfo("[opencode] No managed data directory to reclaim", error);
+    }
     const adapter = this.plugin.app.vault.adapter;
     if (adapter instanceof FileSystemAdapter) {
       dirs.push(

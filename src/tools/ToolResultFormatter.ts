@@ -111,7 +111,9 @@ export class ToolResultFormatter {
       if (typeof normalized === "string" && normalized.startsWith("ENC:")) {
         try {
           normalized = decodeURIComponent(normalized.slice(4));
-        } catch {}
+        } catch {
+          normalized = result;
+        }
       }
 
       let parsedResult: unknown;
@@ -236,8 +238,9 @@ export class ToolResultFormatter {
         ) {
           return (parsed as Record<string, unknown>).documents as unknown[];
         }
-      } catch {}
-      return [];
+      } catch {
+        return [];
+      }
     }
     return [];
   }

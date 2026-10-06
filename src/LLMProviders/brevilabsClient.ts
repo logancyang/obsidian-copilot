@@ -63,7 +63,9 @@ function parseBrevilabsResponse<T>(
   if (typeof data === "string") {
     try {
       data = JSON.parse(data);
-    } catch {}
+    } catch {
+      data = response.json;
+    }
   }
   if (response.status < 200 || response.status >= 300) {
     const detail = (data as { detail?: { reason?: string; error?: string } } | null)?.detail;

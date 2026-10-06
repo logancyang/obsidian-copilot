@@ -64,7 +64,9 @@ function tapReadable(
         if (value) splitter.push(value);
       }
       splitter.flush();
-    } catch {}
+    } catch (error) {
+      logInfo("[ACP debug tap] Stopped logging the stream", error);
+    }
   })();
   return forConsumer;
 }
@@ -94,7 +96,9 @@ export class NdjsonLineSplitter {
   private emit(line: string): void {
     try {
       this.onLine(line);
-    } catch {}
+    } catch (error) {
+      logInfo("[ACP debug tap] Dropped a line the sink could not record", error);
+    }
   }
 }
 

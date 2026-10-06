@@ -1,5 +1,5 @@
 import { err2String } from "@/errorFormat";
-import { App, TFile } from "obsidian";
+import { App, Notice, TFile } from "obsidian";
 import { ensureFolderExists } from "@/utils";
 import { getSettings } from "@/settings/model";
 import { getEffectiveCopilotFolder } from "@/settings/copilotFolder";
@@ -112,6 +112,7 @@ class LogFileManager {
         await app.vault.adapter.write(path, content);
       }
     } catch {
+      return;
     } finally {
       this.flushing = false;
     }
@@ -126,7 +127,9 @@ class LogFileManager {
       if (await app.vault.adapter.exists(path)) {
         await app.vault.adapter.remove(path);
       }
-    } catch {}
+    } catch {
+      return;
+    }
   }
 
   private sanitizeSettingsForLog(): Record<string, unknown> {
@@ -174,12 +177,11 @@ class LogFileManager {
     const bufferSnapshot = [...this.buffer];
 
     try {
-      const sanitizedSettings = this.sanitizeSettingsForLog();
-      const settingsJson = JSON.stringify(sanitizedSettings, null, 2);
-      const settingsLines = ["", "## Settings", "```json", ...settingsJson.split("\n"), "```"];
-
-      bufferSnapshot.push(...settingsLines);
-    } catch {}
+      const settingsJson = JSON.stringify(this.sanitizeSettingsForLog(), null, 2);
+      bufferSnapshot.push("", "## Settings", "```json", ...settingsJson.split("\n"), "```");
+    } catch (error) {
+      bufferSnapshot.push("", "## Settings", `Settings could not be serialized: ${String(error)}`);
+    }
 
     try {
       const content = bufferSnapshot.join("\n") + (bufferSnapshot.length ? "\n" : "");
@@ -194,7 +196,10 @@ class LogFileManager {
       } else {
         await app.vault.create(path, content);
       }
-    } catch {}
+    } catch (error) {
+      // The log file is the logger's own sink, so a write failure can only surface as a Notice. https://github.com/Brevilabs/obsidian-copilot-private/issues/647
+      new Notice(`Could not write the Copilot log file: ${String(error)}`);
+    }
 
     const abstract = app.vault.getAbstractFileByPath(path);
     const file = abstract instanceof TFile ? abstract : null;
@@ -203,7 +208,9 @@ class LogFileManager {
         const leaf = app.workspace.getLeaf(true);
         await leaf.openFile(file);
       }
-    } catch {}
+    } catch {
+      return;
+    }
   }
 }
 

@@ -86,7 +86,9 @@ export class ChatPersistenceManager {
             if (adapterFm.topic) existingTopic = adapterFm.topic;
             if (adapterFm.lastAccessedAt) existingLastAccessedAt = Number(adapterFm.lastAccessedAt);
           }
-        } catch {}
+        } catch (error) {
+          logWarn("[ChatPersistenceManager] Could not read existing chat frontmatter", error);
+        }
       }
 
       const preferredFileName = existingFile
@@ -715,7 +717,9 @@ ${chatContent}`;
         if (adapterFm?.epoch) {
           epoch = Number(adapterFm.epoch);
         }
-      } catch {}
+      } catch (error) {
+        logWarn("[ChatPersistenceManager] Could not read chat frontmatter", error);
+      }
     }
 
     if (!epoch) {

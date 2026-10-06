@@ -155,10 +155,12 @@ export abstract class ManagedBinaryManager<
     let attempted = false;
     try {
       await this.runExclusive({ kind: "installing", progress: null }, async (signal) => {
-        let failure: { pin?: string; minimumVersion?: string; failedAt?: number } = {};
+        let failure: { pin?: string; minimumVersion?: string; failedAt?: number };
         try {
           failure = JSON.parse(await fs.promises.readFile(failurePath, "utf8"));
-        } catch {}
+        } catch {
+          failure = {};
+        }
         // A failed network request must not repeat on every reload; a changed pin can retry immediately.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
         if (

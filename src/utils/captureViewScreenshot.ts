@@ -77,7 +77,9 @@ function resolveBrowserWindow(
         bestDelta = delta;
         best = w;
       }
-    } catch {}
+    } catch {
+      continue;
+    }
   }
   return best ?? current;
 }

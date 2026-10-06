@@ -35,10 +35,12 @@ function wireInternalLinks(
     e.preventDefault();
     const raw = link.getAttribute("data-href") || link.getAttribute("href");
     if (!raw) return;
-    let href = raw;
+    let href: string;
     try {
       href = decodeURIComponent(raw);
-    } catch {}
+    } catch {
+      href = raw;
+    }
     const newLeaf = e.button === 1 || e.ctrlKey || e.metaKey;
     openVaultPath(app, href, { newLeaf, sourcePath });
   };

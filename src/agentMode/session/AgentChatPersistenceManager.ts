@@ -47,8 +47,9 @@ function parseUsageJson(raw: unknown): SessionUsage | undefined {
     ) {
       return parsed as SessionUsage;
     }
-  } catch {}
-  return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export interface LoadedAgentChat {

@@ -1,3 +1,4 @@
+import { logWarn } from "@/logger";
 import { ChatOpenAI } from "@langchain/openai";
 
 export interface ChatLMStudioInput {
@@ -35,7 +36,9 @@ function createLMStudioFetch(baseFetch?: typeof window.fetch): typeof window.fet
         if (modified) {
           init = { ...init, body: JSON.stringify(body) };
         }
-      } catch {}
+      } catch {
+        logWarn("[ChatLMStudio] Sending a request body that is not JSON unchanged");
+      }
     }
     return underlyingFetch(input, init);
   };

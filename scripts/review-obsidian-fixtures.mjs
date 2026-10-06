@@ -196,7 +196,6 @@ async function main() {
     "// eslint-disable-next-line no-restricted-syntax -- fixture\nexport const a = 1;",
     "// prettier-ignore\nexport const a = [1,2];",
     "/* global activeWindow */\nexport const a = 1;",
-    "export function parse(text: string): unknown {\n  try {\n    return JSON.parse(text);\n  } catch {}\n  return undefined;\n}",
   ];
   for (const code of allowedComments) {
     const result = await lintSourceFixture(code, "src/utils.ts");
@@ -204,9 +203,19 @@ async function main() {
       result.messages.every(
         (message) => !["copilot/issue-linked-comments", "no-empty"].includes(message.ruleId)
       ),
-      `issue-linked comment, tool directive, or empty catch was rejected: ${code}`
+      `issue-linked comment or tool directive was rejected: ${code}`
     );
   }
+  const emptyCatchResult = await lintSourceFixture(
+    "export function parse(text: string): unknown {\n  try {\n    return JSON.parse(text);\n  } catch {}\n  return undefined;\n}",
+    "src/utils.ts"
+  );
+  assert(
+    emptyCatchResult.messages.some(
+      (message) => message.ruleId === "no-empty" && message.severity === 2
+    ),
+    "Empty catch block was accepted"
+  );
   const browserStorageAccesses = [
     'localStorage.getItem("key")',
     'sessionStorage.setItem("key", "value")',

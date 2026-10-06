@@ -1,3 +1,4 @@
+import { logWarn } from "@/logger";
 import { EditorView } from "@codemirror/view";
 import type { Editor } from "obsidian";
 import React from "react";
@@ -100,7 +101,9 @@ export class QuickAskOverlay {
     for (const cleanup of this.cleanupCallbacks) {
       try {
         cleanup();
-      } catch {}
+      } catch (error) {
+        logWarn("[QuickAsk] A cleanup callback failed", error);
+      }
     }
     this.cleanupCallbacks = [];
 
