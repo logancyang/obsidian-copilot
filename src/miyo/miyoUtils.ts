@@ -76,13 +76,15 @@ export function getExtraSearchFolderOptions(
   entries: readonly MiyoFolderEntry[],
   vaultName: string
 ): MiyoSearchFolderOption[] {
-  // Only names the saved folder list keeps verbatim are offered, and the vault is
-  // always searched already. https://github.com/logancyang/obsidian-copilot/issues/3508
-  const offered = new Set(normalizeMiyoFolderNames(entries.map((entry) => entry.path)));
+  // Only names the saved folder list keeps verbatim are offered, the vault is always
+  // searched already, and Miyo rejects a name two folders share as ambiguous, which
+  // would fail every vault search. https://github.com/logancyang/obsidian-copilot/issues/3508
+  const names = entries.map((entry) => entry.path);
+  const offered = new Set(normalizeMiyoFolderNames(names));
   offered.delete(vaultName);
   const options: MiyoSearchFolderOption[] = [];
   for (const entry of entries) {
-    if (offered.delete(entry.path)) {
+    if (names.indexOf(entry.path) === names.lastIndexOf(entry.path) && offered.delete(entry.path)) {
       options.push({ name: entry.path, isChat: entry.origin === "chat_sync" });
     }
   }

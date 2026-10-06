@@ -145,19 +145,20 @@ describe("miyoUtils", () => {
       ).toEqual([{ name: "Research", isChat: false }]);
     });
 
-    it("leaves out names the saved folder list would reject and repeats of a name Miyo lists twice — https://github.com/logancyang/obsidian-copilot/issues/3508", () => {
+    it("leaves out names the saved folder list would reject and a name two Miyo folders share, which Miyo rejects as ambiguous — https://github.com/logancyang/obsidian-copilot/issues/3508", () => {
       expect(
         getExtraSearchFolderOptions(
           [
             { path: "Research" },
             { path: "Research", origin: "chat_sync" },
+            { path: "Notes" },
             { path: "a/b" },
             { path: " Padded " },
             { path: 'say "hi"' },
           ],
           "Vault"
         )
-      ).toEqual([{ name: "Research", isChat: false }]);
+      ).toEqual([{ name: "Notes", isChat: false }]);
     });
   });
 
