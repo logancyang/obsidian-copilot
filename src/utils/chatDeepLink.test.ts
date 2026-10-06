@@ -33,7 +33,13 @@ describe("chatDeepLink", () => {
   describe("buildChatDeepLink()", () => {
     it("encodes the vault and chat id without exposing a file path", () => {
       expect(buildChatDeepLink("My Vault", "epoch:1735732800000")).toBe(
-        "obsidian://copilot-chat?vault=My+Vault&id=epoch%3A1735732800000"
+        "obsidian://copilot-chat?vault=My%20Vault&id=epoch%3A1735732800000"
+      );
+    });
+
+    it("keeps a literal plus sign in the vault name distinct from a space", () => {
+      expect(buildChatDeepLink("C++ notes", "epoch:1")).toBe(
+        "obsidian://copilot-chat?vault=C%2B%2B%20notes&id=epoch%3A1"
       );
     });
   });

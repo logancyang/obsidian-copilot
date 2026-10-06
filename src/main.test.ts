@@ -136,7 +136,7 @@ describe("main", () => {
         await plugin.copyChatLink(async () => "Copilot/conversations/renamed.md");
 
         expect(writeText).toHaveBeenCalledWith(
-          "[Trip planning](obsidian://copilot-chat?vault=My+Vault&id=epoch%3A1735732800000)"
+          "[Trip planning](obsidian://copilot-chat?vault=My%20Vault&id=epoch%3A1735732800000)"
         );
       });
 
