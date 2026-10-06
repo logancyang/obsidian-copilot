@@ -138,6 +138,7 @@ import {
   trashFile,
 } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
+import { withTimeout } from "@/utils";
 import { EditorView } from "@codemirror/view";
 import { OpenArtifactsPublisher } from "@/openArtifacts/OpenArtifactsPublisher";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
@@ -145,6 +146,13 @@ import {
   createSelfHostWebSearchAgentBridge,
   type SelfHostWebSearchAgentBridge,
 } from "@/LLMProviders/selfHostServices";
+
+const PENDING_TEARDOWN = Symbol.for("obsidian-copilot:pending-teardown");
+const PREVIOUS_TEARDOWN_TIMEOUT_MS = 10_000;
+
+interface TeardownHandoff {
+  [PENDING_TEARDOWN]?: Promise<void>;
+}
 
 export default class CopilotPlugin extends Plugin {
   chainOwner: ChainOwner;
@@ -175,17 +183,39 @@ export default class CopilotPlugin extends Plugin {
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
   private startupMigrationItems: StartupMigrationItem[] = [];
   private pluginLifecycleActive = true;
+  private initialization: Promise<boolean> = Promise.resolve(false);
 
   public isPluginLifecycleActive(): boolean {
     return this.pluginLifecycleActive;
   }
 
-  async onload(): Promise<void> {
+  // Obsidian awaits onload before opening the vault and never waits for it before unloading, so
+  // startup work runs in the background and registers only after its last await.
+  // https://github.com/logancyang/obsidian-copilot/issues/3518
+  onload(): void {
     installRendererEventsShim();
+    this.initialization = this.initialize().catch((error) => {
+      logError("Copilot failed to start.", error);
+      new Notice("Copilot failed to start. Check the console for details.");
+      return false;
+    });
+    // Obsidian dispatches the URI that launched it once its layout loads, which can precede
+    // initialization, so the handler exists from the start and waits for the chat managers.
+    // https://github.com/logancyang/obsidian-copilot/issues/3271
+    this.registerObsidianProtocolHandler("copilot-chat", (params) => {
+      void this.initialization.then((ready) => {
+        if (ready) void this.openChatDeepLink(params);
+      });
+    });
+  }
+
+  private async initialize(): Promise<boolean> {
+    await this.waitForPreviousTeardown();
     resetPersistenceState();
     KeychainService.resetInstance();
     KeychainService.getInstance(this.app);
     await this.loadSettings();
+    if (!this.pluginLifecycleActive) return false;
     this.modelManagement = createModelManagement({
       app: this.app,
     });
@@ -212,6 +242,20 @@ export default class CopilotPlugin extends Plugin {
         }
       })();
     });
+    await runSettingsMigrations(this.modelManagement);
+    const agentMode = isDesktopRuntime()
+      ? await Promise.all([import("@/agentMode"), import("@/agentMode/agentModelDiscovery")])
+      : null;
+    // Awaited so no publish can create .openartifacts before the old folder moves; a
+    // destination that already exists would strand the legacy history for good.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/337
+    try {
+      await migrateOpenArtifactsFolder(this.app.vault);
+    } catch (error) {
+      logError("Failed to move the Symposium publishing folder to .openartifacts.", error);
+    }
+    if (!this.pluginLifecycleActive) return false;
+
     this.register(
       startReleaseUpdateCheck(
         this.app,
@@ -220,7 +264,6 @@ export default class CopilotPlugin extends Plugin {
         (version) => updateSetting("lastShownStartupVersion", version)
       )
     );
-    await runSettingsMigrations(this.modelManagement);
     void cleanupLegacyIndexArtifacts({
       adapter: this.app.vault.adapter,
       configDir: this.app.vault.configDir,
@@ -267,17 +310,19 @@ export default class CopilotPlugin extends Plugin {
       }
     });
 
-    if (isDesktopRuntime()) {
-      const {
-        CopilotAgentView,
-        PlanPreviewView,
-        PLAN_PREVIEW_VIEW_TYPE,
-        acpFrameSink,
-        createAgentSessionManager,
-        setFrameSinkVaultBasePath,
-        SkillManager,
-      } = await import("@/agentMode");
-      const { wireAgentModelDiscovery } = await import("@/agentMode/agentModelDiscovery");
+    if (agentMode) {
+      const [
+        {
+          CopilotAgentView,
+          PlanPreviewView,
+          PLAN_PREVIEW_VIEW_TYPE,
+          acpFrameSink,
+          createAgentSessionManager,
+          setFrameSinkVaultBasePath,
+          SkillManager,
+        },
+        { wireAgentModelDiscovery },
+      ] = agentMode;
       this.CopilotAgentView = CopilotAgentView;
       this.PlanPreviewView = PlanPreviewView;
       this.planPreviewViewType = PLAN_PREVIEW_VIEW_TYPE;
@@ -364,14 +409,6 @@ export default class CopilotPlugin extends Plugin {
       () => (this.canUseAgentView() ? this.activateAgentView() : this.activateView())
     );
 
-    // Awaited so no publish can create .openartifacts before the old folder moves; a
-    // destination that already exists would strand the legacy history for good.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/337
-    try {
-      await migrateOpenArtifactsFolder(this.app.vault);
-    } catch (error) {
-      logError("Failed to move the Symposium publishing folder to .openartifacts.", error);
-    }
     const openArtifactsPublisher = new OpenArtifactsPublisher(this.app);
     const publishFile = (file: TFile): void => {
       void openArtifactsPublisher
@@ -412,13 +449,24 @@ export default class CopilotPlugin extends Plugin {
     this.initSelectionHandler();
 
     this.initWebSelectionWatcher();
+    return true;
+  }
 
-    // A queued URI may fire as soon as its handler is registered, so register
-    // after chat managers and views are ready to load a conversation.
-    // https://github.com/logancyang/obsidian-copilot/issues/3271
-    this.registerObsidianProtocolHandler("copilot-chat", (params) => {
-      void this.openChatDeepLink(params);
-    });
+  // A disabled or updated copy may still be writing data.json or stopping Agent Mode backends;
+  // a hung shutdown must not keep this copy from starting.
+  // https://github.com/logancyang/obsidian-copilot/issues/3518
+  private async waitForPreviousTeardown(): Promise<void> {
+    const previousTeardown = (window as TeardownHandoff)[PENDING_TEARDOWN];
+    if (!previousTeardown) return;
+    try {
+      await withTimeout(
+        () => previousTeardown,
+        PREVIOUS_TEARDOWN_TIMEOUT_MS,
+        "Previous Copilot shutdown"
+      );
+    } catch (error) {
+      logWarn("Copilot started before its previous copy finished shutting down.", error);
+    }
   }
 
   private async collectLegacyUpgradeRelocation(): Promise<StartupMigrationItem | null> {
@@ -555,7 +603,7 @@ export default class CopilotPlugin extends Plugin {
     // The audio module is shared across hot-reloaded plugin instances, so the outgoing
     // teardown must release its context before a successor can create one. https://github.com/logancyang/obsidian-copilot/issues/2987
     disposeNotificationSound();
-    this.teardown().catch((error) => {
+    (window as TeardownHandoff)[PENDING_TEARDOWN] = this.teardown().catch((error) => {
       logError("Copilot: plugin teardown failed during unload:", error);
     });
   }
