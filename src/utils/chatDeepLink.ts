@@ -20,7 +20,8 @@ async function readEpoch(app: App, path: string): Promise<number | null> {
 }
 
 export function buildChatDeepLink(vault: string, id: string): string {
-  return `obsidian://copilot-chat?${new URLSearchParams({ vault, id }).toString()}`;
+  // Obsidian does not decode "+" as a space in vault names: https://github.com/Brevilabs/obsidian-copilot-private/issues/615
+  return `obsidian://copilot-chat?${new URLSearchParams({ vault, id }).toString().replaceAll("+", "%20")}`;
 }
 
 export function buildChatMarkdownLink(title: string, url: string): string {
