@@ -759,12 +759,11 @@ describe("AgentSession", () => {
         expect(messages[1].turnDurationMs).toBeUndefined();
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 does not open a plan-approval card or a todo list for a replayed ExitPlanMode call or plan", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 does not open a plan-approval card for a replayed ExitPlanMode call", async () => {
         const mock = makeMockBackend();
         const session = makeAwaitingResumeSession(mock);
         const onCurrentPlanChanged = jest.fn();
-        const onCurrentTodoListChanged = jest.fn();
-        subscribeTo(session, { onCurrentPlanChanged, onCurrentTodoListChanged });
+        subscribeTo(session, { onCurrentPlanChanged });
 
         mock.emitUpdate({
           sessionUpdate: "tool_call",
@@ -774,18 +773,33 @@ describe("AgentSession", () => {
           status: "completed",
           rawInput: { plan: "# Old plan\n\n1. step" },
         });
-        mock.emitUpdate({
-          sessionUpdate: "plan",
-          entries: [{ content: "step", status: "pending", priority: "medium" }],
-        });
         session.completeResume(emptyState());
         await session.ready;
 
         expect(session.getCurrentPlan()).toBeNull();
-        expect(session.getCurrentTodoList()).toBeNull();
         expect(onCurrentPlanChanged).not.toHaveBeenCalled();
-        expect(onCurrentTodoListChanged).not.toHaveBeenCalled();
         expect(session.getStatus()).toBe("idle");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/643 restores the last replayed task list as the current todo list", async () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+        const onCurrentTodoListChanged = jest.fn();
+        subscribeTo(session, { onCurrentTodoListChanged });
+
+        mock.emitUpdate({
+          sessionUpdate: "plan",
+          entries: [{ content: "step", status: "pending", priority: "medium" }],
+        });
+        mock.emitUpdate({
+          sessionUpdate: "plan",
+          entries: [{ content: "step", status: "completed", priority: "medium" }],
+        });
+        session.completeResume(emptyState());
+        await session.ready;
+
+        expect(session.getCurrentTodoList()).toEqual([{ content: "step", status: "completed" }]);
+        expect(onCurrentTodoListChanged).toHaveBeenCalled();
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 keeps handling state and usage updates normally while history is collected", () => {

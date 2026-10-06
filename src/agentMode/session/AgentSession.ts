@@ -1467,6 +1467,8 @@ export class AgentSession {
         if (this.store.upsertAgentPart(this.historyAiBubbleId(occurredAt), planToPart(update))) {
           this.scheduleNotifyMessages();
         }
+        // The last replayed task list is the one the chat closed with, so the project popover shows it again. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
+        if (this.applyCurrentTodoList(update.entries)) this.notifyCurrentTodoListChanged();
         return true;
       default:
         return false;

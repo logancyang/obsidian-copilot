@@ -530,6 +530,7 @@ export function replayClaudeTranscript(
 ): SessionEvent[] {
   const state = createTranslatorState(claudeTasks);
   const out: SessionEvent[] = [];
+  const unansweredToolCallIds = new Set<string>();
   for (const line of jsonl.split(/\r?\n/)) {
     const entry = parseTranscriptEntry(line);
     // Meta, subagent, and compaction entries are transcript bookkeeping the live chat never showed. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
@@ -542,9 +543,26 @@ export function replayClaudeTranscript(
           ? replayUserContent(content, entry.uuid, sessionId, state)
           : [];
     const occurredAt = typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
-    for (const e of events) out.push(Number.isFinite(occurredAt) ? { ...e, occurredAt } : e);
+    for (const e of events) {
+      trackUnansweredToolCall(unansweredToolCallIds, e.update);
+      out.push(Number.isFinite(occurredAt) ? { ...e, occurredAt } : e);
+    }
+  }
+  // A tool call the transcript never answered was cut off with its turn, and nothing will settle it after the replay. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
+  for (const toolCallId of unansweredToolCallIds) {
+    out.push(event(sessionId, { sessionUpdate: "tool_call_update", toolCallId, status: "failed" }));
   }
   return out;
+}
+
+function trackUnansweredToolCall(unanswered: Set<string>, update: SessionUpdate): void {
+  if (update.sessionUpdate === "tool_call") unanswered.add(update.toolCallId);
+  if (
+    update.sessionUpdate === "tool_call_update" &&
+    (update.status === "completed" || update.status === "failed")
+  ) {
+    unanswered.delete(update.toolCallId);
+  }
 }
 
 function parseTranscriptEntry(line: string): ClaudeTranscriptEntry | null {

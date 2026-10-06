@@ -1458,6 +1458,30 @@ describe("sdkMessageTranslator", () => {
       });
     });
 
+    it(`marks a tool call the transcript never answered as failed once the replay ends, so it does not show as running forever (${ISSUE_643})`, () => {
+      const jsonl = transcript(
+        userEntry("u-1", "run it"),
+        assistantEntry([
+          { type: "tool_use", id: "tool-done", name: "Bash", input: { command: "ls" } },
+        ]),
+        userEntry("u-2", [{ type: "tool_result", tool_use_id: "tool-done", content: "a.md" }]),
+        assistantEntry([
+          { type: "tool_use", id: "tool-cut", name: "Bash", input: { command: "sleep 99" } },
+        ])
+      );
+
+      const updates = replay(jsonl);
+
+      expect(updates.at(-1)).toEqual({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "tool-cut",
+        status: "failed",
+      });
+      expect(
+        updates.filter((u) => u.sessionUpdate === "tool_call_update" && u.status === "failed")
+      ).toHaveLength(1);
+    });
+
     it("replays a TodoWrite call as the todo plan it set", () => {
       const jsonl = transcript(
         assistantEntry([
