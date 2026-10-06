@@ -76,13 +76,12 @@ import {
   markPaidPendingEntitlement,
   navigateToPlusPage,
   turnOffPaid,
-  useIsPreviewAvailable,
   useIsPreviewEnabled,
   useIsSelfHostEligible,
   useLicenseState,
   verifyCachedEntitlement,
 } from "@/plusUtils";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { Notice } from "obsidian";
 
 const FUTURE_EXP_SECONDS = 9_999_999_999;
@@ -95,8 +94,7 @@ function buildSettings(overrides: Partial<CopilotSettings>): CopilotSettings {
 
 async function verifySessionFeatures(
   features: string[],
-  expSeconds: number = FUTURE_EXP_SECONDS,
-  verify: () => Promise<void> = verifyCachedEntitlement
+  expSeconds: number = FUTURE_EXP_SECONDS
 ): Promise<void> {
   mockVerifyEntitlement.mockResolvedValue({
     user_id: "user-123",
@@ -113,7 +111,7 @@ async function verifySessionFeatures(
       plusLicenseKey: STORED_LICENSE_KEY,
     })
   );
-  await verify();
+  await verifyCachedEntitlement();
 }
 
 function tokenBackedSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
@@ -494,94 +492,67 @@ describe("plusUtils", () => {
   });
 
   describe("isPreviewEnabled()", () => {
-    it("is true when Preview is selected and the verified token carries preview", async () => {
+    it("is true for a verified token for the stored license key that carries preview", async () => {
       await verifySessionFeatures(["self_host", "preview"]);
-      mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: true }));
+      mockGetSettings.mockReturnValue(tokenBackedSettings());
 
       expect(isPreviewEnabled()).toBe(true);
     });
 
-    it("is false when Official is selected even though the token carries preview", async () => {
-      await verifySessionFeatures(["self_host", "preview"]);
-      mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: false }));
-
-      expect(isPreviewEnabled()).toBe(false);
-    });
-
     it("is false for a token without the preview feature", async () => {
-      await verifySessionFeatures(["multi_agent"]);
-      mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: true }));
+      await verifySessionFeatures(["multi_agent", "self_host"]);
+      mockGetSettings.mockReturnValue(tokenBackedSettings());
 
       expect(isPreviewEnabled()).toBe(false);
     });
 
-    it("is false when no token was verified, keeping the saved choice for when access returns", () => {
-      mockGetSettings.mockReturnValue(
-        buildSettings({ previewEnabled: true, entitlementToken: "" })
-      );
+    it("is false when no token was verified this session", () => {
+      mockGetSettings.mockReturnValue(tokenBackedSettings());
 
       expect(isPreviewEnabled()).toBe(false);
-      expect(mockUpdateSetting).not.toHaveBeenCalled();
-      expect(mockSetSettings).not.toHaveBeenCalled();
     });
 
     it("is false once the signed exp has passed", async () => {
       await verifySessionFeatures(["self_host", "preview"], PAST_EXP_SECONDS);
-      mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: true }));
+      mockGetSettings.mockReturnValue(tokenBackedSettings());
+
+      expect(isPreviewEnabled()).toBe(false);
+    });
+
+    it("is false once a different license key is stored", async () => {
+      await verifySessionFeatures(["self_host", "preview"]);
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "another-key" }));
 
       expect(isPreviewEnabled()).toBe(false);
     });
   });
 
-  describe("disablePreviewForSession()", () => {
-    it("runs Copilot as Official for the rest of the session after Preview fails to start (https://github.com/Brevilabs/obsidian-copilot-private/issues/626)", async () => {
-      await jest.isolateModulesAsync(async () => {
-        const isolated = await import("@/plusUtils");
-        await verifySessionFeatures(
-          ["preview"],
-          FUTURE_EXP_SECONDS,
-          isolated.verifyCachedEntitlement
-        );
-        mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: true }));
-        expect(isolated.isPreviewEnabled()).toBe(true);
+  describe("useIsPreviewEnabled()", () => {
+    it("unlocks when the cached token finishes verifying, without a settings change or restart (https://github.com/Brevilabs/obsidian-copilot-private/issues/626)", async () => {
+      mockGetSettings.mockReturnValue(tokenBackedSettings());
+      const { result } = renderHook(() => useIsPreviewEnabled());
+      expect(result.current).toBe(false);
 
-        isolated.disablePreviewForSession();
-
-        expect(isolated.isPreviewEnabled()).toBe(false);
-        expect(mockGetSettings().previewEnabled).toBe(true);
+      mockVerifyEntitlement.mockResolvedValue({
+        user_id: "user-123",
+        plan: "believer",
+        tier: "plus",
+        features: ["self_host", "preview"],
+        iat: 0,
+        exp: FUTURE_EXP_SECONDS,
       });
-    });
-  });
-
-  describe("useIsPreviewAvailable()", () => {
-    it("is true for a verified token carrying preview, whichever channel is selected", async () => {
-      await verifySessionFeatures(["self_host", "preview"]);
-      mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: false }));
-
-      const { result } = renderHook(() => useIsPreviewAvailable());
+      await act(() => verifyCachedEntitlement());
 
       expect(result.current).toBe(true);
     });
 
-    it("is false for a token without preview", async () => {
-      await verifySessionFeatures(["multi_agent", "self_host"]);
-      mockGetSettings.mockReturnValue(tokenBackedSettings());
-
-      const { result } = renderHook(() => useIsPreviewAvailable());
-
-      expect(result.current).toBe(false);
-    });
-  });
-
-  describe("useIsPreviewEnabled()", () => {
-    it("follows the selected channel for a token carrying preview", async () => {
+    it("locks again when the license key changes", async () => {
       await verifySessionFeatures(["preview"]);
-      mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: true }));
-
+      mockGetSettings.mockReturnValue(tokenBackedSettings());
       const { result, rerender } = renderHook(() => useIsPreviewEnabled());
       expect(result.current).toBe(true);
 
-      mockGetSettings.mockReturnValue(tokenBackedSettings({ previewEnabled: false }));
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "another-key" }));
       rerender();
 
       expect(result.current).toBe(false);

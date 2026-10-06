@@ -140,7 +140,6 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { EditorView } from "@codemirror/view";
 import { OpenArtifactsPublisher } from "@/openArtifacts/OpenArtifactsPublisher";
-import { startPreviewActivation } from "@/preview";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
 import {
   createSelfHostWebSearchAgentBridge,
@@ -246,9 +245,7 @@ export default class CopilotPlugin extends Plugin {
 
     this.brevilabsClient = BrevilabsClient.getInstance();
     this.brevilabsClient.setPluginVersion(this.manifest.version);
-    const previewActivation = startPreviewActivation(this);
-    this.register(previewActivation.stop);
-    void verifyCachedEntitlement().then(previewActivation.sync);
+    void verifyCachedEntitlement();
     if (!isLegacyUpgrade) void checkIsPaidUser(this.app, { trigger: "startup" });
     this.registerInterval(
       window.setInterval(

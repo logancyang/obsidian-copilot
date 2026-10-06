@@ -17,7 +17,6 @@ import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
 import { DesktopOnlySettingsPanel } from "./components/DesktopOnlySettingsPanel";
 import { MiyoSettings } from "./components/MiyoSettings";
-import { PreviewSwitch } from "./components/PreviewSwitch";
 import { SelfHostSettings } from "./components/SelfHostSettings";
 
 const LazySkillsSettings = React.lazy(() =>
@@ -150,10 +149,6 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "b
               >
                 <div className="tw-flex tw-items-center tw-gap-2">
                   <span>Copilot Settings</span>
-                  <PreviewSwitch
-                    currentVersion={plugin.manifest.version}
-                    latestVersion={latestVersion}
-                  />
                   <div className="tw-flex tw-items-center tw-gap-1">
                     <span className="tw-text-xs tw-font-normal tw-text-muted">
                       v{plugin.manifest.version}

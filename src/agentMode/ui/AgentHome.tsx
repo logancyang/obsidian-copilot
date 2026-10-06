@@ -13,7 +13,6 @@ import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { AgentWelcomeCard } from "@/agentMode/ui/AgentWelcomeCard";
 import { AgentHomeReleaseUpdate } from "@/components/release-update/AgentHomeReleaseUpdate";
-import { AgentHomePreviewBadge } from "@/agentMode/ui/AgentHomePreviewBadge";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
@@ -632,7 +631,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 currentVersion={plugin.manifest.version}
                 visible={isLanding && !isProjectLanding}
               />
-              <AgentHomePreviewBadge visible={isLanding && !isProjectLanding} />
               {isDragActive && (
                 <div className="tw-pointer-events-none tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary tw-opacity-80">
                   <span>Drop files here...</span>

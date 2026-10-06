@@ -7,15 +7,6 @@ jest.mock("@/settings/v2/components/BasicSettings", () => ({ BasicSettings: () =
 jest.mock("@/settings/v2/components/MiyoSettings", () => ({
   MiyoSettings: () => <div>Miyo settings content</div>,
 }));
-jest.mock("@/settings/v2/components/PreviewSwitch", () => ({
-  PreviewSwitch: ({
-    currentVersion,
-    latestVersion,
-  }: {
-    currentVersion: string;
-    latestVersion: string | null;
-  }) => <div>{`Preview switch for ${currentVersion} against ${latestVersion}`}</div>,
-}));
 jest.mock("@/settings/v2/components/SelfHostSettings", () => ({ SelfHostSettings: () => null }));
 jest.mock("@/settings/v2/components/CommandSettings", () => ({ CommandSettings: () => null }));
 jest.mock("@/settings/v2/components/AdvancedSettings", () => ({ AdvancedSettings: () => null }));
@@ -65,17 +56,6 @@ describe("SettingsMainV2", () => {
       render(<SettingsMainV2 plugin={plugin} />);
       expect(screen.getByText("v1.2.3")).toBeTruthy();
       expect(screen.getByRole("link", { name: "(Update to v4.1.0)" })).toBeTruthy();
-    });
-
-    it("puts the release channel switch before the version so a long version never pushes it off (https://github.com/Brevilabs/obsidian-copilot-private/issues/626)", () => {
-      mockLatestVersion = "4.1.0";
-      mockHasUpdate = true;
-      render(<SettingsMainV2 plugin={plugin} />);
-      const previewSwitch = screen.getByText("Preview switch for 1.2.3 against 4.1.0");
-      const version = screen.getByText("v1.2.3");
-      expect(
-        previewSwitch.compareDocumentPosition(version) & Node.DOCUMENT_POSITION_FOLLOWING
-      ).toBeTruthy();
     });
 
     it("shows up to date when the shared check finds no newer release", () => {
