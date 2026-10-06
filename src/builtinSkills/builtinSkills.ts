@@ -37,6 +37,8 @@ export const PLUS_ENV = {
 
 export const MIYO_SEARCH_SCOPE_ENV = "COPILOT_MIYO_SEARCH_SCOPE";
 export const MIYO_SEARCH_FOLDER_ENV = "COPILOT_MIYO_SEARCH_FOLDER";
+export const MIYO_SEARCH_EXTRA_FOLDERS_ENV = "COPILOT_MIYO_SEARCH_EXTRA_FOLDERS";
+export const MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV = "COPILOT_MIYO_SEARCH_EXTRA_FOLDER_ARGS";
 export const SELF_HOST_WEB_SEARCH_ENV = "COPILOT_SELF_HOST_WEB_SEARCH";
 export const SELF_HOST_WEB_SEARCH_URL_ENV = "COPILOT_SELF_HOST_WEB_SEARCH_URL";
 export const SELF_HOST_WEB_SEARCH_TOKEN_ENV = "COPILOT_SELF_HOST_WEB_SEARCH_TOKEN";
@@ -872,7 +874,7 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   ...OBSIDIAN_SKILLS,
 ];
 
-const MIYO_SEARCH_VERSION = 4;
+const MIYO_SEARCH_VERSION = 5;
 const MIYO_PARSE_VERSION = 2;
 
 const MIYO_POSIX_RESOLVER = `# Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
@@ -916,7 +918,18 @@ case "\${${MIYO_SEARCH_SCOPE_ENV}:-current}" in
     ;;
   current)
     [ -n "\${${MIYO_SEARCH_FOLDER_ENV}:-}" ] || die "Miyo search could not enforce Current vault scope because the active vault identity is missing. Do not retry or run an unrestricted search." 4
-    OUT=$("$MIYO" search "$QUERY" -n 10 --folder "$${MIYO_SEARCH_FOLDER_ENV}" --json 2>&1) || die "Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. Details: $OUT" 1
+    # Ticked folders go first and the vault last, because a Miyo that searches one
+    # folder keeps only the last --folder. No folder name contains "/".
+    # https://github.com/logancyang/obsidian-copilot/issues/3508
+    set -f
+    IFS=/
+    set --
+    for NAME in \${${MIYO_SEARCH_EXTRA_FOLDERS_ENV}:-}; do
+      [ -z "$NAME" ] || set -- "$@" --folder "$NAME"
+    done
+    unset IFS
+    set +f
+    OUT=$("$MIYO" search "$QUERY" -n 10 "$@" --folder "$${MIYO_SEARCH_FOLDER_ENV}" --json 2>&1) || die "Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. Details: $OUT" 1
     ;;
   *)
     die "Miyo search received an invalid Search scope. Do not retry or run an unrestricted search." 4
@@ -926,7 +939,7 @@ printf '%s\\n' "$OUT"
 `;
 
 const MIYO_SEARCH_CMD = `@echo off
-setlocal enableextensions
+setlocal enableextensions disabledelayedexpansion
 rem Semantic vault search via the local Miyo CLI; prints Miyo's JSON to stdout.
 if "%~1"=="" (
   echo Usage: miyo-search.cmd "query" 1>&2
@@ -949,7 +962,10 @@ if not defined ${MIYO_SEARCH_FOLDER_ENV} (
   echo Miyo search could not enforce Current vault scope because the active vault identity is missing. Do not retry or run an unrestricted search. 1>&2
   exit /b 4
 )
-"%MIYO%" search %* -n 10 --folder "%${MIYO_SEARCH_FOLDER_ENV}%" --json
+rem Copilot quotes the ticked folders, which go before the vault because a Miyo that
+rem searches one folder keeps only the last --folder.
+rem https://github.com/logancyang/obsidian-copilot/issues/3508
+"%MIYO%" search %* -n 10 %${MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV}% --folder "%${MIYO_SEARCH_FOLDER_ENV}%" --json
 if errorlevel 1 (
   echo Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. 1>&2
   exit /b 1
@@ -1020,7 +1036,8 @@ unavailable. Read the JSON straight from stdout; do not pipe it through other
 tools (no \`jq\`, no \`|\`).
 
 Search scope comes from Copilot settings. **Current vault** applies Miyo's exact
-folder boundary for the active vault, including from Project chats.
+folder boundary for the active vault and any other Miyo folders ticked in Copilot
+settings, including from Project chats.
 **Unrestricted** searches every folder registered with Miyo.
 
 ## Reading the results

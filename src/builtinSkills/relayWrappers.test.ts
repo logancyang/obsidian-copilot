@@ -1,10 +1,14 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   BUILTIN_SKILLS,
+  MIYO_SEARCH_EXTRA_FOLDERS_ENV,
+  MIYO_SEARCH_FOLDER_ENV,
+  MIYO_SEARCH_SCOPE_ENV,
+  MIYO_SEARCH_SKILL,
   PLUS_ENV,
   SELF_HOST_WEB_SEARCH_ENV,
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
@@ -12,6 +16,7 @@ import {
 } from "@/builtinSkills/builtinSkills";
 
 const ISSUE_3398 = "https://github.com/logancyang/obsidian-copilot/issues/3398";
+const ISSUE_3508 = "https://github.com/logancyang/obsidian-copilot/issues/3508";
 const windows = process.platform === "win32";
 const WRAPPER_TIMEOUT_MS = 60_000;
 
@@ -55,9 +60,10 @@ describe("relayWrappers", () => {
 
   function run(
     skillName: string,
-    env: Record<string, string>
+    env: Record<string, string>,
+    arg = "https://youtu.be/q7mD8NFYd7s"
   ): Promise<{ status: number | null; stdout: string; stderr: string }> {
-    const skill = BUILTIN_SKILLS.find((item) => item.name === skillName)!;
+    const skill = [...BUILTIN_SKILLS, MIYO_SEARCH_SKILL].find((item) => item.name === skillName)!;
     for (const file of skill.files) writeFileSync(path.join(root, file.path), file.content);
     const script = skill.files.find((file) => file.path.endsWith(windows ? ".ps1" : ".sh"))!;
     return new Promise((resolve, reject) => {
@@ -66,7 +72,7 @@ describe("relayWrappers", () => {
         [
           ...(windows ? ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"] : []),
           path.join(root, script.path),
-          "https://youtu.be/q7mD8NFYd7s",
+          arg,
         ],
         { timeout: WRAPPER_TIMEOUT_MS, env: { ...process.env, ...env } }
       );
@@ -109,4 +115,63 @@ describe("relayWrappers", () => {
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe(canned.body);
   });
+
+  function runMiyoSearch(env: Record<string, string>) {
+    const bin = path.join(root, ".miyo", "bin");
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(path.join(bin, "miyo"), `#!/bin/sh\nprintf '[%s]\\n' "$@"\n`, { mode: 0o755 });
+    return run(
+      "miyo-search",
+      { HOME: root, [MIYO_SEARCH_SCOPE_ENV]: "current", ...env },
+      "my * notes"
+    );
+  }
+
+  (windows ? it.skip : it)(
+    `${ISSUE_3508} hands Miyo each ticked folder verbatim, skips empty entries, and passes the vault last`,
+    async () => {
+      const result = await runMiyoSearch({
+        [MIYO_SEARCH_FOLDER_ENV]: "My Vault",
+        [MIYO_SEARCH_EXTRA_FOLDERS_ENV]: "/Research notes//*/$HOME/R&D; echo hi/-drafts/",
+      });
+
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      expect(result.stdout.trim().split("\n")).toEqual(
+        [
+          "search",
+          "my * notes",
+          "-n",
+          "10",
+          "--folder",
+          "Research notes",
+          "--folder",
+          "*",
+          "--folder",
+          "$HOME",
+          "--folder",
+          "R&D; echo hi",
+          "--folder",
+          "-drafts",
+          "--folder",
+          "My Vault",
+          "--json",
+        ].map((arg) => `[${arg}]`)
+      );
+    }
+  );
+
+  (windows ? it.skip : it)(
+    `${ISSUE_3508} searches only the vault when no folder is ticked`,
+    async () => {
+      const result = await runMiyoSearch({ [MIYO_SEARCH_FOLDER_ENV]: "My Vault" });
+
+      expect(result.status).toBe(0);
+      expect(result.stdout.trim().split("\n")).toEqual(
+        ["search", "my * notes", "-n", "10", "--folder", "My Vault", "--json"].map(
+          (arg) => `[${arg}]`
+        )
+      );
+    }
+  );
 });

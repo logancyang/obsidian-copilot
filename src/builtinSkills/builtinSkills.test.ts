@@ -399,6 +399,35 @@ describe("builtinSkills", () => {
       expect(cmd).toContain('--folder "%COPILOT_MIYO_SEARCH_FOLDER%"');
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3508 passes ticked folders before the vault on POSIX, splitting the list on slashes without globbing or eval", () => {
+      const sh = miyoScript(".sh");
+
+      expect(sh).toContain(
+        [
+          "    set -f",
+          "    IFS=/",
+          "    set --",
+          "    for NAME in ${COPILOT_MIYO_SEARCH_EXTRA_FOLDERS:-}; do",
+          '      [ -z "$NAME" ] || set -- "$@" --folder "$NAME"',
+          "    done",
+          "    unset IFS",
+          "    set +f",
+          '    OUT=$("$MIYO" search "$QUERY" -n 10 "$@" --folder "$COPILOT_MIYO_SEARCH_FOLDER" --json 2>&1)',
+        ].join("\n")
+      );
+      expect(sh).not.toMatch(/\beval\b/);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3508 expands pre-quoted ticked-folder arguments once before the vault on Windows, with delayed expansion off and no call", () => {
+      const cmd = miyoScript(".cmd");
+
+      expect(cmd).toContain("setlocal enableextensions disabledelayedexpansion\n");
+      expect(cmd).toContain(
+        '"%MIYO%" search %* -n 10 %COPILOT_MIYO_SEARCH_EXTRA_FOLDER_ARGS% --folder "%COPILOT_MIYO_SEARCH_FOLDER%" --json'
+      );
+      expect(cmd).not.toMatch(/enabledelayedexpansion|\bcall\b|!/i);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 omits the folder boundary only for explicit Unrestricted mode on POSIX and Windows", () => {
       const sh = miyoScript(".sh");
       const cmd = miyoScript(".cmd");
