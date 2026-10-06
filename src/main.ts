@@ -603,9 +603,16 @@ export default class CopilotPlugin extends Plugin {
     // The audio module is shared across hot-reloaded plugin instances, so the outgoing
     // teardown must release its context before a successor can create one. https://github.com/logancyang/obsidian-copilot/issues/2987
     disposeNotificationSound();
-    (window as TeardownHandoff)[PENDING_TEARDOWN] = this.teardown().catch((error) => {
+    const handoff = window as TeardownHandoff;
+    const teardown = this.teardown().catch((error) => {
       logError("Copilot: plugin teardown failed during unload:", error);
     });
+    // A copy unloaded mid-startup tears down instantly while an older copy may still be
+    // stopping its backends, so the handoff covers every earlier teardown.
+    // https://github.com/logancyang/obsidian-copilot/issues/3518
+    handoff[PENDING_TEARDOWN] = Promise.all([handoff[PENDING_TEARDOWN], teardown]).then(
+      () => undefined
+    );
   }
 
   private async teardown(): Promise<void> {

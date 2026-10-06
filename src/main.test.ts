@@ -661,6 +661,28 @@ describe("main", () => {
         expect(calls.slice(-2)).toEqual(["previousLogFlushed", "settingsLoaded"]);
       });
 
+      it("waits for every earlier copy's shutdown, not only the most recently unloaded one https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        jest.useFakeTimers();
+        try {
+          const slow = createPluginUnderTest([]);
+          Object.assign(slow.agentSessionManager as object, {
+            shutdown: jest.fn(() => new Promise<void>(() => undefined)),
+          });
+          const abandoned = createLoadingPlugin();
+          const next = createLoadingPlugin();
+
+          slow.onunload();
+          abandoned.plugin.onload();
+          abandoned.plugin.onunload();
+          next.plugin.onload();
+          await jest.advanceTimersByTimeAsync(9_999);
+
+          expect(next.plugin.loadSettings).not.toHaveBeenCalled();
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
       it("starts anyway after 10 seconds when the previous copy's shutdown hangs https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
         jest.useFakeTimers();
         try {
