@@ -288,6 +288,44 @@ describe("searchResultUtils", () => {
       expect(sources).toHaveLength(3);
       expect(sources.map((s) => s.title)).toEqual(["Doc1", "Doc2", "Doc3"]);
     });
+
+    it("labels a Miyo result from another folder with that folder's name instead of treating it as a vault note — https://github.com/logancyang/obsidian-copilot/issues/3508", () => {
+      const sources = extractSourcesFromSearchResults([
+        { title: "Plan", path: "notes/plan.md", score: 0.9, fromCurrentVault: true },
+        {
+          title: "Idea",
+          path: "Research/ideas/idea.md",
+          score: 0.8,
+          fromCurrentVault: false,
+          miyoSource: "documents",
+        },
+      ]);
+
+      expect(sources).toEqual([
+        { title: "Plan", path: "notes/plan.md", score: 0.9, explanation: null },
+        {
+          title: "Idea",
+          path: "Research/ideas/idea.md",
+          score: 0.8,
+          explanation: null,
+          outsideVaultLabel: "Research",
+        },
+      ]);
+    });
+
+    it("labels a Miyo result from a synced chat folder as Chat — https://github.com/logancyang/obsidian-copilot/issues/3508", () => {
+      const [source] = extractSourcesFromSearchResults([
+        {
+          title: "Trip planning",
+          path: "ChatGPT/2026-01-02 trip.md",
+          score: 0.7,
+          fromCurrentVault: false,
+          miyoSource: "chats",
+        },
+      ]);
+
+      expect(source.outsideVaultLabel).toBe("Chat");
+    });
   });
 
   describe("generateQualitySummary()", () => {

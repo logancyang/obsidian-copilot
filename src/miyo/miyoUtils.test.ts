@@ -7,6 +7,7 @@ jest.mock("@/miyo/miyoStatusStore", () => ({
 import { Platform, type App } from "obsidian";
 import type { CopilotSettings } from "@/settings/model";
 import {
+  getExtraSearchFolderOptions,
   getMiyoFilePath,
   getMiyoFolderName,
   getSearchBackend,
@@ -117,6 +118,46 @@ describe("miyoUtils", () => {
 
     it("returns the normalized path when the vault folder name is empty", () => {
       expect(getMiyoFilePath(buildApp(""), "notes/foo.md")).toBe("notes/foo.md");
+    });
+  });
+
+  describe("getExtraSearchFolderOptions()", () => {
+    it("offers the other Miyo folders in Miyo's order and marks synced chat folders as chats", () => {
+      expect(
+        getExtraSearchFolderOptions(
+          [
+            { path: "Research", origin: "user" },
+            { path: "ChatGPT", origin: "chat_sync" },
+            { path: "Archive" },
+          ],
+          "Vault"
+        )
+      ).toEqual([
+        { name: "Research", isChat: false },
+        { name: "ChatGPT", isChat: true },
+        { name: "Archive", isChat: false },
+      ]);
+    });
+
+    it("leaves out the vault's own folder, which every Current vault search already covers — https://github.com/logancyang/obsidian-copilot/issues/3508", () => {
+      expect(
+        getExtraSearchFolderOptions([{ path: "Vault" }, { path: "Research" }], "Vault")
+      ).toEqual([{ name: "Research", isChat: false }]);
+    });
+
+    it("leaves out names the saved folder list would reject and repeats of a name Miyo lists twice — https://github.com/logancyang/obsidian-copilot/issues/3508", () => {
+      expect(
+        getExtraSearchFolderOptions(
+          [
+            { path: "Research" },
+            { path: "Research", origin: "chat_sync" },
+            { path: "a/b" },
+            { path: " Padded " },
+            { path: 'say "hi"' },
+          ],
+          "Vault"
+        )
+      ).toEqual([{ name: "Research", isChat: false }]);
     });
   });
 

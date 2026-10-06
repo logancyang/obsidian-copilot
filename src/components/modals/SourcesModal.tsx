@@ -1,13 +1,18 @@
 import { logError } from "@/logger";
 import { App, Modal, Setting, TFile } from "obsidian";
 
-export class SourcesModal extends Modal {
-  sources: { title: string; path: string; score: number; explanation?: unknown }[];
+interface ChatSource {
+  title: string;
+  path: string;
+  score: number;
+  explanation?: unknown;
+  outsideVaultLabel?: string;
+}
 
-  constructor(
-    app: App,
-    sources: { title: string; path: string; score: number; explanation?: unknown }[]
-  ) {
+export class SourcesModal extends Modal {
+  sources: ChatSource[];
+
+  constructor(app: App, sources: ChatSource[]) {
     super(app);
     this.sources = sources;
   }
@@ -20,10 +25,7 @@ export class SourcesModal extends Modal {
     this.createSourceList(contentEl, this.sources);
   }
 
-  private createSourceList(
-    container: HTMLElement,
-    sources: { title: string; path: string; score: number; explanation?: unknown }[]
-  ) {
+  private createSourceList(container: HTMLElement, sources: ChatSource[]) {
     const list = container.createEl("ul");
     list.addClass("tw-list-none", "tw-p-0");
 
@@ -43,35 +45,47 @@ export class SourcesModal extends Modal {
           ? `${source.title} (${source.path})`
           : source.title;
 
-      const link = itemContainer.createEl("a", {
-        href: `obsidian://open?vault=${encodeURIComponent(this.app.vault.getName())}&file=${encodeURIComponent(source.path || source.title)}`,
-        text: displayText,
-      });
-      link.title = `${displayText} - drag to insert wikilink`;
-      link.draggable = true;
-      link.addEventListener("dragstart", (e) => {
-        const filePath = source.path || source.title;
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (file instanceof TFile) {
-          const dragManager = (
-            this.app as unknown as {
-              dragManager?: {
-                dragLink: (e: DragEvent, text: string) => unknown;
-                onDragStart: (e: DragEvent, data: unknown) => void;
-              };
-            }
-          ).dragManager;
-          if (!dragManager) return;
-          const linkText = this.app.metadataCache.fileToLinktext(file, "");
-          const dragData = dragManager.dragLink(e, linkText);
-          dragManager.onDragStart(e, dragData);
-        }
-      });
-      link.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        this.app.workspace.openLinkText(source.path || source.title, "").catch(logError);
-      });
+      let link: HTMLElement;
+      if (source.outsideVaultLabel) {
+        // A result from another Miyo folder is not a note in this vault, so it is shown
+        // as text with its folder or Chat label instead of a vault link.
+        // https://github.com/logancyang/obsidian-copilot/issues/3508
+        link = itemContainer.createSpan({ text: displayText });
+        itemContainer.createSpan({
+          text: source.outsideVaultLabel,
+          cls: "tw-ml-2 tw-rounded-md tw-bg-secondary-alt tw-px-1.5 tw-py-0.5 tw-text-ui-smaller",
+        });
+      } else {
+        link = itemContainer.createEl("a", {
+          href: `obsidian://open?vault=${encodeURIComponent(this.app.vault.getName())}&file=${encodeURIComponent(source.path || source.title)}`,
+          text: displayText,
+        });
+        link.title = `${displayText} - drag to insert wikilink`;
+        link.draggable = true;
+        link.addEventListener("dragstart", (e) => {
+          const filePath = source.path || source.title;
+          const file = this.app.vault.getAbstractFileByPath(filePath);
+          if (file instanceof TFile) {
+            const dragManager = (
+              this.app as unknown as {
+                dragManager?: {
+                  dragLink: (e: DragEvent, text: string) => unknown;
+                  onDragStart: (e: DragEvent, data: unknown) => void;
+                };
+              }
+            ).dragManager;
+            if (!dragManager) return;
+            const linkText = this.app.metadataCache.fileToLinktext(file, "");
+            const dragData = dragManager.dragLink(e, linkText);
+            dragManager.onDragStart(e, dragData);
+          }
+        });
+        link.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.app.workspace.openLinkText(source.path || source.title, "").catch(logError);
+        });
+      }
 
       if (typeof source.score === "number") {
         itemContainer.appendChild(

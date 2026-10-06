@@ -67,6 +67,8 @@ function projectSearchDocument(doc: Document, isFilterResult: boolean) {
     chunkId: (doc.metadata as Record<string, unknown>).chunkId ?? null,
     isChunk: (doc.metadata as Record<string, unknown>).isChunk ?? false,
     explanation: doc.metadata.explanation ?? null,
+    fromCurrentVault: doc.metadata.fromCurrentVault,
+    miyoSource: doc.metadata.miyoSource,
     isFilterResult,
     matchType: isFilterResult ? doc.metadata.source || "filter" : undefined,
   };

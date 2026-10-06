@@ -29,6 +29,7 @@ export class MiyoRequestError extends Error {
 
 export interface MiyoFolderEntry {
   path: string;
+  origin?: "user" | "chat_sync";
   exclude_folders?: string[];
   include_patterns?: string[];
   exclude_patterns?: string[];
@@ -63,6 +64,7 @@ export interface MiyoSearchResult {
   chunk_text?: string | null;
   snippet?: string | null;
   metadata?: Record<string, unknown>;
+  source?: "documents" | "chats";
   embedding_model?: string | null;
   ctime?: number;
   mtime?: number;
@@ -329,12 +331,16 @@ export class MiyoClient {
     folderName: string | undefined,
     query: string,
     limit: number,
-    filters?: MiyoSearchFilter[],
-    paths?: string[]
+    {
+      filters,
+      paths,
+      folderNames,
+    }: { filters?: MiyoSearchFilter[]; paths?: string[]; folderNames?: string[] } = {}
   ): Promise<MiyoSearchResponse> {
     const payload = {
       query,
       ...(folderName ? { folder_name: folderName } : {}),
+      ...(folderNames ? { folder_names: folderNames } : {}),
       limit,
       ...(filters && filters.length > 0 ? { filters } : {}),
       // An empty list is omitted so a call with no path filter sends the same body as before.
@@ -417,6 +423,12 @@ export class MiyoClient {
       }
       throw error;
     }
+  }
+
+  public async listFolders(baseUrl: string): Promise<{ folders: MiyoFolderEntry[] }> {
+    return this.requestJson<{ folders: MiyoFolderEntry[] }>(baseUrl, "/v0/folder", {
+      method: "GET",
+    });
   }
 
   public async fileStatus(baseUrl: string, filePath: string): Promise<MiyoFileStatusResponse> {

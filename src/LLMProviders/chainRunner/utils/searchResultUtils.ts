@@ -16,6 +16,8 @@ export interface SearchDoc {
   matchType?: string;
   source?: string;
   chunkId?: string;
+  fromCurrentVault?: boolean;
+  miyoSource?: string;
 }
 
 interface QualitySummary {
@@ -135,9 +137,13 @@ export function formatSearchResultStringForLLM(resultString: string): string {
   }
 }
 
-export function extractSourcesFromSearchResults(
-  searchResults: unknown
-): { title: string; path: string; score: number; explanation?: unknown }[] {
+export function extractSourcesFromSearchResults(searchResults: unknown): {
+  title: string;
+  path: string;
+  score: number;
+  explanation?: unknown;
+  outsideVaultLabel?: string;
+}[] {
   if (!Array.isArray(searchResults)) {
     return [];
   }
@@ -147,6 +153,12 @@ export function extractSourcesFromSearchResults(
     path: doc.path || doc.title || "",
     score: doc.rerank_score || doc.score || 0,
     explanation: doc.explanation || null,
+    // Results from other Miyo folders are not notes in this vault, so they carry a
+    // folder or Chat label instead of becoming vault links.
+    // https://github.com/logancyang/obsidian-copilot/issues/3508
+    ...(doc.fromCurrentVault === false && {
+      outsideVaultLabel: doc.miyoSource === "chats" ? "Chat" : (doc.path ?? "").split("/")[0],
+    }),
   }));
 }
 

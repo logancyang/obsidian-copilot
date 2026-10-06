@@ -11,18 +11,27 @@ import { MiyoClient } from "@/miyo/MiyoClient";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
 import { type CapabilityStatus, refreshMiyoStatus } from "@/miyo/miyoStatusStore";
 import {
+  getExtraSearchFolderOptions,
   getMiyoCustomUrl,
   getMiyoFolderName,
   isLocalMiyoUrl,
+  type MiyoSearchFolderOption,
   MIYO_CHATS_DEEPLINK_URL,
   MIYO_CONNECT_DEEPLINK_URL,
 } from "@/miyo/miyoUtils";
 import { getMiyoConnectionMode } from "@/miyo/miyoRuntimePolicy";
 import { MiyoConnectionPanel } from "@/settings/v2/components/ui/MiyoConnectionPanel";
+import { MiyoSearchFoldersPicker } from "@/settings/v2/components/ui/MiyoSearchFoldersPicker";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
 import { notifyMiyoIndexChanged } from "@/miyo/miyoIndex";
 import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
-import { getSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import {
+  getSettings,
+  normalizeMiyoFolderNames,
+  setSettings,
+  updateSetting,
+  useSettingsValue,
+} from "@/settings/model";
 import {
   type ConnectOutcome,
   type ConnectStep,
@@ -464,6 +473,40 @@ export const MiyoSettings: React.FC = () => {
   const connectedRemote = activeMode === "remote";
   const hasPendingConnection =
     mode !== activeMode || (mode === "remote" && urlDraft.trim() !== activeUrl);
+  const searchSkillShown = pendingSkillEnabled ?? settings.enableMiyoSearchSkill;
+  const showSearchFolders = searchSkillShown && capabilitiesEnabled && !settings.miyoSearchAll;
+  const searchFoldersKey = showSearchFolders ? settingsKey : null;
+  const vaultFolderName = getMiyoFolderName(app);
+  const [searchFolders, setSearchFolders] = useState<{
+    key: string;
+    folders: MiyoSearchFolderOption[] | null;
+  }>();
+
+  // The folder list comes from the Miyo host Copilot is connected to, so it is
+  // refetched whenever that connection changes.
+  // https://github.com/logancyang/obsidian-copilot/issues/3508
+  useEffect(() => {
+    if (!searchFoldersKey) return;
+    let current = true;
+    const client = new MiyoClient();
+    client
+      .resolveBaseUrl(activeUrl)
+      .then((baseUrl) => client.listFolders(baseUrl))
+      .then(
+        ({ folders }) => {
+          const options = getExtraSearchFolderOptions(folders, vaultFolderName);
+          if (current) setSearchFolders({ key: searchFoldersKey, folders: options });
+        },
+        (error: unknown) => {
+          logWarn(`Miyo folder list failed: ${err2String(error)}`);
+          if (current) setSearchFolders({ key: searchFoldersKey, folders: null });
+        }
+      );
+    return () => {
+      current = false;
+    };
+  }, [searchFoldersKey, activeUrl, vaultFolderName]);
+  const shownSearchFolders = searchFolders?.key === searchFoldersKey ? searchFolders : undefined;
 
   return (
     <div className="tw-space-y-4">
@@ -542,23 +585,41 @@ export const MiyoSettings: React.FC = () => {
               )}
               aria-disabled={!capabilitiesEnabled}
             >
-              {(pendingSkillEnabled ?? settings.enableMiyoSearchSkill) && (
-                <CapabilityRow
-                  title="Search scope"
-                  description="Only the current vault, or everything Miyo has indexed."
-                  control={
-                    <SegmentedControl
-                      aria-label="Search scope"
-                      options={[
-                        { label: "Current vault", value: "current" },
-                        { label: "Unrestricted", value: "unrestricted" },
-                      ]}
-                      value={settings.miyoSearchAll ? "unrestricted" : "current"}
-                      onChange={(value) => updateSetting("miyoSearchAll", value === "unrestricted")}
-                      disabled={!capabilitiesEnabled}
+              {searchSkillShown && (
+                <div>
+                  <CapabilityRow
+                    title="Search scope"
+                    description="Only the current vault, or everything Miyo has indexed."
+                    control={
+                      <SegmentedControl
+                        aria-label="Search scope"
+                        options={[
+                          { label: "Current vault", value: "current" },
+                          { label: "Unrestricted", value: "unrestricted" },
+                        ]}
+                        value={settings.miyoSearchAll ? "unrestricted" : "current"}
+                        onChange={(value) =>
+                          updateSetting("miyoSearchAll", value === "unrestricted")
+                        }
+                        disabled={!capabilitiesEnabled}
+                      />
+                    }
+                  />
+                  {showSearchFolders && (
+                    <MiyoSearchFoldersPicker
+                      folders={shownSearchFolders?.folders ?? undefined}
+                      error={
+                        shownSearchFolders?.folders === null
+                          ? "Couldn't load your Miyo folders."
+                          : undefined
+                      }
+                      selected={settings.miyoExtraSearchFolders}
+                      onChange={(next) =>
+                        updateSetting("miyoExtraSearchFolders", normalizeMiyoFolderNames(next))
+                      }
                     />
-                  }
-                />
+                  )}
+                </div>
               )}
 
               <MiyoStatusRow

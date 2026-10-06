@@ -62,6 +62,12 @@ Use **Search scope** in the Miyo settings tab:
 - **Current vault** keeps Copilot's integrated Miyo searches within this vault. This is the safer default when Miyo manages several folders.
 - **Unrestricted** allows searches across everything registered with that Miyo instance.
 
+With **Current vault** selected, the settings tab also lists the other folders registered in Miyo, such as a research folder or a second vault. Tick any of them to search them together with this vault. Synced ChatGPT and Claude chat folders are in the list too, tagged **Chat**. Quick Chat's vault search then covers this vault and the ticked folders, and no other folder.
+
+Searching several folders at once needs a Miyo version that supports it. An older Miyo searches only this vault until you update it. If this computer's Miyo doesn't have a ticked folder, for example after your settings sync from another computer, Copilot skips that folder and searches the rest. The list marks it **Not in Miyo** so you can untick it.
+
+In chat sources, a result from another folder shows that folder's name, and a result from a chat folder shows **Chat**. These results aren't notes in this vault, so you can't open them from the sources list.
+
 The scope is a retrieval preference, not a security boundary. Keep Miyo's registered folders intentional, especially when you use an unrestricted scope or connect to a shared remote server.
 
 ### Relevant Notes
