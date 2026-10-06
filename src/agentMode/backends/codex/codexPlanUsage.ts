@@ -136,7 +136,9 @@ async function rolloutsByRecency(dirs: string[]): Promise<string[]> {
       try {
         const stat = await nodeFs().promises.stat(file);
         rollouts.push({ file, mtimeMs: stat.mtimeMs });
-      } catch {}
+      } catch {
+        continue;
+      }
     }
   }
   return rollouts.sort((a, b) => b.mtimeMs - a.mtimeMs).map((rollout) => rollout.file);
@@ -167,7 +169,9 @@ export function lastRateLimits(tail: string): CodexRateLimits | null {
       const event = JSON.parse(line) as { payload?: { rate_limits?: CodexRateLimits | null } };
       const limits = event.payload?.rate_limits;
       if (limits) return limits;
-    } catch {}
+    } catch {
+      continue;
+    }
   }
   return null;
 }

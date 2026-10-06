@@ -1,3 +1,4 @@
+import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
 export interface ContextCacheFs {
@@ -55,7 +56,9 @@ export function createNodeContextCacheFs(root: string): NodeContextCacheFs {
   const removeBestEffort = async (target: string, recursive: boolean): Promise<void> => {
     try {
       await fs.promises.rm(target, { recursive, force: true });
-    } catch {}
+    } catch (error) {
+      logWarn("[ContextCache] Could not remove a cache entry", error);
+    }
   };
 
   return {

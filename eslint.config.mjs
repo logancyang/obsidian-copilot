@@ -317,7 +317,7 @@ export default [
     plugins: { copilot: copilotLintPlugin },
     rules: {
       "copilot/issue-linked-comments": "error",
-      "no-empty": ["error", { allowEmptyCatch: true }],
+      "no-empty": "error",
     },
   },
 

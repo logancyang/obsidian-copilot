@@ -1,5 +1,5 @@
 import { logFileManager } from "@/logFileManager";
-import type { App } from "obsidian";
+import { Notice, type App } from "obsidian";
 
 jest.mock("@/settings/copilotFolder", () => ({
   getEffectiveCopilotFolder: () => "copilot",
@@ -110,6 +110,15 @@ describe("logFileManager", () => {
         expect(vault.write).not.toHaveBeenCalled();
         expect(vault.create).not.toHaveBeenCalled();
       });
+
+      it("resolves without throwing when the vault write fails", async () => {
+        const { app, vault } = fakeApp(true);
+        vault.write.mockRejectedValueOnce(new Error("disk full"));
+        logFileManager.setApp(app);
+        await logFileManager.append("INFO", "hello");
+
+        await expect(logFileManager.flush()).resolves.toBeUndefined();
+      });
     });
 
     describe("openLogFile()", () => {
@@ -133,6 +142,17 @@ describe("logFileManager", () => {
 
         await logFileManager.openLogFile();
         expect(logFileManager.exportLogText()).not.toContain("## Settings");
+      });
+
+      it("shows a notice when the note cannot be written, since the logger cannot log its own failure (https://github.com/Brevilabs/obsidian-copilot-private/issues/647)", async () => {
+        const { app, vault } = fakeApp(false);
+        vault.create.mockRejectedValueOnce(new Error("read-only vault"));
+        logFileManager.setApp(app);
+
+        await logFileManager.openLogFile();
+        expect(Notice).toHaveBeenCalledWith(
+          "Could not write the Copilot log file: Error: read-only vault"
+        );
       });
     });
 

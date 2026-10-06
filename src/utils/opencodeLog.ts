@@ -37,7 +37,9 @@ export async function findLatestOpencodeLog(
           newestMtime = mtimeMs;
           newestPath = full;
         }
-      } catch {}
+      } catch {
+        continue;
+      }
     }
     return newestPath;
   } catch {

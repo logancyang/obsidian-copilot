@@ -315,7 +315,9 @@ export class OpenArtifactsPublisher {
         try {
           currentDocId = await getOpenArtifactsDocId(this.app, file);
           if (currentDocId === docId) saved = await saveOpenArtifactsLink(this.app, file, receipt);
-        } catch {}
+        } catch (error) {
+          logWarn("[OpenArtifacts] Could not verify or save the note's identity", error);
+        }
         if (!saved) {
           const result: OpenArtifactsPersistenceResult = {
             kind: "persistence",
@@ -381,7 +383,9 @@ export class OpenArtifactsPublisher {
         let currentDocId: string | null | undefined;
         try {
           currentDocId = await getOpenArtifactsDocId(this.app, file);
-        } catch {}
+        } catch (error) {
+          logWarn("[OpenArtifacts] Could not verify the note's identity", error);
+        }
         if (currentDocId) {
           this.blockedPublishResults.delete(file);
         } else {

@@ -1,3 +1,4 @@
+import { logWarn } from "@/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -33,7 +34,9 @@ export function UrlInputRow({
     try {
       const text = await navigator.clipboard.readText();
       if (text) submitText(text);
-    } catch {}
+    } catch (error) {
+      logWarn("Could not read the clipboard", error);
+    }
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {

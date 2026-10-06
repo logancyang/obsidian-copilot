@@ -1,3 +1,4 @@
+import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
 export interface FrameRecord {
@@ -203,7 +204,9 @@ export class FrameSink {
       for (const target of [paths.logPath, paths.rotatedPath]) {
         try {
           await narrowExistingFile(runtime, target, getPosixOwnerUid(runtime));
-        } catch {}
+        } catch (error) {
+          logWarn("[AgentMode] Could not narrow debug log permissions", error);
+        }
       }
     });
     this.writeChain = task;
@@ -325,7 +328,9 @@ export class FrameSink {
       if (stat.size < ROTATE_BYTES) return;
       await removeIfExists(runtime, paths.rotatedPath);
       await runtime.rename(paths.logPath, paths.rotatedPath);
-    } catch {}
+    } catch (error) {
+      logWarn("[AgentMode] Could not rotate the debug log", error);
+    }
   }
 }
 
@@ -531,7 +536,9 @@ function isNotFoundError(error: unknown): boolean {
 async function removeIfExists(runtime: NodeRuntime, path: string): Promise<void> {
   try {
     await runtime.rm(path, { force: true });
-  } catch {}
+  } catch (error) {
+    logWarn("[AgentMode] Could not remove a debug log file", error);
+  }
 }
 
 function stableHash(value: string): string {

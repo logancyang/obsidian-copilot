@@ -228,7 +228,9 @@ function summarizeExplanation(explanation: unknown): string {
     ) {
       parts.push(`Score: ${exp.baseScore.toFixed(4)}→${exp.finalScore.toFixed(4)}`);
     }
-  } catch {}
+  } catch (error) {
+    logWarn("[Search] Could not format the score explanation", error);
+  }
 
   return parts.join(" | ");
 }

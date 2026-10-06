@@ -152,7 +152,9 @@ export class WebSelectionTracker {
       };
 
       this.onSelectionChange(context);
-    } catch {}
+    } catch {
+      return;
+    }
   }
 
   private getOrCreateLeafState(leaf: WebViewerLeaf): LeafSelectionTrackingState {

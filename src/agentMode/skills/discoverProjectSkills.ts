@@ -53,10 +53,12 @@ export async function discoverProjectSkills(
         entries.sort().map(async (name): Promise<ProjectDiscoveryEntry> => {
           const entryAbs = joinPosix(agentDirAbs, name);
 
-          let isLink = false;
+          let isLink: boolean;
           try {
             isLink = await fs.isSymlink(entryAbs);
-          } catch {}
+          } catch {
+            isLink = false;
+          }
           if (isLink) return null;
 
           if (!(await safeIsDirectory(fs, entryAbs))) return null;

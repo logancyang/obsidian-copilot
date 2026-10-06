@@ -129,7 +129,9 @@ export class WebViewerStateManager {
           if (leafTitle && leafTitle.toLowerCase() === titleHintLower) {
             titleMatchedLeaves.push(leaf);
           }
-        } catch {}
+        } catch {
+          continue;
+        }
       }
 
       if (titleMatchedLeaves.length === 1) {
@@ -301,11 +303,15 @@ export class WebViewerStateManager {
           for (const event of entry.events) {
             webview.removeEventListener(event, entry.handler);
           }
-        } catch {}
+        } catch (error) {
+          logWarn("[WebViewer] Could not detach listeners from a closed web view", error);
+        }
 
         this.webviewLoadListeners.delete(webview);
       }
-    } catch {}
+    } catch (error) {
+      logWarn("[WebViewer] Could not sync web view load listeners", error);
+    }
   }
 
   private cleanupWebviewLoadListeners(): void {
@@ -316,7 +322,9 @@ export class WebViewerStateManager {
             webview.removeEventListener(event, handler);
           }
         }
-      } catch {}
+      } catch (error) {
+        logWarn("[WebViewer] Could not detach web view load listeners", error);
+      }
     }
     this.webviewLoadListeners.clear();
   }
@@ -345,7 +353,9 @@ export class WebViewerStateManager {
     for (const callback of this.webviewLoadCallbacks) {
       try {
         callback();
-      } catch {}
+      } catch (error) {
+        logWarn("[WebViewer] A web view load callback failed", error);
+      }
     }
   }
 

@@ -592,7 +592,9 @@ export default class CopilotPlugin extends Plugin {
     try {
       const webViewerService = getWebViewerService(this.app);
       webViewerService.stopActiveWebTabTracking();
-    } catch {}
+    } catch (error) {
+      logWarn("Could not stop web tab tracking", error);
+    }
 
     this.modelManagement?.dispose();
 
@@ -1208,7 +1210,9 @@ export default class CopilotPlugin extends Plugin {
       try {
         const fm = await readFrontmatterViaAdapter(this.app, file.path);
         if (typeof fm?.mode === "string") mode = fm.mode;
-      } catch {}
+      } catch (error) {
+        logWarn("Could not read the chat mode from frontmatter", error);
+      }
     }
     if (mode === AGENT_CHAT_MODE) {
       await this.loadAgentChatHistory(file);
