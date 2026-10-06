@@ -25,6 +25,10 @@ export function isSelfHostModeValid(): boolean {
   return getSettings().enableSelfHostMode === true && hasVerifiedFeature("self_host");
 }
 
+export function isPreviewEnabled(): boolean {
+  return hasVerifiedFeature("preview");
+}
+
 function isPlusModel(modelKey: string): boolean {
   const settings = getSettings();
   const configuredModel = settings.configuredModels.find(
@@ -79,6 +83,25 @@ const NO_VERIFIED_ENTITLEMENT: VerifiedEntitlement = Object.freeze({
 });
 
 let verified: VerifiedEntitlement = NO_VERIFIED_ENTITLEMENT;
+const verifiedListeners = new Set<() => void>();
+
+function setVerified(next: VerifiedEntitlement): void {
+  // Startup verification writes no settings, so preview surfaces need this signal to unlock without a restart.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/626
+  verified = next;
+  verifiedListeners.forEach((listener) => listener());
+}
+
+function subscribeToVerifiedEntitlement(listener: () => void): () => void {
+  verifiedListeners.add(listener);
+  return () => {
+    verifiedListeners.delete(listener);
+  };
+}
+
+function getVerifiedEntitlement(): VerifiedEntitlement {
+  return verified;
+}
 
 function hasLiveEntitlement(): boolean {
   const settings = getSettings();
@@ -180,6 +203,12 @@ export function useLicenseState(): LicenseState {
   return settings.isPaidUser === true && !isEntitlementExpired(settings)
     ? UNNAMED_ACTIVE_LICENSE
     : INACTIVE_LICENSE;
+}
+
+export function useIsPreviewEnabled(): boolean {
+  useSettingsValue();
+  React.useSyncExternalStore(subscribeToVerifiedEntitlement, getVerifiedEntitlement);
+  return isPreviewEnabled();
 }
 
 export function useIsSelfHostEligible(): boolean | undefined {
@@ -306,14 +335,14 @@ export async function applyEntitlement(token: string): Promise<boolean> {
   if (!claims) {
     return false;
   }
-  verified = {
+  setVerified({
     token,
     licenseKey: plusLicenseKey,
     features: new Set(claims.features),
     plan: claims.plan,
     expiresAt: claims.exp * 1000,
     paid: claims.tier !== "free",
-  };
+  });
   setSettings({
     entitlementToken: token,
     entitlementExpiresAt: verified.expiresAt,
@@ -331,12 +360,12 @@ export async function verifyCachedEntitlement(): Promise<void> {
   if (getSettings().entitlementToken !== entitlementToken) {
     return;
   }
-  verified = {
+  setVerified({
     token: entitlementToken,
     licenseKey: plusLicenseKey,
     features: new Set(claims?.features),
     plan: claims?.plan ?? "",
     expiresAt: (claims?.exp ?? 0) * 1000,
     paid: claims ? claims.tier !== "free" : false,
-  };
+  });
 }

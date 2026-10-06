@@ -21,7 +21,8 @@ export type ProductUtmMedium =
   | "chat_mode_select"
   | "multi_agent"
   | "model_picker_lock"
-  | "model_settings_lock";
+  | "model_settings_lock"
+  | "preview_hint";
 
 export function createProductUrl(destination: ProductUrl, medium: ProductUtmMedium): string {
   const url = new URL(destination);
