@@ -325,13 +325,31 @@ describe("toolSummaries", () => {
         vendorToolName: "Bash",
         title: "Bash",
         status: "in_progress",
-        input: { description: "Check working tree" },
+        input: { command: "git status" },
       });
-      expect(lookupToolSummary(inflight).collapsedLine(inflight, CTX)).toBe(
-        "Running Check working tree"
-      );
+      expect(lookupToolSummary(inflight).collapsedLine(inflight, CTX)).toBe("Running `git status`");
       const done = tool({ ...inflight, status: "completed" });
-      expect(lookupToolSummary(done).collapsedLine(done, CTX)).toBe("Ran Check working tree");
+      expect(lookupToolSummary(done).collapsedLine(done, CTX)).toBe("Ran `git status`");
+    });
+
+    it("shows a Bash description verbatim because it already starts with its own verb", () => {
+      const inflight = tool({
+        vendorToolName: "Bash",
+        status: "in_progress",
+        input: { command: "git status", description: "Check working tree" },
+      });
+      expect(lookupToolSummary(inflight).collapsedLine(inflight, CTX)).toBe("Check working tree");
+      const done = tool({ ...inflight, status: "completed" });
+      expect(lookupToolSummary(done).collapsedLine(done, CTX)).toBe("Check working tree");
+    });
+
+    it("shows an execute-kind description verbatim for any agent that sends one", () => {
+      const t = tool({
+        toolKind: "execute",
+        status: "completed",
+        input: { command: "date", description: "Show current date and time" },
+      });
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Show current date and time");
     });
 
     it("expands a Bash call to its full untruncated command", () => {

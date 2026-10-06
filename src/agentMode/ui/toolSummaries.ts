@@ -209,11 +209,11 @@ const EDIT_SUMMARY: ToolSummary = {
 const BASH_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "Bash" }),
   collapsedLine: (p) => {
-    const v = verb(p, "Running", "Ran");
     const input = p.input as { command?: unknown; description?: unknown } | null | undefined;
     if (typeof input?.description === "string" && input.description.length > 0) {
-      return `${v} ${input.description}`;
+      return input.description;
     }
+    const v = verb(p, "Running", "Ran");
     if (typeof input?.command === "string") {
       const cmd = input.command.length > 60 ? input.command.slice(0, 60) + "…" : input.command;
       return `${v} \`${cmd}\``;
