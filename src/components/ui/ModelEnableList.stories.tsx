@@ -41,7 +41,10 @@ const FREE_GROUP: ModelEnableGroup = {
   rows: [{ id: "opencode/grok-code", label: "grok-code-fast-1", enabled: true, isFree: true }],
 };
 
-const Controlled: React.FC<{ groups: ModelEnableGroup[] }> = ({ groups }) => {
+const Controlled: React.FC<{ groups: ModelEnableGroup[]; defaultOpenGroupKey?: string }> = ({
+  groups,
+  defaultOpenGroupKey,
+}) => {
   const [query, setQuery] = React.useState("");
   return (
     <ModelEnableList
@@ -49,6 +52,7 @@ const Controlled: React.FC<{ groups: ModelEnableGroup[] }> = ({ groups }) => {
       query={query}
       onQueryChange={setQuery}
       onToggle={() => undefined}
+      defaultOpenGroupKey={defaultOpenGroupKey}
     />
   );
 };
@@ -72,6 +76,25 @@ export const OverflowingCatalog: StoryObj<ModelEnableListProps> = {
 
 export const ShortCatalog: StoryObj<ModelEnableListProps> = {
   render: () => <Controlled groups={[PLUS_GROUP, FREE_GROUP]} />,
+};
+
+export const CollapsedWithSelections: StoryObj<ModelEnableListProps> = {
+  render: () => (
+    <Controlled
+      groups={[
+        PLUS_GROUP,
+        FREE_GROUP,
+        LONG_GROUP,
+        {
+          ...LONG_GROUP,
+          key: "none",
+          label: "Groq",
+          rows: LONG_GROUP.rows.map((row) => ({ ...row, enabled: false })),
+        },
+      ]}
+      defaultOpenGroupKey={PLUS_GROUP.key}
+    />
+  ),
 };
 
 export const Empty: StoryObj<ModelEnableListProps> = {

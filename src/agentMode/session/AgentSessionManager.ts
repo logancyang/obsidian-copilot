@@ -236,7 +236,7 @@ export class AgentSessionManager {
    * `backendId:baseModelId` pairs already warned about; the read runs on every session create.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
    */
-  private readonly warnedMissingDefaults = new Set<string>();
+  private readonly warnedUnavailableModels = new Set<string>();
   private readonly preloader: AgentModelPreloader;
   private readonly preloadStatus = new Map<BackendId, "pending" | "ready" | "error">();
   private readonly sessionState = new Map<
@@ -816,6 +816,14 @@ export class AgentSessionManager {
     const requestedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
     const resolvedId = this.opts.resolveDescriptor(requestedId) ? requestedId : "opencode";
     const errorSeqAtStart = this.lastErrorSeq;
+    const descriptor = this.resolveDescriptor(resolvedId);
+    const resolvedSeed = seedSelection ?? this.getSeedSelection(resolvedId) ?? undefined;
+    if (!resolvedSeed && descriptor.routesCopilotModels) {
+      const message = `Enable a model for ${descriptor.displayName} in Copilot's model settings to start a chat.`;
+      this.setLastError(message);
+      this.notify();
+      throw new Error(message);
+    }
 
     const projectRecord =
       projectId === GLOBAL_SCOPE ? undefined : getCachedProjectRecordById(projectId);
@@ -843,8 +851,6 @@ export class AgentSessionManager {
             this.currentContextRevisionKey(projectId)
           );
 
-    const descriptor = this.resolveDescriptor(resolvedId);
-
     this.pendingCreates++;
     this.startingBackendId = resolvedId;
     this.notify();
@@ -863,8 +869,6 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager was shut down during session creation");
     }
 
-    const resolvedSeed = seedSelection ?? this.getSeedSelection(resolvedId) ?? undefined;
-
     const internalId = uuidv4();
     const resolvedChatInputId = chatInputId ?? uuidv4();
     const session = AgentSession.start({
@@ -875,6 +879,7 @@ export class AgentSessionManager {
       backendId: resolvedId,
       projectId,
       defaultModelSelection: resolvedSeed,
+      defaultMode: this.getDefaultMode(resolvedId),
       getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
@@ -1396,38 +1401,55 @@ export class AgentSessionManager {
   }
 
   /**
-   * A saved default outlives its model, and seeding a stale selection fails silently. Substitute
-   * here rather than in `getDefaultSelection` so the saved value stays visible in settings.
+   * A carried selection wins, then the saved default, then the first enabled model with
+   * credentials; the saved preference itself is never rewritten.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
+   * https://github.com/logancyang/obsidian-copilot/issues/3319
    */
-  getSeedSelection(backendId: BackendId): ModelSelection | null {
+  getSeedSelection(backendId: BackendId, preferred?: ModelSelection | null): ModelSelection | null {
     const saved = this.getDefaultSelection(backendId);
-    if (!saved) return null;
+    const descriptor = this.opts.resolveDescriptor(backendId);
+    const offered = descriptor?.getEnabledModelEntries?.(getSettings());
+    const requested = preferred ?? saved;
+    // A missing accessor cannot validate agent-native models. An empty list is
+    // authoritative because it can mean the user just disabled the last model.
+    // https://github.com/logancyang/obsidian-copilot/issues/3319
+    if (!offered) return requested;
 
-    const offered = this.opts.resolveDescriptor(backendId)?.getEnabledModelEntries?.(getSettings());
-    if (!offered || offered.length === 0) return saved;
-    if (offered.some((entry) => entry.baseModelId === saved.baseModelId)) return saved;
+    const runnable = offered.filter((entry) => entry.credentialState === "ok");
+    // A backend that may only run enabled models has no agent default to fall back to.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
+    if (!requested && descriptor?.routesCopilotModels !== true) return null;
 
-    const replacement = offered.find((entry) => entry.credentialState === "ok");
-    this.warnDefaultNoLongerOffered(backendId, saved.baseModelId, replacement?.name);
-    return replacement ? { baseModelId: replacement.baseModelId, effort: null } : null;
+    const resolved =
+      [preferred, saved].find(
+        (selection): selection is ModelSelection =>
+          !!selection && runnable.some((entry) => entry.baseModelId === selection.baseModelId)
+      ) ?? (runnable[0] ? { baseModelId: runnable[0].baseModelId, effort: null } : null);
+    if (requested && resolved?.baseModelId !== requested.baseModelId) {
+      const replacementName = runnable.find(
+        (entry) => entry.baseModelId === resolved?.baseModelId
+      )?.name;
+      this.warnSelectionNotRunnable(backendId, requested.baseModelId, replacementName);
+    }
+    return resolved;
   }
 
-  private warnDefaultNoLongerOffered(
+  private warnSelectionNotRunnable(
     backendId: BackendId,
     baseModelId: string,
     replacementName?: string
   ): void {
     const key = `${backendId}:${baseModelId}`;
-    if (this.warnedMissingDefaults.has(key)) return;
-    this.warnedMissingDefaults.add(key);
+    if (this.warnedUnavailableModels.has(key)) return;
+    this.warnedUnavailableModels.add(key);
     const agent = this.resolveDescriptor(backendId).displayName;
     const model = baseModelId.split("/").pop() || baseModelId;
-    logInfo(`[AgentMode] ${backendId} default model ${baseModelId} is no longer offered`);
+    logInfo(`[AgentMode] ${backendId} cannot start a chat on ${baseModelId}`);
     new Notice(
       replacementName
-        ? `${agent} no longer offers ${model}. New chats use ${replacementName} until you pick a new default.`
-        : `${agent} no longer offers ${model}. Pick a model to make it your default again.`
+        ? `${agent} couldn't use ${model}. Using ${replacementName} instead.`
+        : `${agent} couldn't use ${model}. Enable a model ${agent} can run.`
     );
   }
 
@@ -2108,7 +2130,8 @@ export class AgentSessionManager {
     backendId: BackendId,
     sessionId: SessionId,
     projectId: ProjectScopeId,
-    chatInputId?: string
+    chatInputId?: string,
+    seedSelection?: ModelSelection
   ): Promise<AgentSession | null> {
     const existing = this.findLiveSession(backendId, sessionId);
     if (existing) return existing;
@@ -2121,7 +2144,8 @@ export class AgentSessionManager {
       backendId,
       sessionId,
       projectId,
-      chatInputId
+      chatInputId,
+      seedSelection
     ).finally(() => {
       if (this.resumedSessionPromiseById.get(key) === resume) {
         this.resumedSessionPromiseById.delete(key);
@@ -2135,7 +2159,8 @@ export class AgentSessionManager {
     backendId: BackendId,
     sessionId: SessionId,
     projectId: ProjectScopeId,
-    chatInputId?: string
+    chatInputId?: string,
+    seedSelection?: ModelSelection
   ): Promise<AgentSession | null> {
     await this.ensureScopeInstructions(
       projectId,
@@ -2230,6 +2255,8 @@ export class AgentSessionManager {
       backendId,
       projectId,
       initialState: resumeResult.state,
+      defaultModelSelection: seedSelection,
+      defaultMode: this.getDefaultMode(backendId),
       cwd,
       getDescriptor: () => this.opts.resolveDescriptor(backendId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),
@@ -2244,13 +2271,17 @@ export class AgentSessionManager {
         : {}),
     });
 
+    // Apply the seed before replaying backend-specific startup config.
+    // https://github.com/logancyang/obsidian-copilot/issues/3319
+    await session.ready;
+
     if (resumeResult.transcript?.length) {
       session.loadDisplayMessages(resumeResult.transcript);
     }
 
     if (descriptor.applyInitialSessionConfig) {
       try {
-        await descriptor.applyInitialSessionConfig(session, getSettings());
+        await descriptor.applyInitialSessionConfig(session, getSettings(), seedSelection);
       } catch (e) {
         logWarn(
           `[AgentMode] applyInitialSessionConfig failed for resumed ${backendId} session; continuing`,
@@ -2635,14 +2666,22 @@ export class AgentSessionManager {
     chatInputId: string | undefined,
     resumableSessionId: SessionId | undefined,
     label: string | null,
-    labelSource: "user" | "agent" | null
+    labelSource: "user" | "agent" | null,
+    carriedSelection?: ModelSelection
   ): Promise<AgentSession> {
+    // A model-setting change can trigger this restart, so validate the carried
+    // selection before seeding either the resumed or the fallback session.
+    // https://github.com/logancyang/obsidian-copilot/issues/3319
+    const seedSelection = carriedSelection
+      ? (this.getSeedSelection(backendId, carriedSelection) ?? undefined)
+      : undefined;
     if (resumableSessionId) {
       const resumed = await this.tryResumeSessionFromHistory(
         backendId,
         resumableSessionId,
         projectId,
-        chatInputId
+        chatInputId,
+        seedSelection
       ).catch((e) => {
         logWarn(`[AgentMode] resume after ${backendId} restart failed`, e);
         return null;
@@ -2654,7 +2693,7 @@ export class AgentSessionManager {
         return resumed;
       }
     }
-    return this.createSession(backendId, projectId, undefined, chatInputId);
+    return this.createSession(backendId, projectId, seedSelection, chatInputId);
   }
 
   private async restartBackendNow(
@@ -2698,6 +2737,9 @@ export class AgentSessionManager {
             resumableSessionId: session.getBackendSessionId() ?? undefined,
             label: session.getLabel(),
             labelSource: session.getLabelSource(),
+            // The displayed selection is otherwise lost when the process restarts.
+            // https://github.com/logancyang/obsidian-copilot/issues/3319
+            seedSelection: session.getState()?.model?.current,
             detached: this.detachedFromTabIds.has(session.internalId),
             recoveryMessages:
               session.getStatus() === "error" ? session.store.getDisplayMessages() : undefined,
@@ -2729,7 +2771,8 @@ export class AgentSessionManager {
               replacement.chatInputId,
               replacement.resumableSessionId,
               replacement.label,
-              replacement.labelSource
+              replacement.labelSource,
+              replacement.seedSelection
             );
             // A fresh fallback has no backend history for these messages;
             // displaying them there would imply the agent can see that context.

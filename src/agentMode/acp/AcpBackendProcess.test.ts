@@ -395,6 +395,44 @@ describe("AcpBackendProcess", () => {
         expect(handler).toHaveBeenCalledTimes(1);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 replays a catalog update that arrived before the handler as the session's refreshed state", async () => {
+        mockNewSession.mockResolvedValue({
+          sessionId: "s-late",
+          configOptions: modelOptions("model-a"),
+        } as { sessionId: string });
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend(),
+          "1.0.0",
+          modelDescriptor()
+        );
+        await backend.start();
+        await backend.newSession({ cwd: "/vault" });
+        const client = getVaultClient(backend);
+        await client.sessionUpdate({
+          sessionId: "s-late",
+          update: {
+            sessionUpdate: "config_option_update",
+            configOptions: modelOptions("model-late"),
+          },
+        } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+
+        const handler = jest.fn();
+        backend.registerSessionHandler("s-late", handler);
+
+        const replayed = handler.mock.calls
+          .map(([event]) => event.update)
+          .filter((update) => update.sessionUpdate !== "plan_usage_update");
+        expect(replayed).toHaveLength(1);
+        expect(replayed[0].sessionUpdate).toBe("state_changed");
+        expect(replayed[0].state.model.current.baseModelId).toBe("model-late");
+        expect(
+          replayed[0].state.model.availableModels.map(
+            (entry: { baseModelId: string }) => entry.baseModelId
+          )
+        ).toContain("model-late");
+      });
+
       it("tracks todowrite tool ids per session so an id registered in one session does not synthesize a plan in another", async () => {
         const backend = new AcpBackendProcess(
           buildApp(),

@@ -118,7 +118,7 @@ function targetFromPath(part: ToolCallPart, vaultBase: string | null): string | 
   return null;
 }
 
-function displayTargetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
+export function displayTargetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
   const path = targetFromPath(part, vaultBase);
   if (!path || !isAbsolutePath(path)) return path;
   const leaf = path.replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop();

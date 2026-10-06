@@ -268,6 +268,14 @@ export class AcpBackendProcess implements BackendProcess {
       this.pendingUpdates.delete(sessionId);
       for (const wire of buffered) {
         try {
+          const sub = wire.update.sessionUpdate;
+          if (sub === "current_mode_update" || sub === "config_option_update") {
+            handler({
+              sessionId,
+              update: { sessionUpdate: "state_changed", state: this.computeState(wire.sessionId) },
+            });
+            continue;
+          }
           for (const event of acpNotificationToEvents(wire, this.todoToolCallIdsFor(sessionId)))
             handler(event);
         } catch (e) {

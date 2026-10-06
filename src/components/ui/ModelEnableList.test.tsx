@@ -105,6 +105,31 @@ describe("ModelEnableList", () => {
       expect(screen.getAllByRole("link")).toHaveLength(3);
     });
 
+    it("shows a collapsed group's selected-model count beside its provider name", () => {
+      renderList({
+        groups: [
+          {
+            key: "provider-a",
+            label: "Provider A",
+            rows: [
+              { id: "a-1", label: "Model A1", enabled: true },
+              { id: "a-2", label: "Model A2", enabled: false },
+              { id: "a-3", label: "Model A3", enabled: true },
+            ],
+          },
+          GROUPS[1],
+        ],
+        defaultOpenGroupKey: "provider-b",
+      });
+      expect(groupState("Provider A")).toBe("closed");
+      expect(screen.getByTitle("2 selected").textContent).toBe("2");
+    });
+
+    it("omits the selected-model badge for a provider with no selected models (https://github.com/Brevilabs/obsidian-copilot-private/issues/631)", () => {
+      renderList();
+      expect(screen.queryByTitle(/selected/)).toBeNull();
+    });
+
     it("opens every group by default when no defaultOpenGroupKey is given", () => {
       renderList();
       expect(groupState("Provider A")).toBe("open");

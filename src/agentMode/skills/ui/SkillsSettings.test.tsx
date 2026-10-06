@@ -122,7 +122,10 @@ describe("SkillsSettings", () => {
           ...current,
           skills: {
             ...current.skills,
-            builtinPreferences: { "copilot-youtube-transcript": { disabled: true } },
+            builtinPreferences: {
+              ...current.skills.builtinPreferences,
+              "copilot-youtube-transcript": { disabled: true },
+            },
           },
         });
       });
@@ -134,7 +137,7 @@ describe("SkillsSettings", () => {
       ).toBe("true");
       expect(
         screen
-          .getByRole("button", { name: "copilot-web-search for Claude" })
+          .getByRole("button", { name: "copilot-fetch-x for Claude" })
           .getAttribute("aria-disabled")
       ).toBe("false");
       Icon.mockClear();

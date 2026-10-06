@@ -194,14 +194,8 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     },
   },
 
-  async applySelection(
-    session: ModelSelectionSession,
-    selection: ModelSelection,
-    context
-  ): Promise<void> {
-    const currentBase = context
-      ? context.backendReportedCurrent?.baseModelId
-      : session.getState()?.model?.current.baseModelId;
+  async applySelection(session: ModelSelectionSession, selection: ModelSelection): Promise<void> {
+    const currentBase = session.getState()?.model?.current.baseModelId;
     // Model options accept bare ids; effort belongs to the selected model's refreshed
     // config catalog. https://github.com/Brevilabs/obsidian-copilot-private/issues/550
     if (currentBase !== selection.baseModelId) {

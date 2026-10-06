@@ -109,6 +109,18 @@ function descriptorFor(id: BackendId, readOnlyModeId?: string): BackendDescripto
   } as unknown as BackendDescriptor;
 }
 
+function opencodeEnabling(baseModelIds: string[]): BackendDescriptor {
+  return {
+    ...OpencodeBackendDescriptor,
+    getEnabledModelEntries: () =>
+      baseModelIds.map((baseModelId) => ({
+        baseModelId,
+        name: baseModelId,
+        credentialState: "ok" as const,
+      })),
+  };
+}
+
 function textChunk(sessionId: string, text: string): SessionEvent {
   return {
     sessionId,
@@ -510,7 +522,7 @@ describe("FanoutOrchestrator", () => {
         };
         host.ensureBackendForFanout = async (backendId) =>
           backendId === "opencode"
-            ? { proc, descriptor: OpencodeBackendDescriptor }
+            ? { proc, descriptor: opencodeEnabling(["provider/model"]) }
             : {
                 proc: procs.get(backendId)!.proc,
                 descriptor: descriptorFor(backendId),
@@ -551,8 +563,8 @@ describe("FanoutOrchestrator", () => {
               current: { baseModelId: "provider/old", effort: null },
               availableModels: [
                 {
-                  baseModelId: "provider/model",
-                  name: "Model",
+                  baseModelId: "provider/new",
+                  name: "New",
                   provider: "provider",
                   effortOptions: [
                     { value: "high", label: "High" },
@@ -581,7 +593,7 @@ describe("FanoutOrchestrator", () => {
           };
           host.ensureBackendForFanout = async () => ({
             proc,
-            descriptor: OpencodeBackendDescriptor,
+            descriptor: opencodeEnabling(["provider/new"]),
           });
           host.getDefaultSelection = () => ({ baseModelId: "provider/new", effort: "high" });
           jest
@@ -601,6 +613,92 @@ describe("FanoutOrchestrator", () => {
           ]);
         }
       );
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 waits for OpenCode's late catalog to list the enabled default before switching and prompting", async () => {
+        const { host, procs } = makeHost({ opencode: { sessionId: "s-opencode" } });
+        const mock = procs.get("opencode")!;
+        const catalog = (modelIds: string[]): BackendState => ({
+          model: {
+            current: { baseModelId: "opencode/big-pickle", effort: null },
+            availableModels: modelIds.map((baseModelId) => ({
+              baseModelId,
+              name: baseModelId,
+              provider: null,
+              effortOptions: [],
+            })),
+            apply: { kind: "setConfigOption", configId: "model" },
+          },
+          mode: null,
+        });
+        host.ensureBackendForFanout = async () => ({
+          proc: mock.proc,
+          descriptor: opencodeEnabling(["provider/enabled"]),
+        });
+        host.getDefaultSelection = () => ({ baseModelId: "provider/enabled", effort: null });
+        jest.mocked(mock.proc.newSession).mockResolvedValue({
+          sessionId: "s-opencode",
+          state: catalog(["opencode/big-pickle"]),
+        });
+        jest.mocked(mock.proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
+
+        const run = new FanoutOrchestrator(host).run(runInput(["opencode"]));
+        await flush();
+        expect(mock.proc.setSessionConfigOption).not.toHaveBeenCalled();
+        expect(mock.promptCount()).toBe(0);
+
+        mock.emit({
+          sessionId: "s-opencode",
+          update: {
+            sessionUpdate: "state_changed",
+            state: catalog(["opencode/big-pickle", "provider/enabled"]),
+          },
+        });
+        const turn = await run;
+
+        expect(turn.answers.opencode.status).toBe("done");
+        expect(mock.proc.setSessionConfigOption).toHaveBeenCalledWith({
+          sessionId: "s-opencode",
+          configId: "model",
+          value: "provider/enabled",
+        });
+        expect(mock.promptCount()).toBe(1);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 fails an OpenCode slot without prompting when the user enabled no model, rather than running OpenCode's own", async () => {
+        const { host, procs } = makeHost({ opencode: { sessionId: "s-opencode" } });
+        const mock = procs.get("opencode")!;
+        host.ensureBackendForFanout = async () => ({
+          proc: mock.proc,
+          descriptor: opencodeEnabling([]),
+        });
+        jest.mocked(mock.proc.newSession).mockResolvedValue({
+          sessionId: "s-opencode",
+          state: {
+            model: {
+              current: { baseModelId: "opencode/big-pickle", effort: null },
+              availableModels: [
+                {
+                  baseModelId: "opencode/big-pickle",
+                  name: "Big Pickle",
+                  provider: null,
+                  effortOptions: [],
+                },
+              ],
+              apply: { kind: "setConfigOption", configId: "model" },
+            },
+            mode: null,
+          },
+        });
+
+        const turn = await new FanoutOrchestrator(host).run(runInput(["opencode"]));
+
+        expect(turn.answers.opencode).toMatchObject({
+          status: "error",
+          error: expect.stringContaining("None of the models enabled for"),
+        });
+        expect(mock.promptCount()).toBe(0);
+        expect(mock.proc.setSessionConfigOption).not.toHaveBeenCalled();
+      });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 keeps Claude's separate effort dispatch when fan-out uses the shared descriptor contract", async () => {
         const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });

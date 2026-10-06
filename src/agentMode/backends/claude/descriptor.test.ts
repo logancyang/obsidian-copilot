@@ -359,18 +359,6 @@ describe("descriptor", () => {
       }
     );
 
-    it("uses backend-confirmed startup state when the session is optimistically seeded", async () => {
-      const { session, applyModelWireId } = makeSession("sonnet");
-
-      await ClaudeBackendDescriptor.applySelection(
-        session,
-        { baseModelId: "sonnet", effort: null },
-        { backendReportedCurrent: { baseModelId: "default", effort: null } }
-      );
-
-      expect(applyModelWireId).toHaveBeenCalledWith("sonnet");
-    });
-
     it("skips the model write for an ordinary same-model selection", async () => {
       const { session, applyModelWireId } = makeSession("sonnet");
 

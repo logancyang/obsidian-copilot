@@ -1,5 +1,44 @@
 # Release Notes
 
+# v4.0.13 - Codex Safe mode and custom command default model
+
+[![Demo video: Obsidian Copilot 4.0.13: Codex asks before it edits](https://github.com/user-attachments/assets/adeab3df-bd00-4425-8dc2-bc39146669b8)](https://youtube.com/shorts/VNH0E_hcrMQ?feature=share)
+
+Codex now asks before it changes your vault in Safe mode. Approve or reject each edit from Agent Chat, the same way you do with Claude and OpenCode.
+
+Commands also get their own default model, and you can run a command again straight from its result window. This release installs OpenCode 2.0.22 and Codex 2.0.1.
+
+## ✨ Enhancements
+
+- Codex in Safe mode now asks before each edit to your vault. Approve the edit to apply it, or reject it to keep your notes unchanged. ([#3447](https://github.com/logancyang/obsidian-copilot/pull/3447), @zeroliu)
+- Codex chats can use GPT-6.1 Sol. Pick it from the model picker once Copilot installs Codex 2.0.1. ([#3447](https://github.com/logancyang/obsidian-copilot/pull/3447), @zeroliu)
+- Choose a default model for commands in **Settings → Copilot → Command**. Saved commands, Quick Command, and Quick Ask use it unless a command names its own model. ([#3443](https://github.com/logancyang/obsidian-copilot/pull/3443), @zeroliu)
+- Click **Run again** in a command's result window to rerun the same command, for example after switching to another model. ([#3443](https://github.com/logancyang/obsidian-copilot/pull/3443), @zeroliu)
+- Copy Chat Link also works on a chat you have not saved. Copilot saves the chat as a note, then copies a link that reopens it. ([#3392](https://github.com/logancyang/obsidian-copilot/pull/3392), @zeroliu)
+- Agents use their own web search, page fetch, and PDF reading by default. Turn the Copilot web search, web fetch, and read PDF skills on in **Settings → Agents → Skills → Built-in Skills**. ([#3500](https://github.com/logancyang/obsidian-copilot/pull/3500), @zeroliu)
+
+## 🛠️ Bug Fixes
+
+- OpenCode chats start on your default model and offer only the models you enabled for OpenCode. ([#3498](https://github.com/logancyang/obsidian-copilot/pull/3498), @zeroliu)
+- The model picker shows **Loading models…** while any agent chat starts. ([#3503](https://github.com/logancyang/obsidian-copilot/pull/3503), @zeroliu)
+- Open chats keep their model and effort when the agent restarts. ([#3323](https://github.com/logancyang/obsidian-copilot/pull/3323), @zeroliu)
+- The OpenCode model picker shows the provider and model names you set for a custom OpenAI-compatible endpoint. ([#3497](https://github.com/logancyang/obsidian-copilot/pull/3497), @zeroliu)
+- On Windows, web search, web fetch, YouTube transcript, and the other relay skills return non-English text correctly. ([#3488](https://github.com/logancyang/obsidian-copilot/pull/3488), @logancyang)
+- Quick Ask shows a single divider above its bottom row. ([#3489](https://github.com/logancyang/obsidian-copilot/pull/3489), @zeroliu)
+
+## ⚠️ Compatibility Notes
+
+- Copilot now installs OpenCode 2.0.22 and Codex (codex-acp) 2.0.1. Copilot-managed installs download the new versions the next time Copilot loads. Custom binaries need OpenCode 2.0.21 or newer and codex-acp 2.0.0 or newer; open the agent's **Configure** dialog to switch to the Copilot-managed version. ([#3498](https://github.com/logancyang/obsidian-copilot/pull/3498), [#3447](https://github.com/logancyang/obsidian-copilot/pull/3447), @zeroliu)
+- The Copilot web search, web fetch, and read PDF skills are off on existing installs too. In Self-Host Mode with OpenCode, turn on `copilot-web-search` to keep web search. ([#3500](https://github.com/logancyang/obsidian-copilot/pull/3500), @zeroliu)
+- Commands that inherited the chat model now use the command default model. If you have not set one, the command asks you to choose one in **Settings → Copilot → Command**. ([#3443](https://github.com/logancyang/obsidian-copilot/pull/3443), @zeroliu)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.12 - OpenCode 2 in your vault
 
 [![Demo video: OpenCode 2 in Your Vault: Obsidian Copilot 4.0.12](https://github.com/user-attachments/assets/76f592d9-74ce-43cc-85f9-a8312fe16fc9)](https://www.youtube.com/shorts/IjjXVFNFO0k)

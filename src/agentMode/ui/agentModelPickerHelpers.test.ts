@@ -161,6 +161,11 @@ const emptySettings = {
   },
 } as unknown as CopilotSettings;
 
+const copilotPlusSettings = {
+  ...emptySettings,
+  providers: { plus: { origin: { kind: "copilot-plus" } } },
+} as unknown as CopilotSettings;
+
 function claudeWithInstallState(installState: InstallState): BackendDescriptor {
   return {
     ...makeDescriptor("claude", installState),
@@ -385,7 +390,7 @@ describe("agentModelPickerHelpers", () => {
         },
       });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "codex" } as unknown as AgentSession,
+        activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
@@ -408,7 +413,7 @@ describe("agentModelPickerHelpers", () => {
         },
       });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "codex" } as unknown as AgentSession,
+        activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
@@ -431,7 +436,7 @@ describe("agentModelPickerHelpers", () => {
         },
       });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "codex" } as unknown as AgentSession,
+        activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
@@ -467,29 +472,108 @@ describe("agentModelPickerHelpers", () => {
       expect(entries.map((e) => e.name)).toEqual(["anthropic/claude-sonnet-4-6"]);
     });
 
-    it("drops every model not in the enabled set except the kept one", () => {
-      const kept = makeModelEntry("kept-model");
-      const dropped = makeModelEntry("dropped-model");
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 never lists or selects an active model the user has not enabled on a backend that may only run enabled models", () => {
+      const pushed = makeModelEntry("openrouter/unbiased/pareto-26.10-preview");
+      const enabled = makeModelEntry("copilot-plus/copilot-plus-flash");
       const opencode = {
         ...makeDescriptor("opencode"),
-        getEnabledModelEntries: () => [],
+        routesCopilotModels: true,
+        getEnabledModelEntries: () => [
+          { baseModelId: enabled.baseModelId, name: "Flash", credentialState: "ok" as const },
+        ],
       } as unknown as BackendDescriptor;
       const manager = makeManager({
-        catalogById: {
-          opencode: makeCatalog([kept, dropped]),
-        },
+        catalogById: { opencode: makeCatalog([pushed, enabled]) },
       });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "opencode" } as unknown as AgentSession,
+        activeSession: {
+          backendId: "opencode",
+          getStatus: () => "idle",
+        } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "opencode",
         activeDescriptor: opencode,
         activeSessionHasHistory: false,
-        activeModelState: makeModelState("kept-model", [kept, dropped]),
-        activeCurrentEntry: kept,
+        activeModelState: makeModelState(pushed.baseModelId, [pushed, enabled]),
+        activeCurrentEntry: pushed,
       };
-      const { entries } = buildPickerEntries(manager, [opencode], ctx, emptySettings);
-      expect(entries.map((e) => e.name)).toEqual(["kept-model"]);
+
+      const { entries, valueKey } = buildPickerEntries(
+        manager,
+        [opencode],
+        ctx,
+        copilotPlusSettings
+      );
+
+      expect(entries.map((e) => e.name)).toEqual([enabled.baseModelId]);
+      expect(valueKey).toBe("");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 shows Loading models… as the selection, never the agent's own model, while the chat is starting on a backend that may only run enabled models", () => {
+      const agentDefault = makeModelEntry("opencode/fledge-alpha-free");
+      const opencode = {
+        ...makeDescriptor("opencode"),
+        routesCopilotModels: true,
+        getEnabledModelEntries: () => [
+          { baseModelId: agentDefault.baseModelId, name: "Fledge", credentialState: "ok" as const },
+          {
+            baseModelId: "copilot-plus/copilot-plus-flash",
+            name: "Flash",
+            credentialState: "ok" as const,
+          },
+        ],
+      } as unknown as BackendDescriptor;
+      const manager = makeManager({ catalogById: { opencode: makeCatalog([agentDefault]) } });
+      const ctx: ModelActiveContext = {
+        activeSession: {
+          backendId: "opencode",
+          getStatus: () => "starting",
+        } as unknown as AgentSession,
+        activeChatUIState: null,
+        activeBackendId: "opencode",
+        activeDescriptor: opencode,
+        activeSessionHasHistory: false,
+        activeModelState: makeModelState(agentDefault.baseModelId, [agentDefault]),
+        activeCurrentEntry: agentDefault,
+      };
+
+      const { entries, valueKey } = buildPickerEntries(
+        manager,
+        [opencode],
+        ctx,
+        copilotPlusSettings
+      );
+
+      const selected = entries.find((e) => getModelKeyFromModel(e) === valueKey);
+      expect(selected?.displayName).toBe("Loading models…");
+      expect(entries.map((e) => e.name)).toEqual([
+        "__preload_pending__",
+        agentDefault.baseModelId,
+        "copilot-plus/copilot-plus-flash",
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/630 shows Loading models… as the selection while any chat is starting, not the model its agent reports", () => {
+      const agentDefault = makeModelEntry("gpt-5");
+      const codex = makeDescriptor("codex");
+      const manager = makeManager({ catalogById: { codex: makeCatalog([agentDefault]) } });
+      const ctx: ModelActiveContext = {
+        activeSession: {
+          backendId: "codex",
+          getStatus: () => "starting",
+        } as unknown as AgentSession,
+        activeChatUIState: null,
+        activeBackendId: "codex",
+        activeDescriptor: codex,
+        activeSessionHasHistory: false,
+        activeModelState: makeModelState(agentDefault.baseModelId, [agentDefault]),
+        activeCurrentEntry: agentDefault,
+      };
+
+      const { entries, valueKey } = buildPickerEntries(manager, [codex], ctx, emptySettings);
+
+      const selected = entries.find((e) => getModelKeyFromModel(e) === valueKey);
+      expect(selected?.displayName).toBe("Loading models…");
     });
 
     it("carries the model description onto the picker entry as _subtitle", () => {
@@ -512,7 +596,7 @@ describe("agentModelPickerHelpers", () => {
         },
       });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "codex" } as unknown as AgentSession,
+        activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
@@ -540,7 +624,7 @@ describe("agentModelPickerHelpers", () => {
         },
       });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "codex" } as unknown as AgentSession,
+        activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
@@ -600,7 +684,7 @@ describe("agentModelPickerHelpers", () => {
         },
       });
       const ctx: ModelActiveContext = {
-        activeSession: { backendId: "codex" } as unknown as AgentSession,
+        activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
@@ -645,7 +729,7 @@ describe("agentModelPickerHelpers", () => {
       const claude = claudeWithInstallState({ kind: "absent" });
       const ctx: ModelActiveContext = {
         ...noSessionContext(),
-        activeSession: { backendId: "claude" } as unknown as AgentSession,
+        activeSession: { backendId: "claude", getStatus: () => "idle" } as unknown as AgentSession,
         activeBackendId: "claude",
         activeDescriptor: claude,
       };
@@ -661,7 +745,7 @@ describe("agentModelPickerHelpers", () => {
 
     function ctxFor(backendId: "codex" | "claude" | "opencode"): ModelActiveContext {
       return {
-        activeSession: { backendId } as unknown as AgentSession,
+        activeSession: { backendId, getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: null,
         activeBackendId: backendId,
         activeDescriptor: makeDescriptor(backendId),
@@ -728,7 +812,6 @@ describe("agentModelPickerHelpers", () => {
       const entries: ModelSelectorEntry[] = [];
       appendBackendSection(entries, opencodeWithEntries(enabled), {
         backendModels: [makeModelEntry("openrouter/c", "Reported C")],
-        keepBaseModelId: null,
         settings: emptySettings,
       });
       const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
@@ -736,6 +819,50 @@ describe("agentModelPickerHelpers", () => {
       expect(byId["openrouter/c"]._disabledReason).toBeUndefined();
       expect(byId["openrouter/d"]._disabledReason).toBe("Not offered by agent");
       expect(byId["openrouter/c"].displayName).toBe("Reported C");
+    });
+
+    it("shows an enabled model's host label over the agent-reported name, and the reported name when unlabeled (https://github.com/logancyang/obsidian-copilot/issues/3496)", () => {
+      const enabled: EnabledModelEntry[] = [
+        {
+          baseModelId: "d5df8680/auto",
+          name: "custom-model",
+          label: "custom-provider/custom-model",
+          credentialState: "ok",
+        },
+        { baseModelId: "copilot-plus/flash", name: "Flash", credentialState: "ok" },
+      ];
+      const entries: ModelSelectorEntry[] = [];
+      appendBackendSection(entries, opencodeWithEntries(enabled), {
+        backendModels: [
+          makeModelEntry("d5df8680/auto", "d5df8680/auto"),
+          makeModelEntry("copilot-plus/flash", "copilot-plus/flash"),
+        ],
+        settings: emptySettings,
+      });
+      const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
+      expect(byId["d5df8680/auto"].displayName).toBe("custom-provider/custom-model");
+      expect(byId["copilot-plus/flash"].displayName).toBe("copilot-plus/flash");
+    });
+
+    it("shows an enabled model's host label when the agent has no model catalog yet, and its name when unlabeled (https://github.com/logancyang/obsidian-copilot/issues/3496)", () => {
+      const enabled: EnabledModelEntry[] = [
+        {
+          baseModelId: "d5df8680/auto",
+          name: "custom-model",
+          label: "custom-provider/custom-model",
+          credentialState: "ok",
+        },
+        { baseModelId: "copilot-plus/flash", name: "Flash", credentialState: "ok" },
+      ];
+      const entries: ModelSelectorEntry[] = [];
+      appendBackendSection(entries, opencodeWithEntries(enabled), {
+        backendModels: null,
+        settings: emptySettings,
+        useEnabledFallback: true,
+      });
+      const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
+      expect(byId["d5df8680/auto"].displayName).toBe("custom-provider/custom-model");
+      expect(byId["copilot-plus/flash"].displayName).toBe("Flash");
     });
 
     it("carries the backend's free flag onto the picker entry", () => {
@@ -759,7 +886,6 @@ describe("agentModelPickerHelpers", () => {
           makeModelEntry("opencode/big-pickle", "Big Pickle"),
           makeModelEntry("lmstudio/gpt-oss-20b", "GPT OSS 20B"),
         ],
-        keepBaseModelId: null,
         settings: emptySettings,
       });
       const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
@@ -767,28 +893,12 @@ describe("agentModelPickerHelpers", () => {
       expect(byId["lmstudio/gpt-oss-20b"]._isFree).toBe(false);
     });
 
-    it("appends a reported keepBaseModelId not already in the enabled set", () => {
-      const entries: ModelSelectorEntry[] = [];
-      appendBackendSection(
-        entries,
-        opencodeWithEntries([{ baseModelId: "openrouter/a", name: "A", credentialState: "ok" }]),
-        {
-          backendModels: [makeModelEntry("openrouter/a"), makeModelEntry("sticky")],
-          keepBaseModelId: "sticky",
-          settings: emptySettings,
-        }
-      );
-      const names = entries.map((e) => e.name);
-      expect(names).toContain("sticky");
-      expect(entries.find((e) => e.name === "sticky")?._disabledReason).toBeUndefined();
-    });
-
     it("defers to the loading placeholder during preload (no reported catalog yet)", () => {
       const entries: ModelSelectorEntry[] = [];
       appendBackendSection(
         entries,
         opencodeWithEntries([{ baseModelId: "openrouter/a", name: "A", credentialState: "ok" }]),
-        { backendModels: null, keepBaseModelId: null, settings: emptySettings }
+        { backendModels: null, settings: emptySettings }
       );
       expect(entries).toHaveLength(0);
     });
@@ -806,7 +916,7 @@ describe("agentModelPickerHelpers", () => {
         effortOptions: opts.effortOptions,
       };
       return {
-        activeSession: { backendId: "codex" } as unknown as AgentSession,
+        activeSession: { backendId: "codex", getStatus: () => "idle" } as unknown as AgentSession,
         activeChatUIState: makeUIState({ canSwitchEffort: opts.canSwitchEffort }),
         activeBackendId: "codex",
         activeDescriptor: makeDescriptor("codex"),

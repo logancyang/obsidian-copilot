@@ -295,7 +295,7 @@ export async function applyLicenseSettings(): Promise<void> {
 }
 
 export function navigateToPlusPage(medium: ProductUtmMedium): void {
-  window.open(createProductUrl(PRODUCT_URLS.COPILOT, medium), "_blank");
+  window.open(createProductUrl(PRODUCT_URLS.COPILOT_PRICING, medium), "_blank");
 }
 
 export function markPaidPendingEntitlement(): void {

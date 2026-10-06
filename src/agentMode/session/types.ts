@@ -66,6 +66,7 @@ export type EnabledModelCredentialState = "ok" | "missing_key";
 export interface EnabledModelEntry {
   baseModelId: string;
   name: string;
+  label?: string;
   description?: string;
   credentialState: EnabledModelCredentialState;
   capabilities?: ModelCapability[];

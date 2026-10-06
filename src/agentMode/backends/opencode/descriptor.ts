@@ -143,21 +143,15 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     },
   },
 
-  async applySelection(
-    session: ModelSelectionSession,
-    selection: ModelSelection,
-    context
-  ): Promise<void> {
+  async applySelection(session: ModelSelectionSession, selection: ModelSelection): Promise<void> {
     const apply = session.getState()?.model?.apply;
     // A config-option catalog takes bare model ids only. Effort travels through
     // its own option when the model publishes one and is dropped otherwise; a
     // saved level the model does not offer must never become a `/<effort>`
-    // suffix, which opencode rejects, and that rejection reverts the whole
-    // seed to the agent's own default model. https://github.com/Brevilabs/obsidian-copilot-private/issues/364
+    // suffix, which opencode rejects, and that rejection leaves the chat on
+    // the agent's own default model. https://github.com/Brevilabs/obsidian-copilot-private/issues/364
     if (apply?.kind === "setConfigOption") {
-      const currentBase = context
-        ? context.backendReportedCurrent?.baseModelId
-        : session.getState()?.model?.current.baseModelId;
+      const currentBase = session.getState()?.model?.current.baseModelId;
       if (currentBase !== selection.baseModelId) {
         await session.applyModelWireId(
           opencodeWire.encode({ baseModelId: selection.baseModelId, effort: null })

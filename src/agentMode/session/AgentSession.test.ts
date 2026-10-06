@@ -15,9 +15,10 @@ import {
   type AgentSessionStateOptions,
 } from "./AgentSession";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
+import { getSettings } from "@/settings/model";
+import { ContextProcessor } from "@/contextProcessor";
 import { GLOBAL_SCOPE } from "./scope";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
-import type { ApplySelectionContext } from "./descriptor";
 import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
 import { FANOUT_READONLY_PREAMBLE, type FanoutTurn } from "./fanout/fanoutTypes";
 import type {
@@ -25,6 +26,8 @@ import type {
   BackendDescriptor,
   BackendProcess,
   BackendState,
+  CopilotMode,
+  EnabledModelEntry,
   PermissionOption,
   PermissionPrompt,
   SessionEvent,
@@ -155,14 +158,11 @@ function makeConfigOptionDescriptor(): BackendDescriptor {
     wire,
     applySelection: async (
       session: AgentSession,
-      selection: { baseModelId: string; effort: string | null },
-      context?: ApplySelectionContext
+      selection: { baseModelId: string; effort: string | null }
     ) => {
       const apply = session.getState()?.model?.apply;
       if (apply?.kind === "setConfigOption" && apply.effortConfigId) {
-        const currentBase = context
-          ? context.backendReportedCurrent?.baseModelId
-          : session.getState()?.model?.current.baseModelId;
+        const currentBase = session.getState()?.model?.current.baseModelId;
         if (currentBase !== selection.baseModelId) {
           await session.applyModelWireId(
             wire.encode({ baseModelId: selection.baseModelId, effort: null })
@@ -201,12 +201,9 @@ function makeDescriptorWireWithoutEffort(): BackendDescriptor {
     wire,
     applySelection: async (
       session: AgentSession,
-      selection: { baseModelId: string; effort: string | null },
-      context?: ApplySelectionContext
+      selection: { baseModelId: string; effort: string | null }
     ) => {
-      const currentBase = context
-        ? context.backendReportedCurrent?.baseModelId
-        : session.getState()?.model?.current.baseModelId;
+      const currentBase = session.getState()?.model?.current.baseModelId;
       if (currentBase !== selection.baseModelId)
         await session.applyModelWireId(wire.encode(selection));
       if (selection.effort !== null) await session.setConfigOption("effort", selection.effort);
@@ -298,6 +295,82 @@ function subscribeTo(session: AgentSession, listener: Partial<AgentSessionListen
     onStatusChanged: () => {},
     ...listener,
   });
+}
+
+const PLUS_FLASH = "copilot-plus/copilot-plus-flash";
+const STEP_FLASH = "openrouter/stepfun/step-3.5-flash";
+const BIG_PICKLE = "opencode/big-pickle";
+const FLEDGE = "opencode/fledge-alpha-free";
+const PARETO = "openrouter/unbiased/pareto-26.10-preview";
+
+function enabledModel(baseModelId: string): EnabledModelEntry {
+  return { baseModelId, name: baseModelId, credentialState: "ok" };
+}
+
+function enabledModelsOnlyDescriptor(enabled: EnabledModelEntry[]): BackendDescriptor {
+  return {
+    ...makeWireOnlyDescriptor(),
+    displayName: "opencode",
+    routesCopilotModels: true,
+    getEnabledModelEntries: () => enabled,
+  };
+}
+
+function catalogState(
+  modelIds: string[],
+  current: string,
+  modes: CopilotMode[] = ["auto"]
+): BackendState {
+  return {
+    model: {
+      current: { baseModelId: current, effort: null },
+      apply: { kind: "setConfigOption", configId: "model" },
+      availableModels: modelIds.map((baseModelId) => ({
+        baseModelId,
+        name: baseModelId,
+        provider: null,
+        effortOptions: [],
+      })),
+    },
+    mode: {
+      current: "auto",
+      options: modes.map((value) => ({ value, label: value })),
+      apply: Object.fromEntries(
+        modes.map((value) => [value, { kind: "setConfigOption", configId: "mode", value }])
+      ),
+    },
+  };
+}
+
+function fakeCatalogAgent(
+  mock: MockBackend,
+  initial: BackendState
+): { push: (next: BackendState) => void } {
+  let state = initial;
+  mock.newSession.mockResolvedValue({ sessionId: "acp-1", state });
+  mock.setSessionConfigOption.mockImplementation(
+    async ({ configId, value }: { configId: string; value: string }) => {
+      if (configId === "model") {
+        if (!state.model?.availableModels.some((entry) => entry.baseModelId === value)) {
+          throw new Error("Invalid params: model not found");
+        }
+        state = {
+          ...state,
+          model: { ...state.model, current: { baseModelId: value, effort: null } },
+        };
+      }
+      if (configId === "mode" && state.mode) {
+        state = { ...state, mode: { ...state.mode, current: value as CopilotMode } };
+      }
+      return state;
+    }
+  );
+  return {
+    push: (next) => {
+      state = next;
+      mock.emitUpdate({ sessionUpdate: "state_changed", state: next });
+    },
+  };
 }
 
 function sonnetAndGpt5State(): BackendState {
@@ -419,6 +492,99 @@ describe("AgentSession", () => {
         expect(mock.setSessionModel).not.toHaveBeenCalled();
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 moves a resumed session off a model the user has not enabled onto the first enabled one", async () => {
+        const mock = makeMockBackend();
+        const resumedState = catalogState([PARETO, STEP_FLASH], PARETO);
+        fakeCatalogAgent(mock, resumedState);
+        const session = makeSession(mock, {
+          initialState: resumedState,
+          getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(STEP_FLASH)]),
+        });
+
+        await session.ready;
+
+        expect(session.getState()?.model?.current.baseModelId).toBe(STEP_FLASH);
+        expect(session.getStatus()).toBe("idle");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 keeps the agent's model and refuses turns when a resumed session cannot be switched to the enabled default", async () => {
+        const mock = makeMockBackend();
+        const resumedState = catalogState([PLUS_FLASH, PARETO], PARETO);
+        fakeCatalogAgent(mock, resumedState);
+        mock.setSessionConfigOption.mockRejectedValue(new Error("Invalid params: model not found"));
+        const session = makeSession(mock, {
+          initialState: resumedState,
+          defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+          getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(PLUS_FLASH)]),
+        });
+
+        await session.ready;
+
+        expect(session.getState()?.model?.current.baseModelId).toBe(PARETO);
+        expect(await session.sendPrompt("hello").turn).toBe("refusal");
+        expect(mock.prompt).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 waits for a late catalog to list an enabled model, then moves a resumed session off its disabled model", async () => {
+        const mock = makeMockBackend();
+        const resumedState = catalogState([PARETO], PARETO);
+        const agent = fakeCatalogAgent(mock, resumedState);
+        const session = makeSession(mock, {
+          initialState: resumedState,
+          getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(STEP_FLASH)]),
+        });
+        expect(session.getStatus()).toBe("starting");
+
+        agent.push(catalogState([PARETO, STEP_FLASH], PARETO));
+        await session.ready;
+
+        expect(session.getState()?.model?.current.baseModelId).toBe(STEP_FLASH);
+        expect(session.getStatus()).toBe("idle");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 leaves a resumed session open for picking a model, but refuses its turns, when no enabled model is offered within 10 seconds", async () => {
+        jest.useFakeTimers();
+        try {
+          const mock = makeMockBackend();
+          const resumedState = catalogState([PARETO], PARETO);
+          fakeCatalogAgent(mock, resumedState);
+          const session = makeSession(mock, {
+            initialState: resumedState,
+            getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(BIG_PICKLE)]),
+          });
+
+          await jest.advanceTimersByTimeAsync(9_999);
+          expect(session.getStatus()).toBe("starting");
+
+          await jest.advanceTimersByTimeAsync(1);
+          await session.ready;
+
+          expect(session.getStatus()).toBe("idle");
+          expect(await session.sendPrompt("hello").turn).toBe("refusal");
+          expect(mock.prompt).not.toHaveBeenCalled();
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 applies the saved Copilot mode to a resumed session once a late catalog update lists it", async () => {
+        const mock = makeMockBackend();
+        const resumedState = catalogState([BIG_PICKLE], BIG_PICKLE, ["auto"]);
+        const agent = fakeCatalogAgent(mock, resumedState);
+        const session = makeSession(mock, {
+          initialState: resumedState,
+          defaultMode: "default",
+          getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(BIG_PICKLE)]),
+        });
+        expect(session.getStatus()).toBe("starting");
+
+        agent.push(catalogState([BIG_PICKLE], BIG_PICKLE, ["default", "auto"]));
+        await session.ready;
+
+        expect(session.getState()?.mode?.current).toBe("default");
+        expect(session.getStatus()).toBe("idle");
+      });
+
       it("ready resolves immediately when no default selection is supplied", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock, {
@@ -498,7 +664,7 @@ describe("AgentSession", () => {
         });
       });
 
-      it("seeds currentState with the persisted selection before notifying listeners", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/630 reports the agent's own model until the startup switch lands, then the chat's", async () => {
         const mock = makeMockBackend();
         const stateWithSonnet = sonnetAndGpt5State();
         mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: stateWithSonnet });
@@ -517,15 +683,23 @@ describe("AgentSession", () => {
         });
 
         await waitFor(() => {
-          expect(observed[0]).toBe("openai/gpt-5");
           expect(mock.setSessionModel).toHaveBeenCalledWith({
             sessionId: "acp-1",
             modelId: "openai/gpt-5",
           });
         });
+        expect(observed).toEqual(["anthropic/sonnet"]);
 
-        resolveSetModel!(stateWithSonnet);
+        resolveSetModel!({
+          ...stateWithSonnet,
+          model: {
+            ...stateWithSonnet.model!,
+            current: { baseModelId: "openai/gpt-5", effort: null },
+          },
+        });
         await session.ready;
+
+        expect(observed).toEqual(["anthropic/sonnet", "openai/gpt-5"]);
       });
 
       it("stays starting until a newly created session has had the desired model applied", async () => {
@@ -567,7 +741,7 @@ describe("AgentSession", () => {
 
         resolveNewSession!({ sessionId: "acp-1", state: backendState });
         await waitFor(() => {
-          expect(session.getState()?.model?.current.baseModelId).toBe("big-pickle");
+          expect(session.getState()?.model?.current.baseModelId).toBe("kimi-2.6");
           expect(mock.setSessionModel).toHaveBeenCalledWith({
             sessionId: "acp-1",
             modelId: "big-pickle",
@@ -634,7 +808,7 @@ describe("AgentSession", () => {
         expect(session.getState()?.model?.current.effort).toBe("high");
       });
 
-      it("reverts the seeded selection when setModel fails", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/630 keeps the agent's own model and starts when the startup switch fails", async () => {
         const mock = makeMockBackend();
         const stateWithSonnet = sonnetAndGpt5State();
         mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: stateWithSonnet });
@@ -702,7 +876,7 @@ describe("AgentSession", () => {
             value: "openai/gpt-5",
           })
         );
-        expect(session.getState()?.model?.current.baseModelId).toBe("openai/gpt-5");
+        expect(session.getState()?.model?.current.baseModelId).toBe("anthropic/sonnet");
 
         resolveModelSwitch(switchedState);
         await session.ready;
@@ -745,18 +919,200 @@ describe("AgentSession", () => {
           mode: null,
         });
 
-        const session = startSession(mock, {
-          defaultModelSelection: { baseModelId: "openai/gpt-5", effort: null },
-          getDescriptor: () => OpencodeBackendDescriptor,
-        });
-        await session.ready;
+        jest.mocked(getSettings).mockReturnValue({
+          agentMode: {},
+          providers: {
+            zen: {
+              providerId: "zen",
+              displayName: "OpenCode Zen",
+              origin: { kind: "agent", agentType: "opencode" },
+            },
+          },
+          configuredModels: [
+            {
+              configuredModelId: "gpt-5",
+              providerId: "zen",
+              info: { id: "openai/gpt-5", displayName: "GPT-5" },
+            },
+          ],
+          backends: { opencode: { enabledModels: ["gpt-5"] } },
+        } as never);
+        try {
+          const session = startSession(mock, {
+            defaultModelSelection: { baseModelId: "openai/gpt-5", effort: null },
+            getDescriptor: () => OpencodeBackendDescriptor,
+          });
+          await session.ready;
 
-        expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
-          sessionId: "acp-1",
-          configId: "thought_level",
-          value: "low",
+          expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
+            sessionId: "acp-1",
+            configId: "thought_level",
+            value: "low",
+          });
+          expect(session.getState()?.model?.current.effort).toBe("low");
+        } finally {
+          jest.mocked(getSettings).mockReturnValue({ agentMode: {} } as never);
+        }
+      });
+
+      describe("on a backend that may only run models the user enabled", () => {
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 applies an enabled default the first catalog already lists, without waiting for an update", async () => {
+          const mock = makeMockBackend();
+          fakeCatalogAgent(mock, catalogState([FLEDGE, PLUS_FLASH], FLEDGE));
+          const session = startSession(mock, {
+            defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+            getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(PLUS_FLASH)]),
+          });
+
+          await session.ready;
+
+          expect(session.getState()?.model?.current.baseModelId).toBe(PLUS_FLASH);
+          expect(session.getStatus()).toBe("idle");
         });
-        expect(session.getState()?.model?.current.effort).toBe("low");
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 stays starting until a catalog update lists the enabled default, then applies it", async () => {
+          const mock = makeMockBackend();
+          const agent = fakeCatalogAgent(mock, catalogState([FLEDGE, BIG_PICKLE], FLEDGE));
+          const session = startSession(mock, {
+            defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+            getDescriptor: () =>
+              enabledModelsOnlyDescriptor([enabledModel(PLUS_FLASH), enabledModel(BIG_PICKLE)]),
+          });
+          await waitFor(() => expect(session.getState()).not.toBeNull());
+
+          expect(session.getStatus()).toBe("starting");
+          expect(() => session.sendPrompt("too early")).toThrow("Session is still starting");
+
+          agent.push(catalogState([FLEDGE, BIG_PICKLE, PLUS_FLASH, PARETO], PARETO));
+          await session.ready;
+
+          expect(session.getState()?.model?.current.baseModelId).toBe(PLUS_FLASH);
+          expect(session.getStatus()).toBe("idle");
+          expect(mock.setSessionConfigOption).toHaveBeenCalledTimes(1);
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 falls back to the first enabled model in the catalog when the default is still missing after 10 seconds", async () => {
+          jest.useFakeTimers();
+          try {
+            const mock = makeMockBackend();
+            fakeCatalogAgent(mock, catalogState([FLEDGE, STEP_FLASH], FLEDGE));
+            const session = startSession(mock, {
+              defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+              getDescriptor: () =>
+                enabledModelsOnlyDescriptor([enabledModel(PLUS_FLASH), enabledModel(STEP_FLASH)]),
+            });
+
+            await jest.advanceTimersByTimeAsync(9_999);
+            expect(session.getStatus()).toBe("starting");
+
+            await jest.advanceTimersByTimeAsync(1);
+            await session.ready;
+
+            expect(session.getState()?.model?.current.baseModelId).toBe(STEP_FLASH);
+            expect(session.getStatus()).toBe("idle");
+          } finally {
+            jest.useRealTimers();
+          }
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 falls back at once to an offered enabled model when the default's provider key is missing", async () => {
+          const mock = makeMockBackend();
+          fakeCatalogAgent(mock, catalogState([FLEDGE, STEP_FLASH], FLEDGE));
+          const session = startSession(mock, {
+            defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+            getDescriptor: () =>
+              enabledModelsOnlyDescriptor([
+                { ...enabledModel(PLUS_FLASH), credentialState: "missing_key" },
+                enabledModel(STEP_FLASH),
+              ]),
+          });
+
+          await session.ready;
+
+          expect(session.getState()?.model?.current.baseModelId).toBe(STEP_FLASH);
+          expect(session.getStatus()).toBe("idle");
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 keeps the agent's model and refuses turns when switching to the enabled default fails during startup", async () => {
+          const mock = makeMockBackend();
+          fakeCatalogAgent(mock, catalogState([PLUS_FLASH, PARETO], PARETO));
+          mock.setSessionConfigOption.mockRejectedValue(
+            new Error("Invalid params: model not found")
+          );
+          const session = startSession(mock, {
+            defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+            getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(PLUS_FLASH)]),
+          });
+
+          await expect(session.ready).rejects.toThrow("model not found");
+
+          expect(session.getState()?.model?.current.baseModelId).toBe(PARETO);
+          expect(await session.sendPrompt("hello").turn).toBe("refusal");
+          expect(mock.prompt).not.toHaveBeenCalled();
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 fails to start, keeping the agent's model, when no enabled model reaches the catalog within 10 seconds", async () => {
+          jest.useFakeTimers();
+          try {
+            const mock = makeMockBackend();
+            fakeCatalogAgent(mock, catalogState([FLEDGE], FLEDGE));
+            const session = startSession(mock, {
+              defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+              getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(PLUS_FLASH)]),
+            });
+            const startup = session.ready.catch((error: Error) => error.message);
+
+            await jest.advanceTimersByTimeAsync(10_000);
+
+            expect(await startup).toBe(
+              "None of the models enabled for opencode are available. Check them in Copilot's model settings."
+            );
+            expect(session.getStatus()).toBe("error");
+            expect(session.getState()?.model?.current.baseModelId).toBe(FLEDGE);
+            expect(mock.setSessionConfigOption).not.toHaveBeenCalled();
+          } finally {
+            jest.useRealTimers();
+          }
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 stays starting until the saved Copilot mode arrives", async () => {
+          const mock = makeMockBackend();
+          const agent = fakeCatalogAgent(mock, catalogState([BIG_PICKLE], BIG_PICKLE, ["auto"]));
+          const session = startSession(mock, {
+            defaultModelSelection: { baseModelId: BIG_PICKLE, effort: null },
+            defaultMode: "default",
+            getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(BIG_PICKLE)]),
+          });
+          await waitFor(() => expect(session.getState()).not.toBeNull());
+          expect(session.getStatus()).toBe("starting");
+
+          agent.push(catalogState([BIG_PICKLE], BIG_PICKLE, ["default", "auto"]));
+          await session.ready;
+
+          expect(session.getState()?.mode?.current).toBe("default");
+          expect(session.getStatus()).toBe("idle");
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 stops waiting for the catalog, without touching the agent, when the chat is closed", async () => {
+          jest.useFakeTimers();
+          try {
+            const mock = makeMockBackend();
+            fakeCatalogAgent(mock, catalogState([FLEDGE], FLEDGE));
+            const session = startSession(mock, {
+              defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+              getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(PLUS_FLASH)]),
+            });
+            await jest.advanceTimersByTimeAsync(0);
+            expect(session.getStatus()).toBe("starting");
+
+            await session.dispose();
+
+            await expect(session.ready).resolves.toBeUndefined();
+            expect(mock.setSessionConfigOption).not.toHaveBeenCalled();
+          } finally {
+            jest.useRealTimers();
+          }
+        });
       });
     });
 
@@ -807,6 +1163,58 @@ describe("AgentSession", () => {
     });
 
     describe("sendPrompt()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 refuses to run a turn, and says why, while the agent is on a model the user has not enabled", async () => {
+        const mock = makeMockBackend();
+        const agent = fakeCatalogAgent(mock, catalogState([PLUS_FLASH, PARETO], PLUS_FLASH));
+        const session = startSession(mock, {
+          defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+          getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(PLUS_FLASH)]),
+        });
+        await session.ready;
+        agent.push(catalogState([PARETO], PARETO));
+
+        const stopReason = await session.sendPrompt("hello").turn;
+
+        expect(stopReason).toBe("refusal");
+        expect(mock.prompt).not.toHaveBeenCalled();
+        expect(aiMessage(session)?.message).toBe(
+          "**Error:** This chat's model isn't enabled for opencode. Pick an enabled model to continue."
+        );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 refuses a turn whose model switches to one the user has not enabled while its web tabs load", async () => {
+        const mock = makeMockBackend();
+        const agent = fakeCatalogAgent(mock, catalogState([PLUS_FLASH, PARETO], PLUS_FLASH));
+        const session = startSession(mock, {
+          defaultModelSelection: { baseModelId: PLUS_FLASH, effort: null },
+          getDescriptor: () => enabledModelsOnlyDescriptor([enabledModel(PLUS_FLASH)]),
+        });
+        await session.ready;
+        let finishWebTabs: (text: string) => void = () => {};
+        const getInstance = jest.spyOn(ContextProcessor, "getInstance").mockReturnValue({
+          processContextWebTabs: () =>
+            new Promise<string>((resolve) => {
+              finishWebTabs = resolve;
+            }),
+        } as never);
+        try {
+          const { turn } = session.sendPrompt("hello", {
+            notes: [],
+            urls: [],
+            webTabs: [{ url: "https://example.com" }],
+          });
+          await waitFor(() => expect(getInstance).toHaveBeenCalled());
+
+          agent.push(catalogState([PARETO], PARETO));
+          finishWebTabs("<web-tab />");
+
+          expect(await turn).toBe("refusal");
+          expect(mock.prompt).not.toHaveBeenCalled();
+        } finally {
+          getInstance.mockRestore();
+        }
+      });
+
       it("appends the user message and a running placeholder, then goes idle with the stop reason when the prompt resolves", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock);

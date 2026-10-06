@@ -1,4 +1,5 @@
 import { CustomModel } from "@/aiParams";
+import { DEFAULT_BUILTIN_PREFERENCES } from "@/builtinSkills/builtinSkills";
 import { type CopilotSettings } from "@/settings/model";
 import { v4 as uuidv4 } from "uuid";
 import { ChainType } from "./chainType";
@@ -758,6 +759,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     welcomeDismissed: false,
     skills: {
       folder: DEFAULT_SKILLS_FOLDER,
+      builtinPreferences: DEFAULT_BUILTIN_PREFERENCES,
     },
   },
   providers: {},

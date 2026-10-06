@@ -43,7 +43,7 @@ function resetPromptState(): void {
 
 jest.mock("./OpencodeBinaryManager", () => ({
   ...jest.requireActual("./OpencodeBinaryManager"),
-  verifyOpencodeBinary: jest.fn().mockResolvedValue({ stdout: "2.0.3" }),
+  verifyOpencodeBinary: jest.fn().mockResolvedValue({ stdout: "2.0.21" }),
 }));
 
 jest.mock("@/logger", () => ({
@@ -248,6 +248,23 @@ describe("OpencodeBackend", () => {
         "claude-sonnet-4-6": {},
         "claude-haiku": {},
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/644 preserves OpenCode catalog limits for a BYOK model with stored limits", async () => {
+      const provider = makeProvider("p-anthropic", {
+        kind: "byok",
+        catalogProviderId: "anthropic",
+      });
+      const model = makeModel("p-anthropic", "claude-sonnet-4-6");
+      model.info.limits = { context: 200_000 };
+      const deps = makeDeps({
+        resolved: [okEntry(provider, model)],
+        keys: { "p-anthropic": "anth-123" },
+      });
+
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+      expect(cfg.providers.anthropic.models?.["claude-sonnet-4-6"]).toEqual({});
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 declares image input with OpenCode 2 capabilities for a vision model", async () => {
@@ -640,6 +657,23 @@ describe("OpencodeBackend", () => {
       });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/644 passes a published 1M context window to OpenCode for a Copilot Plus model", async () => {
+      const model = makeModel("p-plus", "deepseek-v4-pro");
+      model.info.limits = { context: 1024 * 1024 };
+      const deps = makeDeps({
+        resolved: [okEntry(makePlusProvider(), model)],
+        keys: { "p-plus": "plus-token-123" },
+      });
+
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+      expect(cfg.providers["copilot-plus"].models?.["deepseek-v4-pro"]).toEqual({
+        capabilities: { tools: true, input: ["text"], output: ["text"] },
+        limit: { context: 1024 * 1024 },
+        variants: [],
+      });
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 offers only the effort levels Copilot Plus published", async () => {
       const model = makePlusReasoningModel("copilot-plus-flash", ["high", "max"]);
       const deps = makeDeps({
@@ -923,7 +957,7 @@ describe("OpencodeBackend", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/569 rejects a V1 executable even when settings claim a supported V2 version", async () => {
         updateAgentModeBackendFields("opencode", {
           binaryPath: "/old-opencode",
-          binaryVersion: "2.0.3",
+          binaryVersion: "2.0.21",
           binarySource: "managed",
         });
         jest.mocked(verifyOpencodeBinary).mockResolvedValueOnce({ stdout: "1.18.31" });
