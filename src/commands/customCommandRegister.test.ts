@@ -158,6 +158,56 @@ describe("customCommandRegister", () => {
       });
     });
 
+    describe("initialize()", () => {
+      it("registers every loaded custom command with the plugin", async () => {
+        jest.clearAllMocks();
+        const { getCachedCustomCommands } = jest.requireMock<{
+          getCachedCustomCommands: jest.Mock;
+        }>("@/commands/state");
+        getCachedCustomCommands.mockReturnValue([command("Summarize")]);
+        const addCommand = jest.fn();
+        const mockPlugin = { addCommand, removeCommand: jest.fn(), app: {} } as unknown as Plugin;
+        const mockVault = { on: jest.fn(), off: jest.fn() } as unknown as Vault;
+        const register = new CustomCommandRegister(mockPlugin, {
+          vault: mockVault,
+        } as unknown as App);
+
+        await register.initialize();
+
+        expect(addCommand).toHaveBeenCalledWith(
+          expect.objectContaining({ id: "copilot-command-Summarize", name: "Summarize" })
+        );
+      });
+
+      it("registers nothing when cleanup runs while commands are still loading https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        jest.clearAllMocks();
+        const { loadAllCustomCommands } = jest.requireMock<{ loadAllCustomCommands: jest.Mock }>(
+          "@/commands/customCommandUtils"
+        );
+        const { getCachedCustomCommands } = jest.requireMock<{
+          getCachedCustomCommands: jest.Mock;
+        }>("@/commands/state");
+        getCachedCustomCommands.mockReturnValue([command("Late")]);
+        let finishLoading: () => void = () => undefined;
+        loadAllCustomCommands.mockReturnValueOnce(
+          new Promise<void>((resolve) => (finishLoading = resolve))
+        );
+        const addCommand = jest.fn();
+        const mockPlugin = { addCommand, removeCommand: jest.fn(), app: {} } as unknown as Plugin;
+        const mockVault = { on: jest.fn(), off: jest.fn() } as unknown as Vault;
+        const register = new CustomCommandRegister(mockPlugin, {
+          vault: mockVault,
+        } as unknown as App);
+
+        const initialized = register.initialize();
+        register.cleanup();
+        finishLoading();
+        await initialized;
+
+        expect(addCommand).not.toHaveBeenCalled();
+      });
+    });
+
     describe("cleanup()", () => {
       it("unsubscribes from settings changes on teardown", () => {
         const unsubscribe = jest.fn();

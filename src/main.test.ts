@@ -81,7 +81,7 @@ jest.mock("@/services/webViewerService/webViewerServiceSelection", () => ({
 }));
 import { logError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
-import { flushPersistence } from "@/services/settingsPersistence";
+import { flushPersistence, resetPersistenceState } from "@/services/settingsPersistence";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
@@ -568,6 +568,7 @@ describe("main", () => {
           },
           manifest: { version: "4.0.13" },
           pluginLifecycleActive: true,
+          unload: jest.fn(),
           loadSettings: jest.fn(loadSettings),
           openChatDeepLink: jest.fn(async () => undefined),
         });
@@ -683,6 +684,46 @@ describe("main", () => {
         }
       });
 
+      it("skips settings load when Obsidian unloads it while it waits for the previous copy's shutdown https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        const previousTeardown = deferred();
+        (window as unknown as Record<symbol, unknown>)[pendingTeardown] = previousTeardown.promise;
+        const { plugin, finishStartup } = createLoadingPlugin();
+
+        plugin.onload();
+        plugin.onunload();
+        previousTeardown.resolve();
+
+        await expect(finishStartup()).resolves.toBe(false);
+        expect(resetPersistenceState).not.toHaveBeenCalled();
+        expect(plugin.loadSettings).not.toHaveBeenCalled();
+      });
+
+      it("keeps the next copy from loading settings until a copy unloaded mid-load settles https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        jest.useFakeTimers();
+        try {
+          const previousSettingsStarted = deferred();
+          const previousSettings = deferred();
+          const previous = createLoadingPlugin(() => {
+            previousSettingsStarted.resolve();
+            return previousSettings.promise;
+          });
+          const next = createLoadingPlugin();
+
+          previous.plugin.onload();
+          await previousSettingsStarted.promise;
+          previous.plugin.onunload();
+          next.plugin.onload();
+          await jest.advanceTimersByTimeAsync(9_999);
+          expect(next.plugin.loadSettings).not.toHaveBeenCalled();
+          previousSettings.resolve();
+
+          await expect(next.finishStartup()).resolves.toBe(true);
+          expect(next.plugin.loadSettings).toHaveBeenCalledTimes(1);
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
       it("starts anyway after 10 seconds when the previous copy's shutdown hangs https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
         jest.useFakeTimers();
         try {
@@ -762,7 +803,19 @@ describe("main", () => {
         expect(plugin.openChatDeepLink).not.toHaveBeenCalled();
       });
 
-      it("reports a startup failure instead of leaving an unhandled rejection", async () => {
+      it("ignores a copilot-chat link when Copilot is unloaded before the link's queued open runs https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        const { plugin, finishStartup, openCopilotChatLink } = createLoadingPlugin();
+        plugin.onload();
+        await finishStartup();
+
+        openCopilotChatLink({ action: "copilot-chat", id: "epoch:1" });
+        plugin.onunload();
+        await finishStartup();
+
+        expect(plugin.openChatDeepLink).not.toHaveBeenCalled();
+      });
+
+      it("reports a startup failure and unloads what startup registered https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
         const failure = new Error("settings unreadable");
         const { plugin, finishStartup } = createLoadingPlugin(async () => {
           throw failure;
@@ -775,6 +828,7 @@ describe("main", () => {
         expect(Notice).toHaveBeenCalledWith(
           "Copilot failed to start. Check the console for details."
         );
+        expect(plugin.unload).toHaveBeenCalledTimes(1);
       });
     });
 

@@ -197,6 +197,9 @@ export default class CopilotPlugin extends Plugin {
     this.initialization = this.initialize().catch((error) => {
       logError("Copilot failed to start.", error);
       new Notice("Copilot failed to start. Check the console for details.");
+      // Obsidian keeps a plugin enabled when work after onload fails, so release whatever
+      // startup registered before the failure. https://github.com/logancyang/obsidian-copilot/issues/3518
+      this.unload();
       return false;
     });
     // Obsidian dispatches the URI that launched it once its layout loads, which can precede
@@ -204,13 +207,14 @@ export default class CopilotPlugin extends Plugin {
     // https://github.com/logancyang/obsidian-copilot/issues/3271
     this.registerObsidianProtocolHandler("copilot-chat", (params) => {
       void this.initialization.then((ready) => {
-        if (ready) void this.openChatDeepLink(params);
+        if (ready && this.pluginLifecycleActive) void this.openChatDeepLink(params);
       });
     });
   }
 
   private async initialize(): Promise<boolean> {
     await this.waitForPreviousTeardown();
+    if (!this.pluginLifecycleActive) return false;
     resetPersistenceState();
     KeychainService.resetInstance();
     KeychainService.getInstance(this.app);
@@ -609,12 +613,14 @@ export default class CopilotPlugin extends Plugin {
     const teardown = this.teardown().catch((error) => {
       logError("Copilot: plugin teardown failed during unload:", error);
     });
-    // A copy unloaded mid-startup tears down instantly while an older copy may still be
-    // stopping its backends, so the handoff covers every earlier teardown.
+    // A copy unloaded mid-startup tears down instantly while its own settings load and an older
+    // copy's backends may still be running, so the handoff covers all of them.
     // https://github.com/logancyang/obsidian-copilot/issues/3518
-    handoff[PENDING_TEARDOWN] = Promise.all([handoff[PENDING_TEARDOWN], teardown]).then(
-      () => undefined
-    );
+    handoff[PENDING_TEARDOWN] = Promise.all([
+      handoff[PENDING_TEARDOWN],
+      this.initialization,
+      teardown,
+    ]).then(() => undefined);
   }
 
   private async teardown(): Promise<void> {
