@@ -8,7 +8,6 @@ import { AtMentionTypeahead } from "./AtMentionTypeahead";
 
 interface AddContextButtonProps {
   onSelect: (category: string, data: unknown) => void;
-  isCopilotPlus: boolean;
   showTools?: boolean;
   currentActiveFile: TFile | null;
   lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
@@ -16,7 +15,6 @@ interface AddContextButtonProps {
 
 export const AddContextButton: React.FC<AddContextButtonProps> = ({
   onSelect,
-  isCopilotPlus,
   showTools = false,
   currentActiveFile,
   lexicalEditorRef,
@@ -56,7 +54,6 @@ export const AddContextButton: React.FC<AddContextButtonProps> = ({
           isOpen={open}
           onClose={() => setOpen(false)}
           onSelect={onSelect}
-          isCopilotPlus={isCopilotPlus}
           showTools={showTools}
           currentActiveFile={currentActiveFile}
         />

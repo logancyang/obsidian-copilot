@@ -711,7 +711,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               onImagePaste={onAddImage}
               onTagSelected={onTagSelected}
               placeholder={placeholder}
-              isCopilotPlus={isCopilotPlus}
               showTools={showAtMentionTools}
               currentActiveFile={currentActiveNote}
               currentChain={currentChain}
@@ -731,7 +730,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
           {!editMode && (
             <AddContextButton
               onSelect={handleAddToContext}
-              isCopilotPlus={isCopilotPlus}
               showTools={showAtMentionTools}
               currentActiveFile={currentActiveNote}
               lexicalEditorRef={lexicalEditorRef}

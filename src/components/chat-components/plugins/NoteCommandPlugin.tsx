@@ -15,12 +15,10 @@ import {
 import { NotePreviewCache } from "@/components/chat-components/utils/notePreviewUtils";
 
 interface NoteCommandPluginProps {
-  isCopilotPlus?: boolean;
   currentActiveFile?: TFile | null;
 }
 
 export function NoteCommandPlugin({
-  isCopilotPlus = false,
   currentActiveFile = null,
 }: NoteCommandPluginProps): JSX.Element {
   const app = useApp();
@@ -53,7 +51,7 @@ export function NoteCommandPlugin({
     [previewCache]
   );
 
-  const searchResults = useNoteSearch(currentQuery, isCopilotPlus, {}, currentActiveFile);
+  const searchResults = useNoteSearch(currentQuery, {}, currentActiveFile);
 
   const filteredNotes = searchResults.map((note) => ({
     ...note,

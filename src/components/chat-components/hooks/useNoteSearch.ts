@@ -23,11 +23,10 @@ const DEFAULT_CONFIG: Required<NoteSearchConfig> = {
 
 export function useNoteSearch(
   query: string,
-  isCopilotPlus: boolean = false,
   config: NoteSearchConfig = {},
   currentActiveFile: TFile | null = null
 ): NoteSearchOption[] {
-  const allNotes = useAllNotes(isCopilotPlus);
+  const allNotes = useAllNotes();
 
   const allNoteOptions = useMemo(() => {
     return allNotes.map((file, index) => ({

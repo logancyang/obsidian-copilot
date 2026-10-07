@@ -280,16 +280,6 @@ export function isPlusChain(chainType: ChainType): boolean {
   return chainType === ChainType.COPILOT_PLUS_CHAIN;
 }
 
-export function isAllowedFileForChainContext(file: TFile | null, chainType: ChainType): boolean {
-  if (!file) return false;
-
-  if (isTextReadableFile(file)) {
-    return true;
-  }
-
-  return isPlusChain(chainType);
-}
-
 export interface ChatHistoryEntry {
   role: "user" | "assistant";
   content: string;
