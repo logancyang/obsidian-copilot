@@ -1,5 +1,6 @@
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
+import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
 import type { BackendAuth, BackendDescriptor } from "@/agentMode/session/types";
 import type { BackendAuthUiState } from "@/agentMode/session/useBackendAuthState";
 import type CopilotPlugin from "@/main";
@@ -28,6 +29,8 @@ jest.mock("@/agentMode/session/useBackendAuthState", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook export
   useBackendAuthState: () => authState,
 }));
+
+jest.mock("@/agentMode/ui/ReportIssueModal", () => ({ openReportIssueModal: jest.fn() }));
 
 jest.mock("@/settings/model", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook export
@@ -263,6 +266,30 @@ describe("AgentModeStatus", () => {
       expect(screen.queryByRole("button", { name: "Reload" })).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Retry" }));
       expect(manager.applyHeldConfigChange).toHaveBeenCalledWith("claude");
+      expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
+    });
+
+    it("offers Report an issue beside Retry and opens the report dialog for the failing backend (https://github.com/Brevilabs/obsidian-copilot-private/issues/663)", () => {
+      descriptor = { ...descriptor, id: "opencode", displayName: "opencode" };
+      const manager = {
+        subscribe: jest.fn(() => () => {}),
+        getLastError: jest.fn(() => "opencode exited before the session started."),
+        getOrCreateActiveSession: jest.fn().mockResolvedValue({}),
+        hasHeldConfigChange: jest.fn(() => false),
+        isBackendRestartPending: jest.fn(() => false),
+      } as unknown as AgentSessionManager;
+      const plugin = { app: {}, manifest: { version: "3.4.0" } } as unknown as CopilotPlugin;
+
+      render(<AgentModeStatus manager={manager} plugin={plugin} onInstallClick={jest.fn()} />);
+
+      expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Report an issue" }));
+      expect(openReportIssueModal).toHaveBeenCalledWith({
+        app: plugin.app,
+        activeBackend: "opencode",
+        pluginVersion: "3.4.0",
+        dismissSettings: expect.any(Function),
+      });
       expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
     });
   });

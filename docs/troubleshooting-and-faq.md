@@ -104,6 +104,8 @@ See [Copilot Commands and Quick Ask](custom-commands.md#quick-ask) for selection
 
 Use **Advanced → Debugging & support → Report an issue** for any Copilot problem, Agent Chat or Quick Chat alike. Turn on **Debug Mode** in the same section first and reproduce the problem, so the logs you send actually contain it.
 
+When an agent session fails to start, its error card in Agent Chat also offers **Report an issue** beside **Retry**. It opens the same dialog for the failing agent, so you can file the report while the error is still on screen.
+
 ### Filing a report
 
 1. **Describe what went wrong, and tick what to include.** The sources on offer are a screenshot of the Agent Chat pane (only while one is open), the **Agent Mode activity log**, the regular Copilot chat log, and the opencode log when opencode is your backend. Anything you tick that turns out to have nothing to collect is listed on the next page with the reason, so you never have to guess whether it was gathered.

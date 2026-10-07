@@ -2,6 +2,7 @@ import {
   createReportDir,
   discardReport,
   openIssuePageWith,
+  openReportIssueModal,
   ReportIssueModal,
   uploadReport,
 } from "@/agentMode/ui/ReportIssueModal";
@@ -11,12 +12,13 @@ import type {
   ReportSourceOption,
   UploadOutcome,
 } from "@/agentMode/ui/ReportIssueFlow";
+import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { logWarn } from "@/logger";
 import { getSettings, setSettings } from "@/settings/model";
 import type { ReportInput } from "@/utils/issueReport";
 import { ReportUploadError, type ReportUploader } from "@/utils/reportUpload";
 import { unzipSync } from "fflate";
-import { Notice } from "obsidian";
+import { type App, Notice } from "obsidian";
 import nodeOs from "node:os";
 import nodePath from "node:path";
 
@@ -239,6 +241,78 @@ describe("ReportIssueModal", () => {
       });
 
       await expect(openIssuePageWith({ openExternal }, issueUrl)).resolves.toBe(false);
+    });
+  });
+
+  describe("openReportIssueModal()", () => {
+    interface OpenedModal {
+      open: jest.Mock;
+      params: {
+        activeBackend: string;
+        pluginVersion: string;
+        dismissSettings: () => void;
+        canCaptureTarget: () => boolean;
+        resolveCaptureTarget: () => HTMLElement | null;
+      };
+    }
+
+    function appWithAgentPanes(contentEls: HTMLElement[]) {
+      const revealLeaf = jest.fn();
+      const leaves = contentEls.map((contentEl) => ({ view: { contentEl } }));
+      const getLeavesOfType = jest.fn((type: string) =>
+        type === CHAT_AGENT_VIEWTYPE ? leaves : []
+      );
+      const app = { workspace: { getLeavesOfType, revealLeaf } } as unknown as App;
+      return { app, leaves, revealLeaf };
+    }
+
+    it("opens the dialog for the given backend and version, dismissing Settings through the caller", () => {
+      const { app } = appWithAgentPanes([]);
+      const dismissSettings = jest.fn();
+
+      const modal = openReportIssueModal({
+        app,
+        activeBackend: "opencode",
+        pluginVersion: "3.4.0",
+        dismissSettings,
+      }) as unknown as OpenedModal;
+      modal.params.dismissSettings();
+
+      expect(modal.open).toHaveBeenCalledTimes(1);
+      expect(modal.params.activeBackend).toBe("opencode");
+      expect(modal.params.pluginVersion).toBe("3.4.0");
+      expect(dismissSettings).toHaveBeenCalledTimes(1);
+    });
+
+    it("reveals and photographs the first Agent Mode pane", () => {
+      const pane = window.document.createElement("div");
+      const { app, leaves, revealLeaf } = appWithAgentPanes([pane]);
+
+      const modal = openReportIssueModal({
+        app,
+        activeBackend: "claude",
+        pluginVersion: "3.4.0",
+        dismissSettings: jest.fn(),
+      }) as unknown as OpenedModal;
+
+      expect(modal.params.canCaptureTarget()).toBe(true);
+      expect(modal.params.resolveCaptureTarget()).toBe(pane);
+      expect(revealLeaf).toHaveBeenCalledWith(leaves[0]);
+    });
+
+    it("offers no screenshot target while no Agent Mode pane is open", () => {
+      const { app, revealLeaf } = appWithAgentPanes([]);
+
+      const modal = openReportIssueModal({
+        app,
+        activeBackend: "claude",
+        pluginVersion: "3.4.0",
+        dismissSettings: jest.fn(),
+      }) as unknown as OpenedModal;
+
+      expect(modal.params.canCaptureTarget()).toBe(false);
+      expect(modal.params.resolveCaptureTarget()).toBeNull();
+      expect(revealLeaf).not.toHaveBeenCalled();
     });
   });
 

@@ -29,8 +29,26 @@ interface AgentStatusCardProps {
   tone?: AgentStatusTone;
   progress?: { percent?: number };
   action?: AgentStatusAction;
+  secondaryAction?: AgentStatusButtonAction;
   layout?: "stack" | "row";
 }
+
+interface AgentStatusButtonProps {
+  action: AgentStatusButtonAction;
+  tone: AgentStatusTone;
+}
+
+const AgentStatusButton: React.FC<AgentStatusButtonProps> = ({ action, tone }) => (
+  <Button
+    className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-break-words tw-border tw-border-solid tw-border-border tw-py-1 disabled:tw-opacity-100"
+    variant={tone === "error" ? "ghost" : "secondary"}
+    size="sm"
+    disabled={action.disabled}
+    onClick={action.onClick}
+  >
+    {action.label}
+  </Button>
+);
 
 export const AgentStatusCard: React.FC<AgentStatusCardProps> = ({
   message,
@@ -38,6 +56,7 @@ export const AgentStatusCard: React.FC<AgentStatusCardProps> = ({
   tone = "neutral",
   progress,
   action,
+  secondaryAction,
   layout = "stack",
 }) => (
   <Card
@@ -84,31 +103,30 @@ export const AgentStatusCard: React.FC<AgentStatusCardProps> = ({
         aria-label="Installation progress"
       />
     )}
-    {action &&
-      ("href" in action ? (
-        <Button
-          asChild
-          className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-break-words tw-border tw-border-solid tw-border-border tw-py-1"
-          variant="secondary"
-          size="sm"
-        >
-          <a href={action.href} target="_blank" rel="noopener noreferrer">
-            {action.label}
-          </a>
-        </Button>
-      ) : (
-        <Button
-          className={cn(
-            "tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-break-words tw-border tw-border-solid tw-border-border tw-py-1 disabled:tw-opacity-100",
-            layout === "row" && "tw-shrink-0"
-          )}
-          variant={tone === "error" ? "ghost" : "secondary"}
-          size="sm"
-          disabled={action.disabled}
-          onClick={action.onClick}
-        >
-          {action.label}
-        </Button>
-      ))}
+    {(action || secondaryAction) && (
+      <div
+        className={cn(
+          "tw-flex tw-max-w-full tw-flex-wrap tw-gap-2",
+          layout === "row" && "tw-shrink-0"
+        )}
+      >
+        {action &&
+          ("href" in action ? (
+            <Button
+              asChild
+              className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-break-words tw-border tw-border-solid tw-border-border tw-py-1"
+              variant="secondary"
+              size="sm"
+            >
+              <a href={action.href} target="_blank" rel="noopener noreferrer">
+                {action.label}
+              </a>
+            </Button>
+          ) : (
+            <AgentStatusButton action={action} tone={tone} />
+          ))}
+        {secondaryAction && <AgentStatusButton action={secondaryAction} tone={tone} />}
+      </div>
+    )}
   </Card>
 );

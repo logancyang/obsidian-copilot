@@ -84,6 +84,27 @@ describe("AgentStatusCard", () => {
       );
     });
 
+    it("renders a secondary action after the primary one and invokes each independently", () => {
+      const retry = jest.fn();
+      const report = jest.fn();
+
+      render(
+        <AgentStatusCard
+          tone="error"
+          summary="opencode session error"
+          message="opencode exited before the session started."
+          action={{ label: "Retry", onClick: retry }}
+          secondaryAction={{ label: "Report an issue", onClick: report }}
+        />
+      );
+
+      const buttons = screen.getAllByRole("button");
+      expect(buttons.map((button) => button.textContent)).toEqual(["Retry", "Report an issue"]);
+      fireEvent.click(buttons[1]);
+      expect(report).toHaveBeenCalledTimes(1);
+      expect(retry).not.toHaveBeenCalled();
+    });
+
     it("renders the sign-in fallback as a safe new-tab link", () => {
       const { rerender } = render(
         <AgentStatusCard

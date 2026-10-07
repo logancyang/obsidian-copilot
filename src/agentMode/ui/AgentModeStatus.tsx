@@ -1,4 +1,5 @@
 import { AgentStatusCard } from "@/agentMode/ui/AgentStatusCard";
+import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
 import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import {
   useBackendInstallState,
@@ -172,12 +173,24 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
     });
   };
 
+  const handleReportIssue = (): void => {
+    openReportIssueModal({
+      app: plugin.app,
+      activeBackend: descriptor.id,
+      pluginVersion: plugin.manifest.version,
+      // The card lives in the Agent Mode pane, so no Settings window covers it.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/663
+      dismissSettings: () => undefined,
+    });
+  };
+
   return (
     <AgentStatusCard
       tone="error"
       summary={`${descriptor.displayName} session error`}
       message={bootError}
       action={{ label: "Retry", onClick: handleRetry }}
+      secondaryAction={{ label: "Report an issue", onClick: handleReportIssue }}
     />
   );
 };

@@ -47,6 +47,7 @@ export const LongErrorRetry: StoryObj<AgentStatusCardProps> = {
     message:
       "The agent could not start because its local connection closed before initialization completed. Check the backend configuration and try again.",
     action: { label: "Retry", onClick: () => undefined },
+    secondaryAction: { label: "Report an issue", onClick: () => undefined },
   },
 };
 
@@ -57,6 +58,7 @@ export const LoggedServiceFailure: StoryObj<AgentStatusCardProps> = {
     message:
       "Internal error: Internal service failure\n\nPlatformError: Unknown: FileSystem.realPath (/Users/<user>/Library/Mobile Documents)\n[cause]: Error: EPERM: operation not permitted, lstat '/Users/<user>/Library/Mobile Documents'",
     action: { label: "Retry", onClick: () => undefined },
+    secondaryAction: { label: "Report an issue", onClick: () => undefined },
   },
 };
 
