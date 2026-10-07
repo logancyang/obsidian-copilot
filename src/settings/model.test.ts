@@ -14,6 +14,7 @@ import {
   sanitizeQaExclusions,
   sanitizeSettings,
   settingsAtom,
+  updateBackendDefaultModel,
   settingsStore,
   validateCopilotFolder,
   CopilotSettings,
@@ -930,6 +931,43 @@ describe("model", () => {
 
     it("canonicalizes before deduping and traversal filtering", () => {
       expect(normalizeRootFolders(["a//b", "a/./b", "x/../y", "a/b"])).toEqual(["a/b"]);
+    });
+  });
+
+  describe("updateBackendDefaultModel()", () => {
+    it("records the chosen model without disturbing the enabled list beside it", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        backends: { chat: { enabledModels: ["cm-a", "cm-b"] } },
+      });
+
+      updateBackendDefaultModel("chat", { configuredModelId: "cm-b", effort: "high" });
+
+      expect(settingsStore.get(settingsAtom).backends.chat).toEqual({
+        enabledModels: ["cm-a", "cm-b"],
+        default: { configuredModelId: "cm-b", effort: "high" },
+      });
+    });
+
+    it("drops the stored default when passed null, leaving the enabled list", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        backends: { chat: { enabledModels: ["cm-a"], default: { configuredModelId: "cm-a" } } },
+      });
+
+      updateBackendDefaultModel("chat", null);
+
+      expect(settingsStore.get(settingsAtom).backends.chat).toEqual({ enabledModels: ["cm-a"] });
+    });
+
+    it("creates the backend row for a backend that has never been configured", () => {
+      settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, backends: {} });
+
+      updateBackendDefaultModel("opencode", { configuredModelId: "cm-a" });
+
+      expect(settingsStore.get(settingsAtom).backends).toEqual({
+        opencode: { enabledModels: [], default: { configuredModelId: "cm-a" } },
+      });
     });
   });
 

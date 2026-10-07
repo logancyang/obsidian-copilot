@@ -4,6 +4,7 @@ import type { CopilotSettings } from "@/settings/model";
 const mockGetSettings = jest.fn<CopilotSettings, []>();
 const mockSetSettings = jest.fn<void, [Partial<CopilotSettings>]>();
 const mockUpdateSetting = jest.fn<void, [string, unknown]>();
+const mockUpdateBackendDefaultModel = jest.fn<void, [string, unknown]>();
 
 type SettingsListener = (prev: CopilotSettings, next: CopilotSettings) => void;
 const settingsListeners = new Set<SettingsListener>();
@@ -12,6 +13,8 @@ jest.mock("@/settings/model", () => ({
   getSettings: () => mockGetSettings(),
   setSettings: (partial: Partial<CopilotSettings>) => mockSetSettings(partial),
   updateSetting: (key: string, value: unknown) => mockUpdateSetting(key, value),
+  updateBackendDefaultModel: (backend: string, next: unknown) =>
+    mockUpdateBackendDefaultModel(backend, next),
   useSettingsValue: () => mockGetSettings(),
   subscribeToSettingsChange: (callback: SettingsListener) => {
     settingsListeners.add(callback);
@@ -150,6 +153,7 @@ describe("plusUtils", () => {
   beforeEach(async () => {
     mockSetSettings.mockClear();
     mockUpdateSetting.mockClear();
+    mockUpdateBackendDefaultModel.mockClear();
     mockSetModelKey.mockClear();
     mockVerifyEntitlement.mockReset();
     mockValidateLicenseKey.mockReset();
@@ -210,7 +214,9 @@ describe("plusUtils", () => {
       await applyLicenseSettings();
 
       expect(mockSetModelKey).toHaveBeenCalledWith(FLASH_CONFIGURED_ID);
-      expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: FLASH_CONFIGURED_ID });
+      expect(mockUpdateBackendDefaultModel).toHaveBeenCalledWith("chat", {
+        configuredModelId: FLASH_CONFIGURED_ID,
+      });
     });
 
     it("writes no chain type or embedding model — both belong to retired surfaces", async () => {
@@ -218,8 +224,8 @@ describe("plusUtils", () => {
 
       await applyLicenseSettings();
 
-      const written = mockSetSettings.mock.calls.flatMap((call) => Object.keys(call[0]));
-      expect(written).toEqual(["defaultModelKey"]);
+      expect(mockSetSettings).not.toHaveBeenCalled();
+      expect(mockUpdateBackendDefaultModel).toHaveBeenCalledTimes(1);
     });
 
     it("seeds the agent default model on desktop", async () => {
@@ -237,7 +243,9 @@ describe("plusUtils", () => {
 
       await applyLicenseSettings();
 
-      expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: FLASH_CONFIGURED_ID });
+      expect(mockUpdateBackendDefaultModel).toHaveBeenCalledWith("chat", {
+        configuredModelId: FLASH_CONFIGURED_ID,
+      });
       expect(mockApplyCopilotDefaultModel).not.toHaveBeenCalled();
     });
 
@@ -245,13 +253,15 @@ describe("plusUtils", () => {
       mockGetSettings.mockReturnValue(buildSettings({}));
 
       const applied = applyLicenseSettings();
-      expect(mockSetSettings).not.toHaveBeenCalled();
+      expect(mockUpdateBackendDefaultModel).not.toHaveBeenCalled();
 
       emitSettings(settingsWithFlashConfigured());
       await applied;
 
       expect(mockSetModelKey).toHaveBeenCalledWith(FLASH_CONFIGURED_ID);
-      expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: FLASH_CONFIGURED_ID });
+      expect(mockUpdateBackendDefaultModel).toHaveBeenCalledWith("chat", {
+        configuredModelId: FLASH_CONFIGURED_ID,
+      });
       expect(mockApplyCopilotDefaultModel).toHaveBeenCalledWith(FLASH_CONFIGURED_ID);
     });
 
@@ -260,12 +270,14 @@ describe("plusUtils", () => {
 
       const applied = applyLicenseSettings();
       emitSettings(buildSettings({ userId: "user-123" }));
-      expect(mockSetSettings).not.toHaveBeenCalled();
+      expect(mockUpdateBackendDefaultModel).not.toHaveBeenCalled();
 
       emitSettings(settingsWithFlashConfigured());
       await applied;
 
-      expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: FLASH_CONFIGURED_ID });
+      expect(mockUpdateBackendDefaultModel).toHaveBeenCalledWith("chat", {
+        configuredModelId: FLASH_CONFIGURED_ID,
+      });
     });
 
     it("stops waiting and tells the user when the model never arrives", async () => {
@@ -278,7 +290,7 @@ describe("plusUtils", () => {
         await applied;
 
         expect(mockSetModelKey).not.toHaveBeenCalled();
-        expect(mockSetSettings).not.toHaveBeenCalled();
+        expect(mockUpdateBackendDefaultModel).not.toHaveBeenCalled();
         expect(mockApplyCopilotDefaultModel).not.toHaveBeenCalled();
         expect(Notice).toHaveBeenCalledTimes(1);
       } finally {
@@ -328,7 +340,7 @@ describe("plusUtils", () => {
         jest.useRealTimers();
       }
 
-      expect(mockSetSettings).not.toHaveBeenCalled();
+      expect(mockUpdateBackendDefaultModel).not.toHaveBeenCalled();
     });
 
     it("keeps the chat default when agent seeding throws", async () => {
@@ -338,31 +350,57 @@ describe("plusUtils", () => {
       });
 
       await expect(applyLicenseSettings()).resolves.toBeUndefined();
-      expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: FLASH_CONFIGURED_ID });
+      expect(mockUpdateBackendDefaultModel).toHaveBeenCalledWith("chat", {
+        configuredModelId: FLASH_CONFIGURED_ID,
+      });
     });
   });
 
   describe("isUsingLicensedModels()", () => {
+    const PLUS_PROVIDER = {
+      "plus-1": {
+        providerId: "plus-1",
+        origin: { kind: "copilot-plus" },
+        providerType: "openai-compatible",
+        displayName: "Copilot",
+        addedAt: 0,
+      },
+    };
+    const BYOK_PROVIDER = {
+      "byok-1": {
+        providerId: "byok-1",
+        origin: { kind: "byok", catalogProviderId: "openrouter" },
+        providerType: "openai-compatible",
+        displayName: "OpenRouter",
+        addedAt: 0,
+      },
+    };
+    const MODELS = [
+      {
+        configuredModelId: "cm-flash",
+        providerId: "plus-1",
+        info: { id: "copilot-plus-flash", displayName: "Copilot Plus Flash" },
+        configuredAt: 0,
+      },
+      {
+        configuredModelId: "cm-byok",
+        providerId: "byok-1",
+        info: { id: "copilot-plus-flash", displayName: "Copilot Plus Flash" },
+        configuredAt: 0,
+      },
+    ];
+
+    function licensedSettings(backends: Record<string, unknown>): CopilotSettings {
+      return buildSettings({
+        providers: { ...PLUS_PROVIDER, ...BYOK_PROVIDER },
+        configuredModels: MODELS,
+        backends,
+      } as Partial<CopilotSettings>);
+    }
+
     it("is true when the chat default is a Copilot model", () => {
-      const settings = buildSettings({
-        defaultModelKey: "cm-flash",
-        providers: {
-          "plus-1": {
-            providerId: "plus-1",
-            origin: { kind: "copilot-plus" },
-            providerType: "openai-compatible",
-            displayName: "Copilot",
-            addedAt: 0,
-          },
-        },
-        configuredModels: [
-          {
-            configuredModelId: "cm-flash",
-            providerId: "plus-1",
-            info: { id: "copilot-plus-flash", displayName: "Copilot Plus Flash" },
-            configuredAt: 0,
-          },
-        ],
+      const settings = licensedSettings({
+        chat: { enabledModels: ["cm-flash"], default: { configuredModelId: "cm-flash" } },
       });
       mockGetSettings.mockReturnValue(settings);
 
@@ -370,52 +408,41 @@ describe("plusUtils", () => {
     });
 
     it("is true for an agent still defaulted to a Copilot model after chat moved off it", () => {
-      const settings = buildSettings({
-        defaultModelKey: "cm-byok",
-        agentMode: {
-          ...DEFAULT_SETTINGS.agentMode,
-          backends: {
-            opencode: {
-              defaultModel: { baseModelId: "copilot-plus/copilot-plus-flash", effort: null },
-            },
-          },
-        },
+      const settings = licensedSettings({
+        chat: { enabledModels: ["cm-byok"], default: { configuredModelId: "cm-byok" } },
+        opencode: { enabledModels: ["cm-flash"], default: { configuredModelId: "cm-flash" } },
       });
       mockGetSettings.mockReturnValue(settings);
 
       expect(isUsingLicensedModels(settings)).toBe(true);
     });
 
-    it("ignores a BYOK model whose wire id merely resembles the licensed one", () => {
-      const settings = buildSettings({
-        defaultModelKey: "cm-byok",
-        agentMode: {
-          ...DEFAULT_SETTINGS.agentMode,
-          backends: {
-            opencode: {
-              defaultModel: { baseModelId: "openrouter/copilot-plus-flash", effort: null },
-            },
-            codex: { defaultModel: { baseModelId: "copilot-plus-flash-v2", effort: null } },
-          },
-        },
+    it("ignores a BYOK model that shares the licensed model's name", () => {
+      const settings = licensedSettings({
+        opencode: { enabledModels: ["cm-byok"], default: { configuredModelId: "cm-byok" } },
       });
       mockGetSettings.mockReturnValue(settings);
 
       expect(isUsingLicensedModels(settings)).toBe(false);
     });
 
-    it("is false when neither chat nor any agent points at a Copilot model", () => {
+    it("is false once the Copilot provider the default names has been unregistered", () => {
       const settings = buildSettings({
-        defaultModelKey: "cm-byok",
-        agentMode: {
-          ...DEFAULT_SETTINGS.agentMode,
-          backends: {
-            opencode: {
-              defaultModel: { baseModelId: "anthropic/claude-sonnet-4-5", effort: null },
-            },
-            claude: { defaultModel: null },
-          },
+        providers: BYOK_PROVIDER,
+        configuredModels: MODELS,
+        backends: {
+          chat: { enabledModels: ["cm-flash"], default: { configuredModelId: "cm-flash" } },
         },
+      } as Partial<CopilotSettings>);
+      mockGetSettings.mockReturnValue(settings);
+
+      expect(isUsingLicensedModels(settings)).toBe(false);
+    });
+
+    it("is false when no backend has recorded a default at all", () => {
+      const settings = licensedSettings({
+        chat: { enabledModels: ["cm-byok"] },
+        opencode: { enabledModels: ["cm-flash"] },
       });
       mockGetSettings.mockReturnValue(settings);
 

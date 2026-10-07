@@ -2,6 +2,7 @@ export type { ModelInfo, ProviderType } from "./types/catalog";
 export type {
   AgentType,
   BackendConfig,
+  BackendDefaultModel,
   BackendType,
   ConfiguredModel,
   PersistedCopilotPlusCatalog,
@@ -22,7 +23,11 @@ export {
   configuredModelToCustomModel,
   mapProviderTypeToChatModelProvider,
 } from "./chatModel/configuredModelToCustomModel";
-export { findChatBackendEntry, resolveChatModelSelectionId } from "./chatModel/chatModelSelection";
+export {
+  findChatBackendEntry,
+  isChatModelSelectionForEntry,
+  resolveChatModelSelectionId,
+} from "./chatModel/chatModelSelection";
 export { resolveChatBackendModel } from "./chatModel/resolveChatBackendModel";
 export { capabilitiesFromConfiguredInfo } from "./chatModel/modelCapabilityFlags";
 

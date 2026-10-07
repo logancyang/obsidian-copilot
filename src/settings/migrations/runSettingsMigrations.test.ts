@@ -71,6 +71,40 @@ function codexVaultAt(settingsVersion: number): CopilotSettings {
   });
 }
 
+function defaultsVaultAt(settingsVersion: number | undefined): CopilotSettings {
+  return seedVault({
+    settingsVersion,
+    defaultModelKey: "claude-sonnet-4-5|anthropic",
+    providers: {
+      "prov-claude": {
+        providerId: "prov-claude",
+        providerType: "anthropic",
+        displayName: "Claude Code",
+        origin: { kind: "agent", agentType: "claude" },
+        addedAt: 0,
+      },
+    },
+    configuredModels: [
+      {
+        configuredModelId: "cm-sonnet",
+        providerId: "prov-claude",
+        info: { id: "claude-sonnet-4-5", displayName: "Claude Sonnet 4.5" },
+        configuredAt: 0,
+      },
+    ],
+    backends: {
+      chat: { enabledModels: ["cm-sonnet"] },
+      claude: { enabledModels: ["cm-sonnet"] },
+    },
+    agentMode: {
+      ...DEFAULT_SETTINGS.agentMode,
+      backends: {
+        claude: { defaultModel: { baseModelId: "claude-sonnet-4-5", effort: "high" } },
+      },
+    },
+  });
+}
+
 describe("settingsMigrations", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -358,5 +392,40 @@ describe("settingsMigrations", () => {
         expect(getSettings().backends.codex?.enabledModels).toEqual(["cm-low"]);
       }
     );
+
+    it("v15: records chat's and each agent's default beside its enabled list on a pre-versioned vault", async () => {
+      defaultsVaultAt(undefined);
+      const { api } = makeApi();
+
+      await runSettingsMigrations(api);
+
+      expect(getSettings().backends.chat).toEqual({
+        enabledModels: ["cm-sonnet"],
+        default: { configuredModelId: "cm-sonnet" },
+      });
+      expect(getSettings().backends.claude).toEqual({
+        enabledModels: ["cm-sonnet"],
+        default: { configuredModelId: "cm-sonnet", effort: "high" },
+      });
+      expect(getSettings().settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
+    });
+
+    it("v15: leaves an agent default that names no enabled model unset, and still stamps the version", async () => {
+      const vault = defaultsVaultAt(14);
+      seedVault({
+        ...vault,
+        agentMode: {
+          ...vault.agentMode,
+          backends: { claude: { defaultModel: { baseModelId: "withdrawn", effort: null } } },
+        },
+      });
+      const { api } = makeApi();
+
+      await runSettingsMigrations(api);
+
+      expect(getSettings().backends.claude?.default).toBeUndefined();
+      expect(getSettings().backends.chat?.default).toEqual({ configuredModelId: "cm-sonnet" });
+      expect(getSettings().settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
+    });
   });
 });

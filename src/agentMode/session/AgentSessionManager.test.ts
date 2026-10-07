@@ -50,9 +50,7 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-const settingsChangeCallbacks = new Set<
-  (prev: { agentMode: unknown }, next: { agentMode: unknown }) => void
->();
+const settingsChangeCallbacks = new Set<(prev: object, next: object) => void>();
 
 const ensureAgentsFileForDiscoverySpy = jest.fn<Promise<void>, unknown[]>(async () => undefined);
 jest.mock("@/instructions/agentsFile", () => ({
@@ -103,28 +101,60 @@ function mockDefaultSettings() {
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(mockDefaultSettings),
   setSettings: jest.fn(),
-  subscribeToSettingsChange: jest.fn(
-    (cb: (prev: { agentMode: unknown }, next: { agentMode: unknown }) => void) => {
-      settingsChangeCallbacks.add(cb);
-      return () => settingsChangeCallbacks.delete(cb);
-    }
-  ),
+  updateBackendDefaultModel: (backend: string, next: unknown) =>
+    jest
+      .requireMock<{ setSettings: jest.Mock }>("@/settings/model")
+      .setSettings((cur: { backends?: Record<string, { enabledModels?: string[] }> }) => ({
+        backends: {
+          ...cur.backends,
+          [backend]: {
+            enabledModels: cur.backends?.[backend]?.enabledModels ?? [],
+            ...(next ? { default: next } : {}),
+          },
+        },
+      })),
+  subscribeToSettingsChange: jest.fn((cb: (prev: object, next: object) => void) => {
+    settingsChangeCallbacks.add(cb);
+    return () => settingsChangeCallbacks.delete(cb);
+  }),
   settingsStore: { get: jest.fn(() => ({})), set: jest.fn() },
 }));
 
-function emitSettingsChange(prev: { agentMode: unknown }, next: { agentMode: unknown }): void {
+function emitSettingsChange(prev: object, next: object): void {
   for (const cb of settingsChangeCallbacks) cb(prev, next);
 }
 
-function mockSavedDefault(saved: { baseModelId: string; effort: string | null } | null): void {
-  getSettingsMock.mockReturnValue({
+function backendDefaultSettings(
+  saved: { baseModelId: string; effort: string | null } | null,
+  offered: readonly string[] = []
+): Record<string, unknown> {
+  const wireIds = [...new Set([...offered, ...(saved ? [saved.baseModelId] : [])])];
+  return {
+    configuredModels: wireIds.map((wireId) => ({
+      configuredModelId: `cm:${wireId}`,
+      providerId: "p1",
+      info: { id: wireId, displayName: wireId },
+      configuredAt: 0,
+    })),
+    backends: {
+      opencode: {
+        enabledModels: offered.map((wireId) => `cm:${wireId}`),
+        ...(saved
+          ? { default: { configuredModelId: `cm:${saved.baseModelId}`, effort: saved.effort } }
+          : {}),
+      },
+    },
     agentMode: {
       activeBackend: "opencode",
-      backends: { opencode: { defaultModel: saved } },
+      backends: {},
       notificationSound: false,
       notificationSoundId: "piano",
     },
-  });
+  };
+}
+
+function mockSavedDefault(saved: { baseModelId: string; effort: string | null } | null): void {
+  getSettingsMock.mockReturnValue(backendDefaultSettings(saved));
 }
 
 function changeSavedDefault(
@@ -132,10 +162,7 @@ function changeSavedDefault(
   to: { baseModelId: string; effort: string | null } | null
 ): void {
   mockSavedDefault(to);
-  emitSettingsChange(
-    { agentMode: { backends: { opencode: { defaultModel: from } } } },
-    { agentMode: { backends: { opencode: { defaultModel: to } } } }
-  );
+  emitSettingsChange(backendDefaultSettings(from), backendDefaultSettings(to));
 }
 
 let mockBackendIsRunning = true;
@@ -366,6 +393,13 @@ function buildDescriptor(overrides: Record<string, unknown> = {}): BackendDescri
     subscribeInstallState: jest.fn(),
     openInstallUI: jest.fn(),
     createBackendProcess: jest.fn(() => makeMockBackendProcess()),
+    wire: {
+      encode: (selection: { baseModelId: string }) => selection.baseModelId,
+      decode: (wireId: string) => ({
+        selection: { baseModelId: wireId, effort: null },
+        provider: null,
+      }),
+    },
     ...overrides,
   } as unknown as BackendDescriptor;
 }
@@ -587,18 +621,18 @@ function buildManagerWithReplay(
 function readPersistedDefault(
   setSettings: jest.Mock,
   backendId: string
-): { baseModelId: string; effort: string | null } | undefined {
-  let backends: Record<string, { defaultModel?: { baseModelId: string; effort: string | null } }> =
-    {};
+): { configuredModelId: string; effort?: string | null } | undefined {
+  let backends: Record<
+    string,
+    { enabledModels: string[]; default?: { configuredModelId: string; effort?: string | null } }
+  > = {};
   for (const call of setSettings.mock.calls) {
     const updater = call[0];
     if (typeof updater !== "function") continue;
-    const patch = updater({ agentMode: { backends } });
-    if (patch?.agentMode?.backends) {
-      backends = { ...backends, ...patch.agentMode.backends };
-    }
+    const patch = updater({ backends });
+    if (patch?.backends) backends = { ...backends, ...patch.backends };
   }
-  return backends[backendId]?.defaultModel;
+  return backends[backendId]?.default;
 }
 
 function savedNoteFixture(autosave = false) {
@@ -800,12 +834,8 @@ describe("AgentSessionManager", () => {
         const same = { baseModelId: "opus", effort: "high" };
         changeSavedDefault(same, { ...same });
         emitSettingsChange(
-          { agentMode: { backends: { claude: { defaultModel: null } } } },
-          {
-            agentMode: {
-              backends: { claude: { defaultModel: { baseModelId: "x", effort: null } } },
-            },
-          }
+          { backends: { claude: { enabledModels: [] } } },
+          { backends: { claude: { enabledModels: [], default: { configuredModelId: "cm:x" } } } }
         );
         await flushApplyChain();
 
@@ -1108,7 +1138,7 @@ describe("AgentSessionManager", () => {
           for (let i = 0; i < 12; i++) await Promise.resolve();
 
           expect(readPersistedDefault(setSettingsMock, "opencode")).toEqual(
-            expected === undefined ? undefined : { baseModelId: "opus", effort: expected }
+            expected === undefined ? undefined : { configuredModelId: "cm:opus", effort: expected }
           );
         }
       );
@@ -2268,9 +2298,7 @@ describe("AgentSessionManager", () => {
         async (_case, unsupported) => {
           const originalSettings = getSettingsMock.getMockImplementation();
           const saved = { baseModelId: "copilot-plus/flash", effort: "high" };
-          getSettingsMock.mockReturnValue({
-            agentMode: { backends: { opencode: { defaultModel: saved } } },
-          });
+          getSettingsMock.mockReturnValue(backendDefaultSettings(saved, [saved.baseModelId]));
           const state: BackendState = {
             model: {
               current: { baseModelId: "big-pickle", effort: "low" },
