@@ -183,7 +183,7 @@ export default class CopilotPlugin extends Plugin {
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
   private startupMigrationItems: StartupMigrationItem[] = [];
   private pluginLifecycleActive = true;
-  private initialization: Promise<boolean> = Promise.resolve(false);
+  private initialization: Promise<void> = Promise.resolve();
 
   public isPluginLifecycleActive(): boolean {
     return this.pluginLifecycleActive;
@@ -204,7 +204,6 @@ export default class CopilotPlugin extends Plugin {
       // Obsidian keeps a plugin enabled when work after onload fails, so release whatever
       // startup registered before the failure. https://github.com/logancyang/obsidian-copilot/issues/3518
       this.unload();
-      return false;
     });
     // Obsidian dispatches the URI that launched it once its layout loads, which can precede
     // initialization, so the handler exists from the start and waits for the chat managers.
@@ -216,14 +215,14 @@ export default class CopilotPlugin extends Plugin {
     });
   }
 
-  private async initialize(): Promise<boolean> {
+  private async initialize(): Promise<void> {
     await this.waitForPreviousTeardown();
-    if (!this.pluginLifecycleActive) return false;
+    if (!this.pluginLifecycleActive) return;
     resetPersistenceState();
     KeychainService.resetInstance();
     KeychainService.getInstance(this.app);
     await this.loadSettings();
-    if (!this.pluginLifecycleActive) return false;
+    if (!this.pluginLifecycleActive) return;
     this.modelManagement = createModelManagement({
       app: this.app,
     });
@@ -262,7 +261,7 @@ export default class CopilotPlugin extends Plugin {
     } catch (error) {
       logError("Failed to move the Symposium publishing folder to .openartifacts.", error);
     }
-    if (!this.pluginLifecycleActive) return false;
+    if (!this.pluginLifecycleActive) return;
 
     this.register(
       startReleaseUpdateCheck(
@@ -457,7 +456,6 @@ export default class CopilotPlugin extends Plugin {
     this.initSelectionHandler();
 
     this.initWebSelectionWatcher();
-    return true;
   }
 
   // A disabled or updated copy may still be writing data.json or stopping Agent Mode backends;
@@ -617,14 +615,10 @@ export default class CopilotPlugin extends Plugin {
     const teardown = this.teardown().catch((error) => {
       logError("Copilot: plugin teardown failed during unload:", error);
     });
-    // A copy unloaded mid-startup tears down instantly while its own settings load and an older
-    // copy's backends may still be running, so the handoff covers all of them.
+    // A copy unloaded mid-startup tears down instantly while its own settings load, and its
+    // startup still waits on any older copy's shutdown, so the handoff covers both.
     // https://github.com/logancyang/obsidian-copilot/issues/3518
-    handoff[PENDING_TEARDOWN] = Promise.all([
-      handoff[PENDING_TEARDOWN],
-      this.initialization,
-      teardown,
-    ]).then(() => undefined);
+    handoff[PENDING_TEARDOWN] = Promise.all([this.initialization, teardown]).then(() => undefined);
   }
 
   private async teardown(): Promise<void> {

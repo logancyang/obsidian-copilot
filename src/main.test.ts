@@ -573,7 +573,7 @@ describe("main", () => {
           openChatDeepLink: jest.fn(async () => undefined),
         });
         const finishStartup = () =>
-          (plugin as unknown as { initialization: Promise<boolean> }).initialization;
+          (plugin as unknown as { initialization: Promise<void> }).initialization;
         const openCopilotChatLink = (params: Record<string, string>) =>
           (
             registrations.registerObsidianProtocolHandler.mock.calls[0][1] as (
@@ -608,7 +608,7 @@ describe("main", () => {
 
         plugin.onload();
 
-        await expect(finishStartup()).resolves.toBe(true);
+        await finishStartup();
         expect(registrations.addSettingTab).toHaveBeenCalledTimes(1);
         expect(registrations.registerView).toHaveBeenCalledWith(
           CHAT_VIEWTYPE,
@@ -637,7 +637,7 @@ describe("main", () => {
           plugin.onunload();
           step.resolve();
 
-          await expect(finishStartup()).resolves.toBe(false);
+          await finishStartup();
           expect(registrations.register).not.toHaveBeenCalled();
           expect(registrations.addSettingTab).not.toHaveBeenCalled();
           expect(registrations.registerView).not.toHaveBeenCalled();
@@ -658,7 +658,7 @@ describe("main", () => {
         previous.onunload();
         next.plugin.onload();
 
-        await expect(next.finishStartup()).resolves.toBe(true);
+        await next.finishStartup();
         expect(calls.slice(-2)).toEqual(["previousLogFlushed", "settingsLoaded"]);
       });
 
@@ -693,7 +693,7 @@ describe("main", () => {
         plugin.onunload();
         previousTeardown.resolve();
 
-        await expect(finishStartup()).resolves.toBe(false);
+        await finishStartup();
         expect(resetPersistenceState).not.toHaveBeenCalled();
         expect(plugin.loadSettings).not.toHaveBeenCalled();
       });
@@ -717,7 +717,7 @@ describe("main", () => {
           expect(next.plugin.loadSettings).not.toHaveBeenCalled();
           previousSettings.resolve();
 
-          await expect(next.finishStartup()).resolves.toBe(true);
+          await next.finishStartup();
           expect(next.plugin.loadSettings).toHaveBeenCalledTimes(1);
         } finally {
           jest.useRealTimers();
@@ -737,7 +737,7 @@ describe("main", () => {
           expect(plugin.loadSettings).not.toHaveBeenCalled();
           await jest.advanceTimersByTimeAsync(1);
 
-          await expect(finishStartup()).resolves.toBe(true);
+          await finishStartup();
           expect(plugin.loadSettings).toHaveBeenCalledTimes(1);
           expect(logWarn).toHaveBeenCalledWith(
             "Copilot started before its previous copy finished shutting down.",
@@ -757,7 +757,7 @@ describe("main", () => {
           const first = createLoadingPlugin();
           first.plugin.onload();
           await jest.advanceTimersByTimeAsync(10_000);
-          await expect(first.finishStartup()).resolves.toBe(true);
+          await first.finishStartup();
           const second = createLoadingPlugin();
 
           first.plugin.onunload();
@@ -824,7 +824,7 @@ describe("main", () => {
 
         plugin.onload();
 
-        await expect(finishStartup()).resolves.toBe(false);
+        await finishStartup();
         expect(consoleError).toHaveBeenCalledWith("Copilot failed to start.", failure);
         consoleError.mockRestore();
         expect(Notice).toHaveBeenCalledWith(
