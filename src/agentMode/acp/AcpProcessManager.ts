@@ -23,6 +23,7 @@ export interface AcpProcessManagerOptions {
 export class AcpProcessManager {
   private child: ChildProcessByStdio | null = null;
   private exitListeners = new Set<(code: number | null, signal: NodeJS.Signals | null) => void>();
+  private stderrLineListeners = new Set<(line: string) => void>();
   private hasExited = false;
   private exitCode: number | null = null;
   private exitSignal: NodeJS.Signals | null = null;
@@ -62,7 +63,10 @@ export class AcpProcessManager {
       }
     });
 
-    pipeStderrToLogger(child.stderr, tag);
+    pipeStderrLines(child.stderr, (line) => {
+      emitStderrLine(line, tag);
+      for (const fn of this.stderrLineListeners) fn(line);
+    });
 
     const writableToWeb = (
       Writable as unknown as {
@@ -91,6 +95,11 @@ export class AcpProcessManager {
     }
     this.exitListeners.add(listener);
     return () => this.exitListeners.delete(listener);
+  }
+
+  onStderrLine(listener: (line: string) => void): () => void {
+    this.stderrLineListeners.add(listener);
+    return () => this.stderrLineListeners.delete(listener);
   }
 
   isRunning(): boolean {
@@ -165,7 +174,7 @@ export function sanitizeAcpStdout(inner: ReadableStream<Uint8Array>): ReadableSt
   });
 }
 
-function pipeStderrToLogger(stderr: Readable, tag: string): void {
+function pipeStderrLines(stderr: Readable, onLine: (line: string) => void): void {
   let buffer = "";
   stderr.setEncoding("utf-8");
   stderr.on("data", (chunk: string) => {
@@ -174,11 +183,11 @@ function pipeStderrToLogger(stderr: Readable, tag: string): void {
     while ((nlIdx = buffer.indexOf("\n")) !== -1) {
       const line = buffer.slice(0, nlIdx).trimEnd();
       buffer = buffer.slice(nlIdx + 1);
-      if (line) emitStderrLine(line, tag);
+      if (line) onLine(line);
     }
   });
   stderr.on("end", () => {
-    if (buffer.trim()) emitStderrLine(buffer.trim(), tag);
+    if (buffer.trim()) onLine(buffer.trim());
   });
 }
 
