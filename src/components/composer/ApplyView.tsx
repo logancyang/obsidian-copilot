@@ -1,3 +1,4 @@
+import { APPLY_VIEW_TYPE } from "@/constants";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
@@ -157,8 +158,6 @@ const DiffCell: React.FC<DiffCellProps> = memo(({ row, side }) => {
 });
 
 DiffCell.displayName = "DiffCell";
-
-export const APPLY_VIEW_TYPE = "obsidian-copilot-apply-view";
 
 export interface ApplyViewState {
   changes: Change[];

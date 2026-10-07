@@ -16,7 +16,7 @@ import { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import RelevantNotesView from "@/components/RelevantNotesView";
-import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
+import { ApplyView } from "@/components/composer/ApplyView";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
@@ -32,11 +32,14 @@ import {
   CHAT_AGENT_VIEWTYPE,
   CHAT_VIEWTYPE,
   COPILOT_AGENT_ICON_ID,
+  APPLY_VIEW_TYPE,
   COPILOT_AGENT_ICON_SVG,
   DEFAULT_OPEN_AREA,
+  DESKTOP_VIEW_TYPES,
   EVENT_NAMES,
   PLAN_PREVIEW_VIEW_TYPE,
   RELEVANT_NOTES_VIEWTYPE,
+  SHARED_VIEW_TYPES,
 } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
@@ -150,12 +153,6 @@ import {
   type SelfHostWebSearchAgentBridge,
 } from "@/LLMProviders/selfHostServices";
 
-const SHARED_VIEW_TYPES = [CHAT_VIEWTYPE, APPLY_VIEW_TYPE, RELEVANT_NOTES_VIEWTYPE] as const;
-const DESKTOP_VIEW_TYPES = [
-  ...SHARED_VIEW_TYPES,
-  CHAT_AGENT_VIEWTYPE,
-  PLAN_PREVIEW_VIEW_TYPE,
-] as const;
 const PENDING_TEARDOWN = Symbol.for("obsidian-copilot:pending-teardown");
 const PREVIOUS_TEARDOWN_TIMEOUT_MS = 10_000;
 

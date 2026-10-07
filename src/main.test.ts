@@ -73,12 +73,12 @@ import CopilotView from "@/components/CopilotView";
 import { getSelectedTextContexts, setSelectedTextContexts } from "@/aiParams";
 import { DEFAULT_SETTINGS } from "@/constants";
 import {
+  APPLY_VIEW_TYPE,
   CHAT_AGENT_VIEWTYPE,
   CHAT_VIEWTYPE,
   PLAN_PREVIEW_VIEW_TYPE,
   RELEVANT_NOTES_VIEWTYPE,
 } from "@/constants";
-import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
 import { StartupLoadingView } from "@/components/StartupLoadingView";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import type { WebSelectionTrackingOptions } from "@/services/webViewerService/webViewerServiceSelection";

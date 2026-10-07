@@ -1,5 +1,5 @@
 import { App, TFile } from "obsidian";
-import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
+import { APPLY_VIEW_TYPE } from "@/constants";
 import { diffTrimmedLines } from "diff";
 import { ApplyViewResult } from "@/types";
 import * as z from "zod";
