@@ -126,9 +126,9 @@ export class MiyoSemanticRetriever extends BaseRetriever {
           filters,
         });
       }
-      const response = await this.searchFolders(baseUrl, folderName, extraFolders, query, filters);
+      const searched = await this.searchFolders(baseUrl, folderName, extraFolders, query, filters);
 
-      const rawResults = response.results || [];
+      const rawResults = searched.response.results || [];
       const filteredResults = rawResults.filter((result) => this.isScoreAboveThreshold(result));
 
       if (getSettings().debug) {
@@ -137,8 +137,8 @@ export class MiyoSemanticRetriever extends BaseRetriever {
         );
       }
 
-      const vaultOnly = folderName !== undefined && extraFolders.length === 0;
-      return filteredResults.map((result) => this.toDocument(result, vaultOnly));
+      const searchedExtraFolders = folderName === undefined ? undefined : searched.extraFolders;
+      return filteredResults.map((result) => this.toDocument(result, searchedExtraFolders));
     } catch (error) {
       logWarn(`MiyoSemanticRetriever: search failed: ${error}`);
       // An empty result means a healthy search found no matches. A failed Miyo
@@ -166,15 +166,22 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     extraFolders: string[],
     query: string,
     filters: MiyoSearchFilter[] | undefined
-  ): Promise<MiyoSearchResponse> {
+  ): Promise<{ response: MiyoSearchResponse; extraFolders: string[] }> {
     try {
-      return await this.client.search(baseUrl, folderName, query, MIYO_SEARCH_CANDIDATE_LIMIT, {
-        filters,
-        // folder_name stays the vault, so a Miyo without multi-folder search falls back to
-        // the vault alone instead of every folder. https://github.com/logancyang/obsidian-copilot/issues/3508
-        folderNames:
-          folderName && extraFolders.length > 0 ? [folderName, ...extraFolders] : undefined,
-      });
+      const response = await this.client.search(
+        baseUrl,
+        folderName,
+        query,
+        MIYO_SEARCH_CANDIDATE_LIMIT,
+        {
+          filters,
+          // folder_name stays the vault, so a Miyo without multi-folder search falls back to
+          // the vault alone instead of every folder. https://github.com/logancyang/obsidian-copilot/issues/3508
+          folderNames:
+            folderName && extraFolders.length > 0 ? [folderName, ...extraFolders] : undefined,
+        }
+      );
+      return { response, extraFolders };
     } catch (error) {
       const missing =
         error instanceof MiyoRequestError && error.status === 404
@@ -205,12 +212,19 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     ];
   }
 
-  private toDocument(result: MiyoSearchResult, vaultOnly: boolean): Document {
+  private toDocument(
+    result: MiyoSearchResult,
+    searchedExtraFolders: string[] | undefined
+  ): Document {
     const relativePath = getVaultRelativeMiyoPath(this.app, result.path);
-    // A vault-only search can return paths without the vault prefix, so only a search
-    // that spans other folders tells them apart by path.
+    // A vault-only answer, from an older Miyo or once every ticked folder is skipped, can
+    // return vault paths without the vault prefix. Only paths under a searched extra folder
+    // leave the vault, so exclusion rules still cover the rest.
     // https://github.com/logancyang/obsidian-copilot/issues/3508
-    const fromCurrentVault = vaultOnly || isCurrentVaultMiyoPath(this.app, result.path);
+    const fromCurrentVault =
+      isCurrentVaultMiyoPath(this.app, result.path) ||
+      (searchedExtraFolders !== undefined &&
+        !searchedExtraFolders.some((name) => relativePath.startsWith(`${name}/`)));
     const metadata = result.metadata ?? {};
     const chunkId =
       metadata.chunkId ||

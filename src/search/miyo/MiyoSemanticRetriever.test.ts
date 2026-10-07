@@ -394,6 +394,35 @@ describe("MiyoSemanticRetriever", () => {
         ]);
       });
 
+      it.each([
+        ["an older Miyo ignores the ticked folders", []],
+        [
+          "every ticked folder is missing from Miyo",
+          [new MiyoRequestError(404, "Folder not registered: Research")],
+        ],
+      ])(
+        "keeps unprefixed results inside the vault and applies Copilot exclusions to them when %s — https://github.com/logancyang/obsidian-copilot/issues/3508",
+        async (_scenario, failures: MiyoRequestError[]) => {
+          mockSettings({ qaExclusions: "private", miyoExtraSearchFolders: ["Research"] });
+          failures.forEach((failure) => mockSearch.mockRejectedValueOnce(failure));
+          mockSearch.mockResolvedValueOnce({
+            results: [
+              { id: "excluded", score: 0.9, path: "private/secret.md", chunk_index: 0 },
+              { id: "kept", score: 0.8, path: "notes/keep.md", chunk_index: 0 },
+            ],
+          });
+
+          const documents = await createRetriever().getRelevantDocuments("query");
+
+          expect(
+            documents.map(({ metadata }) => ({
+              path: metadata.path as string,
+              fromCurrentVault: metadata.fromCurrentVault as boolean,
+            }))
+          ).toEqual([{ path: "notes/keep.md", fromCurrentVault: true }]);
+        }
+      );
+
       it("keeps registration guidance without retrying when the vault itself is the unregistered folder — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
         mockSettings({ miyoExtraSearchFolders: ["Research"] });
         mockSearch.mockRejectedValue(new MiyoRequestError(404, "Folder not registered: /vault"));
