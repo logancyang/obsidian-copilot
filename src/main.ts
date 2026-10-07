@@ -35,6 +35,7 @@ import {
   COPILOT_AGENT_ICON_SVG,
   DEFAULT_OPEN_AREA,
   EVENT_NAMES,
+  PLAN_PREVIEW_VIEW_TYPE,
   RELEVANT_NOTES_VIEWTYPE,
 } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
@@ -111,6 +112,7 @@ import {
   Notice,
   Plugin,
   TFile,
+  View,
   ViewCreator,
   WorkspaceLeaf,
 } from "obsidian";
@@ -139,6 +141,7 @@ import {
 } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
 import { withTimeout } from "@/utils";
+import { StartupLoadingView, type CopilotStartup } from "@/components/StartupLoadingView";
 import { EditorView } from "@codemirror/view";
 import { OpenArtifactsPublisher } from "@/openArtifacts/OpenArtifactsPublisher";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
@@ -147,6 +150,12 @@ import {
   type SelfHostWebSearchAgentBridge,
 } from "@/LLMProviders/selfHostServices";
 
+const SHARED_VIEW_TYPES = [CHAT_VIEWTYPE, APPLY_VIEW_TYPE, RELEVANT_NOTES_VIEWTYPE] as const;
+const DESKTOP_VIEW_TYPES = [
+  ...SHARED_VIEW_TYPES,
+  CHAT_AGENT_VIEWTYPE,
+  PLAN_PREVIEW_VIEW_TYPE,
+] as const;
 const PENDING_TEARDOWN = Symbol.for("obsidian-copilot:pending-teardown");
 const PREVIOUS_TEARDOWN_TIMEOUT_MS = 10_000;
 
@@ -154,7 +163,7 @@ interface TeardownHandoff {
   [PENDING_TEARDOWN]?: Promise<void>;
 }
 
-export default class CopilotPlugin extends Plugin {
+export default class CopilotPlugin extends Plugin implements CopilotStartup {
   chainOwner: ChainOwner;
   brevilabsClient: BrevilabsClient;
   userMessageHistory: string[] = [];
@@ -168,7 +177,6 @@ export default class CopilotPlugin extends Plugin {
   skills?: SkillManager;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
-  private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
   private agentModelDiscoveryUnsubscriber?: () => void;
   modelManagement!: ModelManagementApi;
   selfHostWebSearchAgentBridge?: Readonly<SelfHostWebSearchAgentBridge>;
@@ -184,14 +192,28 @@ export default class CopilotPlugin extends Plugin {
   private startupMigrationItems: StartupMigrationItem[] = [];
   private pluginLifecycleActive = true;
   private initialization: Promise<void> = Promise.resolve();
+  private readonly startedViewCreators = new Map<string, ViewCreator>();
 
   public isPluginLifecycleActive(): boolean {
     return this.pluginLifecycleActive;
   }
 
+  whenStarted(): Promise<void> {
+    return this.initialization;
+  }
+
+  isStarted(): boolean {
+    return this.pluginLifecycleActive && this.startedViewCreators.size > 0;
+  }
+
+  createStartedView(viewType: string, leaf: WorkspaceLeaf): View | undefined {
+    if (!this.pluginLifecycleActive) return undefined;
+    return this.startedViewCreators.get(viewType)?.(leaf);
+  }
+
   // Obsidian awaits onload before opening the vault and never waits for it before unloading, so
-  // startup work runs in the background and registers only after its last await.
-  // https://github.com/logancyang/obsidian-copilot/issues/3518
+  // startup work runs in the background and registers what needs loaded settings only after its
+  // last await. https://github.com/logancyang/obsidian-copilot/issues/3518
   onload(): void {
     installRendererEventsShim();
     this.initialization = this.initialize().catch((error) => {
@@ -204,6 +226,17 @@ export default class CopilotPlugin extends Plugin {
       // startup registered before the failure. https://github.com/logancyang/obsidian-copilot/issues/3518
       this.unload();
     });
+    // Restored tabs and the settings tab exist from the start so they show startup progress
+    // instead of disappearing. https://github.com/logancyang/obsidian-copilot/issues/3518
+    const viewTypes = isDesktopRuntime() ? DESKTOP_VIEW_TYPES : SHARED_VIEW_TYPES;
+    for (const viewType of viewTypes) {
+      this.safeRegisterView(
+        viewType,
+        (leaf: WorkspaceLeaf) =>
+          this.createStartedView(viewType, leaf) ?? new StartupLoadingView(leaf, viewType, this)
+      );
+    }
+    this.addSettingTab(new CopilotSettingTab(this.app, this));
     // Obsidian dispatches the URI that launched it once its layout loads, which can precede
     // initialization, so the handler exists from the start and waits for the chat managers.
     // https://github.com/logancyang/obsidian-copilot/issues/3271
@@ -284,8 +317,6 @@ export default class CopilotPlugin extends Plugin {
       },
     });
     const isLegacyUpgrade = getSettings().upgradedToV8FromLegacy;
-    this.addSettingTab(new CopilotSettingTab(this.app, this));
-
     initializeBuiltinTools(this.app);
 
     ContextProcessor.getInstance(this.app);
@@ -321,7 +352,6 @@ export default class CopilotPlugin extends Plugin {
         {
           CopilotAgentView,
           PlanPreviewView,
-          PLAN_PREVIEW_VIEW_TYPE,
           acpFrameSink,
           createAgentSessionManager,
           setFrameSinkVaultBasePath,
@@ -331,7 +361,6 @@ export default class CopilotPlugin extends Plugin {
       ] = agentMode;
       this.CopilotAgentView = CopilotAgentView;
       this.PlanPreviewView = PlanPreviewView;
-      this.planPreviewViewType = PLAN_PREVIEW_VIEW_TYPE;
 
       const adapter = this.app.vault.adapter;
       setFrameSinkVaultBasePath(
@@ -382,28 +411,17 @@ export default class CopilotPlugin extends Plugin {
 
     if (isDesktopRuntime()) registerNoteHeaderAction(this);
 
-    this.safeRegisterView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
-    this.safeRegisterView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
-    this.safeRegisterView(
+    this.startedViewCreators.set(CHAT_VIEWTYPE, (leaf) => new CopilotView(leaf, this));
+    this.startedViewCreators.set(APPLY_VIEW_TYPE, (leaf) => new ApplyView(leaf));
+    this.startedViewCreators.set(
       RELEVANT_NOTES_VIEWTYPE,
-      (leaf: WorkspaceLeaf) => new RelevantNotesView(leaf, this)
+      (leaf) => new RelevantNotesView(leaf, this)
     );
-    if (
-      isDesktopRuntime() &&
-      this.CopilotAgentView &&
-      this.PlanPreviewView &&
-      this.planPreviewViewType
-    ) {
+    if (this.CopilotAgentView && this.PlanPreviewView) {
       const AgentView = this.CopilotAgentView;
       const PreviewView = this.PlanPreviewView;
-      this.safeRegisterView(
-        CHAT_AGENT_VIEWTYPE,
-        (leaf: WorkspaceLeaf) => new AgentView(leaf, this)
-      );
-      this.safeRegisterView(
-        this.planPreviewViewType,
-        (leaf: WorkspaceLeaf) => new PreviewView(leaf)
-      );
+      this.startedViewCreators.set(CHAT_AGENT_VIEWTYPE, (leaf) => new AgentView(leaf, this));
+      this.startedViewCreators.set(PLAN_PREVIEW_VIEW_TYPE, (leaf) => new PreviewView(leaf));
     }
 
     this.initActiveLeafChangeHandler();

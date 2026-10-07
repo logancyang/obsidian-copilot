@@ -53,6 +53,7 @@ jest.mock("@/services/webViewerService/webViewerServiceSingleton", () => ({
   startActiveWebTabTracking: jest.fn(),
 }));
 jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: jest.fn(() => false) }));
+jest.mock("@/utils/rendererEventsShim", () => ({ installRendererEventsShim: jest.fn() }));
 jest.mock("@/utils/notificationSound", () => ({ disposeNotificationSound: jest.fn() }));
 jest.mock("@/utils/chatDeepLink", () => ({
   ...jest.requireActual<typeof import("@/utils/chatDeepLink")>("@/utils/chatDeepLink"),
@@ -71,7 +72,14 @@ import CopilotPlugin from "@/main";
 import CopilotView from "@/components/CopilotView";
 import { getSelectedTextContexts, setSelectedTextContexts } from "@/aiParams";
 import { DEFAULT_SETTINGS } from "@/constants";
-import { CHAT_AGENT_VIEWTYPE, CHAT_VIEWTYPE } from "@/constants";
+import {
+  CHAT_AGENT_VIEWTYPE,
+  CHAT_VIEWTYPE,
+  PLAN_PREVIEW_VIEW_TYPE,
+  RELEVANT_NOTES_VIEWTYPE,
+} from "@/constants";
+import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
+import { StartupLoadingView } from "@/components/StartupLoadingView";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import type { WebSelectionTrackingOptions } from "@/services/webViewerService/webViewerServiceSelection";
 import { EditorView } from "@codemirror/view";
@@ -558,7 +566,7 @@ describe("main", () => {
           registerEvent: jest.fn(),
           registerDomEvent: jest.fn(),
           registerInterval: jest.fn(),
-          registerView: jest.fn(),
+          registerView: jest.fn<void, [string, (leaf: WorkspaceLeaf) => unknown]>(),
           registerEditorExtension: jest.fn(),
           registerObsidianProtocolHandler: jest.fn(),
           addSettingTab: jest.fn(),
@@ -579,6 +587,7 @@ describe("main", () => {
           },
           manifest: { version: "4.0.13" },
           pluginLifecycleActive: true,
+          startedViewCreators: new Map(),
           unload: jest.fn(),
           loadSettings: jest.fn(loadSettings),
           openChatDeepLink: jest.fn(async () => undefined),
@@ -591,7 +600,11 @@ describe("main", () => {
               params: Record<string, string>
             ) => void
           )(params);
-        return { plugin, registrations, finishStartup, openCopilotChatLink };
+        const openRegisteredView = (viewType: string) => {
+          const call = registrations.registerView.mock.calls.find(([type]) => type === viewType);
+          return call?.[1]({} as WorkspaceLeaf);
+        };
+        return { plugin, registrations, finishStartup, openCopilotChatLink, openRegisteredView };
       }
 
       function deferred() {
@@ -610,21 +623,51 @@ describe("main", () => {
           "copilot-chat",
           expect.any(Function)
         );
-        expect(registrations.addSettingTab).not.toHaveBeenCalled();
-        expect(registrations.registerView).not.toHaveBeenCalled();
+        expect(registrations.addCommand).not.toHaveBeenCalled();
+        expect(plugin.isStarted()).toBe(false);
       });
 
-      it("registers the settings tab, chat views, commands, and ribbon icon once startup finishes", async () => {
-        const { plugin, registrations, finishStartup } = createLoadingPlugin();
+      it("registers the settings tab and every Copilot view up front, opening restored tabs as a startup loading view https://github.com/logancyang/obsidian-copilot/issues/3518", () => {
+        const settings = deferred();
+        const { plugin, registrations, openRegisteredView } = createLoadingPlugin(
+          () => settings.promise
+        );
+
+        plugin.onload();
+
+        expect(registrations.addSettingTab).toHaveBeenCalledTimes(1);
+        expect(registrations.registerView.mock.calls.map(([type]) => type)).toEqual([
+          CHAT_VIEWTYPE,
+          APPLY_VIEW_TYPE,
+          RELEVANT_NOTES_VIEWTYPE,
+        ]);
+        expect(openRegisteredView(CHAT_VIEWTYPE)).toBeInstanceOf(StartupLoadingView);
+      });
+
+      it("also registers the Agent Chat and plan preview views up front on desktop https://github.com/logancyang/obsidian-copilot/issues/3518", () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        const settings = deferred();
+        const { plugin, registrations } = createLoadingPlugin(() => settings.promise);
+
+        plugin.onload();
+
+        expect(registrations.registerView.mock.calls.map(([type]) => type)).toEqual([
+          CHAT_VIEWTYPE,
+          APPLY_VIEW_TYPE,
+          RELEVANT_NOTES_VIEWTYPE,
+          CHAT_AGENT_VIEWTYPE,
+          PLAN_PREVIEW_VIEW_TYPE,
+        ]);
+      });
+
+      it("opens the real chat view and registers commands and the ribbon icon once startup finishes", async () => {
+        const { plugin, registrations, finishStartup, openRegisteredView } = createLoadingPlugin();
 
         plugin.onload();
 
         await finishStartup();
-        expect(registrations.addSettingTab).toHaveBeenCalledTimes(1);
-        expect(registrations.registerView).toHaveBeenCalledWith(
-          CHAT_VIEWTYPE,
-          expect.any(Function)
-        );
+        expect(plugin.isStarted()).toBe(true);
+        expect(openRegisteredView(CHAT_VIEWTYPE)).toBeInstanceOf(CopilotView);
         expect(registrations.addCommand).toHaveBeenCalled();
         expect(registrations.addRibbonIcon).toHaveBeenCalledTimes(1);
         expect(registrations.registerObsidianProtocolHandler).toHaveBeenCalledTimes(1);
@@ -634,10 +677,10 @@ describe("main", () => {
         ["settings load", "settings"],
         ["the .openartifacts folder move, its last startup step", "folder"],
       ] as const)(
-        "registers nothing after Obsidian unloads it during %s https://github.com/logancyang/obsidian-copilot/issues/3518",
+        "registers no commands and keeps restored tabs loading after Obsidian unloads it during %s https://github.com/logancyang/obsidian-copilot/issues/3518",
         async (_step, pausedStep) => {
           const step = deferred();
-          const { plugin, registrations, finishStartup } = createLoadingPlugin(
+          const { plugin, registrations, finishStartup, openRegisteredView } = createLoadingPlugin(
             pausedStep === "settings" ? () => step.promise : undefined
           );
           if (pausedStep === "folder") {
@@ -650,9 +693,10 @@ describe("main", () => {
 
           await finishStartup();
           expect(registrations.register).not.toHaveBeenCalled();
-          expect(registrations.addSettingTab).not.toHaveBeenCalled();
-          expect(registrations.registerView).not.toHaveBeenCalled();
           expect(registrations.addCommand).not.toHaveBeenCalled();
+          expect(registrations.addRibbonIcon).not.toHaveBeenCalled();
+          expect(plugin.isStarted()).toBe(false);
+          expect(openRegisteredView(CHAT_VIEWTYPE)).toBeInstanceOf(StartupLoadingView);
         }
       );
 

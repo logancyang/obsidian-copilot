@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { PLAN_PREVIEW_VIEW_TYPE } from "@/constants";
 import { logWarn } from "@/logger";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { CurrentPlan, PlanDecisionAction } from "@/agentMode/session/types";
@@ -8,8 +9,6 @@ import { renderMarkdown } from "@/utils/renderMarkdown";
 import { App, Component, ItemView, WorkspaceLeaf } from "obsidian";
 import React, { useEffect, useRef, useState } from "react";
 import { Root } from "react-dom/client";
-
-export const PLAN_PREVIEW_VIEW_TYPE = "copilot-plan-preview-view";
 
 export interface PlanPreviewViewState {
   proposalId: string;
