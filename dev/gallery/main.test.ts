@@ -123,6 +123,10 @@ function getGeneratedMock(): { loaders: jest.Mock[] } {
     .galleryGeneratedMock;
 }
 
+function finishLoading(plugin: GalleryPlugin): Promise<void> {
+  return (plugin as unknown as { initialization: Promise<void> }).initialization;
+}
+
 function expandStoryPath(gallery: RenderResult, storyId: string): void {
   const segments = storyId.split("/");
   segments.pop();
@@ -194,7 +198,8 @@ describe("main", () => {
       createView = viewCreator as (leaf: WorkspaceLeaf) => GalleryViewContract;
     });
 
-    await plugin.onload();
+    plugin.onload();
+    await finishLoading(plugin);
 
     if (!createView) {
       throw new Error("Gallery view was not registered");
@@ -481,6 +486,21 @@ describe("main", () => {
         expect(typeof window.__gallery?.show).toBe("function");
       });
 
+      it("registers nothing when Obsidian unloads it while stories load https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        const firstHandle = window.__gallery;
+        const unloaded = new GalleryPlugin(app, {
+          id: "copilot-component-gallery",
+        } as PluginManifest);
+
+        unloaded.onload();
+        unloaded.onunload();
+        await finishLoading(unloaded);
+
+        expect(unloaded.registerView).not.toHaveBeenCalled();
+        expect(unloaded.addCommand).not.toHaveBeenCalled();
+        expect(window.__gallery).toBe(firstHandle);
+      });
+
       it("loads the generated catalog once and shares it across gallery views", async () => {
         const firstView = view;
         const secondView = createView?.(leaf);
@@ -698,7 +718,8 @@ describe("main", () => {
         const replacement = new GalleryPlugin(app, {
           id: "copilot-component-gallery",
         } as PluginManifest);
-        await replacement.onload();
+        replacement.onload();
+        await finishLoading(replacement);
         const replacementHandle = window.__gallery;
 
         plugin.onunload();

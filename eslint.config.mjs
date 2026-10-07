@@ -622,10 +622,7 @@ export default [
       "@typescript-eslint/no-empty-function": "off",
       "@typescript-eslint/ban-ts-comment": "off",
       "@typescript-eslint/no-unused-vars": ["error", { args: "none" }],
-      "@typescript-eslint/no-misused-promises": [
-        "error",
-        { checksVoidReturn: { inheritedMethods: false } },
-      ],
+      "@typescript-eslint/no-misused-promises": "error",
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-unsafe-return": "error",
       "@typescript-eslint/unbound-method": "error",
