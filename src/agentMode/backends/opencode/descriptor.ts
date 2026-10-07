@@ -25,6 +25,7 @@ import { opencodeEnabledModelEntries, opencodeWireBaseIdFor } from "./opencodeMo
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import { cacheRoot } from "@/context/conversionsLocation";
+import { opencodeTrimPluginDir } from "./opencodeTrimPlugin";
 import type { ModelSelectionSession } from "@/agentMode/session/types";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import type {
@@ -185,6 +186,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
         backendConfigRegistry,
         clientVersion: args.clientVersion,
         getCacheRoot: () => cacheRoot(args.plugin.app),
+        getTrimPluginDir: opencodeTrimPluginDir,
         getSelfHostWebSearchChannel: () => {
           const bridge = args.plugin.selfHostWebSearchAgentBridge;
           if (!bridge) {
