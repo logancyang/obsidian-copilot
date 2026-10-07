@@ -209,7 +209,11 @@ export class AgentChatPersistenceManager {
     const sessionId = frontmatter.sessionId?.trim() || undefined;
     const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
     const usage = parseUsageJson(frontmatter.usage);
-    const messages = this.parseChatBody(body);
+    const epoch = Number(frontmatter.epoch);
+    const messages = this.parseChatBody(
+      body,
+      Number.isFinite(epoch) && epoch > 0 ? epoch : undefined
+    );
 
     logInfo(
       `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"}, projectId=${projectId})`
@@ -289,7 +293,7 @@ export class AgentChatPersistenceManager {
       .join("\n\n");
   }
 
-  private parseChatBody(body: string): AgentChatMessage[] {
+  private parseChatBody(body: string, conversationEpoch?: number): AgentChatMessage[] {
     const messages: AgentChatMessage[] = [];
     const pattern = /\*\*(user|ai)\*\*: ([\s\S]*?)(?=(?:\n\*\*(?:user|ai)\*\*: )|$)/g;
 
@@ -322,6 +326,11 @@ export class AgentChatPersistenceManager {
             fileName: "",
           };
         }
+      }
+      // Display timestamps omit milliseconds but chat links match the frontmatter epoch exactly, so keep it across reloads.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/661
+      if (messages.length === 0 && conversationEpoch !== undefined) {
+        timestamp = { epoch: conversationEpoch, display: timestampStr, fileName: "" };
       }
 
       const id = timestamp
