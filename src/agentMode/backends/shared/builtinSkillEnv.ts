@@ -1,7 +1,9 @@
 import { BREVILABS_API_BASE_URL } from "@/constants";
-import { type CopilotSettings, getSettings } from "@/settings/model";
+import { type CopilotSettings, getSettings, normalizeMiyoFolderNames } from "@/settings/model";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import {
+  MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV,
+  MIYO_SEARCH_EXTRA_FOLDERS_ENV,
   MIYO_SEARCH_FOLDER_ENV,
   MIYO_SEARCH_SCOPE_ENV,
   PLUS_ENV,
@@ -22,6 +24,8 @@ const MIYO_URL_ENV = "MIYO_URL";
 const PROTECTED_BUILTIN_ENV_KEYS = [
   MIYO_SEARCH_SCOPE_ENV,
   MIYO_SEARCH_FOLDER_ENV,
+  MIYO_SEARCH_EXTRA_FOLDERS_ENV,
+  MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV,
   SELF_HOST_WEB_SEARCH_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
@@ -67,6 +71,19 @@ export async function buildBuiltinSkillEnv(
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
     env[MIYO_SEARCH_SCOPE_ENV] = settings.miyoSearchAll === true ? "unrestricted" : "current";
     if (vaultName) env[MIYO_SEARCH_FOLDER_ENV] = vaultName;
+    const extraFolders = normalizeMiyoFolderNames(settings.miyoExtraSearchFolders).filter(
+      (name) => name !== vaultName
+    );
+    // Ticked folders widen only Current vault scope. sh splits the list on "/", which no stored
+    // name contains; cmd gets pre-quoted arguments because splitting a list there needs delayed
+    // expansion or call, which re-expand ! or % in a name.
+    // https://github.com/logancyang/obsidian-copilot/issues/3508
+    if (settings.miyoSearchAll !== true && extraFolders.length > 0) {
+      env[MIYO_SEARCH_EXTRA_FOLDERS_ENV] = extraFolders.join("/");
+      env[MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV] = extraFolders
+        .map((name) => `--folder "${name}"`)
+        .join(" ");
+    }
   }
 
   if (settings.isPaidUser && settings.plusLicenseKey) {
@@ -106,12 +123,29 @@ export function getBuiltinSkillEnvRestartPolicy(
   // Scope changes only affect a currently enabled skill. Tightening an active
   // boundary must cancel the current turn; widening can wait until it is idle.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
-  const activeMiyoScopeChanged =
-    prev.enableMiyoSearchSkill === true &&
-    next.enableMiyoSearchSkill === true &&
-    prev.miyoSearchAll !== next.miyoSearchAll;
+  const activeMiyoSkill =
+    prev.enableMiyoSearchSkill === true && next.enableMiyoSearchSkill === true;
+  const activeMiyoScopeChanged = activeMiyoSkill && prev.miyoSearchAll !== next.miyoSearchAll;
+  // Ticked folders widen only Current vault scope, so unticking one tightens the boundary.
+  // https://github.com/logancyang/obsidian-copilot/issues/3508
+  const currentScopeKept =
+    activeMiyoSkill && prev.miyoSearchAll !== true && next.miyoSearchAll !== true;
+  const extraFolderRemoved =
+    currentScopeKept &&
+    prev.miyoExtraSearchFolders.some((name) => !next.miyoExtraSearchFolders.includes(name));
+  const extraFolderAdded =
+    currentScopeKept &&
+    next.miyoExtraSearchFolders.some((name) => !prev.miyoExtraSearchFolders.includes(name));
 
-  if (!ordinaryEnvChanged && !selfHostRoutingChanged && !activeMiyoScopeChanged) return "none";
+  if (extraFolderRemoved) return "immediate";
+  if (
+    !ordinaryEnvChanged &&
+    !selfHostRoutingChanged &&
+    !activeMiyoScopeChanged &&
+    !extraFolderAdded
+  ) {
+    return "none";
+  }
   if (
     selfHostRoutingChanged &&
     prev.enableSelfHostMode !== true &&

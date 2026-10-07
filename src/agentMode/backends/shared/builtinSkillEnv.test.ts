@@ -7,6 +7,8 @@ import { getSettings } from "@/settings/model";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { BREVILABS_API_BASE_URL } from "@/constants";
 import {
+  MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV,
+  MIYO_SEARCH_EXTRA_FOLDERS_ENV,
   MIYO_SEARCH_FOLDER_ENV,
   MIYO_SEARCH_SCOPE_ENV,
   PLUS_ENV,
@@ -20,7 +22,10 @@ import {
   resolveObsidianCliPath,
 } from "@/agentMode/backends/shared/obsidianCliPath";
 
-jest.mock("@/settings/model", () => ({ getSettings: jest.fn() }));
+jest.mock("@/settings/model", () => ({
+  getSettings: jest.fn(),
+  normalizeMiyoFolderNames: jest.requireActual("@/settings/model").normalizeMiyoFolderNames,
+}));
 jest.mock("@/miyo/miyoUtils", () => ({ getMiyoCustomUrl: jest.fn() }));
 jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
 jest.mock("@/agentMode/backends/shared/obsidianCliPath", () => ({
@@ -108,6 +113,65 @@ describe("builtinSkillEnv", () => {
       });
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3508 lists ticked Miyo folders for Current vault search as a slash-joined list and as quoted cmd arguments", async () => {
+      mockGetSettings.mockReturnValue({
+        isPaidUser: false,
+        miyoSearchAll: false,
+        miyoExtraSearchFolders: ["Research notes", "ChatGPT chats"],
+      });
+
+      expect(await buildBuiltinSkillEnv("", "/vault/root", "root")).toEqual({
+        [OPENARTIFACTS_WORKSPACE_ROOT_ENV]: "/vault/root",
+        [MIYO_SEARCH_SCOPE_ENV]: "current",
+        [MIYO_SEARCH_FOLDER_ENV]: "root",
+        [MIYO_SEARCH_EXTRA_FOLDERS_ENV]: "Research notes/ChatGPT chats",
+        [MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV]: '--folder "Research notes" --folder "ChatGPT chats"',
+      });
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3508 passes on only ticked folder names a search wrapper cannot misread, without the vault", async () => {
+      mockGetSettings.mockReturnValue({
+        isPaidUser: false,
+        miyoSearchAll: false,
+        miyoExtraSearchFolders: [
+          "  R&D 100%! ",
+          "Projects/2026",
+          'say "hi"',
+          "back\\slash",
+          "tab\tname",
+          "root",
+          "R&D 100%!",
+          42,
+        ],
+      });
+
+      const env = await buildBuiltinSkillEnv("", "/vault/root", "root");
+
+      expect(env[MIYO_SEARCH_EXTRA_FOLDERS_ENV]).toBe("R&D 100%!");
+      expect(env[MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV]).toBe('--folder "R&D 100%!"');
+    });
+
+    it.each([
+      [
+        "Search scope is Unrestricted",
+        { miyoSearchAll: true, miyoExtraSearchFolders: ["Research"] },
+      ],
+      [
+        "the only ticked folder is the vault",
+        { miyoSearchAll: false, miyoExtraSearchFolders: ["root"] },
+      ],
+    ])(
+      "https://github.com/logancyang/obsidian-copilot/issues/3508 leaves the ticked-folder env unset when %s",
+      async (_condition, settings) => {
+        mockGetSettings.mockReturnValue({ isPaidUser: false, ...settings });
+
+        const env = await buildBuiltinSkillEnv("", "/vault/root", "root");
+
+        expect(env).not.toHaveProperty(MIYO_SEARCH_EXTRA_FOLDERS_ENV);
+        expect(env).not.toHaveProperty(MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV);
+      }
+    );
+
     it("injects the host Obsidian CLI independently of Plus and Miyo", async () => {
       mockGetSettings.mockReturnValue({ isPaidUser: false });
       mockResolveObsidianCliPath.mockReturnValue("C:/Users/Me/App Data/Obsidian/Obsidian.com");
@@ -174,6 +238,16 @@ describe("builtinSkillEnv", () => {
       ).toEqual({
         MIYO_URL: "http://override.example",
       });
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3508 prevents backend overrides from setting the ticked Miyo folders", () => {
+      expect(
+        sanitizeBuiltinSkillEnvOverrides({
+          MIYO_URL: "http://override.example",
+          [MIYO_SEARCH_EXTRA_FOLDERS_ENV]: "Private",
+          [MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV]: '--folder "Private"',
+        })
+      ).toEqual({ MIYO_URL: "http://override.example" });
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 preserves unrelated backend overrides", () => {
@@ -282,6 +356,59 @@ describe("builtinSkillEnv", () => {
 
       expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("none");
     });
+
+    it.each([
+      ["unticked", ["Research", "Chats"], ["Research"]],
+      ["swapped for another", ["Research"], ["Chats"]],
+    ])(
+      "https://github.com/logancyang/obsidian-copilot/issues/3508 immediately refreshes an enabled Current vault skill when a ticked folder is %s",
+      (_change, before, after) => {
+        const prev = {
+          enableMiyoSearchSkill: true,
+          miyoSearchAll: false,
+          miyoExtraSearchFolders: before,
+        } as ReturnType<typeof getSettings>;
+        const next = { ...prev, miyoExtraSearchFolders: after };
+
+        expect(getBuiltinSkillEnvRestartPolicy(prev, next, "claude")).toBe("immediate");
+      }
+    );
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3508 defers the refresh when Current vault search only gains ticked folders", () => {
+      const prev = {
+        enableMiyoSearchSkill: true,
+        miyoSearchAll: false,
+        miyoExtraSearchFolders: ["Research"],
+      } as ReturnType<typeof getSettings>;
+      const next = { ...prev, miyoExtraSearchFolders: ["Research", "Chats"] };
+
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "claude")).toBe("deferred");
+    });
+
+    it.each([
+      [
+        "Search scope stays Unrestricted",
+        { enableMiyoSearchSkill: true, miyoSearchAll: true, miyoExtraSearchFolders: ["Research"] },
+        [],
+      ],
+      [
+        "the same folders are ticked in another order",
+        {
+          enableMiyoSearchSkill: true,
+          miyoSearchAll: false,
+          miyoExtraSearchFolders: ["Research", "Chats"],
+        },
+        ["Chats", "Research"],
+      ],
+    ])(
+      "https://github.com/logancyang/obsidian-copilot/issues/3508 keeps the agent running when ticked folders change but %s",
+      (_condition, before, after) => {
+        const prev = before as ReturnType<typeof getSettings>;
+        const next = { ...prev, miyoExtraSearchFolders: after };
+
+        expect(getBuiltinSkillEnvRestartPolicy(prev, next, "claude")).toBe("none");
+      }
+    );
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 keeps spawn-time state for unrelated settings changes", () => {
       const prev = { miyoSearchAll: false, contextTurns: 5 } as ReturnType<typeof getSettings>;

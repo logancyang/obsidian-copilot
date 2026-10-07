@@ -399,6 +399,58 @@ describe("builtinSkills", () => {
       expect(cmd).toContain('--folder "%COPILOT_MIYO_SEARCH_FOLDER%"');
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3508 passes ticked folders before the vault on POSIX, splitting the list on slashes without globbing or eval", () => {
+      const sh = miyoScript(".sh");
+
+      expect(sh).toContain(
+        [
+          "    set -f",
+          "    IFS=/",
+          "    set --",
+          "    for NAME in ${COPILOT_MIYO_SEARCH_EXTRA_FOLDERS:-}; do",
+          '      [ -z "$NAME" ] || set -- "$@" --folder "$NAME"',
+          "    done",
+          "    unset IFS",
+          "    set +f",
+          '    OUT=$("$MIYO" search "$QUERY" -n 10 "$@" --folder "$COPILOT_MIYO_SEARCH_FOLDER" --json 2>&1)',
+        ].join("\n")
+      );
+      expect(sh).not.toMatch(/\beval\b/);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3508 puts the agent's words last on Windows, after --, so they stay query text and cannot add a --folder", () => {
+      const cmd = miyoScript(".cmd");
+
+      expect(cmd).toContain("setlocal enableextensions disabledelayedexpansion\n");
+      expect(cmd).not.toMatch(/enabledelayedexpansion|\bcall\b|!/i);
+      expect(cmd.match(/^.*%\*.*$/gm)).toEqual([
+        '  "%MIYO%" search %* -n 10 --json',
+        '"%MIYO%" search -n 10 %COPILOT_MIYO_SEARCH_EXTRA_FOLDER_ARGS% --folder "%COPILOT_MIYO_SEARCH_FOLDER%" --json -- %*',
+        '"%MIYO%" search -n 10 --folder "%COPILOT_MIYO_SEARCH_FOLDER%" --json -- %*',
+      ]);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3508 retries a failed Windows search with the vault alone only when folders are ticked, without labels or the agent's words inside a block", () => {
+      const cmd = miyoScript(".cmd");
+      const scopeFailed =
+        "  echo Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. 1>&2\n  exit /b 1\n)";
+
+      expect(cmd).toContain(
+        [
+          '"%MIYO%" search -n 10 %COPILOT_MIYO_SEARCH_EXTRA_FOLDER_ARGS% --folder "%COPILOT_MIYO_SEARCH_FOLDER%" --json -- %*',
+          "if not errorlevel 1 exit /b 0",
+          "if not defined COPILOT_MIYO_SEARCH_EXTRA_FOLDER_ARGS (",
+          scopeFailed,
+          '"%MIYO%" search -n 10 --folder "%COPILOT_MIYO_SEARCH_FOLDER%" --json -- %*',
+          "if errorlevel 1 (",
+          scopeFailed,
+          "echo Miyo search skipped the extra Miyo folders ticked in Copilot settings and searched only the active vault. 1>&2",
+          "exit /b 0",
+        ].join("\n")
+      );
+      expect(cmd).not.toMatch(/\bgoto\b|^:/m);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 omits the folder boundary only for explicit Unrestricted mode on POSIX and Windows", () => {
       const sh = miyoScript(".sh");
       const cmd = miyoScript(".cmd");
