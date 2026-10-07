@@ -1,4 +1,5 @@
 import { type App, TFile } from "obsidian";
+import { logWarn } from "@/logger";
 import { MiyoRequestError } from "@/miyo/MiyoClient";
 import { MiyoSemanticRetriever } from "@/search/miyo/MiyoSemanticRetriever";
 import { getSettings } from "@/settings/model";
@@ -28,6 +29,15 @@ function makeApp(getAbstractFileByPath: (path: string) => TFile | null = () => n
   } as unknown as App;
 }
 
+function mockSettings(overrides: Record<string, unknown> = {}) {
+  (getSettings as jest.Mock).mockReturnValue({
+    miyoServerUrl: "http://miyo.local",
+    debug: false,
+    miyoExtraSearchFolders: [],
+    ...overrides,
+  });
+}
+
 function createRetriever(
   options: Partial<ConstructorParameters<typeof MiyoSemanticRetriever>[1]> = {}
 ) {
@@ -42,10 +52,8 @@ function createRetriever(
 describe("MiyoSemanticRetriever", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (getSettings as jest.Mock).mockReturnValue({
-      miyoServerUrl: "http://miyo.local",
-      debug: false,
-    });
+    mockSearch.mockReset();
+    mockSettings();
     mockResolveBaseUrl.mockResolvedValue("http://miyo.local");
   });
 
@@ -112,7 +120,7 @@ describe("MiyoSemanticRetriever", () => {
           "/vault",
           "show notes from this week",
           1000,
-          [{ field: "mtime", gte: startTime, lte: endTime }]
+          { filters: [{ field: "mtime", gte: startTime, lte: endTime }] }
         );
       });
 
@@ -126,16 +134,12 @@ describe("MiyoSemanticRetriever", () => {
           "/vault",
           "list all notes about ai digests",
           1000,
-          undefined
+          {}
         );
       });
 
       it("returns at most maxK chunks even though Miyo returns more", async () => {
-        (getSettings as jest.Mock).mockReturnValue({
-          miyoServerUrl: "http://miyo.local",
-          debug: false,
-          qaExclusions: "private",
-        });
+        mockSettings({ qaExclusions: "private" });
         const app = makeApp();
 
         mockSearch.mockResolvedValue({
@@ -163,11 +167,7 @@ describe("MiyoSemanticRetriever", () => {
       });
 
       it("drops chunks from notes that match the Copilot exclusion rules", async () => {
-        (getSettings as jest.Mock).mockReturnValue({
-          miyoServerUrl: "http://miyo.local",
-          debug: false,
-          qaExclusions: "private",
-        });
+        mockSettings({ qaExclusions: "private" });
 
         const TFileConstructor = TFile as unknown as new (filePath: string) => TFile;
         const filesByPath = new Map<string, TFile>([
@@ -203,12 +203,7 @@ describe("MiyoSemanticRetriever", () => {
       });
 
       it("keeps search-all chunks from another folder that shares a Copilot system root's name", async () => {
-        (getSettings as jest.Mock).mockReturnValue({
-          miyoServerUrl: "http://miyo.local",
-          debug: false,
-          miyoSearchAll: true,
-          copilotFolder: "copilot",
-        });
+        mockSettings({ miyoSearchAll: true, copilotFolder: "copilot" });
         mockSearch.mockResolvedValue({
           results: [
             {
@@ -231,24 +226,14 @@ describe("MiyoSemanticRetriever", () => {
         const retriever = createRetriever();
         const documents = await retriever.getRelevantDocuments("query");
 
-        expect(mockSearch).toHaveBeenCalledWith(
-          "http://miyo.local",
-          undefined,
-          "query",
-          1000,
-          undefined
-        );
+        expect(mockSearch).toHaveBeenCalledWith("http://miyo.local", undefined, "query", 1000, {});
         expect(documents).toHaveLength(1);
         expect(documents[0].metadata.path).toBe("copilot/notes/foo.md");
         expect(documents[0].metadata.fromCurrentVault).toBe(false);
       });
 
       it("drops unprefixed chunks under a Copilot system root on a folder-scoped query", async () => {
-        (getSettings as jest.Mock).mockReturnValue({
-          miyoServerUrl: "http://miyo.local",
-          debug: false,
-          copilotFolder: "copilot",
-        });
+        mockSettings({ copilotFolder: "copilot" });
 
         mockSearch.mockResolvedValue({
           results: [
@@ -285,16 +270,177 @@ describe("MiyoSemanticRetriever", () => {
       });
 
       it("rejects with the unavailable message, not registration guidance, when an unrestricted search gets 404 (https://github.com/logancyang/obsidian-copilot/pull/3090#discussion_r3926715956)", async () => {
-        (getSettings as jest.Mock).mockReturnValue({
-          miyoServerUrl: "http://miyo.local",
-          debug: false,
-          miyoSearchAll: true,
-        });
+        mockSettings({ miyoSearchAll: true });
         mockSearch.mockRejectedValue(new MiyoRequestError(404, "not found"));
 
         await expect(createRetriever().getRelevantDocuments("query")).rejects.toThrow(
           "Miyo is unavailable. Open Miyo, then retry vault search."
         );
+      });
+
+      it("searches the vault plus the ticked extra folders in one request anchored on the vault, listing the vault once — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+        mockSettings({ miyoExtraSearchFolders: ["Research", "/vault", "ChatGPT"] });
+        mockSearch.mockResolvedValue({ results: [] });
+
+        await createRetriever().getRelevantDocuments("query");
+
+        expect(mockSearch).toHaveBeenCalledWith("http://miyo.local", "/vault", "query", 1000, {
+          folderNames: ["/vault", "Research", "ChatGPT"],
+        });
+      });
+
+      it("ignores ticked extra folders when the scope is Unrestricted — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+        mockSettings({ miyoSearchAll: true, miyoExtraSearchFolders: ["Research"] });
+        mockSearch.mockResolvedValue({ results: [] });
+
+        await createRetriever().getRelevantDocuments("query");
+
+        expect(mockSearch).toHaveBeenCalledWith("http://miyo.local", undefined, "query", 1000, {});
+      });
+
+      it("marks extra-folder results as outside the vault, keeps Miyo's note or chat source, and applies Copilot exclusions only to vault results — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+        mockSettings({ qaExclusions: "Archive", miyoExtraSearchFolders: ["Archive", "ChatGPT"] });
+        mockSearch.mockResolvedValue({
+          results: [
+            {
+              id: "vault-excluded",
+              score: 0.95,
+              path: "/vault/Archive/old.md",
+              chunk_index: 0,
+              chunk_text: "an excluded vault note",
+              source: "documents",
+            },
+            {
+              id: "vault-kept",
+              score: 0.9,
+              path: "/vault/notes/keep.md",
+              chunk_index: 0,
+              chunk_text: "a vault note",
+              source: "documents",
+            },
+            {
+              id: "extra-note",
+              score: 0.85,
+              path: "Archive/plan.md",
+              chunk_index: 0,
+              chunk_text: "a note in the ticked Archive folder",
+              source: "documents",
+            },
+            {
+              id: "extra-chat",
+              score: 0.8,
+              path: "ChatGPT/2026-01-02 trip.md",
+              chunk_index: 0,
+              chunk_text: "a synced chat",
+              source: "chats",
+            },
+          ],
+        });
+
+        const documents = await createRetriever().getRelevantDocuments("query");
+
+        expect(
+          documents.map(({ metadata }) => ({
+            path: metadata.path as string,
+            fromCurrentVault: metadata.fromCurrentVault as boolean,
+            miyoSource: metadata.miyoSource as string,
+          }))
+        ).toEqual([
+          { path: "notes/keep.md", fromCurrentVault: true, miyoSource: "documents" },
+          { path: "Archive/plan.md", fromCurrentVault: false, miyoSource: "documents" },
+          { path: "ChatGPT/2026-01-02 trip.md", fromCurrentVault: false, miyoSource: "chats" },
+        ]);
+      });
+
+      it("skips a ticked folder this Miyo does not have and still searches the vault and the other folders — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+        mockSettings({ miyoExtraSearchFolders: ["Research", "Archive"] });
+        mockSearch
+          .mockRejectedValueOnce(new MiyoRequestError(404, "Folder not registered: Archive"))
+          .mockResolvedValueOnce({
+            results: [
+              {
+                id: "research",
+                score: 0.9,
+                path: "Research/idea.md",
+                chunk_index: 0,
+                chunk_text: "research",
+              },
+            ],
+          });
+
+        const documents = await createRetriever().getRelevantDocuments("query");
+
+        expect(mockSearch.mock.calls.map((call: unknown[]) => call[4])).toEqual([
+          { folderNames: ["/vault", "Research", "Archive"] },
+          { folderNames: ["/vault", "Research"] },
+        ]);
+        expect(documents.map((doc) => doc.metadata.path as string)).toEqual(["Research/idea.md"]);
+        expect(logWarn).toHaveBeenCalledWith(expect.stringContaining('"Archive"'));
+      });
+
+      it("falls back to the vault-only request when every ticked folder is missing from Miyo — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+        mockSettings({ miyoExtraSearchFolders: ["Research", "Archive"] });
+        mockSearch
+          .mockRejectedValueOnce(new MiyoRequestError(404, "Folder not registered: Research"))
+          .mockRejectedValueOnce(new MiyoRequestError(404, "Folder not registered: Archive"))
+          .mockResolvedValueOnce({ results: [] });
+
+        await expect(createRetriever().getRelevantDocuments("query")).resolves.toEqual([]);
+
+        expect(mockSearch.mock.calls.map((call: unknown[]) => call[4])).toEqual([
+          { folderNames: ["/vault", "Research", "Archive"] },
+          { folderNames: ["/vault", "Archive"] },
+          {},
+        ]);
+      });
+
+      it.each([
+        ["an older Miyo ignores the ticked folders", []],
+        [
+          "every ticked folder is missing from Miyo",
+          [new MiyoRequestError(404, "Folder not registered: Research")],
+        ],
+      ])(
+        "keeps unprefixed results inside the vault and applies Copilot exclusions to them when %s — https://github.com/logancyang/obsidian-copilot/issues/3508",
+        async (_scenario, failures: MiyoRequestError[]) => {
+          mockSettings({ qaExclusions: "private", miyoExtraSearchFolders: ["Research"] });
+          failures.forEach((failure) => mockSearch.mockRejectedValueOnce(failure));
+          mockSearch.mockResolvedValueOnce({
+            results: [
+              { id: "excluded", score: 0.9, path: "private/secret.md", chunk_index: 0 },
+              { id: "kept", score: 0.8, path: "notes/keep.md", chunk_index: 0 },
+            ],
+          });
+
+          const documents = await createRetriever().getRelevantDocuments("query");
+
+          expect(
+            documents.map(({ metadata }) => ({
+              path: metadata.path as string,
+              fromCurrentVault: metadata.fromCurrentVault as boolean,
+            }))
+          ).toEqual([{ path: "notes/keep.md", fromCurrentVault: true }]);
+        }
+      );
+
+      it("keeps registration guidance without retrying when the vault itself is the unregistered folder — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+        mockSettings({ miyoExtraSearchFolders: ["Research"] });
+        mockSearch.mockRejectedValue(new MiyoRequestError(404, "Folder not registered: /vault"));
+
+        await expect(createRetriever().getRelevantDocuments("query")).rejects.toThrow(
+          "This vault is not registered with Miyo. Register it in Miyo, then retry vault search."
+        );
+        expect(mockSearch).toHaveBeenCalledTimes(1);
+      });
+
+      it("reports Miyo unavailable without retrying when a search with extra folders fails for another reason — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+        mockSettings({ miyoExtraSearchFolders: ["Research"] });
+        mockSearch.mockRejectedValue(new MiyoRequestError(500, "index unavailable"));
+
+        await expect(createRetriever().getRelevantDocuments("query")).rejects.toThrow(
+          "Miyo is unavailable. Open Miyo, then retry vault search."
+        );
+        expect(mockSearch).toHaveBeenCalledTimes(1);
       });
     });
   });

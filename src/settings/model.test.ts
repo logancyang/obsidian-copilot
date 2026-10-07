@@ -7,6 +7,7 @@ import {
   BUILTIN_CHAT_MODELS,
 } from "@/constants";
 import {
+  normalizeMiyoFolderNames,
   normalizeRootFolders,
   resetSettings,
   sanitizeEnvOverrides,
@@ -463,6 +464,24 @@ describe("model", () => {
 
     it("starts a fresh configuration with this computer — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", () => {
       expect(sanitizeSettings({ ...DEFAULT_SETTINGS }).miyoConnectionMode).toBe("local");
+    });
+
+    it("gives an install saved before extra Miyo search folders existed an empty folder list — https://github.com/logancyang/obsidian-copilot/issues/3508", () => {
+      const persisted = { ...DEFAULT_SETTINGS } as Partial<CopilotSettings>;
+      delete persisted.miyoExtraSearchFolders;
+
+      const settings = sanitizeSettings(persisted as CopilotSettings);
+
+      expect(settings.miyoExtraSearchFolders).toEqual([]);
+    });
+
+    it("keeps saved extra Miyo search folders in their normalized form — https://github.com/logancyang/obsidian-copilot/issues/3508", () => {
+      const settings = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        miyoExtraSearchFolders: [" Research ", "Archive", "Research", "a/b"],
+      });
+
+      expect(settings.miyoExtraSearchFolders).toEqual(["Research", "Archive"]);
     });
 
     it("defaults the startup notice marker without inheriting the Agent Home dismissal", () => {
@@ -930,6 +949,53 @@ describe("model", () => {
 
     it("canonicalizes before deduping and traversal filtering", () => {
       expect(normalizeRootFolders(["a//b", "a/./b", "x/../y", "a/b"])).toEqual(["a/b"]);
+    });
+  });
+
+  describe("normalizeMiyoFolderNames()", () => {
+    it("trims folder names and keeps the first occurrence of each in order", () => {
+      expect(normalizeMiyoFolderNames(["Research", " Archive ", "Research", "ChatGPT"])).toEqual([
+        "Research",
+        "Archive",
+        "ChatGPT",
+      ]);
+    });
+
+    it("keeps names with spaces, dots, and non-Latin letters intact", () => {
+      expect(normalizeMiyoFolderNames(["Second Brain", "notes.v2", "研究"])).toEqual([
+        "Second Brain",
+        "notes.v2",
+        "研究",
+      ]);
+    });
+
+    it("drops non-string and blank entries", () => {
+      expect(normalizeMiyoFolderNames([42, null, "", "   ", { name: "x" }, "Archive"])).toEqual([
+        "Archive",
+      ]);
+    });
+
+    it("drops names with a slash, backslash, double quote, or control character, since a Miyo folder name is passed on verbatim — https://github.com/logancyang/obsidian-copilot/issues/3508", () => {
+      expect(
+        normalizeMiyoFolderNames([
+          "a/b",
+          "a\\b",
+          'say "hi"',
+          "tab\there",
+          "line\nbreak",
+          "bell\u0007",
+          "Research",
+        ])
+      ).toEqual(["Research"]);
+    });
+
+    it("returns one shared empty list for a missing, non-list, or fully rejected value", () => {
+      const fromMissing = normalizeMiyoFolderNames(undefined);
+
+      expect(fromMissing).toEqual([]);
+      expect(Object.isFrozen(fromMissing)).toBe(true);
+      expect(normalizeMiyoFolderNames("Research")).toBe(fromMissing);
+      expect(normalizeMiyoFolderNames(["", "a/b"])).toBe(fromMissing);
     });
   });
 

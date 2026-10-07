@@ -84,7 +84,7 @@ In Copilot's Miyo settings, turn on **Semantic search for agents**. Keep **Searc
 
 ![Semantic search enabled and Current vault selected, with both settings highlighted](https://raw.githubusercontent.com/logancyang/obsidian-copilot/14d33de58ed71cc69b82493bfd4f3cc0b593b70a/tutorial-media/remote-miyo/remote-search-settings-highlight.svg)
 
-For Current vault searches, the vault's name must match the folder name registered in Miyo. Notes must also use the same paths within that folder. The vault's full disk location may differ between devices. A note returned by Miyo must exist in the client's vault to open there.
+For Current vault searches, the vault's name must match the folder name registered in Miyo. Notes must also use the same paths within that folder. The vault's full disk location may differ between devices. A note returned by Miyo must exist in the client's vault to open there. The other folders you can tick under **Current vault** come from the Miyo host, not from this device.
 
 Open Agent Chat and ask about a note you know is indexed on the host. For example:
 

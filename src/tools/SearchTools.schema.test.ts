@@ -1,7 +1,9 @@
+import { Document } from "@langchain/core/documents";
 import type { App } from "obsidian";
 
 const mockGetSettings = jest.fn<Record<string, unknown>, []>();
 const mockIsMiyoActive = jest.fn<boolean, []>();
+const mockMiyoDocuments = jest.fn<Promise<Document[]>, []>();
 
 jest.mock("@/settings/model", () => ({
   getSettings: () => mockGetSettings(),
@@ -9,8 +11,16 @@ jest.mock("@/settings/model", () => ({
 jest.mock("@/search/RetrieverFactory", () => ({
   RetrieverFactory: {
     isMiyoActive: () => mockIsMiyoActive(),
+    createMiyoRetriever: () => ({ getRelevantDocuments: () => mockMiyoDocuments() }),
   },
 }));
+jest.mock("@/search/v3/FilterRetriever", () => ({
+  FilterRetriever: class {
+    getRelevantDocuments = async () => [];
+    hasTimeRange = () => false;
+  },
+}));
+jest.mock("@/logger");
 
 import { createLocalSearchTool, webSearchTool } from "@/tools/SearchTools";
 
@@ -77,6 +87,47 @@ describe("SearchTools", () => {
       await expect(invoke({ query: "vault notes", salientTerms: [] })).rejects.toThrow(
         "Miyo is unavailable. Configure a remote Miyo connection, then retry vault search."
       );
+    });
+
+    it("reports whether each Miyo result comes from this vault and whether it is a note or a chat — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+      mockGetSettings.mockReturnValue({ enableMiyo: true, maxSourceChunks: 10 });
+      mockIsMiyoActive.mockReturnValue(true);
+      mockMiyoDocuments.mockResolvedValue([
+        new Document({
+          pageContent: "vault note",
+          metadata: { path: "notes/a.md", title: "A", score: 0.9, fromCurrentVault: true },
+        }),
+        new Document({
+          pageContent: "synced chat",
+          metadata: {
+            path: "ChatGPT/trip.md",
+            title: "Trip",
+            score: 0.8,
+            fromCurrentVault: false,
+            miyoSource: "chats",
+          },
+        }),
+      ]);
+      const tool = createLocalSearchTool({} as App);
+      const invoke = tool.invoke.bind(tool) as (input: {
+        query: string;
+        salientTerms: string[];
+      }) => Promise<string>;
+
+      const result = JSON.parse(await invoke({ query: "trip", salientTerms: [] })) as {
+        documents: Array<Record<string, unknown>>;
+      };
+
+      expect(
+        result.documents.map(({ path, fromCurrentVault, miyoSource }) => ({
+          path,
+          fromCurrentVault,
+          miyoSource,
+        }))
+      ).toEqual([
+        { path: "notes/a.md", fromCurrentVault: true, miyoSource: undefined },
+        { path: "ChatGPT/trip.md", fromCurrentVault: false, miyoSource: "chats" },
+      ]);
     });
   });
 

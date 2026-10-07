@@ -127,9 +127,9 @@ describe("MiyoClient", () => {
       } as RequestUrlResponse);
 
       const client = new MiyoClient();
-      await client.search("http://127.0.0.1:8742", "/vault", "project notes", 10, [
-        { field: "mtime", gte: 1, lte: 2 },
-      ]);
+      await client.search("http://127.0.0.1:8742", "/vault", "project notes", 10, {
+        filters: [{ field: "mtime", gte: 1, lte: 2 }],
+      });
 
       expect(mockedRequestUrl).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -152,10 +152,9 @@ describe("MiyoClient", () => {
         text: "",
       } as RequestUrlResponse);
 
-      await new MiyoClient().search("http://127.0.0.1:8742", "Vault", "stoicism", 30, undefined, [
-        ".pdf",
-        ".epub",
-      ]);
+      await new MiyoClient().search("http://127.0.0.1:8742", "Vault", "stoicism", 30, {
+        paths: [".pdf", ".epub"],
+      });
 
       expect(mockedRequestUrl).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -178,14 +177,7 @@ describe("MiyoClient", () => {
           text: "",
         } as RequestUrlResponse);
 
-        await new MiyoClient().search(
-          "http://127.0.0.1:8742",
-          "Vault",
-          "stoicism",
-          30,
-          undefined,
-          paths
-        );
+        await new MiyoClient().search("http://127.0.0.1:8742", "Vault", "stoicism", 30, { paths });
 
         expect(mockedRequestUrl).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -214,6 +206,54 @@ describe("MiyoClient", () => {
       );
 
       expect(response.results).toEqual(results);
+    });
+
+    it("sends folder_names alongside the folder_name anchor, so a Miyo without multi-folder search still searches only the anchor — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: { results: [] },
+        text: "",
+      } as RequestUrlResponse);
+
+      await new MiyoClient().search("http://127.0.0.1:8742", "Vault", "stoicism", 30, {
+        folderNames: ["Vault", "Research", "ChatGPT"],
+      });
+
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: JSON.stringify({
+            query: "stoicism",
+            folder_name: "Vault",
+            folder_names: ["Vault", "Research", "ChatGPT"],
+            limit: 30,
+          }),
+        })
+      );
+    });
+  });
+
+  describe("listFolders()", () => {
+    it("lists every folder registered with Miyo, including synced chat folders, from /v0/folder — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+      const folders = [
+        { path: "Vault", absolute_path: "/Users/me/Vault", origin: "user" },
+        { path: "ChatGPT", absolute_path: "/Users/me/.miyo/chatgpt", origin: "chat_sync" },
+      ];
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: { folders },
+        text: "",
+      } as RequestUrlResponse);
+
+      const response = await new MiyoClient().listFolders("http://127.0.0.1:8742");
+
+      expect(response.folders).toEqual(folders);
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "http://127.0.0.1:8742/v0/folder",
+          method: "GET",
+          body: undefined,
+        })
+      );
     });
   });
 

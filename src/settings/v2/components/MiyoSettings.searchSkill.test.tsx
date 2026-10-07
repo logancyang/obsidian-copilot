@@ -19,6 +19,9 @@ jest.mock("@/settings/model", () => ({
   useSettingsValue: () => currentSettings,
   normalizeRootFolders:
     jest.requireActual<typeof import("@/settings/model")>("@/settings/model").normalizeRootFolders,
+  normalizeMiyoFolderNames:
+    jest.requireActual<typeof import("@/settings/model")>("@/settings/model")
+      .normalizeMiyoFolderNames,
 }));
 
 let mockMiyoBackend: "available" | "unavailable" | "unknown" | "stale" = "available";
@@ -45,8 +48,17 @@ let mockRegistration: "registered" | "unregistered" | "error" = "registered";
 const addFolderBodies: unknown[] = [];
 let expireLifecycleBeforeAddRequest = false;
 let addFolderError: Error | null = null;
+let mockFolders: Array<{ path: string; origin?: string }> = [];
+let mockListFoldersError: Error | null = null;
+const mockListedBaseUrls: string[] = [];
 jest.mock("@/miyo/MiyoClient", () => ({
   MiyoClient: class {
+    resolveBaseUrl = async (url?: string) => url || "http://127.0.0.1:8742";
+    listFolders = async (baseUrl: string) => {
+      mockListedBaseUrls.push(baseUrl);
+      if (mockListFoldersError) throw mockListFoldersError;
+      return { folders: mockFolders };
+    };
     isBackendAvailable = async (url?: string) => {
       mockProbeUrls.push(url);
       return mockProbeGate ?? mockReachable;
@@ -68,6 +80,9 @@ jest.mock("@/miyo/miyoUtils", () => ({
     "@/miyo/miyoRuntimePolicy"
   ).getMiyoCustomUrl,
   getMiyoFolderName: () => "vault",
+  getExtraSearchFolderOptions:
+    jest.requireActual<typeof import("@/miyo/miyoUtils")>("@/miyo/miyoUtils")
+      .getExtraSearchFolderOptions,
   isLocalMiyoUrl: () => true,
   MIYO_ADD_FOLDER_DEEPLINK_URL: "miyo://add",
   MIYO_DEEPLINK_URL: "miyo://",
@@ -170,6 +185,9 @@ describe("MiyoSettings", () => {
     mockLifecycleActive = true;
     expireLifecycleBeforeAddRequest = false;
     addFolderError = null;
+    mockFolders = [];
+    mockListFoldersError = null;
+    mockListedBaseUrls.length = 0;
   });
 
   describe("MiyoSettings()", () => {
@@ -218,6 +236,80 @@ describe("MiyoSettings", () => {
       expect(screen.queryByLabelText("Search scope")).toBeNull();
       await waitFor(() => expect(currentSettings.enableMiyoSearchSkill).toBe(false));
     });
+    it("lists the connected Miyo host's other folders under Current vault scope, ticked as saved and without this vault — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+      currentSettings = {
+        ...currentSettings,
+        enableMiyo: true,
+        miyoConnectionMode: "remote",
+        miyoServerUrl: "http://home:8742",
+        enableMiyoSearchSkill: true,
+        miyoExtraSearchFolders: ["Research"],
+      };
+      mockFolders = [
+        { path: "vault", origin: "user" },
+        { path: "Research", origin: "user" },
+        { path: "ChatGPT", origin: "chat_sync" },
+      ];
+      render(<MiyoSettings />);
+
+      const research = await screen.findByRole("checkbox", { name: "Research" });
+      expect(research.getAttribute("aria-checked")).toBe("true");
+      const chat = screen.getByRole("checkbox", { name: "ChatGPT" });
+      expect(chat.getAttribute("aria-checked")).toBe("false");
+      expect(chat.closest("label")?.textContent).toContain("Chat");
+      expect(screen.queryByRole("checkbox", { name: "vault" })).toBeNull();
+      expect(mockListedBaseUrls).toContain("http://home:8742");
+    });
+
+    it("saves the ticked folders as the extra search folder list — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+      currentSettings = {
+        ...currentSettings,
+        enableMiyo: true,
+        enableMiyoSearchSkill: true,
+        miyoExtraSearchFolders: ["Research"],
+      };
+      mockFolders = [{ path: "Research" }, { path: "ChatGPT", origin: "chat_sync" }];
+      render(<MiyoSettings />);
+
+      fireEvent.click(await screen.findByRole("checkbox", { name: "ChatGPT" }));
+
+      expect(updateSetting).toHaveBeenCalledWith("miyoExtraSearchFolders", ["Research", "ChatGPT"]);
+    });
+
+    it("shows no folder list and fetches none while the scope is Unrestricted — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+      currentSettings = {
+        ...currentSettings,
+        enableMiyo: true,
+        enableMiyoSearchSkill: true,
+        miyoSearchAll: true,
+      };
+      mockFolders = [{ path: "Research" }];
+      render(<MiyoSettings />);
+      await act(async () => {});
+
+      expect(screen.getByLabelText("Search scope")).toBeTruthy();
+      expect(screen.queryByText("Also search these Miyo folders")).toBeNull();
+      expect(mockListedBaseUrls).toEqual([]);
+    });
+
+    it("shows no folder list and fetches none while Miyo is unavailable — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+      mockMiyoBackend = "unavailable";
+      currentSettings = { ...currentSettings, enableMiyo: true, enableMiyoSearchSkill: true };
+      render(<MiyoSettings />);
+      await act(async () => {});
+
+      expect(screen.queryByText("Also search these Miyo folders")).toBeNull();
+      expect(mockListedBaseUrls).toEqual([]);
+    });
+
+    it("says the folder list could not be loaded when Miyo rejects the request — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
+      currentSettings = { ...currentSettings, enableMiyo: true, enableMiyoSearchSkill: true };
+      mockListFoldersError = new Error("Miyo request failed with status 500");
+      render(<MiyoSettings />);
+
+      expect(await screen.findByText("Couldn't load your Miyo folders.")).toBeTruthy();
+    });
+
     it("hides the agent search skill row on mobile, where Agent mode cannot run — https://github.com/Brevilabs/obsidian-copilot-private/issues/471", async () => {
       mockOnDesktop.mockReturnValue(false);
       currentSettings = { ...currentSettings, enableMiyoSearchSkill: true };

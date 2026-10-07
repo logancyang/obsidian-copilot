@@ -4,7 +4,8 @@ import {
   refreshMiyoStatus,
 } from "@/miyo/miyoStatusStore";
 import { shouldUseMiyo } from "@/miyo/miyoRuntimePolicy";
-import { CopilotSettings, getSettings } from "@/settings/model";
+import type { MiyoFolderEntry } from "@/miyo/MiyoClient";
+import { CopilotSettings, getSettings, normalizeMiyoFolderNames } from "@/settings/model";
 import { App } from "obsidian";
 
 export { getMiyoCustomUrl, shouldUseMiyo } from "@/miyo/miyoRuntimePolicy";
@@ -64,6 +65,30 @@ export async function resolveDocProcessorBackend(
     await refreshMiyoStatus();
   }
   return isMiyoAvailableForCapability("documentProcessor") ? "miyo" : "miyo-unavailable";
+}
+
+export interface MiyoSearchFolderOption {
+  name: string;
+  isChat: boolean;
+}
+
+export function getExtraSearchFolderOptions(
+  entries: readonly MiyoFolderEntry[],
+  vaultName: string
+): MiyoSearchFolderOption[] {
+  // Only names the saved folder list keeps verbatim are offered, the vault is always
+  // searched already, and Miyo rejects a name two folders share as ambiguous, which
+  // would fail every vault search. https://github.com/logancyang/obsidian-copilot/issues/3508
+  const names = entries.map((entry) => entry.path);
+  const offered = new Set(normalizeMiyoFolderNames(names));
+  offered.delete(vaultName);
+  const options: MiyoSearchFolderOption[] = [];
+  for (const entry of entries) {
+    if (names.indexOf(entry.path) === names.lastIndexOf(entry.path) && offered.delete(entry.path)) {
+      options.push({ name: entry.path, isChat: entry.origin === "chat_sync" });
+    }
+  }
+  return options;
 }
 
 export function getMiyoFolderName(app: App): string {
