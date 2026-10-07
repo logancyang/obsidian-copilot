@@ -14,7 +14,7 @@ const WORKTREE_HINT = /When you create a worktree outside the current working di
 function trimParts(parts) {
   const kept = [];
   for (const part of parts) {
-    if (part?.type !== "text" || typeof part.text !== "string") {
+    if (part.type !== "text") {
       kept.push(part);
       continue;
     }
