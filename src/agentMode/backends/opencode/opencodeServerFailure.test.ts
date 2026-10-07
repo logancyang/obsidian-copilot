@@ -13,13 +13,21 @@ describe("opencodeServerFailure", () => {
       );
     });
 
-    it("unescapes quotes and backslashes inside the cause", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/662 keeps closing braces that belong to the logged message", () => {
+      const line = String.raw`level=INFO cause="Error: provider replied {\n  \"error\": \"overloaded\"\n}\n    at send (/$bunfs/root/chunk.js:1:1)" http.status=502`;
+
+      expect(opencodeServerFailureCause(line)).toBe(
+        ["Error: provider replied {", '"error": "overloaded"', "}"].join("\n")
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/662 unescapes quotes and backslashes inside the cause", () => {
       const line = String.raw`level=INFO cause="Error: {\"status\":500} at C:\\notes" http.status=503`;
 
       expect(opencodeServerFailureCause(line)).toBe(String.raw`Error: {"status":500} at C:\notes`);
     });
 
-    it("ignores lines whose request did not fail with a 5xx status", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/662 ignores lines whose request did not fail with a 5xx status", () => {
       expect(
         opencodeServerFailureCause(ICLOUD_EPERM_LINE.replace("http.status=500", "http.status=200"))
       ).toBeNull();
@@ -28,7 +36,7 @@ describe("opencodeServerFailure", () => {
       ).toBeNull();
     });
 
-    it("ignores a 5xx line without a complete cause", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/662 ignores a 5xx line without a complete cause", () => {
       expect(
         opencodeServerFailureCause("level=INFO http.url=/api/model http.status=500")
       ).toBeNull();
