@@ -105,7 +105,7 @@ describe("CodexBackend", () => {
 
           expect(prompt).not.toContain("You are Obsidian Copilot");
           expect(prompt).toContain("call the `request_user_input` tool");
-          expect(prompt).toContain("Do not use `request_user_input_async`");
+          expect(prompt).toContain("including Default");
         } finally {
           setDisableBuiltinSystemPrompt(false);
         }
