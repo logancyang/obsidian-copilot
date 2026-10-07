@@ -210,8 +210,8 @@ export default class CopilotPlugin extends Plugin {
     // initialization, so the handler exists from the start and waits for the chat managers.
     // https://github.com/logancyang/obsidian-copilot/issues/3271
     this.registerObsidianProtocolHandler("copilot-chat", (params) => {
-      void this.initialization.then((ready) => {
-        if (ready && this.pluginLifecycleActive) void this.openChatDeepLink(params);
+      void this.initialization.then(() => {
+        if (this.pluginLifecycleActive) void this.openChatDeepLink(params);
       });
     });
   }
