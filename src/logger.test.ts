@@ -16,7 +16,7 @@ jest.mock("@/logFileManager", () => ({
   },
 }));
 
-import { logError, logInfo, logMarkdownBlock, logWarn } from "@/logger";
+import { logError, logFatalError, logInfo, logMarkdownBlock, logWarn } from "@/logger";
 
 describe("logger", () => {
   let logSpy: jest.SpyInstance;
@@ -100,6 +100,18 @@ describe("logger", () => {
       expect(errorSpy).toHaveBeenCalledWith(failure);
       expect(mockAppend).toHaveBeenNthCalledWith(1, "ERROR", failure);
       expect(mockAppend).toHaveBeenNthCalledWith(2, "ERROR", failure);
+    });
+  });
+
+  describe("logFatalError()", () => {
+    it("writes to console.error and appends an ERROR entry even when debug is disabled", () => {
+      const failure = new Error("settings unreadable");
+      setDebug(false);
+
+      logFatalError("Copilot failed to start.", failure);
+
+      expect(errorSpy).toHaveBeenCalledWith("Copilot failed to start.", failure);
+      expect(mockAppend).toHaveBeenCalledWith("ERROR", "Copilot failed to start.", failure);
     });
   });
 

@@ -9,6 +9,7 @@ jest.mock("obsidian", () => {
     Plugin: class Plugin {},
     PluginSettingTab: class PluginSettingTab {},
     MarkdownView: class MarkdownView {},
+    addIcon: jest.fn(),
   };
 });
 jest.mock("@/LLMProviders/chatModelManager", () => ({
@@ -18,6 +19,7 @@ jest.mock("@/LLMProviders/chatModelManager", () => ({
 
 jest.mock("@/logger", () => ({
   logError: jest.fn(),
+  logFatalError: jest.fn(),
   logInfo: jest.fn(),
   logWarn: jest.fn(),
 }));
@@ -28,16 +30,30 @@ jest.mock("@/services/settingsPersistence", () => ({
   resetPersistenceState: jest.fn(),
 }));
 jest.mock("@/logFileManager", () => ({
-  logFileManager: { flush: jest.fn().mockResolvedValue(undefined) },
+  logFileManager: { flush: jest.fn().mockResolvedValue(undefined), setApp: jest.fn() },
 }));
+jest.mock("@/settings/migrations", () => ({ runSettingsMigrations: jest.fn() }));
+jest.mock("@/settings/migrations/legacyIndexRemovalMigration", () => ({
+  cleanupLegacyIndexArtifacts: jest.fn(),
+}));
+jest.mock("@/commands/migrator", () => ({
+  ...jest.requireActual<typeof import("@/commands/migrator")>("@/commands/migrator"),
+  migrateCommands: jest.fn(async () => null),
+}));
+jest.mock("@/system-prompts/migration", () => ({
+  ...jest.requireActual<typeof import("@/system-prompts/migration")>("@/system-prompts/migration"),
+  migrateSystemPromptsFromSettings: jest.fn(async () => null),
+}));
+jest.mock("@/openArtifacts/openArtifactsLedger", () => ({ migrateOpenArtifactsFolder: jest.fn() }));
 jest.mock("@/state/vaultDataAtoms", () => ({
-  VaultDataManager: { getInstance: jest.fn(() => ({ cleanup: jest.fn() })) },
+  VaultDataManager: { getInstance: jest.fn(() => ({ cleanup: jest.fn(), initialize: jest.fn() })) },
 }));
 jest.mock("@/services/webViewerService/webViewerServiceSingleton", () => ({
   getWebViewerService: jest.fn(() => ({ stopActiveWebTabTracking: jest.fn() })),
   startActiveWebTabTracking: jest.fn(),
 }));
 jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: jest.fn(() => false) }));
+jest.mock("@/utils/rendererEventsShim", () => ({ installRendererEventsShim: jest.fn() }));
 jest.mock("@/utils/notificationSound", () => ({ disposeNotificationSound: jest.fn() }));
 jest.mock("@/utils/chatDeepLink", () => ({
   ...jest.requireActual<typeof import("@/utils/chatDeepLink")>("@/utils/chatDeepLink"),
@@ -56,7 +72,14 @@ import CopilotPlugin from "@/main";
 import CopilotView from "@/components/CopilotView";
 import { getSelectedTextContexts, setSelectedTextContexts } from "@/aiParams";
 import { DEFAULT_SETTINGS } from "@/constants";
-import { CHAT_AGENT_VIEWTYPE } from "@/constants";
+import {
+  APPLY_VIEW_TYPE,
+  CHAT_AGENT_VIEWTYPE,
+  CHAT_VIEWTYPE,
+  PLAN_PREVIEW_VIEW_TYPE,
+  RELEVANT_NOTES_VIEWTYPE,
+} from "@/constants";
+import { StartupLoadingView } from "@/components/StartupLoadingView";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import type { WebSelectionTrackingOptions } from "@/services/webViewerService/webViewerServiceSelection";
 import { EditorView } from "@codemirror/view";
@@ -73,9 +96,12 @@ jest.mock("@/services/webViewerService/webViewerServiceSelection", () => ({
     start = mockStartSelectionTracker;
   },
 }));
-import { logError, logInfo, logWarn } from "@/logger";
+import { logError, logFatalError, logInfo, logWarn } from "@/logger";
+import { migrateCommands } from "@/commands/migrator";
+import { migrateSystemPromptsFromSettings } from "@/system-prompts/migration";
 import { logFileManager } from "@/logFileManager";
-import { flushPersistence } from "@/services/settingsPersistence";
+import { flushPersistence, resetPersistenceState } from "@/services/settingsPersistence";
+import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
 import { findChatFileByDeepLinkId } from "@/utils/chatDeepLink";
@@ -521,6 +547,374 @@ describe("main", () => {
       });
     });
 
+    describe("onload()", () => {
+      const pendingTeardown = Symbol.for("obsidian-copilot:pending-teardown");
+
+      beforeEach(() => {
+        jest.clearAllMocks();
+        delete (window as unknown as Record<symbol, unknown>)[pendingTeardown];
+        (flushPersistence as jest.Mock).mockResolvedValue(undefined);
+        (logFileManager.flush as jest.Mock).mockResolvedValue(undefined);
+        (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+        (migrateOpenArtifactsFolder as jest.Mock).mockResolvedValue(undefined);
+      });
+
+      function createLoadingPlugin(loadSettings: () => Promise<void> = async () => undefined) {
+        const plugin = createPluginUnderTest([]);
+        const registrations = {
+          register: jest.fn(),
+          registerEvent: jest.fn(),
+          registerDomEvent: jest.fn(),
+          registerInterval: jest.fn(),
+          registerView: jest.fn<void, [string, (leaf: WorkspaceLeaf) => unknown]>(),
+          registerEditorExtension: jest.fn(),
+          registerObsidianProtocolHandler: jest.fn(),
+          addSettingTab: jest.fn(),
+          addRibbonIcon: jest.fn(),
+          addCommand: jest.fn(),
+        };
+        Object.assign(plugin, registrations, {
+          app: {
+            vault: { adapter: {}, configDir: "config", on: jest.fn(), getRoot: jest.fn() },
+            workspace: {
+              getLeavesOfType: jest.fn(() => []),
+              on: jest.fn(),
+              onLayoutReady: jest.fn(),
+              getActiveViewOfType: jest.fn(() => null),
+            },
+            metadataCache: { on: jest.fn() },
+            loadLocalStorage: jest.fn(),
+          },
+          manifest: { version: "4.0.13" },
+          pluginLifecycleActive: true,
+          startedViewCreators: new Map(),
+          unload: jest.fn(),
+          loadSettings: jest.fn(loadSettings),
+          openChatDeepLink: jest.fn(async () => undefined),
+        });
+        const finishStartup = () =>
+          (plugin as unknown as { initialization: Promise<void> }).initialization;
+        const openCopilotChatLink = (params: Record<string, string>) =>
+          (
+            registrations.registerObsidianProtocolHandler.mock.calls[0][1] as (
+              params: Record<string, string>
+            ) => void
+          )(params);
+        const openRegisteredView = (viewType: string) => {
+          const call = registrations.registerView.mock.calls.find(([type]) => type === viewType);
+          return call?.[1]({} as WorkspaceLeaf);
+        };
+        return { plugin, registrations, finishStartup, openCopilotChatLink, openRegisteredView };
+      }
+
+      function deferred() {
+        let resolve: () => void = () => undefined;
+        const promise = new Promise<void>((done) => (resolve = done));
+        return { promise, resolve };
+      }
+
+      it("returns before settings load so Obsidian can open the vault without waiting for Copilot https://github.com/logancyang/obsidian-copilot/issues/3518", () => {
+        const settings = deferred();
+        const { plugin, registrations } = createLoadingPlugin(() => settings.promise);
+
+        expect(plugin.onload()).toBeUndefined();
+
+        expect(registrations.registerObsidianProtocolHandler).toHaveBeenCalledWith(
+          "copilot-chat",
+          expect.any(Function)
+        );
+        expect(registrations.addCommand).not.toHaveBeenCalled();
+        expect(plugin.isStarted()).toBe(false);
+      });
+
+      it("registers the settings tab and every Copilot view up front, opening restored tabs as a startup loading view https://github.com/logancyang/obsidian-copilot/issues/3518", () => {
+        const settings = deferred();
+        const { plugin, registrations, openRegisteredView } = createLoadingPlugin(
+          () => settings.promise
+        );
+
+        plugin.onload();
+
+        expect(registrations.addSettingTab).toHaveBeenCalledTimes(1);
+        expect(registrations.registerView.mock.calls.map(([type]) => type)).toEqual([
+          CHAT_VIEWTYPE,
+          APPLY_VIEW_TYPE,
+          RELEVANT_NOTES_VIEWTYPE,
+        ]);
+        expect(openRegisteredView(CHAT_VIEWTYPE)).toBeInstanceOf(StartupLoadingView);
+      });
+
+      it("also registers the Agent Chat and plan preview views up front on desktop https://github.com/logancyang/obsidian-copilot/issues/3518", () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        const settings = deferred();
+        const { plugin, registrations } = createLoadingPlugin(() => settings.promise);
+
+        plugin.onload();
+
+        expect(registrations.registerView.mock.calls.map(([type]) => type)).toEqual([
+          CHAT_VIEWTYPE,
+          APPLY_VIEW_TYPE,
+          RELEVANT_NOTES_VIEWTYPE,
+          CHAT_AGENT_VIEWTYPE,
+          PLAN_PREVIEW_VIEW_TYPE,
+        ]);
+      });
+
+      it("opens the real chat view and registers commands and the ribbon icon once startup finishes", async () => {
+        const { plugin, registrations, finishStartup, openRegisteredView } = createLoadingPlugin();
+
+        plugin.onload();
+
+        await finishStartup();
+        expect(plugin.isStarted()).toBe(true);
+        expect(openRegisteredView(CHAT_VIEWTYPE)).toBeInstanceOf(CopilotView);
+        expect(registrations.addCommand).toHaveBeenCalled();
+        expect(registrations.addRibbonIcon).toHaveBeenCalledTimes(1);
+        expect(registrations.registerObsidianProtocolHandler).toHaveBeenCalledTimes(1);
+      });
+
+      it.each([
+        ["settings load", "settings"],
+        ["the .openartifacts folder move, its last startup step", "folder"],
+      ] as const)(
+        "registers no commands and keeps restored tabs loading after Obsidian unloads it during %s https://github.com/logancyang/obsidian-copilot/issues/3518",
+        async (_step, pausedStep) => {
+          const step = deferred();
+          const { plugin, registrations, finishStartup, openRegisteredView } = createLoadingPlugin(
+            pausedStep === "settings" ? () => step.promise : undefined
+          );
+          if (pausedStep === "folder") {
+            (migrateOpenArtifactsFolder as jest.Mock).mockReturnValue(step.promise);
+          }
+
+          plugin.onload();
+          plugin.onunload();
+          step.resolve();
+
+          await finishStartup();
+          expect(registrations.register).not.toHaveBeenCalled();
+          expect(registrations.addCommand).not.toHaveBeenCalled();
+          expect(registrations.addRibbonIcon).not.toHaveBeenCalled();
+          expect(plugin.isStarted()).toBe(false);
+          expect(openRegisteredView(CHAT_VIEWTYPE)).toBeInstanceOf(StartupLoadingView);
+        }
+      );
+
+      it("loads settings only after the previous copy finishes shutting down https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        const calls: string[] = [];
+        const previous = createPluginUnderTest(calls);
+        (logFileManager.flush as jest.Mock).mockImplementation(async () => {
+          calls.push("previousLogFlushed");
+        });
+        const next = createLoadingPlugin(async () => {
+          calls.push("settingsLoaded");
+        });
+
+        previous.onunload();
+        next.plugin.onload();
+
+        await next.finishStartup();
+        expect(calls.slice(-2)).toEqual(["previousLogFlushed", "settingsLoaded"]);
+      });
+
+      it("waits for every earlier copy's shutdown, not only the most recently unloaded one https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        jest.useFakeTimers();
+        try {
+          const slow = createPluginUnderTest([]);
+          Object.assign(slow.agentSessionManager as object, {
+            shutdown: jest.fn(() => new Promise<void>(() => undefined)),
+          });
+          const abandoned = createLoadingPlugin();
+          const next = createLoadingPlugin();
+
+          slow.onunload();
+          abandoned.plugin.onload();
+          abandoned.plugin.onunload();
+          next.plugin.onload();
+          await jest.advanceTimersByTimeAsync(9_999);
+
+          expect(next.plugin.loadSettings).not.toHaveBeenCalled();
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it("skips settings load when Obsidian unloads it while it waits for the previous copy's shutdown https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        const previousTeardown = deferred();
+        (window as unknown as Record<symbol, unknown>)[pendingTeardown] = previousTeardown.promise;
+        const { plugin, finishStartup } = createLoadingPlugin();
+
+        plugin.onload();
+        plugin.onunload();
+        previousTeardown.resolve();
+
+        await finishStartup();
+        expect(resetPersistenceState).not.toHaveBeenCalled();
+        expect(plugin.loadSettings).not.toHaveBeenCalled();
+      });
+
+      it("keeps the next copy from loading settings until a copy unloaded mid-load settles https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        jest.useFakeTimers();
+        try {
+          const previousSettingsStarted = deferred();
+          const previousSettings = deferred();
+          const previous = createLoadingPlugin(() => {
+            previousSettingsStarted.resolve();
+            return previousSettings.promise;
+          });
+          const next = createLoadingPlugin();
+
+          previous.plugin.onload();
+          await previousSettingsStarted.promise;
+          previous.plugin.onunload();
+          next.plugin.onload();
+          await jest.advanceTimersByTimeAsync(9_999);
+          expect(next.plugin.loadSettings).not.toHaveBeenCalled();
+          previousSettings.resolve();
+
+          await next.finishStartup();
+          expect(next.plugin.loadSettings).toHaveBeenCalledTimes(1);
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it("starts anyway after 10 seconds when the previous copy's shutdown hangs https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        jest.useFakeTimers();
+        try {
+          (window as unknown as Record<symbol, unknown>)[pendingTeardown] = new Promise(
+            () => undefined
+          );
+          const { plugin, finishStartup } = createLoadingPlugin();
+
+          plugin.onload();
+          await jest.advanceTimersByTimeAsync(9_999);
+          expect(plugin.loadSettings).not.toHaveBeenCalled();
+          await jest.advanceTimersByTimeAsync(1);
+
+          await finishStartup();
+          expect(plugin.loadSettings).toHaveBeenCalledTimes(1);
+          expect(logWarn).toHaveBeenCalledWith(
+            "Copilot started before its previous copy finished shutting down.",
+            expect.anything()
+          );
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it("delays only the first start after a shutdown that never finishes https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        jest.useFakeTimers();
+        try {
+          (window as unknown as Record<symbol, unknown>)[pendingTeardown] = new Promise(
+            () => undefined
+          );
+          const first = createLoadingPlugin();
+          first.plugin.onload();
+          await jest.advanceTimersByTimeAsync(10_000);
+          await first.finishStartup();
+          const second = createLoadingPlugin();
+
+          first.plugin.onunload();
+          second.plugin.onload();
+          await jest.advanceTimersByTimeAsync(1);
+
+          expect(second.plugin.loadSettings).toHaveBeenCalledTimes(1);
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it("opens a copilot-chat link that arrives during startup once the chat managers exist https://github.com/logancyang/obsidian-copilot/issues/3271", async () => {
+        const settings = deferred();
+        const { plugin, finishStartup, openCopilotChatLink } = createLoadingPlugin(
+          () => settings.promise
+        );
+
+        plugin.onload();
+        openCopilotChatLink({ action: "copilot-chat", id: "epoch:1" });
+        expect(plugin.openChatDeepLink).not.toHaveBeenCalled();
+        settings.resolve();
+        await finishStartup();
+
+        expect(plugin.openChatDeepLink).toHaveBeenCalledWith({
+          action: "copilot-chat",
+          id: "epoch:1",
+        });
+      });
+
+      it("ignores a copilot-chat link when Copilot is unloaded before startup finishes https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        const settings = deferred();
+        const { plugin, finishStartup, openCopilotChatLink } = createLoadingPlugin(
+          () => settings.promise
+        );
+
+        plugin.onload();
+        openCopilotChatLink({ action: "copilot-chat", id: "epoch:1" });
+        plugin.onunload();
+        settings.resolve();
+        await finishStartup();
+
+        expect(plugin.openChatDeepLink).not.toHaveBeenCalled();
+      });
+
+      it("ignores a copilot-chat link when Copilot is unloaded before the link's queued open runs https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        const { plugin, finishStartup, openCopilotChatLink } = createLoadingPlugin();
+        plugin.onload();
+        await finishStartup();
+
+        openCopilotChatLink({ action: "copilot-chat", id: "epoch:1" });
+        plugin.onunload();
+        await finishStartup();
+
+        expect(plugin.openChatDeepLink).not.toHaveBeenCalled();
+      });
+
+      it("reports a startup failure even with debug logging off, then unloads what startup registered https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+        const failure = new Error("settings unreadable");
+        const { plugin, finishStartup } = createLoadingPlugin(async () => {
+          throw failure;
+        });
+
+        plugin.onload();
+
+        await finishStartup();
+        expect(logFatalError).toHaveBeenCalledWith("Copilot failed to start.", failure);
+        expect(Notice).toHaveBeenCalledWith(
+          "Copilot failed to start. Check the console for details."
+        );
+        expect(plugin.unload).toHaveBeenCalledTimes(1);
+      });
+
+      it.each([
+        ["runs", "stays loaded", true],
+        ["skips", "unloads", false],
+      ] as const)(
+        "%s the legacy command and system-prompt migrations when Copilot %s while their files load https://github.com/logancyang/obsidian-copilot/issues/3518",
+        async (_outcome, _lifecycle, staysLoaded) => {
+          const { plugin, finishStartup } = createLoadingPlugin();
+          plugin.onload();
+          await finishStartup();
+          const layoutReady = (plugin.app.workspace.onLayoutReady as jest.Mock).mock
+            .calls[0][0] as () => void;
+          const filesLoaded = deferred();
+          Object.assign(plugin, {
+            customCommandRegister: { initialize: () => filesLoaded.promise, cleanup: jest.fn() },
+            systemPromptRegister: { initialize: () => filesLoaded.promise, cleanup: jest.fn() },
+            projectRegister: { initialize: async () => null, cleanup: jest.fn() },
+          });
+
+          layoutReady();
+          if (!staysLoaded) plugin.onunload();
+          filesLoaded.resolve();
+          await filesLoaded.promise;
+
+          expect(migrateCommands).toHaveBeenCalledTimes(staysLoaded ? 1 : 0);
+          expect(migrateSystemPromptsFromSettings).toHaveBeenCalledTimes(staysLoaded ? 1 : 0);
+        }
+      );
+    });
+
     describe("onunload()", () => {
       beforeEach(() => {
         jest.clearAllMocks();
@@ -546,36 +940,28 @@ describe("main", () => {
         expect(plugin.isPluginLifecycleActive()).toBe(false);
       });
 
-      it("flushes persistence synchronously, before returning to Obsidian", () => {
-        const calls: string[] = [];
-        const plugin = createPluginUnderTest(calls);
-
-        plugin.onunload();
-
-        expect(flushPersistence).toHaveBeenCalledTimes(1);
-        expect(calls).toEqual([]);
-      });
-
       it("releases audio before asynchronous teardown can overlap a later plugin lifecycle (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
         const calls: string[] = [];
-        let releasePersistence: () => void = () => undefined;
+        let releaseSessions: () => void = () => undefined;
         (disposeNotificationSound as jest.Mock).mockImplementation(() => calls.push("audio"));
-        (flushPersistence as jest.Mock).mockImplementation(() => {
-          calls.push("persistence");
-          return new Promise<void>((resolve) => {
-            releasePersistence = resolve;
-          });
-        });
         const plugin = createPluginUnderTest(calls);
+        Object.assign(plugin, {
+          agentSessionManager: {
+            shutdown: () =>
+              new Promise<void>((resolve) => {
+                releaseSessions = resolve;
+              }),
+          },
+        });
 
         plugin.onunload();
 
-        expect(calls).toEqual(["audio", "persistence"]);
-        releasePersistence();
+        expect(calls).toEqual(["audio", "highlight", "modelDiscovery"]);
+        releaseSessions();
         await flushTeardown();
       });
 
-      it("tears down collaborators in order, flushing persistence before session shutdown and the log last", async () => {
+      it("tears down collaborators in order, draining settings writes only after it stops queuing them and the log last https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
         const calls: string[] = [];
         const plugin = createPluginUnderTest(calls);
         (flushPersistence as jest.Mock).mockImplementation(async () => {
@@ -589,7 +975,6 @@ describe("main", () => {
         await flushTeardown();
 
         expect(calls).toEqual([
-          "persistence",
           "highlight",
           "modelDiscovery",
           "sessions",
@@ -597,6 +982,7 @@ describe("main", () => {
           "systemPrompts",
           "projects",
           "settings",
+          "persistence",
           "modelManagement",
           "logFlush",
         ]);

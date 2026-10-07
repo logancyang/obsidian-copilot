@@ -41,6 +41,9 @@ export class CustomCommandRegister {
 
   async initialize() {
     await loadAllCustomCommands(this.app);
+    // Startup migrations outlive an unload that lands while commands load, and commands added
+    // to an unloaded plugin are never removed. https://github.com/logancyang/obsidian-copilot/issues/3518
+    if (this.disposed) return;
     this.registerCommands();
   }
 

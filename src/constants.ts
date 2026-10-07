@@ -13,6 +13,14 @@ export const CHAT_VIEWTYPE = "copilot-chat-view";
 export const CHAT_AGENT_VIEWTYPE = "copilot-agent-chat-view";
 export const AGENT_CHAT_MODE = "agent";
 export const RELEVANT_NOTES_VIEWTYPE = "copilot-relevant-notes-view";
+export const PLAN_PREVIEW_VIEW_TYPE = "copilot-plan-preview-view";
+export const APPLY_VIEW_TYPE = "obsidian-copilot-apply-view";
+export const SHARED_VIEW_TYPES = [CHAT_VIEWTYPE, APPLY_VIEW_TYPE, RELEVANT_NOTES_VIEWTYPE] as const;
+export const DESKTOP_VIEW_TYPES = [
+  ...SHARED_VIEW_TYPES,
+  CHAT_AGENT_VIEWTYPE,
+  PLAN_PREVIEW_VIEW_TYPE,
+] as const;
 
 export const COPILOT_AGENT_ICON_ID = "copilot-agent";
 

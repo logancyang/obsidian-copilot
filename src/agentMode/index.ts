@@ -41,7 +41,7 @@ export type { CopilotMode, ModelSelection } from "./session/types";
 export { AgentDefaultModelSetting } from "./ui/AgentDefaultModelSetting";
 export { ModelEnableList } from "@/components/ui/ModelEnableList";
 export type { ModelEnableGroup } from "@/components/ui/ModelEnableList";
-export { PlanPreviewView, PLAN_PREVIEW_VIEW_TYPE } from "./ui/PlanPreviewView";
+export { PlanPreviewView } from "./ui/PlanPreviewView";
 export { ReportIssueModal } from "./ui/ReportIssueModal";
 export {
   backendDisplayOrder,
