@@ -486,29 +486,33 @@ describe("AgentChatPersistenceManager", () => {
       ["has no epoch", []],
       ["has a non-numeric epoch", ["epoch: soon"]],
       ["has a zero epoch", ["epoch: 0"]],
-    ])("falls back to the visible timestamp when the note %s", async (_label, epochLines) => {
-      const path = "test-folder/agent__no-epoch.md";
-      await app.vault.adapter.write(
-        path,
-        [
-          "---",
-          ...epochLines,
-          "mode: agent",
-          "backendId: claude",
-          "---",
-          "",
-          "**user**: hi",
-          "[Timestamp: 2026/09/10 23:49:11]",
-        ].join("\n")
-      );
-      const visibleEpoch = new Date("2026/09/10 23:49:11").getTime();
+      ["has a fractional epoch that chat links cannot carry", ["epoch: 1789109351267.5"]],
+    ])(
+      "falls back to the visible timestamp when the note %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/661)",
+      async (_label, epochLines) => {
+        const path = "test-folder/agent__no-epoch.md";
+        await app.vault.adapter.write(
+          path,
+          [
+            "---",
+            ...epochLines,
+            "mode: agent",
+            "backendId: claude",
+            "---",
+            "",
+            "**user**: hi",
+            "[Timestamp: 2026/09/10 23:49:11]",
+          ].join("\n")
+        );
+        const visibleEpoch = new Date("2026/09/10 23:49:11").getTime();
 
-      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
-      expect(loaded.messages[0].timestamp?.epoch).toBe(visibleEpoch);
+        const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
+        expect(loaded.messages[0].timestamp?.epoch).toBe(visibleEpoch);
 
-      const saved = await manager.saveSession(loaded.messages, "claude");
-      expect(app.files.get(saved!.path)!.contents).toContain(`epoch: ${visibleEpoch}\n`);
-    });
+        const saved = await manager.saveSession(loaded.messages, "claude");
+        expect(app.files.get(saved!.path)!.contents).toContain(`epoch: ${visibleEpoch}\n`);
+      }
+    );
 
     it("ignores malformed usage JSON instead of failing the load", async () => {
       const path = "test-folder/agent__badusage.md";

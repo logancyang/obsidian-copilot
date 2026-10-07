@@ -212,7 +212,7 @@ export class AgentChatPersistenceManager {
     const epoch = Number(frontmatter.epoch);
     const messages = this.parseChatBody(
       body,
-      Number.isFinite(epoch) && epoch > 0 ? epoch : undefined
+      Number.isSafeInteger(epoch) && epoch > 0 ? epoch : undefined
     );
 
     logInfo(
