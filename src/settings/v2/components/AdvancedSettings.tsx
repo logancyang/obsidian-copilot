@@ -1,4 +1,3 @@
-import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
@@ -27,8 +26,6 @@ import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
-import { getPersistedDeviceId } from "@/utils/deviceId";
-import { createReportUploader } from "@/utils/reportUpload.brevilabs";
 
 const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-only)";
 
@@ -62,7 +59,7 @@ export const AdvancedSettings: React.FC = () => {
       return;
     }
     void (async () => {
-      const { ReportIssueModal } = await import("@/agentMode");
+      const { openReportIssueModal } = await import("@/agentMode");
       const copilotPlugin = (
         app as unknown as {
           plugins: {
@@ -77,29 +74,14 @@ export const AdvancedSettings: React.FC = () => {
         copilotPlugin?.agentSessionManager?.getActiveSession?.()?.backendId ??
         settings.agentMode.activeBackend;
       const pluginVersion = copilotPlugin?.manifest?.version ?? "unknown";
-      new ReportIssueModal({
+      openReportIssueModal({
         app,
         activeBackend,
         pluginVersion,
-        canCaptureTarget: () => app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE).length > 0,
-        resolveCaptureTarget: () => {
-          const leaf = app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE)[0];
-          if (!leaf) return null;
-          app.workspace.revealLeaf(leaf);
-          const view = leaf.view as unknown as {
-            contentEl?: HTMLElement;
-            containerEl?: HTMLElement;
-          };
-          return view.contentEl ?? view.containerEl ?? null;
-        },
         dismissSettings: () => {
           (app as unknown as { setting: { close: () => void } }).setting.close();
         },
-        uploader: createReportUploader({
-          installId: () => getPersistedDeviceId(app),
-          clientVersion: pluginVersion,
-        }),
-      }).open();
+      });
     })();
   }, [app, settings.agentMode.activeBackend]);
 

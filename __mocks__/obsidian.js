@@ -79,6 +79,7 @@ module.exports = {
       this.titleEl.className = "modal-title";
       this.contentEl = this.modalEl.appendChild(doc.createElement("div"));
       this.contentEl.className = "modal-content";
+      this.setTitle = jest.fn();
       this.open = jest.fn();
       this.close = jest.fn();
       this.onOpen = jest.fn();

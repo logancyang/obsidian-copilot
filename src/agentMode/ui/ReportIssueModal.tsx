@@ -1,4 +1,5 @@
 import { frameSink } from "@/agentMode/session/debugSink";
+import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
 import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { logFileManager } from "@/logFileManager";
@@ -11,7 +12,9 @@ import {
   getNodeReportRuntime,
   type ReportLogRequest,
 } from "@/utils/issueReport";
+import { getPersistedDeviceId } from "@/utils/deviceId";
 import { ReportUploadError, type ReportUploader } from "@/utils/reportUpload";
+import { createReportUploader } from "@/utils/reportUpload.brevilabs";
 import { findLatestOpencodeLog } from "@/utils/opencodeLog";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { captureBehindOverlay } from "./reportScreenshot";
@@ -41,6 +44,40 @@ export interface ReportIssueModalParams {
   activeBackend: string;
   pluginVersion: string;
   uploader: ReportUploader;
+}
+
+export function openReportIssueModal({
+  app,
+  activeBackend,
+  pluginVersion,
+  dismissSettings,
+}: Pick<
+  ReportIssueModalParams,
+  "app" | "activeBackend" | "pluginVersion" | "dismissSettings"
+>): ReportIssueModal {
+  const modal = new ReportIssueModal({
+    app,
+    activeBackend,
+    pluginVersion,
+    dismissSettings,
+    canCaptureTarget: () => app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE).length > 0,
+    resolveCaptureTarget: () => {
+      const leaf = app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE)[0];
+      if (!leaf) return null;
+      app.workspace.revealLeaf(leaf);
+      const view = leaf.view as unknown as {
+        contentEl?: HTMLElement;
+        containerEl?: HTMLElement;
+      };
+      return view.contentEl ?? view.containerEl ?? null;
+    },
+    uploader: createReportUploader({
+      installId: () => getPersistedDeviceId(app),
+      clientVersion: pluginVersion,
+    }),
+  });
+  modal.open();
+  return modal;
 }
 
 interface ElectronShell {
