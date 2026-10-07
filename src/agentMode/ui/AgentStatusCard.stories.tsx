@@ -55,7 +55,7 @@ export const LoggedServiceFailure: StoryObj<AgentStatusCardProps> = {
     summary: "opencode session error",
     tone: "error",
     message:
-      "Internal error: Internal service failure\n\nopencode logged:\nPlatformError: Unknown: FileSystem.realPath (/Users/<user>/Library/Mobile Documents)\n[cause]: Error: EPERM: operation not permitted, lstat '/Users/<user>/Library/Mobile Documents'",
+      "Internal error: Internal service failure\n\nPlatformError: Unknown: FileSystem.realPath (/Users/<user>/Library/Mobile Documents)\n[cause]: Error: EPERM: operation not permitted, lstat '/Users/<user>/Library/Mobile Documents'",
     action: { label: "Retry", onClick: () => undefined },
   },
 };
