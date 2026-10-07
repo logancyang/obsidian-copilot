@@ -50,6 +50,16 @@ export const LongErrorRetry: StoryObj<AgentStatusCardProps> = {
   },
 };
 
+export const LoggedServiceFailure: StoryObj<AgentStatusCardProps> = {
+  args: {
+    summary: "opencode session error",
+    tone: "error",
+    message:
+      "Internal error: Internal service failure\n\nPlatformError: Unknown: FileSystem.realPath (/Users/<user>/Library/Mobile Documents)\n[cause]: Error: EPERM: operation not permitted, lstat '/Users/<user>/Library/Mobile Documents'",
+    action: { label: "Retry", onClick: () => undefined },
+  },
+};
+
 export const ManagedUpgradeRequired: StoryObj<AgentStatusCardProps> = {
   args: {
     summary: "opencode update required",
