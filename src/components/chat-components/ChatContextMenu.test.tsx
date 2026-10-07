@@ -13,10 +13,6 @@ jest.mock("@/context", () => ({
   useApp: () => ({}),
 }));
 
-jest.mock("@/aiParams", () => ({
-  useChainType: () => ["llm_chain"],
-}));
-
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
 jest.mock("@/utils/desktopRuntime", () => ({
@@ -24,7 +20,6 @@ jest.mock("@/utils/desktopRuntime", () => ({
 }));
 
 jest.mock("@/utils", () => ({
-  isPlusChain: () => false,
   openFileInWorkspace: jest.fn(),
 }));
 
