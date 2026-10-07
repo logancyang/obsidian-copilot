@@ -52,7 +52,7 @@ interface MockBackend {
   asBackend: BackendProcess;
   registerHandler: jest.Mock;
   emit: (event: SessionEvent) => void;
-  emitUpdate: (update: SessionEvent["update"]) => void;
+  emitUpdate: (update: SessionEvent["update"], occurredAt?: number) => void;
   prompt: jest.Mock;
   cancel: jest.Mock;
   closeSession: jest.Mock;
@@ -115,7 +115,12 @@ function makeMockBackend(): MockBackend {
     setSessionMode,
     listSessions,
     emit: (event) => handler?.(event),
-    emitUpdate: (update) => handler?.({ sessionId: "acp-1", update }),
+    emitUpdate: (update, occurredAt) =>
+      handler?.({
+        sessionId: "acp-1",
+        update,
+        ...(occurredAt === undefined ? {} : { occurredAt }),
+      }),
   };
 }
 
@@ -715,12 +720,50 @@ describe("AgentSession", () => {
         expect(tool).toMatchObject({ id: "t1", status: "completed" });
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 does not open a plan-approval card or a todo list for a replayed ExitPlanMode call or plan", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/643 dates replayed bubbles from their frames' times and times the agent's turn from its prompt to its last frame", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+        const prompt = Date.parse("2026-10-03T19:31:18.000Z");
+        const reply = Date.parse("2026-10-03T19:31:22.000Z");
+        const turnEnd = Date.parse("2026-10-03T19:31:30.500Z");
+
+        mock.emitUpdate(replayText("user_message_chunk", "read it", "u1"), prompt);
+        mock.emitUpdate(replayText("agent_thought_chunk", "reading", "a1"), reply);
+        mock.emitUpdate(
+          { sessionUpdate: "tool_call", toolCallId: "t1", title: "read", status: "in_progress" },
+          reply + 1_000
+        );
+        mock.emitUpdate(
+          { sessionUpdate: "tool_call_update", toolCallId: "t1", status: "completed" },
+          reply + 2_000
+        );
+        mock.emitUpdate(replayText("agent_message_chunk", "done", "a2"), turnEnd);
+        session.completeResume(emptyState());
+
+        const [user, ai] = session.store.getDisplayMessages();
+        expect(user.timestamp?.epoch).toBe(prompt);
+        expect(ai.timestamp?.epoch).toBe(reply);
+        expect(ai.turnDurationMs).toBe(turnEnd - prompt);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/643 leaves replayed bubbles undated and untimed when their frames carry no time", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "test", "u1"));
+        mock.emitUpdate(replayText("agent_message_chunk", "Hello", "a1"));
+        session.completeResume(emptyState());
+
+        const messages = session.store.getDisplayMessages();
+        expect(messages.map((m) => m.timestamp)).toEqual([null, null]);
+        expect(messages[1].turnDurationMs).toBeUndefined();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 does not open a plan-approval card for a replayed ExitPlanMode call", async () => {
         const mock = makeMockBackend();
         const session = makeAwaitingResumeSession(mock);
         const onCurrentPlanChanged = jest.fn();
-        const onCurrentTodoListChanged = jest.fn();
-        subscribeTo(session, { onCurrentPlanChanged, onCurrentTodoListChanged });
+        subscribeTo(session, { onCurrentPlanChanged });
 
         mock.emitUpdate({
           sessionUpdate: "tool_call",
@@ -730,18 +773,33 @@ describe("AgentSession", () => {
           status: "completed",
           rawInput: { plan: "# Old plan\n\n1. step" },
         });
-        mock.emitUpdate({
-          sessionUpdate: "plan",
-          entries: [{ content: "step", status: "pending", priority: "medium" }],
-        });
         session.completeResume(emptyState());
         await session.ready;
 
         expect(session.getCurrentPlan()).toBeNull();
-        expect(session.getCurrentTodoList()).toBeNull();
         expect(onCurrentPlanChanged).not.toHaveBeenCalled();
-        expect(onCurrentTodoListChanged).not.toHaveBeenCalled();
         expect(session.getStatus()).toBe("idle");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/643 restores the last replayed task list as the current todo list", async () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+        const onCurrentTodoListChanged = jest.fn();
+        subscribeTo(session, { onCurrentTodoListChanged });
+
+        mock.emitUpdate({
+          sessionUpdate: "plan",
+          entries: [{ content: "step", status: "pending", priority: "medium" }],
+        });
+        mock.emitUpdate({
+          sessionUpdate: "plan",
+          entries: [{ content: "step", status: "completed", priority: "medium" }],
+        });
+        session.completeResume(emptyState());
+        await session.ready;
+
+        expect(session.getCurrentTodoList()).toEqual([{ content: "step", status: "completed" }]);
+        expect(onCurrentTodoListChanged).toHaveBeenCalled();
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 keeps handling state and usage updates normally while history is collected", () => {

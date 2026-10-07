@@ -382,40 +382,52 @@ function translateUserMessage(
 
   const out: SessionEvent[] = [];
   for (const block of content) {
-    const b = block as {
-      type?: string;
-      tool_use_id?: string;
-      content?: unknown;
-      is_error?: boolean;
-    };
+    const b = block as ToolResultBlock;
     if (b.type !== "tool_result" || !b.tool_use_id) continue;
 
     const resultAction = decision.resultActions.get(b.tool_use_id);
     if (resultAction?.kind === "omit") continue;
 
-    let status: AgentToolStatus;
-    if (resultAction?.kind === "preserve_status") {
-      status = resultAction.status;
-    } else {
-      status = b.is_error ? "failed" : "completed";
-    }
-    const outputs = toolResultContent(b.content);
-    out.push(
-      event(sessionId, {
-        sessionUpdate: "tool_call_update",
-        toolCallId: b.tool_use_id,
-        status,
-        content: outputs,
-      })
-    );
-    const planUpdate = planUpdateFromClaudeToolResult(
-      state.claudeTasks,
-      b.tool_use_id,
-      b.is_error ? null : b.content
-    );
-    if (!b.is_error && planUpdate) out.push(event(sessionId, planUpdate));
+    const status =
+      resultAction?.kind === "preserve_status" ? resultAction.status : toolResultStatus(b);
+    out.push(...toolResultEvents(sessionId, state, b.tool_use_id, b, status));
   }
   out.push(...taskUpdateEvents(sessionId, decision.updates));
+  return out;
+}
+
+interface ToolResultBlock {
+  type?: string;
+  tool_use_id?: string;
+  content?: unknown;
+  is_error?: boolean;
+}
+
+function toolResultStatus(block: ToolResultBlock): AgentToolStatus {
+  return block.is_error ? "failed" : "completed";
+}
+
+function toolResultEvents(
+  sessionId: SessionId,
+  state: TranslatorState,
+  toolUseId: string,
+  block: ToolResultBlock,
+  status: AgentToolStatus
+): SessionEvent[] {
+  const out = [
+    event(sessionId, {
+      sessionUpdate: "tool_call_update",
+      toolCallId: toolUseId,
+      status,
+      content: toolResultContent(block.content),
+    }),
+  ];
+  const planUpdate = planUpdateFromClaudeToolResult(
+    state.claudeTasks,
+    toolUseId,
+    block.is_error ? null : block.content
+  );
+  if (!block.is_error && planUpdate) out.push(event(sessionId, planUpdate));
   return out;
 }
 
@@ -499,4 +511,133 @@ function couldBeCompleteJson(raw: string): boolean {
     );
   }
   return false;
+}
+
+interface ClaudeTranscriptEntry {
+  type?: string;
+  uuid?: string;
+  timestamp?: unknown;
+  isMeta?: boolean;
+  isSidechain?: boolean;
+  isCompactSummary?: boolean;
+  message?: { content?: unknown };
+}
+
+export function replayClaudeTranscript(
+  jsonl: string,
+  sessionId: SessionId,
+  claudeTasks: ClaudeTaskPlanState
+): SessionEvent[] {
+  const state = createTranslatorState(claudeTasks);
+  const out: SessionEvent[] = [];
+  const unansweredToolCallIds = new Set<string>();
+  for (const line of jsonl.split(/\r?\n/)) {
+    const entry = parseTranscriptEntry(line);
+    // Meta, subagent, and compaction entries are transcript bookkeeping the live chat never showed. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
+    if (!entry || entry.isMeta || entry.isSidechain || entry.isCompactSummary) continue;
+    const content = entry.message?.content;
+    const events =
+      entry.type === "assistant"
+        ? replayAssistantContent(content, sessionId, state)
+        : entry.type === "user"
+          ? replayUserContent(content, entry.uuid, sessionId, state)
+          : [];
+    const occurredAt = typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
+    for (const e of events) {
+      trackUnansweredToolCall(unansweredToolCallIds, e.update);
+      out.push(Number.isFinite(occurredAt) ? { ...e, occurredAt } : e);
+    }
+  }
+  // A tool call the transcript never answered was cut off with its turn, and nothing will settle it after the replay. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
+  for (const toolCallId of unansweredToolCallIds) {
+    out.push(event(sessionId, { sessionUpdate: "tool_call_update", toolCallId, status: "failed" }));
+  }
+  return out;
+}
+
+function trackUnansweredToolCall(unanswered: Set<string>, update: SessionUpdate): void {
+  if (update.sessionUpdate === "tool_call") unanswered.add(update.toolCallId);
+  if (
+    update.sessionUpdate === "tool_call_update" &&
+    (update.status === "completed" || update.status === "failed")
+  ) {
+    unanswered.delete(update.toolCallId);
+  }
+}
+
+function parseTranscriptEntry(line: string): ClaudeTranscriptEntry | null {
+  if (!line.trim()) return null;
+  try {
+    return JSON.parse(line) as ClaudeTranscriptEntry;
+  } catch {
+    return null;
+  }
+}
+
+function replayAssistantContent(
+  content: unknown,
+  sessionId: SessionId,
+  state: TranslatorState
+): SessionEvent[] {
+  if (!Array.isArray(content)) return [];
+  const out: SessionEvent[] = [];
+  for (const block of content) {
+    const b = block as {
+      type?: string;
+      text?: unknown;
+      thinking?: unknown;
+      id?: string;
+      name?: string;
+      input?: unknown;
+    };
+    if (b.type === "text" && typeof b.text === "string") {
+      out.push(textChunk(sessionId, "agent_message_chunk", b.text));
+    } else if (b.type === "thinking" && typeof b.thinking === "string") {
+      out.push(textChunk(sessionId, "agent_thought_chunk", b.thinking));
+    } else if (b.type === "tool_use" && b.id && b.name) {
+      const { tool: name, mcpServer } = resolveToolName(b.name);
+      const input = b.input ?? {};
+      out.push(event(sessionId, makeToolCallUpdate(b.id, b.name, input)));
+      out.push(...todoPlanEvents(sessionId, state, b.id, name, mcpServer, undefined, input));
+    }
+  }
+  return out;
+}
+
+function replayUserContent(
+  content: unknown,
+  messageId: string | undefined,
+  sessionId: SessionId,
+  state: TranslatorState
+): SessionEvent[] {
+  if (typeof content === "string") {
+    return [textChunk(sessionId, "user_message_chunk", content, messageId)];
+  }
+  if (!Array.isArray(content)) return [];
+  const blocks = content as (ToolResultBlock & { text?: unknown })[];
+  if (!blocks.some((b) => b?.type === "tool_result")) {
+    const text = blocks
+      .flatMap((b) => (b?.type === "text" && typeof b.text === "string" ? [b.text] : []))
+      .join("\n\n");
+    return text ? [textChunk(sessionId, "user_message_chunk", text, messageId)] : [];
+  }
+  // A replayed background task has no later notification to settle it, so its result alone sets the status. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
+  return blocks.flatMap((b) =>
+    b?.type === "tool_result" && b.tool_use_id
+      ? toolResultEvents(sessionId, state, b.tool_use_id, b, toolResultStatus(b))
+      : []
+  );
+}
+
+function textChunk(
+  sessionId: SessionId,
+  sessionUpdate: "user_message_chunk" | "agent_message_chunk" | "agent_thought_chunk",
+  text: string,
+  messageId?: string
+): SessionEvent {
+  return event(sessionId, {
+    sessionUpdate,
+    content: { type: "text", text },
+    ...(messageId === undefined ? {} : { messageId }),
+  });
 }

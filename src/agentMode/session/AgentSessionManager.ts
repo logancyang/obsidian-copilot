@@ -2094,7 +2094,6 @@ export class AgentSessionManager {
       this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw err;
     }
-    await this.hydrateResumedTranscript(session, backendId, sessionId);
     if (entry?.title) {
       session.restoreLabel(entry.title, entry.titleSource === "user" ? "user" : "agent");
     }
@@ -2105,25 +2104,6 @@ export class AgentSessionManager {
       this.notify();
     }
     return session;
-  }
-
-  private async hydrateResumedTranscript(
-    session: AgentSession,
-    backendId: BackendId,
-    sessionId: SessionId
-  ): Promise<void> {
-    const proc = this.backends.get(backendId);
-    if (!proc?.readPersistedTranscript) return;
-    if (session.store.getDisplayMessages().length > 0) return;
-    try {
-      const transcript = await proc.readPersistedTranscript({
-        sessionId,
-        cwd: this.resolveSessionCwd(session.projectId),
-      });
-      if (transcript.length > 0) session.loadDisplayMessages(transcript);
-    } catch (e) {
-      logWarn(`[AgentMode] could not hydrate transcript for ${sessionId}`, e);
-    }
   }
 
   private async tryResumeSessionFromHistory(
@@ -2680,7 +2660,6 @@ export class AgentSessionManager {
         return null;
       });
       if (resumed) {
-        await this.hydrateResumedTranscript(resumed, backendId, resumableSessionId);
         if (label && !resumed.getLabel()) resumed.restoreLabel(label, labelSource ?? "agent");
         this.setActiveSession(resumed.internalId);
         return resumed;
