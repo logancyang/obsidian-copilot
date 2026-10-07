@@ -18,7 +18,7 @@ You can also select the Copilot icon in a note's header. Agent Chat opens with t
 
 You can also add context while typing:
 
-- Type `[[` and select a note to insert `[[Note title]]`.
+- Type `[[` and select a note, PDF, or canvas to insert `[[Note title]]`.
 - Type `@` to browse the available context categories.
 - Choose a folder to insert its path as `{Folder/path}`.
 - Paste or drag an image into the composer. The selected model must support images.
