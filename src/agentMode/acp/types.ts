@@ -18,4 +18,5 @@ export interface AcpBackend {
   readPlanUsage?(): Promise<PlanUsageReading>;
   planUsageAppliesTo?(wireModelId: string | null | undefined): boolean;
   readContextWindow?(wireModelId: string | null | undefined): Promise<number | null>;
+  failureCauseFromLog?(stderrLine: string): string | null;
 }

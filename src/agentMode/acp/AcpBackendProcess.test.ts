@@ -113,20 +113,29 @@ jest.mock("@agentclientprotocol/sdk", () => {
 
 const exitListeners = new Set<() => void>();
 let mockProcessIsRunning = true;
+const mockProcessStderr: ((line: string) => void)[] = [];
 
 jest.mock("./AcpProcessManager", () => ({
-  AcpProcessManager: jest.fn().mockImplementation(() => ({
-    start: () => ({
-      stdin: new WritableStream<Uint8Array>(),
-      stdout: new ReadableStream<Uint8Array>(),
-    }),
-    onExit: (fn: () => void) => {
-      exitListeners.add(fn);
-      return () => exitListeners.delete(fn);
-    },
-    isRunning: () => mockProcessIsRunning,
-    shutdown: jest.fn().mockResolvedValue(undefined),
-  })),
+  AcpProcessManager: jest.fn().mockImplementation(() => {
+    const stderrListeners = new Set<(line: string) => void>();
+    mockProcessStderr.push((line) => stderrListeners.forEach((fn) => fn(line)));
+    return {
+      start: () => ({
+        stdin: new WritableStream<Uint8Array>(),
+        stdout: new ReadableStream<Uint8Array>(),
+      }),
+      onExit: (fn: () => void) => {
+        exitListeners.add(fn);
+        return () => exitListeners.delete(fn);
+      },
+      onStderrLine: (fn: (line: string) => void) => {
+        stderrListeners.add(fn);
+        return () => stderrListeners.delete(fn);
+      },
+      isRunning: () => mockProcessIsRunning,
+      shutdown: jest.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 const settle = () => new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -194,6 +203,7 @@ describe("AcpBackendProcess", () => {
   describe("AcpBackendProcess", () => {
     beforeEach(() => {
       exitListeners.clear();
+      mockProcessStderr.length = 0;
       mockProcessIsRunning = true;
       mockInitializeResult = { protocolVersion: 1 };
       mockInitializeRequest.mockClear();
@@ -1101,14 +1111,20 @@ describe("AcpBackendProcess", () => {
     });
 
     describe("newSession()", () => {
-      async function makeListingBackend(): Promise<AcpBackendProcess> {
+      const LOGGED_FAILURE = "500 /api/model";
+      const failureCauseFromLog = (line: string) =>
+        line.startsWith("500 ") ? `EPERM: operation not permitted (${line.slice(4)})` : null;
+
+      async function makeListingBackend(
+        backendOverrides: Partial<AcpBackend> = {}
+      ): Promise<AcpBackendProcess> {
         mockInitializeResult = {
           protocolVersion: 1,
           agentCapabilities: { sessionCapabilities: { list: {} } },
         };
         const backend = new AcpBackendProcess(
           buildApp(),
-          buildStubBackend(),
+          buildStubBackend(backendOverrides),
           "1.0.0",
           buildStubDescriptor()
         );
@@ -1212,6 +1228,66 @@ describe("AcpBackendProcess", () => {
           "opencode's internal service failed to start. Check the Copilot log for its error."
         );
         expect(recover).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/662 adds the cause this process logged for the failed request to the internal error", async () => {
+        const backend = await makeListingBackend({ failureCauseFromLog });
+        const stderr = mockProcessStderr.at(-1)!;
+        mockNewSession.mockImplementationOnce(async () => {
+          stderr("200 /api/session");
+          stderr(LOGGED_FAILURE);
+          stderr("500 /api/agent");
+          throw serviceFailure();
+        });
+
+        const error = await backend.newSession({ cwd: "/vault" }).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(RequestError);
+        expect((error as RequestError).code).toBe(-32603);
+        expect((error as RequestError).message).toBe(
+          "Internal error: Internal service failure\n\nopencode logged:\nEPERM: operation not permitted (/api/model)"
+        );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/662 keeps a cause the process logs after the error but before the service probe answers", async () => {
+        const backend = await makeListingBackend({ failureCauseFromLog });
+        const stderr = mockProcessStderr.at(-1)!;
+        mockNewSession.mockRejectedValueOnce(serviceFailure());
+        mockListSessions.mockImplementationOnce(async () => {
+          stderr(LOGGED_FAILURE);
+          throw serviceFailure();
+        });
+
+        await expect(backend.newSession({ cwd: "/vault" })).rejects.toThrow(
+          "opencode's internal service failed to start. Check the Copilot log for its error.\n\nopencode logged:\nEPERM: operation not permitted (/api/model)"
+        );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/662 ignores causes logged before the request or by another backend process", async () => {
+        const backend = await makeListingBackend({ failureCauseFromLog });
+        const stderr = mockProcessStderr.at(-1)!;
+        await makeListingBackend({ failureCauseFromLog });
+        const otherProcessStderr = mockProcessStderr.at(-1)!;
+        stderr(LOGGED_FAILURE);
+        const failure = serviceFailure();
+        mockNewSession.mockImplementationOnce(async () => {
+          otherProcessStderr(LOGGED_FAILURE);
+          throw failure;
+        });
+
+        await expect(backend.newSession({ cwd: "/vault" })).rejects.toBe(failure);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/662 leaves errors other than the internal error unchanged", async () => {
+        const backend = await makeListingBackend({ failureCauseFromLog });
+        const stderr = mockProcessStderr.at(-1)!;
+        const failure = new RequestError(-32602, "Invalid params");
+        mockNewSession.mockImplementationOnce(async () => {
+          stderr(LOGGED_FAILURE);
+          throw failure;
+        });
+
+        await expect(backend.newSession({ cwd: "/vault" })).rejects.toBe(failure);
       });
     });
 
