@@ -632,7 +632,7 @@ export class AcpBackendProcess implements BackendProcess {
         () => false
       );
     const cause = loggedCause();
-    const logged = cause ? `\n\n${this.backend.displayName} logged:\n${cause}` : "";
+    const logged = cause ? `\n\n${cause}` : "";
     if (serviceAnswers) {
       return logged ? new RequestError(err.code, `${err.message}${logged}`, err.data) : err;
     }

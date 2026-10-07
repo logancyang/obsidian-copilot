@@ -1245,7 +1245,7 @@ describe("AcpBackendProcess", () => {
         expect(error).toBeInstanceOf(RequestError);
         expect((error as RequestError).code).toBe(-32603);
         expect((error as RequestError).message).toBe(
-          "Internal error: Internal service failure\n\nopencode logged:\nEPERM: operation not permitted (/api/model)"
+          "Internal error: Internal service failure\n\nEPERM: operation not permitted (/api/model)"
         );
       });
 
@@ -1259,7 +1259,7 @@ describe("AcpBackendProcess", () => {
         });
 
         await expect(backend.newSession({ cwd: "/vault" })).rejects.toThrow(
-          "opencode's internal service failed to start. Check the Copilot log for its error.\n\nopencode logged:\nEPERM: operation not permitted (/api/model)"
+          "opencode's internal service failed to start. Check the Copilot log for its error.\n\nEPERM: operation not permitted (/api/model)"
         );
       });
 
