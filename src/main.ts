@@ -39,7 +39,7 @@ import {
 } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
-import { logError, logInfo, logWarn } from "@/logger";
+import { logError, logFatalError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import {
   createModelManagement,
@@ -198,8 +198,7 @@ export default class CopilotPlugin extends Plugin {
       // logError prints only when the debug setting is on, which a failed settings load never
       // reads, and this catch keeps Obsidian from logging the failure itself.
       // https://github.com/logancyang/obsidian-copilot/issues/3518
-      // eslint-disable-next-line no-restricted-syntax -- the one startup failure Copilot's logger cannot surface.
-      console.error("Copilot failed to start.", error);
+      logFatalError("Copilot failed to start.", error);
       new Notice("Copilot failed to start. Check the console for details.");
       // Obsidian keeps a plugin enabled when work after onload fails, so release whatever
       // startup registered before the failure. https://github.com/logancyang/obsidian-copilot/issues/3518
@@ -529,7 +528,9 @@ export default class CopilotPlugin extends Plugin {
       "Failed to load projects. Check console for details."
     );
     const commandsTask = task(
-      this.customCommandRegister.initialize().then(() => migrateCommands(this.app)),
+      this.customCommandRegister
+        .initialize()
+        .then(() => this.runUnlessUnloaded(() => migrateCommands(this.app))),
       {
         id: "custom-commands",
         title: "Custom commands",
@@ -538,7 +539,9 @@ export default class CopilotPlugin extends Plugin {
       }
     );
     const promptsTask = task(
-      this.systemPromptRegister.initialize().then(() => migrateSystemPromptsFromSettings(this.app)),
+      this.systemPromptRegister
+        .initialize()
+        .then(() => this.runUnlessUnloaded(() => migrateSystemPromptsFromSettings(this.app))),
       {
         id: "system-prompt",
         title: "System prompt",
@@ -598,6 +601,15 @@ export default class CopilotPlugin extends Plugin {
     });
   }
 
+  // Startup migrations outlive an unload, and a legacy migration finishing in the unloaded copy
+  // would write the same files and settings as its successor's.
+  // https://github.com/logancyang/obsidian-copilot/issues/3518
+  private async runUnlessUnloaded(
+    migrate: () => Promise<StartupMigrationItem | null>
+  ): Promise<StartupMigrationItem | null> {
+    return this.pluginLifecycleActive ? migrate() : null;
+  }
+
   private safeRegisterView(type: string, viewCreator: ViewCreator): void {
     try {
       this.registerView(type, viewCreator);
@@ -622,8 +634,6 @@ export default class CopilotPlugin extends Plugin {
   }
 
   private async teardown(): Promise<void> {
-    await flushPersistence();
-
     this.clearAllPersistentSelectionHighlights();
 
     this.chatSelectionHighlightController?.cleanup();
@@ -637,7 +647,10 @@ export default class CopilotPlugin extends Plugin {
     this.customCommandRegister?.cleanup();
     this.systemPromptRegister?.cleanup();
     this.projectRegister?.cleanup();
+    // The handoff releases the next copy once teardown resolves, so the drain must come after
+    // the last settings change can queue a write. https://github.com/logancyang/obsidian-copilot/issues/3518
     this.settingsUnsubscriber?.();
+    await flushPersistence();
 
     if (isDesktopRuntime()) {
       const { SkillManager } = await import("@/agentMode");

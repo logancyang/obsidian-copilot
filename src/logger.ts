@@ -17,6 +17,12 @@ export function logError(...args: unknown[]) {
   void logFileManager.append("ERROR", ...args);
 }
 
+export function logFatalError(...args: unknown[]) {
+  // eslint-disable-next-line no-restricted-syntax -- logFatalError is the approved console.error boundary for failures the debug setting cannot gate.
+  console.error(...args);
+  void logFileManager.append("ERROR", ...args);
+}
+
 export function logWarn(...args: unknown[]) {
   if (getSettings().debug) {
     // eslint-disable-next-line no-restricted-syntax -- logWarn is the approved console.warn boundary.

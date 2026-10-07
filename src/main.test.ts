@@ -19,6 +19,7 @@ jest.mock("@/LLMProviders/chatModelManager", () => ({
 
 jest.mock("@/logger", () => ({
   logError: jest.fn(),
+  logFatalError: jest.fn(),
   logInfo: jest.fn(),
   logWarn: jest.fn(),
 }));
@@ -34,6 +35,14 @@ jest.mock("@/logFileManager", () => ({
 jest.mock("@/settings/migrations", () => ({ runSettingsMigrations: jest.fn() }));
 jest.mock("@/settings/migrations/legacyIndexRemovalMigration", () => ({
   cleanupLegacyIndexArtifacts: jest.fn(),
+}));
+jest.mock("@/commands/migrator", () => ({
+  ...jest.requireActual<typeof import("@/commands/migrator")>("@/commands/migrator"),
+  migrateCommands: jest.fn(async () => null),
+}));
+jest.mock("@/system-prompts/migration", () => ({
+  ...jest.requireActual<typeof import("@/system-prompts/migration")>("@/system-prompts/migration"),
+  migrateSystemPromptsFromSettings: jest.fn(async () => null),
 }));
 jest.mock("@/openArtifacts/openArtifactsLedger", () => ({ migrateOpenArtifactsFolder: jest.fn() }));
 jest.mock("@/state/vaultDataAtoms", () => ({
@@ -79,7 +88,9 @@ jest.mock("@/services/webViewerService/webViewerServiceSelection", () => ({
     start = mockStartSelectionTracker;
   },
 }));
-import { logError, logInfo, logWarn } from "@/logger";
+import { logError, logFatalError, logInfo, logWarn } from "@/logger";
+import { migrateCommands } from "@/commands/migrator";
+import { migrateSystemPromptsFromSettings } from "@/system-prompts/migration";
 import { logFileManager } from "@/logFileManager";
 import { flushPersistence, resetPersistenceState } from "@/services/settingsPersistence";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
@@ -815,9 +826,8 @@ describe("main", () => {
         expect(plugin.openChatDeepLink).not.toHaveBeenCalled();
       });
 
-      it("prints a startup failure to the console even with debug logging off, then unloads what startup registered https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+      it("reports a startup failure even with debug logging off, then unloads what startup registered https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
         const failure = new Error("settings unreadable");
-        const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
         const { plugin, finishStartup } = createLoadingPlugin(async () => {
           throw failure;
         });
@@ -825,13 +835,40 @@ describe("main", () => {
         plugin.onload();
 
         await finishStartup();
-        expect(consoleError).toHaveBeenCalledWith("Copilot failed to start.", failure);
-        consoleError.mockRestore();
+        expect(logFatalError).toHaveBeenCalledWith("Copilot failed to start.", failure);
         expect(Notice).toHaveBeenCalledWith(
           "Copilot failed to start. Check the console for details."
         );
         expect(plugin.unload).toHaveBeenCalledTimes(1);
       });
+
+      it.each([
+        ["runs", "stays loaded", true],
+        ["skips", "unloads", false],
+      ] as const)(
+        "%s the legacy command and system-prompt migrations when Copilot %s while their files load https://github.com/logancyang/obsidian-copilot/issues/3518",
+        async (_outcome, _lifecycle, staysLoaded) => {
+          const { plugin, finishStartup } = createLoadingPlugin();
+          plugin.onload();
+          await finishStartup();
+          const layoutReady = (plugin.app.workspace.onLayoutReady as jest.Mock).mock
+            .calls[0][0] as () => void;
+          const filesLoaded = deferred();
+          Object.assign(plugin, {
+            customCommandRegister: { initialize: () => filesLoaded.promise, cleanup: jest.fn() },
+            systemPromptRegister: { initialize: () => filesLoaded.promise, cleanup: jest.fn() },
+            projectRegister: { initialize: async () => null, cleanup: jest.fn() },
+          });
+
+          layoutReady();
+          if (!staysLoaded) plugin.onunload();
+          filesLoaded.resolve();
+          await filesLoaded.promise;
+
+          expect(migrateCommands).toHaveBeenCalledTimes(staysLoaded ? 1 : 0);
+          expect(migrateSystemPromptsFromSettings).toHaveBeenCalledTimes(staysLoaded ? 1 : 0);
+        }
+      );
     });
 
     describe("onunload()", () => {
@@ -859,36 +896,28 @@ describe("main", () => {
         expect(plugin.isPluginLifecycleActive()).toBe(false);
       });
 
-      it("flushes persistence synchronously, before returning to Obsidian", () => {
-        const calls: string[] = [];
-        const plugin = createPluginUnderTest(calls);
-
-        plugin.onunload();
-
-        expect(flushPersistence).toHaveBeenCalledTimes(1);
-        expect(calls).toEqual([]);
-      });
-
       it("releases audio before asynchronous teardown can overlap a later plugin lifecycle (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
         const calls: string[] = [];
-        let releasePersistence: () => void = () => undefined;
+        let releaseSessions: () => void = () => undefined;
         (disposeNotificationSound as jest.Mock).mockImplementation(() => calls.push("audio"));
-        (flushPersistence as jest.Mock).mockImplementation(() => {
-          calls.push("persistence");
-          return new Promise<void>((resolve) => {
-            releasePersistence = resolve;
-          });
-        });
         const plugin = createPluginUnderTest(calls);
+        Object.assign(plugin, {
+          agentSessionManager: {
+            shutdown: () =>
+              new Promise<void>((resolve) => {
+                releaseSessions = resolve;
+              }),
+          },
+        });
 
         plugin.onunload();
 
-        expect(calls).toEqual(["audio", "persistence"]);
-        releasePersistence();
+        expect(calls).toEqual(["audio", "highlight", "modelDiscovery"]);
+        releaseSessions();
         await flushTeardown();
       });
 
-      it("tears down collaborators in order, flushing persistence before session shutdown and the log last", async () => {
+      it("tears down collaborators in order, draining settings writes only after it stops queuing them and the log last https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
         const calls: string[] = [];
         const plugin = createPluginUnderTest(calls);
         (flushPersistence as jest.Mock).mockImplementation(async () => {
@@ -902,7 +931,6 @@ describe("main", () => {
         await flushTeardown();
 
         expect(calls).toEqual([
-          "persistence",
           "highlight",
           "modelDiscovery",
           "sessions",
@@ -910,6 +938,7 @@ describe("main", () => {
           "systemPrompts",
           "projects",
           "settings",
+          "persistence",
           "modelManagement",
           "logFlush",
         ]);
