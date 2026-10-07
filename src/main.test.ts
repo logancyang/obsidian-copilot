@@ -815,8 +815,9 @@ describe("main", () => {
         expect(plugin.openChatDeepLink).not.toHaveBeenCalled();
       });
 
-      it("reports a startup failure and unloads what startup registered https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
+      it("prints a startup failure to the console even with debug logging off, then unloads what startup registered https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {
         const failure = new Error("settings unreadable");
+        const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
         const { plugin, finishStartup } = createLoadingPlugin(async () => {
           throw failure;
         });
@@ -824,7 +825,8 @@ describe("main", () => {
         plugin.onload();
 
         await expect(finishStartup()).resolves.toBe(false);
-        expect(logError).toHaveBeenCalledWith("Copilot failed to start.", failure);
+        expect(consoleError).toHaveBeenCalledWith("Copilot failed to start.", failure);
+        consoleError.mockRestore();
         expect(Notice).toHaveBeenCalledWith(
           "Copilot failed to start. Check the console for details."
         );

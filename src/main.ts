@@ -195,7 +195,11 @@ export default class CopilotPlugin extends Plugin {
   onload(): void {
     installRendererEventsShim();
     this.initialization = this.initialize().catch((error) => {
-      logError("Copilot failed to start.", error);
+      // logError prints only when the debug setting is on, which a failed settings load never
+      // reads, and this catch keeps Obsidian from logging the failure itself.
+      // https://github.com/logancyang/obsidian-copilot/issues/3518
+      // eslint-disable-next-line no-restricted-syntax -- the one startup failure Copilot's logger cannot surface.
+      console.error("Copilot failed to start.", error);
       new Notice("Copilot failed to start. Check the console for details.");
       // Obsidian keeps a plugin enabled when work after onload fails, so release whatever
       // startup registered before the failure. https://github.com/logancyang/obsidian-copilot/issues/3518
