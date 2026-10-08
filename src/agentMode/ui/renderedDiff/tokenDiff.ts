@@ -23,6 +23,10 @@ const TOKEN_PATTERNS: readonly RegExp[] = [
   /^!?\[\[[^\]]*\]\]/,
   /^%%.*?%%/,
   /^\$[^$\n]+\$(?!\$)/,
+  // A bare URL is one token so an emphasis character inside it (`a_b`) cannot split it around a marker;
+  // like an autolink it never ends on emphasis, so a delimiter wrapping it stays outside the mark.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+  /^[a-z][a-z\d+.-]*:\/\/[^\s<>*~]*[^\s<>*~_=]/i,
   EMPHASIS_DELIMITER,
   /^[ \t]+/,
 ];
@@ -103,7 +107,23 @@ function matchToken(text: string, index: number): string | null {
 }
 
 export function diffInline(before: string, after: string): string {
-  return renderInline(diffArrays(tokenizeInline(before), tokenizeInline(after)));
+  const parts = diffArrays(tokenizeInline(before), tokenizeInline(after));
+  // A table cell whose emphasis changed is shown whole, like a line; a cell of an added or removed row
+  // has one empty side, which needs no fallback and must not leave an empty mark.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+  if (before !== "" && after !== "" && changesEmphasis(parts))
+    return DEL_OPEN + before + DEL_CLOSE + INS_OPEN + after + INS_CLOSE;
+  return renderInline(parts);
+}
+
+// Markers around a bare emphasis delimiter render as empty marks around restyled text, so a
+// formatting edit is shown as the whole old text and the whole new text.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+function changesEmphasis(parts: readonly ArrayChange<string>[]): boolean {
+  return parts.some(
+    (part) =>
+      (part.added || part.removed) && part.value.some((token) => EMPHASIS_DELIMITER.test(token))
+  );
 }
 
 function renderInline(parts: readonly ArrayChange<string>[]): string {
@@ -159,13 +179,6 @@ function diffModifiedLine(beforeLine: string, afterLine: string): string {
   // Renumbering an ordered list is not a content change, so item numbers are ignored when comparing prefixes.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
   const samePrefix = before.prefix.replace(/\d+/g, "") === after.prefix.replace(/\d+/g, "");
-  // Markers around a bare emphasis delimiter render as empty marks around restyled text, so a
-  // formatting edit is shown as the whole old line and the whole new line.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
-  const changesEmphasis = parts.some(
-    (part) =>
-      (part.added || part.removed) && part.value.some((token) => EMPHASIS_DELIMITER.test(token))
-  );
   // Interleaved word marks are unreadable once most of a line is rewritten, so such a line is shown whole twice.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
   const keptLength = visibleLength(
@@ -173,7 +186,7 @@ function diffModifiedLine(beforeLine: string, afterLine: string): string {
   );
   const mostlyRewritten =
     keptLength * 2 < Math.max(visibleLength(before.content), visibleLength(after.content));
-  if (!samePrefix || changesEmphasis || mostlyRewritten)
+  if (!samePrefix || changesEmphasis(parts) || mostlyRewritten)
     return `${markDeletedLine(beforeLine)}\n${markInsertedLine(afterLine)}`;
   return after.prefix + renderInline(parts);
 }
