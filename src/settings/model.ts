@@ -65,7 +65,6 @@ export interface CopilotSettings {
   defaultSaveFolder: string;
   defaultConversationTag: string;
   autosaveChat: boolean;
-  autoAddActiveContentToContext: boolean;
   customPromptsFolder: string;
   chatNoteContextPath: string;
   chatNoteContextTags: string[];
@@ -547,17 +546,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.lexicalSearchRamLimit = DEFAULT_SETTINGS.lexicalSearchRamLimit;
   } else {
     sanitizedSettings.lexicalSearchRamLimit = Math.min(1000, Math.max(20, lexicalSearchRamLimit));
-  }
-
-  if (typeof sanitizedSettings.autoAddActiveContentToContext !== "boolean") {
-    const oldNoteContext = (settingsToSanitize as unknown as Record<string, unknown>)
-      .includeActiveNoteAsContext;
-    if (typeof oldNoteContext === "boolean") {
-      sanitizedSettings.autoAddActiveContentToContext = oldNoteContext;
-    } else {
-      sanitizedSettings.autoAddActiveContentToContext =
-        DEFAULT_SETTINGS.autoAddActiveContentToContext;
-    }
   }
 
   if (typeof sanitizedSettings.enableMiyo !== "boolean") {

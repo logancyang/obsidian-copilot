@@ -292,9 +292,8 @@ export const AgentChatInput = memo(function AgentChatInput({
       }
       const resolvedText = resolveActiveNoteToken(expanded.text, activeFile);
 
-      const hasAnySelection = selectedTextContexts.length > 0;
       const shouldIncludeActiveWebTab =
-        !hasAnySelection && (includeActiveWebTab || resolvedText.includes(ACTIVE_WEB_TAB_MARKER));
+        includeActiveWebTab || resolvedText.includes(ACTIVE_WEB_TAB_MARKER);
       const resolvedWebTabs = buildWebTabsWithActiveSnapshot(
         app,
         webTabs ?? [],

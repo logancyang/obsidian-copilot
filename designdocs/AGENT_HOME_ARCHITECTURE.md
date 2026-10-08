@@ -119,8 +119,8 @@ composer — so it survives the remount.
 
 ### Per-session draft lifecycle
 
-- **switch session** → load that session's draft (or a fresh default seeded from
-  `autoAddActiveContentToContext`); global `selectedTextContexts` are cleared.
+- **switch session** → load that session's draft (or a fresh default that includes
+  the active note and active web tab); global `selectedTextContexts` are cleared.
 - **send** → snapshot context into the queued item, then `resetCompose()`;
   `loading` + `queue` are per-session so a backgrounded turn never bleeds into the
   foregrounded session.

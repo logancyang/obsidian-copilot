@@ -85,11 +85,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const app = plugin.app || appContext;
   const settings = useSettingsValue();
   const isRelevantNotesPaneOpen = useRelevantNotesPaneOpen(app);
-  const draft = useAgentInputDrafts({
-    store: manager.drafts,
-    chatInputId,
-    defaultIncludeActiveNote: settings.autoAddActiveContentToContext === true,
-  });
+  const draft = useAgentInputDrafts({ store: manager.drafts, chatInputId });
 
   useChatInputAutoFocus();
 

@@ -9,7 +9,6 @@ import React, { useCallback, useMemo, useSyncExternalStore } from "react";
 interface UseAgentInputDraftsArgs {
   store: AgentInputDraftStore;
   chatInputId: string;
-  defaultIncludeActiveNote: boolean;
 }
 
 export interface AgentInputDraftControls extends AgentInputDraft {
@@ -34,7 +33,6 @@ const applyState = <T>(value: React.SetStateAction<T>, previous: T): T =>
 export function useAgentInputDrafts({
   store,
   chatInputId,
-  defaultIncludeActiveNote,
 }: UseAgentInputDraftsArgs): AgentInputDraftControls {
   const active = useSyncExternalStore(store.subscribe, () => store.get(chatInputId));
 
@@ -95,7 +93,9 @@ export function useAgentInputDrafts({
         images: [],
         contextNotes: [],
         includeActiveNote: false,
-        includeActiveWebTab: false,
+        // The agent cannot read the live, possibly signed-in page, so every turn carries it.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/667
+        includeActiveWebTab: true,
       })),
     [updateActive]
   );
@@ -106,12 +106,12 @@ export function useAgentInputDrafts({
         input: "",
         images: EMPTY_IMAGES,
         contextNotes: EMPTY_CONTEXT_NOTES,
-        includeActiveNote: defaultIncludeActiveNote,
-        includeActiveWebTab: false,
+        includeActiveNote: true,
+        includeActiveWebTab: true,
         loading: false,
         queue: EMPTY_QUEUE,
       },
-    [active, defaultIncludeActiveNote]
+    [active]
   );
 
   return useMemo(

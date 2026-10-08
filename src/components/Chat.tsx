@@ -99,12 +99,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
-  const [includeActiveNote, setIncludeActiveNote] = useState(
-    settings.autoAddActiveContentToContext === true
-  );
-  const [includeActiveWebTab, setIncludeActiveWebTab] = useState(
-    settings.autoAddActiveContentToContext === true
-  );
+  const [includeActiveNote, setIncludeActiveNote] = useState(true);
+  const [includeActiveWebTab, setIncludeActiveWebTab] = useState(true);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
   const isMountedRef = useRef(false);
@@ -129,9 +125,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   );
 
   const [selectedTextContexts] = useSelectedTextContexts();
-
-  const hasAnySelection = selectedTextContexts.length > 0;
-  const effectiveIncludeActiveWebTab = includeActiveWebTab && !hasAnySelection;
 
   const { activeWebTabForMentions: currentActiveWebTab } = useActiveWebTabState();
 
@@ -252,7 +245,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         context,
         currentChain,
         includeActiveNote,
-        effectiveIncludeActiveWebTab,
+        includeActiveWebTab,
         content.length > 0 ? content : undefined,
         safeSet.setLoadingMessage
       );
@@ -559,15 +552,14 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     clearSelectedTextContexts();
     plugin.chatSelectionHighlightController.clearForNewChat();
     plugin.suppressCurrentWebSelection(webSelectionUrl);
-    setIncludeActiveNote(settings.autoAddActiveContentToContext);
-    setIncludeActiveWebTab(settings.autoAddActiveContentToContext);
+    setIncludeActiveNote(true);
+    setIncludeActiveWebTab(true);
   }, [
     handleStopGenerating,
     chainManager.chatModelManager,
     chatUIState,
     settings.autosaveChat,
     settings.enableRecentConversations,
-    settings.autoAddActiveContentToContext,
     handleSaveAsNote,
     safeSet,
     plugin,
@@ -650,22 +642,11 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     };
   }, [eventTarget, handleStopGenerating]);
 
-  const [prevAutoAddTuple, setPrevAutoAddTuple] = useState({
-    autoAdd: settings.autoAddActiveContentToContext,
-    chain: selectedChain,
-  });
-  if (
-    prevAutoAddTuple.autoAdd !== settings.autoAddActiveContentToContext ||
-    prevAutoAddTuple.chain !== selectedChain
-  ) {
-    setPrevAutoAddTuple({
-      autoAdd: settings.autoAddActiveContentToContext,
-      chain: selectedChain,
-    });
-    if (settings.autoAddActiveContentToContext !== undefined) {
-      setIncludeActiveNote(settings.autoAddActiveContentToContext);
-      setIncludeActiveWebTab(settings.autoAddActiveContentToContext);
-    }
+  const [prevChain, setPrevChain] = useState(selectedChain);
+  if (prevChain !== selectedChain) {
+    setPrevChain(selectedChain);
+    setIncludeActiveNote(true);
+    setIncludeActiveWebTab(true);
   }
 
   const renderChatComponents = () => (
