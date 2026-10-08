@@ -22,6 +22,7 @@ import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 import { CopilotPlusUsageReader } from "@/agentMode/backends/shared/copilotPlusUsage";
 import type { SelfHostWebSearchAgentChannel } from "@/LLMProviders/selfHostServices";
 import type { Config } from "@opencode/schema/config";
+import { installOpencodeTrimPlugin } from "./opencodeTrimPlugin";
 
 export const OPENCODE_PROVIDER_MAP: Partial<Record<ChatModelProviders, string>> = {
   [ChatModelProviders.ANTHROPIC]: "anthropic",
@@ -49,6 +50,7 @@ export interface OpencodeModelDeps {
   backendConfigRegistry: BackendConfigRegistry;
   clientVersion?: string;
   getCacheRoot?: () => string | undefined;
+  getTrimPluginDir?: () => string;
   getSelfHostWebSearchChannel?: () => Promise<Readonly<SelfHostWebSearchAgentChannel>>;
 }
 
@@ -107,7 +109,16 @@ export class OpencodeBackend implements AcpBackend {
     const configOverride = envOverrides.OPENCODE_CONFIG_CONTENT;
     delete envOverrides.OPENCODE_CONFIG_CONTENT;
     let configContent =
-      configOverride ?? JSON.stringify(await buildOpencodeConfig(settings, this.#deps, cacheRoot));
+      configOverride ??
+      JSON.stringify(
+        await buildOpencodeConfig(
+          settings,
+          this.#deps,
+          cacheRoot,
+          this.#deps.getTrimPluginDir &&
+            (await installOpencodeTrimPlugin(this.#deps.getTrimPluginDir()))
+        )
+      );
     if (settings.enableSelfHostMode === true && configOverride !== undefined) {
       // An explicit config override must not reopen agent-native web tools while
       // Self-Host mode promises that queries stay on the configured route.
@@ -218,7 +229,8 @@ const OPENCODE_1_PERMISSION_KEYS = ["permission", "tools", "agent", "mode"] as c
 export async function buildOpencodeConfig(
   s: CopilotSettings,
   deps: OpencodeModelDeps,
-  cacheRoot?: string
+  cacheRoot?: string,
+  trimPluginDir?: string
 ): Promise<GeneratedOpencodeConfig> {
   const { providerRegistry, backendConfigRegistry } = deps;
 
@@ -333,6 +345,9 @@ export async function buildOpencodeConfig(
     // them (https://github.com/Brevilabs/obsidian-copilot-private/issues/551).
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/559
     { action: "question", resource: "*", effect: "deny" },
+    // session_move points the session's working directory away from the vault.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/665
+    { action: "opencode_session_move", resource: "*", effect: "deny" },
   ];
 
   const selfHost = s.enableSelfHostMode === true;
@@ -371,7 +386,7 @@ export async function buildOpencodeConfig(
     // gains `max`) and merges them over configured variants, which cannot be
     // disabled individually. Only published levels are trusted, so drop it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/557
-    plugins: ["-opencode.variant"],
+    plugins: ["-opencode.variant", ...(trimPluginDir ? [trimPluginDir] : [])],
     // Without a configured provider, native web search asks the user to pick
     // one through OpenCode's form service, and OpenCode's ACP bridge cancels
     // every form, so each search ends as "Web search cancelled". "random" is

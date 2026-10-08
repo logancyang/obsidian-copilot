@@ -1,4 +1,8 @@
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import { verifyOpencodeBinary } from "./OpencodeBinaryManager";
+import { OPENCODE_TRIM_PLUGIN_SOURCE } from "./opencodeTrimPlugin";
 import { updateAgentModeBackendFields } from "@/settings/model";
 import { logWarn } from "@/logger";
 import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
@@ -194,6 +198,10 @@ function lastRuleFor(
 }
 
 const QUESTION_DENY = { action: "question", resource: "*", effect: "deny" };
+
+const SESSION_MOVE_DENY = { action: "opencode_session_move", resource: "*", effect: "deny" };
+
+const BASE_DENIES = [QUESTION_DENY, SESSION_MOVE_DENY];
 
 const COPILOT_BUILD_ASKS = [
   { action: "shell", resource: "*", effect: "ask" },
@@ -809,7 +817,27 @@ describe("OpencodeBackend", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/559 denies OpenCode's native question tool for every agent", async () => {
       const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
-      expect(cfg.permissions).toEqual([QUESTION_DENY]);
+      expect(cfg.permissions).toContainEqual(QUESTION_DENY);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/665 denies session_move so no agent can move its working directory out of the vault", async () => {
+      const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+
+      expect(cfg.permissions).toEqual(BASE_DENIES);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/665 loads the prompt-trimming plugin from its folder alongside the variant removal", async () => {
+      const cfg = await buildOpencodeConfig(
+        getSettings(),
+        NO_MODELS_DEPS,
+        undefined,
+        "/home/.obsidian-copilot/opencode/plugins/copilot-trim"
+      );
+
+      expect(cfg.plugins).toEqual([
+        "-opencode.variant",
+        "/home/.obsidian-copilot/opencode/plugins/copilot-trim",
+      ]);
     });
 
     it("configures copilot-build as a primary agent that asks before shell, edit, and web search", async () => {
@@ -857,7 +885,7 @@ describe("OpencodeBackend", () => {
       const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
       expect(cfg.permissions).toEqual([
-        QUESTION_DENY,
+        ...BASE_DENIES,
         { action: "websearch", resource: "*", effect: "deny" },
         { action: "webfetch", resource: "*", effect: "deny" },
       ]);
@@ -895,7 +923,7 @@ describe("OpencodeBackend", () => {
       ]);
       const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
       expect(cfg.permissions).toEqual([
-        QUESTION_DENY,
+        ...BASE_DENIES,
         { action: "skill", resource: "a", effect: "deny" },
         { action: "skill", resource: "e", effect: "deny" },
       ]);
@@ -905,7 +933,7 @@ describe("OpencodeBackend", () => {
       mockSkills = [makeSkill("foo", ["claude"])];
       mockSkillManagerReady = false;
       const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
-      expect(cfg.permissions).toEqual([QUESTION_DENY]);
+      expect(cfg.permissions).toEqual(BASE_DENIES);
     });
 
     it("allows external_directory access to the cache root for both agents", async () => {
@@ -1162,6 +1190,48 @@ describe("OpencodeBackend", () => {
         expect(cfg.agents.build.permissions).toEqual([allow]);
         expect(cfg.agents["copilot-build"].permissions).toEqual([...COPILOT_BUILD_ASKS, allow]);
         expect(logWarn).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/665 writes the prompt-trimming plugin and has OpenCode load it from that folder", async () => {
+        setOpencodeSettings({ binaryPath: "/path/to/opencode" });
+        const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-backend-"));
+        const pluginDir = path.join(root, "copilot-trim");
+        try {
+          const desc = await new OpencodeBackend({
+            ...NO_MODELS_DEPS,
+            getTrimPluginDir: () => pluginDir,
+          }).buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
+
+          const cfg: GeneratedOpencodeConfig = JSON.parse(
+            desc.env.OPENCODE_CONFIG_CONTENT as string
+          );
+          expect(cfg.plugins).toEqual(["-opencode.variant", pluginDir]);
+          expect(await fs.promises.readFile(path.join(pluginDir, "index.js"), "utf8")).toBe(
+            OPENCODE_TRIM_PLUGIN_SOURCE
+          );
+        } finally {
+          await fs.promises.rm(root, { recursive: true, force: true });
+        }
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/665 starts OpenCode with its full prompt when the plugin cannot be written", async () => {
+        setOpencodeSettings({ binaryPath: "/path/to/opencode" });
+        const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-backend-"));
+        const blocker = path.join(root, "blocker");
+        await fs.promises.writeFile(blocker, "");
+        try {
+          const desc = await new OpencodeBackend({
+            ...NO_MODELS_DEPS,
+            getTrimPluginDir: () => path.join(blocker, "copilot-trim"),
+          }).buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
+
+          const cfg: GeneratedOpencodeConfig = JSON.parse(
+            desc.env.OPENCODE_CONFIG_CONTENT as string
+          );
+          expect(cfg.plugins).toEqual(["-opencode.variant"]);
+        } finally {
+          await fs.promises.rm(root, { recursive: true, force: true });
+        }
       });
 
       it("warns when an OPENCODE_CONFIG_CONTENT override drops the cache allow rule", async () => {
