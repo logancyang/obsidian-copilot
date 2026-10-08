@@ -53,6 +53,9 @@ export class TurnDiffView extends ItemView {
     this.viewRoot?.rerender();
   }
 
+  // Obsidian fills an ItemView's header title only on load, before `setViewState` delivers the state;
+  // its later `updateHeader` refreshes the tab title alone.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
   private refreshTitle(): void {
     const { titleEl } = this as unknown as { titleEl?: HTMLElement };
     titleEl?.setText(this.getDisplayText());
