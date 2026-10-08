@@ -140,12 +140,16 @@ export async function prepareChatImagesForSave<T extends MessageWithImages>(
       legacyEmbeds.every((embed) => /^!\[\[[^\n]+\]\]$|^!\[[^\n]*\]\([^\n]+\)$/.test(embed));
     const embeds: string[] = [];
     for (const image of uploads) {
-      const match =
-        /^data:image\/([a-z0-9.+-]+);base64,((?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2,3}|[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)$/i.exec(
-          image.url
-        );
+      const match = /^data:image\/([a-z0-9.+-]+);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(image.url);
       if (!match) throw new Error("Cannot save an invalid uploaded image.");
-      const bytes = base64ToArrayBuffer(match[2]);
+      let bytes: ArrayBuffer;
+      try {
+        bytes = base64ToArrayBuffer(match[2]);
+      } catch {
+        // atob rejects malformed padding; a stricter regex instead fails to match multi-megabyte photos on iOS.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/94
+        throw new Error("Cannot save an invalid uploaded image.");
+      }
       const base64 = arrayBufferToBase64(bytes);
       const subtype = match[1].toLowerCase();
       const extension = IMAGE_EXTENSIONS.get(subtype) ?? subtype.replace(/[^a-z0-9]/g, "");
