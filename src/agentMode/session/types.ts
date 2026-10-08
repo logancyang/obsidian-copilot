@@ -471,9 +471,6 @@ export interface AgentChatMessage {
   fileChanges?: TurnFileChange[];
 }
 
-// Snapshot the vault around the turn instead of merging the agent's edits: backends
-// report edits too differently to combine, and a turn is the review boundary.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/347
 export interface TurnFileChange {
   path: string;
   status: "modified" | "created" | "deleted";
