@@ -90,12 +90,14 @@ function composer(inputMessage: string, selectedImages: File[]) {
 }
 
 describe("ChatInput", () => {
-  const createObjectURL = URL.createObjectURL;
+  const { createObjectURL, revokeObjectURL } = URL;
   beforeAll(() => {
     URL.createObjectURL = jest.fn(() => "blob:screenshot");
+    URL.revokeObjectURL = jest.fn();
   });
   afterAll(() => {
     URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = revokeObjectURL;
   });
   describe("prependContent()", () => {
     it.each(["draft in progress", ""])(
