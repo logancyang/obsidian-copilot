@@ -10,7 +10,10 @@ export interface FrontmatterSplit {
   body: string;
 }
 
-const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+// Obsidian indents list content with tabs, so a fence nested in a list item sits past CommonMark's
+// three-space limit and would otherwise split at its inner blank lines.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+const FENCE = /^[ \t]*(`{3,}|~{3,})/;
 const HEADING = /^ {0,3}#{1,6}(?:\s|$)/;
 const DELIMITER_CELL = /^[ \t]*:?-+:?[ \t]*$/;
 const FRONTMATTER_FENCE = /^---[ \t]*$/;
@@ -74,7 +77,7 @@ export function splitBlocks(body: string): readonly MarkdownBlock[] {
 }
 
 function skipFencedCode(lines: string[], start: number, marker: string): number {
-  const closing = new RegExp(`^ {0,3}${marker[0]}{${marker.length},}[ \\t]*$`);
+  const closing = new RegExp(`^[ \\t]*${marker[0]}{${marker.length},}[ \\t]*$`);
   let index = start + 1;
   while (index < lines.length && !closing.test(lines[index])) index++;
   return Math.min(index + 1, lines.length);

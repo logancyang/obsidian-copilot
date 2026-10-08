@@ -65,6 +65,28 @@ describe("splitBlocks", () => {
       ]);
     });
 
+    it("keeps a tilde fence whole, including the blank lines inside it", () => {
+      expect(splitBlocks("~~~\nfirst\n\nsecond\n~~~\n")).toEqual([
+        { type: "code", text: "~~~\nfirst\n\nsecond\n~~~" },
+      ]);
+    });
+
+    it("keeps a tab-indented fence inside a list item whole across its inner blank line https://github.com/Brevilabs/obsidian-copilot-private/issues/349", () => {
+      const blocks = splitBlocks("- step\n\t```bash\n\tnpm run a\n\n\tnpm run b\n\t```\n");
+
+      expect(blocks).toEqual([
+        { type: "text", text: "- step" },
+        { type: "code", text: "\t```bash\n\tnpm run a\n\n\tnpm run b\n\t```" },
+      ]);
+    });
+
+    it("runs an unclosed fence to the end of the document as one code block", () => {
+      expect(splitBlocks("Intro.\n\n```js\nconst a = 1;\n\n# not a heading\n")).toEqual([
+        { type: "text", text: "Intro." },
+        { type: "code", text: "```js\nconst a = 1;\n\n# not a heading\n" },
+      ]);
+    });
+
     it("keeps a table whole and separate from the paragraph directly above it", () => {
       const blocks = splitBlocks("Capacity:\n| Region | Partners |\n| --- | --- |\n| EMEA | 2 |\n");
 
