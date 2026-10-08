@@ -30,7 +30,7 @@ import {
 const OPENCODE_BACKEND_ID = "opencode";
 
 const FRAME_LOG_NAME = "acp-frames.ndjson.txt";
-const CHAT_LOG_NAME = "copilot-chat-log.md";
+const CHAT_LOG_NAME = "copilot-log.md";
 const OPENCODE_LOG_NAME = "opencode.log";
 
 export interface ReportIssueModalParams {
@@ -184,9 +184,11 @@ export class ReportIssueModal extends Modal {
       },
       {
         id: "chatLog",
-        label: "Regular chat log",
-        description: "copilot log file",
-        defaultChecked: settings.debug,
+        label: "Copilot log",
+        description: "includes Agent Mode backend errors",
+        // OpenCode 2's server errors reach only this log, and reporters skipped it unchecked.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/649
+        defaultChecked: true,
       }
     );
     if (this.params.activeBackend === OPENCODE_BACKEND_ID) {

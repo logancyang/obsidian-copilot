@@ -312,6 +312,17 @@ describe("ReportIssueModal", () => {
 
         expect(opencodeLog?.defaultChecked).toBe(false);
       });
+
+      it("offers the Copilot log checked even with debug mode off, since OpenCode 2 server errors only reach that log (https://github.com/Brevilabs/obsidian-copilot-private/issues/649)", () => {
+        setSettings({ debug: false });
+        const copilotLog = modalWith({
+          params: { canCaptureTarget: () => true, activeBackend: "opencode" },
+        })
+          .buildSources()
+          .find((source) => source.id === "chatLog");
+
+        expect(copilotLog).toMatchObject({ label: "Copilot log", defaultChecked: true });
+      });
     });
 
     describe("prepare()", () => {
@@ -405,7 +416,7 @@ describe("ReportIssueModal", () => {
         expect(bundleInput().screenshotPng).toBeUndefined();
       });
 
-      it("packs the activity log and the chat log it was asked for into the zip (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      it("packs the activity log and the Copilot log it was asked for into the zip (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
         const frameDir = await realFs.mkdtemp(nodePath.join(nodeOs.tmpdir(), "acp-frames-"));
         created.push(frameDir);
         const framePath = nodePath.join(frameDir, "acp-frames.ndjson");
@@ -420,7 +431,7 @@ describe("ReportIssueModal", () => {
         const entries = unzipSync(new Uint8Array(await realFs.readFile(report.zipPath)));
         const entryText = (name: string) => new TextDecoder().decode(entries[name]);
         expect(entryText("acp-frames.ndjson.txt")).toBe(frames);
-        expect(entryText("copilot-chat-log.md")).toBe(chatLog);
+        expect(entryText("copilot-log.md")).toBe(chatLog);
       });
 
       it("asks for the logs smallest-growing first, so a heavy session's frames cannot crowd the others out (https://github.com/Brevilabs/obsidian-copilot-private/issues/538)", async () => {
