@@ -398,7 +398,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
 
     if (isDesktopRuntime()) {
       const { activeLeafRef, layoutRef } = startActiveWebTabTracking(this.app, {
-        preserveOnViewTypes: [CHAT_VIEWTYPE],
+        preserveOnViewTypes: [CHAT_VIEWTYPE, CHAT_AGENT_VIEWTYPE],
       });
       this.registerEvent(activeLeafRef);
       this.registerEvent(layoutRef);

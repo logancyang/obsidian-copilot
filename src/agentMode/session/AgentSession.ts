@@ -166,6 +166,7 @@ export class AgentSession {
   private readonly contextReady: Promise<ContextMaterializationResult> | null;
   private projectContextBlock: string | null = null;
   private firstPromptSent = false;
+  private lastSentWebTabBlock: string | null = null;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
   private readonly runFanoutTurn: RunFanoutTurn | null;
   private readonly getDisplayName: ((backendId: BackendId) => string) | null;
@@ -731,11 +732,14 @@ export class AgentSession {
       }
 
       const leadingContextBlock = buildPriorFanoutContextBlock(this.pendingFanoutContext);
+      // The agent keeps every earlier turn, so resending an unchanged page fills its context
+      // window with copies. https://github.com/Brevilabs/obsidian-copilot-private/issues/667
+      const webTabPromptBlock = webTabBlock === this.lastSentWebTabBlock ? "" : webTabBlock;
       const promptBlocks = buildPromptBlocks(
         displayText,
         context,
         promptContent,
-        webTabBlock,
+        webTabPromptBlock,
         projectContextBlock,
         leadingContextBlock,
         projectContextUpdatesBlock
@@ -782,6 +786,7 @@ export class AgentSession {
         this.pendingFanoutContext = [];
       }
       if (isFirstTurn && promptStarted) this.firstPromptSent = true;
+      if (webTabBlock && promptStarted) this.lastSentWebTabBlock = webTabBlock;
       if (projectContextUpdates && promptStarted) {
         this.markProjectContextUpdatesDeliveredFn?.(projectContextUpdates.epoch);
       }

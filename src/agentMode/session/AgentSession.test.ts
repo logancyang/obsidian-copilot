@@ -2017,6 +2017,69 @@ describe("AgentSession", () => {
         expect(promptText(1)).toContain("<project_context>");
       });
 
+      describe("with the same web page on several turns", () => {
+        const PAGE = {
+          url: "https://www.youtube.com/watch?v=arj7oStGLkU",
+          title: "Procrastination talk",
+          isActive: true,
+        };
+        const fullBlock = (content: string): string =>
+          `<youtube_video_context>\n<title>${PAGE.title}</title>\n<url>${PAGE.url}</url>\n<content>\n${content}\n</content>\n</youtube_video_context>`;
+        const pageContext = () => ({ notes: [], urls: [], webTabs: [PAGE] });
+        const promptText = (mock: MockBackend, call: number): string =>
+          (mock.prompt.mock.calls[call][0] as { prompt: Array<{ text?: string }> }).prompt
+            .map((b) => b.text ?? "")
+            .join("\n");
+        const stubWebTabs = (...blocks: string[]) => {
+          const processContextWebTabs = jest.fn();
+          for (const block of blocks) processContextWebTabs.mockResolvedValueOnce(block);
+          return jest
+            .spyOn(ContextProcessor, "getInstance")
+            .mockReturnValue({ processContextWebTabs } as never);
+        };
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/667 sends an unchanged page in full once, leaves it out while unchanged, and sends it in full again once it changes", async () => {
+          const getInstance = stubWebTabs(
+            fullBlock("TRANSCRIPT A"),
+            fullBlock("TRANSCRIPT A"),
+            fullBlock("TRANSCRIPT B")
+          );
+          try {
+            const mock = makeMockBackend();
+            const session = makeSession(mock);
+
+            await session.sendPrompt("first", pageContext()).turn;
+            await session.sendPrompt("second", pageContext()).turn;
+            await session.sendPrompt("third", pageContext()).turn;
+
+            expect(promptText(mock, 0)).toContain("TRANSCRIPT A");
+            expect(promptText(mock, 1)).not.toContain(PAGE.url);
+            expect(promptText(mock, 1)).toContain("second");
+            expect(promptText(mock, 2)).toContain("TRANSCRIPT B");
+          } finally {
+            getInstance.mockRestore();
+          }
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/667 resends the page in full after the prompt that carried it failed", async () => {
+          const getInstance = stubWebTabs(fullBlock("TRANSCRIPT A"), fullBlock("TRANSCRIPT A"));
+          try {
+            const mock = makeMockBackend();
+            mock.prompt.mockRejectedValueOnce(new Error("transport down"));
+            const session = makeSession(mock);
+
+            await expect(session.sendPrompt("first", pageContext()).turn).rejects.toThrow(
+              "transport down"
+            );
+            await session.sendPrompt("retry", pageContext()).turn;
+
+            expect(promptText(mock, 1)).toContain("TRANSCRIPT A");
+          } finally {
+            getInstance.mockRestore();
+          }
+        });
+      });
+
       describe("with several mentioned agents", () => {
         const mockedEnsure = ensureMultiAgentEntitlement as jest.MockedFunction<
           typeof ensureMultiAgentEntitlement
@@ -2055,6 +2118,28 @@ describe("AgentSession", () => {
           mockedEnsure.mockReset();
           mockedEnsure.mockResolvedValue(true);
           mockedUpgradePrompt.mockReset();
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/667 gives mentioned agents the full page even after the main agent received it", async () => {
+          const page = { url: "https://example.com/report", title: "Report", isActive: true };
+          const block = "<active_web_tab>\n<content>\nREPORT BODY\n</content>\n</active_web_tab>";
+          const processContextWebTabs = jest.fn().mockResolvedValue(block);
+          const getInstance = jest
+            .spyOn(ContextProcessor, "getInstance")
+            .mockReturnValue({ processContextWebTabs } as never);
+          try {
+            const mock = makeMockBackend();
+            const runFanoutTurn = fanoutRunner(twoAgentTurn());
+            const session = makeSession(mock, { runFanoutTurn });
+            const context = { notes: [], urls: [], webTabs: [page] };
+
+            await session.sendPrompt("summarize", context).turn;
+            await session.sendPrompt("review", context, undefined, BOTH_AGENTS).turn;
+
+            expect(fanoutPromptText(runFanoutTurn)).toContain("REPORT BODY");
+          } finally {
+            getInstance.mockRestore();
+          }
         });
 
         it("hands the turn to the fan-out runner instead of backend.prompt for an entitled user", async () => {

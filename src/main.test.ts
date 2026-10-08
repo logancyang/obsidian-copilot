@@ -66,7 +66,11 @@ jest.mock("@/agentMode", () => ({
     hasInstance: () => mockSkillManagerHasInstance(),
     getInstance: () => ({ dispose: mockSkillManagerDispose }),
   },
+  setFrameSinkVaultBasePath: jest.fn(),
+  acpFrameSink: { narrowLegacyLogs: jest.fn(async () => undefined) },
+  createAgentSessionManager: jest.fn(() => ({})),
 }));
+jest.mock("@/agentMode/agentModelDiscovery", () => ({ wireAgentModelDiscovery: jest.fn() }));
 
 import CopilotPlugin from "@/main";
 import CopilotView from "@/components/CopilotView";
@@ -102,6 +106,7 @@ import { migrateSystemPromptsFromSettings } from "@/system-prompts/migration";
 import { logFileManager } from "@/logFileManager";
 import { flushPersistence, resetPersistenceState } from "@/services/settingsPersistence";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
+import { startActiveWebTabTracking } from "@/services/webViewerService/webViewerServiceSingleton";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
 import { findChatFileByDeepLinkId } from "@/utils/chatDeepLink";
@@ -671,6 +676,22 @@ describe("main", () => {
         expect(registrations.addCommand).toHaveBeenCalled();
         expect(registrations.addRibbonIcon).toHaveBeenCalledTimes(1);
         expect(registrations.registerObsidianProtocolHandler).toHaveBeenCalledTimes(1);
+      });
+
+      it("keeps the active web tab when focus moves into Quick Chat or Agent Chat on desktop https://github.com/Brevilabs/obsidian-copilot-private/issues/667", async () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        (startActiveWebTabTracking as jest.Mock).mockReturnValue({
+          activeLeafRef: {},
+          layoutRef: {},
+        });
+        const { plugin, finishStartup } = createLoadingPlugin();
+
+        plugin.onload();
+
+        await finishStartup();
+        expect(startActiveWebTabTracking).toHaveBeenCalledWith(plugin.app, {
+          preserveOnViewTypes: [CHAT_VIEWTYPE, CHAT_AGENT_VIEWTYPE],
+        });
       });
 
       it.each([

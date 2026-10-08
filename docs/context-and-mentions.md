@@ -29,7 +29,11 @@ A note mention gives the agent the note's vault path so it can read the current 
 
 ### Active note and selected text
 
-A new Agent Chat can start with an **Active Note** badge when that preference is enabled. Remove it when the current note is unrelated. You can add it again on any later turn.
+A new Agent Chat starts with an **Active Note** badge. Remove it when the current note is unrelated. You can add it again on any later turn.
+
+### Active web tab
+
+When a page is open in the desktop Web Viewer, Agent Chat attaches it as an **Active Web Tab** badge on every message, so the agent sees the page you are reading, including pages you are signed in to. The page's full content is sent the first time. While it stays the same, later messages do not send it again, because the agent already has it earlier in the chat. If you go to another page, or the content changes, the new content is sent in full. If you remove the badge, no web page is attached to later messages in that chat, even after you open another page, until you add the **Active Web Tab** again from **Add context** or with `@`.
 
 Active Note and selected text are separate attachments in Agent Chat and Quick Chat. You can include either one or both, even when the excerpt comes from the active note. Removing one badge leaves the other attached. Selection badges show the start of the selected text. Hover over a badge to see the full excerpt and its source.
 
@@ -41,7 +45,7 @@ To attach an excerpt from a note:
 
 The manual selection command is available from the command palette or an assigned hotkey. The editor's Copilot menu contains Quick Ask, quick commands, and custom commands.
 
-For text selected in the Web Viewer, run **Add web selection to chat context**. Copilot sends the selected excerpt instead of also attaching the full active web tab.
+For text selected in the Web Viewer, run **Add web selection to chat context**. Copilot sends the selected excerpt together with the active web tab it came from.
 
 Selected text in notes is automatically added to chat context as you select it in Reading or Edit view, and stays attached when you move to chat. Reading view selections show the note path without line numbers. On desktop, this also works with Web Viewer selections. Review or remove the selection badge before sending.
 

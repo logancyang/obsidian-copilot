@@ -196,9 +196,8 @@ export class ChatManager {
         updatedContext.notes = hasActiveNote ? existingNotes : [...existingNotes, activeNote];
       }
 
-      const hasAnySelection = (updatedContext.selectedTextContexts || []).length > 0;
       const shouldIncludeActiveWebTab =
-        !hasAnySelection && (includeActiveWebTab || messageText.includes(ACTIVE_WEB_TAB_MARKER));
+        includeActiveWebTab || messageText.includes(ACTIVE_WEB_TAB_MARKER);
       updatedContext.webTabs = buildWebTabsWithActiveSnapshot(
         this.plugin.app,
         updatedContext.webTabs || [],

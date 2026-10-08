@@ -7,7 +7,12 @@ import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInput
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Notice, TFile, type App } from "obsidian";
-import type { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
+import type {
+  NoteSelectedTextContext,
+  SelectedTextContext,
+  WebSelectedTextContext,
+  WebTabContext,
+} from "@/types/message";
 import React from "react";
 
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
@@ -68,8 +73,9 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
   ),
 }));
 
+let mockActiveWebTab: WebTabContext | undefined;
 jest.mock("@/components/chat-components/hooks/useActiveWebTabState", () => ({
-  useActiveWebTabState: () => ({ activeWebTabForMentions: undefined }),
+  useActiveWebTabState: () => ({ activeWebTabForMentions: mockActiveWebTab }),
 }));
 let mockSelectedTextContexts: SelectedTextContext[] = [];
 jest.mock("@/aiParams", () => ({
@@ -94,8 +100,12 @@ jest.mock("@/commands/state", () => ({ getCachedCustomCommands: () => [] }));
 jest.mock("@/agentMode/session/expandCustomCommandPrefix", () => ({
   expandCustomCommandPrefix: jest.fn(async (text: string) => ({ text })),
 }));
+const mockBuildWebTabsWithActiveSnapshot = jest.fn(
+  (_app: unknown, _tabs: unknown, _includeActive: boolean): WebTabContext[] => []
+);
 jest.mock("@/services/webViewerService/activeWebTabSnapshot", () => ({
-  buildWebTabsWithActiveSnapshot: () => [],
+  buildWebTabsWithActiveSnapshot: (app: unknown, tabs: unknown, includeActive: boolean) =>
+    mockBuildWebTabsWithActiveSnapshot(app, tabs, includeActive),
 }));
 
 const makeApp = (): App => ({ workspace: { getActiveFile: () => null } }) as unknown as App;
@@ -183,11 +193,7 @@ function setupCancellation() {
     () => true
   );
   function Composer() {
-    draft = useAgentInputDrafts({
-      store,
-      chatInputId: "input-1",
-      defaultIncludeActiveNote: false,
-    });
+    draft = useAgentInputDrafts({ store, chatInputId: "input-1" });
     return inputNode(backend, draft);
   }
   render(<Composer />);
@@ -197,6 +203,7 @@ function setupCancellation() {
 describe("AgentChatInput", () => {
   beforeEach(() => {
     mockSelectedTextContexts = [];
+    mockActiveWebTab = undefined;
     capturedAgentBrands = undefined;
     mockUseCanUseMultiAgent.mockReturnValue(true);
   });
@@ -251,6 +258,39 @@ describe("AgentChatInput", () => {
         });
       }
     );
+
+    it("sends a web selection together with the active web tab https://github.com/Brevilabs/obsidian-copilot-private/issues/667", async () => {
+      const selection: WebSelectedTextContext = {
+        id: "video-excerpt",
+        sourceType: "web",
+        title: "Me at the zoo",
+        url: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+        content: "really really long trunks",
+      };
+      const activeTab: WebTabContext = {
+        url: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+        title: "Me at the zoo",
+        isActive: true,
+      };
+      mockSelectedTextContexts = [selection];
+      mockBuildWebTabsWithActiveSnapshot.mockImplementationOnce((_app, _tabs, includeActive) =>
+        includeActive ? [activeTab] : []
+      );
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+      } as unknown as AgentChatBackend;
+      renderInput(backend, makeDraft({ includeActiveWebTab: true }));
+
+      fireEvent.click(screen.getByText("send"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][1]).toEqual({
+        notes: [],
+        urls: [],
+        selectedTextContexts: [selection],
+        webTabs: [activeTab],
+      });
+    });
 
     it("sends text-only commands that expand to empty without an image-read error https://github.com/logancyang/obsidian-copilot/issues/2850", async () => {
       jest.mocked(expandCustomCommandPrefix).mockResolvedValueOnce({ text: "" });
@@ -460,6 +500,31 @@ describe("AgentChatInput", () => {
         ["claude"],
         [{ url: "https://example.com/report", title: "Report" }]
       );
+      await act(async () => settleCancel());
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/667 restores a queued snapshot of the current page as the Active Web Tab badge instead of a second fixed badge", async () => {
+      const current: WebTabContext = { url: "https://example.com/current", title: "Current" };
+      const other: WebTabContext = { url: "https://example.com/other", title: "Other" };
+      mockActiveWebTab = current;
+      const { getDraft, settleCancel } = setupCancellation();
+      act(() => {
+        getDraft().setLoading(true);
+        getDraft().setIncludeActiveWebTab(false);
+        getDraft().setQueue([
+          {
+            id: "one",
+            rawInput: "follow-up",
+            text: "follow-up",
+            context: { notes: [], urls: [], webTabs: [{ ...current, isActive: true }, other] },
+          },
+        ]);
+      });
+
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+
+      expect(mockPrependContent).toHaveBeenLastCalledWith("follow-up", [], [other]);
+      expect(getDraft().includeActiveWebTab).toBe(true);
       await act(async () => settleCancel());
     });
 

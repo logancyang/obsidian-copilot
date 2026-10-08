@@ -52,6 +52,7 @@ import { getSettings } from "@/settings/model";
 import { processPrompt } from "@/commands/customCommandUtils";
 
 const ISSUE_3210 = "https://github.com/logancyang/obsidian-copilot/issues/3210";
+const ISSUE_667 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/667";
 
 const PROCESSED_CONTENT = "Hello with context";
 const REFRESHED_CONTENT = "Hello with refreshed context";
@@ -346,7 +347,7 @@ describe("ChatManager", () => {
           },
         ],
       ])(
-        "keeps existing web tabs and does not add the active web tab when a %s selection exists",
+        `adds the active web tab beside existing tabs when a %s selection exists (${ISSUE_667})`,
         async (_kind, selection) => {
           showActiveWebTab("https://active.example.com");
           const context = {
@@ -365,8 +366,8 @@ describe("ChatManager", () => {
 
           expect(storedWebTabs(messageId)).toEqual([
             { url: "https://existing.example.com", title: "Existing Tab" },
+            expect.objectContaining({ url: "https://active.example.com", isActive: true }),
           ]);
-          expect(mockGetWebViewerService).not.toHaveBeenCalled();
         }
       );
 

@@ -1,7 +1,16 @@
 import React from "react";
-import { ContextActiveNoteBadge, ContextSelectedTextBadge } from "./ContextBadges";
+import {
+  ContextActiveNoteBadge,
+  ContextActiveWebTabBadge,
+  ContextSelectedTextBadge,
+} from "./ContextBadges";
 import type { Meta, StoryObj } from "@/lib/story";
-import type { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
+import type {
+  NoteSelectedTextContext,
+  SelectedTextContext,
+  WebSelectedTextContext,
+  WebTabContext,
+} from "@/types/message";
 import { TFile } from "obsidian";
 
 const noteFixture: unknown = Object.create(TFile.prototype);
@@ -24,13 +33,17 @@ const selection: NoteSelectedTextContext = {
 interface Props {
   includeActiveNote: boolean;
   selectedTextContexts: SelectedTextContext[];
+  activeWebTab: WebTabContext | null;
 }
 
-function ContextAttachments({ includeActiveNote, selectedTextContexts }: Props) {
+function ContextAttachments({ includeActiveNote, selectedTextContexts, activeWebTab }: Props) {
   return (
     <div className="tw-flex tw-flex-wrap tw-gap-1">
       {includeActiveNote && (
         <ContextActiveNoteBadge currentActiveFile={note} onRemove={() => undefined} />
+      )}
+      {activeWebTab && (
+        <ContextActiveWebTabBadge activeWebTab={activeWebTab} onRemove={() => undefined} />
       )}
       {selectedTextContexts.map((selectedText) => (
         <ContextSelectedTextBadge
@@ -48,6 +61,7 @@ const meta = {
   args: {
     includeActiveNote: true,
     selectedTextContexts: [],
+    activeWebTab: null,
   },
   parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<Props>;
@@ -94,17 +108,22 @@ export const LongSelection: StoryObj<Props> = {
   },
 };
 
+const webSelection: WebSelectedTextContext = {
+  id: "web-excerpt",
+  sourceType: "web",
+  title: "Interview guide",
+  url: "https://example.com/interviews",
+  content: "Ask participants to describe their most recent experience.",
+};
+
 export const WebSelection: StoryObj<Props> = {
+  args: { includeActiveNote: false, selectedTextContexts: [webSelection] },
+};
+
+export const WebSelectionWithActiveWebTab: StoryObj<Props> = {
   args: {
     includeActiveNote: false,
-    selectedTextContexts: [
-      {
-        id: "web-excerpt",
-        sourceType: "web",
-        title: "Interview guide",
-        url: "https://example.com/interviews",
-        content: "Ask participants to describe their most recent experience.",
-      },
-    ],
+    selectedTextContexts: [webSelection],
+    activeWebTab: { url: webSelection.url, title: webSelection.title, isActive: true },
   },
 };

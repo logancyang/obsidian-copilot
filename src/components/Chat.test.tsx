@@ -23,7 +23,7 @@ jest.mock("@/aiParams", () => ({
   useSelectedTextContexts: () => [mockSelections],
 }));
 jest.mock("@/settings/model", () => ({
-  useSettingsValue: () => ({ autoAddActiveContentToContext: true }),
+  useSettingsValue: () => ({}),
 }));
 jest.mock("@/hooks/useChatManager", () => ({
   useChatManager: () => ({ messages: mockMessages, addMessage: jest.fn() }),

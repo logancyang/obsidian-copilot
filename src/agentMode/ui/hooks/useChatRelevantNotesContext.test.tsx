@@ -14,6 +14,10 @@ jest.mock("obsidian", () => ({
 jest.mock("@/aiParams", () => ({
   useSelectedTextContexts: () => [[{ content: "literal excerpt", notePath: "excerpt.md" }]],
 }));
+let mockActiveWebTab: { url: string; title: string } | null = null;
+jest.mock("@/components/chat-components/hooks/useActiveWebTabState", () => ({
+  useActiveWebTabState: () => ({ activeWebTabForMentions: mockActiveWebTab }),
+}));
 jest.mock("@/hooks/useActiveFile", () => ({ useActiveFile: () => ({ path: "active.md" }) }));
 jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoFolderName: () => "Vault",
@@ -59,6 +63,7 @@ describe("useChatRelevantNotesContext", () => {
     });
     afterEach(() => {
       root.remove();
+      mockActiveWebTab = null;
       jest.restoreAllMocks();
     });
 
@@ -387,6 +392,27 @@ describe("useChatRelevantNotesContext", () => {
       ]);
       expect(JSON.stringify(snapshot.request)).not.toContain("private-pixels");
     });
+    it.each([
+      ["no page is open", null, 0],
+      ["a page is open", { url: "https://example.com/report", title: "Report" }, 1],
+    ])(
+      "counts the included active web tab as skipped only when %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/667)",
+      (_case, activeWebTab, expected) => {
+        mockActiveWebTab = activeWebTab;
+        renderHook(() =>
+          useChatRelevantNotesContext(
+            app,
+            root,
+            "one",
+            { ...draft, includeActiveWebTab: true },
+            [],
+            undefined
+          )
+        );
+        void act(() => root.dispatchEvent(new Event("pointerdown")));
+        expect(getChatRelevantNotesStore(app).getSnapshot()!.skippedAttachments).toBe(expected);
+      }
+    );
     it("clears the selected chat when a Markdown editor becomes active even without a Relevant Notes pane (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], undefined));
       void act(() => root.dispatchEvent(new Event("pointerdown")));

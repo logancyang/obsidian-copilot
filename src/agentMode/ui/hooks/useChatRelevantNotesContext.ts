@@ -1,6 +1,7 @@
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useSelectedTextContexts, type ProjectConfig } from "@/aiParams";
+import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { getMiyoFilePath, getMiyoFolderName } from "@/miyo/miyoUtils";
 import {
@@ -22,6 +23,9 @@ export function useChatRelevantNotesContext(
   const store = getChatRelevantNotesStore(app);
   const activeFile = useActiveFile();
   const [selections] = useSelectedTextContexts();
+  // New chats include the web tab by default, which is not an attachment until a page is open.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/667
+  const { activeWebTabForMentions } = useActiveWebTabState();
   const projectFiles = useMemo(() => {
     const { inclusions, exclusions } = getMatchingPatterns({
       ...project?.contextSource,
@@ -103,7 +107,7 @@ export function useChatRelevantNotesContext(
       (count, context) => count + context.urls.length + (context.webTabs?.length ?? 0),
       0
     ) +
-    (draft.includeActiveWebTab ? 1 : 0);
+    (draft.includeActiveWebTab && activeWebTabForMentions ? 1 : 0);
   // Equal retrieval content must keep its identity across streaming renders.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
   const key = JSON.stringify({ id, request: snapshot, skippedAttachments });

@@ -115,43 +115,6 @@ describe("model", () => {
       expect(sanitized.defaultSendShortcut).toBe(SEND_SHORTCUT.SHIFT_ENTER);
     });
 
-    it("migrates legacy includeActiveNoteAsContext=true to autoAddActiveContentToContext=true", () => {
-      const oldSettings = {
-        ...DEFAULT_SETTINGS,
-        autoAddActiveContentToContext: undefined,
-        includeActiveNoteAsContext: true,
-      } as unknown as CopilotSettings;
-
-      const sanitized = sanitizeSettings(oldSettings);
-
-      expect(sanitized.autoAddActiveContentToContext).toBe(true);
-    });
-
-    it("migrates legacy includeActiveNoteAsContext=false to autoAddActiveContentToContext=false", () => {
-      const oldSettings = {
-        ...DEFAULT_SETTINGS,
-        autoAddActiveContentToContext: undefined,
-        includeActiveNoteAsContext: false,
-      } as unknown as CopilotSettings;
-
-      const sanitized = sanitizeSettings(oldSettings);
-
-      expect(sanitized.autoAddActiveContentToContext).toBe(false);
-    });
-
-    it("defaults autoAddActiveContentToContext when no legacy setting exists", () => {
-      const newSettings = {
-        ...DEFAULT_SETTINGS,
-        autoAddActiveContentToContext: undefined,
-      } as unknown as CopilotSettings;
-
-      const sanitized = sanitizeSettings(newSettings);
-
-      expect(sanitized.autoAddActiveContentToContext).toBe(
-        DEFAULT_SETTINGS.autoAddActiveContentToContext
-      );
-    });
-
     it("creates a default agentMode slice when missing", () => {
       const sanitized = sanitizeSettings({
         ...DEFAULT_SETTINGS,

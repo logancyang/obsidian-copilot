@@ -221,10 +221,15 @@ export const AgentChatInput = memo(function AgentChatInput({
     setQueuedMessages([]);
     if (queuedMessages.length > 0) {
       const restored = combineQueuedMessages(queuedMessages);
+      // A fixed copy of the current page would duplicate its Active Web Tab badge and outlive
+      // that badge's removal. https://github.com/Brevilabs/obsidian-copilot-private/issues/667
+      const activeUrl = activeWebTabForMentions?.url;
+      const restoredWebTabs = restored.context?.webTabs ?? [];
+      if (restoredWebTabs.some((tab) => tab.url === activeUrl)) setIncludeActiveWebTab(true);
       chatInputRef.current?.prependContent(
         restored.text,
         restored.mentionedAgents ?? [],
-        restored.context?.webTabs ?? []
+        restoredWebTabs.filter((tab) => tab.url !== activeUrl)
       );
       const notes = restored.context?.notes ?? [];
       if (notes.length > 0) {
@@ -240,7 +245,15 @@ export const AgentChatInput = memo(function AgentChatInput({
     } catch (e) {
       logError("[AgentMode] cancel failed", e);
     }
-  }, [backend, queuedMessages, setContextNotes, setSelectedImages, setQueuedMessages]);
+  }, [
+    activeWebTabForMentions,
+    backend,
+    queuedMessages,
+    setContextNotes,
+    setIncludeActiveWebTab,
+    setSelectedImages,
+    setQueuedMessages,
+  ]);
 
   const runSend = useCallback(
     async (item: QueuedAgentMessage) => {
@@ -292,9 +305,8 @@ export const AgentChatInput = memo(function AgentChatInput({
       }
       const resolvedText = resolveActiveNoteToken(expanded.text, activeFile);
 
-      const hasAnySelection = selectedTextContexts.length > 0;
       const shouldIncludeActiveWebTab =
-        !hasAnySelection && (includeActiveWebTab || resolvedText.includes(ACTIVE_WEB_TAB_MARKER));
+        includeActiveWebTab || resolvedText.includes(ACTIVE_WEB_TAB_MARKER);
       const resolvedWebTabs = buildWebTabsWithActiveSnapshot(
         app,
         webTabs ?? [],

@@ -1,11 +1,6 @@
 import { AgentInputDraftStore } from "@/agentMode/session/AgentInputDraftStore";
 import type { App, TFile } from "obsidian";
 
-let mockAutoAddActiveContent = false;
-jest.mock("@/settings/model", () => ({
-  getSettings: () => ({ autoAddActiveContentToContext: mockAutoAddActiveContent }),
-}));
-
 // eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- minimal path-only stub for draft state tests
 const file = (path: string): TFile => ({ path }) as unknown as TFile;
 
@@ -17,10 +12,6 @@ function buildStore({ live = ["a"], activeFile = null as TFile | null } = {}) {
 }
 
 describe("AgentInputDraftStore", () => {
-  afterEach(() => {
-    mockAutoAddActiveContent = false;
-  });
-
   describe("get()", () => {
     it("returns nothing for a chat input that has never been written", () => {
       const { store } = buildStore();
@@ -30,8 +21,7 @@ describe("AgentInputDraftStore", () => {
   });
 
   describe("update()", () => {
-    it("seeds a first write from the include-active-note setting", () => {
-      mockAutoAddActiveContent = true;
+    it("seeds a first write that includes the active note and web tab", () => {
       const { store } = buildStore();
 
       store.update("a", (draft) => ({ ...draft, input: "hello" }));
@@ -41,7 +31,7 @@ describe("AgentInputDraftStore", () => {
         images: [],
         contextNotes: [],
         includeActiveNote: true,
-        includeActiveWebTab: false,
+        includeActiveWebTab: true,
         loading: false,
         queue: [],
       });
@@ -81,7 +71,6 @@ describe("AgentInputDraftStore", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 replaces the dynamic Active Note badge when the added note is the active note", () => {
-      mockAutoAddActiveContent = true;
       const clicked = file("Clicked.md");
       const { store } = buildStore({ activeFile: clicked });
 
@@ -92,7 +81,6 @@ describe("AgentInputDraftStore", () => {
     });
 
     it("keeps the Active Note badge when the added note is a different note", () => {
-      mockAutoAddActiveContent = true;
       const { store } = buildStore({ activeFile: file("Open.md") });
 
       store.addContextNote("a", file("Other.md"));
