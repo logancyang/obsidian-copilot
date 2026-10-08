@@ -2038,7 +2038,7 @@ describe("AgentSession", () => {
             .mockReturnValue({ processContextWebTabs } as never);
         };
 
-        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/667 sends an unchanged page in full once, then only its title and URL, and in full again once it changes", async () => {
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/667 sends an unchanged page in full once, leaves it out while unchanged, and sends it in full again once it changes", async () => {
           const getInstance = stubWebTabs(
             fullBlock("TRANSCRIPT A"),
             fullBlock("TRANSCRIPT A"),
@@ -2053,9 +2053,8 @@ describe("AgentSession", () => {
             await session.sendPrompt("third", pageContext()).turn;
 
             expect(promptText(mock, 0)).toContain("TRANSCRIPT A");
-            expect(promptText(mock, 1)).not.toContain("TRANSCRIPT A");
-            expect(promptText(mock, 1)).toContain(PAGE.url);
-            expect(promptText(mock, 1)).toContain(PAGE.title);
+            expect(promptText(mock, 1)).not.toContain(PAGE.url);
+            expect(promptText(mock, 1)).toContain("second");
             expect(promptText(mock, 2)).toContain("TRANSCRIPT B");
           } finally {
             getInstance.mockRestore();
