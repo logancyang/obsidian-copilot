@@ -81,7 +81,7 @@ describe("useAgentInputDrafts", () => {
     expect(result.current.queue.map((q) => q.id)).toEqual(["q1"]);
   });
 
-  it("resetCompose clears compose fields and the active note but leaves loading and queue", () => {
+  it("resetCompose clears compose fields but leaves loading and queue", () => {
     const { result } = renderDrafts({ chatInputId: "a" });
 
     act(() => {
@@ -95,7 +95,6 @@ describe("useAgentInputDrafts", () => {
 
     expect(result.current.input).toBe("");
     expect(result.current.images).toEqual([]);
-    expect(result.current.includeActiveNote).toBe(false);
     expect(result.current.loading).toBe(true);
     expect(result.current.queue.map((q) => q.id)).toEqual(["q1"]);
   });
@@ -112,6 +111,21 @@ describe("useAgentInputDrafts", () => {
       act(() => result.current.resetCompose());
 
       expect(result.current.includeActiveWebTab).toBe(included);
+    }
+  );
+
+  it.each([
+    ["keeps a removed active note off", false],
+    ["keeps an included active note on", true],
+  ])(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/670 resetCompose %s for the session's later messages",
+    (_case, included) => {
+      const { result } = renderDrafts({ chatInputId: "a" });
+
+      act(() => result.current.setIncludeActiveNote(included));
+      act(() => result.current.resetCompose());
+
+      expect(result.current.includeActiveNote).toBe(included);
     }
   );
 

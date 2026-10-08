@@ -2,6 +2,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { useEffect } from "react";
 import { $getRoot, type LexicalNode } from "lexical";
 import { $isActiveNotePillNode } from "@/components/chat-components/pills/ActiveNotePillNode";
+import { VALUE_SYNC_TAG } from "@/components/chat-components/plugins/ValueSyncPlugin";
 
 interface ActiveNotePillSyncPluginProps {
   onActiveNoteAdded?: () => void;
@@ -17,7 +18,7 @@ export function ActiveNotePillSyncPlugin({
   useEffect(() => {
     let hasActiveNotePill = false;
 
-    const removeUpdateListener = editor.registerUpdateListener(({ editorState }) => {
+    const removeUpdateListener = editor.registerUpdateListener(({ editorState, tags }) => {
       editorState.read(() => {
         const root = $getRoot();
 
@@ -44,7 +45,9 @@ export function ActiveNotePillSyncPlugin({
           onActiveNoteAdded?.();
         } else if (!foundActiveNotePill && hasActiveNotePill) {
           hasActiveNotePill = false;
-          onActiveNoteRemoved?.();
+          // Clearing the composer after a send is not the user removing the Active Note.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/670
+          if (!tags.has(VALUE_SYNC_TAG)) onActiveNoteRemoved?.();
         }
       });
     });

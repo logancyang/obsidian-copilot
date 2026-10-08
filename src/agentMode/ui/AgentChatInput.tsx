@@ -231,7 +231,12 @@ export const AgentChatInput = memo(function AgentChatInput({
         restored.mentionedAgents ?? [],
         restoredWebTabs.filter((tab) => tab.url !== activeUrl)
       );
-      const notes = restored.context?.notes ?? [];
+      // A fixed copy of the active note would duplicate its Active Note badge and outlive that
+      // badge's removal. https://github.com/Brevilabs/obsidian-copilot-private/issues/670
+      const activePath = app.workspace.getActiveFile()?.path;
+      const restoredNotes = restored.context?.notes ?? [];
+      if (restoredNotes.some((note) => note.path === activePath)) setIncludeActiveNote(true);
+      const notes = restoredNotes.filter((note) => note.path !== activePath);
       if (notes.length > 0) {
         setContextNotes((previous) => dedupeBy([...notes, ...previous], (note) => note.path));
       }
@@ -247,9 +252,11 @@ export const AgentChatInput = memo(function AgentChatInput({
     }
   }, [
     activeWebTabForMentions,
+    app,
     backend,
     queuedMessages,
     setContextNotes,
+    setIncludeActiveNote,
     setIncludeActiveWebTab,
     setSelectedImages,
     setQueuedMessages,

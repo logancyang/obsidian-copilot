@@ -92,7 +92,6 @@ export function useAgentInputDrafts({
         input: "",
         images: [],
         contextNotes: [],
-        includeActiveNote: false,
       })),
     [updateActive]
   );

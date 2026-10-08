@@ -108,7 +108,9 @@ jest.mock("@/services/webViewerService/activeWebTabSnapshot", () => ({
     mockBuildWebTabsWithActiveSnapshot(app, tabs, includeActive),
 }));
 
-const makeApp = (): App => ({ workspace: { getActiveFile: () => null } }) as unknown as App;
+let mockActiveFile: TFile | null = null;
+const makeApp = (): App =>
+  ({ workspace: { getActiveFile: () => mockActiveFile } }) as unknown as App;
 
 const makeFile = (path: string): TFile =>
   new (TFile as unknown as new (path: string) => TFile)(path);
@@ -204,6 +206,7 @@ describe("AgentChatInput", () => {
   beforeEach(() => {
     mockSelectedTextContexts = [];
     mockActiveWebTab = undefined;
+    mockActiveFile = null;
     capturedAgentBrands = undefined;
     mockUseCanUseMultiAgent.mockReturnValue(true);
   });
@@ -525,6 +528,31 @@ describe("AgentChatInput", () => {
 
       expect(mockPrependContent).toHaveBeenLastCalledWith("follow-up", [], [other]);
       expect(getDraft().includeActiveWebTab).toBe(true);
+      await act(async () => settleCancel());
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/670 restores a queued copy of the active note as the Active Note badge instead of a second fixed badge", async () => {
+      const active = makeFile("Active.md");
+      const other = makeFile("Other.md");
+      mockActiveFile = active;
+      const { getDraft, settleCancel } = setupCancellation();
+      act(() => {
+        getDraft().setLoading(true);
+        getDraft().setIncludeActiveNote(false);
+        getDraft().setQueue([
+          {
+            id: "one",
+            rawInput: "follow-up",
+            text: "follow-up",
+            context: { notes: [active, other], urls: [], webTabs: [] },
+          },
+        ]);
+      });
+
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+
+      expect(getDraft().contextNotes).toEqual([other]);
+      expect(getDraft().includeActiveNote).toBe(true);
       await act(async () => settleCancel());
     });
 

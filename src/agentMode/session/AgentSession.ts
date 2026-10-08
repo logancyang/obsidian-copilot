@@ -1838,7 +1838,7 @@ function buildContextEnvelope(context: MessageContext | undefined): string | nul
 
   const lines: string[] = [
     "<copilot-context>",
-    "The user attached the following vault items. The vault is your current working directory; use the Read tool to inspect them when relevant.",
+    "The user attached the following vault items as context. The vault is your current working directory; open them if you need their contents.",
   ];
   if (notePaths.length > 0) {
     lines.push("", "Notes:");
