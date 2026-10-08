@@ -59,6 +59,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.GROQ]: ChatGroq,
   [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
   [ChatModelProviders.SILICONFLOW]: ChatOpenAI,
+  [ChatModelProviders.ATLASCLOUD]: ChatOpenAI,
   [ChatModelProviders.COPILOT_PLUS]: ChatOpenRouter,
   [ChatModelProviders.MISTRAL]: ChatOpenAI,
   [ChatModelProviders.DEEPSEEK]: ChatDeepSeek,
@@ -94,6 +95,7 @@ export default class ChatModelManager {
     [ChatModelProviders.MISTRAL]: () => getSettings().mistralApiKey,
     [ChatModelProviders.DEEPSEEK]: () => getSettings().deepseekApiKey,
     [ChatModelProviders.SILICONFLOW]: () => getSettings().siliconflowApiKey,
+    [ChatModelProviders.ATLASCLOUD]: () => getSettings().atlascloudApiKey,
   } as const;
 
   private constructor() {
@@ -257,6 +259,15 @@ export default class ChatModelManager {
         apiKey: customModel.apiKey || "",
         configuration: {
           baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.SILICONFLOW].host,
+          fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
+        },
+        ...this.getOpenAISpecialConfig(modelName, maxTokens, customModel),
+      },
+      [ChatModelProviders.ATLASCLOUD]: {
+        modelName: modelName,
+        apiKey: customModel.apiKey || "",
+        configuration: {
+          baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.ATLASCLOUD].host,
           fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
         },
         ...this.getOpenAISpecialConfig(modelName, maxTokens, customModel),

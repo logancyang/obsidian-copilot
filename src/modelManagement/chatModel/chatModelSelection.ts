@@ -14,6 +14,7 @@ const DISPLAY_NAME_TO_LEGACY_PROVIDER: Record<string, ChatModelProviders> = {
   "openai format": ChatModelProviders.OPENAI_FORMAT,
   cohere: ChatModelProviders.COHEREAI,
   siliconflow: ChatModelProviders.SILICONFLOW,
+  "atlas cloud": ChatModelProviders.ATLASCLOUD,
 };
 
 function getLegacyChatModelKeys(entry: ResolvedChatBackendEntry): readonly string[] {

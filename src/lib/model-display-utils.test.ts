@@ -16,6 +16,7 @@ describe("model-display-utils", () => {
   describe("getProviderLabel()", () => {
     it("returns known labels, believer suffixes, and unknown provider ids", () => {
       expect(getProviderLabel("openai")).toBe("OpenAI");
+      expect(getProviderLabel("atlascloud")).toBe("Atlas Cloud");
       expect(
         getProviderLabel(
           "copilot-plus",
@@ -35,6 +36,21 @@ describe("model-display-utils", () => {
         hasApiKey: false,
         errorNotice:
           "Please configure API Key for gpt-5 in settings first.\nPath: Settings > Copilot > BYOK",
+      });
+    });
+
+    it("reads the Atlas Cloud key from its own settings field", () => {
+      const atlas = model({
+        name: "deepseek-ai/deepseek-v4-flash",
+        provider: "atlascloud",
+      });
+      expect(checkModelApiKey(atlas, settings({ atlascloudApiKey: "k" }))).toEqual({
+        hasApiKey: true,
+      });
+      expect(checkModelApiKey(atlas, settings({ openAIApiKey: "k" }))).toEqual({
+        hasApiKey: false,
+        errorNotice:
+          "Please configure API Key for deepseek-ai/deepseek-v4-flash in settings first.\nPath: Settings > Copilot > BYOK",
       });
     });
 

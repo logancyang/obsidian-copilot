@@ -216,6 +216,10 @@ export enum ChatModels {
   OPENROUTER_GROK_4_3 = "x-ai/grok-4.3",
   SILICONFLOW_DEEPSEEK_V3 = "deepseek-ai/DeepSeek-V3",
   SILICONFLOW_DEEPSEEK_R1 = "deepseek-ai/DeepSeek-R1",
+  ATLASCLOUD_DEEPSEEK_V4_FLASH = "deepseek-ai/deepseek-v4-flash",
+  ATLASCLOUD_GLM_5_3_FLASH = "zai-org/glm-5.3-flash",
+  ATLASCLOUD_KIMI_K2_6 = "moonshotai/kimi-k2.6",
+  ATLASCLOUD_QWEN_3_5_FLASH = "qwen/qwen3.5-flash",
 }
 
 export enum ChatModelProviders {
@@ -233,6 +237,7 @@ export enum ChatModelProviders {
   DEEPSEEK = "deepseek",
   COHEREAI = "cohereai",
   SILICONFLOW = "siliconflow",
+  ATLASCLOUD = "atlascloud",
 }
 
 export enum ModelCapability {
@@ -429,6 +434,38 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     baseUrl: "https://api.siliconflow.com/v1",
     capabilities: [ModelCapability.REASONING],
   },
+  {
+    name: ChatModels.ATLASCLOUD_DEEPSEEK_V4_FLASH,
+    provider: ChatModelProviders.ATLASCLOUD,
+    enabled: false,
+    isBuiltIn: false,
+    baseUrl: "https://api.atlascloud.ai/v1",
+    capabilities: [ModelCapability.REASONING],
+  },
+  {
+    name: ChatModels.ATLASCLOUD_GLM_5_3_FLASH,
+    provider: ChatModelProviders.ATLASCLOUD,
+    enabled: false,
+    isBuiltIn: false,
+    baseUrl: "https://api.atlascloud.ai/v1",
+    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
+  },
+  {
+    name: ChatModels.ATLASCLOUD_KIMI_K2_6,
+    provider: ChatModelProviders.ATLASCLOUD,
+    enabled: false,
+    isBuiltIn: false,
+    baseUrl: "https://api.atlascloud.ai/v1",
+    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
+  },
+  {
+    name: ChatModels.ATLASCLOUD_QWEN_3_5_FLASH,
+    provider: ChatModelProviders.ATLASCLOUD,
+    enabled: false,
+    isBuiltIn: false,
+    baseUrl: "https://api.atlascloud.ai/v1",
+    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
+  },
 ];
 
 export type Provider = ChatModelProviders;
@@ -503,6 +540,13 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     keyManagementURL: "https://cloud.siliconflow.com/me/account/ak",
     testModel: ChatModels.SILICONFLOW_DEEPSEEK_V3,
   },
+  [ChatModelProviders.ATLASCLOUD]: {
+    label: "Atlas Cloud",
+    host: "https://api.atlascloud.ai/v1",
+    curlBaseURL: "https://api.atlascloud.ai/v1",
+    keyManagementURL: "https://console.atlascloud.ai/api-keys",
+    testModel: ChatModels.ATLASCLOUD_DEEPSEEK_V4_FLASH,
+  },
   [ChatModelProviders.OLLAMA]: {
     label: "Ollama",
     host: "http://localhost:11434/v1/",
@@ -555,6 +599,7 @@ export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSe
   mistralai: "mistralApiKey",
   deepseek: "deepseekApiKey",
   siliconflow: "siliconflowApiKey",
+  atlascloud: "atlascloudApiKey",
 };
 
 export enum DEFAULT_OPEN_AREA {
@@ -679,6 +724,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   mistralApiKey: "",
   deepseekApiKey: "",
   siliconflowApiKey: "",
+  atlascloudApiKey: "",
   defaultChainType: ChainType.LLM_CHAIN,
   defaultModelKey: ChatModels.OPENROUTER_GEMINI_2_5_FLASH + "|" + ChatModelProviders.OPENROUTERAI,
   contextTurns: 15,

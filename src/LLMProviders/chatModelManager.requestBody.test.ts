@@ -64,6 +64,22 @@ function wireModel(overrides: Partial<CustomModel> = {}): CustomModel {
   };
 }
 
+function captureRequestUrl(responseText: string): () => string {
+  let captured = "";
+  const parsedResponse = JSON.parse(responseText) as Record<string, unknown>;
+  setRequestUrlImpl((request: { url?: string }) => {
+    captured = request.url ?? "";
+    return Promise.resolve({
+      status: 200,
+      text: responseText,
+      json: parsedResponse,
+      arrayBuffer: new ArrayBuffer(0),
+      headers: { "content-type": "application/json" },
+    });
+  });
+  return () => captured;
+}
+
 function respondWithBadRequest(message: string): void {
   const body = JSON.stringify({ error: { message, type: "invalid_request_error" } });
   setRequestUrlImpl(() =>
@@ -148,6 +164,20 @@ describe("chatModelManager", () => {
         await expect(send(wireModel())).rejects.toThrow();
 
         expect(attempts).toBe(1);
+      });
+
+      it("falls back to the Atlas Cloud host when the model carries no base URL", async () => {
+        const url = captureRequestUrl(OPENAI_RESPONSE);
+
+        await send(
+          wireModel({
+            name: "deepseek-ai/deepseek-v4-flash",
+            provider: ChatModelProviders.ATLASCLOUD,
+            baseUrl: undefined,
+          })
+        );
+
+        expect(url()).toBe("https://api.atlascloud.ai/v1/chat/completions");
       });
 
       it("sends an explicit per-model output limit when the model carries one", async () => {

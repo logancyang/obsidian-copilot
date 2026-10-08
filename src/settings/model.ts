@@ -51,6 +51,7 @@ export interface CopilotSettings {
   mistralApiKey: string;
   deepseekApiKey: string;
   siliconflowApiKey: string;
+  atlascloudApiKey: string;
   defaultChainType: ChainType;
   defaultModelKey: string;
   contextTurns: number;

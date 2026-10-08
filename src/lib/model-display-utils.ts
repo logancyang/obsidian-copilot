@@ -18,6 +18,7 @@ export type ModelApiKeySettings = Pick<
   | "mistralApiKey"
   | "deepseekApiKey"
   | "siliconflowApiKey"
+  | "atlascloudApiKey"
 >;
 
 const PROVIDERS_WITHOUT_API_KEYS: ReadonlySet<Provider> = new Set([

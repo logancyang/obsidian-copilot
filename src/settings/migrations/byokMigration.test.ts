@@ -89,6 +89,25 @@ describe("byokMigration", () => {
       expect(sf?.catalogProviderId).toBeUndefined();
     });
 
+    it("maps catalog-less Atlas Cloud to openai-compatible with its default base URL", () => {
+      const plan = planByokMigration(
+        settingsWith(
+          [
+            model({
+              name: "deepseek-ai/deepseek-v4-flash",
+              provider: ChatModelProviders.ATLASCLOUD,
+            }),
+          ],
+          {
+            atlascloudApiKey: "k",
+          }
+        )
+      );
+      const atlas = byBaseUrl(plan, "https://api.atlascloud.ai/v1");
+      expect(atlas).toMatchObject({ providerType: "openai-compatible" });
+      expect(atlas?.catalogProviderId).toBeUndefined();
+    });
+
     it("enrolls routable providers into chat + opencode", () => {
       const plan = planByokMigration(
         settingsWith([model({ name: "x", provider: ChatModelProviders.OPENROUTERAI })], {

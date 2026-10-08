@@ -68,6 +68,7 @@ const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
     opencodeRoutable: true,
   },
   [ChatModelProviders.SILICONFLOW]: { providerType: "openai-compatible", opencodeRoutable: true },
+  [ChatModelProviders.ATLASCLOUD]: { providerType: "openai-compatible", opencodeRoutable: true },
   [ChatModelProviders.COHEREAI]: { providerType: "openai-compatible", opencodeRoutable: true },
   [ChatModelProviders.OLLAMA]: {
     providerType: "openai-compatible",
