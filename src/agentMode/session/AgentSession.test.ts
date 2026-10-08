@@ -3224,6 +3224,28 @@ describe("AgentSession", () => {
           expect(watchersDuringTurn).toBe(1);
           expect(vault.watcherCount()).toBe(0);
         });
+
+        it("stops watching the vault when the session is disposed during a turn that never settles https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
+          const vault = makeVault({ "notes/a.md": "one\n" });
+          const mock = makeMockBackend();
+          let markPromptEntered!: () => void;
+          const promptEntered = new Promise<void>((resolve) => {
+            markPromptEntered = resolve;
+          });
+          mock.prompt.mockImplementation(() => {
+            markPromptEntered();
+            return new Promise<never>(() => {});
+          });
+          const session = makeSession(mock, vault.app);
+
+          session.sendPrompt("hang");
+          await promptEntered;
+          expect(vault.watcherCount()).toBe(1);
+
+          await session.dispose();
+
+          expect(vault.watcherCount()).toBe(0);
+        });
       });
     });
 
