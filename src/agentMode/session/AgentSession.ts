@@ -42,6 +42,7 @@ import {
   isNoteSelectedTextContext,
   isWebSelectedTextContext,
   MessageContext,
+  type WebTabContext,
 } from "@/types/message";
 import { err2String, formatDateTime, type FormattedDateTime } from "@/utils";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
@@ -166,6 +167,7 @@ export class AgentSession {
   private readonly contextReady: Promise<ContextMaterializationResult> | null;
   private projectContextBlock: string | null = null;
   private firstPromptSent = false;
+  private lastSentWebTabBlock: string | null = null;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
   private readonly runFanoutTurn: RunFanoutTurn | null;
   private readonly getDisplayName: ((backendId: BackendId) => string) | null;
@@ -731,11 +733,17 @@ export class AgentSession {
       }
 
       const leadingContextBlock = buildPriorFanoutContextBlock(this.pendingFanoutContext);
+      // The agent keeps every earlier turn, so resending an unchanged page fills its context
+      // window with copies. https://github.com/Brevilabs/obsidian-copilot-private/issues/667
+      const webTabPromptBlock =
+        webTabBlock && webTabBlock === this.lastSentWebTabBlock
+          ? buildUnchangedWebTabBlock(context?.webTabs ?? [])
+          : webTabBlock;
       const promptBlocks = buildPromptBlocks(
         displayText,
         context,
         promptContent,
-        webTabBlock,
+        webTabPromptBlock,
         projectContextBlock,
         leadingContextBlock,
         projectContextUpdatesBlock
@@ -782,6 +790,7 @@ export class AgentSession {
         this.pendingFanoutContext = [];
       }
       if (isFirstTurn && promptStarted) this.firstPromptSent = true;
+      if (webTabBlock && promptStarted) this.lastSentWebTabBlock = webTabBlock;
       if (projectContextUpdates && promptStarted) {
         this.markProjectContextUpdatesDeliveredFn?.(projectContextUpdates.epoch);
       }
@@ -1807,6 +1816,18 @@ async function serializeWebTabContext(context: MessageContext | undefined): Prom
   const webTabs = context?.webTabs;
   if (!webTabs || webTabs.length === 0) return "";
   return (await ContextProcessor.getInstance().processContextWebTabs(webTabs)).trim();
+}
+
+function buildUnchangedWebTabBlock(webTabs: readonly WebTabContext[]): string {
+  return [
+    "<web_tabs_unchanged>",
+    "Same content as already sent earlier in this conversation:",
+    ...webTabs.map(
+      (tab) =>
+        `- ${escapeXml(tab.title || tab.url)} (${escapeXml(tab.url)})${tab.isActive ? " [active]" : ""}`
+    ),
+    "</web_tabs_unchanged>",
+  ].join("\n");
 }
 
 function buildWebSelectionBlocks(context: MessageContext | undefined): string | null {

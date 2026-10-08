@@ -33,7 +33,7 @@ A new Agent Chat starts with an **Active Note** badge. Remove it when the curren
 
 ### Active web tab
 
-When a page is open in the desktop Web Viewer, Agent Chat attaches it as an **Active Web Tab** badge on every message, so the agent sees the page you are reading, including pages you are signed in to. Remove the badge to leave the page out of the next message. It returns on the message after that.
+When a page is open in the desktop Web Viewer, Agent Chat attaches it as an **Active Web Tab** badge on every message, so the agent sees the page you are reading, including pages you are signed in to. The page's full content is sent the first time. While it stays the same, later messages send only its title and URL, because the agent already has the content earlier in the chat. If you go to another page, or the content changes, the new content is sent in full. Remove the badge to leave the page out of the next message. It returns on the message after that.
 
 Active Note and selected text are separate attachments in Agent Chat and Quick Chat. You can include either one or both, even when the excerpt comes from the active note. Removing one badge leaves the other attached. Selection badges show the start of the selected text. Hover over a badge to see the full excerpt and its source.
 
