@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 
 export function useObjectUrl(blob: Blob): string | undefined {
   const [url, setUrl] = useState<string>();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const objectUrl = URL.createObjectURL(blob);
     setUrl(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
