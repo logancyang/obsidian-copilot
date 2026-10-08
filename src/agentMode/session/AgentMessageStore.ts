@@ -240,6 +240,19 @@ export class AgentMessageStore {
     return true;
   }
 
+  // OpenCode replays a chat without send times and autosave rewrites its note from these messages, so the note's times carry over while its turns line up. https://github.com/Brevilabs/obsidian-copilot-private/issues/671
+  fillMissingTimestamps(saved: readonly AgentChatMessage[]): void {
+    const visible = this.messages.filter((m) => m.isVisible);
+    for (let i = 0; i < visible.length && i < saved.length; i++) {
+      const msg = visible[i];
+      if (msg.sender !== saved[i].sender) return;
+      const timestamp = saved[i].timestamp;
+      if (msg.timestamp || !timestamp) continue;
+      msg.timestamp = timestamp;
+      this.touch(msg);
+    }
+  }
+
   setFanout(id: string, turn: FanoutTurn): boolean {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;

@@ -40,7 +40,7 @@ import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
-import { CHAT_AGENT_VIEWTYPE } from "@/constants";
+import { CHAT_AGENT_VIEWTYPE, USER_SENDER } from "@/constants";
 import { playNotificationSound } from "@/utils/notificationSound";
 import type { AgentSessionIndex } from "./AgentSessionIndex";
 import {
@@ -56,7 +56,7 @@ import {
   type FanoutHost,
   type FanoutRunInput,
 } from "./fanout/FanoutOrchestrator";
-import type { FanoutTurn } from "./fanout/fanoutTypes";
+import { parseFanoutComposite, type FanoutTurn } from "./fanout/fanoutTypes";
 import { modelCatalogSignature } from "./translateBackendState";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "./scope";
 import {
@@ -2029,7 +2029,15 @@ export class AgentSessionManager {
       throw err;
     }
 
-    session.loadDisplayMessages(loaded.messages);
+    // A reattached session replays the chat with its tool calls and thinking, which the note's text-only copy lacks; fanout turns never reach the agent, so a note holding one stays the source. https://github.com/Brevilabs/obsidian-copilot-private/issues/671
+    const holdsFanout = loaded.messages.some(
+      (m) => m.sender !== USER_SENDER && parseFanoutComposite(m.message) !== null
+    );
+    if (session.hasUserVisibleMessages() && !holdsFanout) {
+      session.store.fillMissingTimestamps(loaded.messages);
+    } else {
+      session.loadDisplayMessages(loaded.messages);
+    }
     session.seedSessionUsage(loaded.usage);
     if (loaded.label) session.setLabel(loaded.label);
     this.getSessionState(session.internalId).source = file;
