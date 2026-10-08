@@ -7,10 +7,10 @@ export const INS_CLOSE = String.fromCharCode(SENTINEL_BLOCK_START + 1);
 export const DEL_OPEN = String.fromCharCode(SENTINEL_BLOCK_START + 2);
 export const DEL_CLOSE = String.fromCharCode(SENTINEL_BLOCK_START + 3);
 
-export const INS_CLASS = "copilot-diff-ins";
-export const DEL_CLASS = "copilot-diff-del";
-export const ROW_INS_CLASS = "copilot-diff-row-ins";
-export const ROW_DEL_CLASS = "copilot-diff-row-del";
+const INS_CLASS = "copilot-diff-ins";
+const DEL_CLASS = "copilot-diff-del";
+const ROW_INS_CLASS = "copilot-diff-row-ins";
+const ROW_DEL_CLASS = "copilot-diff-row-del";
 const DEL_END_CLASS = "copilot-diff-del-end";
 
 const SENTINEL = new RegExp(`[${INS_OPEN}-${DEL_CLOSE}]`);
