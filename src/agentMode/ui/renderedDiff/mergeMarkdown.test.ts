@@ -1,4 +1,10 @@
 import {
+  DEL_CLOSE,
+  DEL_OPEN,
+  INS_CLOSE,
+  INS_OPEN,
+} from "@/agentMode/ui/renderedDiff/applySentinels";
+import {
   BLOCK_MOVED,
   CODE_BLOCK_LINE_CHANGE,
   FILE_CREATED,
@@ -6,6 +12,7 @@ import {
   FRONTMATTER_TAG_ADDED,
   FRONTMATTER_UNCHANGED_BODY_EDIT,
   NON_MARKDOWN_FILE,
+  TABLE_CELL_EDIT,
 } from "@/agentMode/ui/renderedDiff/fixtures";
 import {
   buildRenderedDiffPlan,
@@ -104,6 +111,41 @@ describe("mergeMarkdown", () => {
             { change: "unchanged", text: "Beta" },
           ],
         },
+      ]);
+    });
+
+    it("falls back to a verbatim line diff when the only marks wrap spaces rendering would hide (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      const before = "The pilot runs.\nWe report weekly.\n";
+      const after = "The pilot runs.  \nWe report weekly.\n";
+
+      expect(buildRenderedDiffPlan(before, after, true)).toEqual([
+        {
+          kind: "code",
+          lines: [
+            { change: "deleted", text: "The pilot runs." },
+            { change: "inserted", text: "The pilot runs.  " },
+            { change: "unchanged", text: "We report weekly." },
+          ],
+        },
+      ]);
+    });
+
+    it("shows a shape-preserving table edit as one merged table with the changed cell marked", () => {
+      expect(buildRenderedDiffPlan(TABLE_CELL_EDIT.before, TABLE_CELL_EDIT.after, true)).toEqual([
+        {
+          kind: "markdown",
+          markdown: `| Region | Partners | Status |\n| --- | --- | --- |\n| EMEA | ${DEL_OPEN}2${DEL_CLOSE}${INS_OPEN}3${INS_CLOSE} | Ready |\n| APAC | 1 | Blocked |`,
+        },
+      ]);
+    });
+
+    it("shows a table whose column count changed as the old table removed and the new one added", () => {
+      const before = "| Region | Partners |\n| --- | --- |\n| EMEA | 2 |";
+      const after = "| Region | Partners | Status |\n| --- | --- | --- |\n| EMEA | 2 | Ready |";
+
+      expect(buildRenderedDiffPlan(`${before}\n`, `${after}\n`, true)).toEqual([
+        { kind: "block", change: "deleted", markdown: before },
+        { kind: "block", change: "inserted", markdown: after },
       ]);
     });
 

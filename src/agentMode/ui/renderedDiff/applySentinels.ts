@@ -9,7 +9,7 @@ export const INS_CLOSE = String.fromCharCode(SENTINEL_BLOCK_START + 1);
 export const DEL_OPEN = String.fromCharCode(SENTINEL_BLOCK_START + 2);
 export const DEL_CLOSE = String.fromCharCode(SENTINEL_BLOCK_START + 3);
 
-const SENTINEL = new RegExp(`[${INS_OPEN}-${DEL_CLOSE}]`);
+export const SENTINEL = new RegExp(`[${INS_OPEN}-${DEL_CLOSE}]`);
 
 type Change = "inserted" | "deleted";
 type Mode = Change | null;
