@@ -1,5 +1,43 @@
 # Release Notes
 
+# v4.0.14 - Active note and web page context in Agent Chat, more Miyo search folders
+
+Agent Chat now follows what you are looking at. The note you have open and the page in Obsidian's Web Viewer, such as a YouTube video or an article, are attached when a chat starts and stay attached as you keep talking. Open another note or page and the agent works from the new one.
+
+You can also search other Miyo folders along with your vault. This release also fixes Codex question cards, chat links, and turning Copilot back on after an update.
+
+## ✨ Enhancements
+
+- Agent Chat includes the page open in Web Viewer as a **Current** chip in the composer. The agent receives the full page with your first message, and again only when the page changes. ([#3563](https://github.com/logancyang/obsidian-copilot/pull/3563), @zeroliu)
+- Highlight text on a web page and ask about it: the agent receives both the highlight and the page, in Agent Chat and Quick Chat. ([#3563](https://github.com/logancyang/obsidian-copilot/pull/3563), @zeroliu)
+- The active note stays attached after you send, and each message tells the agent which note is open at that moment. Remove its badge to leave the note out for the rest of the chat. ([#3564](https://github.com/logancyang/obsidian-copilot/pull/3564), @zeroliu)
+- Search other Miyo folders, such as a research folder or your synced ChatGPT chats, along with your vault. Tick them under **Search scope** in **Settings → Copilot → Miyo**, and Quick Chat and agent chats search them too. ([#3525](https://github.com/logancyang/obsidian-copilot/pull/3525), [#3526](https://github.com/logancyang/obsidian-copilot/pull/3526), @wenzhengjiang)
+- With **Autosave Chat as Markdown** off, Claude and OpenCode chats you reopen from Recent Chats show the agent's tool calls and thinking as they appeared live. ([#3394](https://github.com/logancyang/obsidian-copilot/pull/3394), [#3512](https://github.com/logancyang/obsidian-copilot/pull/3512), @zeroliu)
+- Each provider in an agent's model settings shows how many of its models you turned on. ([#3505](https://github.com/logancyang/obsidian-copilot/pull/3505), @zeroliu)
+- Agent tool call rows are dimmer so the reply reads first, and Claude's command rows show their description without an extra "Ran". ([#3520](https://github.com/logancyang/obsidian-copilot/pull/3520), [#3544](https://github.com/logancyang/obsidian-copilot/pull/3544), @zeroliu)
+
+## 🛠️ Bug Fixes
+
+- Codex shows its questions as cards you can answer in Default and Auto modes. ([#3554](https://github.com/logancyang/obsidian-copilot/pull/3554), @zeroliu)
+- Copilot turns back on after an update or a quick off and on, without restarting Obsidian. Your vault also opens without waiting for Copilot, and Copilot tabs show **Starting Copilot…** until it is ready. ([#3545](https://github.com/logancyang/obsidian-copilot/pull/3545), @zeroliu)
+- Copied chat links open their chat in vaults with a space in the name and after an agent chat is reopened. Copy a link again to replace one that did not open. ([#3530](https://github.com/logancyang/obsidian-copilot/pull/3530), [#3546](https://github.com/logancyang/obsidian-copilot/pull/3546), @zeroliu)
+- PDFs show up when you type `[[` or `@` in any chat. ([#3550](https://github.com/logancyang/obsidian-copilot/pull/3550), @zeroliu)
+- Wide tables in chat replies scroll inside their own box, so the rest of the chat stays in place. ([#3521](https://github.com/logancyang/obsidian-copilot/pull/3521), @zeroliu)
+- Typing stays responsive on mobile with a photo attached in Quick Chat or Agent Chat. ([#3561](https://github.com/logancyang/obsidian-copilot/pull/3561), @zeroliu)
+- OpenCode on Copilot Plus uses each model's full context window, such as 1M tokens for DeepSeek V4 Pro. ([#3516](https://github.com/logancyang/obsidian-copilot/pull/3516), @brevilabs-agent-bot[bot])
+- OpenCode agents are no longer told to save files to a temporary folder outside your vault. ([#3556](https://github.com/logancyang/obsidian-copilot/pull/3556), @zeroliu)
+
+## ⚠️ Compatibility Notes
+
+- Searching other Miyo folders needs Miyo 0.3.1 or newer. With an older Miyo, the folders you tick are saved and searches cover your vault only. ([#3525](https://github.com/logancyang/obsidian-copilot/pull/3525), [#3526](https://github.com/logancyang/obsidian-copilot/pull/3526), @wenzhengjiang)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.13 - Codex Safe mode and custom command default model
 
 [![Demo video: Obsidian Copilot 4.0.13: Codex asks before it edits](https://github.com/user-attachments/assets/adeab3df-bd00-4425-8dc2-bc39146669b8)](https://youtube.com/shorts/VNH0E_hcrMQ?feature=share)
