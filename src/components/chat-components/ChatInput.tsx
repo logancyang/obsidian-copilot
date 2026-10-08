@@ -46,6 +46,7 @@ import { $removeActiveWebTabPills } from "./pills/ActiveWebTabPillNode";
 import { $findWebTabPills, $removeWebTabPillsByUrl } from "./pills/WebTabPillNode";
 import LexicalEditor from "./LexicalEditor";
 import { cn } from "@/lib/utils";
+import { useObjectUrl } from "@/hooks/useObjectUrl";
 import { type AgentMentionBrand, EMPTY_AGENT_MENTION_BRANDS } from "./hooks/useAtMentionCategories";
 import { EMPTY_CLOUD_AGENT_IDS } from "./context/CloudAgentContext";
 import { $createAgentPillNode } from "./pills/AgentPillNode";
@@ -137,6 +138,15 @@ export interface ChatInputProps {
   cloudAgentIds?: ReadonlySet<string>;
 
   onMentionedAgentsChange?: (backendIds: string[]) => void;
+}
+
+interface SelectedImagePreviewProps {
+  file: File;
+}
+
+function SelectedImagePreview({ file }: SelectedImagePreviewProps) {
+  const url = useObjectUrl(file);
+  return <img src={url} alt={file.name} className="selected-image-preview" />;
 }
 
 export interface ChatInputHandle {
@@ -669,11 +679,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
             <div className="selected-images">
               {selectedImages.map((file, index) => (
                 <div key={getFileIdentityKey(file)} className="image-preview-container">
-                  <img
-                    src={URL.createObjectURL(file)}
-                    alt={file.name}
-                    className="selected-image-preview"
-                  />
+                  <SelectedImagePreview file={file} />
                   <button
                     type="button"
                     className="remove-image-button"
