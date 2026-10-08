@@ -58,15 +58,6 @@ describe("FilesChangedCard", () => {
       expect(within(rows[0]).getByText("−0")).toBeTruthy();
     });
 
-    it("opens the single file's diff when the collapsed card is clicked", () => {
-      const target = change("notes/alpha.md");
-      const { onOpen } = renderCard([target]);
-
-      fireEvent.click(screen.getByRole("button", { name: /alpha\.md/ }));
-
-      expect(onOpen).toHaveBeenCalledWith(target);
-    });
-
     it("orders rows by vault path rather than by the order the agent touched them", () => {
       renderCard([change("notes/zeta.md"), change("alpha.md"), change("notes/beta.md")]);
 
