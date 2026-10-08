@@ -3832,6 +3832,29 @@ describe("AgentSessionManager", () => {
           [AI_SENDER, fanoutBody],
         ]);
       });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 shows the note's messages when the note holds a refused turn that never reached the agent", async () => {
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "replayed question", "u1"));
+            emit(replayChunk("agent_message_chunk", "replayed answer", "a1"));
+          },
+        });
+        const refusal = "This chat's model isn't enabled. Pick an enabled model to continue.";
+
+        const session = await openSavedChat(replay, [
+          ...savedTurn,
+          { id: "s3", sender: USER_SENDER, message: "try again", isVisible: true, timestamp: null },
+          { id: "s4", sender: AI_SENDER, message: refusal, isVisible: true, timestamp: null },
+        ]);
+
+        expect(senderAndText(session)).toEqual([
+          [USER_SENDER, "saved question"],
+          [AI_SENDER, "saved answer"],
+          [USER_SENDER, "try again"],
+          [AI_SENDER, refusal],
+        ]);
+      });
     });
 
     describe("loadNativeSessionFromHistory()", () => {

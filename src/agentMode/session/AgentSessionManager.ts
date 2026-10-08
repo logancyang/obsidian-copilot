@@ -56,7 +56,7 @@ import {
   type FanoutHost,
   type FanoutRunInput,
 } from "./fanout/FanoutOrchestrator";
-import { parseFanoutComposite, type FanoutTurn } from "./fanout/fanoutTypes";
+import type { FanoutTurn } from "./fanout/fanoutTypes";
 import { modelCatalogSignature } from "./translateBackendState";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "./scope";
 import {
@@ -2029,11 +2029,14 @@ export class AgentSessionManager {
       throw err;
     }
 
-    // A reattached session replays the chat with its tool calls and thinking, which the note's text-only copy lacks; fanout turns never reach the agent, so a note holding one stays the source. https://github.com/Brevilabs/obsidian-copilot-private/issues/671
-    const holdsFanout = loaded.messages.some(
-      (m) => m.sender !== USER_SENDER && parseFanoutComposite(m.message) !== null
-    );
-    if (session.hasUserVisibleMessages() && !holdsFanout) {
+    // A reattached session replays the chat with its tool calls and thinking, which the note's text-only copy lacks; turns that never reach the agent (fanout, local refusals) live only in the note, so a replay with fewer user turns leaves the note as the source. https://github.com/Brevilabs/obsidian-copilot-private/issues/671
+    const replayedUserTurns = session.store
+      .getDisplayMessages()
+      .filter((m) => m.sender === USER_SENDER).length;
+    const savedUserTurns = loaded.messages.filter(
+      (m) => m.isVisible && m.sender === USER_SENDER
+    ).length;
+    if (replayedUserTurns > 0 && replayedUserTurns >= savedUserTurns) {
       session.store.fillMissingTimestamps(loaded.messages);
     } else {
       session.loadDisplayMessages(loaded.messages);
