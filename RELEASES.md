@@ -4,13 +4,17 @@
 
 Bring the web page you are reading into Agent Chat. Open a YouTube video or an article in Obsidian's Web Viewer, and Agent Chat includes it as context.
 
-This release also gives you more control over which Miyo folders Copilot searches, along with many stability improvements.
+This release also gives you more control over which Miyo folders Copilot searches, a first look at Miyo Automations, and many stability improvements.
 
 ## ✨ Enhancements
 
 - Agent Chat includes the page open in Web Viewer, and any text you highlight on it, as context. ([#3563](https://github.com/logancyang/obsidian-copilot/pull/3563), @zeroliu)
 
   ![Agent Chat in the right sidebar with the open Wikipedia page attached as a Current chip](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/agent-chat-with-the-open-wikipedia-page-as-a-current-chip-2f3d191a.png)
+
+- Try Automations (alpha) in Miyo 0.3.1: ask Claude Code, Codex, or OpenCode to do something on a repeat, such as adding yesterday's unfinished tasks to today's daily note, and Miyo runs it on schedule. Tell us what you think in Discord. ([Miyo 0.3.1](https://github.com/Brevilabs/miyo-releases/releases/tag/v0.3.1-beta))
+
+  ![Miyo's Automations tab, marked Alpha, listing a task that runs through Claude Code on weekdays at 9:00 AM and saves to Daily](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/miyo-automations-tab-alpha-2b4549f7.png)
 
 - Choose other Miyo folders to search along with your vault, such as a research folder or your synced ChatGPT chats, under **Search scope** in **Settings → Copilot → Miyo**. ([#3525](https://github.com/logancyang/obsidian-copilot/pull/3525), [#3526](https://github.com/logancyang/obsidian-copilot/pull/3526), @wenzhengjiang)
 
@@ -36,7 +40,7 @@ This release also gives you more control over which Miyo folders Copilot searche
 
 ## ⚠️ Compatibility Notes
 
-- Searching other Miyo folders needs Miyo 0.3.1 or newer. With an older Miyo, Copilot searches your vault only. ([#3525](https://github.com/logancyang/obsidian-copilot/pull/3525), [#3526](https://github.com/logancyang/obsidian-copilot/pull/3526), @wenzhengjiang)
+- Searching other Miyo folders and Automations need Miyo 0.3.1 or newer. With an older Miyo, Copilot searches your vault only. ([#3525](https://github.com/logancyang/obsidian-copilot/pull/3525), [#3526](https://github.com/logancyang/obsidian-copilot/pull/3526), @wenzhengjiang)
 
 ## 🧰 Troubleshoot
 
