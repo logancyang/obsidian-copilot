@@ -8,6 +8,5 @@
     "scripts/printPromptDebugEntry.ts"
   ],
   "project": ["src/**/*.{ts,tsx,js,jsx}", "dev/gallery/**/*.{ts,tsx}", "scripts/**/*.{ts,js,mjs}"],
-  "ignore": ["src/styles/tailwind.css"],
-  "ignoreDependencies": ["buffer"]
+  "ignore": ["src/styles/tailwind.css"]
 }

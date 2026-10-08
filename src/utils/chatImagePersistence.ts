@@ -140,7 +140,10 @@ export async function prepareChatImagesForSave<T extends MessageWithImages>(
       legacyEmbeds.every((embed) => /^!\[\[[^\n]+\]\]$|^!\[[^\n]*\]\([^\n]+\)$/.test(embed));
     const embeds: string[] = [];
     for (const image of uploads) {
-      const match = /^data:image\/([a-z0-9.+-]+);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(image.url);
+      const match =
+        /^data:image\/([a-z0-9.+-]+);base64,((?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2,3}|[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)$/i.exec(
+          image.url
+        );
       if (!match) throw new Error("Cannot save an invalid uploaded image.");
       const bytes = base64ToArrayBuffer(match[2]);
       const base64 = arrayBufferToBase64(bytes);
@@ -149,8 +152,7 @@ export async function prepareChatImagesForSave<T extends MessageWithImages>(
       if (
         !bytes.byteLength ||
         !extension ||
-        base64.replace(/=+$/, "") !== match[2].replace(/=+$/, "") ||
-        (match[2].includes("=") && match[2] !== base64)
+        base64.replace(/=+$/, "") !== match[2].replace(/=+$/, "")
       ) {
         throw new Error("Cannot save an invalid uploaded image.");
       }
