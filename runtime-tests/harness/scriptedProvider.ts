@@ -12,6 +12,8 @@ export interface ScriptedEndpoint {
 type ScriptedReply =
   /** Stream `text` one word at a time, then finish. */
   | { kind: "answer"; text: string }
+  /** Ask the agent to run one of its own tools, as a model's tool call does. */
+  | { kind: "toolCall"; id: string; name: string; arguments: Record<string, unknown> }
   /** Stream `text`, then keep the response open and hand it to `onHeld`. */
   | { kind: "hold"; text: string; onHeld: (held: HeldStream) => void }
   /**
@@ -38,7 +40,15 @@ export interface RecordedRequest {
   /** The request's last user message: the question an agent turn answers. */
   question: string;
   /** The conversation the request carried, without the system prompt. */
-  messages: readonly { role: string; content: string }[];
+  messages: readonly RecordedMessage[];
+}
+
+/** One message of a recorded request's conversation. */
+export interface RecordedMessage {
+  role: string;
+  content: string;
+  /** On a `tool` message, the id of the tool call it answers. */
+  toolCallId?: string;
 }
 
 /** A conversation waiting on an answer, as the provider paces its stream. */
@@ -97,6 +107,7 @@ export class ScriptedProvider {
   readonly #failures: string[] = [];
   readonly #open = new Set<http.ServerResponse>();
   readonly #held: HeldStream[] = [];
+  #toolCalls = 0;
   /** The last error reply and the question it refused, which it keeps refusing. */
   #failing: { question: string; reply: ScriptedReply } | null = null;
 
@@ -122,6 +133,17 @@ export class ScriptedProvider {
   /** Answers held so far, oldest first, including ones since released, broken, or closed. */
   get held(): readonly HeldStream[] {
     return this.#held;
+  }
+
+  /**
+   * Queue a tool call for the next agent turn: `name` with `args`, as a model
+   * asks for one. The agent runs its real tool and sends the result in its next
+   * request. Returns the call's id, which that result carries.
+   */
+  callTool(name: string, args: Record<string, unknown>): string {
+    const id = `call_scripted_${++this.#toolCalls}`;
+    this.#replies.push({ kind: "toolCall", id, name, arguments: args });
+    return id;
   }
 
   /** Queue an answer for the next agent turn, streamed one word at a time. */
@@ -204,6 +226,7 @@ export class ScriptedProvider {
         role: message.role,
         content:
           typeof message.content === "string" ? message.content : JSON.stringify(message.content),
+        ...(message.tool_call_id ? { toolCallId: message.tool_call_id } : {}),
       }));
     const question = messages.findLast((message) => message.role === "user")?.content ?? "";
     let asker: Asker | undefined;
@@ -241,6 +264,21 @@ export class ScriptedProvider {
         reply.retryAfterMs === undefined ? {} : { "retry-after-ms": String(reply.retryAfterMs) };
       res.writeHead(reply.status, { "content-type": "application/json", ...retryAfter });
       res.end(JSON.stringify({ error: { message: reply.message } }), reply.onRefused);
+      return;
+    }
+
+    if (reply.kind === "toolCall") {
+      const call = { name: reply.name, arguments: JSON.stringify(reply.arguments) };
+      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+      writeEvent(
+        res,
+        chunk(model, {
+          role: "assistant",
+          tool_calls: [{ index: 0, id: reply.id, type: "function", function: call }],
+        })
+      );
+      writeEvent(res, chunk(model, {}, "tool_calls"));
+      res.end("data: [DONE]\n\n");
       return;
     }
 
@@ -339,7 +377,7 @@ interface ChatCompletionRequest {
   model?: unknown;
   reasoning_effort?: unknown;
   tools?: unknown;
-  messages?: { role: string; content: unknown }[];
+  messages?: { role: string; content: unknown; tool_call_id?: string }[];
 }
 
 function chunk(

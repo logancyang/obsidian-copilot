@@ -45,6 +45,12 @@ export class FileSystemAdapter {
     return this.basePath;
   }
 
+  /** `VaultClient` writes through this when the agent calls ACP `fs/write_text_file`. */
+  async write(relativePath: string, data: string): Promise<void> {
+    vaultWrites.push([relativePath, data]);
+    await nodeFs.promises.writeFile(nodePath.join(this.basePath, relativePath), data);
+  }
+
   async exists(relativePath: string): Promise<boolean> {
     try {
       await nodeFs.promises.access(nodePath.join(this.basePath, relativePath));
@@ -57,6 +63,9 @@ export class FileSystemAdapter {
 
 /** Every notice Copilot showed, oldest first. The harness empties it for each scenario. */
 export const shownNotices: string[] = [];
+
+/** Every write that reached the vault adapter, as `[vault path, content]`. The harness empties it for each scenario. */
+export const vaultWrites: [string, string][] = [];
 
 /** Obsidian's toast. Records its message so a scenario can assert what the user was told. */
 export class Notice {
