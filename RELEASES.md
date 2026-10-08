@@ -1,47 +1,45 @@
 # Release Notes
 
-# v4.0.14 - Active note and web page context in Agent Chat, more Miyo search folders
+# v4.0.14 - Web page context in Agent Chat, improved Miyo scope control, and stability improvements
 
-Agent Chat now follows what you are looking at. The note you have open and the page in Obsidian's Web Viewer, such as a YouTube video or an article, are attached when a chat starts and stay attached as you keep talking. Open another note or page and the agent works from the new one.
+Bring the web page you are reading into Agent Chat. Open a YouTube video or an article in Obsidian's Web Viewer, and Agent Chat includes it as context.
 
-You can also search other Miyo folders along with your vault. This release also fixes Codex question cards, chat links, and turning Copilot back on after an update.
+This release also gives you more control over which Miyo folders Copilot searches, along with many stability improvements.
 
 ## ✨ Enhancements
 
-- Agent Chat includes the page open in Web Viewer as a **Current** chip in the composer. The agent receives the full page with your first message, and again only when the page changes. ([#3563](https://github.com/logancyang/obsidian-copilot/pull/3563), @zeroliu)
+- Agent Chat includes the page open in Web Viewer, and any text you highlight on it, as context. ([#3563](https://github.com/logancyang/obsidian-copilot/pull/3563), @zeroliu)
 
   ![Agent Chat in the right sidebar with the open Wikipedia page attached as a Current chip](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/agent-chat-with-the-open-wikipedia-page-as-a-current-chip-2f3d191a.png)
 
-- Highlight text on a web page and ask about it: the agent receives both the highlight and the page, in Agent Chat and Quick Chat. ([#3563](https://github.com/logancyang/obsidian-copilot/pull/3563), @zeroliu)
-- The active note stays attached after you send, and each message tells the agent which note is open at that moment. Remove its badge to leave the note out for the rest of the chat. ([#3564](https://github.com/logancyang/obsidian-copilot/pull/3564), @zeroliu)
+- The active note stays in Agent Chat's context until you remove it. ([#3564](https://github.com/logancyang/obsidian-copilot/pull/3564), @zeroliu)
 
   ![Agent Chat after sending a message, with the Project Falcon Active Note badge still in the composer](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/active-note-badge-still-attached-after-sending-1186cc1d.png)
 
-- Search other Miyo folders, such as a research folder or your synced ChatGPT chats, along with your vault. Tick them under **Search scope** in **Settings → Copilot → Miyo**, and Quick Chat and agent chats search them too. ([#3525](https://github.com/logancyang/obsidian-copilot/pull/3525), [#3526](https://github.com/logancyang/obsidian-copilot/pull/3526), @wenzhengjiang)
-- With **Autosave Chat as Markdown** off, Claude and OpenCode chats you reopen from Recent Chats show the agent's tool calls and thinking as they appeared live. ([#3394](https://github.com/logancyang/obsidian-copilot/pull/3394), [#3512](https://github.com/logancyang/obsidian-copilot/pull/3512), @zeroliu)
+- Choose other Miyo folders to search along with your vault, such as a research folder or your synced ChatGPT chats, under **Search scope** in **Settings → Copilot → Miyo**. ([#3525](https://github.com/logancyang/obsidian-copilot/pull/3525), [#3526](https://github.com/logancyang/obsidian-copilot/pull/3526), @wenzhengjiang)
+- Reopened Claude and OpenCode chats show the agent's tool calls and thinking as they appeared live. ([#3394](https://github.com/logancyang/obsidian-copilot/pull/3394), [#3512](https://github.com/logancyang/obsidian-copilot/pull/3512), @zeroliu)
 
   ![A Claude chat reopened from Recent Chats showing its Read tool calls and reply](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/reopened-claude-chat-showing-its-read-tool-calls-61216ee5.png)
 
+- Mention PDFs with `[[` or `@` in any chat. ([#3550](https://github.com/logancyang/obsidian-copilot/pull/3550), @zeroliu)
 - Each provider in an agent's model settings shows how many of its models you turned on. ([#3505](https://github.com/logancyang/obsidian-copilot/pull/3505), @zeroliu)
 
   ![OpenCode model settings with provider groups showing selected-model count badges](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/provider-groups-with-selected-model-counts-8f4ffd29.png)
 
-- Agent tool call rows are dimmer so the reply reads first, and Claude's command rows show their description without an extra "Ran". ([#3520](https://github.com/logancyang/obsidian-copilot/pull/3520), [#3544](https://github.com/logancyang/obsidian-copilot/pull/3544), @zeroliu)
+- Agent tool call rows are dimmer so the reply reads first. ([#3520](https://github.com/logancyang/obsidian-copilot/pull/3520), [#3544](https://github.com/logancyang/obsidian-copilot/pull/3544), @zeroliu)
 
 ## 🛠️ Bug Fixes
 
 - Codex shows its questions as cards you can answer in Default and Auto modes. ([#3554](https://github.com/logancyang/obsidian-copilot/pull/3554), @zeroliu)
-- Copilot turns back on after an update or a quick off and on, without restarting Obsidian. Your vault also opens without waiting for Copilot, and Copilot tabs show **Starting Copilot…** until it is ready. ([#3545](https://github.com/logancyang/obsidian-copilot/pull/3545), @zeroliu)
-- Copied chat links open their chat in vaults with a space in the name and after an agent chat is reopened. Copy a link again to replace one that did not open. ([#3530](https://github.com/logancyang/obsidian-copilot/pull/3530), [#3546](https://github.com/logancyang/obsidian-copilot/pull/3546), @zeroliu)
-- PDFs show up when you type `[[` or `@` in any chat. ([#3550](https://github.com/logancyang/obsidian-copilot/pull/3550), @zeroliu)
+- Copied chat links open their chat, including in vaults with a space in the name. ([#3530](https://github.com/logancyang/obsidian-copilot/pull/3530), [#3546](https://github.com/logancyang/obsidian-copilot/pull/3546), @zeroliu)
 - Wide tables in chat replies scroll inside their own box, so the rest of the chat stays in place. ([#3521](https://github.com/logancyang/obsidian-copilot/pull/3521), @zeroliu)
-- Typing stays responsive on mobile with a photo attached in Quick Chat or Agent Chat. ([#3561](https://github.com/logancyang/obsidian-copilot/pull/3561), @zeroliu)
+- Typing stays responsive on mobile with a photo attached. ([#3561](https://github.com/logancyang/obsidian-copilot/pull/3561), @zeroliu)
 - OpenCode on Copilot Plus uses each model's full context window, such as 1M tokens for DeepSeek V4 Pro. ([#3516](https://github.com/logancyang/obsidian-copilot/pull/3516), @brevilabs-agent-bot[bot])
-- OpenCode agents are no longer told to save files to a temporary folder outside your vault. ([#3556](https://github.com/logancyang/obsidian-copilot/pull/3556), @zeroliu)
+- OpenCode no longer suggests saving your work outside your vault. ([#3556](https://github.com/logancyang/obsidian-copilot/pull/3556), @zeroliu)
 
 ## ⚠️ Compatibility Notes
 
-- Searching other Miyo folders needs Miyo 0.3.1 or newer. With an older Miyo, the folders you tick are saved and searches cover your vault only. ([#3525](https://github.com/logancyang/obsidian-copilot/pull/3525), [#3526](https://github.com/logancyang/obsidian-copilot/pull/3526), @wenzhengjiang)
+- Searching other Miyo folders needs Miyo 0.3.1 or newer. With an older Miyo, Copilot searches your vault only. ([#3525](https://github.com/logancyang/obsidian-copilot/pull/3525), [#3526](https://github.com/logancyang/obsidian-copilot/pull/3526), @wenzhengjiang)
 
 ## 🧰 Troubleshoot
 
