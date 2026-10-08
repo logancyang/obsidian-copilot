@@ -145,6 +145,7 @@
     "zod": "^4.4.2"
   },
   "overrides": {
-    "@browserbasehq/stagehand": "3.2.1"
+    "@browserbasehq/stagehand": "3.2.1",
+    "handlebars": "4.7.10"
   }
 }
