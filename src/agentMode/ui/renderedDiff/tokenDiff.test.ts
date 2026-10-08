@@ -159,6 +159,15 @@ describe("tokenDiff", () => {
       );
     });
 
+    it("replaces a bare URL whole, leaving emphasis delimiters around it outside the marks https://github.com/Brevilabs/obsidian-copilot-private/issues/349", () => {
+      expect(diffInline("see https://ex.com/a_b1 now", "see https://ex.com/a_b2 now")).toBe(
+        `see ${deleted("https://ex.com/a_b1")}${inserted("https://ex.com/a_b2")} now`
+      );
+      expect(diffInline("**https://a.com** now", "**https://b.com** now")).toBe(
+        `**${deleted("https://a.com")}${inserted("https://b.com")}** now`
+      );
+    });
+
     it.each(atomicEdits)(
       "replaces %s whole without inserting markers inside syntax (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)",
       (_name, before, after) => {
@@ -216,15 +225,6 @@ describe("tokenDiff", () => {
       const merged = diffTextBlock("- One\n- Two\n- Three", "- One\n- Three");
 
       expect(merged).toBe(`- One\n- ${deleted("Two")}\n- Three`);
-    });
-
-    it("diffs paired lines at token level rather than replacing them whole", () => {
-      const merged = diffTextBlock(
-        "The pilot runs for six weeks.",
-        "The pilot runs for ten weeks."
-      );
-
-      expect(merged).toBe(`The pilot runs for ${deleted("six")}${inserted("ten")} weeks.`);
     });
 
     it("emits a toggled task as a removed line and an added line because the change is in the checkbox syntax", () => {

@@ -68,6 +68,28 @@ describe("tableDiff", () => {
       );
     });
 
+    it("shows a cell whose emphasis changed as the whole old cell and the whole new cell https://github.com/Brevilabs/obsidian-copilot-private/issues/349", () => {
+      const merged = diffTableBlock(
+        `${header}\n| EMEA | 2 | **Ready** |`,
+        `${header}\n| EMEA | 2 | Ready |`
+      );
+
+      expect(merged).toBe(`${header}\n| EMEA | 2 | ${deleted("**Ready**")}${inserted("Ready")} |`);
+    });
+
+    it("marks an emphasized cell of an added row as one insertion without an empty deletion https://github.com/Brevilabs/obsidian-copilot-private/issues/349", () => {
+      const merged = diffTableBlock(
+        `${header}\n| EMEA | 2 | Ready |`,
+        `${header}\n| EMEA | 2 | Ready |\n| AMER | 4 | **New** |`
+      );
+
+      expect(merged).toBe(
+        `${header}\n| EMEA | 2 | Ready |\n| ${inserted("AMER")} | ${inserted("4")} | ${inserted(
+          "**New**"
+        )} |`
+      );
+    });
+
     it("refuses to merge tables whose column counts differ so the caller can replace the block whole", () => {
       const merged = diffTableBlock(
         "| Region | Partners |\n| --- | --- |\n| EMEA | 2 |",
