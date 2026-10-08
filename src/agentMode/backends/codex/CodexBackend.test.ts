@@ -3,7 +3,8 @@ import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { MIYO_SEARCH_FOLDER_ENV, MIYO_SEARCH_SCOPE_ENV } from "@/builtinSkills/builtinSkills";
 import { detectBinary } from "@/utils/detectBinary";
-import { CodexBackend } from "./CodexBackend";
+import { setDisableBuiltinSystemPrompt } from "@/system-prompts/state";
+import { CODEX_QUESTION_CARD_STEERING, CodexBackend } from "./CodexBackend";
 import { resolveSupportedCodexAcpEntry } from "./codexVersion";
 import * as codexVersion from "./codexVersion";
 
@@ -88,12 +89,26 @@ describe("CodexBackend", () => {
         expect(desc.env[OPENARTIFACTS_WORKSPACE_ROOT_ENV]).toBe("/vault");
       });
 
-      it("encodes the shared product prompt byte for byte", async () => {
+      it("encodes the shared product prompt byte for byte, followed by the question-card steering", async () => {
         const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
 
         expect(JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions).toBe(
-          buildAgentSystemPrompt("codex")
+          `${buildAgentSystemPrompt("codex")}\n\n${CODEX_QUESTION_CARD_STEERING}`
         );
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/3536 steers Codex to the request_user_input card even when the built-in system prompt is disabled", async () => {
+        setDisableBuiltinSystemPrompt(true);
+        try {
+          const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+          const prompt = JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions;
+
+          expect(prompt).not.toContain("You are Obsidian Copilot");
+          expect(prompt).toContain("call the `request_user_input` tool");
+          expect(prompt).toContain("including Default");
+        } finally {
+          setDisableBuiltinSystemPrompt(false);
+        }
       });
 
       it("passes the plugin version to built-in Copilot Plus skills", async () => {
