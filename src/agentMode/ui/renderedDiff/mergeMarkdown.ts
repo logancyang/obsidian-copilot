@@ -1,4 +1,11 @@
 import { alignBlocks } from "@/agentMode/ui/renderedDiff/alignBlocks";
+import {
+  DEL_CLOSE,
+  DEL_OPEN,
+  INS_CLOSE,
+  INS_OPEN,
+  SENTINEL,
+} from "@/agentMode/ui/renderedDiff/applySentinels";
 import type { MarkdownBlockType } from "@/agentMode/ui/renderedDiff/splitBlocks";
 import { splitBlocks, splitFrontmatter } from "@/agentMode/ui/renderedDiff/splitBlocks";
 import { diffTableBlock } from "@/agentMode/ui/renderedDiff/tableDiff";
@@ -17,7 +24,7 @@ export type DiffSegment =
   | { kind: "block"; change: "deleted" | "inserted"; markdown: string }
   | { kind: "code"; lines: CodeDiffLine[] };
 
-const SENTINEL_MARK = /[\uE000-\uE003]/;
+const VISIBLE_MARK = new RegExp(`[${INS_OPEN}${DEL_OPEN}]\\s*[^\\s${INS_CLOSE}${DEL_CLOSE}]`);
 
 export function isMarkdownPath(path: string): boolean {
   return /\.(md|markdown)$/i.test(path);
@@ -51,7 +58,7 @@ export function buildRenderedDiffPlan(
   const afterText = (after ?? "").replace(/\r\n/g, "\n");
   // Raw sentinel characters would be consumed as diff markup, corrupting note text.
   // Preserve them verbatim: https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-  if (!markdown || SENTINEL_MARK.test(beforeText) || SENTINEL_MARK.test(afterText)) {
+  if (!markdown || SENTINEL.test(beforeText) || SENTINEL.test(afterText)) {
     return verbatimPlan(beforeText, afterText);
   }
 
@@ -85,10 +92,10 @@ export function buildRenderedDiffPlan(
     }
   }
   const collapsed = collapseMarkdown(segments);
-  // Rendering hides whitespace-only edits such as blank lines, so show those verbatim.
+  // Rendering hides whitespace-only edits such as blank lines or marked spaces, so show those verbatim.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
   const rendersChange = collapsed.some(
-    (segment) => segment.kind !== "markdown" || SENTINEL_MARK.test(segment.markdown)
+    (segment) => segment.kind !== "markdown" || VISIBLE_MARK.test(segment.markdown)
   );
   return rendersChange || beforeText === afterText
     ? collapsed
