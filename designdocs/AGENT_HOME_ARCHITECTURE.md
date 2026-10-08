@@ -122,7 +122,7 @@ composer — so it survives the remount.
 - **switch session** → load that session's draft (or a fresh default that includes
   the active note and active web tab); global `selectedTextContexts` are cleared.
 - **send** → snapshot context into the queued item, then `resetCompose()`, which
-  keeps the session's Active Web Tab choice;
+  keeps the session's Active Note and Active Web Tab choices;
   `loading` + `queue` are per-session so a backgrounded turn never bleeds into the
   foregrounded session.
 - **turn resolves after a tab switch** → the send-time `setLoading` closure is

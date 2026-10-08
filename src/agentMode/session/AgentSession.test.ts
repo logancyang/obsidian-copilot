@@ -3908,7 +3908,7 @@ describe("AgentSession", () => {
       ]);
     });
 
-    it("wraps the message with note paths when contextNotes are attached", () => {
+    it("wraps the message with note paths offered as context to open when needed", () => {
       const blocks = buildPromptBlocks("summarize them", {
         notes: [makeFile("daily/2026-04-28.md"), makeFile("projects/copilot.md")],
         urls: [],
@@ -3919,6 +3919,8 @@ describe("AgentSession", () => {
       expect(text).toContain("<copilot-context>");
       expect(text).toContain("- daily/2026-04-28.md");
       expect(text).toContain("- projects/copilot.md");
+      expect(text).toContain("open them if you need their contents");
+      expect(text).not.toContain("use the Read tool");
       expect(text).toContain("</copilot-context>");
       expect(text).toContain("<user-message>\nsummarize them\n</user-message>");
     });
