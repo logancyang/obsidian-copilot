@@ -93,9 +93,6 @@ export function useAgentInputDrafts({
         images: [],
         contextNotes: [],
         includeActiveNote: false,
-        // The agent cannot read the live, possibly signed-in page, so every turn carries it.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/667
-        includeActiveWebTab: true,
       })),
     [updateActive]
   );

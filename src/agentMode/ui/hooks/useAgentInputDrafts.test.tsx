@@ -100,14 +100,20 @@ describe("useAgentInputDrafts", () => {
     expect(result.current.queue.map((q) => q.id)).toEqual(["q1"]);
   });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/667 resetCompose re-includes an active web tab removed for the previous message", () => {
-    const { result } = renderDrafts({ chatInputId: "a" });
+  it.each([
+    ["keeps a removed active web tab off", false],
+    ["keeps an included active web tab on", true],
+  ])(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/667 resetCompose %s for the session's later messages",
+    (_case, included) => {
+      const { result } = renderDrafts({ chatInputId: "a" });
 
-    act(() => result.current.setIncludeActiveWebTab(false));
-    act(() => result.current.resetCompose());
+      act(() => result.current.setIncludeActiveWebTab(included));
+      act(() => result.current.resetCompose());
 
-    expect(result.current.includeActiveWebTab).toBe(true);
-  });
+      expect(result.current.includeActiveWebTab).toBe(included);
+    }
+  );
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/579 shows a note attached through the store while the composer is mounted", () => {
     const { result, store } = renderDrafts({ chatInputId: "a" });
