@@ -12,20 +12,15 @@ This release also gives you more control over which Miyo folders Copilot searche
 
   ![Agent Chat in the right sidebar with the open Wikipedia page attached as a Current chip](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/agent-chat-with-the-open-wikipedia-page-as-a-current-chip-2f3d191a.png)
 
-- The active note stays in Agent Chat's context until you remove it. ([#3564](https://github.com/logancyang/obsidian-copilot/pull/3564), @zeroliu)
-
-  ![Agent Chat after sending a message, with the Project Falcon Active Note badge still in the composer](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/active-note-badge-still-attached-after-sending-1186cc1d.png)
-
 - Choose other Miyo folders to search along with your vault, such as a research folder or your synced ChatGPT chats, under **Search scope** in **Settings → Copilot → Miyo**. ([#3525](https://github.com/logancyang/obsidian-copilot/pull/3525), [#3526](https://github.com/logancyang/obsidian-copilot/pull/3526), @wenzhengjiang)
-- Reopened Claude and OpenCode chats show the agent's tool calls and thinking as they appeared live. ([#3394](https://github.com/logancyang/obsidian-copilot/pull/3394), [#3512](https://github.com/logancyang/obsidian-copilot/pull/3512), @zeroliu)
 
-  ![A Claude chat reopened from Recent Chats showing its Read tool calls and reply](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/reopened-claude-chat-showing-its-read-tool-calls-61216ee5.png)
-
-- Mention PDFs with `[[` or `@` in any chat. ([#3550](https://github.com/logancyang/obsidian-copilot/pull/3550), @zeroliu)
 - Each provider in an agent's model settings shows how many of its models you turned on. ([#3505](https://github.com/logancyang/obsidian-copilot/pull/3505), @zeroliu)
 
   ![OpenCode model settings with provider groups showing selected-model count badges](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/provider-groups-with-selected-model-counts-8f4ffd29.png)
 
+- The active note stays in Agent Chat's context until you remove it. ([#3564](https://github.com/logancyang/obsidian-copilot/pull/3564), @zeroliu)
+- Reopened Claude and OpenCode chats show the agent's tool calls and thinking as they appeared live. ([#3394](https://github.com/logancyang/obsidian-copilot/pull/3394), [#3512](https://github.com/logancyang/obsidian-copilot/pull/3512), @zeroliu)
+- Mention PDFs with `[[` or `@` in any chat. ([#3550](https://github.com/logancyang/obsidian-copilot/pull/3550), @zeroliu)
 - Agent tool call rows are dimmer so the reply reads first. ([#3520](https://github.com/logancyang/obsidian-copilot/pull/3520), [#3544](https://github.com/logancyang/obsidian-copilot/pull/3544), @zeroliu)
 
 ## 🛠️ Bug Fixes
