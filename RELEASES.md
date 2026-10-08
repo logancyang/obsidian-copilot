@@ -14,6 +14,8 @@ This release also gives you more control over which Miyo folders Copilot searche
 
 - Choose other Miyo folders to search along with your vault, such as a research folder or your synced ChatGPT chats, under **Search scope** in **Settings → Copilot → Miyo**. ([#3525](https://github.com/logancyang/obsidian-copilot/pull/3525), [#3526](https://github.com/logancyang/obsidian-copilot/pull/3526), @wenzhengjiang)
 
+  ![Ticking Research and ChatGPT under Also search these Miyo folders, with Search scope set to Current vault](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/choose-miyo-folders-to-search-with-your-vault-d3405d57.gif)
+
 - Each provider in an agent's model settings shows how many of its models you turned on. ([#3505](https://github.com/logancyang/obsidian-copilot/pull/3505), @zeroliu)
 
   ![OpenCode model settings with provider groups showing selected-model count badges](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/provider-groups-with-selected-model-counts-8f4ffd29.png)
