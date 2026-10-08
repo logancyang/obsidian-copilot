@@ -31,6 +31,8 @@ Vault QA is no longer a separate mode. If it was your saved mode before upgradin
 
 Quick Chat can include the active note, selected text, other notes, folders, and images; on desktop it can also include open Web Viewer tabs. The selected model must support images. Context appears above the message box, where you can review or remove it before sending.
 
+A new Quick Chat attaches the active note and, on desktop, the page open in the Web Viewer, including pages you are signed in to. If you remove either badge, it stays off for that chat until you start a new chat or switch modes.
+
 - Use **Add context** (`+`) or type `@` to find context.
 - Type `[[Note Title]]` to reference a note directly.
 
@@ -61,7 +63,7 @@ After a response, the token counter in the top bar shows the context used for th
 
 ## Start or reopen a chat
 
-Use **New Chat** in the top bar or run **New Copilot Quick Chat**. Starting over clears the current messages and resets context to the active note when automatic context is enabled.
+Use **New Chat** in the top bar or run **New Copilot Quick Chat**. Starting over clears the current messages and attaches the active note and active web tab again.
 
 Use **Chat History** to search saved conversations, reopen one, rename it, open its Markdown source, or delete it. Continuing a reopened conversation updates its existing note, including after the note has been renamed or while its source is open.
 

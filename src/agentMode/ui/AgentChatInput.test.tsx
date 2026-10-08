@@ -73,8 +73,9 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
   ),
 }));
 
+let mockActiveWebTab: WebTabContext | undefined;
 jest.mock("@/components/chat-components/hooks/useActiveWebTabState", () => ({
-  useActiveWebTabState: () => ({ activeWebTabForMentions: undefined }),
+  useActiveWebTabState: () => ({ activeWebTabForMentions: mockActiveWebTab }),
 }));
 let mockSelectedTextContexts: SelectedTextContext[] = [];
 jest.mock("@/aiParams", () => ({
@@ -202,6 +203,7 @@ function setupCancellation() {
 describe("AgentChatInput", () => {
   beforeEach(() => {
     mockSelectedTextContexts = [];
+    mockActiveWebTab = undefined;
     capturedAgentBrands = undefined;
     mockUseCanUseMultiAgent.mockReturnValue(true);
   });
@@ -498,6 +500,31 @@ describe("AgentChatInput", () => {
         ["claude"],
         [{ url: "https://example.com/report", title: "Report" }]
       );
+      await act(async () => settleCancel());
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/667 restores a queued snapshot of the current page as the Active Web Tab badge instead of a second fixed badge", async () => {
+      const current: WebTabContext = { url: "https://example.com/current", title: "Current" };
+      const other: WebTabContext = { url: "https://example.com/other", title: "Other" };
+      mockActiveWebTab = current;
+      const { getDraft, settleCancel } = setupCancellation();
+      act(() => {
+        getDraft().setLoading(true);
+        getDraft().setIncludeActiveWebTab(false);
+        getDraft().setQueue([
+          {
+            id: "one",
+            rawInput: "follow-up",
+            text: "follow-up",
+            context: { notes: [], urls: [], webTabs: [{ ...current, isActive: true }, other] },
+          },
+        ]);
+      });
+
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+
+      expect(mockPrependContent).toHaveBeenLastCalledWith("follow-up", [], [other]);
+      expect(getDraft().includeActiveWebTab).toBe(true);
       await act(async () => settleCancel());
     });
 
