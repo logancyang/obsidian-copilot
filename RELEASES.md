@@ -2,6 +2,8 @@
 
 # v4.0.14 - Web page context in Agent Chat, improved Miyo scope control, and stability improvements
 
+[![Demo video: Copilot 4.0.14: Web Pages, Miyo Folders, and Automations](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/demo-video-obsidian-copilot-4-0-14-49219052.png)](https://www.youtube.com/shorts/yVl0pULi36A)
+
 Bring the web page you are reading into Agent Chat. Open a YouTube video or an article in Obsidian's Web Viewer, and Agent Chat includes it as context.
 
 This release also gives you more control over which Miyo folders Copilot searches, a first look at Miyo Automations, and many stability improvements.
@@ -25,7 +27,7 @@ This release also gives you more control over which Miyo folders Copilot searche
   ![OpenCode model settings with provider groups showing selected-model count badges](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/provider-groups-with-selected-model-counts-8f4ffd29.png)
 
 - The active note stays in Agent Chat's context until you remove it. ([#3564](https://github.com/logancyang/obsidian-copilot/pull/3564), @zeroliu)
-- Reopened Claude and OpenCode chats show the agent's tool calls and thinking as they appeared live. ([#3394](https://github.com/logancyang/obsidian-copilot/pull/3394), [#3512](https://github.com/logancyang/obsidian-copilot/pull/3512), @zeroliu)
+- Reopened Claude and OpenCode chats show the agent's tool calls and thinking as they appeared live. ([#3394](https://github.com/logancyang/obsidian-copilot/pull/3394), [#3512](https://github.com/logancyang/obsidian-copilot/pull/3512), [#3565](https://github.com/logancyang/obsidian-copilot/pull/3565), @zeroliu)
 - Mention PDFs with `[[` or `@` in any chat. ([#3550](https://github.com/logancyang/obsidian-copilot/pull/3550), @zeroliu)
 - Agent tool call rows are dimmer so the reply reads first. ([#3520](https://github.com/logancyang/obsidian-copilot/pull/3520), [#3544](https://github.com/logancyang/obsidian-copilot/pull/3544), @zeroliu)
 
