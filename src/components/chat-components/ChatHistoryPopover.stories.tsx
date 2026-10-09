@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@/lib/story";
 import React, { useEffect, useRef } from "react";
-import { ChatHistoryPopover } from "./ChatHistoryPopover";
+import { ChatHistoryPopover, type ChatHistoryItem } from "./ChatHistoryPopover";
 
 type Props = React.ComponentProps<typeof ChatHistoryPopover>;
 
@@ -53,4 +53,55 @@ export const OpenSession: StoryObj<Props> = {
 
 export const Responding: StoryObj<Props> = {
   render: () => <OpenPopover isRunning />,
+};
+
+const BACKEND_HISTORY: ChatHistoryItem[] = [
+  { ...CHAT_HISTORY[0], id: "claude-chat", title: "Claude chat", backendId: "claude" },
+  { ...CHAT_HISTORY[0], id: "codex-chat", title: "Codex chat", backendId: "codex" },
+];
+
+const DELETE_SUMMARIES: Record<string, string> = {
+  "claude-chat":
+    "Removes: chat file, session index entry and Claude transcript. Keeps: nothing. You can no longer resume it in Claude Code.",
+  "codex-chat": "Removes: chat file and session index entry. Keeps: Codex transcript.",
+};
+
+const ConfirmingDeletePopover: React.FC<{ row: number }> = ({ row }) => {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    triggerRef.current?.click();
+    const observer = new MutationObserver(() => {
+      const button = document.querySelectorAll<HTMLButtonElement>('button[title="delete file"]')[
+        row
+      ];
+      if (!button) return;
+      observer.disconnect();
+      button.click();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [row]);
+
+  return (
+    <ChatHistoryPopover
+      chatHistory={BACKEND_HISTORY}
+      onUpdateTitle={async () => {}}
+      onDeleteChat={async () => {}}
+      onLoadChat={async () => {}}
+      getDeleteSummary={(chat) => DELETE_SUMMARIES[chat.id]}
+    >
+      <button ref={triggerRef} type="button">
+        Open chat history
+      </button>
+    </ChatHistoryPopover>
+  );
+};
+
+export const ConfirmDeleteClaude: StoryObj<Props> = {
+  render: () => <ConfirmingDeletePopover row={0} />,
+};
+
+export const ConfirmDeleteCodex: StoryObj<Props> = {
+  render: () => <ConfirmingDeletePopover row={1} />,
 };

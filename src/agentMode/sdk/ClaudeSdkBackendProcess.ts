@@ -500,6 +500,10 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   }
 
   async deleteSessionTranscript(params: { sessionId: SessionId; cwd: string }): Promise<void> {
+    // A session id from note frontmatter must stay inside the Claude store. https://github.com/logancyang/obsidian-copilot/issues/2888
+    if (!/^[A-Za-z0-9_-]+$/.test(params.sessionId)) {
+      throw new Error("invalid Claude session id");
+    }
     const { unlink } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
     try {
       await unlink(await this.claudeTranscriptPath(params.sessionId, params.cwd));

@@ -5,7 +5,7 @@ import type {
   SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { BackendDescriptor, SessionEvent } from "@/agentMode/session/types";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -1368,6 +1368,18 @@ describe("ClaudeSdkBackendProcess", () => {
         await proc.deleteSessionTranscript({ sessionId, cwd });
 
         await expect(proc.sessionExistsLocally({ sessionId, cwd })).resolves.toBe(false);
+      });
+
+      it("rejects a session id that would leave the Claude store and keeps the outside file", async () => {
+        const outside = path.join(configDir, "victim.jsonl");
+        await writeFile(outside, "{}\n");
+        const proc = makeProcWithConfigDir();
+
+        await expect(
+          proc.deleteSessionTranscript({ sessionId: "../../victim", cwd })
+        ).rejects.toThrow("invalid Claude session id");
+
+        await expect(readFile(outside, "utf8")).resolves.toBe("{}\n");
       });
 
       it("resolves when the transcript is already gone", async () => {

@@ -30,7 +30,11 @@ export function describeChatDeletePlan(
     removes.push(SESSION_INDEX_COPY);
     (descriptor.deletesSessionTranscript ? removes : keeps).push(transcriptCopy(descriptor));
   }
-  return `Removes: ${joinCopies(removes)}. Keeps: ${keeps.length ? joinCopies(keeps) : "nothing"}.`;
+  const summary = `Removes: ${joinCopies(removes)}. Keeps: ${keeps.length ? joinCopies(keeps) : "nothing"}.`;
+  // https://github.com/logancyang/obsidian-copilot/issues/2888
+  return descriptor?.deletesSessionTranscript
+    ? `${summary} You can no longer resume it in Claude Code.`
+    : summary;
 }
 
 export function formatChatDeleteNotice(report: ChatDeleteReport): string {

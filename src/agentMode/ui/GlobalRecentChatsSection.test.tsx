@@ -322,7 +322,10 @@ describe("GlobalRecentChatsSection", () => {
     });
 
     it.each([
-      ["claude", "Removes: chat file, session index entry and Claude transcript. Keeps: nothing."],
+      [
+        "claude",
+        "Removes: chat file, session index entry and Claude transcript. Keeps: nothing. You can no longer resume it in Claude Code.",
+      ],
       ["codex", "Removes: chat file and session index entry. Keeps: Codex transcript."],
     ])(
       "https://github.com/logancyang/obsidian-copilot/issues/2888 names what a %s chat delete removes and keeps",

@@ -9,7 +9,7 @@ describe("chatDeleteReport", () => {
   describe("describeChatDeletePlan()", () => {
     it("names the chat file, index entry and transcript as removed for a Claude chat", () => {
       expect(describeChatDeletePlan("chats/agent__a.md", CLAUDE)).toBe(
-        "Removes: chat file, session index entry and Claude transcript. Keeps: nothing."
+        "Removes: chat file, session index entry and Claude transcript. Keeps: nothing. You can no longer resume it in Claude Code."
       );
     });
 
@@ -24,7 +24,7 @@ describe("chatDeleteReport", () => {
 
     it("leaves out the chat file for a chat that exists only in the session index", () => {
       expect(describeChatDeletePlan(buildNativeChatId("claude", "s1"), CLAUDE)).toBe(
-        "Removes: session index entry and Claude transcript. Keeps: nothing."
+        "Removes: session index entry and Claude transcript. Keeps: nothing. You can no longer resume it in Claude Code."
       );
     });
 
