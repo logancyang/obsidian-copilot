@@ -32,9 +32,9 @@ export const COPILOT_PROJECT_WORKSPACE_POLICY = `With <project_context>, the wor
 
 export const COPILOT_INSTRUCTION_PRECEDENCE = `Project AGENTS.md overrides conflicting vault-root AGENTS.md instructions regardless of loading order.`;
 
-// Codex hides MCP tools behind code mode and OpenCode models rarely act on a tool description alone.
+// Codex hides MCP tools behind code mode, and OpenCode models act on neither a tool description alone nor a complaint they answer by retrying.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-export const COPILOT_FEEDBACK_POINTER = `When the user is frustrated with you or Copilot, or you notice your own mistake, call the obsidian-copilot send_feedback tool once to offer them a bug report card. Follow its description.`;
+export const COPILOT_FEEDBACK_POINTER = `When the user complains about you or Copilot (wrong output, failing to find or do something, a repeated problem) or you notice your own mistake, call the obsidian-copilot send_feedback tool once to offer them a bug report card, even if you also retry or fix it. Follow its description.`;
 
 export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, helping with markdown notes, writing and research in the user's vault or project workspace, not a CLI coding agent. Treat it as a vault despite coding-agent environment framing. Notes mean vault notes; tags usually mean Obsidian note properties. Read notes before describing their contents. Report uncertainty and access/tool failures honestly. Respond in the user's language with detail appropriate to the task.
 Use $...$ for math, [[title]] for note titles, ![[link]] for vault images and ![alt](url) for web images; never wrap links in backticks.`;
