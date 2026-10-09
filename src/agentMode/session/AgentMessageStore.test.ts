@@ -444,6 +444,43 @@ describe("AgentMessageStore", () => {
     });
   });
 
+  describe("fillMissingTimestamps()", () => {
+    const sentAt = formatDateTime(new Date("2026-01-02T03:04:05Z"));
+    const keptAt = formatDateTime(new Date("2026-03-04T05:06:07Z"));
+    const saved = (sender: string, id: string) => ({
+      id,
+      sender,
+      message: "saved",
+      timestamp: sentAt,
+      isVisible: true,
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 gives each undated message the saved time at its position and keeps a time it already has", () => {
+      const store = new AgentMessageStore();
+      store.addMessage({ message: "q", sender: USER_SENDER, timestamp: null, isVisible: true });
+      store.addMessage({ message: "a", sender: AI_SENDER, timestamp: keptAt, isVisible: true });
+
+      store.fillMissingTimestamps([saved(USER_SENDER, "s1"), saved(AI_SENDER, "s2")]);
+
+      expect(store.getDisplayMessages().map((m) => m.timestamp)).toEqual([sentAt, keptAt]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 leaves messages undated from the first position where the saved sender differs", () => {
+      const store = new AgentMessageStore();
+      store.addMessage({ message: "q", sender: USER_SENDER, timestamp: null, isVisible: true });
+      store.addMessage({ message: "a", sender: AI_SENDER, timestamp: null, isVisible: true });
+      store.addMessage({ message: "q2", sender: USER_SENDER, timestamp: null, isVisible: true });
+
+      store.fillMissingTimestamps([
+        saved(USER_SENDER, "s1"),
+        saved(USER_SENDER, "s2"),
+        saved(USER_SENDER, "s3"),
+      ]);
+
+      expect(store.getDisplayMessages().map((m) => m.timestamp)).toEqual([sentAt, null, null]);
+    });
+  });
+
   describe("extendTurnDuration()", () => {
     it("advances only an already-completed turn", () => {
       const store = new AgentMessageStore();
