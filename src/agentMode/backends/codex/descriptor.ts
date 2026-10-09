@@ -117,6 +117,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 
   presentPermissionOption(option: PermissionOption, metadata: unknown): PermissionOption {
     const decision = codexPermissionDecision(metadata);
+    if (decision === "acceptForSession") return { ...option, scope: CODEX_SESSION_SCOPE };
     const isExecpolicyAmendment =
       decision === "acceptWithExecpolicyAmendment" && option.kind === "allow_always";
     const isNetworkPolicyAmendment =
@@ -128,6 +129,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
       ...option,
       name: option.kind === "reject_always" ? "Block Always" : "Allow Always",
       description: option.name,
+      scope: CODEX_RULES_SCOPE,
     };
   },
 
@@ -229,6 +231,13 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     return buildCodexModeState(modeState, configOptions);
   },
 };
+
+// Codex keeps session approvals in memory and appends policy amendments to its rules file.
+// https://github.com/logancyang/obsidian-copilot/issues/2889
+const CODEX_SESSION_SCOPE =
+  "Covers what this option names, until this chat ends. Start a new chat to undo.";
+const CODEX_RULES_SCOPE =
+  "Saved to ~/.codex/rules/default.rules for all Codex chats. Hover to see the rule; delete it there to undo.";
 
 function codexPermissionDecision(metadata: unknown): unknown {
   if (metadata === null || typeof metadata !== "object") return undefined;

@@ -470,6 +470,7 @@ describe("descriptor", () => {
           name: "Allow Always",
           description: rule,
           kind: "allow_always",
+          scope: expect.stringContaining("~/.codex/rules/default.rules"),
         });
       });
 
@@ -489,10 +490,11 @@ describe("descriptor", () => {
           name: "Block Always",
           description: "Block api.example.com in the Future",
           kind: "reject_always",
+          scope: expect.stringContaining("~/.codex/rules/default.rules"),
         });
       });
 
-      it("leaves a session decision unchanged even when its opaque id resembles a policy amendment", () => {
+      it("keeps a session decision's label and scopes it to the chat even when its opaque id resembles a policy amendment for https://github.com/logancyang/obsidian-copilot/issues/2889", () => {
         const option: PermissionOption = {
           optionId: "accept_execpolicy_amendment",
           name: "Allow Host for Session",
@@ -503,7 +505,7 @@ describe("descriptor", () => {
           CodexBackendDescriptor.presentPermissionOption?.(option, {
             codex: { decision: "acceptForSession" },
           })
-        ).toBe(option);
+        ).toEqual({ ...option, scope: expect.stringContaining("until this chat ends") });
       });
 
       it.each([

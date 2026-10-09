@@ -26,6 +26,8 @@ const EMPTY_OPTION_NAMES: readonly string[] = Object.freeze([]);
 // Codex quotes the whole command prefix in its "don't ask again" option name, which can fill the card.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/618
 const QUOTED_CODE = /\s*`([^`\n]+)`/;
+const UNKNOWN_ALWAYS_SCOPE =
+  "The agent decides what this covers and how long it lasts. Undo it in the agent's own settings.";
 
 interface OptionLabel {
   text: string;
@@ -110,16 +112,17 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
         ) : null}
       </div>
 
-      <div className="copilot-divider-t tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-px-3 tw-py-2">
+      <div className="copilot-divider-t tw-flex tw-flex-col tw-gap-2 tw-px-3 tw-py-2">
         <TooltipProvider delayDuration={0}>
           {orderedOptions.map((option, index) => {
             const { code } = optionLabels[index];
+            // One-time approval is the default; "always" grants must not look like the safe pick.
+            // https://github.com/logancyang/obsidian-copilot/issues/2889
             const button = (
               <Button
-                key={option.optionId}
-                variant={variantForKind(option.kind)}
+                variant={option.kind === "allow_once" ? "default" : "secondary"}
                 size="sm"
-                className="tw-h-auto tw-min-h-6 tw-min-w-0 tw-max-w-full tw-whitespace-normal"
+                className="tw-h-auto tw-min-h-6 tw-w-full tw-min-w-0 tw-whitespace-normal"
                 disabled={busy}
                 onClick={() => choose(option.optionId)}
               >
@@ -127,20 +130,29 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
               </Button>
             );
 
-            if (!option.description && !code) return button;
-
             return (
-              <Tooltip key={option.optionId}>
-                <TooltipTrigger asChild>{button}</TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  className="tw-max-w-sm tw-whitespace-pre-wrap tw-break-words"
-                >
-                  {option.description}
-                  {option.description && code ? "\n" : null}
-                  {code ? <code>{code}</code> : null}
-                </TooltipContent>
-              </Tooltip>
+              <div key={option.optionId} className="tw-flex tw-flex-col tw-gap-1">
+                {!option.description && !code ? (
+                  button
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>{button}</TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      className="tw-max-w-sm tw-whitespace-pre-wrap tw-break-words"
+                    >
+                      {option.description}
+                      {option.description && code ? "\n" : null}
+                      {code ? <code>{code}</code> : null}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                {isAlwaysKind(option.kind) ? (
+                  <p className="tw-m-0 tw-text-xs tw-text-muted">
+                    {option.scope ?? UNKNOWN_ALWAYS_SCOPE}
+                  </p>
+                ) : null}
+              </div>
             );
           })}
         </TooltipProvider>
@@ -149,16 +161,8 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
   );
 };
 
-function variantForKind(kind: PermissionOptionKind): "default" | "secondary" | "destructive" {
-  switch (kind) {
-    case "allow_once":
-    case "reject_once":
-      return "secondary";
-    case "allow_always":
-      return "default";
-    case "reject_always":
-      return "destructive";
-  }
+function isAlwaysKind(kind: PermissionOptionKind): boolean {
+  return kind === "allow_always" || kind === "reject_always";
 }
 
 function sortOptions(options: PermissionOption[]): PermissionOption[] {

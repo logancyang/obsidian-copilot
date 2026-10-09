@@ -125,6 +125,9 @@ export interface BackendDescriptor {
 
   presentPermissionOption?(option: PermissionOption, metadata: unknown): PermissionOption;
 
+  // Omitted when the agent's CLI owns the endpoint. https://github.com/logancyang/obsidian-copilot/issues/2889
+  dataDestination?(settings: CopilotSettings, baseModelId: string): string | null;
+
   readonly showModelDescriptions?: boolean;
 
   applySelection(session: ModelSelectionSession, selection: ModelSelection): Promise<void>;

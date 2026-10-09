@@ -72,8 +72,7 @@ describe("ToolPermissionCard", () => {
       const firstButton = screen.getByRole("button", { name: "Allow Always 1" });
       const secondButton = screen.getByRole("button", { name: "Allow Always 2" });
       const rejectButton = screen.getByRole("button", { name: "Reject" });
-      expect(firstButton.parentElement).toBe(secondButton.parentElement);
-      expect(secondButton.parentElement).toBe(rejectButton.parentElement);
+      expect(screen.getAllByRole("button")).toEqual([firstButton, secondButton, rejectButton]);
 
       fireEvent.pointerMove(firstButton, { pointerType: "mouse" });
       expect((await screen.findByRole("tooltip")).textContent).toBe(firstRule);
@@ -147,6 +146,58 @@ describe("ToolPermissionCard", () => {
         "Allow Always 3",
         "Allow Always 1",
       ]);
+    });
+
+    it("puts the one-time allow first as the only primary option for https://github.com/logancyang/obsidian-copilot/issues/2889", () => {
+      render(
+        <ToolPermissionCard
+          request={makeRequest([
+            { optionId: "always", name: "Allow always", kind: "allow_always" },
+            { optionId: "never", name: "Deny always", kind: "reject_always" },
+            { optionId: "no", name: "Deny", kind: "reject_once" },
+            { optionId: "once", name: "Allow once", kind: "allow_once" },
+          ])}
+          onResolve={jest.fn()}
+        />
+      );
+
+      const buttons = screen.getAllByRole("button");
+      expect(buttons.map((button) => button.textContent)).toEqual([
+        "Allow once",
+        "Allow always",
+        "Deny",
+        "Deny always",
+      ]);
+      expect(buttons.map((button) => button.classList.contains("mod-cta"))).toEqual([
+        true,
+        false,
+        false,
+        false,
+      ]);
+    });
+
+    it("shows a scope line under every always option and none under one-time options for https://github.com/logancyang/obsidian-copilot/issues/2889", () => {
+      const scope = "Covers Bash(git add:*) until this chat ends. Start a new chat to undo.";
+      render(
+        <ToolPermissionCard
+          request={makeRequest([
+            { optionId: "once", name: "Allow once", kind: "allow_once" },
+            { optionId: "always", name: "Allow always", kind: "allow_always", scope },
+            { optionId: "never", name: "Deny always", kind: "reject_always" },
+            { optionId: "no", name: "Deny", kind: "reject_once" },
+          ])}
+          onResolve={jest.fn()}
+        />
+      );
+
+      const lineUnder = (name: string) =>
+        screen.getByRole("button", { name }).nextElementSibling?.textContent ?? null;
+      expect(lineUnder("Allow always")).toBe(scope);
+      expect(lineUnder("Deny always")).toBe(
+        "The agent decides what this covers and how long it lasts. Undo it in the agent's own settings."
+      );
+      expect(lineUnder("Allow once")).toBeNull();
+      expect(lineUnder("Deny")).toBeNull();
     });
 
     it("orders actions by kind and shows an unbroken label in full", () => {

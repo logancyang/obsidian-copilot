@@ -22,6 +22,32 @@ jest.mock("@/logger", () => ({
 
 describe("descriptor", () => {
   describe("OpencodeBackendDescriptor", () => {
+    describe("dataDestination()", () => {
+      const settings = {
+        providers: {
+          local: {
+            providerId: "local",
+            providerType: "openai-compatible",
+            displayName: "LM Box",
+            baseUrl: "http://localhost:1234/v1",
+            origin: { kind: "byok" },
+            addedAt: 0,
+          },
+        },
+      } as unknown as CopilotSettings;
+
+      it.each([
+        ["local/qwen3", "LM Box (http://localhost:1234/v1)"],
+        ["zen/big-pickle", "zen, as set in OpenCode"],
+        ["__preload_pending__", null],
+      ])(
+        "names where %s is sent for https://github.com/logancyang/obsidian-copilot/issues/2889",
+        (baseModelId, expected) => {
+          expect(OpencodeBackendDescriptor.dataDestination?.(settings, baseModelId)).toBe(expected);
+        }
+      );
+    });
+
     describe("managedInstall.getState()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/578 reports the shared manager's install progress", () => {
         const plugin = vaultPlugin(os.tmpdir());

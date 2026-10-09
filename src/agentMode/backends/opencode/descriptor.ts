@@ -21,7 +21,11 @@ import {
   OpencodeBinaryManager,
   toOpencodeInstallState,
 } from "./OpencodeBinaryManager";
-import { opencodeEnabledModelEntries, opencodeWireBaseIdFor } from "./opencodeModelResolve";
+import {
+  mapProviderToOpencodeId,
+  opencodeEnabledModelEntries,
+  opencodeWireBaseIdFor,
+} from "./opencodeModelResolve";
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import { cacheRoot } from "@/context/conversionsLocation";
@@ -88,6 +92,18 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
     return [...opencodeEnabledModelEntries(settings)];
+  },
+
+  dataDestination(settings: CopilotSettings, baseModelId: string): string | null {
+    if (!baseModelId.includes("/")) return null;
+    const opencodeProviderId = baseModelId.split("/")[0];
+    const provider = Object.values(settings.providers).find(
+      (p) => mapProviderToOpencodeId(p)?.id === opencodeProviderId
+    );
+    if (!provider) return `${opencodeProviderId}, as set in OpenCode`;
+    return provider.baseUrl
+      ? `${provider.displayName} (${provider.baseUrl})`
+      : provider.displayName;
   },
 
   getWireBaseId(configuredModelId: string, settings: CopilotSettings): string | null {

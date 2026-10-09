@@ -147,6 +147,7 @@ describe("descriptor", () => {
           notificationSound: false,
           notificationSoundId: "piano",
           welcomeDismissed: false,
+          dataNoticeAccepted: false,
           skills: { folder: "copilot/skills" },
           backends: {
             claude: {

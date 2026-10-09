@@ -764,6 +764,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     notificationSound: true,
     notificationSoundId: "piano",
     welcomeDismissed: false,
+    dataNoticeAccepted: false,
     skills: {
       folder: DEFAULT_SKILLS_FOLDER,
       builtinPreferences: DEFAULT_BUILTIN_PREFERENCES,

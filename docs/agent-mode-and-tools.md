@@ -91,6 +91,8 @@ Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** 
 
 An empty Agent Chat shows a fixed hint: "Ask anything • @ to add context • / for commands".
 
+The first time you send a message in Agent Chat, Copilot shows where your context goes before anything is sent: the agent, the model, and the provider or endpoint. For Claude and Codex, the agent's own CLI sets the endpoint. Each message may send your message, notes and files you attach or the agent reads, tool results, and the conversation so far. Agents you @mention get the same context. Select **Continue** to send; Copilot does not show this again. Select **Cancel** to keep your message unsent.
+
 Agent Chat groups consecutive tool calls and reasoning into a compact activity row. The row reports the total tool commands, distinct files read or edited, and recorded reasoning time. Open it to inspect every step.
 
 Copilot checks for updates in the background when the plugin loads, including when Obsidian starts. If a newer version is available, a notice offers **View release notes** once per release. This is remembered separately from dismissing the Agent Chat home banner. You can keep using or close Obsidian while the check runs. Copilot reads the version from the published release’s manifest, and Settings and Agent Chat share that check.
@@ -124,7 +126,7 @@ With Codex, **Safe** uses the adapter's **Ask for approval** preset. It can edit
 
 When Codex presents a plan, you can **Approve** it, **Reject** it, or type feedback in the plan card. Feedback starts a new chat turn so Codex can revise the plan; review the new proposal before approving it. If you ask Codex to save the plan to a note, approve the revised plan to let it create the note.
 
-When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. Stopping the turn cancels unanswered requests.
+When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. The one-time allow option comes first and is the highlighted default. Each "always" option shows what it covers, how long it lasts, and how to undo it. Claude saves its rules in the session or in a Claude settings file that the line names. Codex keeps session approvals until the chat ends and saves command and host rules to `~/.codex/rules/default.rules`. When Copilot cannot know an agent's scope, as with opencode, the line says so; manage those approvals in the agent's own settings. Stopping the turn cancels unanswered requests.
 
 When Claude or Codex asks a set of questions, answer the current tab and select **Next**. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead. **Cancel** dismisses the entire request. If Codex withdraws or times out the question, its card disappears.
 

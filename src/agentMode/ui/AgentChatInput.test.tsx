@@ -83,13 +83,17 @@ jest.mock("@/aiParams", () => ({
   removeSelectedTextContext: jest.fn(),
   useSelectedTextContexts: () => [mockSelectedTextContexts, jest.fn()],
 }));
+let mockSettings: { debug: boolean; agentMode: { dataNoticeAccepted: boolean } };
 jest.mock("@/settings/model", () => ({
   getModelKeyFromModel: (model: { name: string; provider: string; _backendId?: string }) => {
     const baseKey = `${model.name}|${model.provider}`;
     return model._backendId ? `${model._backendId}:${baseKey}` : baseKey;
   },
   useSettingsValue: () => ({}),
-  getSettings: () => ({ debug: false }),
+  getSettings: () => mockSettings,
+  updateSetting: (key: "agentMode", value: typeof mockSettings.agentMode) => {
+    mockSettings = { ...mockSettings, [key]: value };
+  },
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
@@ -209,9 +213,57 @@ describe("AgentChatInput", () => {
     mockActiveFile = null;
     capturedAgentBrands = undefined;
     mockUseCanUseMultiAgent.mockReturnValue(true);
+    mockSettings = { debug: false, agentMode: { dataNoticeAccepted: true } };
   });
 
   describe("AgentChatInput()", () => {
+    it("holds the first send until Continue and never shows again for https://github.com/logancyang/obsidian-copilot/issues/2889", async () => {
+      mockSettings = { debug: false, agentMode: { dataNoticeAccepted: false } };
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+      } as unknown as AgentChatBackend;
+      const draft = makeDraft();
+      renderInput(backend, draft, { mainAgentId: "codex" });
+
+      fireEvent.click(screen.getByRole("button", { name: "send" }));
+      expect(await screen.findByText("Where your Agent context goes")).toBeTruthy();
+      expect(screen.getByText("Codex")).toBeTruthy();
+      expect(screen.getByText("The endpoint the Codex CLI is set to use")).toBeTruthy();
+      for (const category of [
+        "Your message",
+        "Notes and files you attach or the agent reads",
+        "Tool results",
+        "The conversation so far",
+      ]) {
+        expect(screen.getByText(category)).toBeTruthy();
+      }
+      expect(backend.sendMessage).not.toHaveBeenCalled();
+      expect(draft.resetCompose).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(mockSettings.agentMode.dataNoticeAccepted).toBe(true);
+      expect(screen.queryByText("Where your Agent context goes")).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "send" }));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(2));
+      expect(screen.queryByText("Where your Agent context goes")).toBeNull();
+    });
+
+    it("sends nothing and keeps the notice pending when it is cancelled for https://github.com/logancyang/obsidian-copilot/issues/2889", async () => {
+      mockSettings = { debug: false, agentMode: { dataNoticeAccepted: false } };
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+      } as unknown as AgentChatBackend;
+      renderInput(backend, makeDraft());
+
+      fireEvent.click(screen.getByRole("button", { name: "send" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+
+      expect(screen.queryByText("Where your Agent context goes")).toBeNull();
+      expect(backend.sendMessage).not.toHaveBeenCalled();
+      expect(mockSettings.agentMode.dataNoticeAccepted).toBe(false);
+    });
     it.each([
       {
         scenario: "the active note and its selection together",

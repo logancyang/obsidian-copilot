@@ -14,8 +14,14 @@ const request = {
   },
   options: [
     { optionId: "allow_once", name: "Allow once", kind: "allow_once" },
-    { optionId: "allow_always", name: "Always allow", kind: "allow_always" },
-    { optionId: "reject_once", name: "Deny once", kind: "reject_once" },
+    {
+      optionId: "allow_always",
+      name: "Allow always",
+      kind: "allow_always",
+      scope:
+        "Covers Edit(launch brief.md). Saved to .claude/settings.local.json in this chat's folder, for later chats there. Remove it there to undo.",
+    },
+    { optionId: "reject_once", name: "Deny", kind: "reject_once" },
   ],
 } satisfies PermissionPrompt;
 
