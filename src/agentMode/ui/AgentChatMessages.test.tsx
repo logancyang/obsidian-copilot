@@ -6,6 +6,7 @@ import type {
   PermissionPrompt,
 } from "@/agentMode/session/types";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
+import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import { AI_SENDER } from "@/constants";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
@@ -72,6 +73,17 @@ jest.mock("@/agentMode/ui/AskUserQuestionCard", () => ({
   ),
 }));
 
+const mockOpenReportIssueModal = jest.fn();
+jest.mock("@/agentMode/ui/ReportIssueModal", () => ({
+  openReportIssueModal: (...args: unknown[]) => mockOpenReportIssueModal(...args),
+}));
+
+const mockSetSettings = jest.fn();
+jest.mock("@/settings/model", () => ({
+  ...jest.requireActual<Record<string, unknown>>("@/settings/model"),
+  setSettings: (...args: unknown[]) => mockSetSettings(...args),
+}));
+
 jest.mock("@/agentMode/ui/PlanProposalCard", () => ({
   PlanProposalCard: ({ plan }: { plan: CurrentPlan }) => <div>Plan {plan.id}</div>,
 }));
@@ -94,7 +106,28 @@ function assistantMessage(
 const chatBackend = {
   resolveToolPermission: jest.fn(),
   resolveAskUserQuestion: jest.fn(),
+  dismissFeedbackOffer: jest.fn(),
+  markFeedbackReported: jest.fn(),
 } as unknown as AgentChatBackend;
+
+const FEEDBACK_OFFER: FeedbackOffer = {
+  draft: {
+    title: "Replied in Swedish to an English request",
+    whatHappened: "The agent answered 'hej'.",
+    userSaid: "Why do you switch languages?",
+    repro: "1. Ask in English.",
+  },
+  evidence: { backendId: "codex", model: "gpt-6.1-sol", sessionId: "s-1", raisedAt: "t" },
+  afterUserMessageId: "user-1",
+  status: "open",
+};
+
+const FEEDBACK_TRANSCRIPT = [
+  assistantMessage("user-1", 1, { sender: "user", message: "why?" }),
+  assistantMessage("reply-1", 2, { message: "Sorry about that." }),
+  assistantMessage("user-2", 3, { sender: "user", message: "next question" }),
+  assistantMessage("reply-2", 4, { message: "Next answer." }),
+];
 
 function permission(id: string): PermissionPrompt {
   return {
@@ -136,6 +169,7 @@ function renderMessages(
     pendingAskUserQuestions: [],
     chatBackend,
     isLoading,
+    feedbackOffer: null,
     ...overrides,
   };
   return { ...render(<AgentChatMessages {...props} />), props };
@@ -160,6 +194,77 @@ describe("AgentChatMessages", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Scroll to end" }));
       expect(mockScrollState.onResume).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows the feedback card right after the reply of the turn that raised it", () => {
+      const { container } = renderMessages(FEEDBACK_TRANSCRIPT, false, {
+        feedbackOffer: FEEDBACK_OFFER,
+      });
+
+      const text = container.textContent ?? "";
+      expect(screen.getByTestId("agent-feedback-card")).toBeTruthy();
+      expect(text.indexOf("Sorry about that.")).toBeLessThan(
+        text.indexOf("Report this to the Copilot team?")
+      );
+      expect(text.indexOf("Report this to the Copilot team?")).toBeLessThan(
+        text.indexOf("next question")
+      );
+    });
+
+    it("hides a dismissed feedback card", () => {
+      renderMessages(FEEDBACK_TRANSCRIPT, false, {
+        feedbackOffer: { ...FEEDBACK_OFFER, status: "dismissed" },
+      });
+
+      expect(screen.queryByTestId("agent-feedback-card")).toBeNull();
+    });
+
+    it("opens the report dialog prefilled from the card with every source checked, and records the sent report", () => {
+      mockOpenReportIssueModal.mockClear();
+      renderMessages(FEEDBACK_TRANSCRIPT, false, { feedbackOffer: FEEDBACK_OFFER });
+
+      fireEvent.click(screen.getByRole("button", { name: "Review & report" }));
+
+      expect(mockOpenReportIssueModal).toHaveBeenCalledWith(expect.anything(), {
+        activeBackend: "codex",
+        initialNote: expect.stringMatching(/^Replied in Swedish to an English request\n/),
+        preselectAllSources: true,
+        onReported: expect.any(Function),
+      });
+      const { onReported } = mockOpenReportIssueModal.mock.calls[0][1] as {
+        onReported: (report: { reportId: string; issueUrl: string }) => void;
+      };
+      onReported({ reportId: "r1", issueUrl: "https://example.com" });
+      expect(chatBackend.markFeedbackReported).toHaveBeenCalledWith({
+        reportId: "r1",
+        issueUrl: "https://example.com",
+      });
+    });
+
+    it("dismisses the card without opening the report dialog", () => {
+      mockOpenReportIssueModal.mockClear();
+      renderMessages(FEEDBACK_TRANSCRIPT, false, { feedbackOffer: FEEDBACK_OFFER });
+
+      fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+
+      expect(chatBackend.dismissFeedbackOffer).toHaveBeenCalled();
+      expect(mockOpenReportIssueModal).not.toHaveBeenCalled();
+    });
+
+    it("turns feedback cards off and dismisses this one when the user opts out", () => {
+      mockSetSettings.mockClear();
+      renderMessages(FEEDBACK_TRANSCRIPT, false, { feedbackOffer: FEEDBACK_OFFER });
+
+      fireEvent.click(screen.getByRole("button", { name: "Don't offer again" }));
+
+      const update = mockSetSettings.mock.calls[0][0] as (cur: {
+        agentMode: Record<string, unknown>;
+      }) => { agentMode: Record<string, unknown> };
+      expect(update({ agentMode: { debugFullFrames: true } }).agentMode).toEqual({
+        debugFullFrames: true,
+        offerFeedbackCards: false,
+      });
+      expect(chatBackend.dismissFeedbackOffer).toHaveBeenCalled();
     });
 
     it("forwards the active session conversation path to user messages https://github.com/Brevilabs/obsidian-copilot-private/issues/539", () => {

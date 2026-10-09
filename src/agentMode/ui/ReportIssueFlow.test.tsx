@@ -106,6 +106,18 @@ describe("ReportIssueFlow", () => {
         expect(screen.getByText(/Reports are private and deleted after 60 days/)).toBeTruthy();
       });
 
+      it("starts with a feedback card's draft in the note field, still editable before it is sent", async () => {
+        const { props } = renderFlow({ initialNote: "Replied in Swedish\n\nWhat happened: hej" });
+
+        expect((noteField() as HTMLTextAreaElement).value).toBe(
+          "Replied in Swedish\n\nWhat happened: hej"
+        );
+        fireEvent.change(noteField(), { target: { value: "Replied in Swedish, edited" } });
+        submit();
+        await awaitPrepared();
+        expect(props.prepare).toHaveBeenCalledWith("Replied in Swedish, edited", expect.any(Set));
+      });
+
       it("passes the note and only the checked sources to prepare", async () => {
         const prepare = jest.fn().mockResolvedValue(prepared);
         renderFlow({ prepare });

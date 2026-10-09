@@ -113,6 +113,7 @@ const actionRailArgs: AgentChatMessagesProps = {
   pendingAskUserQuestions: questions,
   chatBackend: {} as AgentChatBackend,
   isLoading: true,
+  feedbackOffer: null,
 };
 
 const meta = {

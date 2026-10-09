@@ -16,6 +16,9 @@ import { findLatestOpencodeLog } from "@/utils/opencodeLog";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { captureBehindOverlay } from "./reportScreenshot";
 import { getSettings } from "@/settings/model";
+import { CHAT_AGENT_VIEWTYPE } from "@/constants";
+import { getPersistedDeviceId } from "@/utils/deviceId";
+import { createReportUploader } from "@/utils/reportUpload.brevilabs";
 import { App, Modal, Notice, apiVersion } from "obsidian";
 import React from "react";
 import { Root } from "react-dom/client";
@@ -41,6 +44,50 @@ export interface ReportIssueModalParams {
   activeBackend: string;
   pluginVersion: string;
   uploader: ReportUploader;
+  initialNote?: string;
+  preselectAllSources?: boolean;
+  onReported?: (report: { reportId: string; issueUrl: string }) => void;
+}
+
+export interface OpenReportIssueOptions {
+  activeBackend: string;
+  initialNote?: string;
+  preselectAllSources?: boolean;
+  onReported?: (report: { reportId: string; issueUrl: string }) => void;
+}
+
+export function openReportIssueModal(app: App, options: OpenReportIssueOptions): ReportIssueModal {
+  const pluginVersion =
+    (
+      app as unknown as {
+        plugins: { getPlugin: (id: string) => { manifest?: { version?: string } } | null };
+      }
+    ).plugins.getPlugin("copilot")?.manifest?.version ?? "unknown";
+  const modal = new ReportIssueModal({
+    ...options,
+    app,
+    pluginVersion,
+    canCaptureTarget: () => app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE).length > 0,
+    resolveCaptureTarget: () => {
+      const leaf = app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE)[0];
+      if (!leaf) return null;
+      app.workspace.revealLeaf(leaf);
+      const view = leaf.view as unknown as {
+        contentEl?: HTMLElement;
+        containerEl?: HTMLElement;
+      };
+      return view.contentEl ?? view.containerEl ?? null;
+    },
+    dismissSettings: () => {
+      (app as unknown as { setting: { close: () => void } }).setting.close();
+    },
+    uploader: createReportUploader({
+      installId: () => getPersistedDeviceId(app),
+      clientVersion: pluginVersion,
+    }),
+  });
+  modal.open();
+  return modal;
 }
 
 interface ElectronShell {
@@ -131,6 +178,7 @@ export class ReportIssueModal extends Modal {
     this.root = createPluginRoot(this.contentEl, this.app);
     this.root.render(
       <ReportIssueFlow
+        initialNote={this.params.initialNote}
         sources={this.buildSources()}
         prepare={(note, selected) => this.prepare(note, selected)}
         upload={(report) => this.upload(report)}
@@ -196,7 +244,7 @@ export class ReportIssueModal extends Modal {
         id: "opencodeLog",
         label: "OpenCode backend log",
         description: "may include unrelated sessions",
-        defaultChecked: false,
+        defaultChecked: this.params.preselectAllSources === true,
       });
     }
     return sources;
@@ -286,6 +334,9 @@ export class ReportIssueModal extends Modal {
     this.uploading = true;
     const outcome = await uploadReport(this.params.uploader, report);
     this.uploading = false;
+    if (outcome.ok) {
+      this.params.onReported?.({ reportId: outcome.reportId, issueUrl: outcome.issueUrl });
+    }
     if (this.root) return outcome;
     // The dialog closed while the bytes were in flight. No browser tab — the
     // user has moved on — but the id is the one thing they cannot reconstruct,

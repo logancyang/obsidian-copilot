@@ -951,6 +951,16 @@ describe("AgentSession", () => {
         });
       });
 
+      it("passes the plugin's MCP servers into the newSession payload", async () => {
+        const mock = makeMockBackend();
+        const mcpServers = [
+          { name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: { A: "b" } },
+        ];
+        const session = startSession(mock, { mcpServers });
+        await session.ready;
+        expect(mock.newSession).toHaveBeenCalledWith(expect.objectContaining({ mcpServers }));
+      });
+
       it("passes the session's projectId into the newSession payload", async () => {
         const mock = makeMockBackend();
         const session = startSession(mock, { cwd: "/vault/Projects/p", projectId: "proj-7" });
@@ -3833,6 +3843,123 @@ describe("AgentSession", () => {
         const session = makeSession(mock, { backendId: "claude" });
         expect(session.getPendingAskUserQuestions()).toHaveLength(0);
         expect(session.getPendingAskUserQuestions()).toBe(session.getPendingAskUserQuestions());
+      });
+    });
+
+    describe("getFeedbackOffer()", () => {
+      it("starts with no feedback card", () => {
+        expect(makeSession(makeMockBackend()).getFeedbackOffer()).toBeNull();
+      });
+    });
+
+    describe("offerFeedback()", () => {
+      const DRAFT = {
+        title: "Replied in Swedish to an English request",
+        whatHappened: "The agent answered 'hej'.",
+        userSaid: "Why do you switch to a different language?",
+        repro: "1. Ask in English.",
+      };
+
+      const sessionWithTranscript = () => {
+        const session = makeSession(makeMockBackend(), {
+          backendId: "codex",
+          initialState: sonnetAndGpt5State(),
+        });
+        session.loadDisplayMessages([
+          { id: "u1", sender: USER_SENDER, message: "hej", isVisible: true, timestamp: null },
+          { id: "a1", sender: AI_SENDER, message: "hej", isVisible: true, timestamp: null },
+          { id: "u2", sender: USER_SENDER, message: "why?", isVisible: true, timestamp: null },
+        ]);
+        return session;
+      };
+
+      it("opens a card with the draft, session evidence and the latest user message as its anchor", () => {
+        const session = sessionWithTranscript();
+        const onMessagesChanged = jest.fn();
+        subscribeTo(session, { onMessagesChanged });
+
+        expect(session.offerFeedback(DRAFT)).toBe("shown");
+
+        expect(onMessagesChanged).toHaveBeenCalled();
+        expect(session.getFeedbackOffer()).toEqual({
+          draft: DRAFT,
+          evidence: {
+            backendId: "codex",
+            model: "anthropic/sonnet",
+            sessionId: "acp-1",
+            raisedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+          },
+          afterUserMessageId: "u2",
+          status: "open",
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 refuses a second card in the same session whether the first is open, dismissed or sent", () => {
+        const session = sessionWithTranscript();
+        session.offerFeedback(DRAFT);
+        const first = session.getFeedbackOffer();
+
+        expect(session.offerFeedback({ ...DRAFT, title: "Another problem" })).toBe(
+          "already_offered"
+        );
+        session.dismissFeedbackOffer();
+        expect(session.offerFeedback(DRAFT)).toBe("already_offered");
+        expect(session.getFeedbackOffer()?.draft).toBe(first?.draft);
+      });
+
+      it("anchors to nothing when the session has no user message yet", () => {
+        const session = makeSession(makeMockBackend());
+        session.offerFeedback(DRAFT);
+        expect(session.getFeedbackOffer()?.afterUserMessageId).toBeNull();
+      });
+    });
+
+    describe("dismissFeedbackOffer()", () => {
+      const DRAFT = { title: "t", whatHappened: "w", userSaid: "", repro: "r" };
+
+      it("marks an open card dismissed and notifies, without any other effect", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        session.offerFeedback(DRAFT);
+        const onMessagesChanged = jest.fn();
+        subscribeTo(session, { onMessagesChanged });
+
+        session.dismissFeedbackOffer();
+
+        expect(session.getFeedbackOffer()?.status).toBe("dismissed");
+        expect(onMessagesChanged).toHaveBeenCalledTimes(1);
+        expect(mock.prompt).not.toHaveBeenCalled();
+      });
+
+      it("leaves a sent card and a missing card unchanged", () => {
+        const session = makeSession(makeMockBackend());
+        session.dismissFeedbackOffer();
+        expect(session.getFeedbackOffer()).toBeNull();
+
+        session.offerFeedback(DRAFT);
+        session.markFeedbackReported({ reportId: "r1", issueUrl: "https://example.com" });
+        session.dismissFeedbackOffer();
+        expect(session.getFeedbackOffer()?.status).toBe("reported");
+      });
+    });
+
+    describe("markFeedbackReported()", () => {
+      it("records the report ID and issue link on the card", () => {
+        const session = makeSession(makeMockBackend());
+        session.offerFeedback({ title: "t", whatHappened: "w", userSaid: "", repro: "r" });
+
+        session.markFeedbackReported({ reportId: "r1", issueUrl: "https://example.com" });
+
+        expect(session.getFeedbackOffer()).toMatchObject({
+          status: "reported",
+          report: { reportId: "r1", issueUrl: "https://example.com" },
+        });
+      });
+
+      it("ignores a report when no card was offered", () => {
+        const session = makeSession(makeMockBackend());
+        session.markFeedbackReported({ reportId: "r1", issueUrl: "https://example.com" });
+        expect(session.getFeedbackOffer()).toBeNull();
       });
     });
 

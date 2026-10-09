@@ -1,4 +1,5 @@
-import type { BackendState } from "@/agentMode/session/types";
+import type { AgentMcpServer, BackendState } from "@/agentMode/session/types";
+import type { FeedbackMcpServer } from "@/agentMode/session/feedback/feedbackMcpServer";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
@@ -129,6 +130,7 @@ const EMPTY_SESSIONS = Object.freeze([]) as unknown as AgentSession[];
 const EMPTY_HISTORY_ITEMS = Object.freeze([]) as unknown as ChatHistoryItem[];
 const EMPTY_RECENT_CHAT_IDS: ReadonlySet<string> = new Set();
 const EMPTY_CHAT_INPUT_IDS: readonly string[] = Object.freeze([]);
+const EMPTY_MCP_SERVERS: ReadonlyArray<AgentMcpServer> = Object.freeze([]);
 
 const RESUMED_SESSION_BEHIND_EPOCH = -1;
 
@@ -184,6 +186,7 @@ export interface AgentSessionManagerOptions {
   beforeBackendStart?: (id: BackendId) => Promise<void>;
   persistenceManager?: AgentChatPersistenceManager;
   sessionIndex?: AgentSessionIndex;
+  feedbackServer?: FeedbackMcpServer;
 }
 
 export class AgentSessionManager {
@@ -864,12 +867,14 @@ export class AgentSessionManager {
       throw err;
     }
 
+    const internalId = uuidv4();
+    const mcpServers = await this.connectFeedbackServer(internalId);
+
     if (this.disposed) {
       this.finishPendingCreate();
       throw new Error("AgentSessionManager was shut down during session creation");
     }
 
-    const internalId = uuidv4();
     const resolvedChatInputId = chatInputId ?? uuidv4();
     const session = AgentSession.start({
       backend,
@@ -885,6 +890,7 @@ export class AgentSessionManager {
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getApp: () => this.app,
       contextReady,
+      mcpServers,
       ...(projectId !== GLOBAL_SCOPE
         ? {
             getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
@@ -1744,6 +1750,7 @@ export class AgentSessionManager {
       logWarn(`[AgentMode] dispose during closeSession failed`, e);
     }
     this.detachAutoSave(id);
+    this.opts.feedbackServer?.disconnect(id);
     this.sessions.delete(id);
     this.chatUIStates.delete(id);
     this.landingCaptureSignatures.delete(id);
@@ -1924,6 +1931,25 @@ export class AgentSessionManager {
     }
   }
 
+  // Feedback cards are optional, so a server that cannot start leaves the chat running without them.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+  private async connectFeedbackServer(internalId: string): Promise<ReadonlyArray<AgentMcpServer>> {
+    const server = this.opts.feedbackServer;
+    if (!server || !getSettings().agentMode.offerFeedbackCards) return EMPTY_MCP_SERVERS;
+    try {
+      return [
+        await server.connect(internalId, (draft) =>
+          getSettings().agentMode.offerFeedbackCards
+            ? (this.sessions.get(internalId)?.offerFeedback(draft) ?? "turned_off")
+            : "turned_off"
+        ),
+      ];
+    } catch (err) {
+      logWarn("[AgentMode] feedback MCP server unavailable; continuing without it", err);
+      return EMPTY_MCP_SERVERS;
+    }
+  }
+
   async shutdown(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
@@ -1957,6 +1983,7 @@ export class AgentSessionManager {
         }
       })
     );
+    this.opts.feedbackServer?.dispose();
     this.sessions.clear();
     this.chatUIStates.clear();
     this.landingCaptureSignatures.clear();
@@ -2191,11 +2218,12 @@ export class AgentSessionManager {
     const additionalDirectories = contextReady
       ? (await contextReady).additionalDirectories
       : undefined;
+    const internalId = uuidv4();
+    const mcpServers = await this.connectFeedbackServer(internalId);
     if (this.disposed) {
       this.finishPendingCreate();
       return null;
     }
-    const internalId = uuidv4();
     // The chat attaches before the backend replays its history, so replayed frames are never in flight without a handler.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/602
     const session = new AgentSession({
@@ -2221,7 +2249,13 @@ export class AgentSessionManager {
         : {}),
     });
 
-    const openInput = { sessionId, cwd, projectId, additionalDirectories };
+    const openInput = {
+      sessionId,
+      cwd,
+      projectId,
+      additionalDirectories,
+      mcpServers,
+    };
     let resumeResult: LoadSessionOutput | null = null;
     try {
       resumeResult = await backend.loadSession(openInput);
@@ -2587,6 +2621,7 @@ export class AgentSessionManager {
       if (dead.length === 0) return;
       for (const s of dead) {
         this.detachAutoSave(s.internalId);
+        this.opts.feedbackServer?.disconnect(s.internalId);
         this.sessions.delete(s.internalId);
         this.chatUIStates.delete(s.internalId);
         this.landingCaptureSignatures.delete(s.internalId);

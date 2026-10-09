@@ -144,6 +144,7 @@ describe("descriptor", () => {
           byok: {},
           activeBackend: "claude",
           debugFullFrames: false,
+          offerFeedbackCards: true,
           notificationSound: false,
           notificationSoundId: "piano",
           welcomeDismissed: false,

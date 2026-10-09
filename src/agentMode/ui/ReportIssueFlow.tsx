@@ -34,6 +34,7 @@ export type UploadOutcome =
   | { ok: false; error: string };
 
 export interface ReportIssueFlowProps {
+  initialNote?: string;
   sources: ReportSourceOption[];
   prepare: (note: string, selected: ReadonlySet<ReportSourceId>) => Promise<PreparedReport>;
   upload: (report: PreparedReport) => Promise<UploadOutcome>;
@@ -58,7 +59,7 @@ function useMountedRef() {
 export function ReportIssueFlow(props: ReportIssueFlowProps) {
   const { sources, prepare, discardReport } = props;
   const [phase, setPhase] = React.useState<ReportPhase>("details");
-  const [note, setNote] = React.useState("");
+  const [note, setNote] = React.useState(props.initialNote ?? "");
   const [selected, setSelected] = React.useState<Set<ReportSourceId>>(
     () => new Set(sources.filter((s) => s.defaultChecked).map((s) => s.id))
   );

@@ -219,6 +219,55 @@ describe("AgentChatUIState", () => {
     });
   });
 
+  function feedbackChat(): AgentChatUIState {
+    const session = new AgentSession({
+      backend: {
+        isRunning: () => true,
+        onExit: () => () => undefined,
+        registerSessionHandler: () => () => undefined,
+      } as unknown as BackendProcess,
+      backendSessionId: "s-1",
+      internalId: "feedback",
+      backendId: "claude",
+    });
+    session.completeResume(null);
+    const chat = new AgentChatUIState(session);
+    session.offerFeedback({ title: "t", whatHappened: "w", userSaid: "", repro: "r" });
+    return chat;
+  }
+
+  describe("getFeedbackOffer()", () => {
+    it("serves the session's open feedback card", () => {
+      expect(feedbackChat().getFeedbackOffer()?.status).toBe("open");
+    });
+  });
+
+  describe("dismissFeedbackOffer()", () => {
+    it("dismisses the session's open card and notifies the view", () => {
+      const chat = feedbackChat();
+      const listener = jest.fn();
+      chat.subscribe(listener);
+
+      chat.dismissFeedbackOffer();
+
+      expect(chat.getFeedbackOffer()?.status).toBe("dismissed");
+      expect(listener).toHaveBeenCalled();
+    });
+  });
+
+  describe("markFeedbackReported()", () => {
+    it("records the sent report on the session's card", () => {
+      const chat = feedbackChat();
+
+      chat.markFeedbackReported({ reportId: "r1", issueUrl: "https://example.com" });
+
+      expect(chat.getFeedbackOffer()).toMatchObject({
+        status: "reported",
+        report: { reportId: "r1", issueUrl: "https://example.com" },
+      });
+    });
+  });
+
   describe("isTurnInFlight()", () => {
     it("stays true while an approved plan is being implemented and clears when the turn finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", async () => {
       const review = planReview("next_turn");

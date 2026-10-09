@@ -125,6 +125,7 @@ describe("model", () => {
         activeBackend: "opencode",
         backends: {},
         debugFullFrames: true,
+        offerFeedbackCards: true,
         notificationSound: true,
         notificationSoundId: "piano",
         welcomeDismissed: false,
@@ -201,6 +202,21 @@ describe("model", () => {
         },
       } as unknown as CopilotSettings);
       expect(sanitized.agentMode.debugFullFrames).toBe(false);
+    });
+
+    it("offers feedback cards to an install that never saved the setting, and keeps an explicit opt-out", () => {
+      const base = { byok: {}, activeBackend: "opencode", backends: {} };
+      const fresh = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: base,
+      } as unknown as CopilotSettings);
+      const optedOut = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: { ...base, offerFeedbackCards: false },
+      } as unknown as CopilotSettings);
+
+      expect(fresh.agentMode.offerFeedbackCards).toBe(true);
+      expect(optedOut.agentMode.offerFeedbackCards).toBe(false);
     });
 
     it("falls back to debugFullFrames=true when the persisted value is not a boolean", () => {

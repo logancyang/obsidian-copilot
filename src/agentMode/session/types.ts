@@ -330,10 +330,17 @@ export interface AskUserQuestionPrompt {
   signal?: AbortSignal;
 }
 
+export interface AgentMcpServer {
+  name: string;
+  url: string;
+  headers: Readonly<Record<string, string>>;
+}
+
 export interface OpenSessionInput {
   cwd: string;
   projectId?: ProjectScopeId;
   additionalDirectories?: string[];
+  mcpServers?: ReadonlyArray<AgentMcpServer>;
 }
 
 export interface OpenSessionOutput {
@@ -346,6 +353,7 @@ export interface ResumeSessionInput {
   cwd: string;
   projectId?: ProjectScopeId;
   additionalDirectories?: string[];
+  mcpServers?: ReadonlyArray<AgentMcpServer>;
 }
 
 export type ResumeSessionOutput = OpenSessionOutput;
@@ -355,6 +363,7 @@ export interface LoadSessionInput {
   cwd: string;
   projectId?: ProjectScopeId;
   additionalDirectories?: string[];
+  mcpServers?: ReadonlyArray<AgentMcpServer>;
 }
 
 export type LoadSessionOutput = OpenSessionOutput;

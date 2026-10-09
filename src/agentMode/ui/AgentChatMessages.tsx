@@ -2,6 +2,10 @@ import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import { AskUserQuestionCard } from "@/agentMode/ui/AskUserQuestionCard";
 import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
+import { FeedbackCard, findFeedbackCardIndex } from "@/agentMode/ui/FeedbackCard";
+import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
+import { formatFeedbackNote, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
+import { setSettings } from "@/settings/model";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
@@ -28,6 +32,7 @@ interface AgentChatMessagesProps {
   pendingAskUserQuestions: AskUserQuestionPrompt[];
   chatBackend: AgentChatBackend;
   isLoading: boolean;
+  feedbackOffer: FeedbackOffer | null;
 }
 
 function toChatMessageView(m: AgentChatMessage): ChatMessage {
@@ -156,6 +161,7 @@ const AgentChatMessages = memo(
     pendingAskUserQuestions,
     chatBackend,
     isLoading,
+    feedbackOffer,
   }: AgentChatMessagesProps) => {
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
@@ -191,6 +197,30 @@ const AgentChatMessages = memo(
         ? `permission:${pendingPermission.toolCall.toolCallId}`
         : null;
 
+    const feedbackCardIndex = useMemo(
+      () => findFeedbackCardIndex(visible, feedbackOffer),
+      [visible, feedbackOffer]
+    );
+    const feedbackCard =
+      feedbackOffer && feedbackCardIndex !== -1 ? (
+        <FeedbackCard
+          offer={feedbackOffer}
+          onReview={() =>
+            openReportIssueModal(app, {
+              activeBackend: feedbackOffer.evidence.backendId,
+              initialNote: formatFeedbackNote(feedbackOffer),
+              preselectAllSources: true,
+              onReported: (report) => chatBackend.markFeedbackReported(report),
+            })
+          }
+          onDismiss={() => chatBackend.dismissFeedbackOffer()}
+          onTurnOff={() => {
+            setSettings((cur) => ({ agentMode: { ...cur.agentMode, offerFeedbackCards: false } }));
+            chatBackend.dismissFeedbackOffer();
+          }}
+        />
+      ) : null;
+
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);
     const streamingMessageId = isLoading ? latestAssistant?.id : undefined;
 
@@ -205,22 +235,27 @@ const AgentChatMessages = memo(
         >
           {visible.map((message, index) => {
             const shouldApplyMinHeight =
-              index === visible.length - 1 && message.sender !== USER_SENDER && !showPlanCard;
+              index === visible.length - 1 &&
+              message.sender !== USER_SENDER &&
+              !showPlanCard &&
+              index !== feedbackCardIndex;
             const messageKey = getMessageKey(adapted[index], index);
 
             return (
-              <AgentMessageRow
-                key={messageKey}
-                messageKey={messageKey}
-                message={message}
-                app={app}
-                sourcePath={sourcePath}
-                isLatestAssistant={
-                  message.sender !== USER_SENDER && message.id === latestAssistant?.id
-                }
-                isStreaming={message.id === streamingMessageId}
-                minHeight={shouldApplyMinHeight ? containerMinHeight : undefined}
-              />
+              <React.Fragment key={messageKey}>
+                <AgentMessageRow
+                  messageKey={messageKey}
+                  message={message}
+                  app={app}
+                  sourcePath={sourcePath}
+                  isLatestAssistant={
+                    message.sender !== USER_SENDER && message.id === latestAssistant?.id
+                  }
+                  isStreaming={message.id === streamingMessageId}
+                  minHeight={shouldApplyMinHeight ? containerMinHeight : undefined}
+                />
+                {index === feedbackCardIndex ? feedbackCard : null}
+              </React.Fragment>
             );
           })}
           {inlinePlanCard}

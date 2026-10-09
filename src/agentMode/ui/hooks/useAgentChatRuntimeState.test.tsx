@@ -6,6 +6,7 @@ import type {
   CurrentPlan,
   PermissionPrompt,
 } from "@/agentMode/session/types";
+import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { act, render, renderHook } from "@testing-library/react";
 import React, { useEffect } from "react";
@@ -19,6 +20,7 @@ interface FakeBackendState {
   currentTodoList?: AgentTodoListEntry[] | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
+  feedbackOffer?: FeedbackOffer | null;
 }
 
 function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
@@ -31,6 +33,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     currentTodoList: initial.currentTodoList ?? null,
     pendingToolPermissions: initial.pendingToolPermissions ?? [],
     pendingAskUserQuestions: initial.pendingAskUserQuestions ?? [],
+    feedbackOffer: initial.feedbackOffer ?? null,
   };
   const listeners = new Set<() => void>();
 
@@ -47,6 +50,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     getCurrentTodoList: () => state.currentTodoList ?? null,
     getPendingToolPermissions: () => state.pendingToolPermissions,
     getPendingAskUserQuestions: () => state.pendingAskUserQuestions,
+    getFeedbackOffer: () => state.feedbackOffer ?? null,
   } as unknown as AgentChatBackend;
 
   return {
@@ -88,6 +92,20 @@ describe("useAgentChatRuntimeState", () => {
         fake.emit();
       });
       expect(result.current.isTurnInFlight).toBe(false);
+    });
+
+    it("picks up a feedback card the moment the backend offers it", () => {
+      const fake = makeFakeBackend();
+      const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
+      expect(result.current.feedbackOffer).toBeNull();
+      const offer = { status: "open" } as FeedbackOffer;
+
+      act(() => {
+        fake.state.feedbackOffer = offer;
+        fake.emit();
+      });
+
+      expect(result.current.feedbackOffer).toBe(offer);
     });
 
     it("re-syncs every field when the backend notifies", () => {
