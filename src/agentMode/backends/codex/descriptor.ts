@@ -237,7 +237,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 const CODEX_SESSION_SCOPE =
   "Covers what this option names, until this chat ends. Start a new chat to undo.";
 const CODEX_RULES_SCOPE =
-  "Saved to ~/.codex/rules/default.rules for all Codex chats. Hover to see the rule; delete it there to undo.";
+  "Saved to rules/default.rules in your Codex home (~/.codex by default) for all Codex chats. Hover to see the rule; delete it there to undo.";
 
 function codexPermissionDecision(metadata: unknown): unknown {
   if (metadata === null || typeof metadata !== "object") return undefined;

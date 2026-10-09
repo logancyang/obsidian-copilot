@@ -35,6 +35,7 @@ import {
   getCloudAgentIds,
 } from "@/agentMode/backends/registry";
 import { AgentDataNoticeCard } from "@/agentMode/ui/AgentDataNoticeCard";
+import { isLoadingModelsEntry } from "@/agentMode/ui/agentModelPickerHelpers";
 import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/activeWebTabSnapshot";
 import {
   isNoteSelectedTextContext,
@@ -471,6 +472,9 @@ export const AgentChatInput = memo(function AgentChatInput({
               noticeDescriptor.dataDestination?.(getSettings(), activeModelEntry.name)) ||
             `The endpoint the ${noticeDescriptor.displayName} CLI is set to use`
           }
+          // Until models load, the card cannot name the provider the message goes to.
+          // https://github.com/logancyang/obsidian-copilot/issues/2889
+          continueDisabled={!!activeModelEntry && isLoadingModelsEntry(activeModelEntry)}
           onContinue={handleDataNoticeContinue}
           onCancel={() => setDataNoticeWebTabs(null)}
         />

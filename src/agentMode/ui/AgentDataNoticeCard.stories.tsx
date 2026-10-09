@@ -31,3 +31,11 @@ export const CliOwnedEndpoint: StoryObj<AgentDataNoticeCardProps> = {
     destination: "The endpoint the Codex CLI is set to use",
   },
 };
+
+export const ModelsLoading: StoryObj<AgentDataNoticeCardProps> = {
+  args: {
+    modelName: "Loading models…",
+    destination: "The endpoint the opencode CLI is set to use",
+    continueDisabled: true,
+  },
+};

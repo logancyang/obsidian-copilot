@@ -83,7 +83,11 @@ jest.mock("@/aiParams", () => ({
   removeSelectedTextContext: jest.fn(),
   useSelectedTextContexts: () => [mockSelectedTextContexts, jest.fn()],
 }));
-let mockSettings: { debug: boolean; agentMode: { dataNoticeAccepted: boolean } };
+let mockSettings: {
+  debug: boolean;
+  agentMode: { dataNoticeAccepted: boolean };
+  providers?: Record<string, unknown>;
+};
 jest.mock("@/settings/model", () => ({
   getModelKeyFromModel: (model: { name: string; provider: string; _backendId?: string }) => {
     const baseKey = `${model.name}|${model.provider}`;
@@ -248,6 +252,41 @@ describe("AgentChatInput", () => {
       fireEvent.click(screen.getByRole("button", { name: "send" }));
       await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(2));
       expect(screen.queryByText("Where your Agent context goes")).toBeNull();
+    });
+
+    it("keeps Continue off while the agent loads its models for https://github.com/logancyang/obsidian-copilot/issues/2889", async () => {
+      mockSettings = { debug: false, agentMode: { dataNoticeAccepted: false }, providers: {} };
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+      } as unknown as AgentChatBackend;
+      const picker = (name: string, displayName: string) => ({
+        models: [
+          {
+            name,
+            displayName,
+            provider: "agent",
+            enabled: true,
+            isBuiltIn: false,
+            _backendId: "opencode",
+          },
+        ],
+        value: `opencode:${name}|agent`,
+        onChange: jest.fn(),
+      });
+      const draft = makeDraft();
+      const { rerender } = renderInput(backend, draft, {
+        modelPickerOverride: picker("__preload_pending__", "Loading models…"),
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "send" }));
+      const continueButton = await screen.findByRole("button", { name: "Continue" });
+      expect(continueButton).toHaveProperty("disabled", true);
+
+      rerender(
+        inputNode(backend, draft, { modelPickerOverride: picker("zen/big-pickle", "Big Pickle") })
+      );
+      expect(screen.getByText("Big Pickle")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Continue" })).toHaveProperty("disabled", false);
     });
 
     it("sends nothing and keeps the notice pending when it is cancelled for https://github.com/logancyang/obsidian-copilot/issues/2889", async () => {

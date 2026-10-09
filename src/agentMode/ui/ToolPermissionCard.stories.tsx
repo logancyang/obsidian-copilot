@@ -19,7 +19,7 @@ const request = {
       name: "Allow always",
       kind: "allow_always",
       scope:
-        "Covers Edit(launch brief.md). Saved to .claude/settings.local.json in this chat's folder, for later chats there. Remove it there to undo.",
+        "Covers Edit(launch brief.md). Saved to .claude/settings.local.json in the vault folder (for a project chat, the project note's folder), for later chats there. Remove it there to undo.",
     },
     { optionId: "reject_once", name: "Deny", kind: "reject_once" },
   ],

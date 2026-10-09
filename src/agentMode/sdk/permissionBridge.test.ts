@@ -58,7 +58,7 @@ describe("permissionBridge", () => {
         ["session", "Covers Bash(git add:*) until this chat ends. Start a new chat to undo."],
         [
           "localSettings",
-          "Covers Bash(git add:*). Saved to .claude/settings.local.json in this chat's folder, for later chats there. Remove it there to undo.",
+          "Covers Bash(git add:*). Saved to .claude/settings.local.json in the vault folder (for a project chat, the project note's folder), for later chats there. Remove it there to undo.",
         ],
         [
           "userSettings",

@@ -160,12 +160,13 @@ function permissionOptions(suggestions: PermissionUpdate[] | undefined): Permiss
   return [ALLOW_ONCE, allowAlways, REJECT_ONCE];
 }
 
+const CHAT_FOLDER = "the vault folder (for a project chat, the project note's folder)";
 // Most lasting first, so a mixed suggestion reports where it outlives the chat.
 // https://github.com/logancyang/obsidian-copilot/issues/2889
 const SAVED_DESTINATIONS: ReadonlyArray<[PermissionUpdate["destination"], string]> = [
   ["userSettings", "~/.claude/settings.json, for all your Claude Code projects"],
-  ["projectSettings", ".claude/settings.json in this chat's folder, for later chats there"],
-  ["localSettings", ".claude/settings.local.json in this chat's folder, for later chats there"],
+  ["projectSettings", `.claude/settings.json in ${CHAT_FOLDER}, for later chats there`],
+  ["localSettings", `.claude/settings.local.json in ${CHAT_FOLDER}, for later chats there`],
 ];
 
 function describeSuggestionScope(suggestions: PermissionUpdate[]): string {

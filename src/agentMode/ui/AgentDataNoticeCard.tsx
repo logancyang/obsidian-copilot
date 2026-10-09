@@ -6,6 +6,7 @@ interface AgentDataNoticeCardProps {
   backendName: string;
   modelName: string | null;
   destination: string;
+  continueDisabled?: boolean;
   onContinue: () => void;
   onCancel: () => void;
 }
@@ -17,6 +18,7 @@ export const AgentDataNoticeCard = memo(
     backendName,
     modelName,
     destination,
+    continueDisabled = false,
     onContinue,
     onCancel,
   }: AgentDataNoticeCardProps): React.ReactElement => (
@@ -52,7 +54,7 @@ export const AgentDataNoticeCard = memo(
         <Button variant="secondary" size="sm" onClick={onCancel}>
           Cancel
         </Button>
-        <Button variant="default" size="sm" onClick={onContinue}>
+        <Button variant="default" size="sm" disabled={continueDisabled} onClick={onContinue}>
           Continue
         </Button>
       </div>

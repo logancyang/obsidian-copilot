@@ -470,7 +470,9 @@ describe("descriptor", () => {
           name: "Allow Always",
           description: rule,
           kind: "allow_always",
-          scope: expect.stringContaining("~/.codex/rules/default.rules"),
+          scope: expect.stringContaining(
+            "rules/default.rules in your Codex home (~/.codex by default)"
+          ),
         });
       });
 
@@ -490,7 +492,9 @@ describe("descriptor", () => {
           name: "Block Always",
           description: "Block api.example.com in the Future",
           kind: "reject_always",
-          scope: expect.stringContaining("~/.codex/rules/default.rules"),
+          scope: expect.stringContaining(
+            "rules/default.rules in your Codex home (~/.codex by default)"
+          ),
         });
       });
 
