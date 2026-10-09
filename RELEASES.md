@@ -1,5 +1,56 @@
 # Release Notes
 
+# v4.0.14 - Web page context in Agent Chat, improved Miyo scope control, and stability improvements
+
+[![Demo video: Copilot 4.0.14: Web Pages, Miyo Folders, and Automations](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/demo-video-obsidian-copilot-4-0-14-49219052.png)](https://www.youtube.com/shorts/yVl0pULi36A)
+
+Bring the web page you are reading into Agent Chat. Open a YouTube video or an article in Obsidian's Web Viewer, and Agent Chat includes it as context.
+
+This release also gives you more control over which Miyo folders Copilot searches, a first look at Miyo Automations, and many stability improvements.
+
+## ✨ Enhancements
+
+- Agent Chat includes the page open in Web Viewer, and any text you highlight on it, as context. ([#3563](https://github.com/logancyang/obsidian-copilot/pull/3563), @zeroliu)
+
+  ![Agent Chat in the right sidebar with the open Wikipedia page attached as a Current chip](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/agent-chat-with-the-open-wikipedia-page-as-a-current-chip-2f3d191a.png)
+
+- Try Miyo Automations (alpha), new in Miyo 0.3.1: ask Claude Code, Codex, or OpenCode to do something on a repeat, such as adding yesterday's unfinished tasks to today's daily note, and Miyo runs it on schedule. Tell us what you think in Discord. ([Miyo 0.3.1](https://github.com/Brevilabs/miyo-releases/releases/tag/v0.3.1))
+
+  ![Miyo's Automations tab, marked Alpha, listing a task that runs through Claude Code on weekdays at 9:00 AM and saves to Daily](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/miyo-automations-tab-alpha-2b4549f7.png)
+
+- Choose other Miyo folders to search along with your vault, such as a research folder or your synced ChatGPT chats, under **Search scope** in **Settings → Copilot → Miyo**. ([#3525](https://github.com/logancyang/obsidian-copilot/pull/3525), [#3526](https://github.com/logancyang/obsidian-copilot/pull/3526), @wenzhengjiang)
+
+  ![Miyo Search scope set to Current vault with Research and ChatGPT ticked under Also search these Miyo folders](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/miyo-search-scope-with-research-and-chatgpt-ticked-670fb725.png)
+
+- Each provider in an agent's model settings shows how many of its models you turned on. ([#3505](https://github.com/logancyang/obsidian-copilot/pull/3505), @zeroliu)
+
+  ![OpenCode model settings with provider groups showing selected-model count badges](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/provider-groups-with-selected-model-counts-8f4ffd29.png)
+
+- The active note stays in Agent Chat's context until you remove it. ([#3564](https://github.com/logancyang/obsidian-copilot/pull/3564), @zeroliu)
+- Reopened Claude and OpenCode chats show the agent's tool calls and thinking as they appeared live. ([#3394](https://github.com/logancyang/obsidian-copilot/pull/3394), [#3512](https://github.com/logancyang/obsidian-copilot/pull/3512), [#3565](https://github.com/logancyang/obsidian-copilot/pull/3565), @zeroliu)
+- Mention PDFs with `[[` or `@` in any chat. ([#3550](https://github.com/logancyang/obsidian-copilot/pull/3550), @zeroliu)
+- Agent tool call rows are dimmer so the reply reads first. ([#3520](https://github.com/logancyang/obsidian-copilot/pull/3520), [#3544](https://github.com/logancyang/obsidian-copilot/pull/3544), @zeroliu)
+
+## 🛠️ Bug Fixes
+
+- Codex shows its questions as cards you can answer in Default and Auto modes. ([#3554](https://github.com/logancyang/obsidian-copilot/pull/3554), @zeroliu)
+- Copied chat links open their chat, including in vaults with a space in the name. ([#3530](https://github.com/logancyang/obsidian-copilot/pull/3530), [#3546](https://github.com/logancyang/obsidian-copilot/pull/3546), @zeroliu)
+- Wide tables in chat replies scroll inside their own box, so the rest of the chat stays in place. ([#3521](https://github.com/logancyang/obsidian-copilot/pull/3521), @zeroliu)
+- Typing stays responsive on mobile with a photo attached. ([#3561](https://github.com/logancyang/obsidian-copilot/pull/3561), @zeroliu)
+- OpenCode on Copilot Plus uses each model's full context window, such as 1M tokens for DeepSeek V4 Pro. ([#3516](https://github.com/logancyang/obsidian-copilot/pull/3516), @brevilabs-agent-bot[bot])
+- OpenCode no longer suggests saving your work outside your vault. ([#3556](https://github.com/logancyang/obsidian-copilot/pull/3556), @zeroliu)
+
+## ⚠️ Compatibility Notes
+
+- Searching other Miyo folders and Miyo Automations need Miyo 0.3.1 or newer. With an older Miyo, Copilot searches your vault only. ([#3525](https://github.com/logancyang/obsidian-copilot/pull/3525), [#3526](https://github.com/logancyang/obsidian-copilot/pull/3526), @wenzhengjiang)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.13 - Codex Safe mode and custom command default model
 
 [![Demo video: Obsidian Copilot 4.0.13: Codex asks before it edits](https://github.com/user-attachments/assets/adeab3df-bd00-4425-8dc2-bc39146669b8)](https://youtube.com/shorts/VNH0E_hcrMQ?feature=share)
