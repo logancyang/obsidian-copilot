@@ -321,6 +321,21 @@ describe("GlobalRecentChatsSection", () => {
       expect(screen.getByTitle("Confirm delete")).toBeTruthy();
     });
 
+    it.each([
+      ["claude", "Removes: chat file, session index entry and Claude transcript. Keeps: nothing."],
+      ["codex", "Removes: chat file and session index entry. Keeps: Codex transcript."],
+    ])(
+      "https://github.com/logancyang/obsidian-copilot/issues/2888 names what a %s chat delete removes and keeps",
+      (backendId, summary) => {
+        renderSection({ items: [makeItem("chats/agent__a.md", { backendId })] });
+
+        expect(screen.queryByText(/^Removes:/)).toBeNull();
+        fireEvent.click(screen.getByTitle("Delete"));
+
+        expect(screen.getByText(summary)).toBeTruthy();
+      }
+    );
+
     it("refreshes once when the parent re-renders with the items that refresh produced", () => {
       const loadHistory = jest.fn(async () => {});
       const Parent = ({ items }: { items: SectionItems }) => (

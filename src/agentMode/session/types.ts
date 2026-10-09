@@ -419,6 +419,7 @@ export interface BackendProcess {
   resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput>;
   loadSession(params: LoadSessionInput): Promise<LoadSessionOutput>;
   sessionExistsLocally?(params: { sessionId: SessionId; cwd: string }): Promise<boolean>;
+  deleteSessionTranscript?(params: { sessionId: SessionId; cwd: string }): Promise<void>;
   supportsAdditionalDirectories?(): boolean;
   shutdown(): Promise<void>;
 }

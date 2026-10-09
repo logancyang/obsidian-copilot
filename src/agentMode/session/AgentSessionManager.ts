@@ -48,6 +48,12 @@ import {
   mergeChatHistoryItems,
   type MarkdownChatEntry,
 } from "./chatHistoryMerge";
+import {
+  CHAT_FILE_COPY,
+  SESSION_INDEX_COPY,
+  transcriptCopy,
+  type ChatDeleteReport,
+} from "./chatDeleteReport";
 import { MethodUnsupportedError } from "./errors";
 import { replayPersistedMode } from "./replayPersistedMode";
 import { applyModeSpec } from "./modeApply";
@@ -617,25 +623,69 @@ export class AgentSessionManager {
     await persistence.updateTopic(fileId, newTitle);
   }
 
-  async deleteChatHistory(fileId: string): Promise<void> {
+  async deleteChatHistory(fileId: string): Promise<ChatDeleteReport> {
     const index = this.opts.sessionIndex;
-    const native = parseNativeChatId(fileId);
-    if (native) {
-      if (!index) throw new Error("Agent session index is not configured.");
-      this.cancelPendingIndexTouch(native.backendId, native.sessionId);
-      await index.deleteSession(native.backendId, native.sessionId);
-      return;
-    }
     const persistence = this.opts.persistenceManager;
-    if (!persistence) throw new Error("Agent chat persistence is not configured.");
-    if (index) {
-      const ref = await this.readSessionRefFromFile(fileId);
-      if (ref) {
+    const native = parseNativeChatId(fileId);
+    if (native && !index) throw new Error("Agent session index is not configured.");
+    if (!native && !persistence) throw new Error("Agent chat persistence is not configured.");
+
+    const report: ChatDeleteReport = { removed: [], kept: [], failed: [] };
+    const attempt = async (copy: string, step: () => Promise<void>): Promise<void> => {
+      try {
+        await step();
+        report.removed.push(copy);
+      } catch (e) {
+        logError(`[AgentMode] delete ${copy} failed`, e);
+        report.failed.push({ copy, error: e instanceof Error ? e.message : String(e) });
+      }
+    };
+
+    const ref = native ?? (await this.readSessionRefFromFile(fileId));
+    const projectId = native
+      ? ((await index?.getEntry(native.backendId, native.sessionId))?.projectId ?? GLOBAL_SCOPE)
+      : (await readChatPathProjectId(this.app, fileId))?.trim() || GLOBAL_SCOPE;
+
+    // Close an open chat first so its autosave cannot write the file again.
+    // https://github.com/logancyang/obsidian-copilot/issues/2888
+    try {
+      await this.closeChatSession(fileId);
+      if (ref) await this.closeChatSession(buildNativeChatId(ref.backendId, ref.sessionId));
+    } catch (e) {
+      logError("[AgentMode] close open chat before delete failed", e);
+      report.failed.push({
+        copy: "open chat session",
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+
+    if (!native && persistence) {
+      await attempt(CHAT_FILE_COPY, () => persistence.deleteFile(fileId));
+    }
+    if (ref && index) {
+      await attempt(SESSION_INDEX_COPY, async () => {
         this.cancelPendingIndexTouch(ref.backendId, ref.sessionId);
         await index.deleteSession(ref.backendId, ref.sessionId);
+        await index.flushOrThrow();
+      });
+    }
+    const descriptor = ref ? this.opts.resolveDescriptor(ref.backendId) : undefined;
+    if (ref && descriptor) {
+      const copy = transcriptCopy(descriptor);
+      if (!descriptor.deletesSessionTranscript) {
+        report.kept.push(copy);
+      } else {
+        await attempt(copy, async () => {
+          const cwd = this.resolveSessionCwd(projectId);
+          const proc =
+            this.getRunningProcsByBackend().get(ref.backendId) ??
+            (await this.ensureBackend(ref.backendId, descriptor));
+          if (!proc.deleteSessionTranscript) throw new Error("not supported by this backend");
+          await proc.deleteSessionTranscript({ sessionId: ref.sessionId, cwd });
+        });
       }
     }
-    await persistence.deleteFile(fileId);
+    return report;
   }
 
   private cancelPendingIndexTouch(backendId: BackendId, sessionId: string): void {

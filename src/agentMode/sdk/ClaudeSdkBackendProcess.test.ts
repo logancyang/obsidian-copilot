@@ -1342,6 +1342,50 @@ describe("ClaudeSdkBackendProcess", () => {
       });
     });
 
+    describe("deleteSessionTranscript()", () => {
+      const cwd = "/vault";
+      const projectDir = cwd.replace(/[^a-zA-Z0-9]/g, "-");
+      const sessionId = "11111111-2222-3333-4444-555555555555";
+      let configDir: string;
+
+      beforeEach(async () => {
+        configDir = await mkdtemp(path.join(os.tmpdir(), "claude-config-"));
+      });
+      afterEach(async () => {
+        await rm(configDir, { recursive: true, force: true });
+      });
+
+      function makeProcWithConfigDir(): ClaudeSdkBackendProcess {
+        return makeProc({ getEnvOverrides: () => ({ CLAUDE_CONFIG_DIR: configDir }) });
+      }
+
+      it("removes the session transcript from disk", async () => {
+        const dir = path.join(configDir, "projects", projectDir);
+        await mkdir(dir, { recursive: true });
+        await writeFile(path.join(dir, `${sessionId}.jsonl`), "{}\n");
+        const proc = makeProcWithConfigDir();
+
+        await proc.deleteSessionTranscript({ sessionId, cwd });
+
+        await expect(proc.sessionExistsLocally({ sessionId, cwd })).resolves.toBe(false);
+      });
+
+      it("resolves when the transcript is already gone", async () => {
+        await expect(
+          makeProcWithConfigDir().deleteSessionTranscript({ sessionId, cwd })
+        ).resolves.toBeUndefined();
+      });
+
+      it("rejects when the transcript path cannot be removed", async () => {
+        await mkdir(path.join(configDir, "projects", projectDir, `${sessionId}.jsonl`), {
+          recursive: true,
+        });
+        await expect(
+          makeProcWithConfigDir().deleteSessionTranscript({ sessionId, cwd })
+        ).rejects.toThrow();
+      });
+    });
+
     describe("sessionExistsLocally()", () => {
       const cwd = "/vault";
       const projectDir = cwd.replace(/[^a-zA-Z0-9]/g, "-");

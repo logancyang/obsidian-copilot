@@ -4,6 +4,7 @@ import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManage
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import type CopilotPlugin from "@/main";
 import { act, renderHook } from "@testing-library/react";
+import { Notice } from "obsidian";
 
 const item = (id: string): ChatHistoryItem => ({ id }) as unknown as ChatHistoryItem;
 
@@ -11,7 +12,7 @@ function makeManager() {
   return {
     getChatHistoryItems: jest.fn(async () => [item("a"), item("b")]),
     updateChatTitle: jest.fn(async () => {}),
-    deleteChatHistory: jest.fn(async () => {}),
+    deleteChatHistory: jest.fn(async () => ({ removed: ["chat file"], kept: [], failed: [] })),
   } as unknown as AgentSessionManager & {
     getChatHistoryItems: jest.Mock;
     updateChatTitle: jest.Mock;
@@ -153,6 +154,26 @@ describe("useAgentHistoryControls", () => {
 
       expect(manager.deleteChatHistory).toHaveBeenCalledWith("a");
       expect(manager.getChatHistoryItems).toHaveBeenCalledWith("project-1");
+    });
+
+    it("shows one notice built from the delete report and never claims a full delete after a failure", async () => {
+      const manager = makeManager() as AgentSessionManager & { deleteChatHistory: jest.Mock };
+      manager.deleteChatHistory.mockResolvedValue({
+        removed: ["chat file"],
+        kept: [],
+        failed: [{ copy: "session index entry", error: "disk full" }],
+      });
+      const { result } = renderControls(manager);
+      (Notice as unknown as jest.Mock).mockClear();
+
+      await act(async () => {
+        await result.current.deleteChat("a");
+      });
+
+      expect(Notice).toHaveBeenCalledTimes(1);
+      expect(Notice).toHaveBeenCalledWith(
+        "Deletion was partial. Removed: chat file. Failed: session index entry (disk full)."
+      );
     });
   });
 });

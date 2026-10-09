@@ -1,4 +1,5 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
+import { formatChatDeleteNotice } from "@/agentMode/session/chatDeleteReport";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { logError } from "@/logger";
@@ -96,7 +97,8 @@ export function useAgentHistoryControls(
       await runWithNotice(
         "delete chat",
         async () => {
-          await manager.deleteChatHistory(id);
+          const report = await manager.deleteChatHistory(id);
+          new Notice(formatChatDeleteNotice(report));
           await loadChatHistory();
         },
         true

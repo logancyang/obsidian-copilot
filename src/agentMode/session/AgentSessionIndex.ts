@@ -175,6 +175,19 @@ export class AgentSessionIndex {
     await this.writeChain;
   }
 
+  async flushOrThrow(): Promise<void> {
+    if (this.saveTimer !== null) {
+      window.clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    const snapshot = this.serialize();
+    const write = this.writeChain.then(() => this.storage.write(this.filePath, snapshot));
+    this.writeChain = write.catch((e) => {
+      logWarn(`[AgentMode] failed to write agent session index at ${this.filePath}`, e);
+    });
+    await write;
+  }
+
   private ensureLoaded(): Promise<void> {
     if (!this.loadPromise) {
       this.loadPromise = this.loadFromDisk();

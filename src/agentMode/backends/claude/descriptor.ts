@@ -175,6 +175,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   restartOnProviderConfigChange: false,
   restartOnSystemPromptChange: false,
   summarizesSessionTitle: false,
+  deletesSessionTranscript: true,
   wire: claudeWire,
   showModelDescriptions: true,
 

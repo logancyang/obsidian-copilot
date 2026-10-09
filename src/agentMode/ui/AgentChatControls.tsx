@@ -1,4 +1,5 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
+import { describeChatDeletePlan } from "@/agentMode/session/chatDeleteReport";
 import {
   ChatHistoryItem,
   ChatHistoryPopover,
@@ -11,6 +12,9 @@ import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
 import { useSettingsValue } from "@/settings/model";
 import { Download, History, MessageCirclePlus, Sparkles } from "lucide-react";
 import React from "react";
+
+const resolveDeleteSummary = (item: ChatHistoryItem) =>
+  describeChatDeletePlan(item.id, item.backendId ? backendRegistry[item.backendId] : undefined);
 
 const resolveHistoryIcon = (item: ChatHistoryItem) =>
   item.backendId ? backendRegistry[item.backendId]?.Icon : undefined;
@@ -116,6 +120,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
               onLoadChat={onLoadChat}
               onOpenSourceFile={onOpenSourceFile}
               getIcon={resolveHistoryIcon}
+              getDeleteSummary={resolveDeleteSummary}
             >
               <TooltipTrigger asChild>
                 <Button

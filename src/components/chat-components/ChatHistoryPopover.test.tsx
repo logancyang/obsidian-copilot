@@ -15,6 +15,31 @@ const history = ["Open research", "Saved research"].map((title) => ({
 }));
 
 describe("ChatHistoryPopover", () => {
+  describe("delete confirmation", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/2888 shows the delete summary of the chat being confirmed", () => {
+      window.IntersectionObserver = jest.fn(() => ({
+        observe: jest.fn(),
+        disconnect: jest.fn(),
+      })) as unknown as typeof IntersectionObserver;
+      render(
+        <ChatHistoryPopover
+          chatHistory={history}
+          onUpdateTitle={jest.fn()}
+          onDeleteChat={async () => {}}
+          getDeleteSummary={(chat) => `Summary for ${chat.title}`}
+        >
+          <button type="button">History</button>
+        </ChatHistoryPopover>
+      );
+      fireEvent.click(screen.getByText("History"));
+      expect(screen.queryByText(/^Summary for/)).toBeNull();
+
+      fireEvent.click(screen.getAllByTitle("delete file")[0]);
+
+      expect(screen.getAllByText(/^Summary for/)).toHaveLength(1);
+    });
+  });
+
   beforeEach(() => {
     window.IntersectionObserver = jest.fn(() => ({
       observe: jest.fn(),

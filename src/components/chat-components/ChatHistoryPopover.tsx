@@ -52,6 +52,7 @@ interface ChatHistoryPopoverProps {
   onOpenSourceFile?: (id: string) => Promise<void>;
   getIcon?: ChatHistoryIconResolver;
   getBadge?: ChatHistoryBadgeResolver;
+  getDeleteSummary?: (item: ChatHistoryItem) => string | undefined;
   side?: "top" | "right" | "bottom" | "left";
   align?: "start" | "center" | "end";
 }
@@ -68,6 +69,7 @@ export function ChatHistoryPopover({
   onOpenSourceFile,
   getIcon,
   getBadge,
+  getDeleteSummary,
   side = "top",
   align = "end",
 }: ChatHistoryPopoverProps) {
@@ -318,6 +320,7 @@ export function ChatHistoryPopover({
                             confirmDeleteId={confirmDeleteId}
                             getIcon={getIcon}
                             getBadge={getBadge}
+                            getDeleteSummary={getDeleteSummary}
                           />
                         ))}
                       </div>
@@ -360,6 +363,7 @@ interface ChatHistoryItemProps {
   confirmDeleteId: string | null;
   getIcon?: ChatHistoryIconResolver;
   getBadge?: ChatHistoryBadgeResolver;
+  getDeleteSummary?: (item: ChatHistoryItem) => string | undefined;
 }
 
 function ChatHistoryItem({
@@ -381,6 +385,7 @@ function ChatHistoryItem({
   confirmDeleteId,
   getIcon,
   getBadge,
+  getDeleteSummary,
 }: ChatHistoryItemProps) {
   const RowIcon = getIcon?.(chat) ?? MessageCircle;
   if (isEditing) {
@@ -414,136 +419,146 @@ function ChatHistoryItem({
     );
   }
 
+  const deleteSummary = confirmDeleteId === chat.id ? getDeleteSummary?.(chat) : undefined;
+
   return (
-    <div
-      className={cn(
-        "tw-group tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-modifier-hover"
-      )}
-      role="button"
-      tabIndex={0}
-      // Let keyboard users reach release controls without opening the chat.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
-      onKeyDown={(event) => {
-        if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
-          event.preventDefault();
-          onLoadChat(chat.id);
-        }
-      }}
-      onClick={() => onLoadChat(chat.id)}
-    >
-      <ChatIconWithAttention
-        icon={RowIcon}
-        needsAttention={chat.needsAttention}
-        isSessionLive={isSessionOpen}
-        iconClassName="tw-size-3 tw-text-muted"
-      />
-      <span
-        className="tw-block tw-min-w-0 tw-flex-1 tw-truncate tw-text-sm tw-font-medium tw-text-normal"
-        title={chat.title}
-      >
-        {chat.title}
-      </span>
-
-      {getBadge?.(chat)}
-
-      {isRunning && (
-        <LoaderCircle
-          className="tw-size-3.5 tw-shrink-0 tw-animate-spin tw-text-accent group-focus-within:tw-hidden group-hover:tw-hidden"
-          aria-label="Responding"
-        />
-      )}
-
+    <>
       <div
         className={cn(
-          "tw-flex tw-shrink-0 tw-items-center tw-gap-1.5 tw-transition-opacity",
-          isMobile ? "tw-flex" : "tw-hidden group-focus-within:tw-flex group-hover:tw-flex"
+          "tw-group tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-modifier-hover"
         )}
+        role="button"
+        tabIndex={0}
+        // Let keyboard users reach release controls without opening the chat.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
+        onKeyDown={(event) => {
+          if (
+            event.target === event.currentTarget &&
+            (event.key === "Enter" || event.key === " ")
+          ) {
+            event.preventDefault();
+            onLoadChat(chat.id);
+          }
+        }}
+        onClick={() => onLoadChat(chat.id)}
       >
-        {confirmDeleteId === chat.id ? (
-          <>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(chat.id);
-              }}
-              className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
-              title="Confirm Delete"
-            >
-              <Check className="tw-size-3" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCancelDelete();
-              }}
-              className="tw-size-5 tw-p-0"
-              title="Cancel deletion"
-            >
-              <X className="tw-size-3" />
-            </Button>
-          </>
-        ) : (
-          <>
-            {isSessionOpen && onCloseSession && (
+        <ChatIconWithAttention
+          icon={RowIcon}
+          needsAttention={chat.needsAttention}
+          isSessionLive={isSessionOpen}
+          iconClassName="tw-size-3 tw-text-muted"
+        />
+        <span
+          className="tw-block tw-min-w-0 tw-flex-1 tw-truncate tw-text-sm tw-font-medium tw-text-normal"
+          title={chat.title}
+        >
+          {chat.title}
+        </span>
+
+        {getBadge?.(chat)}
+
+        {isRunning && (
+          <LoaderCircle
+            className="tw-size-3.5 tw-shrink-0 tw-animate-spin tw-text-accent group-focus-within:tw-hidden group-hover:tw-hidden"
+            aria-label="Responding"
+          />
+        )}
+
+        <div
+          className={cn(
+            "tw-flex tw-shrink-0 tw-items-center tw-gap-1.5 tw-transition-opacity",
+            isMobile ? "tw-flex" : "tw-hidden group-focus-within:tw-flex group-hover:tw-flex"
+          )}
+        >
+          {confirmDeleteId === chat.id ? (
+            <>
               <Button
                 size="sm"
                 variant="ghost"
-                className="tw-size-5 tw-p-0"
-                aria-label="Close session"
-                title="Close session"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  safeAsyncHandler(onCloseSession)(chat.id);
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(chat.id);
                 }}
+                className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
+                title="Confirm Delete"
               >
-                <Power className="tw-size-3" />
+                <Check className="tw-size-3" />
               </Button>
-            )}
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onOpenSourceFile) {
-                  onOpenSourceFile(chat.id);
-                }
-              }}
-              className="tw-size-5 tw-p-0"
-              title="Open the source file"
-            >
-              <ArrowUpRight className="tw-size-4" />
-            </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCancelDelete();
+                }}
+                className="tw-size-5 tw-p-0"
+                title="Cancel deletion"
+              >
+                <X className="tw-size-3" />
+              </Button>
+            </>
+          ) : (
+            <>
+              {isSessionOpen && onCloseSession && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="tw-size-5 tw-p-0"
+                  aria-label="Close session"
+                  title="Close session"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    safeAsyncHandler(onCloseSession)(chat.id);
+                  }}
+                >
+                  <Power className="tw-size-3" />
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenSourceFile) {
+                    onOpenSourceFile(chat.id);
+                  }
+                }}
+                className="tw-size-5 tw-p-0"
+                title="Open the source file"
+              >
+                <ArrowUpRight className="tw-size-4" />
+              </Button>
 
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                onStartEdit(chat.id, chat.title);
-              }}
-              className="tw-size-5 tw-p-0"
-            >
-              <Edit2 className="tw-size-3" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(chat.id);
-              }}
-              className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
-              title="delete file"
-            >
-              <Trash2 className="tw-size-3" />
-            </Button>
-          </>
-        )}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStartEdit(chat.id, chat.title);
+                }}
+                className="tw-size-5 tw-p-0"
+              >
+                <Edit2 className="tw-size-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(chat.id);
+                }}
+                className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
+                title="delete file"
+              >
+                <Trash2 className="tw-size-3" />
+              </Button>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+      {deleteSummary && (
+        <div className="tw-px-1 tw-pb-1 tw-text-xs tw-text-muted">{deleteSummary}</div>
+      )}
+    </>
   );
 }

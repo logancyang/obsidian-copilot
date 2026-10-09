@@ -499,6 +499,15 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     }
   }
 
+  async deleteSessionTranscript(params: { sessionId: SessionId; cwd: string }): Promise<void> {
+    const { unlink } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
+    try {
+      await unlink(await this.claudeTranscriptPath(params.sessionId, params.cwd));
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    }
+  }
+
   private async claudeTranscriptPath(sessionId: string, cwd: string): Promise<string> {
     const path = requireNodeModule<typeof import("node:path")>("path");
     const configDir = (await this.resolveClaudeConfigDir()).trim();

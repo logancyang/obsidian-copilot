@@ -192,6 +192,30 @@ describe("AgentSessionIndex", () => {
     });
   });
 
+  describe("flushOrThrow()", () => {
+    it("writes the pending deletion before it resolves", async () => {
+      const storage = makeStorage();
+      const index = new AgentSessionIndex(storage, INDEX_PATH);
+      await index.recordSession(entry());
+      await index.deleteSession("opencode", "s1");
+      await index.flushOrThrow();
+      expect(JSON.parse(storage.files.get(INDEX_PATH)!)).toMatchObject({
+        entries: [],
+        tombstones: { "opencode:s1": expect.any(Number) },
+      });
+    });
+
+    it("rejects with the storage error when the write fails", async () => {
+      const storage = makeStorage();
+      storage.write = async () => {
+        throw new Error("disk full");
+      };
+      const index = new AgentSessionIndex(storage, INDEX_PATH);
+      await index.deleteSession("opencode", "s1");
+      await expect(index.flushOrThrow()).rejects.toThrow("disk full");
+    });
+  });
+
   describe("getEntries()", () => {
     it("starts empty when the index file is corrupt", async () => {
       const corrupt = new AgentSessionIndex(

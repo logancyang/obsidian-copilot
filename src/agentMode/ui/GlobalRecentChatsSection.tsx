@@ -1,4 +1,5 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
+import { describeChatDeletePlan } from "@/agentMode/session/chatDeleteReport";
 import { AgentHomePreviewList } from "@/agentMode/ui/AgentHomeSection";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
 import { Button } from "@/components/ui/button";
@@ -156,133 +157,142 @@ const RecentChatRow = memo(function RecentChatRow({
     );
   }
 
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      className={cn(
-        "tw-group tw-flex tw-min-h-9 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
-        "tw-text-left tw-transition-colors hover:tw-bg-modifier-hover"
-      )}
-      onClick={() => onOpen(item.id)}
-      onKeyDown={(e) => {
-        if (e.target !== e.currentTarget) return;
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onOpen(item.id);
-        }
-      }}
-    >
-      {/* Session ownership and active response are independent indicators.
-          https://github.com/Brevilabs/obsidian-copilot-private/issues/429 */}
-      <ChatIconTile Icon={Icon} needsAttention={hasAttention} isSessionLive={isSessionOpen} />
-      <RecentChatTitle title={item.title} />
+  const deleteSummary = confirmingDelete
+    ? describeChatDeletePlan(item.id, item.backendId ? backendRegistry[item.backendId] : undefined)
+    : undefined;
 
-      <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5">
-        {projectName && <RecentChatProjectBadge name={projectName} />}
-        {isRunning ? (
-          <LoaderCircle
-            className={cn(
-              "tw-size-3.5 tw-shrink-0 tw-animate-spin tw-text-accent",
-              "group-focus-within:tw-hidden group-hover:tw-hidden"
-            )}
-            aria-label="Responding"
-          />
-        ) : (
-          <span
-            className="tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted group-focus-within:tw-hidden group-hover:tw-hidden"
-            title={new Date(item.lastAccessedAt).toLocaleString()}
-          >
-            {formatCompactRelativeTime(item.lastAccessedAt.getTime())}
-          </span>
+  return (
+    <div>
+      <div
+        role="button"
+        tabIndex={0}
+        className={cn(
+          "tw-group tw-flex tw-min-h-9 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
+          "tw-text-left tw-transition-colors hover:tw-bg-modifier-hover"
         )}
-        <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-1.5 group-focus-within:tw-flex group-hover:tw-flex">
-          {confirmingDelete ? (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onConfirmDelete(item.id);
-                }}
-                className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
-                title="Confirm delete"
-              >
-                <Check className="tw-size-3" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCancelDelete();
-                }}
-                className="tw-size-5 tw-p-0"
-                title="Cancel"
-              >
-                <X className="tw-size-3" />
-              </Button>
-            </>
-          ) : (
-            <>
-              {isSessionOpen && onCloseSession && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="tw-size-5 tw-p-0"
-                  aria-label="Close session"
-                  title="Close session"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    safeAsyncHandler(onCloseSession)(item.id);
-                  }}
-                >
-                  <Power className="tw-size-3" />
-                </Button>
+        onClick={() => onOpen(item.id)}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen(item.id);
+          }
+        }}
+      >
+        {/* Session ownership and active response are independent indicators.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/429 */}
+        <ChatIconTile Icon={Icon} needsAttention={hasAttention} isSessionLive={isSessionOpen} />
+        <RecentChatTitle title={item.title} />
+
+        <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5">
+          {projectName && <RecentChatProjectBadge name={projectName} />}
+          {isRunning ? (
+            <LoaderCircle
+              className={cn(
+                "tw-size-3.5 tw-shrink-0 tw-animate-spin tw-text-accent",
+                "group-focus-within:tw-hidden group-hover:tw-hidden"
               )}
-              {canOpenSourceFile && (
+              aria-label="Responding"
+            />
+          ) : (
+            <span
+              className="tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted group-focus-within:tw-hidden group-hover:tw-hidden"
+              title={new Date(item.lastAccessedAt).toLocaleString()}
+            >
+              {formatCompactRelativeTime(item.lastAccessedAt.getTime())}
+            </span>
+          )}
+          <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-1.5 group-focus-within:tw-flex group-hover:tw-flex">
+            {confirmingDelete ? (
+              <>
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onOpenSourceFile(item.id);
+                    onConfirmDelete(item.id);
+                  }}
+                  className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
+                  title="Confirm delete"
+                >
+                  <Check className="tw-size-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCancelDelete();
                   }}
                   className="tw-size-5 tw-p-0"
-                  title="Open source note"
+                  title="Cancel"
                 >
-                  <ArrowUpRight className="tw-size-4" />
+                  <X className="tw-size-3" />
                 </Button>
-              )}
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStartEdit(item.id, item.title);
-                }}
-                className="tw-size-5 tw-p-0"
-                title="Rename"
-              >
-                <Edit2 className="tw-size-3" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStartDelete(item.id);
-                }}
-                className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
-                title="Delete"
-              >
-                <Trash2 className="tw-size-3" />
-              </Button>
-            </>
-          )}
+              </>
+            ) : (
+              <>
+                {isSessionOpen && onCloseSession && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="tw-size-5 tw-p-0"
+                    aria-label="Close session"
+                    title="Close session"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      safeAsyncHandler(onCloseSession)(item.id);
+                    }}
+                  >
+                    <Power className="tw-size-3" />
+                  </Button>
+                )}
+                {canOpenSourceFile && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenSourceFile(item.id);
+                    }}
+                    className="tw-size-5 tw-p-0"
+                    title="Open source note"
+                  >
+                    <ArrowUpRight className="tw-size-4" />
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStartEdit(item.id, item.title);
+                  }}
+                  className="tw-size-5 tw-p-0"
+                  title="Rename"
+                >
+                  <Edit2 className="tw-size-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStartDelete(item.id);
+                  }}
+                  className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
+                  title="Delete"
+                >
+                  <Trash2 className="tw-size-3" />
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </div>
+      {deleteSummary && (
+        <div className="tw-px-2 tw-pb-1.5 tw-text-xs tw-text-muted">{deleteSummary}</div>
+      )}
     </div>
   );
 });

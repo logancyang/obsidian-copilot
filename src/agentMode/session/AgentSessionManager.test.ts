@@ -675,6 +675,10 @@ function buildHistoryHarness(opts?: {
   listSessions?: jest.Mock;
   warmListSessions?: jest.Mock;
   warmSessionExistsLocally?: jest.Mock;
+  warmDeleteSessionTranscript?: jest.Mock;
+  deletesSessionTranscript?: boolean;
+  displayName?: string;
+  indexWriteError?: Error;
   probeSessionId?: string;
   summarizesSessionTitle?: boolean;
   backendId?: BackendId;
@@ -725,12 +729,21 @@ function buildHistoryHarness(opts?: {
     updateTopic: jest.fn(async () => undefined),
     deleteFile: jest.fn(async () => undefined),
   };
-  const index = new AgentSessionIndex(makeIndexStorage(), "plugins/copilot/index.json");
+  const indexStorage = makeIndexStorage();
+  if (opts?.indexWriteError) {
+    const error = opts.indexWriteError;
+    indexStorage.write = async () => {
+      throw error;
+    };
+  }
+  const index = new AgentSessionIndex(indexStorage, "plugins/copilot/index.json");
   const backendId = opts?.backendId ?? "opencode";
   const descriptor = buildDescriptor({
     id: backendId,
     getInstallState: jest.fn(() => opts?.installState ?? { kind: "ready", source: "custom" }),
     summarizesSessionTitle: opts?.summarizesSessionTitle ?? true,
+    deletesSessionTranscript: opts?.deletesSessionTranscript,
+    ...(opts?.displayName ? { displayName: opts.displayName } : {}),
     getProbeSessionId: jest.fn(() => opts?.probeSessionId),
     applyInitialSessionConfig: opts?.applyInitialSessionConfig,
     ...(opts?.createBackendProcess
@@ -752,11 +765,18 @@ function buildHistoryHarness(opts?: {
     sessionIndex: index,
     preloader: {
       getWarmProcs: jest.fn(() => {
-        if (!opts?.warmListSessions && !opts?.warmSessionExistsLocally) return [];
+        if (
+          !opts?.warmListSessions &&
+          !opts?.warmSessionExistsLocally &&
+          !opts?.warmDeleteSessionTranscript
+        )
+          return [];
         const proc: Record<string, unknown> = { ...makeMockBackendProcess() };
         if (opts.warmListSessions) proc.listSessions = opts.warmListSessions;
         if (opts.warmSessionExistsLocally)
           proc.sessionExistsLocally = opts.warmSessionExistsLocally;
+        if (opts.warmDeleteSessionTranscript)
+          proc.deleteSessionTranscript = opts.warmDeleteSessionTranscript;
         return [{ backendId, proc }];
       }),
     },
@@ -3650,7 +3670,12 @@ describe("AgentSessionManager", () => {
           createdAtMs: 1_000,
           lastAccessedAtMs: 2_000,
         });
-        await manager.deleteChatHistory(buildNativeChatId("opencode", "s1"));
+        const report = await manager.deleteChatHistory(buildNativeChatId("opencode", "s1"));
+        expect(report).toEqual({
+          removed: ["session index entry"],
+          kept: ["opencode transcript"],
+          failed: [],
+        });
         expect(await manager.getChatHistoryItems()).toHaveLength(0);
         expect(await index.isTombstoned("opencode", "s1")).toBe(true);
         expect(persistence.deleteFile).not.toHaveBeenCalled();
@@ -3673,9 +3698,111 @@ describe("AgentSessionManager", () => {
           createdAtMs: 1_000,
           lastAccessedAtMs: 2_000,
         });
-        await manager.deleteChatHistory("chats/agent__a.md");
+        const report = await manager.deleteChatHistory("chats/agent__a.md");
         expect(persistence.deleteFile).toHaveBeenCalledWith("chats/agent__a.md");
         expect(await index.isTombstoned("opencode", "s1")).toBe(true);
+        expect(report).toEqual({
+          removed: ["chat file", "session index entry"],
+          kept: ["opencode transcript"],
+          failed: [],
+        });
+      });
+
+      it("removes the chat file, the index entry and the Claude transcript of a Claude chat", async () => {
+        const deleteSessionTranscript = jest.fn(async () => undefined);
+        const { manager, index, persistence } = buildHistoryHarness({
+          backendId: "claude",
+          displayName: "Claude",
+          deletesSessionTranscript: true,
+          warmDeleteSessionTranscript: deleteSessionTranscript,
+          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "claude", sessionId: "s1" } },
+        });
+        await index.recordSession({
+          backendId: "claude",
+          sessionId: "s1",
+          title: "Doomed",
+          createdAtMs: 1_000,
+          lastAccessedAtMs: 2_000,
+        });
+
+        const report = await manager.deleteChatHistory("chats/agent__a.md");
+
+        expect(report).toEqual({
+          removed: ["chat file", "session index entry", "Claude transcript"],
+          kept: [],
+          failed: [],
+        });
+        expect(persistence.deleteFile).toHaveBeenCalledWith("chats/agent__a.md");
+        expect(deleteSessionTranscript).toHaveBeenCalledWith({
+          sessionId: "s1",
+          cwd: "/vault",
+        });
+      });
+
+      it("keeps going and names the failed copy when the transcript cannot be removed", async () => {
+        const { manager, index, persistence } = buildHistoryHarness({
+          backendId: "claude",
+          displayName: "Claude",
+          deletesSessionTranscript: true,
+          warmDeleteSessionTranscript: jest.fn(async () => {
+            throw new Error("EACCES");
+          }),
+          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "claude", sessionId: "s1" } },
+        });
+
+        const report = await manager.deleteChatHistory("chats/agent__a.md");
+
+        expect(report).toEqual({
+          removed: ["chat file", "session index entry"],
+          kept: [],
+          failed: [{ copy: "Claude transcript", error: "EACCES" }],
+        });
+        expect(persistence.deleteFile).toHaveBeenCalled();
+        expect(await index.isTombstoned("claude", "s1")).toBe(true);
+      });
+
+      it("runs the other steps and reports the chat file when it cannot be deleted", async () => {
+        const deleteSessionTranscript = jest.fn(async () => undefined);
+        const { manager, persistence } = buildHistoryHarness({
+          backendId: "claude",
+          displayName: "Claude",
+          deletesSessionTranscript: true,
+          warmDeleteSessionTranscript: deleteSessionTranscript,
+          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "claude", sessionId: "s1" } },
+        });
+        persistence.deleteFile.mockRejectedValueOnce(new Error("Chat file not found."));
+
+        const report = await manager.deleteChatHistory("chats/agent__a.md");
+
+        expect(report.failed).toEqual([{ copy: "chat file", error: "Chat file not found." }]);
+        expect(report.removed).toEqual(["session index entry", "Claude transcript"]);
+        expect(deleteSessionTranscript).toHaveBeenCalled();
+      });
+
+      it("reports the index entry as failed when the index write fails", async () => {
+        const { manager } = buildHistoryHarness({
+          indexWriteError: new Error("disk full"),
+          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", sessionId: "s1" } },
+        });
+
+        const report = await manager.deleteChatHistory("chats/agent__a.md");
+
+        expect(report.failed).toEqual([{ copy: "session index entry", error: "disk full" }]);
+        expect(report.removed).toEqual(["chat file"]);
+      });
+
+      it("closes an open chat before it deletes the chat file", async () => {
+        const { manager, persistence } = buildHistoryHarness({
+          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", sessionId: "s1" } },
+        });
+        const close = jest.spyOn(manager, "closeChatSession");
+        persistence.deleteFile.mockImplementationOnce(async () => {
+          expect(close).toHaveBeenCalledWith("chats/agent__a.md");
+        });
+
+        await manager.deleteChatHistory("chats/agent__a.md");
+
+        expect(persistence.deleteFile).toHaveBeenCalled();
       });
     });
 
