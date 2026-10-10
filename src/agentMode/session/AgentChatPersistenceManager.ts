@@ -288,9 +288,27 @@ export class AgentChatPersistenceManager {
           m.message.length === 0 && m.fanout
             ? serializeFanoutComposite(m.fanout, (id) => id)
             : m.message;
-        return `**${m.sender}**: ${body}\n[Timestamp: ${ts}]`;
+        const askUserTurns = this.formatAskUserExchanges(m);
+        const content = askUserTurns.length > 0 ? `${body}\n${askUserTurns.join("\n")}` : body;
+        return `**${m.sender}**: ${content}\n[Timestamp: ${ts}]`;
       })
       .join("\n\n");
+  }
+
+  // Ask User questions and the answers they collect are stored on tool_call
+  // parts of the assistant turn rather than in the plain message text, so the
+  // saved transcript must read them out separately to keep the whole exchange.
+  // https://github.com/logancyang/obsidian-copilot/issues/3370
+  private formatAskUserExchanges(m: AgentChatMessage): string[] {
+    const lines: string[] = [];
+    for (const part of m.parts ?? []) {
+      if (part.kind !== "tool_call" || !part.userResponse) continue;
+      lines.push(part.userResponse);
+      for (const output of part.output ?? []) {
+        if (output.type === "text" && output.text) lines.push(output.text);
+      }
+    }
+    return lines;
   }
 
   private parseChatBody(body: string, conversationEpoch?: number): AgentChatMessage[] {

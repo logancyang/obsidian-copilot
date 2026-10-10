@@ -2400,9 +2400,16 @@ export class AgentSessionManager {
           .map((a) => `${a.status}:${a.text.length}`)
           .join(",") + `|${last.fanout.summary.status}:${last.fanout.summary.text.length}`
       : "";
+    // An Ask User answer changes only the turn's tool parts, so it has to count as a change on its own.
+    // https://github.com/logancyang/obsidian-copilot/issues/3370
+    const answersSig = (last?.parts ?? [])
+      .flatMap((p) =>
+        p.kind === "tool_call" && p.userResponse ? [`${p.id}:${p.userResponse}`] : []
+      )
+      .join(",");
     const signature = `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       last?.message ?? ""
-    }-${fanoutSig}-${usage?.updatedAt ?? ""}`;
+    }-${fanoutSig}-${answersSig}-${usage?.updatedAt ?? ""}`;
     const state = this.getSessionState(session.internalId);
     if (state.signature === signature) {
       return state.source ?? null;
