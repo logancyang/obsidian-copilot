@@ -9,25 +9,48 @@ jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
 jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
 const mockSpawn = jest.fn();
 const mockExec = jest.fn();
-jest.mock("./codexVersion", () => ({
-  ...jest.requireActual("./codexVersion"),
-  resolveSupportedCodexAcpEntry: (path: string) => path,
-}));
+const mockPackageFs = {
+  realpathSync: (file: string) => file,
+  readFileSync: (file: string) =>
+    JSON.stringify(
+      file.replaceAll("\\", "/").endsWith("/provenance.json")
+        ? { acpVersion: "2.0.1", target: `${process.platform}-${process.arch}` }
+        : {
+            name: "@agentclientprotocol/codex-acp",
+            version: "2.0.1",
+            bin: { "codex-acp": "dist/index.js" },
+          }
+    ),
+};
 jest.mock("@/utils/desktopRuntime", () => ({
   requireNodeModule: (id: string) =>
     id === "child_process"
       ? { execFile: mockExec, spawn: mockSpawn }
-      : jest.requireActual(`node:${id}`),
+      : id === "fs"
+        ? mockPackageFs
+        : id === "module"
+          ? {
+              createRequire: (from: string) => ({
+                resolve: (request: string) =>
+                  `${from.replace(/dist[\\/]index\.js$/, "")}node_modules/${request}`,
+              }),
+            }
+          : jest.requireActual(`node:${id}`),
 }));
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/379";
 const DIRECT_RUNTIME_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/686";
+const NPM_ENTRY = "/npm/node_modules/@agentclientprotocol/codex-acp/dist/index.js";
+const NPM_LAUNCHER =
+  "/npm/node_modules/@agentclientprotocol/codex-acp/node_modules/@openai/codex/bin/codex.js";
+const BUNDLE = "/bundle/codex-acp";
+const RUNTIME = "/bundle/codex-runtime/bin/codex";
 const settings = {
   ...getSettings(),
   agentMode: {
     ...getSettings().agentMode,
     backends: {
       codex: {
-        binaryPath: "/bundle/codex-acp",
+        binaryPath: NPM_ENTRY,
         envOverrides: { CODEX_HOME: "/my profile", OPENAI_API_KEY: "", CODEX_API_KEY: "" },
       },
     },
@@ -40,12 +63,6 @@ const configured = (config: object) => ({
     backends: { codex: { ...settings.agentMode.backends.codex, ...config } },
   },
 });
-const MANAGED = {
-  binaryPath: "/bundle/codex-acp",
-  binarySource: "managed",
-  binaryVersion: "2.0.1",
-};
-const RUNTIME = "/bundle/codex-runtime/bin/codex";
 const child = () =>
   Object.assign(new EventEmitter(), {
     pid: 987654,
@@ -195,8 +212,8 @@ describe("codexAuth", () => {
           { id: 1, method: "account/read", params: { refreshToken: false } },
         ]);
         expect(mockSpawn).toHaveBeenCalledWith(
-          "/bundle/codex-acp",
-          ["cli", "app-server"],
+          NPM_LAUNCHER,
+          ["app-server"],
           expect.objectContaining({
             env: expect.objectContaining({ CODEX_HOME: "/my profile" }),
             detached: process.platform !== "win32",
@@ -205,17 +222,18 @@ describe("codexAuth", () => {
       }
     );
     it.each([
-      ["darwin", "/bundle/codex-acp", RUNTIME],
-      ["win32", "/bundle/codex-acp.exe", "\\bundle\\codex-runtime\\bin\\codex.exe"],
+      ["darwin", "managed", BUNDLE, RUNTIME],
+      ["darwin", "custom", BUNDLE, RUNTIME],
+      ["win32", "custom", "/bundle/codex-acp.exe", "\\bundle\\codex-runtime\\bin\\codex.exe"],
     ] as const)(
-      `probes a managed %s install through its bundled Codex app-server with the same profile: ${DIRECT_RUNTIME_ISSUE}`,
-      async (platform, binaryPath, runtime) => {
+      `probes a %s %s bundle through its own Codex app-server with the same profile: ${DIRECT_RUNTIME_ISSUE}`,
+      async (platform, binarySource, binaryPath, runtime) => {
         const original = Object.getOwnPropertyDescriptor(process, "platform")!;
         Object.defineProperty(process, "platform", { value: platform });
         jest.mocked(detectBinary).mockClear();
         try {
           await expect(
-            codexAuth.getStatus(configured({ ...MANAGED, binaryPath }))
+            codexAuth.getStatus(configured({ binarySource, binaryPath }))
           ).resolves.toEqual(SIGNED_IN);
           expect(mockSpawn).toHaveBeenCalledWith(
             runtime,
@@ -341,25 +359,27 @@ describe("codexAuth", () => {
       expect(mockSpawn).toHaveBeenCalledTimes(2);
       expect(mockSpawn).toHaveBeenNthCalledWith(
         1,
-        "/bundle/codex-acp",
-        ["cli", "logout"],
+        NPM_LAUNCHER,
+        ["logout"],
         expect.objectContaining({ env: expect.objectContaining({ CODEX_HOME: "/my profile" }) })
       );
       expect(mockSpawn).toHaveBeenNthCalledWith(
         2,
-        "/bundle/codex-acp",
-        ["cli", "app-server"],
+        NPM_LAUNCHER,
+        ["app-server"],
         expect.objectContaining({ env: expect.objectContaining({ CODEX_HOME: "/my profile" }) })
       );
     });
-    it(`logs a managed install out through its bundled Codex and checks the same profile: ${DIRECT_RUNTIME_ISSUE}`, async () => {
+    it(`logs a custom bundle out through its own Codex and checks the same profile: ${DIRECT_RUNTIME_ISSUE}`, async () => {
       mockSpawn.mockImplementation((_command, args) => {
         if (args.includes("app-server")) return serve(null);
         const proc = child();
         queueMicrotask(() => proc.emit("close", 0));
         return proc;
       });
-      await expect(codexAuth.signOut!(configured(MANAGED))).resolves.toEqual({ signedIn: false });
+      await expect(
+        codexAuth.signOut!(configured({ binarySource: "custom", binaryPath: BUNDLE }))
+      ).resolves.toEqual({ signedIn: false });
       const profile = expect.objectContaining({
         env: expect.objectContaining({ CODEX_HOME: "/my profile" }),
       });
@@ -457,10 +477,16 @@ describe("codexAuth", () => {
       );
     });
     it.each([
-      ["custom adapter", {}, "/bundle/codex-acp", ["cli", "login"]],
-      ["managed install", MANAGED, RUNTIME, ["login"]],
+      ["an npm adapter's own Codex", {}, NPM_LAUNCHER, ["login"]],
+      [
+        "an npm adapter's CODEX_PATH",
+        { envOverrides: { CODEX_HOME: "/my profile", CODEX_PATH: "/Users/Jane Doe/bin/codex" } },
+        "/Users/Jane Doe/bin/codex",
+        ["login"],
+      ],
+      ["a managed bundle", { binarySource: "managed", binaryPath: BUNDLE }, RUNTIME, ["login"]],
     ])(
-      `selects the OpenAI authorization URL from a %s login and verifies status with the same profile: ${ISSUE} ${DIRECT_RUNTIME_ISSUE}`,
+      `selects the OpenAI authorization URL from %s login and verifies status with the same profile: ${ISSUE} ${DIRECT_RUNTIME_ISSUE}`,
       async (_source, config, command, loginArgs) => {
         const onUrl = jest.fn();
         mockSpawn.mockImplementation((_command, args) => {

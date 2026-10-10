@@ -14,14 +14,18 @@ export interface CodexAcpInvocation {
   env: NodeJS.ProcessEnv;
 }
 
+export type CodexAcpKind = "bundle" | "npm";
+
 export interface CodexAcpPackage {
   entryPath: string;
   version: string;
+  kind: CodexAcpKind;
 }
 
 export interface CodexAcpPackageFs {
   realpathSync(path: string): string;
   readFileSync(path: string, encoding: "utf8"): string;
+  resolveFrom(fromFile: string, request: string): string;
 }
 
 function defaultPackageFs(): CodexAcpPackageFs {
@@ -29,6 +33,10 @@ function defaultPackageFs(): CodexAcpPackageFs {
   return {
     realpathSync: (path) => fs.realpathSync(path),
     readFileSync: (path, encoding) => fs.readFileSync(path, encoding),
+    resolveFrom: (fromFile, request) =>
+      requireNodeModule<typeof import("node:module")>("module")
+        .createRequire(fromFile)
+        .resolve(request),
   };
 }
 
@@ -80,6 +88,7 @@ export function inspectCodexAcpPackage(
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
         return {
           entryPath,
+          kind: "bundle",
           runtimeVersion: provenance.acpVersion!,
           version:
             provenance.packagingRevision === undefined
@@ -125,7 +134,7 @@ export function inspectCodexAcpPackage(
   if (!parsedVersion) {
     throw unsupportedAdapter();
   }
-  return { entryPath, version, runtimeVersion: version };
+  return { entryPath, version, runtimeVersion: version, kind: "npm" };
 }
 
 export function resolveSupportedCodexAcpPackage(
@@ -133,17 +142,13 @@ export function resolveSupportedCodexAcpPackage(
   platform: NodeJS.Platform = process.platform,
   packageFs: CodexAcpPackageFs = defaultPackageFs()
 ): CodexAcpPackage {
-  const { entryPath, version, runtimeVersion } = inspectCodexAcpPackage(
-    adapterPath,
-    platform,
-    packageFs
-  );
+  const { runtimeVersion, ...supported } = inspectCodexAcpPackage(adapterPath, platform, packageFs);
   assertBinaryCompatible(
     { kind: "installed", version: runtimeVersion, source: "custom" },
     CODEX_MIN_VERSION,
     CURRENT_PACKAGE_NAME
   );
-  return { entryPath, version };
+  return supported;
 }
 
 export function resolveSupportedCodexAcpEntry(
@@ -152,6 +157,36 @@ export function resolveSupportedCodexAcpEntry(
   packageFs: CodexAcpPackageFs = defaultPackageFs()
 ): string {
   return resolveSupportedCodexAcpPackage(adapterPath, platform, packageFs).entryPath;
+}
+
+export function bundledCodexRuntimePath(
+  bundleEntryPath: string,
+  platform: NodeJS.Platform
+): string {
+  const node = requireNodeModule<typeof import("node:path")>("path");
+  const path = platform === "win32" ? node.win32 : node.posix;
+  return path.join(
+    path.dirname(bundleEntryPath),
+    "codex-runtime",
+    "bin",
+    platform === "win32" ? "codex.exe" : "codex"
+  );
+}
+
+export function resolveCodexCommand(
+  adapterPath: string,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform,
+  packageFs: CodexAcpPackageFs = defaultPackageFs()
+): string {
+  const { entryPath, kind } = resolveSupportedCodexAcpPackage(adapterPath, platform, packageFs);
+  // The bundle's entry pins CODEX_PATH to its adjacent runtime, so that runtime is what sessions run.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/686
+  if (kind === "bundle") return bundledCodexRuntimePath(entryPath, platform);
+  // Run the Codex the npm adapter would (CODEX_PATH, else its own @openai/codex) without
+  // `codex-acp cli`, whose Windows shell launch splits paths with spaces.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/686
+  return env.CODEX_PATH || packageFs.resolveFrom(entryPath, "@openai/codex/bin/codex.js");
 }
 
 export function isSupportedCodexAcpPath(adapterPath: string | undefined): boolean {
