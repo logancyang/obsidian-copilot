@@ -62,7 +62,7 @@ describe("permissionBridge", () => {
         ],
         [
           "userSettings",
-          "Covers Bash(git add:*). Saved to ~/.claude/settings.json, for all your Claude Code projects. Remove it there to undo.",
+          "Covers Bash(git add:*). Saved to settings.json in your Claude Code config folder (~/.claude by default), for all your Claude Code projects. Remove it there to undo.",
         ],
       ])(
         "offers allow_always scoped to a %s rule suggestion for https://github.com/logancyang/obsidian-copilot/issues/2889",

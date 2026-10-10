@@ -164,7 +164,10 @@ const CHAT_FOLDER = "the vault folder (for a project chat, the project note's fo
 // Most lasting first, so a mixed suggestion reports where it outlives the chat.
 // https://github.com/logancyang/obsidian-copilot/issues/2889
 const SAVED_DESTINATIONS: ReadonlyArray<[PermissionUpdate["destination"], string]> = [
-  ["userSettings", "~/.claude/settings.json, for all your Claude Code projects"],
+  [
+    "userSettings",
+    "settings.json in your Claude Code config folder (~/.claude by default), for all your Claude Code projects",
+  ],
   ["projectSettings", `.claude/settings.json in ${CHAT_FOLDER}, for later chats there`],
   ["localSettings", `.claude/settings.local.json in ${CHAT_FOLDER}, for later chats there`],
 ];
