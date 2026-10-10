@@ -88,8 +88,11 @@ const serve = (account: unknown = ACCOUNT) => {
   return proc;
 };
 
+const hostPlatform = Object.getOwnPropertyDescriptor(process, "platform")!;
+
 describe("codexAuth", () => {
   beforeEach(() => {
+    Object.defineProperty(process, "platform", { configurable: true, value: "darwin" });
     jest.mocked(logWarn).mockClear();
     mockSpawn.mockReset().mockImplementation((_command, args) => {
       if (args.includes("app-server")) return serve();
@@ -99,6 +102,7 @@ describe("codexAuth", () => {
     });
   });
   afterEach(() => {
+    Object.defineProperty(process, "platform", hostPlatform);
     jest.restoreAllMocks();
     jest.useRealTimers();
   });
