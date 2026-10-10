@@ -83,7 +83,9 @@ describe("descriptor", () => {
       ])(
         "names where %s is sent for https://github.com/logancyang/obsidian-copilot/issues/2889",
         (baseModelId, expected) => {
-          expect(OpencodeBackendDescriptor.dataDestination(settings, baseModelId)).toBe(expected);
+          expect(OpencodeBackendDescriptor.dataDestination(settings, baseModelId, null)).toBe(
+            expected
+          );
         }
       );
     });

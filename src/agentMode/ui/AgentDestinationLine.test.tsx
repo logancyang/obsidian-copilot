@@ -1,3 +1,5 @@
+import * as os from "node:os";
+import * as path from "node:path";
 import { AgentDestinationLine, resolveDataDestination } from "@/agentMode/ui/AgentDestinationLine";
 import type { AgentModelPickerOverride } from "@/agentMode/ui/useAgentModelPicker";
 import type { CopilotSettings } from "@/settings/model";
@@ -9,6 +11,7 @@ const SERVER_ENV_KEYS = [
   "CLAUDE_CODE_USE_BEDROCK",
   "CLAUDE_CODE_USE_VERTEX",
   "OPENAI_BASE_URL",
+  "CLAUDE_CONFIG_DIR",
 ];
 const savedEnv = SERVER_ENV_KEYS.map((key) => [key, process.env[key]] as const);
 
@@ -39,6 +42,7 @@ function picker(backendId: string, name: string): AgentModelPickerOverride {
 describe("AgentDestinationLine", () => {
   beforeEach(() => {
     for (const key of SERVER_ENV_KEYS) delete process.env[key];
+    process.env.CLAUDE_CONFIG_DIR = path.join(os.tmpdir(), "no-claude-config");
   });
   afterEach(() => {
     for (const [key, value] of savedEnv) {
@@ -55,14 +59,14 @@ describe("AgentDestinationLine", () => {
     ])(
       "names the destination of the selected %s model for https://github.com/logancyang/obsidian-copilot/issues/2889",
       (backendId, name, expected) => {
-        expect(resolveDataDestination(picker(backendId, name), settings)).toBe(expected);
+        expect(resolveDataDestination(picker(backendId, name), settings, null)).toBe(expected);
       }
     );
 
     it("names nothing without a selected agent model", () => {
-      expect(resolveDataDestination(null, settings)).toBeNull();
+      expect(resolveDataDestination(null, settings, null)).toBeNull();
       expect(
-        resolveDataDestination({ ...picker("claude", "sonnet"), value: "missing" }, settings)
+        resolveDataDestination({ ...picker("claude", "sonnet"), value: "missing" }, settings, null)
       ).toBeNull();
     });
   });

@@ -5,12 +5,13 @@ import React from "react";
 
 export function resolveDataDestination(
   picker: AgentModelPickerOverride | null,
-  settings: CopilotSettings
+  settings: CopilotSettings,
+  vaultBase: string | null
 ): string | null {
   const entry = picker?.models.find((model) => getModelKeyFromModel(model) === picker.value);
   if (!entry?._backendId) return null;
   const descriptor = backendRegistry[entry._backendId];
-  return descriptor?.dataDestination(settings, entry.name) ?? null;
+  return descriptor?.dataDestination(settings, entry.name, vaultBase) ?? null;
 }
 
 interface AgentDestinationLineProps {

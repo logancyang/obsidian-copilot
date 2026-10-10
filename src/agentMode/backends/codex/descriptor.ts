@@ -123,13 +123,19 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 
   presentPermissionOption(option: PermissionOption, metadata: unknown): PermissionOption {
     const decision = codexPermissionDecision(metadata);
-    if (decision === "acceptForSession") return { ...option, description: CODEX_SESSION_SCOPE };
+    if (decision === "acceptForSession" || CODEX_SESSION_OPTION_IDS.has(option.optionId)) {
+      return { ...option, description: CODEX_SESSION_SCOPE };
+    }
     const isExecpolicyAmendment =
       decision === "acceptWithExecpolicyAmendment" && option.kind === "allow_always";
     const isNetworkPolicyAmendment =
       decision === "applyNetworkPolicyAmendment" &&
       (option.kind === "allow_always" || option.kind === "reject_always");
-    if (!isExecpolicyAmendment && !isNetworkPolicyAmendment) return option;
+    if (!isExecpolicyAmendment && !isNetworkPolicyAmendment) {
+      return isCodexRulesOptionId(option.optionId)
+        ? { ...option, description: CODEX_RULES_SCOPE }
+        : option;
+    }
 
     return {
       ...option,
@@ -243,6 +249,21 @@ const CODEX_SESSION_SCOPE =
   "Covers what this option names, until this chat ends. Start a new chat to undo.";
 const CODEX_RULES_SCOPE =
   "Saved to rules/default.rules in your Codex home (~/.codex by default) for all later Codex chats. Delete it there to undo.";
+
+// codex-acp 2.x sends fixed option ids and no decision metadata.
+// https://github.com/logancyang/obsidian-copilot/issues/2889
+const CODEX_SESSION_OPTION_IDS = new Set([
+  "allow_for_session",
+  "allow_permissions_session",
+  "allow_session",
+]);
+
+function isCodexRulesOptionId(optionId: string): boolean {
+  return (
+    optionId === "accept_execpolicy_amendment" ||
+    optionId.startsWith("apply_network_policy_amendment:")
+  );
+}
 
 function codexPermissionDecision(metadata: unknown): unknown {
   if (metadata === null || typeof metadata !== "object") return undefined;

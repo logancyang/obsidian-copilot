@@ -93,6 +93,31 @@ function claudeResolverEnv(): Omit<Parameters<typeof resolveClaudeBinary>[0], "o
   };
 }
 
+// Claude Code also takes `env` from its settings files, so a server set there (such as Bedrock)
+// must not read as Anthropic. https://github.com/logancyang/obsidian-copilot/issues/2889
+function usesCustomClaudeServer(settings: CopilotSettings, vaultBase: string | null): boolean {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const os = requireNodeModule<typeof import("node:os")>("os");
+  const path = requireNodeModule<typeof import("node:path")>("path");
+  const env = claudeChildEnv(settings);
+  const configDir = env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
+  const files = [path.join(configDir, "settings.json")];
+  if (vaultBase) {
+    files.push(path.join(vaultBase, ".claude", "settings.json"));
+    files.push(path.join(vaultBase, ".claude", "settings.local.json"));
+  }
+  const fileEnvs = files.map((file): Record<string, unknown> | undefined => {
+    try {
+      return (JSON.parse(fs.readFileSync(file, "utf8")) as { env?: Record<string, unknown> }).env;
+    } catch {
+      return undefined;
+    }
+  });
+  return [env, ...fileEnvs].some(
+    (e) => e?.ANTHROPIC_BASE_URL || e?.CLAUDE_CODE_USE_BEDROCK || e?.CLAUDE_CODE_USE_VERTEX
+  );
+}
+
 function claudeChildEnv(settings: CopilotSettings): NodeJS.ProcessEnv {
   const overrides = settings.agentMode?.backends?.claude?.envOverrides;
   return overrides && Object.keys(overrides).length > 0
@@ -178,11 +203,14 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   wire: claudeWire,
   showModelDescriptions: true,
 
-  dataDestination(settings: CopilotSettings): string {
-    const env = claudeChildEnv(settings);
-    const customServer =
-      env.ANTHROPIC_BASE_URL || env.CLAUDE_CODE_USE_BEDROCK || env.CLAUDE_CODE_USE_VERTEX;
-    return customServer ? "the server set in your Claude Code settings" : "Claude Code (Anthropic)";
+  dataDestination(
+    settings: CopilotSettings,
+    _baseModelId: string,
+    vaultBase: string | null
+  ): string {
+    return usesCustomClaudeServer(settings, vaultBase)
+      ? "the server set in your Claude Code settings"
+      : "Claude Code (Anthropic)";
   },
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {

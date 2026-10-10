@@ -460,19 +460,60 @@ describe("descriptor", () => {
 
       it("names OpenAI by default and the user's server when a base URL is set for https://github.com/logancyang/obsidian-copilot/issues/2889", () => {
         delete process.env.OPENAI_BASE_URL;
-        expect(CodexBackendDescriptor.dataDestination(settingsWithCodex({}), "gpt-5.5")).toBe(
+        expect(CodexBackendDescriptor.dataDestination(settingsWithCodex({}), "gpt-5.5", null)).toBe(
           "Codex (OpenAI)"
         );
         expect(
           CodexBackendDescriptor.dataDestination(
             settingsWithCodex({ envOverrides: { OPENAI_BASE_URL: "https://proxy.example" } }),
-            "gpt-5.5"
+            "gpt-5.5",
+            null
           )
         ).toBe("the server set in your Codex settings");
       });
     });
 
     describe("presentPermissionOption()", () => {
+      it.each([
+        [
+          "accept_execpolicy_amendment",
+          "Yes, and don't ask again for commands that start with `npm test`",
+          "allow_always",
+          "Saved to rules/default.rules",
+        ],
+        [
+          "apply_network_policy_amendment:0",
+          "Yes, and allow this host in the future",
+          "allow_always",
+          "Saved to rules/default.rules",
+        ],
+        [
+          "apply_network_policy_amendment:1",
+          "No, and block this host in the future",
+          "reject_always",
+          "Saved to rules/default.rules",
+        ],
+        [
+          "allow_for_session",
+          "Yes, and don't ask again for this command in this session",
+          "allow_always",
+          "until this chat ends",
+        ],
+        [
+          "allow_permissions_session",
+          "Yes, and allow these permissions for this session",
+          "allow_always",
+          "until this chat ends",
+        ],
+      ] as const)(
+        "notes the scope of codex-acp 2.x option %s without metadata and keeps its label for https://github.com/logancyang/obsidian-copilot/issues/2889",
+        (optionId, name, kind, note) => {
+          const option: PermissionOption = { optionId, name, kind };
+          const presented = CodexBackendDescriptor.presentPermissionOption?.(option, undefined);
+          expect(presented).toEqual({ ...option, description: expect.stringContaining(note) });
+        }
+      );
+
       it.each([
         ["opaque-exec-decision", "acceptWithExecpolicyAmendment"],
         ["opaque-network-decision", "applyNetworkPolicyAmendment"],

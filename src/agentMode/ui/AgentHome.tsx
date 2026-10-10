@@ -35,6 +35,7 @@ import { useChatInputAutoFocus } from "@/agentMode/ui/hooks/useChatInputAutoFocu
 import { useRefreshEmptyLandingOnContextSourceChange } from "@/agentMode/ui/hooks/useRefreshEmptyLandingOnContextSourceChange";
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { AgentDestinationLine, resolveDataDestination } from "@/agentMode/ui/AgentDestinationLine";
+import { getVaultBase } from "@/utils/vaultPath";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
@@ -563,7 +564,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   );
 
   const landingDestination = isLanding
-    ? resolveDataDestination(modelPickerOverride, settings)
+    ? resolveDataDestination(modelPickerOverride, settings, getVaultBase(app))
     : null;
 
   const showProjectHero = isProjectLanding && !isOrphanedProject;
