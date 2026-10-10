@@ -321,6 +321,26 @@ describe("GlobalRecentChatsSection", () => {
       expect(screen.getByTitle("Confirm delete")).toBeTruthy();
     });
 
+    it.each([
+      ["claude", "Claude Code"],
+      ["codex", "Codex"],
+      ["opencode", "opencode"],
+    ])(
+      "https://github.com/logancyang/obsidian-copilot/issues/2888 says the %s agent may keep its own copy before the user confirms",
+      (backendId, agent) => {
+        renderSection({ items: [makeItem("chats/agent__a.md", { backendId })] });
+
+        expect(screen.queryByText(/^Delete this chat from Copilot/)).toBeNull();
+        fireEvent.click(screen.getByTitle("Delete"));
+
+        expect(
+          screen.getByText(
+            `Delete this chat from Copilot? ${agent} may keep its own copy of this conversation on this computer.`
+          )
+        ).toBeTruthy();
+      }
+    );
+
     it("refreshes once when the parent re-renders with the items that refresh produced", () => {
       const loadHistory = jest.fn(async () => {});
       const Parent = ({ items }: { items: SectionItems }) => (

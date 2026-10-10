@@ -675,6 +675,7 @@ function buildHistoryHarness(opts?: {
   listSessions?: jest.Mock;
   warmListSessions?: jest.Mock;
   warmSessionExistsLocally?: jest.Mock;
+  indexWriteError?: Error;
   probeSessionId?: string;
   summarizesSessionTitle?: boolean;
   backendId?: BackendId;
@@ -724,8 +725,16 @@ function buildHistoryHarness(opts?: {
     getAgentChatHistoryFiles: jest.fn(async () => tfiles),
     updateTopic: jest.fn(async () => undefined),
     deleteFile: jest.fn(async () => undefined),
+    saveSession: jest.fn(async () => ({ path: "chats/new.md" })),
   };
-  const index = new AgentSessionIndex(makeIndexStorage(), "plugins/copilot/index.json");
+  const indexStorage = makeIndexStorage();
+  if (opts?.indexWriteError) {
+    const error = opts.indexWriteError;
+    indexStorage.write = async () => {
+      throw error;
+    };
+  }
+  const index = new AgentSessionIndex(indexStorage, "plugins/copilot/index.json");
   const backendId = opts?.backendId ?? "opencode";
   const descriptor = buildDescriptor({
     id: backendId,
@@ -3676,6 +3685,132 @@ describe("AgentSessionManager", () => {
         await manager.deleteChatHistory("chats/agent__a.md");
         expect(persistence.deleteFile).toHaveBeenCalledWith("chats/agent__a.md");
         expect(await index.isTombstoned("opencode", "s1")).toBe(true);
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/2888 touches only Copilot's own copy of the chat", async () => {
+        const { manager, index, persistence } = buildHistoryHarness({
+          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", sessionId: "s1" } },
+        });
+        await index.recordSession({
+          backendId: "opencode",
+          sessionId: "s1",
+          title: "Doomed",
+          createdAtMs: 1_000,
+          lastAccessedAtMs: 2_000,
+        });
+
+        await manager.deleteChatHistory("chats/agent__a.md");
+
+        expect(persistence.deleteFile).toHaveBeenCalledTimes(1);
+        expect(persistence.deleteFile).toHaveBeenCalledWith("chats/agent__a.md");
+        expect(await index.getEntry("opencode", "s1")).toBeNull();
+      });
+
+      it("rejects with the storage error when the chat file cannot be deleted", async () => {
+        const { manager, persistence } = buildHistoryHarness({
+          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", sessionId: "s1" } },
+        });
+        persistence.deleteFile.mockRejectedValueOnce(new Error("locked"));
+
+        await expect(manager.deleteChatHistory("chats/agent__a.md")).rejects.toThrow("locked");
+      });
+
+      it("rejects with the storage error when the index write fails", async () => {
+        const { manager, persistence } = buildHistoryHarness({
+          indexWriteError: new Error("disk full"),
+          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", sessionId: "s1" } },
+        });
+
+        await expect(manager.deleteChatHistory("chats/agent__a.md")).rejects.toThrow("disk full");
+        expect(persistence.deleteFile).toHaveBeenCalledWith("chats/agent__a.md");
+      });
+
+      describe("when the chat is open", () => {
+        const issue = "https://github.com/logancyang/obsidian-copilot/issues/2888";
+
+        async function openChat() {
+          const harness = buildHistoryHarness();
+          const session = await harness.manager.createSession("opencode");
+          const sessionId = session.getBackendSessionId()!;
+          await harness.index.recordSession({
+            backendId: "opencode",
+            sessionId,
+            title: "Open",
+            createdAtMs: 1_000,
+            lastAccessedAtMs: 2_000,
+          });
+          return {
+            ...harness,
+            session,
+            sessionId,
+            chatId: buildNativeChatId("opencode", sessionId),
+          };
+        }
+
+        it(`${issue} closes the live session before it deletes the history entry`, async () => {
+          const { manager, index, sessionId, chatId } = await openChat();
+
+          await manager.deleteChatHistory(chatId);
+
+          expect(manager.getSessions()).toEqual([]);
+          expect(await index.isTombstoned("opencode", sessionId)).toBe(true);
+        });
+
+        it(`${issue} deletes the note an autosave that is already writing creates after delete starts`, async () => {
+          // Resolving in the same turn lets the save finish before delete reads the path, so the test would pass without the fix. https://github.com/logancyang/obsidian-copilot/issues/2888
+          const { setImmediate: nextLoopTurn } =
+            jest.requireActual<typeof import("timers")>("timers");
+          jest.useFakeTimers();
+          getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
+          const { manager, persistence, session, chatId } = await openChat();
+          let finishSave!: (saved: { path: string }) => void;
+          persistence.saveSession.mockImplementationOnce(
+            () => new Promise((resolve) => (finishSave = resolve))
+          );
+          getSessionTestHandle(session).setMessages([{ message: "First turn" }], true);
+          await jest.advanceTimersByTimeAsync(2000);
+
+          const deleting = manager.deleteChatHistory(chatId);
+          nextLoopTurn(() => finishSave({ path: "chats/new.md" }));
+          await deleting;
+
+          expect(persistence.deleteFile).toHaveBeenCalledWith("chats/new.md");
+        });
+
+        it(`${issue} leaves an open chat alone when another note shares its session`, async () => {
+          const sharedSessionId = `backend-${nextBackendSessionId}`;
+          const { manager, persistence } = buildHistoryHarness({
+            files: {
+              "chats/duplicate.md": {
+                epoch: 1_000,
+                backendId: "opencode",
+                sessionId: sharedSessionId,
+              },
+            },
+          });
+          const session = await manager.createSession("opencode");
+          expect(session.getBackendSessionId()).toBe(sharedSessionId);
+          getSessionTestHandle(session).setMessages([{ message: "First turn" }], true);
+          await manager.saveActiveSession();
+
+          await manager.deleteChatHistory("chats/duplicate.md");
+
+          expect(manager.getSessions()).toEqual([session]);
+          expect(persistence.deleteFile).toHaveBeenCalledTimes(1);
+          expect(persistence.deleteFile).toHaveBeenCalledWith("chats/duplicate.md");
+        });
+
+        it(`${issue} never saves a pending autosave while it deletes the chat`, async () => {
+          jest.useFakeTimers();
+          getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
+          const { manager, persistence, session, chatId } = await openChat();
+          getSessionTestHandle(session).setMessages([{ message: "First turn" }], true);
+
+          await manager.deleteChatHistory(chatId);
+
+          expect(persistence.saveSession).not.toHaveBeenCalled();
+          expect(persistence.deleteFile).not.toHaveBeenCalled();
+        });
       });
     });
 

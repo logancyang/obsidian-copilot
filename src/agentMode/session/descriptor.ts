@@ -95,6 +95,8 @@ export interface BackendDescriptor {
 
   readonly summarizesSessionTitle: boolean;
 
+  readonly agentProductName?: string;
+
   readonly planFeedbackDelivery?: "permission" | "next_turn";
 
   getInstallState(settings: CopilotSettings): InstallState;

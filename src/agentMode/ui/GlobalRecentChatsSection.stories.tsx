@@ -2,7 +2,7 @@ import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/Agent
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import type { Meta, StoryObj } from "@/lib/story";
 import { MessageSquare } from "lucide-react";
-import React from "react";
+import React, { useEffect, useRef } from "react";
 
 type GlobalRecentChatsSectionProps = React.ComponentProps<typeof GlobalRecentChatsSection>;
 
@@ -70,4 +70,27 @@ export const OpenSessions: StoryObj<GlobalRecentChatsSectionProps> = {
     onCloseSession: noop,
   },
   render: renderShelf,
+};
+
+const backendItems: GlobalRecentChatsSectionProps["items"] = [
+  { ...items[0], title: "Claude chat", backendId: "claude" },
+  { ...items[1], title: "Codex chat", backendId: "codex" },
+];
+
+const ConfirmingDelete: React.FC<{ row: number }> = ({ row }) => {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    ref.current?.querySelectorAll<HTMLButtonElement>('button[title="Delete"]')[row]?.click();
+  }, [row]);
+
+  return <div ref={ref}>{renderShelf({ items: backendItems })}</div>;
+};
+
+export const ConfirmDeleteClaude: StoryObj<GlobalRecentChatsSectionProps> = {
+  render: () => <ConfirmingDelete row={0} />,
+};
+
+export const ConfirmDeleteCodex: StoryObj<GlobalRecentChatsSectionProps> = {
+  render: () => <ConfirmingDelete row={1} />,
 };
