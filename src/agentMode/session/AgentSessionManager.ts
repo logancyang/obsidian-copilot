@@ -637,12 +637,9 @@ export class AgentSessionManager {
 
     const ref = native ?? (await this.readSessionRefFromFile(fileId));
 
-    // Close an open chat first so its autosave cannot write the file again.
-    // https://github.com/logancyang/obsidian-copilot/issues/2888
-    await attempt("open chat session", async () => {
-      await this.closeChatSession(fileId);
-      if (ref) await this.closeChatSession(buildNativeChatId(ref.backendId, ref.sessionId));
-    });
+    await this.closeOpenChatForDelete(
+      ref ? [fileId, buildNativeChatId(ref.backendId, ref.sessionId)] : [fileId]
+    );
 
     if (!native && persistence) {
       await attempt("chat file", () => persistence.deleteFile(fileId));
@@ -658,6 +655,28 @@ export class AgentSessionManager {
       throw new Error(`Copilot could not delete: ${failures.join("; ")}.`);
     }
     return formatChatDeleteNotice(ref ? this.opts.resolveDescriptor(ref.backendId) : undefined);
+  }
+
+  // An open chat must be gone before its files are, or autosave writes the note again. Delete
+  // must not depend on the agent releasing its session, so a failed release falls back to local
+  // teardown. https://github.com/logancyang/obsidian-copilot/issues/2888
+  private async closeOpenChatForDelete(historyIds: string[]): Promise<void> {
+    for (const [internalId, session] of Array.from(this.sessions)) {
+      if (
+        !this.recentChatIdsForSession(internalId, session).some((id) => historyIds.includes(id))
+      ) {
+        continue;
+      }
+      try {
+        await this.closeSession(internalId, { releaseBackend: true });
+      } catch (e) {
+        logWarn("[AgentMode] release before delete failed; closing the chat locally", e);
+        await this.closeSession(internalId);
+      }
+      if (this.sessions.has(internalId)) {
+        throw new Error("Copilot could not close the open chat, so nothing was deleted.");
+      }
+    }
   }
 
   private cancelPendingIndexTouch(backendId: BackendId, sessionId: string): void {

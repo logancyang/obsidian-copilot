@@ -3747,18 +3747,62 @@ describe("AgentSessionManager", () => {
         expect(persistence.deleteFile).toHaveBeenCalledWith("chats/agent__a.md");
       });
 
-      it("https://github.com/logancyang/obsidian-copilot/issues/2888 closes an open chat before it deletes the chat file", async () => {
-        const { manager, persistence } = buildHistoryHarness({
-          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", sessionId: "s1" } },
-        });
-        const close = jest.spyOn(manager, "closeChatSession");
-        persistence.deleteFile.mockImplementationOnce(async () => {
-          expect(close).toHaveBeenCalledWith("chats/agent__a.md");
+      describe("when the chat is open", () => {
+        const issue = "https://github.com/logancyang/obsidian-copilot/issues/2888";
+
+        async function openChat() {
+          const harness = buildHistoryHarness();
+          const session = await harness.manager.createSession("opencode");
+          const sessionId = session.getBackendSessionId()!;
+          await harness.index.recordSession({
+            backendId: "opencode",
+            sessionId,
+            title: "Open",
+            createdAtMs: 1_000,
+            lastAccessedAtMs: 2_000,
+          });
+          return {
+            ...harness,
+            session,
+            sessionId,
+            chatId: buildNativeChatId("opencode", sessionId),
+          };
+        }
+
+        it(`${issue} closes the live session before it deletes the history entry`, async () => {
+          const { manager, index, sessionId, chatId } = await openChat();
+
+          const notice = await manager.deleteChatHistory(chatId);
+
+          expect(notice).toBe("Chat deleted from Copilot. opencode may keep its own copy.");
+          expect(manager.getSessions()).toEqual([]);
+          expect(await index.isTombstoned("opencode", sessionId)).toBe(true);
         });
 
-        await manager.deleteChatHistory("chats/agent__a.md");
+        it(`${issue} still closes the chat locally and deletes it when the agent cannot release the session`, async () => {
+          const { manager, index, sessionId, chatId } = await openChat();
+          const proc = manager.getBackendProcess("opencode")!;
+          (proc.closeSession as jest.Mock).mockRejectedValueOnce(
+            new Error("session/close unsupported")
+          );
 
-        expect(persistence.deleteFile).toHaveBeenCalled();
+          const notice = await manager.deleteChatHistory(chatId);
+
+          expect(notice).toBe("Chat deleted from Copilot. opencode may keep its own copy.");
+          expect(manager.getSessions()).toEqual([]);
+          expect(await index.isTombstoned("opencode", sessionId)).toBe(true);
+        });
+
+        it(`${issue} deletes nothing when the chat is still open after both close attempts`, async () => {
+          const { manager, index, sessionId, chatId } = await openChat();
+          jest.spyOn(manager, "closeSession").mockResolvedValue(undefined);
+
+          await expect(manager.deleteChatHistory(chatId)).rejects.toThrow(
+            "Copilot could not close the open chat, so nothing was deleted."
+          );
+
+          expect(await index.isTombstoned("opencode", sessionId)).toBe(false);
+        });
       });
     });
 
