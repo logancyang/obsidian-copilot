@@ -1,4 +1,4 @@
-import type { BackendId } from "@/agentMode/session/types";
+import type { BackendId, TurnDiff } from "@/agentMode/session/types";
 import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 
 export interface AcpSpawnDescriptor {
@@ -18,4 +18,8 @@ export interface AcpBackend {
   readPlanUsage?(): Promise<PlanUsageReading>;
   planUsageAppliesTo?(wireModelId: string | null | undefined): boolean;
   readContextWindow?(wireModelId: string | null | undefined): Promise<number | null>;
+  readonly clientCapabilitiesMeta?: Readonly<Record<string, unknown>>;
+  readTurnDiff?(
+    promptResultMeta: Readonly<Record<string, unknown>> | null | undefined
+  ): TurnDiff | null;
 }
