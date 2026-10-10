@@ -228,6 +228,7 @@ export interface ToolCallDelta {
   kind?: AgentToolKind;
   status?: AgentToolStatus;
   rawInput?: unknown;
+  originalFile?: string | null;
   content?: ToolCallContent[] | null;
   locations?: Array<{ path: string; line?: number | null }> | null;
   vendorToolName?: string;
@@ -467,6 +468,16 @@ export interface AgentChatMessage {
   turnStopReason?: StopReason;
   turnDurationMs?: number;
   fanout?: FanoutTurn;
+  fileChanges?: TurnFileChange[];
+}
+
+export interface TurnFileChange {
+  path: string;
+  status: "modified" | "created" | "deleted";
+  before: string | null;
+  after: string | null;
+  additions: number;
+  deletions: number;
 }
 
 export type NewAgentChatMessage = Omit<AgentChatMessage, "id"> & { id?: string };

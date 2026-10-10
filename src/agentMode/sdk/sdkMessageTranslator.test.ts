@@ -436,6 +436,74 @@ describe("sdkMessageTranslator", () => {
       expect(out[0].update).toMatchObject({ status: "failed" });
     });
 
+    it("forwards the pre-edit file content an Edit result carries as originalFile", () => {
+      const state = createTranslatorState();
+      const out = translateSdkMessage(
+        {
+          type: "user",
+          tool_use_result: {
+            filePath: "/vault/notes/a.md",
+            originalFile: "before the edit\n",
+            userModified: false,
+          },
+          message: {
+            content: [{ type: "tool_result", tool_use_id: "tu-edit", content: "ok" }],
+          } as never,
+          parent_tool_use_id: null,
+          session_id: SESSION_ID,
+        } as never,
+        SESSION_ID,
+        state
+      );
+      expect(out[0].update).toMatchObject({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "tu-edit",
+        status: "completed",
+        originalFile: "before the edit\n",
+      });
+    });
+
+    it("forwards a null originalFile so a file the Write created reports no prior content (https://github.com/Brevilabs/obsidian-copilot-private/issues/347)", () => {
+      const state = createTranslatorState();
+      const out = translateSdkMessage(
+        {
+          type: "user",
+          tool_use_result: {
+            type: "create",
+            filePath: "/vault/notes/new.md",
+            content: "fresh\n",
+            originalFile: null,
+          },
+          message: {
+            content: [{ type: "tool_result", tool_use_id: "tu-write", content: "ok" }],
+          } as never,
+          parent_tool_use_id: null,
+          session_id: SESSION_ID,
+        } as never,
+        SESSION_ID,
+        state
+      );
+      expect(out[0].update).toMatchObject({ toolCallId: "tu-write", originalFile: null });
+    });
+
+    it("omits originalFile for a tool result that carries no pre-edit content", () => {
+      const state = createTranslatorState();
+      const out = translateSdkMessage(
+        {
+          type: "user",
+          tool_use_result: { stdout: "listing" },
+          message: {
+            content: [{ type: "tool_result", tool_use_id: "tu-bash", content: "ok" }],
+          } as never,
+          parent_tool_use_id: null,
+          session_id: SESSION_ID,
+        } as never,
+        SESSION_ID,
+        state
+      );
+      expect(out[0].update).not.toHaveProperty("originalFile");
+    });
+
     it("synthesizes current_mode_update on EnterPlanMode tool_use", () => {
       const state = createTranslatorState();
       const out = translateSdkMessage(
