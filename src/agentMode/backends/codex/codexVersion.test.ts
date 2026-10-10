@@ -10,7 +10,6 @@ import {
   CODEX_MIN_VERSION,
   isSupportedCodexAcpPath,
   resolveSupportedCodexAcpPackage,
-  resolveSupportedCodexAcpEntry,
   type CodexAcpPackageFs,
 } from "./codexVersion";
 
@@ -154,13 +153,11 @@ describe("codexVersion", () => {
         ).toThrow("not supported");
       }
     );
-  });
-  describe("resolveSupportedCodexAcpEntry()", () => {
     it.each(["0.0.44", "0.0.45", "0.0.45-beta.1", "1.13.0", "2.0.0-beta.1"])(
       "rejects adapter %s below the supported minimum https://github.com/Brevilabs/obsidian-copilot-private/issues/618 https://github.com/logancyang/obsidian-copilot/issues/2967",
       (version) => {
         expect(() =>
-          resolveSupportedCodexAcpEntry(
+          resolveSupportedCodexAcpPackage(
             UNIX_ENTRY,
             "darwin",
             packageFs(UNIX_ENTRY, metadata(version))
@@ -173,8 +170,8 @@ describe("codexVersion", () => {
       const packageFileSystem = packageFs(UNIX_ENTRY, metadata(CODEX_MIN_VERSION));
 
       expect(
-        resolveSupportedCodexAcpEntry("/usr/local/bin/codex-acp", "darwin", packageFileSystem)
-      ).toBe(UNIX_ENTRY);
+        resolveSupportedCodexAcpPackage("/usr/local/bin/codex-acp", "darwin", packageFileSystem)
+      ).toMatchObject({ entryPath: UNIX_ENTRY });
       expect(packageFileSystem.readFileSync).toHaveBeenCalledWith(
         "/npm/lib/node_modules/@agentclientprotocol/codex-acp/package.json",
         "utf8"
@@ -185,7 +182,9 @@ describe("codexVersion", () => {
       const entry = "C:\\npm\\node_modules\\@agentclientprotocol\\codex-acp\\dist\\index.js";
       const packageFileSystem = packageFs(entry, metadata("2.0.0"));
 
-      expect(resolveSupportedCodexAcpEntry(entry, "win32", packageFileSystem)).toBe(entry);
+      expect(resolveSupportedCodexAcpPackage(entry, "win32", packageFileSystem)).toMatchObject({
+        entryPath: entry,
+      });
       expect(packageFileSystem.readFileSync).toHaveBeenCalledWith(
         "C:\\npm\\node_modules\\@agentclientprotocol\\codex-acp\\package.json",
         "utf8"
@@ -199,7 +198,7 @@ describe("codexVersion", () => {
       );
 
       expect(() =>
-        resolveSupportedCodexAcpEntry("/usr/local/bin/codex-acp", "darwin", packageFileSystem)
+        resolveSupportedCodexAcpPackage("/usr/local/bin/codex-acp", "darwin", packageFileSystem)
       ).toThrow("not supported");
     });
 
@@ -207,12 +206,12 @@ describe("codexVersion", () => {
       "https://github.com/logancyang/obsidian-copilot/issues/2967 accepts supported versions with a semantic-version suffix: %s",
       (version) => {
         expect(
-          resolveSupportedCodexAcpEntry(
+          resolveSupportedCodexAcpPackage(
             "/usr/local/bin/codex-acp",
             "darwin",
             packageFs(UNIX_ENTRY, metadata(version))
           )
-        ).toBe(UNIX_ENTRY);
+        ).toMatchObject({ entryPath: UNIX_ENTRY });
       }
     );
 
@@ -223,7 +222,7 @@ describe("codexVersion", () => {
       ["malformed metadata", []],
     ])("rejects %s metadata", (_label, packageMetadata) => {
       expect(() =>
-        resolveSupportedCodexAcpEntry(
+        resolveSupportedCodexAcpPackage(
           "/usr/local/bin/codex-acp",
           "darwin",
           packageFs(UNIX_ENTRY, packageMetadata)
@@ -231,7 +230,6 @@ describe("codexVersion", () => {
       ).toThrow("not supported");
     });
   });
-
   describe("isSupportedCodexAcpPath()", () => {
     afterEach(() => {
       for (const tempDir of tempDirs.splice(0)) {
@@ -257,14 +255,14 @@ describe("codexVersion", () => {
   describe("bundledCodexRuntimePath()", () => {
     it(`locates the native Codex shipped beside a bundled adapter: ${DIRECT_RUNTIME_ISSUE}`, () => {
       expect(
-        bundledCodexRuntimePath("/Users/Jane Doe/.obsidian-copilot/codex/2.0.1/codex-acp", "darwin")
-      ).toBe("/Users/Jane Doe/.obsidian-copilot/codex/2.0.1/codex-runtime/bin/codex");
+        bundledCodexRuntimePath("/Users/Jane Doe/.obsidian-copilot/codex/2.2.2/codex-acp", "darwin")
+      ).toBe("/Users/Jane Doe/.obsidian-copilot/codex/2.2.2/codex-runtime/bin/codex");
       expect(
         bundledCodexRuntimePath(
-          "C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.0.1\\codex-acp.exe",
+          "C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.2.2\\codex-acp.exe",
           "win32"
         )
-      ).toBe("C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.0.1\\codex-runtime\\bin\\codex.exe");
+      ).toBe("C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.2.2\\codex-runtime\\bin\\codex.exe");
     });
   });
   describe("resolveCodexCommand()", () => {
