@@ -298,6 +298,31 @@ describe("AgentChatPersistenceManager", () => {
       expect(loaded.label).toBe(tricky);
     });
 
+    it("writes Ask User questions and answers next to the assistant turn that collected them (#3370)", async () => {
+      const askUserMessage: AgentChatMessage = {
+        ...makeMessage(AI_SENDER, "Before I continue, I need your input."),
+        parts: [
+          {
+            kind: "tool_call",
+            id: "ask-1",
+            title: "Answered: The third option",
+            status: "completed",
+            userResponse: "Answered: The third option",
+            output: [{ type: "text", text: "How should I proceed?: The third option" }],
+          },
+        ],
+      };
+      const saved = await manager.saveSession(
+        [makeMessage(USER_SENDER, "q"), askUserMessage],
+        "claude",
+        {}
+      );
+      const contents = app.files.get(saved!.path)!.contents!;
+      expect(contents).toContain("**ai**: Before I continue, I need your input.");
+      expect(contents).toContain("Answered: The third option");
+      expect(contents).toContain("How should I proceed?: The third option");
+    });
+
     it("strips control characters from labels so they can't break frontmatter", async () => {
       const messages = [makeMessage(USER_SENDER, "hi")];
       const saved = await manager.saveSession(messages, "opencode", {
