@@ -62,8 +62,9 @@ const BACKEND_HISTORY: ChatHistoryItem[] = [
 
 const DELETE_SUMMARIES: Record<string, string> = {
   "claude-chat":
-    "Removes: chat file, session index entry and Claude transcript. Keeps: nothing. You can no longer resume it in Claude Code.",
-  "codex-chat": "Removes: chat file and session index entry. Keeps: Codex transcript.",
+    "Delete this chat from Copilot? Claude Code may keep its own copy of this conversation on this computer.",
+  "codex-chat":
+    "Delete this chat from Copilot? Codex may keep its own copy of this conversation on this computer.",
 };
 
 const ConfirmingDeletePopover: React.FC<{ row: number }> = ({ row }) => {

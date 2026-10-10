@@ -5,7 +5,7 @@ import type {
   SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { BackendDescriptor, SessionEvent } from "@/agentMode/session/types";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -1339,62 +1339,6 @@ describe("ClaudeSdkBackendProcess", () => {
         expect(loaded.sessionId).toBe(sessionId);
         expect(loaded.state.model?.current.baseModelId).toBe("claude-fake-pro");
         expect(events).toEqual([]);
-      });
-    });
-
-    describe("deleteSessionTranscript()", () => {
-      const cwd = "/vault";
-      const projectDir = cwd.replace(/[^a-zA-Z0-9]/g, "-");
-      const sessionId = "11111111-2222-3333-4444-555555555555";
-      let configDir: string;
-
-      beforeEach(async () => {
-        configDir = await mkdtemp(path.join(os.tmpdir(), "claude-config-"));
-      });
-      afterEach(async () => {
-        await rm(configDir, { recursive: true, force: true });
-      });
-
-      function makeProcWithConfigDir(): ClaudeSdkBackendProcess {
-        return makeProc({ getEnvOverrides: () => ({ CLAUDE_CONFIG_DIR: configDir }) });
-      }
-
-      it("removes the session transcript from disk", async () => {
-        const dir = path.join(configDir, "projects", projectDir);
-        await mkdir(dir, { recursive: true });
-        await writeFile(path.join(dir, `${sessionId}.jsonl`), "{}\n");
-        const proc = makeProcWithConfigDir();
-
-        await proc.deleteSessionTranscript({ sessionId, cwd });
-
-        await expect(proc.sessionExistsLocally({ sessionId, cwd })).resolves.toBe(false);
-      });
-
-      it("rejects a session id that would leave the Claude store and keeps the outside file", async () => {
-        const outside = path.join(configDir, "victim.jsonl");
-        await writeFile(outside, "{}\n");
-        const proc = makeProcWithConfigDir();
-
-        await expect(
-          proc.deleteSessionTranscript({ sessionId: "../../victim", cwd })
-        ).rejects.toThrow("invalid Claude session id");
-
-        await expect(readFile(outside, "utf8")).resolves.toBe("{}\n");
-      });
-
-      it("resolves when the transcript is already gone", async () => {
-        await expect(
-          makeProcWithConfigDir().deleteSessionTranscript({ sessionId, cwd })
-        ).resolves.toBeUndefined();
-      });
-
-      it("rejects when the transcript path cannot be removed", async () => {
-        await mkdir(path.join(configDir, "projects", projectDir, `${sessionId}.jsonl`), {
-          recursive: true,
-        });
-        await expect(
-          makeProcWithConfigDir().deleteSessionTranscript({ sessionId, cwd })
-        ).rejects.toThrow();
       });
     });
 

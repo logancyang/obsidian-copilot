@@ -1,5 +1,5 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
-import { describeChatDeletePlan } from "@/agentMode/session/chatDeleteReport";
+import { describeChatDelete } from "@/agentMode/session/chatDeleteText";
 import {
   ChatHistoryItem,
   ChatHistoryPopover,
@@ -14,7 +14,7 @@ import { Download, History, MessageCirclePlus, Sparkles } from "lucide-react";
 import React from "react";
 
 const resolveDeleteSummary = (item: ChatHistoryItem) =>
-  describeChatDeletePlan(item.id, item.backendId ? backendRegistry[item.backendId] : undefined);
+  describeChatDelete(item.backendId ? backendRegistry[item.backendId] : undefined);
 
 const resolveHistoryIcon = (item: ChatHistoryItem) =>
   item.backendId ? backendRegistry[item.backendId]?.Icon : undefined;

@@ -12,7 +12,9 @@ function makeManager() {
   return {
     getChatHistoryItems: jest.fn(async () => [item("a"), item("b")]),
     updateChatTitle: jest.fn(async () => {}),
-    deleteChatHistory: jest.fn(async () => ({ removed: ["chat file"], kept: [], failed: [] })),
+    deleteChatHistory: jest.fn(
+      async () => "Chat deleted from Copilot. Codex may keep its own copy."
+    ),
   } as unknown as AgentSessionManager & {
     getChatHistoryItems: jest.Mock;
     updateChatTitle: jest.Mock;
@@ -156,13 +158,8 @@ describe("useAgentHistoryControls", () => {
       expect(manager.getChatHistoryItems).toHaveBeenCalledWith("project-1");
     });
 
-    it("shows one notice built from the delete report and never claims a full delete after a failure", async () => {
-      const manager = makeManager() as AgentSessionManager & { deleteChatHistory: jest.Mock };
-      manager.deleteChatHistory.mockResolvedValue({
-        removed: ["chat file"],
-        kept: [],
-        failed: [{ copy: "session index entry", error: "disk full" }],
-      });
+    it("shows the delete notice once after a successful delete", async () => {
+      const manager = makeManager();
       const { result } = renderControls(manager);
       (Notice as unknown as jest.Mock).mockClear();
 
@@ -172,8 +169,28 @@ describe("useAgentHistoryControls", () => {
 
       expect(Notice).toHaveBeenCalledTimes(1);
       expect(Notice).toHaveBeenCalledWith(
-        "Deletion was partial. Removed: chat file. Failed: session index entry (disk full)."
+        "Chat deleted from Copilot. Codex may keep its own copy."
       );
+    });
+
+    it("shows the failure, reloads the history, and rejects when Copilot's own delete fails", async () => {
+      const manager = makeManager() as AgentSessionManager & {
+        getChatHistoryItems: jest.Mock;
+        deleteChatHistory: jest.Mock;
+      };
+      manager.deleteChatHistory.mockRejectedValue(
+        new Error("Copilot could not delete: chat file (locked).")
+      );
+      const { result } = renderControls(manager);
+      (Notice as unknown as jest.Mock).mockClear();
+
+      await act(async () => {
+        await expect(result.current.deleteChat("a")).rejects.toThrow("chat file (locked)");
+      });
+
+      expect(Notice).toHaveBeenCalledTimes(1);
+      expect(Notice).toHaveBeenCalledWith("Copilot could not delete: chat file (locked).");
+      expect(manager.getChatHistoryItems).toHaveBeenCalled();
     });
   });
 });

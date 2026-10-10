@@ -322,20 +322,22 @@ describe("GlobalRecentChatsSection", () => {
     });
 
     it.each([
-      [
-        "claude",
-        "Removes: chat file, session index entry and Claude transcript. Keeps: nothing. You can no longer resume it in Claude Code.",
-      ],
-      ["codex", "Removes: chat file and session index entry. Keeps: Codex transcript."],
+      ["claude", "Claude Code"],
+      ["codex", "Codex"],
+      ["opencode", "opencode"],
     ])(
-      "https://github.com/logancyang/obsidian-copilot/issues/2888 names what a %s chat delete removes and keeps",
-      (backendId, summary) => {
+      "https://github.com/logancyang/obsidian-copilot/issues/2888 says the %s agent may keep its own copy before the user confirms",
+      (backendId, agent) => {
         renderSection({ items: [makeItem("chats/agent__a.md", { backendId })] });
 
-        expect(screen.queryByText(/^Removes:/)).toBeNull();
+        expect(screen.queryByText(/^Delete this chat from Copilot/)).toBeNull();
         fireEvent.click(screen.getByTitle("Delete"));
 
-        expect(screen.getByText(summary)).toBeTruthy();
+        expect(
+          screen.getByText(
+            `Delete this chat from Copilot? ${agent} may keep its own copy of this conversation on this computer.`
+          )
+        ).toBeTruthy();
       }
     );
 

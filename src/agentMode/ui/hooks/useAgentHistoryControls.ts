@@ -1,5 +1,4 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import { formatChatDeleteNotice } from "@/agentMode/session/chatDeleteReport";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { logError } from "@/logger";
@@ -94,17 +93,17 @@ export function useAgentHistoryControls(
 
   const deleteChat = useCallback(
     async (id: string) => {
-      await runWithNotice(
-        "delete chat",
-        async () => {
-          const report = await manager.deleteChatHistory(id);
-          new Notice(formatChatDeleteNotice(report));
-          await loadChatHistory();
-        },
-        true
-      );
+      try {
+        new Notice(await manager.deleteChatHistory(id));
+      } catch (error) {
+        logError("[AgentMode] delete chat failed", error);
+        new Notice(error instanceof Error ? error.message : "Failed to delete chat.");
+        await loadChatHistory();
+        throw error;
+      }
+      await loadChatHistory();
     },
-    [manager, loadChatHistory, runWithNotice]
+    [manager, loadChatHistory]
   );
 
   const openSourceFile = useCallback(
