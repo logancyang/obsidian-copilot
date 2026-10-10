@@ -16,6 +16,7 @@ import { getSettings, updateAgentModeBackendFields } from "@/settings/model";
 import { resolveSupportedCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
 
 import { installCodexArchive, CODEX_PINNED_VERSION } from "./codexArchive";
+import { managedCodexRuntimePath } from "./cliSetup";
 
 const TIMEOUT_MS = 5 * 60_000;
 const EMPTY_BINARY_SETTINGS: BinarySettings = Object.freeze({});
@@ -73,7 +74,11 @@ export class CodexBinaryManager extends ManagedBinaryManager {
       // A runnable adapter alone does not prove its bundled native runtime survived extraction.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
       progress.verifying("bundled Codex runtime");
-      const runtime = await run(stagedEntry, ["cli", "--help"], signal);
+      const runtime = await run(
+        managedCodexRuntimePath(stagedEntry, process.platform),
+        ["--help"],
+        signal
+      );
       if (!runtime.includes("Codex CLI"))
         throw new Error("The bundled Codex runtime could not start.");
       if (signal.aborted) throw new ManagedInstallAbortError();

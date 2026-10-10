@@ -6,6 +6,7 @@ import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { detectBinary } from "@/utils/detectBinary";
 import { buildCodexAcpInvocation, resolveSupportedCodexAcpEntry } from "./codexVersion";
+import { managedCodexRuntimePath } from "./cliSetup";
 import type { CopilotSettings } from "@/settings/model";
 
 interface AccountReply {
@@ -22,9 +23,23 @@ async function invocation(settings: CopilotSettings) {
     sanitizeBuiltinSkillEnvOverrides(config?.envOverrides)
   );
   const entry = resolveSupportedCodexAcpEntry(descriptor.command);
+  // `codex-acp cli` runs the bundled Codex through cmd.exe on Windows, which splits paths with spaces.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/686
+  if (config?.binarySource === "managed")
+    return {
+      command: managedCodexRuntimePath(entry, process.platform),
+      args: [],
+      env: descriptor.env,
+    };
   const node =
     process.platform === "win32" && entry.endsWith(".js") ? await detectBinary("node") : undefined;
-  return buildCodexAcpInvocation(entry, [], descriptor.env, process.platform, node ?? undefined);
+  return buildCodexAcpInvocation(
+    entry,
+    ["cli"],
+    descriptor.env,
+    process.platform,
+    node ?? undefined
+  );
 }
 
 async function readCodexAuthStatus(settings: CopilotSettings) {
@@ -41,7 +56,7 @@ async function readCodexAuthStatus(settings: CopilotSettings) {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
     await signInWithCli(
       call.command,
-      [...call.args, "cli", "app-server"],
+      [...call.args, "app-server"],
       call.env,
       async () => ({ loggedIn: status?.signedIn === true }),
       {
@@ -147,7 +162,7 @@ export const codexAuth: BackendAuth = {
     const call = await invocation(settings);
     const status = await signOutWithCli(
       call.command,
-      [...call.args, "cli", "logout"],
+      [...call.args, "logout"],
       call.env,
       async () => {
         const status = await readCodexAuthStatus(settings);
@@ -161,7 +176,7 @@ export const codexAuth: BackendAuth = {
     const call = await invocation(settings);
     const result = await signInWithCli(
       call.command,
-      [...call.args, "cli", "login"],
+      [...call.args, "login"],
       call.env,
       async () => {
         const status = await codexAuth.getStatus(settings);
