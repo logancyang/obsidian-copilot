@@ -121,8 +121,12 @@ function claudeEffectiveEnv(
   return Object.assign({}, env, ...fileEnvs) as Record<string, unknown>;
 }
 
+// Same truthy values Claude Code accepts for its provider switches.
+// https://github.com/logancyang/obsidian-copilot/issues/2889
+const TRUTHY_ENV_VALUES = new Set(["1", "true", "yes", "on"]);
+
 function isEnabledFlag(value: unknown): boolean {
-  return typeof value === "string" && value !== "" && value !== "0" && value !== "false";
+  return typeof value === "string" && TRUTHY_ENV_VALUES.has(value.trim().toLowerCase());
 }
 
 function claudeChildEnv(settings: CopilotSettings): NodeJS.ProcessEnv {
