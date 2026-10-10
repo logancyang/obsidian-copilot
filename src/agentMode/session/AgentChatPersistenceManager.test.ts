@@ -298,7 +298,7 @@ describe("AgentChatPersistenceManager", () => {
       expect(loaded.label).toBe(tricky);
     });
 
-    it("writes Ask User questions and answers next to the assistant turn that collected them (#3370)", async () => {
+    it("writes Ask User questions and answers next to the assistant turn that collected them for https://github.com/logancyang/obsidian-copilot/issues/3370", async () => {
       const askUserMessage: AgentChatMessage = {
         ...makeMessage(AI_SENDER, "Before I continue, I need your input."),
         parts: [

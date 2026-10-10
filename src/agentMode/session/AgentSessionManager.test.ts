@@ -178,9 +178,12 @@ type MockSessionStatus =
   | "error"
   | "closed";
 
+type MockDisplayMessage = Pick<AgentChatMessage, "message"> &
+  Partial<Pick<AgentChatMessage, "parts">>;
+
 interface MockSessionTestHandle {
   setStatus(status: MockSessionStatus): void;
-  setMessages(messages: { message: string }[], notify?: boolean): void;
+  setMessages(messages: MockDisplayMessage[], notify?: boolean): void;
   setHasUserVisibleMessages(value: boolean): void;
 }
 
@@ -207,7 +210,7 @@ function makeMockSession(overrides: {
   let labelSource: "user" | "agent" | null = overrides.label ? "agent" : null;
   let status: MockSessionStatus = "idle";
   let needsAttention = false;
-  let displayMessages: { message: string }[] = [];
+  let displayMessages: MockDisplayMessage[] = [];
   let hasUserVisibleMessages = false;
   const listeners = new Set<{
     onMessagesChanged?: () => void;
@@ -3278,6 +3281,39 @@ describe("AgentSessionManager", () => {
         await expect(mgr.saveActiveSession()).resolves.toEqual({ path: "chats/saved.md" });
 
         expect(saveSession).toHaveBeenCalledWith(messages, session.backendId, expect.anything());
+      });
+
+      it("saves again when an Ask User answer is the only change since the last save for https://github.com/logancyang/obsidian-copilot/issues/3370", async () => {
+        const { mgr, saveSession } = savedNoteFixture();
+        const session = await mgr.createSession();
+        const handle = getSessionTestHandle(session);
+        const asked = [{ message: "Question" }, { message: "Which option should I use?" }];
+        handle.setMessages(asked);
+        await mgr.saveActiveSession();
+        const answered = [
+          asked[0],
+          {
+            ...asked[1],
+            parts: [
+              {
+                kind: "tool_call" as const,
+                id: "ask-1",
+                title: "Answered: The third option",
+                status: "completed" as const,
+                userResponse: "Answered: The third option",
+              },
+            ],
+          },
+        ];
+        handle.setMessages(answered);
+        await mgr.saveActiveSession();
+        expect(saveSession).toHaveBeenCalledTimes(2);
+        expect(saveSession).toHaveBeenLastCalledWith(
+          answered,
+          session.backendId,
+          expect.objectContaining({ existingPath: "chats/saved.md" })
+        );
+        await mgr.shutdown();
       });
 
       it("persists changes during the first manual save for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
