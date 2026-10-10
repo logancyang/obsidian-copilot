@@ -20,6 +20,7 @@ jest.mock("@/utils/desktopRuntime", () => ({
       : jest.requireActual(`node:${id}`),
 }));
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/379";
+const DIRECT_RUNTIME_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/686";
 const settings = {
   ...getSettings(),
   agentMode: {
@@ -39,6 +40,12 @@ const configured = (config: object) => ({
     backends: { codex: { ...settings.agentMode.backends.codex, ...config } },
   },
 });
+const MANAGED = {
+  binaryPath: "/bundle/codex-acp",
+  binarySource: "managed",
+  binaryVersion: "2.0.1",
+};
+const RUNTIME = "/bundle/codex-runtime/bin/codex";
 const child = () =>
   Object.assign(new EventEmitter(), {
     pid: 987654,
@@ -197,6 +204,32 @@ describe("codexAuth", () => {
         );
       }
     );
+    it.each([
+      ["darwin", "/bundle/codex-acp", RUNTIME],
+      ["win32", "/bundle/codex-acp.exe", "\\bundle\\codex-runtime\\bin\\codex.exe"],
+    ] as const)(
+      `probes a managed %s install through its bundled Codex app-server with the same profile: ${DIRECT_RUNTIME_ISSUE}`,
+      async (platform, binaryPath, runtime) => {
+        const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+        Object.defineProperty(process, "platform", { value: platform });
+        jest.mocked(detectBinary).mockClear();
+        try {
+          await expect(
+            codexAuth.getStatus(configured({ ...MANAGED, binaryPath }))
+          ).resolves.toEqual(SIGNED_IN);
+          expect(mockSpawn).toHaveBeenCalledWith(
+            runtime,
+            ["app-server"],
+            expect.objectContaining({
+              env: expect.objectContaining({ CODEX_HOME: "/my profile" }),
+            })
+          );
+          expect(detectBinary).not.toHaveBeenCalled();
+        } finally {
+          Object.defineProperty(process, "platform", original);
+        }
+      }
+    );
     it(`ignores notifications and diagnostics while assembling a split account response: ${ISSUE}`, async () => {
       const proc = child();
       mockSpawn.mockReturnValue(proc);
@@ -319,6 +352,22 @@ describe("codexAuth", () => {
         expect.objectContaining({ env: expect.objectContaining({ CODEX_HOME: "/my profile" }) })
       );
     });
+    it(`logs a managed install out through its bundled Codex and checks the same profile: ${DIRECT_RUNTIME_ISSUE}`, async () => {
+      mockSpawn.mockImplementation((_command, args) => {
+        if (args.includes("app-server")) return serve(null);
+        const proc = child();
+        queueMicrotask(() => proc.emit("close", 0));
+        return proc;
+      });
+      await expect(codexAuth.signOut!(configured(MANAGED))).resolves.toEqual({ signedIn: false });
+      const profile = expect.objectContaining({
+        env: expect.objectContaining({ CODEX_HOME: "/my profile" }),
+      });
+      expect(mockSpawn.mock.calls).toEqual([
+        [RUNTIME, ["logout"], profile],
+        [RUNTIME, ["app-server"], profile],
+      ]);
+    });
     it.each(["startup failure", "unrecognized output"])(
       `rejects unverifiable status after logout exits successfully: %s ${ISSUE}`,
       async (failure) => {
@@ -407,23 +456,37 @@ describe("codexAuth", () => {
         "[AgentMode] Codex browser sign-in ended without a verified account"
       );
     });
-    it(`selects the OpenAI authorization URL and verifies status with the same profile: ${ISSUE}`, async () => {
-      const onUrl = jest.fn();
-      mockSpawn.mockImplementation((_command, args) => {
-        if (args.includes("app-server")) return serve();
-        const proc = child();
-        queueMicrotask(() => {
-          proc.stderr.write(
-            "Starting on http://localhost:1455\nhttps://auth.openai.com/oauth/authorize?client_id=test\n"
-          );
-          proc.emit("close", 0);
+    it.each([
+      ["custom adapter", {}, "/bundle/codex-acp", ["cli", "login"]],
+      ["managed install", MANAGED, RUNTIME, ["login"]],
+    ])(
+      `selects the OpenAI authorization URL from a %s login and verifies status with the same profile: ${ISSUE} ${DIRECT_RUNTIME_ISSUE}`,
+      async (_source, config, command, loginArgs) => {
+        const onUrl = jest.fn();
+        mockSpawn.mockImplementation((_command, args) => {
+          if (args.includes("app-server")) return serve();
+          const proc = child();
+          queueMicrotask(() => {
+            proc.stderr.write(
+              "Starting on http://localhost:1455\nhttps://auth.openai.com/oauth/authorize?client_id=test\n"
+            );
+            proc.emit("close", 0);
+          });
+          return proc;
         });
-        return proc;
-      });
-      await expect(codexAuth.signIn(settings, { onUrl })).resolves.toEqual(SIGNED_IN);
-      expect(onUrl).toHaveBeenCalledTimes(1);
-      expect(onUrl).toHaveBeenCalledWith("https://auth.openai.com/oauth/authorize?client_id=test");
-      expect(mockSpawn).toHaveBeenCalledTimes(2);
-    });
+        await expect(codexAuth.signIn(configured(config), { onUrl })).resolves.toEqual(SIGNED_IN);
+        expect(onUrl).toHaveBeenCalledTimes(1);
+        expect(onUrl).toHaveBeenCalledWith(
+          "https://auth.openai.com/oauth/authorize?client_id=test"
+        );
+        expect(mockSpawn).toHaveBeenCalledTimes(2);
+        expect(mockSpawn).toHaveBeenNthCalledWith(
+          1,
+          command,
+          loginArgs,
+          expect.objectContaining({ env: expect.objectContaining({ CODEX_HOME: "/my profile" }) })
+        );
+      }
+    );
   });
 });

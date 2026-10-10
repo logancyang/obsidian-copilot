@@ -48,7 +48,7 @@ const InteractiveConfigView: React.FC<Partial<CodexConfigViewProps>> = (props) =
         terminalCommand:
           props.activeSource === "custom"
             ? "'/usr/local/bin/codex-acp' cli login"
-            : `'/Users/example/.obsidian-copilot/codex/${CODEX_PINNED_VERSION}/codex-acp' cli login`,
+            : `'/Users/example/.obsidian-copilot/codex/${CODEX_PINNED_VERSION}/codex-runtime/bin/codex' login`,
       }}
     />
   );
