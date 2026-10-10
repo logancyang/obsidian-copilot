@@ -1,5 +1,5 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
-import { describeChatDelete } from "@/agentMode/session/chatDeleteText";
+import { describeChatDelete } from "@/lib/chatDeleteText";
 import { AgentHomePreviewList } from "@/agentMode/ui/AgentHomeSection";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
 import { Button } from "@/components/ui/button";

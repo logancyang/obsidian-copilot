@@ -1,6 +1,7 @@
-import type { BackendDescriptor } from "./types";
-
-type DeleteTextDescriptor = Pick<BackendDescriptor, "displayName" | "agentProductName">;
+interface DeleteTextDescriptor {
+  displayName: string;
+  agentProductName?: string;
+}
 
 function agentName(descriptor: DeleteTextDescriptor): string {
   return descriptor.agentProductName ?? descriptor.displayName;

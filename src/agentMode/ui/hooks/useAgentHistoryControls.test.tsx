@@ -173,7 +173,7 @@ describe("useAgentHistoryControls", () => {
       );
     });
 
-    it("shows the failure, reloads the history, and rejects when Copilot's own delete fails", async () => {
+    it("shows the failure notice, reloads the history, and rejects when Copilot's own delete fails", async () => {
       const manager = makeManager() as AgentSessionManager & {
         getChatHistoryItems: jest.Mock;
         deleteChatHistory: jest.Mock;
@@ -189,7 +189,7 @@ describe("useAgentHistoryControls", () => {
       });
 
       expect(Notice).toHaveBeenCalledTimes(1);
-      expect(Notice).toHaveBeenCalledWith("Copilot could not delete: chat file (locked).");
+      expect(Notice).toHaveBeenCalledWith("Failed to delete chat.");
       expect(manager.getChatHistoryItems).toHaveBeenCalled();
     });
   });

@@ -1,3 +1,4 @@
+import { describeChatDelete } from "@/lib/chatDeleteText";
 import type { Meta, StoryObj } from "@/lib/story";
 import React, { useEffect, useRef } from "react";
 import { ChatHistoryPopover, type ChatHistoryItem } from "./ChatHistoryPopover";
@@ -61,10 +62,8 @@ const BACKEND_HISTORY: ChatHistoryItem[] = [
 ];
 
 const DELETE_SUMMARIES: Record<string, string> = {
-  "claude-chat":
-    "Delete this chat from Copilot? Claude Code may keep its own copy of this conversation on this computer.",
-  "codex-chat":
-    "Delete this chat from Copilot? Codex may keep its own copy of this conversation on this computer.",
+  "claude-chat": describeChatDelete({ displayName: "Claude", agentProductName: "Claude Code" }),
+  "codex-chat": describeChatDelete({ displayName: "Codex" }),
 };
 
 const ConfirmingDeletePopover: React.FC<{ row: number }> = ({ row }) => {

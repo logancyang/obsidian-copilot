@@ -48,7 +48,7 @@ import {
   mergeChatHistoryItems,
   type MarkdownChatEntry,
 } from "./chatHistoryMerge";
-import { formatChatDeleteNotice } from "./chatDeleteText";
+import { formatChatDeleteNotice } from "@/lib/chatDeleteText";
 import { MethodUnsupportedError } from "./errors";
 import { replayPersistedMode } from "./replayPersistedMode";
 import { applyModeSpec } from "./modeApply";
@@ -625,16 +625,6 @@ export class AgentSessionManager {
     if (native && !index) throw new Error("Agent session index is not configured.");
     if (!native && !persistence) throw new Error("Agent chat persistence is not configured.");
 
-    const failures: string[] = [];
-    const attempt = async (copy: string, step: () => Promise<void>): Promise<void> => {
-      try {
-        await step();
-      } catch (e) {
-        logError(`[AgentMode] delete ${copy} failed`, e);
-        failures.push(`${copy} (${e instanceof Error ? e.message : String(e)})`);
-      }
-    };
-
     const ref = native ?? (await this.readSessionRefFromFile(fileId));
 
     const savedPaths = await this.closeOpenChatForDelete(
@@ -643,19 +633,12 @@ export class AgentSessionManager {
 
     const notePaths = new Set(native ? savedPaths : [fileId, ...savedPaths]);
     if (persistence) {
-      for (const path of notePaths) {
-        await attempt("chat file", () => persistence.deleteFile(path));
-      }
+      for (const path of notePaths) await persistence.deleteFile(path);
     }
     if (ref && index) {
-      await attempt("history entry", async () => {
-        this.cancelPendingIndexTouch(ref.backendId, ref.sessionId);
-        await index.deleteSession(ref.backendId, ref.sessionId);
-        await index.flushOrThrow();
-      });
-    }
-    if (failures.length > 0) {
-      throw new Error(`Copilot could not delete: ${failures.join("; ")}.`);
+      this.cancelPendingIndexTouch(ref.backendId, ref.sessionId);
+      await index.deleteSession(ref.backendId, ref.sessionId);
+      await index.flushOrThrow();
     }
     return formatChatDeleteNotice(ref ? this.opts.resolveDescriptor(ref.backendId) : undefined);
   }
@@ -678,9 +661,6 @@ export class AgentSessionManager {
       } catch (e) {
         logWarn("[AgentMode] release before delete failed; closing the chat locally", e);
         await this.closeSession(internalId);
-      }
-      if (this.sessions.has(internalId)) {
-        throw new Error("Copilot could not close the open chat, so nothing was deleted.");
       }
       if (state?.source?.path) savedPaths.push(state.source.path);
     }

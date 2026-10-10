@@ -1,5 +1,5 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
-import { describeChatDelete } from "@/agentMode/session/chatDeleteText";
+import { describeChatDelete } from "@/lib/chatDeleteText";
 import {
   ChatHistoryItem,
   ChatHistoryPopover,

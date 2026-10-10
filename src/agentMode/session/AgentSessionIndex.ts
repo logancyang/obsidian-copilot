@@ -170,7 +170,7 @@ export class AgentSessionIndex {
     if (this.saveTimer !== null) {
       window.clearTimeout(this.saveTimer);
       this.saveTimer = null;
-      this.queueWrite();
+      void this.queueWrite();
     }
     await this.writeChain;
   }
@@ -180,12 +180,7 @@ export class AgentSessionIndex {
       window.clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
-    const snapshot = this.serialize();
-    const write = this.writeChain.then(() => this.storage.write(this.filePath, snapshot));
-    this.writeChain = write.catch((e) => {
-      logWarn(`[AgentMode] failed to write agent session index at ${this.filePath}`, e);
-    });
-    await write;
+    await this.queueWrite();
   }
 
   private ensureLoaded(): Promise<void> {
@@ -220,17 +215,17 @@ export class AgentSessionIndex {
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
     this.saveTimer = window.setTimeout(() => {
       this.saveTimer = null;
-      this.queueWrite();
+      void this.queueWrite();
     }, SAVE_DEBOUNCE_MS);
   }
 
-  private queueWrite(): void {
+  private queueWrite(): Promise<void> {
     const snapshot = this.serialize();
-    this.writeChain = this.writeChain
-      .then(() => this.storage.write(this.filePath, snapshot))
-      .catch((e) => {
-        logWarn(`[AgentMode] failed to write agent session index at ${this.filePath}`, e);
-      });
+    const write = this.writeChain.then(() => this.storage.write(this.filePath, snapshot));
+    this.writeChain = write.catch((e) => {
+      logWarn(`[AgentMode] failed to write agent session index at ${this.filePath}`, e);
+    });
+    return write;
   }
 
   private serialize(): string {

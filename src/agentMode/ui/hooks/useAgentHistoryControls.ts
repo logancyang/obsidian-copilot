@@ -94,16 +94,18 @@ export function useAgentHistoryControls(
   const deleteChat = useCallback(
     async (id: string) => {
       try {
-        new Notice(await manager.deleteChatHistory(id));
-      } catch (error) {
-        logError("[AgentMode] delete chat failed", error);
-        new Notice(error instanceof Error ? error.message : "Failed to delete chat.");
+        await runWithNotice(
+          "delete chat",
+          async () => {
+            new Notice(await manager.deleteChatHistory(id));
+          },
+          true
+        );
+      } finally {
         await loadChatHistory();
-        throw error;
       }
-      await loadChatHistory();
     },
-    [manager, loadChatHistory]
+    [manager, loadChatHistory, runWithNotice]
   );
 
   const openSourceFile = useCallback(
