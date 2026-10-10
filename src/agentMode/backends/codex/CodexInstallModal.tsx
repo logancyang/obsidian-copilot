@@ -136,12 +136,7 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
         onSignIn: auth.signIn,
         onCancel: auth.cancelSignIn,
         onSignOut: auth.signOut,
-        terminalCommand: codexSignInCommand(
-          binaryPath,
-          codex?.binarySource,
-          codex?.envOverrides,
-          process.platform
-        ),
+        terminalCommand: codexSignInCommand(binaryPath, codex?.envOverrides, process.platform),
       }}
       source={runtime.kind === "installing" ? "managed" : source}
       onSourceChange={setSource}

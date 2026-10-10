@@ -1,5 +1,5 @@
 import { terminalSignInCommand } from "@/agentMode/backends/shared/terminalSignInCommand";
-import { requireNodeModule } from "@/utils/desktopRuntime";
+import { resolveCodexCommand, type CodexAcpPackageFs } from "./codexVersion";
 
 export const CODEX_BINARY_NAME = "codex-acp";
 export const CODEX_PINNED_VERSION = "2.0.1";
@@ -10,39 +10,31 @@ export function codexBinaryPathPlaceholder(platform: NodeJS.Platform): string {
     : "/absolute/path/to/codex-acp";
 }
 
-export function managedCodexRuntimePath(adapterPath: string, platform: NodeJS.Platform): string {
-  const node = requireNodeModule<typeof import("node:path")>("path");
-  const path = platform === "win32" ? node.win32 : node.posix;
-  return path.join(
-    path.dirname(adapterPath),
-    "codex-runtime",
-    "bin",
-    platform === "win32" ? "codex.exe" : "codex"
-  );
-}
-
 export function codexSignInCommand(
   binaryPath: string | undefined,
-  binarySource: "managed" | "custom" | undefined,
   envOverrides: Record<string, string> | undefined,
-  platform: NodeJS.Platform
+  platform: NodeJS.Platform,
+  packageFs?: CodexAcpPackageFs
 ): string | null {
-  // `codex-acp cli` runs the bundled Codex through cmd.exe on Windows, which splits paths with spaces.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/686
-  if (binarySource === "managed" && binaryPath)
-    return terminalSignInCommand({
-      binaryPath: managedCodexRuntimePath(binaryPath, platform),
-      args: ["login"],
-      profileVariables: ["CODEX_HOME"],
-      envOverrides,
+  let codex: string;
+  try {
+    codex = resolveCodexCommand(
+      binaryPath ?? "",
+      { ...process.env, ...envOverrides },
       platform,
-    });
+      packageFs
+    );
+  } catch {
+    // A missing or unsupported adapter cannot sign in, so there is no command to offer.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/686
+    return null;
+  }
   return terminalSignInCommand({
-    binaryPath,
-    args: ["cli", "login"],
-    profileVariables: ["CODEX_HOME", "CODEX_PATH"],
+    binaryPath: codex,
+    args: ["login"],
+    profileVariables: ["CODEX_HOME"],
     envOverrides,
     platform,
-    runtime: platform === "win32" && binaryPath?.endsWith(".js") ? "node" : undefined,
+    runtime: platform === "win32" && codex.endsWith(".js") ? "node" : undefined,
   });
 }

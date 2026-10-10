@@ -4,6 +4,8 @@ import * as path from "node:path";
 
 import {
   buildCodexAcpInvocation,
+  bundledCodexRuntimePath,
+  resolveCodexCommand,
   inspectCodexAcpPackage,
   CODEX_MIN_VERSION,
   isSupportedCodexAcpPath,
@@ -13,12 +15,16 @@ import {
 } from "./codexVersion";
 
 const UNIX_ENTRY = "/npm/lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js";
+const NPM_CODEX_LAUNCHER =
+  "/npm/lib/node_modules/@agentclientprotocol/codex-acp/node_modules/@openai/codex/bin/codex.js";
+const DIRECT_RUNTIME_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/686";
 const tempDirs: string[] = [];
 
 function packageFs(entryPath: string, packageMetadata: unknown): CodexAcpPackageFs {
   return {
     realpathSync: jest.fn().mockReturnValue(entryPath),
     readFileSync: jest.fn().mockReturnValue(JSON.stringify(packageMetadata)),
+    resolveFrom: jest.fn().mockReturnValue(NPM_CODEX_LAUNCHER),
   };
 }
 
@@ -50,7 +56,7 @@ describe("codexVersion", () => {
       (version) => {
         expect(
           inspectCodexAcpPackage(UNIX_ENTRY, "darwin", packageFs(UNIX_ENTRY, metadata(version)))
-        ).toEqual({ entryPath: UNIX_ENTRY, version, runtimeVersion: version });
+        ).toEqual({ entryPath: UNIX_ENTRY, version, runtimeVersion: version, kind: "npm" });
       }
     );
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 retains the actual runtime version separately from native packaging revisions", () => {
@@ -65,7 +71,12 @@ describe("codexVersion", () => {
             target: `darwin-${process.arch}`,
           })
         )
-      ).toEqual({ entryPath: entry, version: "0.0.44-r1", runtimeVersion: "0.0.44" });
+      ).toEqual({
+        entryPath: entry,
+        version: "0.0.44-r1",
+        runtimeVersion: "0.0.44",
+        kind: "bundle",
+      });
     });
   });
   describe("resolveSupportedCodexAcpPackage()", () => {
@@ -74,7 +85,7 @@ describe("codexVersion", () => {
 
       expect(
         resolveSupportedCodexAcpPackage("/usr/local/bin/codex-acp", "darwin", packageFileSystem)
-      ).toEqual({ entryPath: UNIX_ENTRY, version: "2.0.0" });
+      ).toEqual({ entryPath: UNIX_ENTRY, version: "2.0.0", kind: "npm" });
     });
     it.each(["darwin", "linux", "win32"] as const)(
       "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 resolves a pinned native bundle on %s",
@@ -87,6 +98,7 @@ describe("codexVersion", () => {
         expect(resolveSupportedCodexAcpPackage(entry, platform, nativeFs)).toEqual({
           entryPath: entry,
           version: "2.0.0",
+          kind: "bundle",
         });
       }
     );
@@ -109,7 +121,11 @@ describe("codexVersion", () => {
               target: `darwin-${process.arch}`,
             })
           )
-        ).toEqual({ entryPath: entry, version: `${acpVersion}-r${packagingRevision}` });
+        ).toEqual({
+          entryPath: entry,
+          version: `${acpVersion}-r${packagingRevision}`,
+          kind: "bundle",
+        });
       }
     );
     it.each([
@@ -238,6 +254,66 @@ describe("codexVersion", () => {
     });
   });
 
+  describe("bundledCodexRuntimePath()", () => {
+    it(`locates the native Codex shipped beside a bundled adapter: ${DIRECT_RUNTIME_ISSUE}`, () => {
+      expect(
+        bundledCodexRuntimePath("/Users/Jane Doe/.obsidian-copilot/codex/2.0.1/codex-acp", "darwin")
+      ).toBe("/Users/Jane Doe/.obsidian-copilot/codex/2.0.1/codex-runtime/bin/codex");
+      expect(
+        bundledCodexRuntimePath(
+          "C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.0.1\\codex-acp.exe",
+          "win32"
+        )
+      ).toBe("C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.0.1\\codex-runtime\\bin\\codex.exe");
+    });
+  });
+  describe("resolveCodexCommand()", () => {
+    it.each([
+      [
+        "darwin",
+        "/Users/Jane Doe/codex/codex-acp",
+        "/Users/Jane Doe/codex/codex-runtime/bin/codex",
+      ],
+      [
+        "win32",
+        "C:\\Users\\Jane Doe\\codex\\codex-acp.exe",
+        "C:\\Users\\Jane Doe\\codex\\codex-runtime\\bin\\codex.exe",
+      ],
+    ] as const)(
+      `runs a %s bundle's own Codex even when CODEX_PATH is set: ${DIRECT_RUNTIME_ISSUE}`,
+      (platform, entry, runtime) => {
+        const bundleFs = packageFs(entry, {
+          acpVersion: CODEX_MIN_VERSION,
+          target: `${platform}-${process.arch}`,
+        });
+        expect(
+          resolveCodexCommand(entry, { CODEX_PATH: "/global/codex" }, platform, bundleFs)
+        ).toBe(runtime);
+      }
+    );
+    it(`runs the Codex an npm adapter is pointed at through CODEX_PATH: ${DIRECT_RUNTIME_ISSUE}`, () => {
+      expect(
+        resolveCodexCommand(
+          "/usr/local/bin/codex-acp",
+          { CODEX_PATH: "/Users/Jane Doe/bin/codex" },
+          "darwin",
+          packageFs(UNIX_ENTRY, metadata(CODEX_MIN_VERSION))
+        )
+      ).toBe("/Users/Jane Doe/bin/codex");
+    });
+    it(`runs an npm adapter's own @openai/codex launcher when CODEX_PATH is unset: ${DIRECT_RUNTIME_ISSUE}`, () => {
+      const npmFs = packageFs(UNIX_ENTRY, metadata(CODEX_MIN_VERSION));
+      expect(resolveCodexCommand("/usr/local/bin/codex-acp", {}, "darwin", npmFs)).toBe(
+        NPM_CODEX_LAUNCHER
+      );
+      expect(npmFs.resolveFrom).toHaveBeenCalledWith(UNIX_ENTRY, "@openai/codex/bin/codex.js");
+    });
+    it("rejects an adapter below the supported minimum", () => {
+      expect(() =>
+        resolveCodexCommand(UNIX_ENTRY, {}, "darwin", packageFs(UNIX_ENTRY, metadata("1.13.0")))
+      ).toThrow("not supported");
+    });
+  });
   describe("buildCodexAcpInvocation()", () => {
     it.each(["darwin", "linux", "win32"] as const)(
       "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 launches native bundles directly on %s",

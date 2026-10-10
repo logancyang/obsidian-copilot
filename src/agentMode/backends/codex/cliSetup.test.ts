@@ -1,77 +1,111 @@
-import {
-  codexBinaryPathPlaceholder,
-  codexSignInCommand,
-  managedCodexRuntimePath,
-} from "./cliSetup";
+import { codexBinaryPathPlaceholder, codexSignInCommand } from "./cliSetup";
+import type { CodexAcpPackageFs } from "./codexVersion";
 
 const DIRECT_RUNTIME_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/686";
+const NPM_ENTRY = "/npm/lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js";
+const NPM_LAUNCHER =
+  "/npm/lib/node_modules/@agentclientprotocol/codex-acp/node_modules/@openai/codex/bin/codex.js";
+
+function packageFs(
+  entryPath: string,
+  metadata: object,
+  launcher = NPM_LAUNCHER
+): CodexAcpPackageFs {
+  return {
+    realpathSync: () => entryPath,
+    readFileSync: () => JSON.stringify(metadata),
+    resolveFrom: () => launcher,
+  };
+}
+
+function npmFs(entryPath: string, launcher?: string): CodexAcpPackageFs {
+  return packageFs(
+    entryPath,
+    {
+      name: "@agentclientprotocol/codex-acp",
+      version: "2.0.1",
+      bin: { "codex-acp": "dist/index.js" },
+    },
+    launcher
+  );
+}
+
+function bundleFs(entryPath: string, platform: NodeJS.Platform): CodexAcpPackageFs {
+  return packageFs(entryPath, { acpVersion: "2.0.1", target: `${platform}-${process.arch}` });
+}
 
 describe("cliSetup", () => {
-  describe("managedCodexRuntimePath()", () => {
-    it(`locates the bundled native Codex beside a managed adapter: ${DIRECT_RUNTIME_ISSUE}`, () => {
-      expect(
-        managedCodexRuntimePath("/Users/Jane Doe/.obsidian-copilot/codex/2.0.1/codex-acp", "darwin")
-      ).toBe("/Users/Jane Doe/.obsidian-copilot/codex/2.0.1/codex-runtime/bin/codex");
-      expect(
-        managedCodexRuntimePath(
-          "C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.0.1\\codex-acp.exe",
-          "win32"
-        )
-      ).toBe("C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.0.1\\codex-runtime\\bin\\codex.exe");
-    });
-  });
   describe("codexSignInCommand()", () => {
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 targets the configured native adapter and profile without exposing API keys", () => {
+    it(`signs an npm adapter in through its own Codex launcher with the profile and without API keys: ${DIRECT_RUNTIME_ISSUE}`, () => {
       expect(
         codexSignInCommand(
-          "/custom codex-acp/codex-acp",
-          "custom",
-          { CODEX_HOME: "/profile", CODEX_PATH: "/custom codex", OPENAI_API_KEY: "secret" },
-          "darwin"
+          "/usr/local/bin/codex-acp",
+          { CODEX_HOME: "/profile", OPENAI_API_KEY: "secret" },
+          "darwin",
+          npmFs(NPM_ENTRY)
         )
-      ).toBe(
-        "CODEX_HOME=/profile CODEX_PATH='/custom codex' '/custom codex-acp/codex-acp' cli login"
-      );
+      ).toBe(`CODEX_HOME=/profile '${NPM_LAUNCHER}' login`);
     });
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 runs Windows npm adapters through Node and native adapters directly", () => {
-      const profile = { CODEX_HOME: "/profile", CODEX_PATH: "/custom codex" };
-      expect(codexSignInCommand("C:\\npm\\index.js", "custom", profile, "win32")).toBe(
-        "$env:CODEX_HOME = '/profile'; $env:CODEX_PATH = '/custom codex'; node 'C:\\npm\\index.js' cli login"
-      );
-      expect(codexSignInCommand("C:\\native\\codex-acp.exe", undefined, profile, "win32")).toBe(
-        "$env:CODEX_HOME = '/profile'; $env:CODEX_PATH = '/custom codex'; & 'C:\\native\\codex-acp.exe' cli login"
-      );
+    it(`signs an npm adapter in through the Codex its CODEX_PATH override names: ${DIRECT_RUNTIME_ISSUE}`, () => {
+      expect(
+        codexSignInCommand(
+          "/usr/local/bin/codex-acp",
+          { CODEX_HOME: "/profile", CODEX_PATH: "/Users/Jane Doe/bin/codex" },
+          "darwin",
+          npmFs(NPM_ENTRY)
+        )
+      ).toBe("CODEX_HOME=/profile '/Users/Jane Doe/bin/codex' login");
     });
-    it(`signs a managed install in through its bundled Codex with a quoted path and profile: ${DIRECT_RUNTIME_ISSUE}`, () => {
-      const profile = {
-        CODEX_HOME: "/profile",
-        CODEX_PATH: "/ignored codex",
-        OPENAI_API_KEY: "secret",
+    it(`runs a Windows npm adapter's Codex launcher through Node: ${DIRECT_RUNTIME_ISSUE}`, () => {
+      const entry = "C:\\npm\\node_modules\\@agentclientprotocol\\codex-acp\\dist\\index.js";
+      const launcher =
+        "C:\\npm\\node_modules\\@agentclientprotocol\\codex-acp\\node_modules\\@openai\\codex\\bin\\codex.js";
+      expect(
+        codexSignInCommand(entry, { CODEX_HOME: "/profile" }, "win32", npmFs(entry, launcher))
+      ).toBe(`$env:CODEX_HOME = '/profile'; node '${launcher}' login`);
+    });
+    it.each([
+      [
+        "darwin",
+        "/Users/Jane Doe/.obsidian-copilot/codex/2.0.1/codex-acp",
+        "CODEX_HOME=/profile '/Users/Jane Doe/.obsidian-copilot/codex/2.0.1/codex-runtime/bin/codex' login",
+      ],
+      [
+        "win32",
+        "C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.0.1\\codex-acp.exe",
+        "$env:CODEX_HOME = '/profile'; & 'C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.0.1\\codex-runtime\\bin\\codex.exe' login",
+      ],
+    ] as const)(
+      `signs a %s bundle in through its own Codex with a quoted path: ${DIRECT_RUNTIME_ISSUE}`,
+      (platform, entry, command) => {
+        expect(
+          codexSignInCommand(
+            entry,
+            { CODEX_HOME: "/profile", CODEX_PATH: "/global/codex" },
+            platform,
+            bundleFs(entry, platform)
+          )
+        ).toBe(command);
+      }
+    );
+    it(`omits terminal sign-in when no supported adapter is selected: ${DIRECT_RUNTIME_ISSUE}`, () => {
+      const missing: CodexAcpPackageFs = {
+        realpathSync: () => {
+          throw Object.assign(new Error("missing"), { code: "ENOENT" });
+        },
+        readFileSync: () => "",
+        resolveFrom: () => "",
       };
+      expect(codexSignInCommand(undefined, undefined, "darwin", missing)).toBeNull();
+      expect(codexSignInCommand("/gone/codex-acp", undefined, "darwin", missing)).toBeNull();
       expect(
         codexSignInCommand(
-          "/Users/Jane Doe/.obsidian-copilot/codex/2.0.1/codex-acp",
-          "managed",
-          profile,
-          "darwin"
+          "/old/codex-acp",
+          undefined,
+          "darwin",
+          bundleFs("/old/codex-acp", "linux")
         )
-      ).toBe(
-        "CODEX_HOME=/profile '/Users/Jane Doe/.obsidian-copilot/codex/2.0.1/codex-runtime/bin/codex' login"
-      );
-      expect(
-        codexSignInCommand(
-          "C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.0.1\\codex-acp.exe",
-          "managed",
-          profile,
-          "win32"
-        )
-      ).toBe(
-        "$env:CODEX_HOME = '/profile'; & 'C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.0.1\\codex-runtime\\bin\\codex.exe' login"
-      );
-    });
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 omits terminal sign-in until a binary is selected", () => {
-      expect(codexSignInCommand(undefined, undefined, undefined, "darwin")).toBeNull();
-      expect(codexSignInCommand("", "managed", undefined, "darwin")).toBeNull();
+      ).toBeNull();
     });
   });
   describe("codexBinaryPathPlaceholder()", () => {
