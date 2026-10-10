@@ -31,6 +31,7 @@
     "format:check": "prettier --check 'src/**/*.{js,ts,tsx,md}'",
     "version": "node version-bump.mjs",
     "test": "jest",
+    "test:ready-gate": "node --test scripts/ready-gate-check.test.mjs",
     "test:mobile-load": "npm run build && node scripts/mobile-load-smoke.cjs",
     "prepare": "husky",
     "prompt:debug": "node scripts/printPromptDebug.js",
