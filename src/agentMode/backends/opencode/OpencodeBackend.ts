@@ -54,6 +54,10 @@ export interface OpencodeModelDeps {
   getSelfHostWebSearchChannel?: () => Promise<Readonly<SelfHostWebSearchAgentChannel>>;
 }
 
+interface CopilotPluginToolMetadata {
+  copilot?: { originalFiles?: Record<string, string | null> };
+}
+
 export class OpencodeBackend implements AcpBackend {
   readonly id = "opencode" as const;
   readonly displayName = "opencode";
@@ -78,6 +82,12 @@ export class OpencodeBackend implements AcpBackend {
 
   async readContextWindow(wireModelId: string | null | undefined): Promise<number | null> {
     return this.#copilotPlus.readContextWindow(copilotPlusModelId(wireModelId));
+  }
+
+  readOriginalFiles(rawOutput: unknown): Readonly<Record<string, string | null>> | undefined {
+    const metadata = (rawOutput as { metadata?: CopilotPluginToolMetadata } | null | undefined)
+      ?.metadata;
+    return metadata?.copilot?.originalFiles;
   }
 
   async buildSpawnDescriptor(ctx: {

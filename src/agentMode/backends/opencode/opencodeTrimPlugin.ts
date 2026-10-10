@@ -7,7 +7,12 @@ import { opencodeManagedDataDir } from "./OpencodeBinaryManager";
 // The plugin also drops the built-in `report` skill, because a skill deny rule
 // would hide a user's own skill named `report` too.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/665
+// It also reads each file an edit, write or patch is about to change and returns that text with
+// the tool's result, because OpenCode names the file only milliseconds before writing it.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/687
 export const OPENCODE_TRIM_PLUGIN_SOURCE = `"use strict";
+const fs = require("fs");
+const path = require("path");
 const TEMP_DIR_LINE = /^[ \\t]*Prefer .+ over generic system temporary directories[^\\n]*\\n?/gm;
 const WORKTREE_HINT = /When you create a worktree outside the current working directory[^\\n]*/g;
 
@@ -34,6 +39,54 @@ function trimRequest(event) {
   } catch {}
 }
 
+const PATCH_FILE_HEADER = /^\\*\\*\\* (?:Add File|Delete File|Update File|Move to): (.+)$/;
+
+function writeTargets(tool, input) {
+  if (!input || typeof input !== "object") return [];
+  if (tool === "edit" || tool === "write") {
+    const file = typeof input.path === "string" ? input.path : input.filePath;
+    return typeof file === "string" && file ? [file] : [];
+  }
+  if (tool !== "patch" || typeof input.patchText !== "string") return [];
+  return input.patchText.split("\\n").flatMap((line) => {
+    const header = PATCH_FILE_HEADER.exec(line.trim());
+    return header && header[1].trim() ? [header[1].trim()] : [];
+  });
+}
+
+async function readOriginal(file) {
+  try {
+    return await fs.promises.readFile(file, "utf8");
+  } catch (error) {
+    return error && error.code === "ENOENT" ? null : undefined;
+  }
+}
+
+function captureOriginals(ctx) {
+  const pending = new Map();
+  return {
+    before: async (event) => {
+      try {
+        const files = {};
+        for (const file of writeTargets(event.tool, event.input)) {
+          const absolute = path.resolve(ctx.location.directory, file);
+          const text = await readOriginal(absolute);
+          if (text !== undefined) files[absolute] = text;
+        }
+        if (Object.keys(files).length > 0) pending.set(event.id, files);
+      } catch {}
+    },
+    after: (event) => {
+      const files = pending.get(event.id);
+      pending.delete(event.id);
+      if (!files || event.status !== "completed") return;
+      try {
+        event.result.metadata = { ...event.result.metadata, copilot: { originalFiles: files } };
+      } catch {}
+    },
+  };
+}
+
 module.exports = {
   id: "copilot.trim",
   setup: async (ctx) => {
@@ -41,6 +94,9 @@ module.exports = {
       await ctx.session.hook(hook, trimRequest);
     }
     await ctx.skill.transform((skills) => skills.remove("report"));
+    const originals = captureOriginals(ctx);
+    await ctx.tool.hook("execute.before", originals.before);
+    await ctx.tool.hook("execute.after", originals.after);
   },
 };
 `;

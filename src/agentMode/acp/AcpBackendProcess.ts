@@ -108,6 +108,8 @@ export class AcpBackendProcess implements BackendProcess {
   private capabilities = new Map<AcpCapability, boolean>();
   private readonly sessionWireState = new Map<SessionId, SessionWireState>();
   private readonly todoToolCallIdsBySession = new Map<SessionId, Set<string>>();
+  private readonly readOriginalFiles = (rawOutput: unknown) =>
+    this.backend.readOriginalFiles?.(rawOutput);
   private readonly sawLiveUsage = new Set<SessionId>();
   private lastPlanUsage: PlanUsage | null = null;
   private planUsageRead: Promise<void> | null = null;
@@ -274,7 +276,11 @@ export class AcpBackendProcess implements BackendProcess {
             });
             continue;
           }
-          for (const event of acpNotificationToEvents(wire, this.todoToolCallIdsFor(sessionId)))
+          for (const event of acpNotificationToEvents(
+            wire,
+            this.todoToolCallIdsFor(sessionId),
+            this.readOriginalFiles
+          ))
             handler(event);
         } catch (e) {
           logWarn(`[AgentMode] replay of buffered session/update threw for ${sessionId}`, e);
@@ -726,7 +732,11 @@ export class AcpBackendProcess implements BackendProcess {
       return;
     }
 
-    for (const event of acpNotificationToEvents(update, this.todoToolCallIdsFor(sessionId)))
+    for (const event of acpNotificationToEvents(
+      update,
+      this.todoToolCallIdsFor(sessionId),
+      this.readOriginalFiles
+    ))
       handler(this.withBackendContextWindow(event));
   }
 

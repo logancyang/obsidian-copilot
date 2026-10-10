@@ -193,6 +193,26 @@ const testAcpNotificationToEvents = () => {
     expect(cleared[1].update).toEqual({ sessionUpdate: "plan", entries: [] });
   });
 
+  it("attaches the originals the backend reads from a tool result's raw output https://github.com/Brevilabs/obsidian-copilot-private/issues/687", () => {
+    const rawOutput = { metadata: { originals: { "/vault/a.md": "before\n" } } };
+    const readOriginalFiles = jest.fn(
+      (raw: unknown) => (raw as typeof rawOutput).metadata.originals
+    );
+    const update = notification({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "call-1",
+      status: "completed",
+      rawOutput,
+    });
+
+    const [withReader] = acpNotificationToEvents(update, undefined, readOriginalFiles);
+    const [withoutReader] = acpNotificationToEvents(update);
+
+    expect(readOriginalFiles).toHaveBeenCalledWith(rawOutput);
+    expect(withReader.update).toMatchObject({ originalFiles: { "/vault/a.md": "before\n" } });
+    expect(withoutReader.update).not.toHaveProperty("originalFiles");
+  });
+
   it("passes a real plan notification through unchanged as a single event", () => {
     const events = acpNotificationToEvents(
       notification({

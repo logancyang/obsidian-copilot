@@ -2366,13 +2366,17 @@ describe("AgentSession", () => {
           },
         });
 
-        const toolResult = (toolCallId: string, originalFile: string | null) => ({
+        const toolResult = (
+          toolCallId: string,
+          originalFile: string | null,
+          filePath = "/vault/notes/a.md"
+        ) => ({
           sessionId: "acp-1",
           update: {
             sessionUpdate: "tool_call_update" as const,
             toolCallId,
             status: "completed" as const,
-            originalFile,
+            originalFiles: { [filePath]: originalFile },
           },
         });
 
@@ -2764,7 +2768,7 @@ describe("AgentSession", () => {
             const mock = makeMockBackend();
             mock.prompt.mockImplementation(async () => {
               mock.emit(editCall("t1", "/vault/notes/new.md"));
-              mock.emit(toolResult("t1", null));
+              mock.emit(toolResult("t1", null, "/vault/notes/new.md"));
               return { stopReason: "end_turn" as const };
             });
             const session = makeSession(mock, vault.app);
@@ -2810,6 +2814,53 @@ describe("AgentSession", () => {
 
             expect(fileChangesOf(session)).toMatchObject([
               { before: "the true original\n", after: "already written by the agent\n" },
+            ]);
+          });
+          it("matches each original to its own file when one call changes several https://github.com/Brevilabs/obsidian-copilot-private/issues/687", async () => {
+            const vault = makeVault({
+              "notes/a.md": "a after\n",
+              "notes/moved.md": "moved\n",
+            });
+            const mock = makeMockBackend();
+            mock.prompt.mockImplementation(async () => {
+              mock.emit({
+                sessionId: "acp-1",
+                update: {
+                  sessionUpdate: "tool_call" as const,
+                  toolCallId: "t1",
+                  title: "patch",
+                  kind: "edit" as const,
+                  status: "in_progress" as const,
+                  locations: [
+                    { path: "/vault/notes/a.md" },
+                    { path: "/vault/notes/old.md" },
+                    { path: "/vault/notes/moved.md" },
+                  ],
+                },
+              });
+              mock.emit({
+                sessionId: "acp-1",
+                update: {
+                  sessionUpdate: "tool_call_update" as const,
+                  toolCallId: "t1",
+                  status: "completed" as const,
+                  originalFiles: {
+                    "/vault/notes/a.md": "a before\n",
+                    "/vault/notes/old.md": "moved\n",
+                    "/vault/notes/moved.md": null,
+                  },
+                },
+              });
+              return { stopReason: "end_turn" as const };
+            });
+            const session = makeSession(mock, vault.app);
+
+            await session.sendPrompt("patch and move").turn;
+
+            expect(fileChangesOf(session)).toEqual([
+              expect.objectContaining({ path: "notes/a.md", before: "a before\n" }),
+              expect.objectContaining({ path: "notes/old.md", status: "deleted" }),
+              expect.objectContaining({ path: "notes/moved.md", status: "created" }),
             ]);
           });
         });

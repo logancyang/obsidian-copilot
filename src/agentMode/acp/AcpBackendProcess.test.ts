@@ -440,6 +440,51 @@ describe("AcpBackendProcess", () => {
         expect(handler).toHaveBeenCalledTimes(1);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/687 attaches the backend's originals to tool results, whether buffered before the handler or delivered live", async () => {
+        mockNewSession.mockResolvedValue({ sessionId: "s-edit" });
+        const readOriginalFiles = jest.fn((rawOutput: unknown) =>
+          rawOutput ? { "/vault/a.md": "before\n" } : undefined
+        );
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ readOriginalFiles }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+        await backend.newSession({ cwd: "/vault" });
+        const client = getVaultClient(backend);
+        const toolResult = (toolCallId: string) =>
+          ({
+            sessionId: "s-edit",
+            update: {
+              sessionUpdate: "tool_call_update",
+              toolCallId,
+              status: "completed",
+              rawOutput: { metadata: {} },
+            },
+          }) as unknown as Parameters<typeof client.sessionUpdate>[0];
+
+        await client.sessionUpdate(toolResult("buffered"));
+        const handler = jest.fn();
+        backend.registerSessionHandler("s-edit", handler);
+        await client.sessionUpdate(toolResult("live"));
+
+        const toolUpdates = handler.mock.calls
+          .map(([event]) => event.update)
+          .filter((update) => update.sessionUpdate === "tool_call_update");
+        expect(toolUpdates).toEqual([
+          expect.objectContaining({
+            toolCallId: "buffered",
+            originalFiles: { "/vault/a.md": "before\n" },
+          }),
+          expect.objectContaining({
+            toolCallId: "live",
+            originalFiles: { "/vault/a.md": "before\n" },
+          }),
+        ]);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 replays a catalog update that arrived before the handler as the session's refreshed state", async () => {
         mockNewSession.mockResolvedValue({
           sessionId: "s-late",

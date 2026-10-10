@@ -54,6 +54,7 @@ import {
   diffTargetPaths,
   editTargetPaths,
   isCapturableVaultPath,
+  toVaultTargetPath,
   type EditTargetSource,
 } from "@/agentMode/session/editTargets";
 import {
@@ -1447,7 +1448,7 @@ export class AgentSession {
               input: merged.input,
               diffPaths: diffTargetPaths(merged.output),
             },
-            update.originalFile
+            update.originalFiles
           );
         }
         if (merged.kind === "tool_call") {
@@ -1603,14 +1604,21 @@ export class AgentSession {
   private observeToolCall(
     kind: AgentToolKind | undefined,
     target: EditTargetSource,
-    originalFile?: string | null
+    originalFiles?: Readonly<Record<string, string | null>>
   ): void {
     const changes = kind === "edit" || kind === "delete";
     if (!changes && kind !== "read") return;
     const app = this.getApp?.();
     const adapter = app?.vault?.adapter;
     if (!app || !adapter) return;
-    for (const path of editTargetPaths(target, getVaultBase(app))) {
+    const vaultBase = getVaultBase(app);
+    const originals = new Map(
+      Object.entries(originalFiles ?? {}).map(([path, text]) => [
+        toVaultTargetPath(path, vaultBase),
+        text,
+      ])
+    );
+    for (const path of editTargetPaths(target, vaultBase)) {
       if (!isCapturableVaultPath(path)) continue;
       let capture = this.turnFiles.get(path);
       if (!capture) {
@@ -1623,7 +1631,7 @@ export class AgentSession {
       capture.edited = true;
       // Later results report text this turn already changed; the first is the turn's starting file.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
-      if (capture.writeTimeBefore === undefined) capture.writeTimeBefore = originalFile;
+      if (capture.writeTimeBefore === undefined) capture.writeTimeBefore = originals.get(path);
     }
   }
 

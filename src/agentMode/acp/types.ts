@@ -22,4 +22,5 @@ export interface AcpBackend {
   readTurnDiff?(
     promptResultMeta: Readonly<Record<string, unknown>> | null | undefined
   ): TurnDiff | null;
+  readOriginalFiles?(rawOutput: unknown): Readonly<Record<string, string | null>> | undefined;
 }
