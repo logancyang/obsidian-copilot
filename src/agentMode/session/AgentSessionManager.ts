@@ -627,9 +627,7 @@ export class AgentSessionManager {
 
     const ref = native ?? (await this.readSessionRefFromFile(fileId));
 
-    const savedPaths = await this.closeOpenChatForDelete(
-      ref ? [fileId, buildNativeChatId(ref.backendId, ref.sessionId)] : [fileId]
-    );
+    const savedPaths = await this.closeOpenChatForDelete(fileId);
 
     const notePaths = new Set(native ? savedPaths : [fileId, ...savedPaths]);
     if (persistence) {
@@ -645,14 +643,10 @@ export class AgentSessionManager {
   // An open chat must be gone before its files are, or autosave writes the note again. Closing can
   // itself save a first note, so this returns the notes the closed chats saved.
   // https://github.com/logancyang/obsidian-copilot/issues/2888
-  private async closeOpenChatForDelete(historyIds: string[]): Promise<string[]> {
+  private async closeOpenChatForDelete(historyId: string): Promise<string[]> {
     const savedPaths: string[] = [];
     for (const [internalId, session] of Array.from(this.sessions)) {
-      if (
-        !this.recentChatIdsForSession(internalId, session).some((id) => historyIds.includes(id))
-      ) {
-        continue;
-      }
+      if (!this.recentChatIdsForSession(internalId, session).includes(historyId)) continue;
       const state = this.sessionState.get(internalId);
       await this.closeSession(internalId);
       if (state?.source?.path) savedPaths.push(state.source.path);

@@ -3761,21 +3761,46 @@ describe("AgentSessionManager", () => {
         });
 
         it(`${issue} deletes the note an autosave that is already writing creates after delete starts`, async () => {
-          const { setTimeout: realSetTimeout } =
+          const { setImmediate: nextLoopTurn } =
             jest.requireActual<typeof import("timers")>("timers");
           jest.useFakeTimers();
           getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
           const { manager, persistence, session, chatId } = await openChat();
+          let finishSave!: (saved: { path: string }) => void;
           persistence.saveSession.mockImplementationOnce(
-            () =>
-              new Promise((resolve) => realSetTimeout(() => resolve({ path: "chats/new.md" }), 50))
+            () => new Promise((resolve) => (finishSave = resolve))
           );
           getSessionTestHandle(session).setMessages([{ message: "First turn" }], true);
           await jest.advanceTimersByTimeAsync(2000);
 
-          await manager.deleteChatHistory(chatId);
+          const deleting = manager.deleteChatHistory(chatId);
+          nextLoopTurn(() => finishSave({ path: "chats/new.md" }));
+          await deleting;
 
           expect(persistence.deleteFile).toHaveBeenCalledWith("chats/new.md");
+        });
+
+        it(`${issue} leaves an open chat alone when another note shares its session`, async () => {
+          const sharedSessionId = `backend-${nextBackendSessionId}`;
+          const { manager, persistence } = buildHistoryHarness({
+            files: {
+              "chats/duplicate.md": {
+                epoch: 1_000,
+                backendId: "opencode",
+                sessionId: sharedSessionId,
+              },
+            },
+          });
+          const session = await manager.createSession("opencode");
+          expect(session.getBackendSessionId()).toBe(sharedSessionId);
+          getSessionTestHandle(session).setMessages([{ message: "First turn" }], true);
+          await manager.saveActiveSession();
+
+          await manager.deleteChatHistory("chats/duplicate.md");
+
+          expect(manager.getSessions()).toEqual([session]);
+          expect(persistence.deleteFile).toHaveBeenCalledTimes(1);
+          expect(persistence.deleteFile).toHaveBeenCalledWith("chats/duplicate.md");
         });
 
         it(`${issue} deletes the first note that closing a native chat with a pending autosave writes`, async () => {
