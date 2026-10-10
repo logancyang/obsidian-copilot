@@ -426,6 +426,11 @@ describe("configuredModelGrouping", () => {
             provider: ocAgent,
             enabled: false,
           },
+          {
+            configuredModel: model("m-oc3", "oc-agent", "lmstudio/qwen3"),
+            provider: ocAgent,
+            enabled: false,
+          },
         ],
       };
       const groups = buildModelEnableGroups(partition, true, "", false);
@@ -433,6 +438,7 @@ describe("configuredModelGrouping", () => {
         ["Anthropic", { kind: "cloud", label: "Anthropic" }],
         ["opencode", { kind: "cloud", label: "OpenCode Zen" }],
         ["openrouter", { kind: "cloud", label: "openrouter" }],
+        ["lmstudio", { kind: "local", label: "The lmstudio server set in opencode" }],
       ]);
     });
 

@@ -1,4 +1,5 @@
 import type { ModelEnableGroup, ModelEnableRow } from "@/components/ui/ModelEnableList";
+import type { Destination } from "@/types/destination";
 import { isOpencodeZenWireId, OPENCODE_ZEN_PROVIDER_ID } from "@/utils/opencodeModelId";
 import {
   COPILOT_PLUS_DESTINATION,
@@ -108,6 +109,18 @@ export function rowMatches(row: ModelEnableRow, q: string): boolean {
 
 type OriginKind = Provider["origin"]["kind"];
 
+// opencode's built-in local providers default to a server on this computer.
+// https://github.com/logancyang/obsidian-copilot/issues/2889
+const OPENCODE_LOCAL_PROVIDER_IDS = new Set(["lmstudio", "ollama"]);
+
+function opencodeProviderDestination(providerId: string): Destination {
+  if (providerId === OPENCODE_ZEN_PROVIDER_ID) return { kind: "cloud", label: "OpenCode Zen" };
+  if (OPENCODE_LOCAL_PROVIDER_IDS.has(providerId)) {
+    return { kind: "local", label: `The ${providerId} server set in opencode` };
+  }
+  return { kind: "cloud", label: providerId };
+}
+
 function originBadgeLabel(kind: OriginKind): string {
   switch (kind) {
     case "byok":
@@ -171,12 +184,7 @@ export function buildModelEnableGroups(
   for (const [label, { rows }] of bySubGroup) {
     // opencode's own providers have no Copilot settings row, so their group names the destination.
     // https://github.com/logancyang/obsidian-copilot/issues/2889
-    const destination = isOpencode
-      ? {
-          kind: "cloud" as const,
-          label: label === OPENCODE_ZEN_PROVIDER_ID ? "OpenCode Zen" : label,
-        }
-      : undefined;
+    const destination = isOpencode ? opencodeProviderDestination(label) : undefined;
     out.push({ group: { key: `agent:${label}`, label, destination, rows }, kind: "agent" });
   }
 
