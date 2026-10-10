@@ -1,5 +1,5 @@
 import type { Provider } from "@/modelManagement/types/persisted";
-import { isSelfHostedProvider, isSelfHostedUrl } from "./isSelfHostedProvider";
+import { isLoopbackUrl, isSelfHostedProvider, isSelfHostedUrl } from "./isSelfHostedProvider";
 
 describe("isSelfHostedProvider", () => {
   describe("isSelfHostedUrl()", () => {
@@ -43,6 +43,19 @@ describe("isSelfHostedProvider", () => {
       "not a url",
     ])("does not treat %s as self-hosted", (url) => {
       expect(isSelfHostedUrl(url)).toBe(false);
+    });
+  });
+
+  describe("isLoopbackUrl()", () => {
+    it.each([
+      ["http://localhost:11434/v1", true],
+      ["http://127.0.0.1:1234", true],
+      ["http://[::1]:8080", true],
+      ["http://192.168.1.5:1234", false],
+      ["https://api.openai.com/v1", false],
+      [undefined, false],
+    ])("reports whether %s is this computer", (url, expected) => {
+      expect(isLoopbackUrl(url)).toBe(expected);
     });
   });
 

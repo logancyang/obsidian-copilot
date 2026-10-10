@@ -20,7 +20,7 @@ const PLUS_GROUP: ModelEnableGroup = {
   key: "plus",
   label: "Copilot Plus",
   badge: "privacy",
-  tooltip: "Copilot license required",
+  destination: { kind: "lock", label: "Brevilabs servers (US)" },
   highlight: true,
   rows: [
     {
@@ -108,7 +108,8 @@ export const LockedCopilotCatalog: StoryObj<ModelEnableListProps> = {
         key: "locked:copilot-plus",
         label: "Copilot",
         badge: "privacy",
-        tooltip: "Copilot license required",
+        destination: { kind: "lock", label: "Brevilabs servers (US)" },
+        destinationNote: "Copilot license required",
         highlight: true,
         rows: [
           {

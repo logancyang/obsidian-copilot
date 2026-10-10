@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
+import { DestinationIcon } from "@/components/ui/DestinationIcon";
+import { providerDestination } from "@/modelManagement/providers/providerDestination";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
 import { useModelManagement } from "@/modelManagement/ui/ModelManagementContext";
 import { providerRequiresApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
@@ -160,6 +162,7 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                 <span className="tw-truncate tw-text-sm tw-font-semibold tw-text-normal">
                   {provider.displayName}
                 </span>
+                <DestinationIcon destination={providerDestination(provider)} />
                 {group.needsSelfHostWarning && <SelfHostCloudWarningIcon />}
               </span>
               <span className="tw-text-xs tw-text-muted">{getSubLine()}</span>

@@ -4,6 +4,8 @@ Copilot V4 can get models from a Copilot plan, your own provider key or local
 endpoint, or an agent account you already use. These options are separate.
 Adding a key does not change the models supplied by Claude Code or Codex.
 
+Settings show where each source sends your requests. Hover the small icon next to a provider name: a lock for Copilot Plus ("Brevilabs servers (US)"), a desktop for a server on this computer or your local network, and a cloud for any other service. The Claude Code and Codex tabs in Agent settings show the same icon next to the agent name, for example "Amazon Bedrock" when your Claude Code settings turn on Bedrock.
+
 ## Choose a model source
 
 | Model source                        | Quick Chat | Agent Chat                                 |

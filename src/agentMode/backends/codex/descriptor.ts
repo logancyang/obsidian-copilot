@@ -37,6 +37,8 @@ import { CODEX_BINARY_NAME } from "./cliSetup";
 import { buildCodexModeMapping, buildCodexModeState } from "./codexModeMapping";
 import { isSupportedCodexAcpPath, inspectCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
 import { classifyBinaryInstall } from "@/agentMode/backends/shared/binaryCompatibility";
+import { urlDestination } from "@/modelManagement";
+import type { Destination } from "@/types/destination";
 
 const codexBinaryManager = new CodexBinaryManager();
 
@@ -115,19 +117,33 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     return name.replace(/^gpt/i, "GPT");
   },
 
+  dataDestination(settings: CopilotSettings): Destination {
+    const overrides = settings.agentMode?.backends?.codex?.envOverrides;
+    const baseUrl = overrides?.OPENAI_BASE_URL || process.env.OPENAI_BASE_URL;
+    if (baseUrl) return urlDestination(baseUrl, "The server set in OPENAI_BASE_URL");
+    return { kind: "cloud", label: "OpenAI" };
+  },
+
   presentPermissionOption(option: PermissionOption, metadata: unknown): PermissionOption {
     const decision = codexPermissionDecision(metadata);
+    if (decision === "acceptForSession" || CODEX_SESSION_OPTION_IDS.has(option.optionId)) {
+      return { ...option, description: CODEX_SESSION_SCOPE };
+    }
     const isExecpolicyAmendment =
       decision === "acceptWithExecpolicyAmendment" && option.kind === "allow_always";
     const isNetworkPolicyAmendment =
       decision === "applyNetworkPolicyAmendment" &&
       (option.kind === "allow_always" || option.kind === "reject_always");
-    if (!isExecpolicyAmendment && !isNetworkPolicyAmendment) return option;
+    if (!isExecpolicyAmendment && !isNetworkPolicyAmendment) {
+      return isCodexRulesOptionId(option.optionId)
+        ? { ...option, description: CODEX_RULES_SCOPE }
+        : option;
+    }
 
     return {
       ...option,
       name: option.kind === "reject_always" ? "Block Always" : "Allow Always",
-      description: option.name,
+      description: `${option.name}\n${CODEX_RULES_SCOPE}`,
     };
   },
 
@@ -229,6 +245,28 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     return buildCodexModeState(modeState, configOptions);
   },
 };
+
+// Codex keeps session approvals in memory and appends policy amendments to its rules file.
+// https://github.com/logancyang/obsidian-copilot/issues/2889
+const CODEX_SESSION_SCOPE =
+  "Covers what this option names, until this chat ends. Start a new chat to undo.";
+const CODEX_RULES_SCOPE =
+  "Saved to rules/default.rules in your Codex home (~/.codex by default) for all later Codex chats. Delete it there to undo.";
+
+// codex-acp 2.x sends fixed option ids and no decision metadata.
+// https://github.com/logancyang/obsidian-copilot/issues/2889
+const CODEX_SESSION_OPTION_IDS = new Set([
+  "allow_for_session",
+  "allow_permissions_session",
+  "allow_session",
+]);
+
+function isCodexRulesOptionId(optionId: string): boolean {
+  return (
+    optionId === "accept_execpolicy_amendment" ||
+    optionId.startsWith("apply_network_policy_amendment:")
+  );
+}
 
 function codexPermissionDecision(metadata: unknown): unknown {
   if (metadata === null || typeof metadata !== "object") return undefined;

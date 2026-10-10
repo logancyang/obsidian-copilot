@@ -1,3 +1,6 @@
+import * as path from "node:path";
+import * as os from "node:os";
+import * as fs from "node:fs";
 import { signOutFromClaude } from "./claudeAuth";
 jest.mock("./claudeAuth", () => ({ signOutFromClaude: jest.fn() }));
 
@@ -128,6 +131,98 @@ describe("descriptor", () => {
       expect(signOutFromClaude).not.toHaveBeenCalled();
     });
   });
+  describe("ClaudeBackendDescriptor.dataDestination()", () => {
+    const serverEnvKeys = [
+      "ANTHROPIC_BASE_URL",
+      "CLAUDE_CODE_USE_BEDROCK",
+      "CLAUDE_CODE_USE_VERTEX",
+      "CLAUDE_CONFIG_DIR",
+    ];
+    const saved = serverEnvKeys.map((key) => [key, process.env[key]] as const);
+    let configDir: string;
+    let vaultBase: string;
+    const writeJson = (file: string, value: unknown) => {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, typeof value === "string" ? value : JSON.stringify(value));
+    };
+    const destination = (envOverrides: Record<string, string> = {}) =>
+      ClaudeBackendDescriptor.dataDestination!(
+        settingsWithClaudeRuntime({
+          envOverrides: { CLAUDE_CONFIG_DIR: configDir, ...envOverrides },
+        }),
+        vaultBase
+      );
+    beforeEach(() => {
+      for (const key of serverEnvKeys) delete process.env[key];
+      configDir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-config-"));
+      vaultBase = fs.mkdtempSync(path.join(os.tmpdir(), "claude-vault-"));
+    });
+    afterEach(() => {
+      for (const [key, value] of saved) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      fs.rmSync(configDir, { recursive: true, force: true });
+      fs.rmSync(vaultBase, { recursive: true, force: true });
+    });
+
+    it("names Anthropic when nothing sets another server, even with an unreadable settings file", () => {
+      writeJson(path.join(configDir, "settings.json"), "{not json");
+      expect(destination()).toEqual({ kind: "cloud", label: "Anthropic" });
+    });
+
+    it.each([
+      [
+        "a plugin override sets a cloud base URL",
+        () => ({ ANTHROPIC_BASE_URL: "https://proxy.example" }),
+        { kind: "cloud", label: "The server set in your Claude Code settings" },
+      ],
+      [
+        "a plugin override sets a local base URL",
+        () => ({ ANTHROPIC_BASE_URL: "http://127.0.0.1:4000" }),
+        { kind: "local", label: "A server on this computer" },
+      ],
+      [
+        "only the Claude config folder's settings.json turns on Bedrock",
+        () => {
+          writeJson(path.join(configDir, "settings.json"), {
+            env: { CLAUDE_CODE_USE_BEDROCK: "1" },
+          });
+          return {};
+        },
+        { kind: "cloud", label: "Amazon Bedrock" },
+      ],
+      [
+        "the vault's .claude/settings.local.json turns on Vertex",
+        () => {
+          writeJson(path.join(vaultBase, ".claude", "settings.local.json"), {
+            env: { CLAUDE_CODE_USE_VERTEX: "1" },
+          });
+          return {};
+        },
+        { kind: "cloud", label: "Google Vertex AI" },
+      ],
+      [
+        "the vault's .claude/settings.json turns Bedrock off again",
+        () => {
+          writeJson(path.join(configDir, "settings.json"), {
+            env: { CLAUDE_CODE_USE_BEDROCK: "1" },
+          });
+          writeJson(path.join(vaultBase, ".claude", "settings.json"), {
+            env: { CLAUDE_CODE_USE_BEDROCK: "0" },
+          });
+          return {};
+        },
+        { kind: "cloud", label: "Anthropic" },
+      ],
+    ])(
+      "names the destination when %s for https://github.com/logancyang/obsidian-copilot/issues/2889",
+      (_source, arrange, expected) => {
+        expect(destination(arrange())).toEqual(expected);
+      }
+    );
+  });
+
   describe("ClaudeBackendDescriptor.createBackendProcess()", () => {
     afterEach(() => {
       resetSettings();

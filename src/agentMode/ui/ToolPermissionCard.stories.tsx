@@ -14,7 +14,13 @@ const request = {
   },
   options: [
     { optionId: "allow_once", name: "Allow once", kind: "allow_once" },
-    { optionId: "allow_always", name: "Always allow", kind: "allow_always" },
+    {
+      optionId: "allow_always",
+      name: "Allow always",
+      kind: "allow_always",
+      description:
+        "Covers Edit(launch brief.md). Saved to .claude/settings.local.json in the vault folder (for a project chat, the project note's folder), for later chats there. Remove it there to undo.",
+    },
     { optionId: "reject_once", name: "Deny once", kind: "reject_once" },
   ],
 } satisfies PermissionPrompt;
@@ -89,14 +95,16 @@ export const CodexCommandPrefix: StoryObj<ToolPermissionCardProps> = {
         rawInput: { command: codexCommand },
       },
       options: [
-        { optionId: "approved", name: "Yes, proceed", kind: "allow_once" },
+        { optionId: "allow_once", name: "Yes, proceed", kind: "allow_once" },
         {
-          optionId: "approved-execpolicy-amendment",
+          optionId: "accept_execpolicy_amendment",
           name: `Yes, and don't ask again for commands that start with \`${codexCommand}\``,
           kind: "allow_always",
+          description:
+            "Saved to rules/default.rules in your Codex home (~/.codex by default) for all later Codex chats. Delete it there to undo.",
         },
         {
-          optionId: "abort",
+          optionId: "cancel",
           name: "No, and tell Codex what to do differently",
           kind: "reject_once",
         },
