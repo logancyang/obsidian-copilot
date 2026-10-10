@@ -675,8 +675,6 @@ function buildHistoryHarness(opts?: {
   listSessions?: jest.Mock;
   warmListSessions?: jest.Mock;
   warmSessionExistsLocally?: jest.Mock;
-  displayName?: string;
-  agentProductName?: string;
   indexWriteError?: Error;
   probeSessionId?: string;
   summarizesSessionTitle?: boolean;
@@ -742,8 +740,6 @@ function buildHistoryHarness(opts?: {
     id: backendId,
     getInstallState: jest.fn(() => opts?.installState ?? { kind: "ready", source: "custom" }),
     summarizesSessionTitle: opts?.summarizesSessionTitle ?? true,
-    ...(opts?.displayName ? { displayName: opts.displayName } : {}),
-    agentProductName: opts?.agentProductName,
     getProbeSessionId: jest.fn(() => opts?.probeSessionId),
     applyInitialSessionConfig: opts?.applyInitialSessionConfig,
     ...(opts?.createBackendProcess
@@ -3663,8 +3659,7 @@ describe("AgentSessionManager", () => {
           createdAtMs: 1_000,
           lastAccessedAtMs: 2_000,
         });
-        const notice = await manager.deleteChatHistory(buildNativeChatId("opencode", "s1"));
-        expect(notice).toBe("Chat deleted from Copilot. opencode may keep its own copy.");
+        await manager.deleteChatHistory(buildNativeChatId("opencode", "s1"));
         expect(await manager.getChatHistoryItems()).toHaveLength(0);
         expect(await index.isTombstoned("opencode", "s1")).toBe(true);
         expect(persistence.deleteFile).not.toHaveBeenCalled();
@@ -3692,17 +3687,11 @@ describe("AgentSessionManager", () => {
         expect(await index.isTombstoned("opencode", "s1")).toBe(true);
       });
 
-      it.each([
-        ["claude", "Claude", "Claude Code"],
-        ["codex", "Codex", undefined],
-        ["opencode", "opencode", undefined],
-      ] as const)(
-        "https://github.com/logancyang/obsidian-copilot/issues/2888 touches only Copilot's own copy of a %s chat and says the agent may keep its own",
-        async (backendId, displayName, agentProductName) => {
+      it.each(["claude", "codex", "opencode"] as const)(
+        "https://github.com/logancyang/obsidian-copilot/issues/2888 touches only Copilot's own copy of a %s chat",
+        async (backendId) => {
           const { manager, index, persistence } = buildHistoryHarness({
             backendId,
-            displayName,
-            agentProductName,
             files: { "chats/agent__a.md": { epoch: 1_000, backendId, sessionId: "s1" } },
           });
           await index.recordSession({
@@ -3713,11 +3702,8 @@ describe("AgentSessionManager", () => {
             lastAccessedAtMs: 2_000,
           });
 
-          const notice = await manager.deleteChatHistory("chats/agent__a.md");
+          await manager.deleteChatHistory("chats/agent__a.md");
 
-          expect(notice).toBe(
-            `Chat deleted from Copilot. ${agentProductName ?? displayName} may keep its own copy.`
-          );
           expect(persistence.deleteFile).toHaveBeenCalledTimes(1);
           expect(persistence.deleteFile).toHaveBeenCalledWith("chats/agent__a.md");
           expect(await index.getEntry(backendId, "s1")).toBeNull();
@@ -3768,23 +3754,8 @@ describe("AgentSessionManager", () => {
         it(`${issue} closes the live session before it deletes the history entry`, async () => {
           const { manager, index, sessionId, chatId } = await openChat();
 
-          const notice = await manager.deleteChatHistory(chatId);
+          await manager.deleteChatHistory(chatId);
 
-          expect(notice).toBe("Chat deleted from Copilot. opencode may keep its own copy.");
-          expect(manager.getSessions()).toEqual([]);
-          expect(await index.isTombstoned("opencode", sessionId)).toBe(true);
-        });
-
-        it(`${issue} still closes the chat locally and deletes it when the agent cannot release the session`, async () => {
-          const { manager, index, sessionId, chatId } = await openChat();
-          const proc = manager.getBackendProcess("opencode")!;
-          (proc.closeSession as jest.Mock).mockRejectedValueOnce(
-            new Error("session/close unsupported")
-          );
-
-          const notice = await manager.deleteChatHistory(chatId);
-
-          expect(notice).toBe("Chat deleted from Copilot. opencode may keep its own copy.");
           expect(manager.getSessions()).toEqual([]);
           expect(await index.isTombstoned("opencode", sessionId)).toBe(true);
         });

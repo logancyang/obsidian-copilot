@@ -6,15 +6,14 @@ import type CopilotPlugin from "@/main";
 import { act, renderHook } from "@testing-library/react";
 import { Notice } from "obsidian";
 
-const item = (id: string): ChatHistoryItem => ({ id }) as unknown as ChatHistoryItem;
+const item = (id: string, backendId?: string): ChatHistoryItem =>
+  ({ id, backendId }) as unknown as ChatHistoryItem;
 
 function makeManager() {
   return {
     getChatHistoryItems: jest.fn(async () => [item("a"), item("b")]),
     updateChatTitle: jest.fn(async () => {}),
-    deleteChatHistory: jest.fn(
-      async () => "Chat deleted from Copilot. Codex may keep its own copy."
-    ),
+    deleteChatHistory: jest.fn(async () => {}),
   } as unknown as AgentSessionManager & {
     getChatHistoryItems: jest.Mock;
     updateChatTitle: jest.Mock;
@@ -158,19 +157,45 @@ describe("useAgentHistoryControls", () => {
       expect(manager.getChatHistoryItems).toHaveBeenCalledWith("project-1");
     });
 
-    it("shows the delete notice once after a successful delete", async () => {
+    it.each([
+      ["claude", "Claude Code"],
+      ["codex", "Codex"],
+      ["opencode", "opencode"],
+    ])(
+      "shows one notice saying %s may keep its own copy after a successful delete",
+      async (backendId, agent) => {
+        const manager = makeManager();
+        manager.getChatHistoryItems.mockResolvedValue([item("a", backendId)]);
+        const { result } = renderControls(manager);
+        await act(async () => {
+          await result.current.loadChatHistory();
+        });
+        (Notice as unknown as jest.Mock).mockClear();
+
+        await act(async () => {
+          await result.current.deleteChat("a");
+        });
+
+        expect(Notice).toHaveBeenCalledTimes(1);
+        expect(Notice).toHaveBeenCalledWith(
+          `Chat deleted from Copilot. ${agent} may keep its own copy.`
+        );
+      }
+    );
+
+    it("shows only that the chat left Copilot when the chat has no known agent", async () => {
       const manager = makeManager();
       const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
       (Notice as unknown as jest.Mock).mockClear();
 
       await act(async () => {
         await result.current.deleteChat("a");
       });
 
-      expect(Notice).toHaveBeenCalledTimes(1);
-      expect(Notice).toHaveBeenCalledWith(
-        "Chat deleted from Copilot. Codex may keep its own copy."
-      );
+      expect(Notice).toHaveBeenCalledWith("Chat deleted from Copilot.");
     });
 
     it("shows the failure notice, reloads the history, and rejects when Copilot's own delete fails", async () => {

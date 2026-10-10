@@ -48,7 +48,6 @@ import {
   mergeChatHistoryItems,
   type MarkdownChatEntry,
 } from "./chatHistoryMerge";
-import { formatChatDeleteNotice } from "@/lib/chatDeleteText";
 import { MethodUnsupportedError } from "./errors";
 import { replayPersistedMode } from "./replayPersistedMode";
 import { applyModeSpec } from "./modeApply";
@@ -618,7 +617,7 @@ export class AgentSessionManager {
     await persistence.updateTopic(fileId, newTitle);
   }
 
-  async deleteChatHistory(fileId: string): Promise<string> {
+  async deleteChatHistory(fileId: string): Promise<void> {
     const index = this.opts.sessionIndex;
     const persistence = this.opts.persistenceManager;
     const native = parseNativeChatId(fileId);
@@ -640,12 +639,10 @@ export class AgentSessionManager {
       await index.deleteSession(ref.backendId, ref.sessionId);
       await index.flushOrThrow();
     }
-    return formatChatDeleteNotice(ref ? this.opts.resolveDescriptor(ref.backendId) : undefined);
   }
 
   // An open chat must be gone before its files are, or autosave writes the note again. Closing can
-  // itself save a first note, so this returns the notes the closed chats saved. Delete must not
-  // depend on the agent releasing its session, so a failed release falls back to local teardown.
+  // itself save a first note, so this returns the notes the closed chats saved.
   // https://github.com/logancyang/obsidian-copilot/issues/2888
   private async closeOpenChatForDelete(historyIds: string[]): Promise<string[]> {
     const savedPaths: string[] = [];
@@ -656,12 +653,7 @@ export class AgentSessionManager {
         continue;
       }
       const state = this.sessionState.get(internalId);
-      try {
-        await this.closeSession(internalId, { releaseBackend: true });
-      } catch (e) {
-        logWarn("[AgentMode] release before delete failed; closing the chat locally", e);
-        await this.closeSession(internalId);
-      }
+      await this.closeSession(internalId);
       if (state?.source?.path) savedPaths.push(state.source.path);
     }
     return savedPaths;
