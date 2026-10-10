@@ -727,6 +727,7 @@ function buildHistoryHarness(opts?: {
     getAgentChatHistoryFiles: jest.fn(async () => tfiles),
     updateTopic: jest.fn(async () => undefined),
     deleteFile: jest.fn(async () => undefined),
+    saveSession: jest.fn(async () => ({ path: "chats/new.md" })),
   };
   const indexStorage = makeIndexStorage();
   if (opts?.indexWriteError) {
@@ -3791,6 +3792,18 @@ describe("AgentSessionManager", () => {
           expect(notice).toBe("Chat deleted from Copilot. opencode may keep its own copy.");
           expect(manager.getSessions()).toEqual([]);
           expect(await index.isTombstoned("opencode", sessionId)).toBe(true);
+        });
+
+        it(`${issue} deletes the first note that closing a native chat with a pending autosave writes`, async () => {
+          jest.useFakeTimers();
+          getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
+          const { manager, persistence, session, chatId } = await openChat();
+          getSessionTestHandle(session).setMessages([{ message: "First turn" }], true);
+
+          await manager.deleteChatHistory(chatId);
+
+          expect(persistence.saveSession).toHaveBeenCalledTimes(1);
+          expect(persistence.deleteFile).toHaveBeenCalledWith("chats/new.md");
         });
 
         it(`${issue} deletes nothing when the chat is still open after both close attempts`, async () => {

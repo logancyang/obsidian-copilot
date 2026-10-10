@@ -637,12 +637,15 @@ export class AgentSessionManager {
 
     const ref = native ?? (await this.readSessionRefFromFile(fileId));
 
-    await this.closeOpenChatForDelete(
+    const savedPaths = await this.closeOpenChatForDelete(
       ref ? [fileId, buildNativeChatId(ref.backendId, ref.sessionId)] : [fileId]
     );
 
-    if (!native && persistence) {
-      await attempt("chat file", () => persistence.deleteFile(fileId));
+    const notePaths = new Set(native ? savedPaths : [fileId, ...savedPaths]);
+    if (persistence) {
+      for (const path of notePaths) {
+        await attempt("chat file", () => persistence.deleteFile(path));
+      }
     }
     if (ref && index) {
       await attempt("history entry", async () => {
@@ -657,16 +660,19 @@ export class AgentSessionManager {
     return formatChatDeleteNotice(ref ? this.opts.resolveDescriptor(ref.backendId) : undefined);
   }
 
-  // An open chat must be gone before its files are, or autosave writes the note again. Delete
-  // must not depend on the agent releasing its session, so a failed release falls back to local
-  // teardown. https://github.com/logancyang/obsidian-copilot/issues/2888
-  private async closeOpenChatForDelete(historyIds: string[]): Promise<void> {
+  // An open chat must be gone before its files are, or autosave writes the note again. Closing can
+  // itself save a first note, so this returns the notes the closed chats saved. Delete must not
+  // depend on the agent releasing its session, so a failed release falls back to local teardown.
+  // https://github.com/logancyang/obsidian-copilot/issues/2888
+  private async closeOpenChatForDelete(historyIds: string[]): Promise<string[]> {
+    const savedPaths: string[] = [];
     for (const [internalId, session] of Array.from(this.sessions)) {
       if (
         !this.recentChatIdsForSession(internalId, session).some((id) => historyIds.includes(id))
       ) {
         continue;
       }
+      const state = this.sessionState.get(internalId);
       try {
         await this.closeSession(internalId, { releaseBackend: true });
       } catch (e) {
@@ -676,7 +682,9 @@ export class AgentSessionManager {
       if (this.sessions.has(internalId)) {
         throw new Error("Copilot could not close the open chat, so nothing was deleted.");
       }
+      if (state?.source?.path) savedPaths.push(state.source.path);
     }
+    return savedPaths;
   }
 
   private cancelPendingIndexTouch(backendId: BackendId, sessionId: string): void {
