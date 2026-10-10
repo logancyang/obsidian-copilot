@@ -5,7 +5,6 @@ import { MIYO_SEARCH_FOLDER_ENV, MIYO_SEARCH_SCOPE_ENV } from "@/builtinSkills/b
 import { detectBinary } from "@/utils/detectBinary";
 import { setDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 import { CODEX_QUESTION_CARD_STEERING, CodexBackend } from "./CodexBackend";
-import { resolveSupportedCodexAcpEntry } from "./codexVersion";
 import * as codexVersion from "./codexVersion";
 
 jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
@@ -16,19 +15,18 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
+const mockAdapterEntry = jest.fn();
+
 jest.mock("./codexVersion", () => {
   const actual = jest.requireActual("./codexVersion");
   return {
     ...actual,
     __esModule: true,
     inspectCodexAcpPackage: (path: string) => ({
-      entryPath: jest.mocked(resolveSupportedCodexAcpEntry)(path),
+      entryPath: mockAdapterEntry(path),
       version: "2.0.0",
       runtimeVersion: "2.0.0",
     }),
-    resolveSupportedCodexAcpEntry: jest
-      .fn()
-      .mockReturnValue("/npm/lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js"),
   };
 });
 
@@ -71,8 +69,7 @@ describe("CodexBackend", () => {
       afterEach(() => Object.defineProperty(process, "platform", { value: hostPlatform }));
       beforeEach(() => {
         Object.defineProperty(process, "platform", { value: "darwin" });
-        jest
-          .mocked(resolveSupportedCodexAcpEntry)
+        mockAdapterEntry
           .mockReset()
           .mockReturnValue("/npm/lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js");
         resetSettings();
@@ -198,7 +195,7 @@ describe("CodexBackend", () => {
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 launches a Windows native bundle without detecting Node", async () => {
         Object.defineProperty(process, "platform", { configurable: true, value: "win32" });
-        jest.mocked(resolveSupportedCodexAcpEntry).mockReturnValue("C:\\bundle\\codex-acp.exe");
+        mockAdapterEntry.mockReturnValue("C:\\bundle\\codex-acp.exe");
         jest.mocked(detectBinary).mockClear();
 
         const result = await new CodexBackend().buildSpawnDescriptor({
@@ -225,14 +222,14 @@ describe("CodexBackend", () => {
       });
 
       it("https://github.com/logancyang/obsidian-copilot/issues/2916 enforces the supported adapter before spawning", async () => {
-        jest.mocked(resolveSupportedCodexAcpEntry).mockImplementationOnce(() => {
+        mockAdapterEntry.mockImplementationOnce(() => {
           throw new Error("unsupported Codex adapter");
         });
 
         await expect(
           new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" })
         ).rejects.toThrow("unsupported Codex adapter");
-        expect(resolveSupportedCodexAcpEntry).toHaveBeenCalledWith("/usr/local/bin/codex-acp");
+        expect(mockAdapterEntry).toHaveBeenCalledWith("/usr/local/bin/codex-acp");
       });
 
       it("throws when the codex binary path is unset", async () => {

@@ -312,6 +312,7 @@ describe("descriptor", () => {
         (source) => {
           mockedResolveSupportedPackage.mockReturnValue({
             entryPath: "/codex/index.js",
+            kind: "npm",
             version: "0.0.44",
             runtimeVersion: "0.0.44",
           });
@@ -360,6 +361,7 @@ describe("descriptor", () => {
         (_label, fields, actualVersion, expected) => {
           mockedResolveSupportedPackage.mockReturnValue({
             entryPath: "/codex/index.js",
+            kind: "npm",
             version: actualVersion,
             runtimeVersion: actualVersion.replace(/-r\d+$/, ""),
           });

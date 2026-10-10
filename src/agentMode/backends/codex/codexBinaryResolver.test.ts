@@ -184,6 +184,7 @@ describe("codexBinaryResolver", () => {
             version: "2.0.0",
             bin: { "codex-acp": "dist/index.js" },
           }),
+        resolveFrom: () => "",
       };
       const accepts = jest.fn((candidate: string) => {
         try {
