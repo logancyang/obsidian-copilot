@@ -67,6 +67,7 @@ jest.mock("@/agentMode", () => ({
     getInstance: () => ({ dispose: mockSkillManagerDispose }),
   },
   setFrameSinkVaultBasePath: jest.fn(),
+  closeRestoredTurnDiffs: jest.fn(),
   acpFrameSink: { narrowLegacyLogs: jest.fn(async () => undefined) },
   createAgentSessionManager: jest.fn(() => ({})),
 }));
