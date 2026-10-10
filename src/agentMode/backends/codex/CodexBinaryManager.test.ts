@@ -143,13 +143,21 @@ describe("CodexBinaryManager", () => {
         unsubscribe();
       });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/686 verifies the staged adapter and then starts its bundled native Codex directly", async () => {
+        const hostFlavor = path.sep === "\\" ? "win32" : "darwin";
+        setPlatform(hostFlavor);
         const manager = new CodexBinaryManager();
+
         await manager.install();
-        const stage = path.join(manager.getDataDir(), `.tmp-${CODEX_PINNED_VERSION}-`);
-        expect(mockedExecFile.mock.calls.map(([command, args]) => [command, args])).toEqual([
-          [expect.stringMatching(new RegExp(`^${stage}\\d+/codex-acp$`)), ["--version"]],
-          [expect.stringMatching(new RegExp(`^${stage}\\d+/codex-runtime/bin/codex$`)), ["--help"]],
-        ]);
+
+        const [[launcher, launcherArgs], [runtime, runtimeArgs]] = mockedExecFile.mock.calls;
+        const stage = path.dirname(launcher);
+        expect(path.dirname(stage)).toBe(manager.getDataDir());
+        expect(path.basename(stage).startsWith(`.tmp-${CODEX_PINNED_VERSION}-`)).toBe(true);
+        expect(launcherArgs).toEqual(["--version"]);
+        expect(runtime).toBe(
+          path.join(stage, "codex-runtime", "bin", hostFlavor === "win32" ? "codex.exe" : "codex")
+        );
+        expect(runtimeArgs).toEqual(["--help"]);
       });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/578 shows transferred bytes and each installation phase during a managed install", async () => {
         jest.mocked(installCodexArchive).mockImplementation(async (stage, _signal, progress) => {
