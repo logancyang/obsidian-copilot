@@ -243,6 +243,7 @@ function makeMockSession(overrides: {
       hasUserVisibleMessages = messages.length > 0;
     }),
     seedSessionUsage: jest.fn(),
+    offerFeedback: jest.fn(() => "shown"),
     getSessionUsage: () => null,
     subscribe: (l: Parameters<typeof listeners.add>[0]) => {
       listeners.add(l);
@@ -401,6 +402,7 @@ interface ManagerOptions {
   persistence?: unknown;
   sessionIndex?: AgentSessionIndex;
   beforeBackendStart?: ManagerDeps["beforeBackendStart"];
+  feedbackServer?: ManagerDeps["feedbackServer"];
 }
 
 const builtManagers: AgentSessionManager[] = [];
@@ -430,11 +432,31 @@ function buildManager(options: ManagerOptions = {}): AgentSessionManager {
       persistenceManager: options.persistence as ManagerDeps["persistenceManager"],
       sessionIndex: options.sessionIndex,
       beforeBackendStart: options.beforeBackendStart,
+      feedbackServer: options.feedbackServer,
     }
   );
   builtManagers.push(manager);
   return manager;
 }
+
+const FEEDBACK_CHANNEL = Object.freeze({
+  name: "obsidian-copilot",
+  url: "http://127.0.0.1:4100/mcp",
+  headers: Object.freeze({ Authorization: "Bearer t0k3n" }),
+});
+
+function buildFeedbackServer(connect: jest.Mock = jest.fn(async () => FEEDBACK_CHANNEL)) {
+  return { connect, disconnect: jest.fn(), dispose: jest.fn() };
+}
+
+function offerFeedbackCards(enabled: boolean): void {
+  getSettingsMock.mockReturnValue({
+    ...mockDefaultSettings(),
+    agentMode: { ...mockDefaultSettings().agentMode, offerFeedbackCards: enabled },
+  });
+}
+
+const FEEDBACK_DRAFT = { title: "t", whatHappened: "w", userSaid: "u", repro: "r" };
 
 function seedProjects(...ids: string[]): void {
   projectsState.updateCachedProjectRecords(
@@ -572,7 +594,8 @@ function senderAndText(session: AgentSession): [string, string][] {
 
 function buildManagerWithReplay(
   backendOverrides: Record<string, unknown> = {},
-  descriptorOverrides: Partial<BackendDescriptor> = {}
+  descriptorOverrides: Partial<BackendDescriptor> = {},
+  feedbackServer?: ManagerDeps["feedbackServer"]
 ): AgentSessionManager {
   const backend = {
     ...makeMockBackendProcess(),
@@ -584,6 +607,7 @@ function buildManagerWithReplay(
   };
   return buildManager({
     descriptor: buildDescriptor({ createBackendProcess: () => backend, ...descriptorOverrides }),
+    feedbackServer,
   });
 }
 
@@ -890,6 +914,68 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).toBe(session);
         expect(mgr.getActiveChatUIState()).not.toBeNull();
         expect(mgr.getChatUIState(session.internalId)).toBe(mgr.getActiveChatUIState());
+      });
+
+      it("attaches the feedback MCP server to a new session and routes its cards to that session", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({ feedbackServer });
+
+        const session = await mgr.createSession();
+
+        expect(feedbackServer.connect).toHaveBeenCalledWith(
+          session.internalId,
+          expect.any(Function)
+        );
+        expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+          expect.objectContaining({ mcpServers: [FEEDBACK_CHANNEL] })
+        );
+        const onOffer = feedbackServer.connect.mock.calls[0][1] as (draft: unknown) => string;
+        expect(onOffer(FEEDBACK_DRAFT)).toBe("shown");
+        expect(session.offerFeedback).toHaveBeenCalledWith(FEEDBACK_DRAFT);
+      });
+
+      it("starts a session without the feedback server while feedback cards are turned off", async () => {
+        offerFeedbackCards(false);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({ feedbackServer });
+
+        await mgr.createSession();
+
+        expect(feedbackServer.connect).not.toHaveBeenCalled();
+        expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+          expect.objectContaining({ mcpServers: [] })
+        );
+      });
+
+      it("tells the agent feedback is turned off when the user opts out after the session started", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({ feedbackServer });
+        const session = await mgr.createSession();
+        const onOffer = feedbackServer.connect.mock.calls[0][1] as (draft: unknown) => string;
+
+        offerFeedbackCards(false);
+
+        expect(onOffer(FEEDBACK_DRAFT)).toBe("turned_off");
+        expect(session.offerFeedback).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 still starts the chat when the feedback server cannot start", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer(
+          jest.fn(async () => {
+            throw new Error("EADDRINUSE");
+          })
+        );
+        const mgr = buildManager({ feedbackServer });
+
+        const session = await mgr.createSession();
+
+        expect(mgr.getActiveSession()).toBe(session);
+        expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+          expect.objectContaining({ mcpServers: [] })
+        );
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 refuses to start a chat, and asks for an enabled model, when a backend that may only run enabled models has none", async () => {
@@ -1414,6 +1500,17 @@ describe("AgentSessionManager", () => {
         expect(mockSessionDispose).toHaveBeenCalled();
       });
 
+      it("revokes the closed session's feedback server token", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({ feedbackServer });
+        const a = await mgr.createSession();
+
+        await mgr.closeSession(a.internalId);
+
+        expect(feedbackServer.disconnect).toHaveBeenCalledWith(a.internalId);
+      });
+
       it("when the active session is closed, picks the right neighbor as active", async () => {
         const mgr = buildManager();
         const a = await mgr.createSession();
@@ -1650,6 +1747,15 @@ describe("AgentSessionManager", () => {
         expect(mockSessionCancel).toHaveBeenCalledTimes(2);
         expect(mockSessionDispose).toHaveBeenCalledTimes(2);
         expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+      });
+
+      it("closes the feedback server", async () => {
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({ feedbackServer });
+
+        await mgr.shutdown();
+
+        expect(feedbackServer.dispose).toHaveBeenCalledTimes(1);
       });
 
       it("stops reacting to project record changes", async () => {
@@ -2442,6 +2548,22 @@ describe("AgentSessionManager", () => {
         expect(replacement?.getBackendSessionId()).toBe(backendSessionId);
         expect(replacement?.chatInputId).toBe(chatInputId);
         expect(mgr.getSessions()).toHaveLength(1);
+      });
+
+      it("re-attaches the feedback MCP server when it reloads the replaced tab", async () => {
+        offerFeedbackCards(true);
+        const loadSession = jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+          sessionId,
+          state: { model: null, mode: null },
+        }));
+        const mgr = buildManagerWithReplay({ loadSession }, {}, buildFeedbackServer());
+        await mgr.createSession();
+
+        await mgr.restartBackend("opencode", "managed skills changed");
+
+        expect(loadSession).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpServers: [FEEDBACK_CHANNEL] })
+        );
       });
 
       it("rebuilds the replaced tab with the tool calls its backend replays during load (https://github.com/Brevilabs/obsidian-copilot-private/issues/643)", async () => {

@@ -555,6 +555,41 @@ describe("ClaudeSdkBackendProcess", () => {
         ]);
       });
 
+      it("attaches Copilot's MCP servers over HTTP and pre-approves their tools on every turn", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({
+          cwd: "/vault",
+          mcpServers: [
+            {
+              name: "obsidian-copilot",
+              url: "http://127.0.0.1:4100/mcp",
+              headers: { Authorization: "Bearer t0k3n" },
+            },
+          ],
+        });
+
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const { options } = getPromptQueryCalls()[0][0] as { options: Record<string, unknown> };
+        expect(options.mcpServers).toEqual({
+          "obsidian-copilot": {
+            type: "http",
+            url: "http://127.0.0.1:4100/mcp",
+            headers: { Authorization: "Bearer t0k3n" },
+          },
+        });
+        expect(options.allowedTools).toEqual([
+          "Read",
+          "Write",
+          "Edit",
+          "Glob",
+          "Grep",
+          "LS",
+          "mcp__obsidian-copilot",
+        ]);
+      });
+
       it("starts the first query with the claude_code preset, tool allow and deny lists, the foreground hook, and a fresh session id", async () => {
         queryMock.mockImplementation(() => makeQuery([resultMessage()]));
         const proc = makeProc();

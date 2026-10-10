@@ -140,6 +140,7 @@ export interface CopilotSettings {
     deviceProfiles?: Record<string, DeviceAgentProfile>;
     claudeCli?: { path?: string };
     debugFullFrames: boolean;
+    offerFeedbackCards: boolean;
     notificationSound: boolean;
     notificationSoundId: NotificationSoundId;
     welcomeDismissed: boolean;
@@ -810,6 +811,11 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
       ? r.debugFullFrames
       : DEFAULT_SETTINGS.agentMode.debugFullFrames;
 
+  const offerFeedbackCards =
+    typeof r.offerFeedbackCards === "boolean"
+      ? r.offerFeedbackCards
+      : DEFAULT_SETTINGS.agentMode.offerFeedbackCards;
+
   const notificationSound =
     typeof r.notificationSound === "boolean"
       ? r.notificationSound
@@ -858,6 +864,7 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     activeBackend,
     backends,
     debugFullFrames,
+    offerFeedbackCards,
     notificationSound,
     notificationSoundId,
     welcomeDismissed,

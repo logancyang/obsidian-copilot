@@ -38,6 +38,7 @@ function useCodexSettings(codex?: Record<string, unknown>): void {
       byok: {},
       activeBackend: "codex",
       debugFullFrames: false,
+      offerFeedbackCards: true,
       notificationSound: false,
       notificationSoundId: "piano",
       welcomeDismissed: false,

@@ -761,6 +761,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     activeBackend: "opencode",
     backends: {},
     debugFullFrames: true,
+    offerFeedbackCards: true,
     notificationSound: true,
     notificationSoundId: "piano",
     welcomeDismissed: false,

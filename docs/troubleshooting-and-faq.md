@@ -123,6 +123,14 @@ Use **Advanced → Debugging & support → Report an issue** for any Copilot pro
 3. **Review what was packed, then upload.** Copilot lists what actually went into the zip, source by source, with the finished file's size and, beside anything skipped or failed, the reason. **Show zip** opens the file in your file manager if you want to look inside. Uploading is a separate click — **Upload & open issue** — and nothing leaves your machine until you press it. **Cancel** here deletes the zip unless you have already chosen **Open issue anyway**.
 4. **Finish the issue in your browser.** As soon as the upload lands, Copilot opens a prefilled GitHub issue with the report ID already in the body, closes the dialog, and shows a short notice. If your browser could not be opened, the notice carries the report ID and a link to the issue page instead. Nothing is filed until you press Submit in your browser.
 
+### Reporting from Agent Chat
+
+When you tell Agent Chat it got something wrong, or the agent notices its own mistake, it may draft a report for you. A **Report this to the Copilot team?** card appears under its reply, with a one-line summary and your own words. The card never interrupts the agent, and it appears at most once per chat.
+
+- **Review & report** opens **Report an issue** with the agent's draft already in the description: what happened, what you said, steps to reproduce, and which agent, model and chat it came from. Every available attachment starts ticked, so untick anything you would rather not send. Edit the description freely, then continue with the steps above. Once the upload lands, the card shows the report ID.
+- **Dismiss** removes the card. Nothing is sent.
+- **Don't offer again** removes the card and turns off **Offer feedback reports in Agent Chat** in **Advanced → Debugging & support**.
+
 ### What gets sent, and what does not
 
 Before anything is written into the zip, Copilot cleans every log and your own description on this device: usernames taken from home-folder paths, email addresses, and recognizable credentials such as API keys and tokens are replaced with visible markers so you can see that something was removed. This is a best-effort pass over the formats Copilot knows, so an unfamiliar secret can still slip through — which is exactly what the review step is for.
