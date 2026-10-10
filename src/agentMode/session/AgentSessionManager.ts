@@ -640,14 +640,23 @@ export class AgentSessionManager {
     }
   }
 
-  // An open chat must be gone before its files are, or autosave writes the note again. Closing can
-  // itself save a first note, so this returns the notes the closed chats saved.
+  // An open chat must be gone before its files are, or autosave writes the note again. Delete never
+  // saves: it stops new autosaves first, and only waits for a save that is already writing, so this
+  // returns the notes the closed chats already have. State stays so that running save is awaited.
   // https://github.com/logancyang/obsidian-copilot/issues/2888
   private async closeOpenChatForDelete(historyId: string): Promise<string[]> {
     const savedPaths: string[] = [];
     for (const [internalId, session] of Array.from(this.sessions)) {
       if (!this.recentChatIdsForSession(internalId, session).includes(historyId)) continue;
       const state = this.sessionState.get(internalId);
+      if (state) {
+        state.unsub?.();
+        state.unsub = undefined;
+        window.clearTimeout(state.timer);
+        state.timer = undefined;
+        window.clearTimeout(state.indexTimer);
+        state.indexTimer = undefined;
+      }
       await this.closeSession(internalId);
       if (state?.source?.path) savedPaths.push(state.source.path);
     }

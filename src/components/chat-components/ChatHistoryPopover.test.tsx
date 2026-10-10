@@ -15,12 +15,14 @@ const history = ["Open research", "Saved research"].map((title) => ({
 }));
 
 describe("ChatHistoryPopover", () => {
-  describe("delete confirmation", () => {
+  beforeEach(() => {
+    window.IntersectionObserver = jest.fn(() => ({
+      observe: jest.fn(),
+      disconnect: jest.fn(),
+    })) as unknown as typeof IntersectionObserver;
+  });
+  describe("ChatHistoryPopover()", () => {
     it("https://github.com/logancyang/obsidian-copilot/issues/2888 shows the delete summary of the chat being confirmed", () => {
-      window.IntersectionObserver = jest.fn(() => ({
-        observe: jest.fn(),
-        disconnect: jest.fn(),
-      })) as unknown as typeof IntersectionObserver;
       render(
         <ChatHistoryPopover
           chatHistory={history}
@@ -38,15 +40,6 @@ describe("ChatHistoryPopover", () => {
 
       expect(screen.getAllByText(/^Summary for/)).toHaveLength(1);
     });
-  });
-
-  beforeEach(() => {
-    window.IntersectionObserver = jest.fn(() => ({
-      observe: jest.fn(),
-      disconnect: jest.fn(),
-    })) as unknown as typeof IntersectionObserver;
-  });
-  describe("ChatHistoryPopover()", () => {
     it(`${issue} closes an open session while preserving its saved history and leaving the popover open`, async () => {
       const onCloseSession = jest.fn(async () => {});
       const onLoadChat = jest.fn(async () => {});
