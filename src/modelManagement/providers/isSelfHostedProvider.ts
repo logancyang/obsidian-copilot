@@ -33,6 +33,14 @@ export function isSelfHostedUrl(raw: string | undefined): boolean {
   return false;
 }
 
+export function isLoopbackUrl(raw: string | undefined): boolean {
+  const host = parseHost(raw);
+  if (!host) return false;
+  return (
+    host === "localhost" || host.endsWith(".localhost") || host === "::1" || /^127\./.test(host)
+  );
+}
+
 function isPrivateIPv4(host: string): boolean {
   const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$/);
   if (!ipv4) return false;

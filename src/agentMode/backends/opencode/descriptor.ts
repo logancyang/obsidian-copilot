@@ -21,11 +21,7 @@ import {
   OpencodeBinaryManager,
   toOpencodeInstallState,
 } from "./OpencodeBinaryManager";
-import {
-  mapProviderToOpencodeId,
-  opencodeEnabledModelEntries,
-  opencodeWireBaseIdFor,
-} from "./opencodeModelResolve";
+import { opencodeEnabledModelEntries, opencodeWireBaseIdFor } from "./opencodeModelResolve";
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import { cacheRoot } from "@/context/conversionsLocation";
@@ -39,7 +35,6 @@ import type {
   ModelWireCodec,
   PermissionOption,
 } from "@/agentMode/session/types";
-import { isOpencodeZenWireId } from "@/utils/opencodeModelId";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
 import { findModelEntry } from "@/agentMode/session/translateBackendState";
@@ -94,19 +89,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
     return [...opencodeEnabledModelEntries(settings)];
-  },
-
-  dataDestination(settings: CopilotSettings, baseModelId: string): string | null {
-    if (!baseModelId.includes("/")) return null;
-    if (isOpencodeZenWireId(baseModelId)) return "OpenCode Zen";
-    const opencodeProviderId = baseModelId.split("/")[0];
-    const provider = Object.values(settings.providers).find(
-      (p) => mapProviderToOpencodeId(p)?.id === opencodeProviderId
-    );
-    if (!provider) return `the ${opencodeProviderId} provider set in opencode`;
-    if (provider.origin.kind === "copilot-plus") return "Copilot Plus (Brevilabs, US)";
-    if (isLoopbackUrl(provider.baseUrl)) return "this computer";
-    return provider.displayName;
   },
 
   // OpenCode 2.0.22 stores an "always" reply as a saved rule for its project folder.
@@ -260,16 +242,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     };
   },
 };
-
-function isLoopbackUrl(raw: string | undefined): boolean {
-  if (!raw) return false;
-  try {
-    const host = new URL(raw).hostname.replace(/^\[|\]$/g, "");
-    return host === "localhost" || host === "::1" || /^127\./.test(host);
-  } catch {
-    return false;
-  }
-}
 
 function opencodeProviderToCopilot(opencodeProviderId: string): string | null {
   for (const [copilotProvider, oId] of Object.entries(OPENCODE_PROVIDER_MAP)) {

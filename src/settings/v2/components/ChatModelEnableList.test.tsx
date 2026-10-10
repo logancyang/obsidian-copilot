@@ -20,6 +20,8 @@ jest.mock("@/modelManagement", () => ({
   backendsAtom: "backends",
   COPILOT_PLUS_MODELS: [],
   capabilitiesFromConfiguredInfo: () => [],
+  COPILOT_PLUS_DESTINATION: { kind: "lock", label: "Brevilabs servers (US)" },
+  providerDestination: () => ({ kind: "cloud", label: "Provider" }),
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the public hook
   useModelManagement: () => ({ backendConfigRegistry: { enableModel, disableModel } }),
 }));

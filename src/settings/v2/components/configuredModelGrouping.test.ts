@@ -406,6 +406,36 @@ describe("configuredModelGrouping", () => {
       expect(routerGroup?.rows.map((r) => r.id)).toEqual(["m-oc2"]);
     });
 
+    it("names each provider group's destination for https://github.com/logancyang/obsidian-copilot/issues/2889", () => {
+      const partition = {
+        byokPlusCandidates: [
+          {
+            configuredModel: model("m-byok", "byok-1", "claude-sonnet-4-5"),
+            provider: byok,
+            enabled: true,
+          },
+        ],
+        agentOriginCandidates: [
+          {
+            configuredModel: model("m-oc1", "oc-agent", "opencode/big-pickle"),
+            provider: ocAgent,
+            enabled: false,
+          },
+          {
+            configuredModel: model("m-oc2", "oc-agent", "openrouter/x"),
+            provider: ocAgent,
+            enabled: false,
+          },
+        ],
+      };
+      const groups = buildModelEnableGroups(partition, true, "", false);
+      expect(groups.map((g) => [g.label, g.destination])).toEqual([
+        ["Anthropic", { kind: "cloud", label: "Anthropic" }],
+        ["opencode", { kind: "cloud", label: "OpenCode Zen" }],
+        ["openrouter", { kind: "cloud", label: "openrouter" }],
+      ]);
+    });
+
     it("filters rows by the search query and drops empty groups", () => {
       const partition = {
         byokPlusCandidates: [],
@@ -460,7 +490,8 @@ describe("configuredModelGrouping", () => {
 
       expect(groups[0].label).toBe("Copilot");
       expect(groups[0].badge).toBe("privacy");
-      expect(groups[0].tooltip).toBe("Copilot license required");
+      expect(groups[0].destination).toEqual({ kind: "lock", label: "Brevilabs servers (US)" });
+      expect(groups[0].destinationNote).toBe("Copilot license required");
       expect(groups[0].highlight).toBe(true);
       expect(groups[0].rows.length).toBeGreaterThan(0);
       expect(groups[0].rows.every((row) => row.locked && !row.enabled)).toBe(true);
@@ -593,7 +624,8 @@ describe("configuredModelGrouping", () => {
       expect(groups[0].key).toBe("byok:plus-1");
       expect(groups[0].highlight).toBe(true);
       expect(groups[0].badge).toBe("privacy");
-      expect(groups[0].tooltip).toBe("Copilot license required");
+      expect(groups[0].destination).toEqual({ kind: "lock", label: "Brevilabs servers (US)" });
+      expect(groups[0].destinationNote).toBeUndefined();
       expect(groups.find((g) => g.key === "byok:byok-1")?.highlight).toBeUndefined();
     });
 

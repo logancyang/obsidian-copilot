@@ -146,11 +146,10 @@ describe("descriptor", () => {
       fs.writeFileSync(file, typeof value === "string" ? value : JSON.stringify(value));
     };
     const destination = (envOverrides: Record<string, string> = {}) =>
-      ClaudeBackendDescriptor.dataDestination(
+      ClaudeBackendDescriptor.dataDestination!(
         settingsWithClaudeRuntime({
           envOverrides: { CLAUDE_CONFIG_DIR: configDir, ...envOverrides },
         }),
-        "sonnet",
         vaultBase
       );
     beforeEach(() => {
@@ -169,33 +168,57 @@ describe("descriptor", () => {
 
     it("names Anthropic when nothing sets another server, even with an unreadable settings file", () => {
       writeJson(path.join(configDir, "settings.json"), "{not json");
-      expect(destination()).toBe("Claude Code (Anthropic)");
+      expect(destination()).toEqual({ kind: "cloud", label: "Anthropic" });
     });
 
     it.each([
-      ["a plugin override", () => ({ ANTHROPIC_BASE_URL: "https://proxy.example" })],
       [
-        "the Claude config folder's settings.json",
+        "a plugin override sets a cloud base URL",
+        () => ({ ANTHROPIC_BASE_URL: "https://proxy.example" }),
+        { kind: "cloud", label: "The server set in your Claude Code settings" },
+      ],
+      [
+        "a plugin override sets a local base URL",
+        () => ({ ANTHROPIC_BASE_URL: "http://127.0.0.1:4000" }),
+        { kind: "local", label: "A server on this computer" },
+      ],
+      [
+        "only the Claude config folder's settings.json turns on Bedrock",
         () => {
           writeJson(path.join(configDir, "settings.json"), {
             env: { CLAUDE_CODE_USE_BEDROCK: "1" },
           });
           return {};
         },
+        { kind: "cloud", label: "Amazon Bedrock" },
       ],
       [
-        "the vault's .claude/settings.local.json",
+        "the vault's .claude/settings.local.json turns on Vertex",
         () => {
           writeJson(path.join(vaultBase, ".claude", "settings.local.json"), {
             env: { CLAUDE_CODE_USE_VERTEX: "1" },
           });
           return {};
         },
+        { kind: "cloud", label: "Google Vertex AI" },
+      ],
+      [
+        "the vault's .claude/settings.json turns Bedrock off again",
+        () => {
+          writeJson(path.join(configDir, "settings.json"), {
+            env: { CLAUDE_CODE_USE_BEDROCK: "1" },
+          });
+          writeJson(path.join(vaultBase, ".claude", "settings.json"), {
+            env: { CLAUDE_CODE_USE_BEDROCK: "0" },
+          });
+          return {};
+        },
+        { kind: "cloud", label: "Anthropic" },
       ],
     ])(
-      "names the user's server when %s sets one for https://github.com/logancyang/obsidian-copilot/issues/2889",
-      (_source, arrange) => {
-        expect(destination(arrange())).toBe("the server set in your Claude Code settings");
+      "names the destination when %s for https://github.com/logancyang/obsidian-copilot/issues/2889",
+      (_source, arrange, expected) => {
+        expect(destination(arrange())).toEqual(expected);
       }
     );
   });

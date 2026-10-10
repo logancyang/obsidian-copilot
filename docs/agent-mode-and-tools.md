@@ -91,8 +91,6 @@ Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** 
 
 An empty Agent Chat shows a fixed hint: "Ask anything • @ to add context • / for commands".
 
-Above the message box, an empty chat also shows where your context goes: "Your message, notes the agent reads, and tool results go to …". Claude goes to Claude Code (Anthropic) and Codex to Codex (OpenAI), unless you set a custom server for them. opencode names the provider of the selected model, such as OpenCode Zen for its free models, or "this computer" for a local model. The line changes when you change the agent or model, and it disappears after your first message.
-
 Agent Chat groups consecutive tool calls and reasoning into a compact activity row. The row reports the total tool commands, distinct files read or edited, and recorded reasoning time. Open it to inspect every step.
 
 Copilot checks for updates in the background when the plugin loads, including when Obsidian starts. If a newer version is available, a notice offers **View release notes** once per release. This is remembered separately from dismissing the Agent Chat home banner. You can keep using or close Obsidian while the check runs. Copilot reads the version from the published release’s manifest, and Settings and Agent Chat share that check.

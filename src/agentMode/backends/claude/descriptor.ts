@@ -26,6 +26,8 @@ import {
   sanitizeBuiltinSkillEnvOverrides,
 } from "@/agentMode/backends/shared/builtinSkillEnv";
 import { getVaultBase } from "@/utils/vaultPath";
+import { urlDestination } from "@/modelManagement";
+import type { Destination } from "@/types/destination";
 import { getMiyoFolderName } from "@/miyo/miyoUtils";
 import type {
   BackendAuth,
@@ -95,7 +97,10 @@ function claudeResolverEnv(): Omit<Parameters<typeof resolveClaudeBinary>[0], "o
 
 // Claude Code also takes `env` from its settings files, so a server set there (such as Bedrock)
 // must not read as Anthropic. https://github.com/logancyang/obsidian-copilot/issues/2889
-function usesCustomClaudeServer(settings: CopilotSettings, vaultBase: string | null): boolean {
+function claudeEffectiveEnv(
+  settings: CopilotSettings,
+  vaultBase: string | null
+): Record<string, unknown> {
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
   const os = requireNodeModule<typeof import("node:os")>("os");
   const path = requireNodeModule<typeof import("node:path")>("path");
@@ -113,9 +118,11 @@ function usesCustomClaudeServer(settings: CopilotSettings, vaultBase: string | n
       return undefined;
     }
   });
-  return [env, ...fileEnvs].some(
-    (e) => e?.ANTHROPIC_BASE_URL || e?.CLAUDE_CODE_USE_BEDROCK || e?.CLAUDE_CODE_USE_VERTEX
-  );
+  return Object.assign({}, env, ...fileEnvs) as Record<string, unknown>;
+}
+
+function isEnabledFlag(value: unknown): boolean {
+  return typeof value === "string" && value !== "" && value !== "0" && value !== "false";
 }
 
 function claudeChildEnv(settings: CopilotSettings): NodeJS.ProcessEnv {
@@ -203,14 +210,15 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   wire: claudeWire,
   showModelDescriptions: true,
 
-  dataDestination(
-    settings: CopilotSettings,
-    _baseModelId: string,
-    vaultBase: string | null
-  ): string {
-    return usesCustomClaudeServer(settings, vaultBase)
-      ? "the server set in your Claude Code settings"
-      : "Claude Code (Anthropic)";
+  dataDestination(settings: CopilotSettings, vaultBase: string | null): Destination {
+    const env = claudeEffectiveEnv(settings, vaultBase);
+    if (isEnabledFlag(env.CLAUDE_CODE_USE_BEDROCK))
+      return { kind: "cloud", label: "Amazon Bedrock" };
+    if (isEnabledFlag(env.CLAUDE_CODE_USE_VERTEX))
+      return { kind: "cloud", label: "Google Vertex AI" };
+    const baseUrl = typeof env.ANTHROPIC_BASE_URL === "string" ? env.ANTHROPIC_BASE_URL : "";
+    if (baseUrl) return urlDestination(baseUrl, "The server set in your Claude Code settings");
+    return { kind: "cloud", label: "Anthropic" };
   },
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {

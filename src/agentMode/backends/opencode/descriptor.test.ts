@@ -36,60 +36,6 @@ describe("descriptor", () => {
       });
     });
 
-    describe("dataDestination()", () => {
-      const settings = {
-        providers: {
-          local: {
-            providerId: "local",
-            providerType: "openai-compatible",
-            displayName: "LM Box",
-            baseUrl: "http://127.0.0.1:1234/v1",
-            origin: { kind: "byok" },
-            addedAt: 0,
-          },
-          lan: {
-            providerId: "lan",
-            providerType: "openai-compatible",
-            displayName: "Office GPU",
-            baseUrl: "http://192.168.1.20:8000/v1",
-            origin: { kind: "byok" },
-            addedAt: 0,
-          },
-          anthropic: {
-            providerId: "anthropic",
-            providerType: "anthropic",
-            displayName: "Anthropic",
-            origin: { kind: "byok", catalogProviderId: "anthropic" },
-            addedAt: 0,
-          },
-          plus: {
-            providerId: "plus",
-            providerType: "openai-compatible",
-            displayName: "Copilot Plus",
-            origin: { kind: "copilot-plus" },
-            addedAt: 0,
-          },
-        },
-      } as unknown as CopilotSettings;
-
-      it.each([
-        ["local/qwen3", "this computer"],
-        ["lan/qwen3", "Office GPU"],
-        ["anthropic/claude-sonnet-4-5", "Anthropic"],
-        ["copilot-plus/copilot-plus-flash", "Copilot Plus (Brevilabs, US)"],
-        ["opencode/big-pickle", "OpenCode Zen"],
-        ["custom/model", "the custom provider set in opencode"],
-        ["__preload_pending__", null],
-      ])(
-        "names where %s is sent for https://github.com/logancyang/obsidian-copilot/issues/2889",
-        (baseModelId, expected) => {
-          expect(OpencodeBackendDescriptor.dataDestination(settings, baseModelId, null)).toBe(
-            expected
-          );
-        }
-      );
-    });
-
     describe("managedInstall.getState()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/578 reports the shared manager's install progress", () => {
         const plugin = vaultPlugin(os.tmpdir());

@@ -37,6 +37,8 @@ import { CODEX_BINARY_NAME } from "./cliSetup";
 import { buildCodexModeMapping, buildCodexModeState } from "./codexModeMapping";
 import { isSupportedCodexAcpPath, inspectCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
 import { classifyBinaryInstall } from "@/agentMode/backends/shared/binaryCompatibility";
+import { urlDestination } from "@/modelManagement";
+import type { Destination } from "@/types/destination";
 
 const codexBinaryManager = new CodexBinaryManager();
 
@@ -115,10 +117,11 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     return name.replace(/^gpt/i, "GPT");
   },
 
-  dataDestination(settings: CopilotSettings): string {
+  dataDestination(settings: CopilotSettings): Destination {
     const overrides = settings.agentMode?.backends?.codex?.envOverrides;
-    const customServer = overrides?.OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL;
-    return customServer ? "the server set in your Codex settings" : "Codex (OpenAI)";
+    const baseUrl = overrides?.OPENAI_BASE_URL || process.env.OPENAI_BASE_URL;
+    if (baseUrl) return urlDestination(baseUrl, "The server set in OPENAI_BASE_URL");
+    return { kind: "cloud", label: "OpenAI" };
   },
 
   presentPermissionOption(option: PermissionOption, metadata: unknown): PermissionOption {

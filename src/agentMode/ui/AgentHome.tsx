@@ -34,8 +34,6 @@ import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
 import { useChatInputAutoFocus } from "@/agentMode/ui/hooks/useChatInputAutoFocus";
 import { useRefreshEmptyLandingOnContextSourceChange } from "@/agentMode/ui/hooks/useRefreshEmptyLandingOnContextSourceChange";
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
-import { AgentDestinationLine, resolveDataDestination } from "@/agentMode/ui/AgentDestinationLine";
-import { getVaultBase } from "@/utils/vaultPath";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
@@ -563,10 +561,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     />
   );
 
-  const landingDestination = isLanding
-    ? resolveDataDestination(modelPickerOverride, settings, getVaultBase(app))
-    : null;
-
   const showProjectHero = isProjectLanding && !isOrphanedProject;
   const heroText = showProjectHero ? `Chat in ${projectName}` : greeting;
   const hero = (
@@ -652,16 +646,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 {isLanding ? (
                   <AgentLandingStack
                     hero={hero}
-                    composer={
-                      landingDestination ? (
-                        <>
-                          <AgentDestinationLine destination={landingDestination} />
-                          {composerNode}
-                        </>
-                      ) : (
-                        composerNode
-                      )
-                    }
+                    composer={composerNode}
                     floating={
                       !isProjectLanding &&
                       projects.length === 0 &&

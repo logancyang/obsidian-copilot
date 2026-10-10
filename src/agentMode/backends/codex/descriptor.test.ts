@@ -458,19 +458,25 @@ describe("descriptor", () => {
         else process.env.OPENAI_BASE_URL = savedBaseUrl;
       });
 
-      it("names OpenAI by default and the user's server when a base URL is set for https://github.com/logancyang/obsidian-copilot/issues/2889", () => {
-        delete process.env.OPENAI_BASE_URL;
-        expect(CodexBackendDescriptor.dataDestination(settingsWithCodex({}), "gpt-5.5", null)).toBe(
-          "Codex (OpenAI)"
-        );
-        expect(
-          CodexBackendDescriptor.dataDestination(
-            settingsWithCodex({ envOverrides: { OPENAI_BASE_URL: "https://proxy.example" } }),
-            "gpt-5.5",
-            null
-          )
-        ).toBe("the server set in your Codex settings");
-      });
+      it.each([
+        [{}, { kind: "cloud", label: "OpenAI" }],
+        [
+          { OPENAI_BASE_URL: "https://proxy.example/v1" },
+          { kind: "cloud", label: "The server set in OPENAI_BASE_URL" },
+        ],
+        [
+          { OPENAI_BASE_URL: "http://192.168.1.20:8000/v1" },
+          { kind: "local", label: "A server on your local network" },
+        ],
+      ])(
+        "names where Codex sends requests with overrides %j for https://github.com/logancyang/obsidian-copilot/issues/2889",
+        (envOverrides, expected) => {
+          delete process.env.OPENAI_BASE_URL;
+          expect(
+            CodexBackendDescriptor.dataDestination!(settingsWithCodex({ envOverrides }), null)
+          ).toEqual(expected);
+        }
+      );
     });
 
     describe("presentPermissionOption()", () => {

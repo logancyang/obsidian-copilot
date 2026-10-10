@@ -75,6 +75,23 @@ describe("ByokGlobalTable", () => {
       expect(screen.getByText("Claude Opus 4.5")).toBeTruthy();
     });
 
+    it("names where each provider sends requests for https://github.com/logancyang/obsidian-copilot/issues/2889", () => {
+      const local: ByokTableGroup = {
+        provider: {
+          ...group.provider,
+          providerId: "p2",
+          displayName: "LM Studio",
+          baseUrl: "http://localhost:1234/v1",
+        },
+        models: [],
+      };
+      renderWithProvider(
+        <ByokGlobalTable groups={[group, local]} onConfigure={jest.fn()} onRemove={jest.fn()} />
+      );
+      expect(screen.getByText("Sends requests to: Anthropic")).toBeTruthy();
+      expect(screen.getByText("Sends requests to: A server on this computer")).toBeTruthy();
+    });
+
     it("shows the model count and a Verified badge for a verified provider", () => {
       renderWithProvider(
         <ByokGlobalTable groups={[group]} onConfigure={jest.fn()} onRemove={jest.fn()} />
