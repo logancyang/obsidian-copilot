@@ -14,12 +14,10 @@ export interface CodexAcpInvocation {
   env: NodeJS.ProcessEnv;
 }
 
-export type CodexAcpKind = "bundle" | "npm";
-
 export interface CodexAcpPackage {
   entryPath: string;
   version: string;
-  kind: CodexAcpKind;
+  kind: "bundle" | "npm";
 }
 
 export interface CodexAcpPackageFs {
@@ -151,14 +149,6 @@ export function resolveSupportedCodexAcpPackage(
   return supported;
 }
 
-export function resolveSupportedCodexAcpEntry(
-  adapterPath: string,
-  platform: NodeJS.Platform = process.platform,
-  packageFs: CodexAcpPackageFs = defaultPackageFs()
-): string {
-  return resolveSupportedCodexAcpPackage(adapterPath, platform, packageFs).entryPath;
-}
-
 export function bundledCodexRuntimePath(
   bundleEntryPath: string,
   platform: NodeJS.Platform
@@ -192,7 +182,7 @@ export function resolveCodexCommand(
 export function isSupportedCodexAcpPath(adapterPath: string | undefined): boolean {
   if (!adapterPath) return false;
   try {
-    resolveSupportedCodexAcpEntry(adapterPath);
+    resolveSupportedCodexAcpPackage(adapterPath);
     return true;
   } catch {
     return false;
