@@ -162,12 +162,12 @@ const RecentChatRow = memo(function RecentChatRow({
     : undefined;
 
   return (
-    <div>
+    <div className="tw-group">
       <div
         role="button"
         tabIndex={0}
         className={cn(
-          "tw-group tw-flex tw-min-h-9 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
+          "tw-flex tw-min-h-9 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
           "tw-text-left tw-transition-colors hover:tw-bg-modifier-hover"
         )}
         onClick={() => onOpen(item.id)}

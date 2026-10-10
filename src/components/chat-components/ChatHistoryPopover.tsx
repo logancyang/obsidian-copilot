@@ -422,10 +422,10 @@ function ChatHistoryItem({
   const deleteSummary = confirmDeleteId === chat.id ? getDeleteSummary?.(chat) : undefined;
 
   return (
-    <>
+    <div className="tw-group">
       <div
         className={cn(
-          "tw-group tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-modifier-hover"
+          "tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-modifier-hover"
         )}
         role="button"
         tabIndex={0}
@@ -559,6 +559,6 @@ function ChatHistoryItem({
       {deleteSummary && (
         <div className="tw-px-1 tw-pb-1 tw-text-xs tw-text-muted">{deleteSummary}</div>
       )}
-    </>
+    </div>
   );
 }

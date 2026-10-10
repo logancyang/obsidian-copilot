@@ -244,6 +244,7 @@ export class AgentSessionManager {
     {
       source?: { path: string };
       timer?: number;
+      saving?: Promise<unknown>;
       indexTimer?: number;
       unsub?: () => void;
       signature?: string;
@@ -2341,7 +2342,7 @@ export class AgentSessionManager {
     if (state.timer) window.clearTimeout(state.timer);
     state.timer = window.setTimeout(() => {
       state.timer = undefined;
-      this.flushAutoSave(session).catch((e) =>
+      state.saving = this.flushAutoSave(session).catch((e) =>
         logWarn(`[AgentMode] auto-save failed for ${session.internalId}`, e)
       );
     }, AUTOSAVE_DEBOUNCE_MS);
@@ -2458,6 +2459,9 @@ export class AgentSessionManager {
         logWarn(`[AgentMode] drain session-index update failed for ${session.internalId}`, e);
       }
     }
+    // A save that already started is in neither timer; closing must still wait for it.
+    // https://github.com/logancyang/obsidian-copilot/issues/2888
+    await state?.saving;
     if (!state?.timer) return;
     window.clearTimeout(state.timer);
     state.timer = undefined;

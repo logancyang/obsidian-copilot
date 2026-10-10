@@ -3760,6 +3760,24 @@ describe("AgentSessionManager", () => {
           expect(await index.isTombstoned("opencode", sessionId)).toBe(true);
         });
 
+        it(`${issue} deletes the note an autosave that is already writing creates after delete starts`, async () => {
+          const { setTimeout: realSetTimeout } =
+            jest.requireActual<typeof import("timers")>("timers");
+          jest.useFakeTimers();
+          getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
+          const { manager, persistence, session, chatId } = await openChat();
+          persistence.saveSession.mockImplementationOnce(
+            () =>
+              new Promise((resolve) => realSetTimeout(() => resolve({ path: "chats/new.md" }), 50))
+          );
+          getSessionTestHandle(session).setMessages([{ message: "First turn" }], true);
+          await jest.advanceTimersByTimeAsync(2000);
+
+          await manager.deleteChatHistory(chatId);
+
+          expect(persistence.deleteFile).toHaveBeenCalledWith("chats/new.md");
+        });
+
         it(`${issue} deletes the first note that closing a native chat with a pending autosave writes`, async () => {
           jest.useFakeTimers();
           getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
