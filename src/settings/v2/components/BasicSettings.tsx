@@ -237,7 +237,22 @@ export const BasicSettings: React.FC = () => {
         <SettingItem
           type="custom"
           title="Copilot folder location"
-          description="Where Copilot keeps conversations, prompts, memory and more. All sub-folders derive from this."
+          description={
+            <div className="tw-flex tw-items-center tw-gap-1.5">
+              <span className="tw-leading-none">
+                Where Copilot keeps conversations, prompts, memory and more. All sub-folders derive
+                from this.
+              </span>
+              <HelpTooltip
+                content={
+                  <div className="tw-max-w-96 tw-py-4 tw-text-xs tw-text-muted">
+                    Use a dot name like <code>.copilot</code> to hide the folder. Obsidian Sync
+                    skips hidden folders. <code>.obsidian</code> can&#39;t be used.
+                  </div>
+                }
+              />
+            </div>
+          }
         >
           <div className="tw-flex tw-items-center tw-gap-2">
             <Input
@@ -264,7 +279,7 @@ export const BasicSettings: React.FC = () => {
             <Button
               variant="secondary"
               size="icon"
-              onClick={() => revealFolderInExplorer(app, settings.copilotFolder)}
+              onClick={() => void revealFolderInExplorer(app, settings.copilotFolder)}
               aria-label="Open Copilot folder"
               title="Open Copilot folder"
             >

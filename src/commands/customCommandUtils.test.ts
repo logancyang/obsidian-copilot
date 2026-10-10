@@ -780,7 +780,7 @@ describe("customCommandUtils", () => {
       frontmatter: MockFrontmatter;
     }
     interface MockAppLike {
-      vault: { read: jest.Mock };
+      vault: { read: jest.Mock; getAbstractFileByPath: jest.Mock };
       metadataCache: { getFileCache: jest.Mock };
     }
     type AppRef = { app: unknown };
@@ -807,6 +807,7 @@ describe("customCommandUtils", () => {
             .mockResolvedValue(
               "---\ncopilot-command-context-menu-enabled: true\ncopilot-command-slash-enabled: false\ncopilot-command-context-menu-order: 42\ncopilot-command-model-key: gpt-4\ncopilot-command-last-used: 1234567890\n---\nPrompt content here."
             ),
+          getAbstractFileByPath: jest.fn(() => mockFile),
         },
         metadataCache: {
           getFileCache: jest.fn().mockReturnValue(mockMetadata),
