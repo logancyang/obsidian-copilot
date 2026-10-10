@@ -974,6 +974,19 @@ describe("OpencodeBackend", () => {
       );
     });
 
+    describe("failureCauseFromLog()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/662 reads the cause from OpenCode's server 5xx line and ignores other lines", () => {
+        const backend = new OpencodeBackend(NO_MODELS_DEPS);
+
+        expect(
+          backend.failureCauseFromLog(
+            'level=INFO cause="Error: EPERM: operation not permitted" role=server http.status=500'
+          )
+        ).toBe("Error: EPERM: operation not permitted");
+        expect(backend.failureCauseFromLog('level=ERROR message="ACP request failed"')).toBeNull();
+      });
+    });
+
     describe("buildSpawnDescriptor()", () => {
       beforeEach(() => {
         resetSettings();

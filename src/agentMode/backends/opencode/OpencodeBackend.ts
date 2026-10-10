@@ -18,6 +18,7 @@ import {
 } from "@/agentMode/backends/shared/builtinSkillEnv";
 import { OpencodeBackendDescriptor } from "./descriptor";
 import { copilotPlusModelId, mapProviderToOpencodeId } from "./opencodeModelResolve";
+import { opencodeServerFailureCause } from "./opencodeServerFailure";
 import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 import { CopilotPlusUsageReader } from "@/agentMode/backends/shared/copilotPlusUsage";
 import type { SelfHostWebSearchAgentChannel } from "@/LLMProviders/selfHostServices";
@@ -78,6 +79,10 @@ export class OpencodeBackend implements AcpBackend {
 
   async readContextWindow(wireModelId: string | null | undefined): Promise<number | null> {
     return this.#copilotPlus.readContextWindow(copilotPlusModelId(wireModelId));
+  }
+
+  failureCauseFromLog(stderrLine: string): string | null {
+    return opencodeServerFailureCause(stderrLine);
   }
 
   async buildSpawnDescriptor(ctx: {

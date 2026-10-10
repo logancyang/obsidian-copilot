@@ -306,11 +306,9 @@ export class AcpBackendProcess implements BackendProcess {
       mcpServers: [],
       ...this.additionalDirectoriesField(params.additionalDirectories),
     };
-    const wireResp = await this.requireConnection()
-      .agent.request("session/new", req)
-      .catch(async (err: unknown) => {
-        throw await this.serviceStoppedOr(err);
-      });
+    const wireResp = await this.requestReportingServiceFailure((connection) =>
+      connection.agent.request("session/new", req)
+    );
     this.hasServedSession = true;
     this.recordWireState(wireResp.sessionId, {
       modes: wireResp.modes ?? null,
@@ -323,14 +321,12 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async prompt(params: PromptInput): Promise<PromptOutput> {
-    const resp = await this.requireConnection()
-      .agent.request("session/prompt", {
+    const resp = await this.requestReportingServiceFailure((connection) =>
+      connection.agent.request("session/prompt", {
         sessionId: sessionIdToAcp(params.sessionId),
         prompt: promptContentToAcp(params.prompt),
       })
-      .catch(async (err: unknown) => {
-        throw await this.serviceStoppedOr(err);
-      });
+    );
     this.hasServedSession = true;
     const usage = resp.usage;
     if (usage && !this.sawLiveUsage.has(params.sessionId)) {
@@ -622,7 +618,7 @@ export class AcpBackendProcess implements BackendProcess {
   // way and restart forever. A healthy service reports some failures with the same error as a
   // dead one, so a failed `session/list` probe decides. https://github.com/Brevilabs/obsidian-copilot-private/issues/561
   // https://github.com/anomalyco/opencode/issues/51716
-  private async serviceStoppedOr(err: unknown): Promise<unknown> {
+  private async serviceStoppedOr(err: unknown, loggedCause: () => string | null): Promise<unknown> {
     if (
       !(err instanceof RequestError && err.code === JSONRPC_INTERNAL_ERROR) ||
       !this.hasCapability("session/list")
@@ -635,14 +631,41 @@ export class AcpBackendProcess implements BackendProcess {
         () => true,
         () => false
       );
-    if (serviceAnswers) return err;
+    const cause = loggedCause();
+    const logged = cause ? `\n\n${cause}` : "";
+    if (serviceAnswers) {
+      return logged ? new RequestError(err.code, `${err.message}${logged}`, err.data) : err;
+    }
     if (!this.hasServedSession) {
       return new Error(
-        `${this.backend.displayName}'s internal service failed to start. Check the Copilot log for its error.`
+        `${this.backend.displayName}'s internal service failed to start. Check the Copilot log for its error.${logged}`
       );
     }
     this.unhealthyHandler?.();
-    return new Error(`${this.backend.displayName}'s internal service stopped. Please try again.`);
+    return new Error(
+      `${this.backend.displayName}'s internal service stopped. Please try again.${logged}`
+    );
+  }
+
+  // The generic internal error hides why the request failed; the backend logs the reason on its
+  // own stderr. Only lines from this process that arrive between sending the request and finishing
+  // the service probe count, so an earlier unrelated failure is never shown.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/662
+  private async requestReportingServiceFailure<T>(
+    send: (connection: ClientConnection) => Promise<T>
+  ): Promise<T> {
+    const connection = this.requireConnection();
+    let cause: string | null = null;
+    const stopWatching = this.process?.onStderrLine((line) => {
+      cause ??= this.backend.failureCauseFromLog?.(line) ?? null;
+    });
+    try {
+      return await send(connection);
+    } catch (err) {
+      throw await this.serviceStoppedOr(err, () => cause);
+    } finally {
+      stopWatching?.();
+    }
   }
 
   private requireConnection(): ClientConnection {
