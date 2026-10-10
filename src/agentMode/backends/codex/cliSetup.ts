@@ -2,7 +2,9 @@ import { terminalSignInCommand } from "@/agentMode/backends/shared/terminalSignI
 import { resolveCodexCommand, type CodexAcpPackageFs } from "./codexVersion";
 
 export const CODEX_BINARY_NAME = "codex-acp";
-export const CODEX_PINNED_VERSION = "2.0.1";
+// Keep inputs.json in Brevilabs/codex-acp-binary on this release so its PR builds test what Copilot ships.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/685
+export const CODEX_PINNED_VERSION = "2.2.2";
 
 export function codexBinaryPathPlaceholder(platform: NodeJS.Platform): string {
   return platform === "win32"

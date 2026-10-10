@@ -23,7 +23,7 @@ function npmFs(entryPath: string, launcher?: string): CodexAcpPackageFs {
     entryPath,
     {
       name: "@agentclientprotocol/codex-acp",
-      version: "2.0.1",
+      version: "2.2.2",
       bin: { "codex-acp": "dist/index.js" },
     },
     launcher
@@ -31,7 +31,7 @@ function npmFs(entryPath: string, launcher?: string): CodexAcpPackageFs {
 }
 
 function bundleFs(entryPath: string, platform: NodeJS.Platform): CodexAcpPackageFs {
-  return packageFs(entryPath, { acpVersion: "2.0.1", target: `${platform}-${process.arch}` });
+  return packageFs(entryPath, { acpVersion: "2.2.2", target: `${platform}-${process.arch}` });
 }
 
 describe("cliSetup", () => {
@@ -67,13 +67,13 @@ describe("cliSetup", () => {
     it.each([
       [
         "darwin",
-        "/Users/Jane Doe/.obsidian-copilot/codex/2.0.1/codex-acp",
-        "CODEX_HOME=/profile '/Users/Jane Doe/.obsidian-copilot/codex/2.0.1/codex-runtime/bin/codex' login",
+        "/Users/Jane Doe/.obsidian-copilot/codex/2.2.2/codex-acp",
+        "CODEX_HOME=/profile '/Users/Jane Doe/.obsidian-copilot/codex/2.2.2/codex-runtime/bin/codex' login",
       ],
       [
         "win32",
-        "C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.0.1\\codex-acp.exe",
-        "$env:CODEX_HOME = '/profile'; & 'C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.0.1\\codex-runtime\\bin\\codex.exe' login",
+        "C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.2.2\\codex-acp.exe",
+        "$env:CODEX_HOME = '/profile'; & 'C:\\Users\\Jane Doe\\.obsidian-copilot\\codex\\2.2.2\\codex-runtime\\bin\\codex.exe' login",
       ],
     ] as const)(
       `signs a %s bundle in through its own Codex with a quoted path: ${DIRECT_RUNTIME_ISSUE}`,

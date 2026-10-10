@@ -14,10 +14,10 @@ const mockPackageFs = {
   readFileSync: (file: string) =>
     JSON.stringify(
       file.replaceAll("\\", "/").endsWith("/provenance.json")
-        ? { acpVersion: "2.0.1", target: `${process.platform}-${process.arch}` }
+        ? { acpVersion: "2.2.2", target: `${process.platform}-${process.arch}` }
         : {
             name: "@agentclientprotocol/codex-acp",
-            version: "2.0.1",
+            version: "2.2.2",
             bin: { "codex-acp": "dist/index.js" },
           }
     ),
