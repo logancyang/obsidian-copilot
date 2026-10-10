@@ -37,7 +37,9 @@ import type {
   ModeMapping,
   ModelSelection,
   ModelWireCodec,
+  PermissionOption,
 } from "@/agentMode/session/types";
+import { isOpencodeZenWireId } from "@/utils/opencodeModelId";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
 import { findModelEntry } from "@/agentMode/session/translateBackendState";
@@ -96,6 +98,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
   dataDestination(settings: CopilotSettings, baseModelId: string): string | null {
     if (!baseModelId.includes("/")) return null;
+    if (isOpencodeZenWireId(baseModelId)) return "OpenCode Zen";
     const opencodeProviderId = baseModelId.split("/")[0];
     const provider = Object.values(settings.providers).find(
       (p) => mapProviderToOpencodeId(p)?.id === opencodeProviderId
@@ -104,6 +107,17 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     if (provider.origin.kind === "copilot-plus") return "Copilot Plus (Brevilabs, US)";
     if (isLoopbackUrl(provider.baseUrl)) return "this computer";
     return provider.displayName;
+  },
+
+  // OpenCode 2.0.22 stores an "always" reply as a saved rule for its project folder.
+  // https://github.com/logancyang/obsidian-copilot/issues/2889
+  presentPermissionOption(option: PermissionOption): PermissionOption {
+    if (option.kind !== "allow_always") return option;
+    return {
+      ...option,
+      description:
+        "Saves a rule that opencode uses in later chats in this folder: the vault folder, or the project note's folder for a project chat.",
+    };
   },
 
   getWireBaseId(configuredModelId: string, settings: CopilotSettings): string | null {

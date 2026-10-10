@@ -91,7 +91,7 @@ Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** 
 
 An empty Agent Chat shows a fixed hint: "Ask anything • @ to add context • / for commands".
 
-Above the message box, an empty chat also shows where your context goes: "Your message, notes the agent reads, and tool results go to …". Claude goes to Claude Code (Anthropic) and Codex to Codex (OpenAI), unless you set a custom server for them. opencode names the provider of the selected model, or "this computer" for a local model. The line changes when you change the agent or model, and it disappears after your first message.
+Above the message box, an empty chat also shows where your context goes: "Your message, notes the agent reads, and tool results go to …". Claude goes to Claude Code (Anthropic) and Codex to Codex (OpenAI), unless you set a custom server for them. opencode names the provider of the selected model, such as OpenCode Zen for its free models, or "this computer" for a local model. The line changes when you change the agent or model, and it disappears after your first message.
 
 Agent Chat groups consecutive tool calls and reasoning into a compact activity row. The row reports the total tool commands, distinct files read or edited, and recorded reasoning time. Open it to inspect every step.
 
@@ -126,7 +126,7 @@ With Codex, **Safe** uses the adapter's **Ask for approval** preset. It can edit
 
 When Codex presents a plan, you can **Approve** it, **Reject** it, or type feedback in the plan card. Feedback starts a new chat turn so Codex can revise the plan; review the new proposal before approving it. If you ask Codex to save the plan to a note, approve the revised plan to let it create the note.
 
-When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. The one-time allow is highlighted. Hover an "always" option to see what it covers and how long it lasts: Claude names its rule and the settings file it saves to, and Codex says when it saves a rule for later chats. Claude offers "Allow always" only when it has a rule to save. Stopping the turn cancels unanswered requests.
+When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. The one-time allow is highlighted. Hover an "always" option to see what it covers and how long it lasts: Claude names its rule and the settings file it saves to, and Codex and opencode say when they save a rule for later chats. Claude offers "Allow always" only when it has a rule to save. Stopping the turn cancels unanswered requests.
 
 When Claude or Codex asks a set of questions, answer the current tab and select **Next**. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead. **Cancel** dismisses the entire request. If Codex withdraws or times out the question, its card disappears.
 

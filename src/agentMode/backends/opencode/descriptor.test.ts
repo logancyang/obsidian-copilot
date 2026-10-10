@@ -22,6 +22,20 @@ jest.mock("@/logger", () => ({
 
 describe("descriptor", () => {
   describe("OpencodeBackendDescriptor", () => {
+    describe("presentPermissionOption()", () => {
+      it("says an always reply is saved for later chats in the folder for https://github.com/logancyang/obsidian-copilot/issues/2889", () => {
+        const always = { optionId: "always", name: "Always allow", kind: "allow_always" } as const;
+        const once = { optionId: "once", name: "Allow once", kind: "allow_once" } as const;
+
+        expect(OpencodeBackendDescriptor.presentPermissionOption?.(always, undefined)).toEqual({
+          ...always,
+          description:
+            "Saves a rule that opencode uses in later chats in this folder: the vault folder, or the project note's folder for a project chat.",
+        });
+        expect(OpencodeBackendDescriptor.presentPermissionOption?.(once, undefined)).toBe(once);
+      });
+    });
+
     describe("dataDestination()", () => {
       const settings = {
         providers: {
@@ -63,7 +77,8 @@ describe("descriptor", () => {
         ["lan/qwen3", "Office GPU"],
         ["anthropic/claude-sonnet-4-5", "Anthropic"],
         ["copilot-plus/copilot-plus-flash", "Copilot Plus (Brevilabs, US)"],
-        ["zen/big-pickle", "the zen provider set in opencode"],
+        ["opencode/big-pickle", "OpenCode Zen"],
+        ["custom/model", "the custom provider set in opencode"],
         ["__preload_pending__", null],
       ])(
         "names where %s is sent for https://github.com/logancyang/obsidian-copilot/issues/2889",
