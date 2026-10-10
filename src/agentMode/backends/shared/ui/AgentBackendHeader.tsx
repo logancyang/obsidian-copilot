@@ -8,6 +8,8 @@ import type {
 import { InstallBadge } from "@/agentMode/backends/shared/installStatus";
 import { Button } from "@/components/ui/button";
 import { TruncatedText } from "@/components/TruncatedText";
+import { DestinationIcon } from "@/components/ui/DestinationIcon";
+import type { Destination } from "@/types/destination";
 
 export interface AgentBackendHeaderProps {
   displayName: string;
@@ -17,6 +19,7 @@ export interface AgentBackendHeaderProps {
   managedInstall: ManagedInstallActionState;
   resolvedPath: string | null;
   onConfigure: () => void;
+  destination?: Destination;
 }
 
 export function AgentBackendHeader({
@@ -27,6 +30,7 @@ export function AgentBackendHeader({
   managedInstall,
   resolvedPath,
   onConfigure,
+  destination,
 }: AgentBackendHeaderProps) {
   const updating = managedInstall.kind === "running";
   const updateFailed = managedInstall.kind === "error";
@@ -38,6 +42,7 @@ export function AgentBackendHeader({
           <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col">
             <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
               <span className="tw-text-base tw-font-semibold">{displayName}</span>
+              {destination && <DestinationIcon destination={destination} />}
               <InstallBadge state={installState} authStatus={authStatus} />
             </div>
             {resolvedPath && (

@@ -2,6 +2,7 @@ import type { App } from "obsidian";
 import type React from "react";
 import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
+import type { Destination } from "@/types/destination";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type {
   BackendConfigOption,
@@ -124,6 +125,10 @@ export interface BackendDescriptor {
   normalizeModelName?(name: string): string;
 
   presentPermissionOption?(option: PermissionOption, metadata: unknown): PermissionOption;
+
+  // Agents whose own CLI picks the server name it in their settings tab.
+  // https://github.com/logancyang/obsidian-copilot/issues/2889
+  dataDestination?(settings: CopilotSettings, vaultBase: string | null): Destination;
 
   readonly showModelDescriptions?: boolean;
 

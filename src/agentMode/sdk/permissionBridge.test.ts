@@ -40,7 +40,7 @@ describe("permissionBridge", () => {
         toolUseID: "toolu_test_id",
       } as unknown as Parameters<PermissionBridge["canUseTool"]>[2];
 
-      it("prompts with the tool kind, call id, raw input, and the four allow/reject options", async () => {
+      it("prompts with the tool kind, call id, raw input, and only one-time options when Claude Code suggests no rule for https://github.com/logancyang/obsidian-copilot/issues/2889", async () => {
         let captured: PermissionPrompt | null = null;
         const bridge = makeBridge(async (req) => {
           captured = req;
@@ -51,12 +51,62 @@ describe("permissionBridge", () => {
         expect(captured!.toolCall.kind).toBe("edit");
         expect(captured!.toolCall.toolCallId).toBe("toolu_test_id");
         expect(captured!.toolCall.rawInput).toEqual({ file_path: "a.md" });
-        expect(captured!.options.map((o) => o.kind)).toEqual([
-          "allow_once",
-          "allow_always",
-          "reject_once",
-          "reject_always",
-        ]);
+        expect(captured!.options.map((o) => o.kind)).toEqual(["allow_once", "reject_once"]);
+      });
+
+      it.each([
+        ["session", "Covers Bash(git add:*) until this chat ends. Start a new chat to undo."],
+        [
+          "localSettings",
+          "Covers Bash(git add:*). Saved to .claude/settings.local.json in the vault folder (for a project chat, the project note's folder), for later chats there. Remove it there to undo.",
+        ],
+        [
+          "userSettings",
+          "Covers Bash(git add:*). Saved to settings.json in your Claude Code config folder (~/.claude by default), for all your Claude Code projects. Remove it there to undo.",
+        ],
+      ])(
+        "offers allow_always scoped to a %s rule suggestion for https://github.com/logancyang/obsidian-copilot/issues/2889",
+        async (destination, scope) => {
+          let captured: PermissionPrompt | null = null;
+          const bridge = makeBridge(async (req) => {
+            captured = req;
+            return { outcome: { outcome: "selected", optionId: "allow_once" } };
+          });
+          await bridge.canUseTool("Bash", { command: "git add ." }, {
+            ...ctx,
+            suggestions: [
+              {
+                type: "addRules",
+                rules: [{ toolName: "Bash", ruleContent: "git add:*" }],
+                behavior: "allow",
+                destination,
+              },
+            ],
+          } as unknown as Parameters<PermissionBridge["canUseTool"]>[2]);
+          expect(captured!.options.map((o) => [o.kind, o.description])).toEqual([
+            ["allow_once", undefined],
+            ["allow_always", scope],
+            ["reject_once", undefined],
+          ]);
+        }
+      );
+
+      it("names file-edit mode and added directories in a session scope for https://github.com/logancyang/obsidian-copilot/issues/2889", async () => {
+        let captured: PermissionPrompt | null = null;
+        const bridge = makeBridge(async (req) => {
+          captured = req;
+          return { outcome: { outcome: "selected", optionId: "allow_once" } };
+        });
+        await bridge.canUseTool("Edit", { file_path: "/notes/a.md" }, {
+          ...ctx,
+          suggestions: [
+            { type: "setMode", mode: "acceptEdits", destination: "session" },
+            { type: "addDirectories", directories: ["/notes"], destination: "session" },
+          ],
+        } as unknown as Parameters<PermissionBridge["canUseTool"]>[2]);
+        expect(captured!.options.find((o) => o.kind === "allow_always")?.description).toBe(
+          "Covers all file edits, access to /notes until this chat ends. Start a new chat to undo."
+        );
       });
 
       it("allows with the original input when the user picks allow_once", async () => {

@@ -451,7 +451,75 @@ describe("descriptor", () => {
       });
     });
 
+    describe("dataDestination()", () => {
+      const savedBaseUrl = process.env.OPENAI_BASE_URL;
+      afterEach(() => {
+        if (savedBaseUrl === undefined) delete process.env.OPENAI_BASE_URL;
+        else process.env.OPENAI_BASE_URL = savedBaseUrl;
+      });
+
+      it.each([
+        [{}, { kind: "cloud", label: "OpenAI" }],
+        [
+          { OPENAI_BASE_URL: "https://proxy.example/v1" },
+          { kind: "cloud", label: "The server set in OPENAI_BASE_URL" },
+        ],
+        [
+          { OPENAI_BASE_URL: "http://192.168.1.20:8000/v1" },
+          { kind: "local", label: "A server on your local network" },
+        ],
+      ])(
+        "names where Codex sends requests with overrides %j for https://github.com/logancyang/obsidian-copilot/issues/2889",
+        (envOverrides, expected) => {
+          delete process.env.OPENAI_BASE_URL;
+          expect(
+            CodexBackendDescriptor.dataDestination!(settingsWithCodex({ envOverrides }), null)
+          ).toEqual(expected);
+        }
+      );
+    });
+
     describe("presentPermissionOption()", () => {
+      it.each([
+        [
+          "accept_execpolicy_amendment",
+          "Yes, and don't ask again for commands that start with `npm test`",
+          "allow_always",
+          "Saved to rules/default.rules",
+        ],
+        [
+          "apply_network_policy_amendment:0",
+          "Yes, and allow this host in the future",
+          "allow_always",
+          "Saved to rules/default.rules",
+        ],
+        [
+          "apply_network_policy_amendment:1",
+          "No, and block this host in the future",
+          "reject_always",
+          "Saved to rules/default.rules",
+        ],
+        [
+          "allow_for_session",
+          "Yes, and don't ask again for this command in this session",
+          "allow_always",
+          "until this chat ends",
+        ],
+        [
+          "allow_permissions_session",
+          "Yes, and allow these permissions for this session",
+          "allow_always",
+          "until this chat ends",
+        ],
+      ] as const)(
+        "notes the scope of codex-acp 2.x option %s without metadata and keeps its label for https://github.com/logancyang/obsidian-copilot/issues/2889",
+        (optionId, name, kind, note) => {
+          const option: PermissionOption = { optionId, name, kind };
+          const presented = CodexBackendDescriptor.presentPermissionOption?.(option, undefined);
+          expect(presented).toEqual({ ...option, description: expect.stringContaining(note) });
+        }
+      );
+
       it.each([
         ["opaque-exec-decision", "acceptWithExecpolicyAmendment"],
         ["opaque-network-decision", "applyNetworkPolicyAmendment"],
@@ -468,7 +536,7 @@ describe("descriptor", () => {
         ).toEqual({
           optionId,
           name: "Allow Always",
-          description: rule,
+          description: `${rule}\nSaved to rules/default.rules in your Codex home (~/.codex by default) for all later Codex chats. Delete it there to undo.`,
           kind: "allow_always",
         });
       });
@@ -487,12 +555,14 @@ describe("descriptor", () => {
         ).toEqual({
           optionId: "opaque-network-rejection",
           name: "Block Always",
-          description: "Block api.example.com in the Future",
+          description: expect.stringMatching(
+            /^Block api\.example\.com in the Future\nSaved to rules\/default\.rules/
+          ),
           kind: "reject_always",
         });
       });
 
-      it("leaves a session decision unchanged even when its opaque id resembles a policy amendment", () => {
+      it("keeps a session decision's label and scopes it to the chat even when its opaque id resembles a policy amendment for https://github.com/logancyang/obsidian-copilot/issues/2889", () => {
         const option: PermissionOption = {
           optionId: "accept_execpolicy_amendment",
           name: "Allow Host for Session",
@@ -503,7 +573,11 @@ describe("descriptor", () => {
           CodexBackendDescriptor.presentPermissionOption?.(option, {
             codex: { decision: "acceptForSession" },
           })
-        ).toBe(option);
+        ).toEqual({
+          ...option,
+          description:
+            "Covers what this option names, until this chat ends. Start a new chat to undo.",
+        });
       });
 
       it.each([

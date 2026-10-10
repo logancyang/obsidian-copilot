@@ -3,13 +3,14 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { FreeModelWarningIcon } from "@/components/ui/FreeModelWarningIcon";
 import { LicenseRequiredIcon } from "@/components/ui/LicenseRequiredIcon";
 import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { DestinationIcon } from "@/components/ui/DestinationIcon";
 import { ModelCapabilityIcons, hasCapabilityIcons } from "@/components/ui/model-display";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import type { ModelCapability } from "@/constants";
 import { cn } from "@/lib/utils";
-import { ChevronRight, KeyRound } from "lucide-react";
+import type { Destination } from "@/types/destination";
+import { ChevronRight } from "lucide-react";
 import React from "react";
 
 const SETTINGS_PRICING_URL = createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "model_settings_lock");
@@ -29,7 +30,8 @@ export interface ModelEnableGroup {
   key: string;
   label: string;
   badge?: string;
-  tooltip?: string;
+  destination?: Destination;
+  destinationNote?: string;
   highlight?: boolean;
   rows: ModelEnableRow[];
 }
@@ -182,20 +184,11 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
                           {group.badge}
                         </Badge>
                       )}
-                      {group.tooltip && (
-                        <span
-                          className="tw-flex tw-shrink-0 tw-items-center"
-                          onClick={(e) => e.stopPropagation()}
-                          onPointerDown={(e) => e.stopPropagation()}
-                        >
-                          <HelpTooltip
-                            content={group.tooltip}
-                            side="top"
-                            buttonClassName="tw-size-4"
-                          >
-                            <KeyRound className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
-                          </HelpTooltip>
-                        </span>
+                      {group.destination && (
+                        <DestinationIcon
+                          destination={group.destination}
+                          note={group.destinationNote}
+                        />
                       )}
                     </div>
                   </CollapsibleTrigger>

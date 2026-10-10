@@ -26,6 +26,8 @@ import {
   sanitizeBuiltinSkillEnvOverrides,
 } from "@/agentMode/backends/shared/builtinSkillEnv";
 import { getVaultBase } from "@/utils/vaultPath";
+import { urlDestination } from "@/modelManagement";
+import type { Destination } from "@/types/destination";
 import { getMiyoFolderName } from "@/miyo/miyoUtils";
 import type {
   BackendAuth,
@@ -91,6 +93,40 @@ function claudeResolverEnv(): Omit<Parameters<typeof resolveClaudeBinary>[0], "o
       readdirSync: (p) => fs.readdirSync(p),
     },
   };
+}
+
+// Claude Code also takes `env` from its settings files, so a server set there (such as Bedrock)
+// must not read as Anthropic. https://github.com/logancyang/obsidian-copilot/issues/2889
+function claudeEffectiveEnv(
+  settings: CopilotSettings,
+  vaultBase: string | null
+): Record<string, unknown> {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const os = requireNodeModule<typeof import("node:os")>("os");
+  const path = requireNodeModule<typeof import("node:path")>("path");
+  const env = claudeChildEnv(settings);
+  const configDir = env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
+  const files = [path.join(configDir, "settings.json")];
+  if (vaultBase) {
+    files.push(path.join(vaultBase, ".claude", "settings.json"));
+    files.push(path.join(vaultBase, ".claude", "settings.local.json"));
+  }
+  const fileEnvs = files.map((file): Record<string, unknown> | undefined => {
+    try {
+      return (JSON.parse(fs.readFileSync(file, "utf8")) as { env?: Record<string, unknown> }).env;
+    } catch {
+      return undefined;
+    }
+  });
+  return Object.assign({}, env, ...fileEnvs) as Record<string, unknown>;
+}
+
+// Same truthy values Claude Code accepts for its provider switches.
+// https://github.com/logancyang/obsidian-copilot/issues/2889
+const TRUTHY_ENV_VALUES = new Set(["1", "true", "yes", "on"]);
+
+function isEnabledFlag(value: unknown): boolean {
+  return typeof value === "string" && TRUTHY_ENV_VALUES.has(value.trim().toLowerCase());
 }
 
 function claudeChildEnv(settings: CopilotSettings): NodeJS.ProcessEnv {
@@ -177,6 +213,17 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   summarizesSessionTitle: false,
   wire: claudeWire,
   showModelDescriptions: true,
+
+  dataDestination(settings: CopilotSettings, vaultBase: string | null): Destination {
+    const env = claudeEffectiveEnv(settings, vaultBase);
+    if (isEnabledFlag(env.CLAUDE_CODE_USE_BEDROCK))
+      return { kind: "cloud", label: "Amazon Bedrock" };
+    if (isEnabledFlag(env.CLAUDE_CODE_USE_VERTEX))
+      return { kind: "cloud", label: "Google Vertex AI" };
+    const baseUrl = typeof env.ANTHROPIC_BASE_URL === "string" ? env.ANTHROPIC_BASE_URL : "";
+    if (baseUrl) return urlDestination(baseUrl, "The server set in your Claude Code settings");
+    return { kind: "cloud", label: "Anthropic" };
+  },
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
     return [

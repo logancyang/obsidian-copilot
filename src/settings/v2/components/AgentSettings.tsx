@@ -25,6 +25,7 @@ import React from "react";
 import { QuickChatPanel } from "./QuickChatPanel";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
 import { AgentNotificationSoundSettings } from "./ui/AgentNotificationSoundSettings";
+import { getVaultBase } from "@/utils/vaultPath";
 
 const QUICK_CHAT_TAB_ID = "quickchat";
 
@@ -190,6 +191,7 @@ const BackendPanel: React.FC<{
           managedInstall={managedInstall}
           resolvedPath={resolvedPath ? formatBinaryPathForDisplay(resolvedPath) : null}
           onConfigure={() => descriptor.openInstallUI(plugin)}
+          destination={descriptor.dataDestination?.(settings, getVaultBase(plugin.app))}
         />
 
         {installState.kind === "ready" && manager && (

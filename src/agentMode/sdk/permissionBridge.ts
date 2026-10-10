@@ -134,18 +134,67 @@ export class PermissionBridge {
   }
 }
 
-const STANDARD_OPTION_NAMES: Record<PermissionOptionKind, string> = {
-  allow_once: "Allow once",
-  allow_always: "Allow always",
-  reject_once: "Deny once",
-  reject_always: "Deny always",
-};
-const STANDARD_OPTIONS: PermissionOption[] = PERMISSION_OPTION_KINDS.map((kind) => ({
-  optionId: kind,
-  name: STANDARD_OPTION_NAMES[kind],
-  kind,
-}));
+// "Deny always" saves nothing in the SDK, and "Allow always" only saves what Claude Code
+// suggests, so neither is offered when it would not hold.
+// https://github.com/logancyang/obsidian-copilot/issues/2889
 const STANDARD_OPTION_IDS = new Set<string>(PERMISSION_OPTION_KINDS);
+const ALLOW_ONCE: PermissionOption = {
+  optionId: "allow_once",
+  name: "Allow once",
+  kind: "allow_once",
+};
+const REJECT_ONCE: PermissionOption = {
+  optionId: "reject_once",
+  name: "Deny once",
+  kind: "reject_once",
+};
+
+function permissionOptions(suggestions: PermissionUpdate[] | undefined): PermissionOption[] {
+  if (!suggestions?.length) return [ALLOW_ONCE, REJECT_ONCE];
+  const allowAlways: PermissionOption = {
+    optionId: "allow_always",
+    name: "Allow always",
+    kind: "allow_always",
+    description: describeSuggestionScope(suggestions),
+  };
+  return [ALLOW_ONCE, allowAlways, REJECT_ONCE];
+}
+
+const CHAT_FOLDER = "the vault folder (for a project chat, the project note's folder)";
+// Most lasting first, so a mixed suggestion reports where it outlives the chat.
+// https://github.com/logancyang/obsidian-copilot/issues/2889
+const SAVED_DESTINATIONS: ReadonlyArray<[PermissionUpdate["destination"], string]> = [
+  [
+    "userSettings",
+    "settings.json in your Claude Code config folder (~/.claude by default), for all your Claude Code projects",
+  ],
+  ["projectSettings", `.claude/settings.json in ${CHAT_FOLDER}, for later chats there`],
+  ["localSettings", `.claude/settings.local.json in ${CHAT_FOLDER}, for later chats there`],
+];
+
+function describeSuggestionScope(suggestions: PermissionUpdate[]): string {
+  const covers = suggestions.flatMap(describeUpdate).join(", ") || "Claude Code's suggested rule";
+  const saved = SAVED_DESTINATIONS.find(([d]) => suggestions.some((s) => s.destination === d));
+  if (!saved) return `Covers ${covers} until this chat ends. Start a new chat to undo.`;
+  return `Covers ${covers}. Saved to ${saved[1]}. Remove it there to undo.`;
+}
+
+function describeUpdate(update: PermissionUpdate): string[] {
+  switch (update.type) {
+    case "addRules":
+    case "replaceRules":
+      return update.rules.map((r) =>
+        r.ruleContent ? `${r.toolName}(${r.ruleContent})` : r.toolName
+      );
+    case "setMode":
+      return [update.mode === "acceptEdits" ? "all file edits" : `${update.mode} mode`];
+    case "addDirectories":
+      return update.directories.map((d) => `access to ${d}`);
+    case "removeRules":
+    case "removeDirectories":
+      return [];
+  }
+}
 
 function synthesizePermissionPrompt(
   toolName: string,
@@ -165,7 +214,7 @@ function synthesizePermissionPrompt(
       mcpServer,
       ...vendorMetaFields(name, undefined, mcpServer),
     },
-    options: STANDARD_OPTIONS,
+    options: permissionOptions(ctx.suggestions),
   };
 }
 

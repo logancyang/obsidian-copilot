@@ -4,6 +4,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 const SESSION_ID = "session-1" as SessionId;
+const UNKNOWN_ALWAYS_SCOPE =
+  "The agent decides what this covers, and it may keep it for later chats. Undo it in the agent's own settings.";
 const TOOL_CALL_ID = "tool-1";
 
 function makeRequest(options: PermissionOption[]): PermissionPrompt {
@@ -130,6 +132,48 @@ describe("ToolPermissionCard", () => {
       expect(screen.getByRole("button", { name: "Block Always" })).toBeTruthy();
     });
 
+    it("highlights only the one-time allow for https://github.com/logancyang/obsidian-copilot/issues/2889", () => {
+      render(
+        <ToolPermissionCard
+          request={makeRequest([
+            { optionId: "once", name: "Allow once", kind: "allow_once" },
+            { optionId: "always", name: "Allow always", kind: "allow_always" },
+            { optionId: "no", name: "Deny once", kind: "reject_once" },
+          ])}
+          onResolve={jest.fn()}
+        />
+      );
+
+      const buttons = screen.getAllByRole("button");
+      expect(buttons.map((button) => button.textContent)).toEqual([
+        "Allow once",
+        "Allow always",
+        "Deny once",
+      ]);
+      expect(buttons.map((button) => button.classList.contains("mod-cta"))).toEqual([
+        true,
+        false,
+        false,
+      ]);
+    });
+
+    it("gives an always option without its own note a hover note on scope and lifetime for https://github.com/logancyang/obsidian-copilot/issues/2889", async () => {
+      render(
+        <ToolPermissionCard
+          request={makeRequest([
+            { optionId: "once", name: "Allow once", kind: "allow_once" },
+            { optionId: "always", name: "Always allow", kind: "allow_always" },
+          ])}
+          onResolve={jest.fn()}
+        />
+      );
+
+      fireEvent.pointerMove(screen.getByRole("button", { name: "Always allow" }), {
+        pointerType: "mouse",
+      });
+      expect((await screen.findByRole("tooltip")).textContent).toBe(UNKNOWN_ALWAYS_SCOPE);
+    });
+
     it("keeps generated suffixes distinct from backend-provided labels", () => {
       render(
         <ToolPermissionCard
@@ -197,7 +241,9 @@ describe("ToolPermissionCard", () => {
       });
 
       fireEvent.pointerMove(button, { pointerType: "mouse" });
-      expect((await screen.findByRole("tooltip")).textContent).toBe(prefix);
+      expect((await screen.findByRole("tooltip")).textContent).toBe(
+        `${UNKNOWN_ALWAYS_SCOPE}\n${prefix}`
+      );
 
       fireEvent.click(button);
       expect(onResolve).toHaveBeenLastCalledWith(TOOL_CALL_ID, "approved-execpolicy-amendment");
