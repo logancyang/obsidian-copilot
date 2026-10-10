@@ -128,6 +128,43 @@ describe("descriptor", () => {
       expect(signOutFromClaude).not.toHaveBeenCalled();
     });
   });
+  describe("ClaudeBackendDescriptor.dataDestination()", () => {
+    const serverEnvKeys = [
+      "ANTHROPIC_BASE_URL",
+      "CLAUDE_CODE_USE_BEDROCK",
+      "CLAUDE_CODE_USE_VERTEX",
+    ];
+    const saved = serverEnvKeys.map((key) => [key, process.env[key]] as const);
+    beforeEach(() => {
+      for (const key of serverEnvKeys) delete process.env[key];
+    });
+    afterEach(() => {
+      for (const [key, value] of saved) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    });
+
+    it.each([
+      [{}, "Claude Code (Anthropic)"],
+      [
+        { ANTHROPIC_BASE_URL: "https://proxy.example" },
+        "the server set in your Claude Code settings",
+      ],
+      [{ CLAUDE_CODE_USE_BEDROCK: "1" }, "the server set in your Claude Code settings"],
+    ])(
+      "names where Claude Code sends context with overrides %j for https://github.com/logancyang/obsidian-copilot/issues/2889",
+      (envOverrides, expected) => {
+        expect(
+          ClaudeBackendDescriptor.dataDestination(
+            settingsWithClaudeRuntime({ envOverrides }),
+            "sonnet"
+          )
+        ).toBe(expected);
+      }
+    );
+  });
+
   describe("ClaudeBackendDescriptor.createBackendProcess()", () => {
     afterEach(() => {
       resetSettings();
@@ -147,7 +184,6 @@ describe("descriptor", () => {
           notificationSound: false,
           notificationSoundId: "piano",
           welcomeDismissed: false,
-          dataNoticeAccepted: false,
           skills: { folder: "copilot/skills" },
           backends: {
             claude: {

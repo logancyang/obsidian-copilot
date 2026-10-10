@@ -143,7 +143,6 @@ export interface CopilotSettings {
     notificationSound: boolean;
     notificationSoundId: NotificationSoundId;
     welcomeDismissed: boolean;
-    dataNoticeAccepted: boolean;
     skills: {
       folder: string;
       suppressMigrationConfirm?: boolean;
@@ -828,11 +827,6 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
       ? r.welcomeDismissed
       : DEFAULT_SETTINGS.agentMode.welcomeDismissed;
 
-  const dataNoticeAccepted =
-    typeof r.dataNoticeAccepted === "boolean"
-      ? r.dataNoticeAccepted
-      : DEFAULT_SETTINGS.agentMode.dataNoticeAccepted;
-
   const claudeCliRaw =
     r.claudeCli && typeof r.claudeCli === "object"
       ? (r.claudeCli as Record<string, unknown>)
@@ -867,7 +861,6 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     notificationSound,
     notificationSoundId,
     welcomeDismissed,
-    dataNoticeAccepted,
     skills,
     ...(claudeCli ? { claudeCli } : {}),
     ...(deviceProfiles ? { deviceProfiles } : {}),

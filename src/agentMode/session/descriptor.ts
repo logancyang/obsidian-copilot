@@ -125,8 +125,9 @@ export interface BackendDescriptor {
 
   presentPermissionOption?(option: PermissionOption, metadata: unknown): PermissionOption;
 
-  // Omitted when the agent's CLI owns the endpoint. https://github.com/logancyang/obsidian-copilot/issues/2889
-  dataDestination?(settings: CopilotSettings, baseModelId: string): string | null;
+  // Named in the empty chat so users see where context goes before they send.
+  // https://github.com/logancyang/obsidian-copilot/issues/2889
+  dataDestination(settings: CopilotSettings, baseModelId: string): string | null;
 
   readonly showModelDescriptions?: boolean;
 

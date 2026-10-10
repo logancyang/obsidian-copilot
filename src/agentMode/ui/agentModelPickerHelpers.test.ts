@@ -6,7 +6,6 @@ import {
   buildModelOnChange,
   buildPickerEntries,
   collectModelActiveContext,
-  isLoadingModelsEntry,
   synthesizeAgentEntry,
 } from "./agentModelPickerHelpers";
 import { ModelCapability } from "@/constants";
@@ -1113,20 +1112,6 @@ describe("agentModelPickerHelpers", () => {
       const entries = [synthesizeAgentEntry(OTHER, OTHER, opencode)];
       const out = buildEffortOptionsByModelKey(manager, entries);
       expect(out[getModelKeyFromModel(entries[0])]).toEqual([]);
-    });
-  });
-
-  describe("isLoadingModelsEntry()", () => {
-    it("recognizes only the loading placeholder the picker shows while an agent starts for https://github.com/logancyang/obsidian-copilot/issues/2889", () => {
-      const descriptor = makeDescriptor("opencode");
-      const loading = synthesizeAgentEntry("__preload_pending__", "Loading models…", descriptor);
-      const failed = synthesizeAgentEntry("__preload_error__", "Failed to load", descriptor);
-      const real = synthesizeAgentEntry("zen/big-pickle", "Big Pickle", descriptor);
-
-      expect(isLoadingModelsEntry(loading)).toBe(true);
-      expect(isLoadingModelsEntry(failed)).toBe(false);
-      expect(isLoadingModelsEntry(real)).toBe(false);
-      expect(isLoadingModelsEntry({ ...loading, provider: "openai" })).toBe(false);
     });
   });
 

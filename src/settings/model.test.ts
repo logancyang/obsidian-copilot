@@ -128,7 +128,6 @@ describe("model", () => {
         notificationSound: true,
         notificationSoundId: "piano",
         welcomeDismissed: false,
-        dataNoticeAccepted: false,
         skills: {
           folder: "copilot/skills",
           builtinPreferences: {

@@ -26,12 +26,16 @@ const EMPTY_OPTION_NAMES: readonly string[] = Object.freeze([]);
 // Codex quotes the whole command prefix in its "don't ask again" option name, which can fill the card.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/618
 const QUOTED_CODE = /\s*`([^`\n]+)`/;
+
+// Every "always" grant says on hover what it covers and how long it lasts, even when the agent
+// does not. https://github.com/logancyang/obsidian-copilot/issues/2889
 const UNKNOWN_ALWAYS_SCOPE =
-  "The agent decides what this covers and how long it lasts. Undo it in the agent's own settings.";
+  "The agent decides what this covers, and it may keep it for later chats. Undo it in the agent's own settings.";
 
 interface OptionLabel {
   text: string;
   code?: string;
+  description?: string;
 }
 
 export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
@@ -42,10 +46,7 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
   const { toolCall, options } = request;
   const [busy, setBusy] = useState(false);
   const orderedOptions = useMemo(() => sortOptions(options), [options]);
-  const optionLabels = useMemo(
-    () => orderedOptions.map((o) => splitOptionName(o.name)),
-    [orderedOptions]
-  );
+  const optionLabels = useMemo(() => orderedOptions.map(optionLabel), [orderedOptions]);
   const optionNames = useMemo(
     () => disambiguateOptionNames(optionLabels.map((label) => label.text)),
     [optionLabels]
@@ -112,17 +113,16 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
         ) : null}
       </div>
 
-      <div className="copilot-divider-t tw-flex tw-flex-col tw-gap-2 tw-px-3 tw-py-2">
+      <div className="copilot-divider-t tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-px-3 tw-py-2">
         <TooltipProvider delayDuration={0}>
           {orderedOptions.map((option, index) => {
-            const { code } = optionLabels[index];
-            // One-time approval is the default; "always" grants must not look like the safe pick.
-            // https://github.com/logancyang/obsidian-copilot/issues/2889
+            const { code, description } = optionLabels[index];
             const button = (
               <Button
-                variant={option.kind === "allow_once" ? "default" : "secondary"}
+                key={option.optionId}
+                variant={variantForKind(option.kind)}
                 size="sm"
-                className="tw-h-auto tw-min-h-6 tw-w-full tw-min-w-0 tw-whitespace-normal"
+                className="tw-h-auto tw-min-h-6 tw-min-w-0 tw-max-w-full tw-whitespace-normal"
                 disabled={busy}
                 onClick={() => choose(option.optionId)}
               >
@@ -130,29 +130,20 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
               </Button>
             );
 
+            if (!description && !code) return button;
+
             return (
-              <div key={option.optionId} className="tw-flex tw-flex-col tw-gap-1">
-                {!option.description && !code ? (
-                  button
-                ) : (
-                  <Tooltip>
-                    <TooltipTrigger asChild>{button}</TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      className="tw-max-w-sm tw-whitespace-pre-wrap tw-break-words"
-                    >
-                      {option.description}
-                      {option.description && code ? "\n" : null}
-                      {code ? <code>{code}</code> : null}
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-                {isAlwaysKind(option.kind) ? (
-                  <p className="tw-m-0 tw-text-xs tw-text-muted">
-                    {option.scope ?? UNKNOWN_ALWAYS_SCOPE}
-                  </p>
-                ) : null}
-              </div>
+              <Tooltip key={option.optionId}>
+                <TooltipTrigger asChild>{button}</TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  className="tw-max-w-sm tw-whitespace-pre-wrap tw-break-words"
+                >
+                  {description}
+                  {description && code ? "\n" : null}
+                  {code ? <code>{code}</code> : null}
+                </TooltipContent>
+              </Tooltip>
             );
           })}
         </TooltipProvider>
@@ -161,8 +152,18 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
   );
 };
 
-function isAlwaysKind(kind: PermissionOptionKind): boolean {
-  return kind === "allow_always" || kind === "reject_always";
+// One-time approval is the default; an "always" grant must not look like the safe pick.
+// https://github.com/logancyang/obsidian-copilot/issues/2889
+function variantForKind(kind: PermissionOptionKind): "default" | "secondary" | "destructive" {
+  switch (kind) {
+    case "allow_once":
+      return "default";
+    case "reject_once":
+    case "allow_always":
+      return "secondary";
+    case "reject_always":
+      return "destructive";
+  }
 }
 
 function sortOptions(options: PermissionOption[]): PermissionOption[] {
@@ -171,10 +172,12 @@ function sortOptions(options: PermissionOption[]): PermissionOption[] {
   );
 }
 
-function splitOptionName(name: string): OptionLabel {
-  const match = QUOTED_CODE.exec(name);
-  if (!match) return { text: name };
-  return { text: name.replace(match[0], "…").trim(), code: match[1] };
+function optionLabel(option: PermissionOption): OptionLabel {
+  const description =
+    option.description ?? (option.kind === "allow_always" ? UNKNOWN_ALWAYS_SCOPE : undefined);
+  const match = QUOTED_CODE.exec(option.name);
+  if (!match) return { text: option.name, description };
+  return { text: option.name.replace(match[0], "…").trim(), code: match[1], description };
 }
 
 function disambiguateOptionNames(names: string[]): readonly string[] {

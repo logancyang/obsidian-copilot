@@ -100,10 +100,10 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     const provider = Object.values(settings.providers).find(
       (p) => mapProviderToOpencodeId(p)?.id === opencodeProviderId
     );
-    if (!provider) return `${opencodeProviderId}, as set in OpenCode`;
-    return provider.baseUrl
-      ? `${provider.displayName} (${provider.baseUrl})`
-      : provider.displayName;
+    if (!provider) return `the ${opencodeProviderId} provider set in opencode`;
+    if (provider.origin.kind === "copilot-plus") return "Copilot Plus (Brevilabs, US)";
+    if (isLoopbackUrl(provider.baseUrl)) return "this computer";
+    return provider.displayName;
   },
 
   getWireBaseId(configuredModelId: string, settings: CopilotSettings): string | null {
@@ -246,6 +246,16 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     };
   },
 };
+
+function isLoopbackUrl(raw: string | undefined): boolean {
+  if (!raw) return false;
+  try {
+    const host = new URL(raw).hostname.replace(/^\[|\]$/g, "");
+    return host === "localhost" || host === "::1" || /^127\./.test(host);
+  } catch {
+    return false;
+  }
+}
 
 function opencodeProviderToCopilot(opencodeProviderId: string): string | null {
   for (const [copilotProvider, oId] of Object.entries(OPENCODE_PROVIDER_MAP)) {

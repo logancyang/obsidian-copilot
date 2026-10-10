@@ -178,6 +178,13 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   wire: claudeWire,
   showModelDescriptions: true,
 
+  dataDestination(settings: CopilotSettings): string {
+    const env = claudeChildEnv(settings);
+    const customServer =
+      env.ANTHROPIC_BASE_URL || env.CLAUDE_CODE_USE_BEDROCK || env.CLAUDE_CODE_USE_VERTEX;
+    return customServer ? "the server set in your Claude Code settings" : "Claude Code (Anthropic)";
+  },
+
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
     return [
       ...agentOriginEnabledModelEntries(settings, "claude", (wireId) => claudeWire.decode(wireId)),

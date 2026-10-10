@@ -148,10 +148,6 @@ export function synthesizeAgentEntry(
   };
 }
 
-export function isLoadingModelsEntry(entry: ModelSelectorEntry): boolean {
-  return entry.provider === AGENT_PROVIDER && entry.name === "__preload_pending__";
-}
-
 function synthesizePreloadPlaceholder(
   descriptor: BackendDescriptor,
   status: "pending" | "error"

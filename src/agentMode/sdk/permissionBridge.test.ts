@@ -83,7 +83,7 @@ describe("permissionBridge", () => {
               },
             ],
           } as unknown as Parameters<PermissionBridge["canUseTool"]>[2]);
-          expect(captured!.options.map((o) => [o.kind, o.scope])).toEqual([
+          expect(captured!.options.map((o) => [o.kind, o.description])).toEqual([
             ["allow_once", undefined],
             ["allow_always", scope],
             ["reject_once", undefined],
@@ -104,7 +104,7 @@ describe("permissionBridge", () => {
             { type: "addDirectories", directories: ["/notes"], destination: "session" },
           ],
         } as unknown as Parameters<PermissionBridge["canUseTool"]>[2]);
-        expect(captured!.options.find((o) => o.kind === "allow_always")?.scope).toBe(
+        expect(captured!.options.find((o) => o.kind === "allow_always")?.description).toBe(
           "Covers all file edits, access to /notes until this chat ends. Start a new chat to undo."
         );
       });

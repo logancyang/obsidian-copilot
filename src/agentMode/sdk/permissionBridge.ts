@@ -145,7 +145,7 @@ const ALLOW_ONCE: PermissionOption = {
 };
 const REJECT_ONCE: PermissionOption = {
   optionId: "reject_once",
-  name: "Deny",
+  name: "Deny once",
   kind: "reject_once",
 };
 
@@ -155,7 +155,7 @@ function permissionOptions(suggestions: PermissionUpdate[] | undefined): Permiss
     optionId: "allow_always",
     name: "Allow always",
     kind: "allow_always",
-    scope: describeSuggestionScope(suggestions),
+    description: describeSuggestionScope(suggestions),
   };
   return [ALLOW_ONCE, allowAlways, REJECT_ONCE];
 }

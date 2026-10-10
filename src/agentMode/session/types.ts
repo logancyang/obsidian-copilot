@@ -299,9 +299,6 @@ export interface PermissionOption {
   name: string;
   description?: string;
   kind: PermissionOptionKind;
-  // What an "always" option covers, how long it lasts, and how to undo it.
-  // https://github.com/logancyang/obsidian-copilot/issues/2889
-  scope?: string;
 }
 
 export interface PermissionPrompt {

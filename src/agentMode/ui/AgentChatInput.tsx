@@ -29,13 +29,7 @@ import {
 } from "@/agentMode/ui/mentionedAgents";
 import type { BackendId } from "@/agentMode/session/types";
 import type CopilotPlugin from "@/main";
-import {
-  backendRegistry,
-  getActiveBackendDescriptor,
-  getCloudAgentIds,
-} from "@/agentMode/backends/registry";
-import { AgentDataNoticeCard } from "@/agentMode/ui/AgentDataNoticeCard";
-import { isLoadingModelsEntry } from "@/agentMode/ui/agentModelPickerHelpers";
+import { getCloudAgentIds } from "@/agentMode/backends/registry";
 import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/activeWebTabSnapshot";
 import {
   isNoteSelectedTextContext,
@@ -43,13 +37,13 @@ import {
   type SelectedTextContext,
   type WebTabContext,
 } from "@/types/message";
-import { getModelKeyFromModel, getSettings, updateSetting } from "@/settings/model";
+import { getModelKeyFromModel } from "@/settings/model";
 import { modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
 import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
 import { App, Notice, TFile } from "obsidian";
-import React, { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
@@ -172,7 +166,6 @@ export const AgentChatInput = memo(function AgentChatInput({
   const { activeWebTabForMentions } = useActiveWebTabState();
 
   const previousChatInputIdRef = useRef(chatInputId);
-  const [dataNoticeWebTabs, setDataNoticeWebTabs] = useState<WebTabContext[] | null>(null);
 
   const canUseMultiAgent = useCanUseMultiAgent();
 
@@ -296,12 +289,6 @@ export const AgentChatInput = memo(function AgentChatInput({
       if (disabled) return;
       const text = inputMessage.trim();
       if (!text && selectedImages.length === 0) return;
-      // Nothing leaves the vault before the user has seen where it goes.
-      // https://github.com/logancyang/obsidian-copilot/issues/2889
-      if (!getSettings().agentMode.dataNoticeAccepted) {
-        setDataNoticeWebTabs(webTabs ?? []);
-        return;
-      }
       const rawInput = inputMessage;
 
       const activeFile = app.workspace.getActiveFile();
@@ -431,17 +418,6 @@ export const AgentChatInput = memo(function AgentChatInput({
     unsupportedImageModelLabel,
   ]);
 
-  const handleDataNoticeContinue = useCallback(() => {
-    updateSetting("agentMode", { ...getSettings().agentMode, dataNoticeAccepted: true });
-    setDataNoticeWebTabs(null);
-    void handleSendMessage(dataNoticeWebTabs ?? undefined);
-  }, [dataNoticeWebTabs, handleSendMessage]);
-
-  const noticeBackendId = activeModelEntry?._backendId ?? mainAgentId;
-  const noticeDescriptor =
-    (noticeBackendId && backendRegistry[noticeBackendId]) ||
-    getActiveBackendDescriptor(getSettings());
-
   const handleRemoveQueuedMessage = useCallback(
     (id: string) => {
       setQueuedMessages((q) => q.filter((m) => m.id !== id));
@@ -461,24 +437,6 @@ export const AgentChatInput = memo(function AgentChatInput({
 
   return (
     <>
-      {dataNoticeWebTabs && (
-        <AgentDataNoticeCard
-          backendName={noticeDescriptor.displayName}
-          modelName={
-            activeModelEntry ? activeModelEntry.displayName || activeModelEntry.name : null
-          }
-          destination={
-            (activeModelEntry &&
-              noticeDescriptor.dataDestination?.(getSettings(), activeModelEntry.name)) ||
-            `The endpoint the ${noticeDescriptor.displayName} CLI is set to use`
-          }
-          // Until models load, the card cannot name the provider the message goes to.
-          // https://github.com/logancyang/obsidian-copilot/issues/2889
-          continueDisabled={!!activeModelEntry && isLoadingModelsEntry(activeModelEntry)}
-          onContinue={handleDataNoticeContinue}
-          onCancel={() => setDataNoticeWebTabs(null)}
-        />
-      )}
       {queuedMessages.length > 0 && (
         <QueuedMessageList messages={queuedMessages} onRemove={handleRemoveQueuedMessage} />
       )}

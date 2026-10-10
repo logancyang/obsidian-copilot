@@ -115,9 +115,15 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     return name.replace(/^gpt/i, "GPT");
   },
 
+  dataDestination(settings: CopilotSettings): string {
+    const overrides = settings.agentMode?.backends?.codex?.envOverrides;
+    const customServer = overrides?.OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL;
+    return customServer ? "the server set in your Codex settings" : "Codex (OpenAI)";
+  },
+
   presentPermissionOption(option: PermissionOption, metadata: unknown): PermissionOption {
     const decision = codexPermissionDecision(metadata);
-    if (decision === "acceptForSession") return { ...option, scope: CODEX_SESSION_SCOPE };
+    if (decision === "acceptForSession") return { ...option, description: CODEX_SESSION_SCOPE };
     const isExecpolicyAmendment =
       decision === "acceptWithExecpolicyAmendment" && option.kind === "allow_always";
     const isNetworkPolicyAmendment =
@@ -128,8 +134,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     return {
       ...option,
       name: option.kind === "reject_always" ? "Block Always" : "Allow Always",
-      description: option.name,
-      scope: CODEX_RULES_SCOPE,
+      description: `${option.name}\n${CODEX_RULES_SCOPE}`,
     };
   },
 
@@ -237,7 +242,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 const CODEX_SESSION_SCOPE =
   "Covers what this option names, until this chat ends. Start a new chat to undo.";
 const CODEX_RULES_SCOPE =
-  "Saved to rules/default.rules in your Codex home (~/.codex by default) for all Codex chats. Hover to see the rule; delete it there to undo.";
+  "Saved to rules/default.rules in your Codex home (~/.codex by default) for all later Codex chats. Delete it there to undo.";
 
 function codexPermissionDecision(metadata: unknown): unknown {
   if (metadata === null || typeof metadata !== "object") return undefined;

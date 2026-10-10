@@ -451,6 +451,27 @@ describe("descriptor", () => {
       });
     });
 
+    describe("dataDestination()", () => {
+      const savedBaseUrl = process.env.OPENAI_BASE_URL;
+      afterEach(() => {
+        if (savedBaseUrl === undefined) delete process.env.OPENAI_BASE_URL;
+        else process.env.OPENAI_BASE_URL = savedBaseUrl;
+      });
+
+      it("names OpenAI by default and the user's server when a base URL is set for https://github.com/logancyang/obsidian-copilot/issues/2889", () => {
+        delete process.env.OPENAI_BASE_URL;
+        expect(CodexBackendDescriptor.dataDestination(settingsWithCodex({}), "gpt-5.5")).toBe(
+          "Codex (OpenAI)"
+        );
+        expect(
+          CodexBackendDescriptor.dataDestination(
+            settingsWithCodex({ envOverrides: { OPENAI_BASE_URL: "https://proxy.example" } }),
+            "gpt-5.5"
+          )
+        ).toBe("the server set in your Codex settings");
+      });
+    });
+
     describe("presentPermissionOption()", () => {
       it.each([
         ["opaque-exec-decision", "acceptWithExecpolicyAmendment"],
@@ -468,11 +489,8 @@ describe("descriptor", () => {
         ).toEqual({
           optionId,
           name: "Allow Always",
-          description: rule,
+          description: `${rule}\nSaved to rules/default.rules in your Codex home (~/.codex by default) for all later Codex chats. Delete it there to undo.`,
           kind: "allow_always",
-          scope: expect.stringContaining(
-            "rules/default.rules in your Codex home (~/.codex by default)"
-          ),
         });
       });
 
@@ -490,11 +508,10 @@ describe("descriptor", () => {
         ).toEqual({
           optionId: "opaque-network-rejection",
           name: "Block Always",
-          description: "Block api.example.com in the Future",
-          kind: "reject_always",
-          scope: expect.stringContaining(
-            "rules/default.rules in your Codex home (~/.codex by default)"
+          description: expect.stringMatching(
+            /^Block api\.example\.com in the Future\nSaved to rules\/default\.rules/
           ),
+          kind: "reject_always",
         });
       });
 
@@ -509,7 +526,11 @@ describe("descriptor", () => {
           CodexBackendDescriptor.presentPermissionOption?.(option, {
             codex: { decision: "acceptForSession" },
           })
-        ).toEqual({ ...option, scope: expect.stringContaining("until this chat ends") });
+        ).toEqual({
+          ...option,
+          description:
+            "Covers what this option names, until this chat ends. Start a new chat to undo.",
+        });
       });
 
       it.each([
