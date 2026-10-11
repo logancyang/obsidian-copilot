@@ -195,10 +195,23 @@ function mapNullable<T, R>(value: T | null | undefined, fn: (value: T) => R): R 
   return fn(value);
 }
 
+// Copilot's OpenCode plugin writes each file's text from just before the tool changed it here.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/687
+function copilotOriginalFiles(rawOutput: unknown): Record<string, string | null> | undefined {
+  const files = (rawOutput as { metadata?: { copilot?: { originalFiles?: unknown } } } | null)
+    ?.metadata?.copilot?.originalFiles;
+  if (typeof files !== "object" || files === null) return undefined;
+  const texts = Object.values(files);
+  return texts.every((text) => typeof text === "string" || text === null)
+    ? (files as Record<string, string | null>)
+    : undefined;
+}
+
 function toolCallDeltaFromAcp(
   upd: ToolCallUpdate & { sessionUpdate?: "tool_call_update" }
 ): ToolCallDelta {
   const resolved = upd.title != null ? resolveToolName(upd.title) : null;
+  const originalFiles = copilotOriginalFiles(upd.rawOutput);
   return {
     toolCallId: upd.toolCallId,
     title: resolved?.tool,
@@ -210,6 +223,7 @@ function toolCallDeltaFromAcp(
       locs.map((l) => ({ path: l.path, line: l.line ?? undefined }))
     ),
     mcpServer: resolved?.mcpServer,
+    ...(originalFiles ? { originalFiles } : {}),
   };
 }
 

@@ -16,6 +16,7 @@ jest.mock("@/logger", () => ({
 }));
 
 type Hook = (event: unknown) => void;
+type ToolHook = (event: Record<string, unknown>) => Promise<void> | void;
 
 interface LoadedPlugin {
   id: string;
@@ -48,8 +49,9 @@ const ENV_BLOCK_TRIMMED = [
 const WORKTREE_HINT =
   "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.";
 
-async function setUpPlugin(plugin: LoadedPlugin) {
+async function setUpPlugin(plugin: LoadedPlugin, directory = "/vault") {
   const hooks = new Map<string, Hook>();
+  const toolHooks = new Map<string, ToolHook>();
   const skills = new Map([
     ["opencode", {}],
     ["report", {}],
@@ -60,8 +62,10 @@ async function setUpPlugin(plugin: LoadedPlugin) {
       transform: async (edit: (editor: { remove: (id: string) => void }) => void) =>
         edit({ remove: (id) => void skills.delete(id) }),
     },
+    tool: { hook: async (name: string, hook: ToolHook) => void toolHooks.set(name, hook) },
+    location: { directory },
   });
-  return { hooks, skills };
+  return { hooks, toolHooks, skills };
 }
 
 describe("opencodeTrimPlugin", () => {
@@ -74,7 +78,7 @@ describe("opencodeTrimPlugin", () => {
       await installOpencodeTrimPlugin(pluginRoot);
       const source = await fs.promises.readFile(path.join(pluginRoot, "index.js"), "utf8");
       const module = { exports: {} as LoadedPlugin };
-      vm.runInThisContext(`(function (module) {${source}\n})`)(module);
+      vm.runInThisContext(`(function (module, require) {${source}\n})`)(module, require);
       plugin = module.exports;
     });
 
@@ -146,6 +150,131 @@ describe("opencodeTrimPlugin", () => {
       const hook = await contextHook();
 
       expect(() => hook({ system: "not a list", messages: null })).not.toThrow();
+    });
+
+    describe("write-time originals", () => {
+      let vault: string;
+
+      beforeEach(async () => {
+        vault = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-originals-"));
+        await fs.promises.mkdir(path.join(vault, "notes"));
+        await fs.promises.writeFile(path.join(vault, "notes/a.md"), "a before\n");
+        await fs.promises.writeFile(path.join(vault, "notes/old.md"), "old before\n");
+      });
+
+      afterEach(async () => {
+        await fs.promises.rm(vault, { recursive: true, force: true });
+      });
+
+      async function runTool(
+        tool: string,
+        input: unknown,
+        write: () => Promise<void>,
+        status: "completed" | "error" = "completed"
+      ) {
+        const { toolHooks } = await setUpPlugin(plugin, vault);
+        await toolHooks.get("execute.before")!({ tool, id: "call-1", input });
+        await write();
+        const after: Record<string, unknown> = { tool, id: "call-1", input, status };
+        if (status === "completed") after.result = { output: "ok", metadata: { files: [] } };
+        await toolHooks.get("execute.after")!(after);
+        return { after, toolHooks };
+      }
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/687 returns the text an edit replaced alongside OpenCode's own metadata", async () => {
+        const { after } = await runTool("edit", { path: "notes/a.md" }, () =>
+          fs.promises.writeFile(path.join(vault, "notes/a.md"), "a after\n")
+        );
+
+        expect(after.result).toEqual({
+          output: "ok",
+          metadata: {
+            files: [],
+            copilot: { originalFiles: { [path.join(vault, "notes/a.md")]: "a before\n" } },
+          },
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/687 reports a file a write created as having no original", async () => {
+        const { after } = await runTool("write", { filePath: "notes/new.md" }, () =>
+          fs.promises.writeFile(path.join(vault, "notes/new.md"), "fresh\n")
+        );
+
+        expect(after.result).toMatchObject({
+          metadata: { copilot: { originalFiles: { [path.join(vault, "notes/new.md")]: null } } },
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/687 returns every file a patch adds, updates, deletes or moves", async () => {
+        const patchText = [
+          "*** Begin Patch",
+          "*** Update File: notes/a.md",
+          "@@",
+          "-a before",
+          "+a after",
+          "*** Update File: notes/old.md",
+          "*** Move to: notes/moved.md",
+          "*** Add File: notes/new.md",
+          "+fresh",
+          "*** End Patch",
+        ].join("\n");
+
+        const { after } = await runTool("patch", { patchText }, async () => {
+          await fs.promises.writeFile(path.join(vault, "notes/a.md"), "a after\n");
+          await fs.promises.rename(
+            path.join(vault, "notes/old.md"),
+            path.join(vault, "notes/moved.md")
+          );
+        });
+
+        expect(after.result).toMatchObject({
+          metadata: {
+            copilot: {
+              originalFiles: {
+                [path.join(vault, "notes/a.md")]: "a before\n",
+                [path.join(vault, "notes/old.md")]: "old before\n",
+                [path.join(vault, "notes/moved.md")]: null,
+                [path.join(vault, "notes/new.md")]: null,
+              },
+            },
+          },
+        });
+      });
+
+      it("leaves reads and other tools' results untouched", async () => {
+        const { after } = await runTool("read", { path: "notes/a.md" }, async () => {});
+
+        expect(after.result).toEqual({ output: "ok", metadata: { files: [] } });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/687 forgets a failed call's originals so a later call with the same id reports only its own", async () => {
+        const { toolHooks } = await runTool(
+          "edit",
+          { path: "notes/a.md" },
+          async () => {},
+          "error"
+        );
+        await toolHooks.get("execute.before")!({ tool: "read", id: "call-1", input: {} });
+        const after: Record<string, unknown> = {
+          tool: "read",
+          id: "call-1",
+          status: "completed",
+          result: { output: "ok" },
+        };
+        await toolHooks.get("execute.after")!(after);
+
+        expect(after.result).toEqual({ output: "ok" });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/687 never fails the tool when a target cannot be read", async () => {
+        const { toolHooks } = await setUpPlugin(plugin, vault);
+        const before = toolHooks.get("execute.before")!;
+
+        await expect(
+          before({ tool: "edit", id: "call-1", input: { path: "notes" } })
+        ).resolves.toBeUndefined();
+        await expect(before({ tool: "edit", id: "call-2", input: null })).resolves.toBeUndefined();
+      });
     });
   });
 
