@@ -262,7 +262,7 @@ describe("toolSummaries", () => {
       expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't edit plan.md");
     });
 
-    it("says Didn't create when a denied Claude Write carries only the declined text (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
+    it("says Didn't edit when a Claude Write is denied with no diff, since its whole-file content cannot tell a create from an overwrite (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
       const failed = tool({
         vendorToolName: "Write",
         title: "Write",
@@ -271,17 +271,17 @@ describe("toolSummaries", () => {
         input: { file_path: "/Users/me/vault/notes.md", content: "# Notes\n" },
         output: [{ type: "text", text: "User declined" }],
       });
-      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't create notes.md");
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't edit notes.md");
     });
 
-    it("says Didn't create when an OpenCode write of full content fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
+    it("says Didn't edit when an OpenCode write of full content fails with no diff (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
       const failed = tool({
         toolKind: "edit",
         title: "notes.md",
         status: "failed",
         input: { filePath: "/Users/me/vault/notes.md", content: "# Notes\n" },
       });
-      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't create notes.md");
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't edit notes.md");
     });
 
     it("says Didn't create when a Codex diff adds a new file and fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {

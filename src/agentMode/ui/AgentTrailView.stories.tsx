@@ -81,7 +81,7 @@ const UNIFIED_CARDS: AgentMessagePart[] = [
 const FAILED_FILE_CHANGES: AgentMessagePart[] = [
   say("The edit was denied, so the card says the note was not edited."),
   tool("failed-edit", "Edit", { status: "failed", input: { file_path: "Projects/plan.md" } }),
-  say("A denied write of a new note says it was not created."),
+  say("A denied write with no diff says the note was not edited."),
   tool("failed-write", "Write", {
     status: "failed",
     input: { file_path: "Projects/notes.md", content: "# Notes\n" },

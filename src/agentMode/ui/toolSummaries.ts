@@ -108,13 +108,8 @@ function fileChangeVerb(
 }
 
 function createsNewFile(part: ToolCallPart): boolean {
-  // A denied Claude Write reports only "User declined" with no diff, so the
-  // whole-file `content` input is the remaining signal that it was a create.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/691
   const diffs = (part.output ?? []).filter((o) => o.type === "diff");
-  if (diffs.length > 0) return diffs.every((o) => o.oldText === null);
-  const input = part.input as { content?: unknown } | null | undefined;
-  return typeof input?.content === "string";
+  return diffs.length > 0 && diffs.every((o) => o.oldText === null);
 }
 
 function diffTargetPaths(part: ToolCallPart): string[] {
