@@ -14,6 +14,7 @@ import {
 } from "./codexVersion";
 
 const UNIX_ENTRY = "/npm/lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js";
+const WINDOWS_ENTRY = "C:\\npm\\node_modules\\@agentclientprotocol\\codex-acp\\dist\\index.js";
 const NPM_CODEX_LAUNCHER =
   "/npm/lib/node_modules/@agentclientprotocol/codex-acp/node_modules/@openai/codex/bin/codex.js";
 const DIRECT_RUNTIME_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/686";
@@ -305,6 +306,47 @@ describe("codexVersion", () => {
         NPM_CODEX_LAUNCHER
       );
       expect(npmFs.resolveFrom).toHaveBeenCalledWith(UNIX_ENTRY, "@openai/codex/bin/codex.js");
+    });
+    it.each([
+      [
+        "npm",
+        '"%_prog%"  "%dp0%\\node_modules\\@openai\\codex\\bin\\codex.js" %*\r\n',
+        "C:\\Users\\Jane Doe\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\bin\\codex.js",
+      ],
+      [
+        "pnpm",
+        'node  "%~dp0\\..\\@openai\\codex\\bin\\codex.js" %*\r\n',
+        "C:\\Users\\Jane Doe\\AppData\\Roaming\\@openai\\codex\\bin\\codex.js",
+      ],
+    ])(
+      `runs the target of a Windows %s command shim named by CODEX_PATH: ${DIRECT_RUNTIME_ISSUE}`,
+      (_manager, shim, target) => {
+        const npmFs = packageFs(WINDOWS_ENTRY, metadata(CODEX_MIN_VERSION));
+        jest
+          .mocked(npmFs.readFileSync)
+          .mockImplementation((file) =>
+            file.endsWith(".CMD") ? shim : JSON.stringify(metadata(CODEX_MIN_VERSION))
+          );
+        expect(
+          resolveCodexCommand(
+            WINDOWS_ENTRY,
+            { CODEX_PATH: "C:\\Users\\Jane Doe\\AppData\\Roaming\\npm\\codex.CMD" },
+            "win32",
+            npmFs
+          )
+        ).toBe(target);
+      }
+    );
+    it(`rejects a Windows command script CODEX_PATH whose target cannot be found: ${DIRECT_RUNTIME_ISSUE}`, () => {
+      const npmFs = packageFs(WINDOWS_ENTRY, metadata(CODEX_MIN_VERSION));
+      jest
+        .mocked(npmFs.readFileSync)
+        .mockImplementation((file) =>
+          file.endsWith(".bat") ? "@echo off\r\n" : JSON.stringify(metadata(CODEX_MIN_VERSION))
+        );
+      expect(() =>
+        resolveCodexCommand(WINDOWS_ENTRY, { CODEX_PATH: "C:\\tools\\codex.bat" }, "win32", npmFs)
+      ).toThrow("CODEX_PATH");
     });
     it("rejects an adapter below the supported minimum", () => {
       expect(() =>

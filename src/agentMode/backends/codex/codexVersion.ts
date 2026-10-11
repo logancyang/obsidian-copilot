@@ -176,7 +176,19 @@ export function resolveCodexCommand(
   // Run the Codex the npm adapter would (CODEX_PATH, else its own @openai/codex) without
   // `codex-acp cli`, whose Windows shell launch splits paths with spaces.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/686
-  return env.CODEX_PATH || packageFs.resolveFrom(entryPath, "@openai/codex/bin/codex.js");
+  const override = env.CODEX_PATH;
+  if (!override) return packageFs.resolveFrom(entryPath, "@openai/codex/bin/codex.js");
+  if (platform !== "win32" || !/\.(cmd|bat)$/i.test(override)) return override;
+  // Node cannot spawn a Windows command script without a shell, so run the npm shim's target.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/686
+  const target = /"%~?dp0%?\\([^"]+)"\s+%\*/.exec(packageFs.readFileSync(override, "utf8"))?.[1];
+  if (!target) {
+    throw new Error(
+      `CODEX_PATH names ${override}, which Copilot cannot run directly. Point CODEX_PATH at codex.exe or Codex's bin\\codex.js instead.`
+    );
+  }
+  const path = requireNodeModule<typeof import("node:path")>("path").win32;
+  return path.join(path.dirname(override), target);
 }
 
 export function isSupportedCodexAcpPath(adapterPath: string | undefined): boolean {
