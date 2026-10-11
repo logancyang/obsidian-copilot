@@ -81,6 +81,9 @@ describe("agentSystemPrompt", () => {
       }
       setDisableBuiltinSystemPrompt(true);
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_LONG_WRITE_POLICY);
+      expect(COPILOT_LONG_WRITE_POLICY).toBe(
+        "A single write or edit call must never contain more than 5,000 words. For a longer file, create it with the first part, then append each next part with a separate edit call until it is complete."
+      );
     });
 
     it("suppresses the base prompt when 'disable builtin' is on, keeping the pill directive", () => {

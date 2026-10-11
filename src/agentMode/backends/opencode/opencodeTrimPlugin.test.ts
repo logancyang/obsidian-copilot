@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as vm from "vm";
+import { AGENT_WRITE_MAX_BYTES } from "@/agentMode/backends/shared/agentWriteLimit";
 import { logWarn } from "@/logger";
 import {
   installOpencodeTrimPlugin,
@@ -50,6 +51,8 @@ const WORKTREE_HINT =
 
 async function setUpPlugin(plugin: LoadedPlugin) {
   const hooks = new Map<string, Hook>();
+  const toolHooks = new Map<string, Hook>();
+  const permissionHooks = new Map<string, Hook>();
   const skills = new Map([
     ["opencode", {}],
     ["report", {}],
@@ -60,8 +63,38 @@ async function setUpPlugin(plugin: LoadedPlugin) {
       transform: async (edit: (editor: { remove: (id: string) => void }) => void) =>
         edit({ remove: (id) => void skills.delete(id) }),
     },
+    tool: { hook: async (name: string, hook: Hook) => void toolHooks.set(name, hook) },
+    permission: { hook: async (name: string, hook: Hook) => void permissionHooks.set(name, hook) },
   });
-  return { hooks, skills };
+  return { hooks, skills, toolHooks, permissionHooks };
+}
+
+const ISSUE_641 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/641";
+
+interface Evaluation {
+  effect: string;
+  message?: string;
+}
+
+async function writeGuard(plugin: LoadedPlugin) {
+  const { toolHooks, permissionHooks } = await setUpPlugin(plugin);
+  let callCount = 0;
+  return (tool: string, input: Record<string, unknown>, effect = "allow"): Evaluation => {
+    const id = `call-${++callCount}`;
+    toolHooks.get("execute.before")!({ tool, id, input });
+    const evaluation: Evaluation & Record<string, unknown> = {
+      action: "edit",
+      resources: ["note.md"],
+      source: { type: "tool", messageID: "message-1", id },
+      effect,
+    };
+    permissionHooks.get("evaluate")!(evaluation);
+    toolHooks.get("execute.after")!({ tool, id, input, status: "completed" });
+    return {
+      effect: evaluation.effect,
+      ...(evaluation.message ? { message: evaluation.message } : {}),
+    };
+  };
 }
 
 describe("opencodeTrimPlugin", () => {
@@ -146,6 +179,76 @@ describe("opencodeTrimPlugin", () => {
       const hook = await contextHook();
 
       expect(() => hook({ system: "not a list", messages: null })).not.toThrow();
+    });
+  });
+
+  describe("OPENCODE_TRIM_PLUGIN_SOURCE write guard", () => {
+    let pluginRoot: string;
+    let plugin: LoadedPlugin;
+
+    beforeAll(async () => {
+      pluginRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-trim-guard-"));
+      await installOpencodeTrimPlugin(pluginRoot);
+      const source = await fs.promises.readFile(path.join(pluginRoot, "index.js"), "utf8");
+      const module = { exports: {} as LoadedPlugin };
+      vm.runInThisContext(`(function (module) {${source}\n})`)(module);
+      plugin = module.exports;
+    });
+
+    afterAll(async () => {
+      await fs.promises.rm(pluginRoot, { recursive: true, force: true });
+    });
+
+    it(`${ISSUE_641} keeps a ${AGENT_WRITE_MAX_BYTES}-byte write and denies one byte more, telling the agent to write in parts`, async () => {
+      const call = await writeGuard(plugin);
+
+      expect(
+        call("write", { path: "note.md", content: "a".repeat(AGENT_WRITE_MAX_BYTES) })
+      ).toEqual({
+        effect: "allow",
+      });
+      const denied = call("write", {
+        path: "note.md",
+        content: "a".repeat(AGENT_WRITE_MAX_BYTES + 1),
+      });
+      expect(denied.effect).toBe("deny");
+      expect(denied.message).toMatch(/^Nothing was written: this call is over 40 KB/);
+      expect(denied.message).toContain("Write the file in parts");
+    });
+
+    it(`${ISSUE_641} counts UTF-8 bytes, so 13,334 Han characters (40,002 bytes) are denied`, async () => {
+      const call = await writeGuard(plugin);
+
+      expect(call("write", { path: "note.md", content: "漢".repeat(13_334) }).effect).toBe("deny");
+    });
+
+    it(`${ISSUE_641} denies an empty write as a cut-off reply and keeps a single newline`, async () => {
+      const call = await writeGuard(plugin);
+
+      const denied = call("write", { path: "note.md", content: "" });
+      expect(denied.effect).toBe("deny");
+      expect(denied.message).toContain("usually means your reply hit the output limit");
+      expect(denied.message).toContain("write a single newline");
+      expect(call("write", { path: "note.md", content: "\n" }).effect).toBe("allow");
+    });
+
+    it(`${ISSUE_641} denies an oversized edit or patch`, async () => {
+      const call = await writeGuard(plugin);
+      const big = "a".repeat(AGENT_WRITE_MAX_BYTES + 1);
+
+      expect(call("edit", { path: "note.md", oldString: "x", newString: big }).effect).toBe("deny");
+      expect(call("patch", { patchText: big }).effect).toBe("deny");
+    });
+
+    it(`${ISSUE_641} leaves small calls and other tools on their own effect, so Default mode still asks`, async () => {
+      const call = await writeGuard(plugin);
+
+      expect(call("write", { path: "note.md", content: "hello" }, "ask")).toEqual({
+        effect: "ask",
+      });
+      expect(call("shell", { command: "a".repeat(AGENT_WRITE_MAX_BYTES + 1) }, "ask")).toEqual({
+        effect: "ask",
+      });
     });
   });
 
