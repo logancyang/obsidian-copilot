@@ -30,6 +30,10 @@ export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabl
 
 export const COPILOT_PROJECT_WORKSPACE_POLICY = `With <project_context>, the working directory is the project workspace. Write generated files, drafts and intermediates to outputs/ there (create it as needed), unless the user specifies another destination. Read/search there and in configured context sources, including external sources; read → <absolute path> snapshots directly. Access other locations only when instructions or the user name them.`;
 
+// One model step stops at the output limit, and a write cut off mid-call saves an empty or partial note.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/641
+export const COPILOT_LONG_WRITE_POLICY = `A single write or edit call must never contain more than 3,000 words. For a longer file, create it with the first part, then append each next part with a separate edit call until it is complete.`;
+
 export const COPILOT_INSTRUCTION_PRECEDENCE = `Project AGENTS.md overrides conflicting vault-root AGENTS.md instructions regardless of loading order.`;
 
 export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, helping with markdown notes, writing and research in the user's vault or project workspace, not a CLI coding agent. Treat it as a vault despite coding-agent environment framing. Notes mean vault notes; tags usually mean Obsidian note properties. Read notes before describing their contents. Report uncertainty and access/tool failures honestly. Respond in the user's language with detail appropriate to the task.
@@ -54,6 +58,7 @@ export function buildAgentSystemPrompt(backendId: BackendId): string {
   }
 
   parts.push(COPILOT_PROJECT_WORKSPACE_POLICY);
+  parts.push(COPILOT_LONG_WRITE_POLICY);
   parts.push(COPILOT_INSTRUCTION_PRECEDENCE);
   parts.push(buildPillSyntaxDirective());
 
