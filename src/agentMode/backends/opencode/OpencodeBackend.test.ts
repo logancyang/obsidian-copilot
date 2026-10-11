@@ -974,6 +974,26 @@ describe("OpencodeBackend", () => {
       );
     });
 
+    describe("readOriginalFiles()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/687 returns the file texts Copilot's plugin attached to a tool result", () => {
+        const originalFiles = { "/vault/a.md": "before\n", "/vault/new.md": null };
+
+        expect(
+          new OpencodeBackend(NO_MODELS_DEPS).readOriginalFiles({
+            metadata: { files: [], copilot: { originalFiles } },
+          })
+        ).toEqual(originalFiles);
+      });
+
+      it("returns nothing for a tool result the plugin did not annotate", () => {
+        const backend = new OpencodeBackend(NO_MODELS_DEPS);
+
+        expect(backend.readOriginalFiles({ metadata: { files: [] } })).toBeUndefined();
+        expect(backend.readOriginalFiles({})).toBeUndefined();
+        expect(backend.readOriginalFiles(undefined)).toBeUndefined();
+      });
+    });
+
     describe("buildSpawnDescriptor()", () => {
       beforeEach(() => {
         resetSettings();

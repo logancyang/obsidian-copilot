@@ -39,6 +39,7 @@ import type {
   ToolCallSnapshot,
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
+import type { AcpBackend } from "./types";
 import { resolveToolName } from "@/agentMode/session/toolName";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
 
@@ -195,10 +196,14 @@ function mapNullable<T, R>(value: T | null | undefined, fn: (value: T) => R): R 
   return fn(value);
 }
 
+export type OriginalFilesReader = NonNullable<AcpBackend["readOriginalFiles"]>;
+
 function toolCallDeltaFromAcp(
-  upd: ToolCallUpdate & { sessionUpdate?: "tool_call_update" }
+  upd: ToolCallUpdate & { sessionUpdate?: "tool_call_update" },
+  readOriginalFiles: OriginalFilesReader | undefined
 ): ToolCallDelta {
   const resolved = upd.title != null ? resolveToolName(upd.title) : null;
+  const originalFiles = readOriginalFiles?.(upd.rawOutput);
   return {
     toolCallId: upd.toolCallId,
     title: resolved?.tool,
@@ -210,19 +215,23 @@ function toolCallDeltaFromAcp(
       locs.map((l) => ({ path: l.path, line: l.line ?? undefined }))
     ),
     mcpServer: resolved?.mcpServer,
+    ...(originalFiles ? { originalFiles } : {}),
   };
 }
 
 export function acpNotificationToEvents(
   n: SessionNotification,
-  todoToolCallIds?: Set<string>
+  todoToolCallIds?: Set<string>,
+  readOriginalFiles?: OriginalFilesReader
 ): SessionEvent[] {
   const kind = n.update.sessionUpdate;
   if (kind === "plan_update" || kind === "plan_removed") {
     return [];
   }
   const sessionId = sessionIdFromAcp(n.sessionId);
-  const events: SessionEvent[] = [{ sessionId, update: acpUpdateToSessionUpdate(n.update) }];
+  const events: SessionEvent[] = [
+    { sessionId, update: acpUpdateToSessionUpdate(n.update, readOriginalFiles) },
+  ];
   const todoPlan = todoToolPlanFromAcp(n.update, todoToolCallIds);
   if (todoPlan) events.push({ sessionId, update: todoPlan });
   return events;
@@ -271,7 +280,10 @@ function todoToolPlanFromAcp(
   return { sessionUpdate: "plan", entries };
 }
 
-function acpUpdateToSessionUpdate(update: SessionNotification["update"]): SessionUpdate {
+function acpUpdateToSessionUpdate(
+  update: SessionNotification["update"],
+  readOriginalFiles: OriginalFilesReader | undefined
+): SessionUpdate {
   switch (update.sessionUpdate) {
     case "user_message_chunk":
     case "agent_message_chunk":
@@ -289,7 +301,7 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
     case "tool_call_update":
       return {
         sessionUpdate: "tool_call_update",
-        ...toolCallDeltaFromAcp(update),
+        ...toolCallDeltaFromAcp(update, readOriginalFiles),
       };
     case "plan":
       return {

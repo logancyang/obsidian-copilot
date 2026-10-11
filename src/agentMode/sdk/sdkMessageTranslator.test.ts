@@ -436,7 +436,7 @@ describe("sdkMessageTranslator", () => {
       expect(out[0].update).toMatchObject({ status: "failed" });
     });
 
-    it("forwards the pre-edit file content an Edit result carries as originalFile", () => {
+    it("forwards the pre-edit file content an Edit result carries, keyed by the edited file", () => {
       const state = createTranslatorState();
       const out = translateSdkMessage(
         {
@@ -459,11 +459,11 @@ describe("sdkMessageTranslator", () => {
         sessionUpdate: "tool_call_update",
         toolCallId: "tu-edit",
         status: "completed",
-        originalFile: "before the edit\n",
+        originalFiles: { "/vault/notes/a.md": "before the edit\n" },
       });
     });
 
-    it("forwards a null originalFile so a file the Write created reports no prior content (https://github.com/Brevilabs/obsidian-copilot-private/issues/347)", () => {
+    it("forwards a null original so a file the Write created reports no prior content (https://github.com/Brevilabs/obsidian-copilot-private/issues/347)", () => {
       const state = createTranslatorState();
       const out = translateSdkMessage(
         {
@@ -483,10 +483,13 @@ describe("sdkMessageTranslator", () => {
         SESSION_ID,
         state
       );
-      expect(out[0].update).toMatchObject({ toolCallId: "tu-write", originalFile: null });
+      expect(out[0].update).toMatchObject({
+        toolCallId: "tu-write",
+        originalFiles: { "/vault/notes/new.md": null },
+      });
     });
 
-    it("omits originalFile for a tool result that carries no pre-edit content", () => {
+    it("omits originals for a tool result that carries no pre-edit content", () => {
       const state = createTranslatorState();
       const out = translateSdkMessage(
         {
@@ -501,7 +504,7 @@ describe("sdkMessageTranslator", () => {
         SESSION_ID,
         state
       );
-      expect(out[0].update).not.toHaveProperty("originalFile");
+      expect(out[0].update).not.toHaveProperty("originalFiles");
     });
 
     it("synthesizes current_mode_update on EnterPlanMode tool_use", () => {

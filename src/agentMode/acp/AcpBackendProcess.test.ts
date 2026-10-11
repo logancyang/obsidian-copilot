@@ -383,6 +383,29 @@ describe("AcpBackendProcess", () => {
           expect.objectContaining({ clientCapabilities: expect.objectContaining({ plan: {} }) })
         );
       });
+
+      it("sends the backend's client capability metadata so it can opt into agent extensions https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ clientCapabilitiesMeta: { vendor: { feature: true } } }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+
+        await backend.start();
+
+        expect(mockInitializeRequest.mock.calls[0][0].clientCapabilities._meta).toEqual({
+          vendor: { feature: true },
+        });
+      });
+
+      it("sends no capability metadata for a backend that declares none", async () => {
+        await startBackend();
+
+        expect(mockInitializeRequest.mock.calls[0][0].clientCapabilities).not.toHaveProperty(
+          "_meta"
+        );
+      });
     });
 
     describe("registerSessionHandler()", () => {
@@ -415,6 +438,51 @@ describe("AcpBackendProcess", () => {
         } as unknown as Parameters<typeof client.sessionUpdate>[0];
         await expect(client.sessionUpdate(strayUpdate)).resolves.toBeUndefined();
         expect(handler).toHaveBeenCalledTimes(1);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/687 attaches the backend's originals to tool results, whether buffered before the handler or delivered live", async () => {
+        mockNewSession.mockResolvedValue({ sessionId: "s-edit" });
+        const readOriginalFiles = jest.fn((rawOutput: unknown) =>
+          rawOutput ? { "/vault/a.md": "before\n" } : undefined
+        );
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ readOriginalFiles }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+        await backend.newSession({ cwd: "/vault" });
+        const client = getVaultClient(backend);
+        const toolResult = (toolCallId: string) =>
+          ({
+            sessionId: "s-edit",
+            update: {
+              sessionUpdate: "tool_call_update",
+              toolCallId,
+              status: "completed",
+              rawOutput: { metadata: {} },
+            },
+          }) as unknown as Parameters<typeof client.sessionUpdate>[0];
+
+        await client.sessionUpdate(toolResult("buffered"));
+        const handler = jest.fn();
+        backend.registerSessionHandler("s-edit", handler);
+        await client.sessionUpdate(toolResult("live"));
+
+        const toolUpdates = handler.mock.calls
+          .map(([event]) => event.update)
+          .filter((update) => update.sessionUpdate === "tool_call_update");
+        expect(toolUpdates).toEqual([
+          expect.objectContaining({
+            toolCallId: "buffered",
+            originalFiles: { "/vault/a.md": "before\n" },
+          }),
+          expect.objectContaining({
+            toolCallId: "live",
+            originalFiles: { "/vault/a.md": "before\n" },
+          }),
+        ]);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 replays a catalog update that arrived before the handler as the session's refreshed state", async () => {
@@ -1350,6 +1418,44 @@ describe("AcpBackendProcess", () => {
         await backend.start();
         return backend;
       }
+
+      it("returns the turn diff its backend reads from the prompt result's metadata https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
+        const readTurnDiff = jest.fn(() => ({
+          root: "/repo",
+          unifiedDiff: "diff --git a/x b/x\n",
+        }));
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ readTurnDiff }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+        promptMock(backend).mockResolvedValueOnce({
+          stopReason: "end_turn",
+          _meta: { vendor: { diff: "raw" } },
+        });
+
+        const result = await backend.prompt({ sessionId: "s1", prompt: [] });
+
+        expect(readTurnDiff).toHaveBeenCalledWith({ vendor: { diff: "raw" } });
+        expect(result).toEqual({
+          stopReason: "end_turn",
+          turnDiff: { root: "/repo", unifiedDiff: "diff --git a/x b/x\n" },
+        });
+      });
+
+      it("returns only the stop reason for a backend that reads no turn diff", async () => {
+        const backend = await makeBackend();
+        promptMock(backend).mockResolvedValueOnce({
+          stopReason: "end_turn",
+          _meta: { vendor: { diff: "raw" } },
+        });
+
+        await expect(backend.prompt({ sessionId: "s1", prompt: [] })).resolves.toEqual({
+          stopReason: "end_turn",
+        });
+      });
 
       it("emits a used-only usage_update from the prompt result when no live update was seen", async () => {
         const backend = await makeBackend();

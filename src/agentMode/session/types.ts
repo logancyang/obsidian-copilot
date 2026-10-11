@@ -228,7 +228,7 @@ export interface ToolCallDelta {
   kind?: AgentToolKind;
   status?: AgentToolStatus;
   rawInput?: unknown;
-  originalFile?: string | null;
+  originalFiles?: Readonly<Record<string, string | null>>;
   content?: ToolCallContent[] | null;
   locations?: Array<{ path: string; line?: number | null }> | null;
   vendorToolName?: string;
@@ -367,6 +367,12 @@ export interface PromptInput {
 
 export interface PromptOutput {
   stopReason: StopReason;
+  turnDiff?: TurnDiff;
+}
+
+export interface TurnDiff {
+  root: string;
+  unifiedDiff: string;
 }
 
 export interface ListSessionsInput {
