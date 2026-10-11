@@ -252,6 +252,116 @@ describe("toolSummaries", () => {
       expect(lookupToolSummary(done).collapsedLine(done, CTX)).toBe("Edited draft.md");
     });
 
+    it("says Didn't edit when a Claude Edit fails or is denied (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
+      const failed = tool({
+        vendorToolName: "Edit",
+        title: "Edit",
+        status: "failed",
+        input: { file_path: "/Users/me/vault/plan.md" },
+      });
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't edit plan.md");
+    });
+
+    it("says Didn't create when a denied Claude Write carries only the declined text (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
+      const failed = tool({
+        vendorToolName: "Write",
+        title: "Write",
+        toolKind: "edit",
+        status: "failed",
+        input: { file_path: "/Users/me/vault/notes.md", content: "# Notes\n" },
+        output: [{ type: "text", text: "User declined" }],
+      });
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't create notes.md");
+    });
+
+    it("says Didn't create when an OpenCode write of full content fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
+      const failed = tool({
+        toolKind: "edit",
+        title: "notes.md",
+        status: "failed",
+        input: { filePath: "/Users/me/vault/notes.md", content: "# Notes\n" },
+      });
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't create notes.md");
+    });
+
+    it("says Didn't create when a Codex diff adds a new file and fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
+      const failed = tool({
+        toolKind: "edit",
+        title: "Editing files",
+        status: "failed",
+        output: [
+          { type: "diff", path: "/Users/me/vault/notes.md", oldText: null, newText: "# Notes" },
+        ],
+      });
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't create notes.md");
+    });
+
+    it("says Didn't edit when a Write replacing existing text fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
+      const failed = tool({
+        vendorToolName: "Write",
+        title: "Write",
+        status: "failed",
+        input: { file_path: "/Users/me/vault/plan.md" },
+        output: [{ type: "diff", path: "/Users/me/vault/plan.md", oldText: "old", newText: "new" }],
+      });
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't edit plan.md");
+    });
+
+    it("says Didn't edit for a failed Codex multi-file edit (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
+      const failed = tool({
+        toolKind: "edit",
+        title: "Editing files",
+        status: "failed",
+        output: [
+          { type: "diff", path: "src/a.ts", oldText: "a", newText: "A" },
+          { type: "diff", path: "src/b.ts", oldText: "b", newText: "B" },
+        ],
+      });
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't edit 2 files");
+    });
+
+    it("says Didn't edit for a failed OpenCode edit (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
+      const failed = tool({
+        toolKind: "edit",
+        title: "plan.md",
+        status: "failed",
+        input: { filePath: "/Users/me/vault/plan.md" },
+      });
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't edit plan.md");
+    });
+
+    it("uses Deleting, Deleted and Didn't delete across the delete lifecycle (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
+      const inflight = tool({
+        toolKind: "delete",
+        title: "old.md",
+        status: "in_progress",
+        input: { filePath: "/Users/me/vault/old.md" },
+      });
+      const summary = lookupToolSummary(inflight);
+      expect(summary.collapsedLine(inflight, CTX)).toBe("Deleting old.md");
+      expect(summary.collapsedLine({ ...inflight, status: "completed" }, CTX)).toBe(
+        "Deleted old.md"
+      );
+      expect(summary.collapsedLine({ ...inflight, status: "failed" }, CTX)).toBe(
+        "Didn't delete old.md"
+      );
+    });
+
+    it("keeps past-tense labels on failed tools that do not change files (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
+      const bash = tool({
+        vendorToolName: "Bash",
+        status: "failed",
+        input: { command: "npm test" },
+      });
+      expect(lookupToolSummary(bash).collapsedLine(bash, CTX)).toBe("Ran `npm test`");
+      const read = tool({
+        vendorToolName: "Read",
+        status: "failed",
+        input: { file_path: "/Users/me/vault/plan.md" },
+      });
+      expect(lookupToolSummary(read).collapsedLine(read, CTX)).toBe("Read plan.md");
+    });
+
     it("uses a single Codex diff path as the edit target", () => {
       const t = tool({
         toolKind: "edit",

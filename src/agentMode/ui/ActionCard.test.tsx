@@ -32,6 +32,24 @@ describe("ActionCard", () => {
       expect(openVaultPath).toHaveBeenCalledWith({}, "notes/today.md", { newLeaf: true });
     });
 
+    it("renders a denied edit as Didn't edit with no file link (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
+      render(
+        <ActionCard
+          part={readTool({
+            vendorToolName: "Edit",
+            title: "Edit plan.md",
+            input: { file_path: "plan.md" },
+            status: "failed",
+          })}
+          open={false}
+          onToggle={jest.fn()}
+        />
+      );
+
+      expect(screen.getByText("Didn't edit plan.md")).toBeTruthy();
+      expect(screen.queryByRole("link")).toBeNull();
+    });
+
     it("renders an in-progress read as plain text without a link", () => {
       render(
         <ActionCard part={readTool({ status: "in_progress" })} open={false} onToggle={jest.fn()} />
