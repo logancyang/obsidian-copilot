@@ -78,6 +78,27 @@ const UNIFIED_CARDS: AgentMessagePart[] = [
   say("Reasoning, individual tools, grouped work, and delegated work now align."),
 ];
 
+const FAILED_FILE_CHANGES: AgentMessagePart[] = [
+  say("The edit was denied, so the card says the note was not edited."),
+  tool("failed-edit", "Edit", { status: "failed", input: { file_path: "Projects/plan.md" } }),
+  say("A denied write with no diff says the note was not edited."),
+  tool("failed-write", "Write", {
+    status: "failed",
+    input: { file_path: "Projects/notes.md", content: "# Notes\n" },
+    output: [{ type: "text", text: "User declined" }],
+  }),
+  say("A denied delete says the note was not deleted."),
+  tool("failed-delete", "Delete", {
+    status: "failed",
+    toolKind: "delete",
+    input: { filePath: "Archive/old.md" },
+  }),
+  say("A failed shell command still ran, so its label is unchanged."),
+  tool("failed-bash", "Bash", { status: "failed", input: { command: "npm test" } }),
+  say("A completed edit keeps its past-tense label."),
+  tool("done-edit", "Edit", { input: { file_path: "Projects/plan.md" } }),
+];
+
 const TrailDemo: React.FC<{
   parts: AgentMessagePart[];
   isStreaming?: boolean;
@@ -116,6 +137,10 @@ export const Streaming: StoryObj<AgentTrailProps> = {
 
 export const UnifiedCardStyles: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={UNIFIED_CARDS} />,
+};
+
+export const FailedFileChanges: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={FAILED_FILE_CHANGES} />,
 };
 
 export const CompletedWithoutDuration: StoryObj<AgentTrailProps> = {
