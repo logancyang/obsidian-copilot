@@ -284,7 +284,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       pathToClaudeCodeExecutable: this.opts.pathToClaudeCodeExecutable,
       cwd: session.cwd ?? undefined,
       includePartialMessages: true,
-      allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "LS"],
+      // Edit tools stay out so the permission mode decides them. https://github.com/Brevilabs/obsidian-copilot-private/issues/690
+      allowedTools: ["Read", "Glob", "Grep", "LS"],
       disallowedTools: ["TaskOutput", "Workflow", "Monitor"],
       canUseTool: permissionBridge.canUseTool,
     };
