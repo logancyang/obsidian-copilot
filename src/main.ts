@@ -40,6 +40,7 @@ import {
   PLAN_PREVIEW_VIEW_TYPE,
   RELEVANT_NOTES_VIEWTYPE,
   SHARED_VIEW_TYPES,
+  TURN_DIFF_VIEW_TYPE,
 } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
@@ -174,6 +175,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   skills?: SkillManager;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
+  private TurnDiffView?: typeof import("@/agentMode").TurnDiffView;
   private agentModelDiscoveryUnsubscriber?: () => void;
   modelManagement!: ModelManagementApi;
   selfHostWebSearchAgentBridge?: Readonly<SelfHostWebSearchAgentBridge>;
@@ -349,6 +351,8 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
         {
           CopilotAgentView,
           PlanPreviewView,
+          TurnDiffView,
+          closeRestoredTurnDiffs,
           acpFrameSink,
           createAgentSessionManager,
           setFrameSinkVaultBasePath,
@@ -358,6 +362,8 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       ] = agentMode;
       this.CopilotAgentView = CopilotAgentView;
       this.PlanPreviewView = PlanPreviewView;
+      this.TurnDiffView = TurnDiffView;
+      closeRestoredTurnDiffs(this.app.workspace);
 
       const adapter = this.app.vault.adapter;
       setFrameSinkVaultBasePath(
@@ -414,11 +420,13 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       RELEVANT_NOTES_VIEWTYPE,
       (leaf) => new RelevantNotesView(leaf, this)
     );
-    if (this.CopilotAgentView && this.PlanPreviewView) {
+    if (this.CopilotAgentView && this.PlanPreviewView && this.TurnDiffView) {
       const AgentView = this.CopilotAgentView;
       const PreviewView = this.PlanPreviewView;
+      const DiffView = this.TurnDiffView;
       this.startedViewCreators.set(CHAT_AGENT_VIEWTYPE, (leaf) => new AgentView(leaf, this));
       this.startedViewCreators.set(PLAN_PREVIEW_VIEW_TYPE, (leaf) => new PreviewView(leaf));
+      this.startedViewCreators.set(TURN_DIFF_VIEW_TYPE, (leaf) => new DiffView(leaf));
     }
 
     this.initActiveLeafChangeHandler();
