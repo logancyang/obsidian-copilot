@@ -611,7 +611,7 @@ describe("builtinSkills", () => {
 
   describe("isBuiltinSkillEnabledFor()", () => {
     it("enables every seeded builtin for every agent when no preference is stored", () => {
-      const settings = settingsWith({});
+      const settings = settingsWith({}, { enableMiyoDocumentProcessing: false });
       for (const agent of ["claude", "codex", "opencode"]) {
         expect(isBuiltinSkillEnabledFor(settings, "copilot-web-search", agent)).toBe(true);
         expect(isBuiltinSkillEnabledFor(settings, "copilot-read-pdf", agent)).toBe(true);
@@ -641,11 +641,15 @@ describe("builtinSkills", () => {
     });
 
     it("follows the Miyo gates: Miyo skills need their setting, and Miyo documents drop the cloud PDF skill", () => {
-      const off = settingsWith({});
+      const off = settingsWith({}, { enableMiyoDocumentProcessing: false });
       expect(isBuiltinSkillEnabledFor(off, "miyo-search", "claude")).toBe(false);
       expect(isBuiltinSkillEnabledFor(off, "miyo-parse", "claude")).toBe(false);
+      expect(isBuiltinSkillEnabledFor(off, "copilot-read-pdf", "claude")).toBe(true);
 
-      const on = settingsWith({}, { enableMiyoSearchSkill: true, docProcessorBackend: "miyo" });
+      const on = settingsWith(
+        {},
+        { enableMiyoSearchSkill: true, enableMiyoDocumentProcessing: true }
+      );
       expect(isBuiltinSkillEnabledFor(on, "miyo-search", "claude")).toBe(true);
       expect(isBuiltinSkillEnabledFor(on, "miyo-parse", "claude")).toBe(true);
       expect(isBuiltinSkillEnabledFor(on, "copilot-read-pdf", "claude")).toBe(false);

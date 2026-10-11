@@ -149,11 +149,11 @@ describe("SkillsSettings", () => {
       expect(Icon).not.toHaveBeenCalled();
     });
 
-    it.each<[boolean, "plus" | "miyo", boolean, boolean]>([
-      [false, "plus", false, false],
-      [true, "plus", true, false],
-      [false, "miyo", false, true],
-      [true, "miyo", true, true],
+    it.each<[boolean, boolean, boolean, boolean]>([
+      [false, false, false, false],
+      [true, false, true, false],
+      [false, true, false, true],
+      [true, true, true, true],
     ])(
       "shows Miyo tools only for enabled feature settings (%s, %s) for https://github.com/logancyang/obsidian-copilot/issues/3022",
       async (search, documents, showSearch, showParse) => {
@@ -161,7 +161,7 @@ describe("SkillsSettings", () => {
         settingsStore.set(settingsAtom, {
           ...initial,
           enableMiyoSearchSkill: search,
-          docProcessorBackend: documents,
+          enableMiyoDocumentProcessing: documents,
         });
         await act(async () => {
           renderSettings();

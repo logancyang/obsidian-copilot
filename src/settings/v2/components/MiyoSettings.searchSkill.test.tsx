@@ -207,22 +207,34 @@ describe("MiyoSettings", () => {
       expect(screen.getByRole("button", { name: "Connect" })).toBeTruthy();
     });
 
-    it("describes Document Processor using the selected backend — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
-      currentSettings.docProcessorBackend = "plus";
-      const { rerender } = render(<MiyoSettings />);
+    it("toggles Miyo document processing from its switch without a Miyo connection — https://github.com/Brevilabs/obsidian-copilot-private/issues/654", async () => {
+      currentSettings = {
+        ...currentSettings,
+        enableMiyo: false,
+        enableMiyoDocumentProcessing: true,
+      };
+      render(<MiyoSettings />);
       await act(async () => {});
+      const documentSwitch = screen.getByRole("switch", {
+        name: "Enable Miyo document processing",
+      });
+      expect(documentSwitch.getAttribute("aria-checked")).toBe("true");
+
+      fireEvent.click(documentSwitch);
+
+      expect(updateSetting).toHaveBeenCalledWith("enableMiyoDocumentProcessing", false);
+    });
+
+    it("explains what turning Miyo document processing off means for Agent Chat and Quick Chat — https://github.com/Brevilabs/obsidian-copilot-private/issues/654", async () => {
+      currentSettings.enableMiyoDocumentProcessing = false;
+      render(<MiyoSettings />);
+      await act(async () => {});
+      expect(screen.getByText(/When off, Agent Chat can use the Copilot PDF skill/)).toBeTruthy();
       expect(
-        screen.getByText("Use Copilot Cloud to process PDF, EPUB, and other formats.")
-      ).toBeTruthy();
-      expect(screen.queryByText(/uses credits/)).toBeNull();
-      currentSettings.docProcessorBackend = "miyo";
-      rerender(<MiyoSettings />);
-      expect(
-        screen.getByText("Miyo processes PDF and EPUB. Other formats use Copilot Cloud.")
-      ).toBeTruthy();
-      expect(
-        screen.queryByText("Use Copilot Cloud to process PDF, EPUB, and other formats.")
-      ).toBeNull();
+        screen
+          .getByRole("switch", { name: "Enable Miyo document processing" })
+          .getAttribute("aria-checked")
+      ).toBe("false");
     });
 
     it("shows Search scope only while Semantic search is enabled — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
@@ -439,7 +451,7 @@ describe("MiyoSettings", () => {
         miyoServerUrl: "http://remote:8742",
         enableMiyoSearchSkill: true,
         miyoSearchAll: true,
-        docProcessorBackend: "miyo",
+        enableMiyoDocumentProcessing: true,
       };
       render(<MiyoSettings />);
       fireEvent.click(screen.getByRole("radio", { name: /Local/ }));
@@ -459,7 +471,7 @@ describe("MiyoSettings", () => {
       expect(currentSettings).toMatchObject({
         enableMiyoSearchSkill: true,
         miyoSearchAll: true,
-        docProcessorBackend: "miyo",
+        enableMiyoDocumentProcessing: true,
       });
       expect(updateSetting).not.toHaveBeenCalledWith("miyoServerUrl", "");
       expect(mockProbeUrls).toEqual([]);

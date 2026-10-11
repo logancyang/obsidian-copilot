@@ -63,7 +63,7 @@ export function buildAgentSystemPrompt(backendId: BackendId): string {
       parts.push(`${COPILOT_SKILL_FIRST_LEAD} ${relayJobs.join(", ")}. ${COPILOT_SKILL_FALLBACK}`);
     }
     parts.push(COPILOT_WEB_RESEARCH_STEERING);
-    if (settings.docProcessorBackend === "miyo") parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
+    if (settings.enableMiyoDocumentProcessing) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
     if (enabled("miyo-search")) parts.push(COPILOT_MIYO_SEARCH_STEERING);
   }
 
