@@ -13,7 +13,7 @@ const ROW_INS_CLASS = "copilot-diff-row-ins";
 const ROW_DEL_CLASS = "copilot-diff-row-del";
 const DEL_END_CLASS = "copilot-diff-del-end";
 
-const SENTINEL = new RegExp(`[${INS_OPEN}-${DEL_CLOSE}]`);
+export const SENTINEL = new RegExp(`[${INS_OPEN}-${DEL_CLOSE}]`);
 
 type Mode = "ins" | "del" | null;
 
