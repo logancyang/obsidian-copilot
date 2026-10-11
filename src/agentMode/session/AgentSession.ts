@@ -1622,8 +1622,8 @@ export class AgentSession {
       if (!isCapturableVaultPath(path)) continue;
       let capture = this.turnFiles.get(path);
       if (!capture) {
-        // Issued as the call is announced: out-of-process backends write only afterwards.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+        // Read as the call is announced; an Auto-mode write can land first, so a write-time original wins.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/687
         capture = { edited: false, snapshot: readVaultText(adapter, path) };
         this.turnFiles.set(path, capture);
       }
