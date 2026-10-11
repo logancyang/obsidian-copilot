@@ -32,7 +32,7 @@ export const COPILOT_PROJECT_WORKSPACE_POLICY = `With <project_context>, the wor
 
 // One model step stops at the output limit, and a write cut off mid-call saves an empty or partial note.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/641
-export const COPILOT_LONG_WRITE_POLICY = `A single write or edit call must never contain more than 3,000 words. For a longer file, create it with the first part, then append each next part with a separate edit call until it is complete.`;
+export const COPILOT_LONG_WRITE_POLICY = `A single write or edit call must never contain more than 4,000 words. For a longer file, create it with the first part, then append each next part with a separate edit call until it is complete.`;
 
 export const COPILOT_INSTRUCTION_PRECEDENCE = `Project AGENTS.md overrides conflicting vault-root AGENTS.md instructions regardless of loading order.`;
 
