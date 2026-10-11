@@ -1,9 +1,49 @@
 import React from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { App, Menu, type Modal } from "obsidian";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
+import { AppContext } from "@/context";
+import { buildNativeChatId } from "@/utils/nativeChatId";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
+const mockOpenedModals: Modal[] = [];
+
+jest.mock("obsidian", () => {
+  const obsidianMock = jest.requireActual("obsidian");
+  class OpenableModal extends obsidianMock.Modal {
+    constructor(app: unknown) {
+      super(app);
+      delete this.onOpen;
+      delete this.onClose;
+      this.setTitle = (title: string) => this.titleEl.setText(title);
+      this.contentEl.empty = () => this.contentEl.replaceChildren();
+      this.open = () => {
+        mockOpenedModals.push(this as unknown as Modal);
+        document.body.appendChild(this.containerEl);
+        this.onOpen();
+      };
+      this.close = jest.fn(() => {
+        this.onClose();
+        this.containerEl.remove();
+      });
+    }
+  }
+  return { ...obsidianMock, Modal: OpenableModal };
+});
+
 type SectionItems = React.ComponentProps<typeof GlobalRecentChatsSection>["items"];
+
+interface MockMenuItem {
+  title?: string;
+  icon?: string | null;
+  warning?: boolean;
+  separator?: boolean;
+  click?: () => void;
+}
+
+interface MockMenu {
+  items: MockMenuItem[];
+}
 
 const noop = async () => {};
 
@@ -14,21 +54,48 @@ function renderSection(
   } = {}
 ) {
   return render(
-    <GlobalRecentChatsSection
-      {...{ openChatIds: props.openChatIds, onCloseSession: props.onCloseSession }}
-      items={props.items ?? []}
-      variant={props.variant}
-      title={props.title}
-      runningChatIds={props.runningChatIds}
-      attentionChatIds={props.attentionChatIds}
-      projectNamesById={props.projectNamesById}
-      sortStrategy={props.sortStrategy}
-      onLoadChat={props.onLoadChat ?? noop}
-      onUpdateTitle={props.onUpdateTitle ?? noop}
-      onDeleteChat={props.onDeleteChat ?? noop}
-      onOpenSourceFile={props.onOpenSourceFile ?? noop}
-    />
+    <AppContext.Provider value={new App()}>
+      <GlobalRecentChatsSection
+        {...{ openChatIds: props.openChatIds, onCloseSession: props.onCloseSession }}
+        items={props.items ?? []}
+        variant={props.variant}
+        title={props.title}
+        runningChatIds={props.runningChatIds}
+        attentionChatIds={props.attentionChatIds}
+        projectNamesById={props.projectNamesById}
+        sortStrategy={props.sortStrategy}
+        onLoadChat={props.onLoadChat ?? noop}
+        onUpdateTitle={props.onUpdateTitle ?? noop}
+        onDeleteChat={props.onDeleteChat ?? noop}
+        onOpenSourceFile={props.onOpenSourceFile ?? noop}
+        onCopyChatLink={props.onCopyChatLink ?? noop}
+      />
+    </AppContext.Provider>
   );
+}
+
+function rowFor(title: string): HTMLElement {
+  const row = screen.getByText(title).closest<HTMLElement>('[role="button"]');
+  if (!row) throw new Error(`No row for ${title}`);
+  return row;
+}
+
+function openMenuFromButton(title: string): { menu: MockMenu; show: jest.SpyInstance } {
+  const show = jest.spyOn(Menu.prototype, "showAtPosition");
+  fireEvent.click(within(rowFor(title)).getByRole("button", { name: "More actions" }));
+  return { menu: show.mock.contexts.at(-1) as MockMenu, show };
+}
+
+function chooseMenuItem(menu: MockMenu, title: string): void {
+  const item = menu.items.find((candidate) => candidate.title === title);
+  if (!item?.click) throw new Error(`No menu item ${title}`);
+  item.click();
+}
+
+function lastModal(): Modal {
+  const modal = mockOpenedModals.at(-1);
+  if (!modal) throw new Error("No modal was opened");
+  return modal;
 }
 
 function queryAttentionDot(container: HTMLElement): Element | null {
@@ -73,6 +140,8 @@ describe("GlobalRecentChatsSection", () => {
   });
   afterEach(() => {
     window.IntersectionObserver = originalObserver;
+    jest.restoreAllMocks();
+    mockOpenedModals.splice(0).forEach((modal) => modal.containerEl.remove());
   });
 
   describe("GlobalRecentChatsSection()", () => {
@@ -289,48 +358,158 @@ describe("GlobalRecentChatsSection", () => {
       expect(screen.getAllByText(/^Chat search-page-/)).toHaveLength(50);
     });
 
-    it("https://github.com/logancyang/obsidian-copilot/issues/3040 keeps a rename draft when updating the title fails", async () => {
-      const onUpdateTitle = jest.fn(async () => {
-        throw new Error("rename failed");
-      });
-      renderSection({ items: [makeItem("rename-failure")], onUpdateTitle });
+    it("shows only Open source note and More actions when hovering a saved chat whose session is closed", () => {
+      renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })] });
 
-      fireEvent.click(screen.getByTitle("Rename"));
-      const input = screen.getByDisplayValue("Chat rename-failure");
-      fireEvent.change(input, { target: { value: "Retained draft" } });
-      await act(async () => {
-        fireEvent.keyDown(input, { key: "Enter" });
-      });
+      const actions = within(rowFor("Saved chat"))
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label"));
 
-      expect(onUpdateTitle).toHaveBeenCalledWith("rename-failure", "Retained draft");
-      expect(screen.getByDisplayValue("Retained draft")).toBeTruthy();
+      expect(actions).toEqual(["Open source note", "More actions"]);
     });
 
-    it("https://github.com/logancyang/obsidian-copilot/issues/3040 keeps delete confirmation available when deletion fails", async () => {
-      const onDeleteChat = jest.fn(async () => {
-        throw new Error("delete failed");
+    it("leads the hover actions with Close session when the chat's session is open", () => {
+      renderSection({
+        items: [makeItem("chats/open.md", { title: "Open chat" })],
+        openChatIds: new Set(["chats/open.md"]),
+        onCloseSession: noop,
       });
-      renderSection({ items: [makeItem("delete-failure")], onDeleteChat });
 
-      fireEvent.click(screen.getByTitle("Delete"));
+      const actions = within(rowFor("Open chat"))
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label"));
+
+      expect(actions).toEqual(["Close session", "Open source note", "More actions"]);
+    });
+
+    it("lists Rename, Copy chat link, a separator, and a warning-styled Delete in the More actions menu", () => {
+      renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })] });
+
+      const { menu } = openMenuFromButton("Saved chat");
+
+      expect(menu.items.map((item) => (item.separator ? "---" : item.title))).toEqual([
+        "Rename",
+        "Copy chat link",
+        "---",
+        "Delete",
+      ]);
+      expect(menu.items.find((item) => item.title === "Delete")?.warning).toBe(true);
+    });
+
+    it("opens the menu below the More actions button in the row's own window without opening the chat", () => {
+      const onLoadChat = jest.fn(noop);
+      renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })], onLoadChat });
+
+      const { show } = openMenuFromButton("Saved chat");
+
+      expect(show).toHaveBeenCalledWith(
+        expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+        rowFor("Saved chat").ownerDocument
+      );
+      expect(onLoadChat).not.toHaveBeenCalled();
+    });
+
+    it("opens the same menu at the pointer instead of the browser menu when the row is right-clicked", () => {
+      const onLoadChat = jest.fn(noop);
+      renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })], onLoadChat });
+      const show = jest.spyOn(Menu.prototype, "showAtPosition");
+
+      const notPrevented = fireEvent.contextMenu(rowFor("Saved chat"), {
+        clientX: 120,
+        clientY: 80,
+      });
+
+      const menu = show.mock.contexts[0] as MockMenu;
+      expect(notPrevented).toBe(false);
+      expect(show).toHaveBeenCalledWith({ x: 120, y: 80 }, rowFor("Saved chat").ownerDocument);
+      expect(menu.items.map((item) => item.title)).toContain("Rename");
+      expect(onLoadChat).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/693 leaves Copy chat link and Open source note out for a chat with no saved note", () => {
+      const nativeId = buildNativeChatId("opencode", "session-1");
+      renderSection({ items: [makeItem(nativeId, { title: "Native chat" })] });
+
+      const { menu } = openMenuFromButton("Native chat");
+
+      expect(menu.items.map((item) => item.title)).not.toContain("Copy chat link");
+      expect(
+        within(rowFor("Native chat")).queryByRole("button", { name: "Open source note" })
+      ).toBeNull();
+    });
+
+    it("copies the link of the chosen chat when Copy chat link is selected", () => {
+      const onCopyChatLink = jest.fn(noop);
+      renderSection({
+        items: [makeItem("chats/saved.md", { title: "Saved chat" })],
+        onCopyChatLink,
+      });
+
+      chooseMenuItem(openMenuFromButton("Saved chat").menu, "Copy chat link");
+
+      expect(onCopyChatLink).toHaveBeenCalledWith("chats/saved.md");
+    });
+
+    it("renames the chat from a Rename chat dialog prefilled with its current title", async () => {
+      const onUpdateTitle = jest.fn(noop);
+      renderSection({
+        items: [makeItem("chats/saved.md", { title: "Saved chat" })],
+        onUpdateTitle,
+      });
+
+      act(() => chooseMenuItem(openMenuFromButton("Saved chat").menu, "Rename"));
+      const dialog = lastModal();
+      const field = within(dialog.contentEl).getByRole("textbox", { name: "Chat title" });
+      expect(dialog.titleEl.textContent).toBe("Rename chat");
+      expect(field).toHaveProperty("value", "Saved chat");
+      fireEvent.change(field, { target: { value: "Launch checklist" } });
       await act(async () => {
-        fireEvent.click(screen.getByTitle("Confirm delete"));
+        fireEvent.click(within(dialog.contentEl).getByRole("button", { name: "Save" }));
       });
 
-      expect(onDeleteChat).toHaveBeenCalledWith("delete-failure");
-      expect(screen.getByTitle("Confirm delete")).toBeTruthy();
+      expect(onUpdateTitle).toHaveBeenCalledWith("chats/saved.md", "Launch checklist");
+      expect(dialog.close).toHaveBeenCalled();
+    });
+
+    it("deletes the chat after the user confirms in the Delete chat dialog", async () => {
+      const onDeleteChat = jest.fn(noop);
+      renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })], onDeleteChat });
+
+      act(() => chooseMenuItem(openMenuFromButton("Saved chat").menu, "Delete"));
+      const dialog = lastModal();
+      expect(dialog.titleEl.textContent).toBe("Delete chat");
+      expect(within(dialog.contentEl).getByText("Delete this chat from Copilot?")).toBeTruthy();
+      await act(async () => {
+        fireEvent.click(within(dialog.contentEl).getByRole("button", { name: "Delete" }));
+      });
+
+      expect(onDeleteChat).toHaveBeenCalledWith("chats/saved.md");
+    });
+
+    it("keeps the chat when the Delete chat dialog is cancelled", () => {
+      const onDeleteChat = jest.fn(noop);
+      renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })], onDeleteChat });
+
+      act(() => chooseMenuItem(openMenuFromButton("Saved chat").menu, "Delete"));
+      act(() => {
+        fireEvent.click(within(lastModal().contentEl).getByRole("button", { name: "Cancel" }));
+      });
+
+      expect(onDeleteChat).not.toHaveBeenCalled();
+      expect(screen.getByText("Saved chat")).toBeTruthy();
     });
 
     it.each([["claude", "Claude Code"]])(
-      "https://github.com/logancyang/obsidian-copilot/issues/2888 says the %s agent may keep its own copy before the user confirms",
+      "https://github.com/logancyang/obsidian-copilot/issues/2888 says in the Delete chat dialog that the %s agent may keep its own copy",
       (backendId, agent) => {
-        renderSection({ items: [makeItem("chats/agent__a.md", { backendId })] });
+        renderSection({
+          items: [makeItem("chats/agent__a.md", { title: "Agent chat", backendId })],
+        });
 
-        expect(screen.queryByText(/^Delete this chat from Copilot/)).toBeNull();
-        fireEvent.click(screen.getByTitle("Delete"));
+        act(() => chooseMenuItem(openMenuFromButton("Agent chat").menu, "Delete"));
 
         expect(
-          screen.getByText(
+          within(lastModal().contentEl).getByText(
             `Delete this chat from Copilot? ${agent} may keep its own copy of this conversation on this computer.`
           )
         ).toBeTruthy();
@@ -339,15 +518,19 @@ describe("GlobalRecentChatsSection", () => {
 
     it("refreshes once when the parent re-renders with the items that refresh produced", () => {
       const loadHistory = jest.fn(async () => {});
+      const app = new App();
       const Parent = ({ items }: { items: SectionItems }) => (
-        <GlobalRecentChatsSection
-          items={items}
-          onLoadChat={noop}
-          onUpdateTitle={noop}
-          onDeleteChat={noop}
-          onOpenSourceFile={noop}
-          onLoadHistory={safeAsyncHandler(loadHistory)}
-        />
+        <AppContext.Provider value={app}>
+          <GlobalRecentChatsSection
+            items={items}
+            onLoadChat={noop}
+            onUpdateTitle={noop}
+            onDeleteChat={noop}
+            onOpenSourceFile={noop}
+            onCopyChatLink={noop}
+            onLoadHistory={safeAsyncHandler(loadHistory)}
+          />
+        </AppContext.Provider>
       );
 
       const { rerender } = render(<Parent items={[]} />);

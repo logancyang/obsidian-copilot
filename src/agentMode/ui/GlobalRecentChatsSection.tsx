@@ -1,32 +1,23 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
-import { describeChatDelete } from "@/lib/chatDeleteText";
 import { AgentHomePreviewList } from "@/agentMode/ui/AgentHomeSection";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
+import { RenameChatModal } from "@/agentMode/ui/RenameChatModal";
+import { ConfirmModal } from "@/components/modals/ConfirmModal";
+import { describeChatDelete } from "@/lib/chatDeleteText";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { type ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { ChatIconWithAttention } from "@/components/chat-components/ChatIconWithAttention";
-import { logError } from "@/logger";
+import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
 import { isNativeChatId } from "@/utils/nativeChatId";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
-import {
-  ArrowUpRight,
-  Check,
-  Edit2,
-  LoaderCircle,
-  MessageCircle,
-  Power,
-  Trash2,
-  X,
-} from "lucide-react";
+import { ArrowUpRight, LoaderCircle, MessageCircle, MoreHorizontal, Power } from "lucide-react";
+import { type App, Menu, type MenuPositionDef } from "obsidian";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
-
-const NOOP_SAVE = (): void => {};
 
 export type RecentChatsVariant = "global" | "project";
 
@@ -38,6 +29,7 @@ interface GlobalRecentChatsSectionProps {
   onUpdateTitle: (id: string, newTitle: string) => Promise<void>;
   onDeleteChat: (id: string) => Promise<void>;
   onOpenSourceFile: (id: string) => Promise<void>;
+  onCopyChatLink: (id: string) => Promise<void>;
   onLoadHistory?: () => void;
   runningChatIds?: ReadonlySet<string>;
   openChatIds?: ReadonlySet<string>;
@@ -88,21 +80,85 @@ const ChatIconTile = memo(
 );
 ChatIconTile.displayName = "ChatIconTile";
 
+interface RecentChatMenuActions {
+  onUpdateTitle: (id: string, newTitle: string) => Promise<void>;
+  onCopyChatLink: (id: string) => Promise<void>;
+  onDeleteChat: (id: string) => Promise<void>;
+}
+
+function buildRecentChatMenu(
+  app: App,
+  item: ChatHistoryItem,
+  { onUpdateTitle, onCopyChatLink, onDeleteChat }: RecentChatMenuActions
+): Menu {
+  const menu = new Menu();
+  menu.addItem((menuItem) =>
+    menuItem
+      .setTitle("Rename")
+      .setIcon("pencil")
+      .onClick(() =>
+        new RenameChatModal(app, item.title, (title) => onUpdateTitle(item.id, title)).open()
+      )
+  );
+  // A chat with no saved note has nothing a link could open: https://github.com/Brevilabs/obsidian-copilot-private/issues/693
+  if (!isNativeChatId(item.id)) {
+    menu.addItem((menuItem) =>
+      menuItem
+        .setTitle("Copy chat link")
+        .setIcon("link")
+        .onClick(() => safeAsyncHandler(onCopyChatLink)(item.id))
+    );
+  }
+  menu.addSeparator();
+  menu.addItem((menuItem) =>
+    menuItem
+      .setTitle("Delete")
+      .setIcon("trash-2")
+      .setWarning(true)
+      .onClick(() =>
+        new ConfirmModal(
+          app,
+          () => onDeleteChat(item.id),
+          describeChatDelete(item.backendId ? backendRegistry[item.backendId] : undefined),
+          "Delete chat",
+          "Delete",
+          "Cancel"
+        ).open()
+      )
+  );
+  return menu;
+}
+
+interface RowActionButtonProps {
+  label: string;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  children: React.ReactNode;
+}
+
+function RowActionButton({ label, onClick, children }: RowActionButtonProps): React.ReactElement {
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="tw-size-5 tw-p-0"
+      aria-label={label}
+      title={label}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick(event);
+      }}
+    >
+      {children}
+    </Button>
+  );
+}
+
 interface RecentChatRowProps {
   item: ChatHistoryItem;
   projectName?: string;
-  isEditing: boolean;
-  editingTitle: string;
-  confirmingDelete: boolean;
   onOpen: (id: string) => void;
-  onStartEdit: (id: string, title: string) => void;
-  onEditingTitleChange: (title: string) => void;
-  onSaveEdit: () => void;
-  onCancelEdit: () => void;
-  onStartDelete: (id: string) => void;
-  onConfirmDelete: (id: string) => void;
-  onCancelDelete: () => void;
-  canOpenSourceFile: boolean;
+  onShowMenu: (item: ChatHistoryItem, position: MenuPositionDef, doc: Document) => void;
+  isNoteBacked: boolean;
   onOpenSourceFile: (id: string) => void;
   isRunning: boolean;
   isSessionOpen: boolean;
@@ -113,18 +169,9 @@ interface RecentChatRowProps {
 const RecentChatRow = memo(function RecentChatRow({
   item,
   projectName,
-  isEditing,
-  editingTitle,
-  confirmingDelete,
   onOpen,
-  onStartEdit,
-  onEditingTitleChange,
-  onSaveEdit,
-  onCancelEdit,
-  onStartDelete,
-  onConfirmDelete,
-  onCancelDelete,
-  canOpenSourceFile,
+  onShowMenu,
+  isNoteBacked,
   onOpenSourceFile,
   isRunning,
   isSessionOpen,
@@ -133,166 +180,75 @@ const RecentChatRow = memo(function RecentChatRow({
 }: RecentChatRowProps): React.ReactElement {
   const Icon = resolveChatIcon(item) ?? MessageCircle;
 
-  if (isEditing) {
-    return (
-      <div className="tw-flex tw-min-h-9 tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5">
-        <ChatIconTile Icon={Icon} needsAttention={hasAttention} />
-        <Input
-          value={editingTitle}
-          onChange={(e) => onEditingTitleChange(e.target.value)}
-          className="!tw-h-6 tw-flex-1"
-          autoFocus
-          onKeyDown={(e) => {
-            if (e.key === "Enter") onSaveEdit();
-            else if (e.key === "Escape") onCancelEdit();
-          }}
-        />
-        <Button size="sm" variant="ghost" onClick={onSaveEdit} className="tw-size-5 tw-p-0">
-          <Check className="tw-size-3" />
-        </Button>
-        <Button size="sm" variant="ghost" onClick={onCancelEdit} className="tw-size-5 tw-p-0">
-          <X className="tw-size-3" />
-        </Button>
-      </div>
-    );
-  }
-
-  const deleteSummary = confirmingDelete
-    ? describeChatDelete(item.backendId ? backendRegistry[item.backendId] : undefined)
-    : undefined;
-
   return (
-    <div className="tw-group">
-      <div
-        role="button"
-        tabIndex={0}
-        className={cn(
-          "tw-flex tw-min-h-9 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
-          "tw-text-left tw-transition-colors hover:tw-bg-modifier-hover"
-        )}
-        onClick={() => onOpen(item.id)}
-        onKeyDown={(e) => {
-          if (e.target !== e.currentTarget) return;
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onOpen(item.id);
-          }
-        }}
-      >
-        {/* Session ownership and active response are independent indicators.
+    <div
+      role="button"
+      tabIndex={0}
+      className={cn(
+        "tw-group tw-flex tw-min-h-9 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
+        "tw-text-left tw-transition-colors hover:tw-bg-modifier-hover"
+      )}
+      onClick={() => onOpen(item.id)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onShowMenu(item, { x: event.clientX, y: event.clientY }, event.currentTarget.ownerDocument);
+      }}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen(item.id);
+        }
+      }}
+    >
+      {/* Session ownership and active response are independent indicators.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/429 */}
-        <ChatIconTile Icon={Icon} needsAttention={hasAttention} isSessionLive={isSessionOpen} />
-        <RecentChatTitle title={item.title} />
+      <ChatIconTile Icon={Icon} needsAttention={hasAttention} isSessionLive={isSessionOpen} />
+      <RecentChatTitle title={item.title} />
 
-        <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5">
-          {projectName && <RecentChatProjectBadge name={projectName} />}
-          {isRunning ? (
-            <LoaderCircle
-              className={cn(
-                "tw-size-3.5 tw-shrink-0 tw-animate-spin tw-text-accent",
-                "group-focus-within:tw-hidden group-hover:tw-hidden"
-              )}
-              aria-label="Responding"
-            />
-          ) : (
-            <span
-              className="tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted group-focus-within:tw-hidden group-hover:tw-hidden"
-              title={new Date(item.lastAccessedAt).toLocaleString()}
-            >
-              {formatCompactRelativeTime(item.lastAccessedAt.getTime())}
-            </span>
-          )}
-          <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-1.5 group-focus-within:tw-flex group-hover:tw-flex">
-            {confirmingDelete ? (
-              <>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onConfirmDelete(item.id);
-                  }}
-                  className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
-                  title="Confirm delete"
-                >
-                  <Check className="tw-size-3" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCancelDelete();
-                  }}
-                  className="tw-size-5 tw-p-0"
-                  title="Cancel"
-                >
-                  <X className="tw-size-3" />
-                </Button>
-              </>
-            ) : (
-              <>
-                {isSessionOpen && onCloseSession && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="tw-size-5 tw-p-0"
-                    aria-label="Close session"
-                    title="Close session"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      safeAsyncHandler(onCloseSession)(item.id);
-                    }}
-                  >
-                    <Power className="tw-size-3" />
-                  </Button>
-                )}
-                {canOpenSourceFile && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenSourceFile(item.id);
-                    }}
-                    className="tw-size-5 tw-p-0"
-                    title="Open source note"
-                  >
-                    <ArrowUpRight className="tw-size-4" />
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onStartEdit(item.id, item.title);
-                  }}
-                  className="tw-size-5 tw-p-0"
-                  title="Rename"
-                >
-                  <Edit2 className="tw-size-3" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onStartDelete(item.id);
-                  }}
-                  className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
-                  title="Delete"
-                >
-                  <Trash2 className="tw-size-3" />
-                </Button>
-              </>
+      <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5">
+        {projectName && <RecentChatProjectBadge name={projectName} />}
+        {isRunning ? (
+          <LoaderCircle
+            className={cn(
+              "tw-size-3.5 tw-shrink-0 tw-animate-spin tw-text-accent",
+              "group-focus-within:tw-hidden group-hover:tw-hidden"
             )}
-          </div>
+            aria-label="Responding"
+          />
+        ) : (
+          <span
+            className="tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted group-focus-within:tw-hidden group-hover:tw-hidden"
+            title={new Date(item.lastAccessedAt).toLocaleString()}
+          >
+            {formatCompactRelativeTime(item.lastAccessedAt.getTime())}
+          </span>
+        )}
+        <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-1.5 group-focus-within:tw-flex group-hover:tw-flex">
+          {isSessionOpen && onCloseSession && (
+            <RowActionButton
+              label="Close session"
+              onClick={() => safeAsyncHandler(onCloseSession)(item.id)}
+            >
+              <Power className="tw-size-3" />
+            </RowActionButton>
+          )}
+          {isNoteBacked && (
+            <RowActionButton label="Open source note" onClick={() => onOpenSourceFile(item.id)}>
+              <ArrowUpRight className="tw-size-4" />
+            </RowActionButton>
+          )}
+          <RowActionButton
+            label="More actions"
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              onShowMenu(item, { x: rect.left, y: rect.bottom }, event.currentTarget.ownerDocument);
+            }}
+          >
+            <MoreHorizontal className="tw-size-4" />
+          </RowActionButton>
         </div>
       </div>
-      {deleteSummary && (
-        <div className="tw-px-2 tw-pb-1.5 tw-text-xs tw-text-muted">{deleteSummary}</div>
-      )}
     </div>
   );
 });
@@ -305,6 +261,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   onUpdateTitle,
   onDeleteChat,
   onOpenSourceFile,
+  onCopyChatLink,
   onLoadHistory,
   runningChatIds,
   openChatIds,
@@ -314,10 +271,8 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   sortStrategy = "recent",
   className,
 }: GlobalRecentChatsSectionProps): React.ReactElement {
+  const app = useApp();
   const [query, setQuery] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingTitle, setEditingTitle] = useState("");
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     onLoadHistory?.();
@@ -335,43 +290,6 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
     [displayCount, filteredItems]
   );
 
-  const handleStartEdit = useCallback((id: string, title: string) => {
-    setConfirmDeleteId(null);
-    setEditingId(id);
-    setEditingTitle(title);
-  }, []);
-
-  const handleSaveEdit = useCallback(async () => {
-    const trimmed = editingTitle.trim();
-    const id = editingId;
-    if (!id || !trimmed) {
-      setEditingId(null);
-      return;
-    }
-
-    try {
-      await onUpdateTitle(id, trimmed);
-      setEditingId(null);
-    } catch (error) {
-      logError("Error updating title:", error);
-    }
-  }, [editingId, editingTitle, onUpdateTitle]);
-
-  const handleConfirmDelete = useCallback(
-    async (id: string) => {
-      try {
-        await onDeleteChat(id);
-        setConfirmDeleteId(null);
-      } catch (error) {
-        logError("Error deleting chat:", error);
-      }
-    },
-    [onDeleteChat]
-  );
-
-  const handleSaveEditSafely = safeAsyncHandler(handleSaveEdit);
-  const handleConfirmDeleteSafely = safeAsyncHandler(handleConfirmDelete);
-
   const handleOpenSourceFile = useCallback(
     (id: string) => {
       void onOpenSourceFile(id);
@@ -381,8 +299,16 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
 
   const handleOpen = safeAsyncHandler(onLoadChat);
 
-  const handleCancelEdit = useCallback(() => setEditingId(null), []);
-  const handleCancelDelete = useCallback(() => setConfirmDeleteId(null), []);
+  const handleShowMenu = useCallback(
+    (item: ChatHistoryItem, position: MenuPositionDef, doc: Document) => {
+      buildRecentChatMenu(app, item, {
+        onUpdateTitle,
+        onCopyChatLink,
+        onDeleteChat,
+      }).showAtPosition(position, doc);
+    },
+    [app, onCopyChatLink, onDeleteChat, onUpdateTitle]
+  );
   const getProjectName = useCallback(
     (item: ChatHistoryItem): string | undefined =>
       variant === "global" && item.projectId ? projectNamesById?.[item.projectId] : undefined,
@@ -420,18 +346,9 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
                 key={item.id}
                 item={item}
                 projectName={getProjectName(item)}
-                isEditing={editingId === item.id}
-                editingTitle={editingId === item.id ? editingTitle : ""}
-                confirmingDelete={confirmDeleteId === item.id}
                 onOpen={handleOpen}
-                onStartEdit={handleStartEdit}
-                onEditingTitleChange={setEditingTitle}
-                onSaveEdit={editingId === item.id ? handleSaveEditSafely : NOOP_SAVE}
-                onCancelEdit={handleCancelEdit}
-                onStartDelete={setConfirmDeleteId}
-                onConfirmDelete={handleConfirmDeleteSafely}
-                onCancelDelete={handleCancelDelete}
-                canOpenSourceFile={!isNativeChatId(item.id)}
+                onShowMenu={handleShowMenu}
+                isNoteBacked={!isNativeChatId(item.id)}
                 onOpenSourceFile={handleOpenSourceFile}
                 isRunning={runningChatIds?.has(item.id) ?? false}
                 isSessionOpen={openChatIds?.has(item.id) ?? false}

@@ -18,6 +18,7 @@ export interface AgentHistoryControls {
   updateChatTitle: (id: string, newTitle: string) => Promise<void>;
   deleteChat: (id: string) => Promise<void>;
   openSourceFile: (id: string) => Promise<void>;
+  copyChatLink: (id: string) => Promise<void>;
 }
 export function useAgentHistoryControls(
   manager: AgentSessionManager,
@@ -121,6 +122,8 @@ export function useAgentHistoryControls(
     [plugin, runWithNotice]
   );
 
+  const copyChatLink = useCallback((id: string) => plugin.copyChatLink(async () => id), [plugin]);
+
   return {
     chatHistoryItems: visibleChatHistoryItems,
     chatHistorySettled,
@@ -129,5 +132,6 @@ export function useAgentHistoryControls(
     updateChatTitle,
     deleteChat,
     openSourceFile,
+    copyChatLink,
   };
 }

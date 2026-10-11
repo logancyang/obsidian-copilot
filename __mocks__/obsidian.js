@@ -91,6 +91,44 @@ module.exports = {
     unload() {}
     register() {}
   },
+  Menu: class Menu {
+    constructor() {
+      this.items = [];
+    }
+    addItem(build) {
+      const item = {
+        title: "",
+        icon: null,
+        warning: false,
+        setTitle(title) {
+          this.title = title;
+          return this;
+        },
+        setIcon(icon) {
+          this.icon = icon;
+          return this;
+        },
+        setWarning(warning) {
+          this.warning = warning;
+          return this;
+        },
+        onClick(callback) {
+          this.click = callback;
+          return this;
+        },
+      };
+      build(item);
+      this.items.push(item);
+      return this;
+    }
+    addSeparator() {
+      this.items.push({ separator: true });
+      return this;
+    }
+    showAtPosition() {
+      return this;
+    }
+  },
   FuzzySuggestModal: class FuzzySuggestModal {
     constructor(app) {
       this.app = app;

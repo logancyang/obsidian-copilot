@@ -14,6 +14,7 @@ declare module "obsidian" {
 
   interface MenuItem {
     setSubmenu(): this;
+    setWarning(isWarning: boolean): this;
 
     submenu?: Menu;
   }
