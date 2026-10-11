@@ -95,24 +95,6 @@ export const WithFailedEdit: StoryObj<ActivityGroupCardProps> = {
   },
 };
 
-export const AllEditsDenied: StoryObj<ActivityGroupCardProps> = {
-  args: {
-    group: group([
-      action("Edit Projects/plan.md", {
-        vendorToolName: "Edit",
-        status: "failed",
-        input: { file_path: "Projects/plan.md" },
-      }),
-      action("Edit Projects/todo.md", {
-        vendorToolName: "Edit",
-        status: "failed",
-        input: { file_path: "Projects/todo.md" },
-      }),
-    ]),
-    thinkingMs: 0,
-  },
-};
-
 export const InFlight: StoryObj<ActivityGroupCardProps> = {
   args: {
     group: group([

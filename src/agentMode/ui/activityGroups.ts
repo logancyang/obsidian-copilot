@@ -69,7 +69,6 @@ export function foldActivityGroups(nodes: RenderNode[]): GroupedTrailNode[] {
 }
 
 type FileActivityFamily = "read" | "edit";
-type FileSummaryFamily = FileActivityFamily | "failedEdit";
 
 function fileFamilyFor(part: ToolCallPart): FileActivityFamily | null {
   if (!part.mcpServer) {
@@ -94,14 +93,12 @@ function fileFamilyFor(part: ToolCallPart): FileActivityFamily | null {
   }
 }
 
-function filePhraseFor(family: FileSummaryFamily, n: number): string {
+function filePhraseFor(family: FileActivityFamily, n: number): string {
   switch (family) {
     case "read":
       return `read ${pluralize(n, "file")}`;
     case "edit":
       return `edited ${pluralize(n, "file")}`;
-    case "failedEdit":
-      return `didn't edit ${pluralize(n, "file")}`;
   }
 }
 
@@ -134,8 +131,8 @@ export function summarizeActivity(
   members: ActivityMember[],
   options: ActivitySummaryOptions = {}
 ): ActivitySummary {
-  const fileOrder: FileSummaryFamily[] = [];
-  const fileCounts = new Map<FileSummaryFamily, FileCount>();
+  const fileOrder: FileActivityFamily[] = [];
+  const fileCounts = new Map<FileActivityFamily, FileCount>();
   let commands = 0;
   let thoughts = 0;
   let completedThinkingMs = 0;
@@ -149,13 +146,11 @@ export function summarizeActivity(
     }
     commands++;
     if (member.part.status === "failed") failed++;
-    const fileFamily = fileFamilyFor(member.part);
-    if (!fileFamily) continue;
-    // A failed edit left the note unchanged, so it counts as a file that was
-    // not edited rather than an edited file.
+    const family = fileFamilyFor(member.part);
+    if (!family) continue;
+    // A failed edit left the note unchanged, so it is not an edited file.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/691
-    const family: FileSummaryFamily =
-      fileFamily === "edit" && member.part.status === "failed" ? "failedEdit" : fileFamily;
+    if (family === "edit" && member.part.status === "failed") continue;
     if (!fileCounts.has(family)) {
       fileOrder.push(family);
       fileCounts.set(family, { paths: new Set(), withoutPath: 0 });
@@ -170,7 +165,6 @@ export function summarizeActivity(
   }
 
   const parts = commands > 0 ? [`ran ${pluralize(commands, "command")}`] : [];
-  fileOrder.sort((a, b) => Number(a === "failedEdit") - Number(b === "failedEdit"));
   for (const family of fileOrder) {
     const count = fileCounts.get(family)!;
     parts.push(filePhraseFor(family, count.paths.size + count.withoutPath));
