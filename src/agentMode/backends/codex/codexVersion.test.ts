@@ -307,46 +307,15 @@ describe("codexVersion", () => {
       );
       expect(npmFs.resolveFrom).toHaveBeenCalledWith(UNIX_ENTRY, "@openai/codex/bin/codex.js");
     });
-    it.each([
-      [
-        "npm",
-        '"%_prog%"  "%dp0%\\node_modules\\@openai\\codex\\bin\\codex.js" %*\r\n',
-        "C:\\Users\\Jane Doe\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\bin\\codex.js",
-      ],
-      [
-        "pnpm",
-        'node  "%~dp0\\..\\@openai\\codex\\bin\\codex.js" %*\r\n',
-        "C:\\Users\\Jane Doe\\AppData\\Roaming\\@openai\\codex\\bin\\codex.js",
-      ],
-    ])(
-      `runs the target of a Windows %s command shim named by CODEX_PATH: ${DIRECT_RUNTIME_ISSUE}`,
-      (_manager, shim, target) => {
-        const npmFs = packageFs(WINDOWS_ENTRY, metadata(CODEX_MIN_VERSION));
-        jest
-          .mocked(npmFs.readFileSync)
-          .mockImplementation((file) =>
-            file.endsWith(".CMD") ? shim : JSON.stringify(metadata(CODEX_MIN_VERSION))
-          );
-        expect(
-          resolveCodexCommand(
-            WINDOWS_ENTRY,
-            { CODEX_PATH: "C:\\Users\\Jane Doe\\AppData\\Roaming\\npm\\codex.CMD" },
-            "win32",
-            npmFs
-          )
-        ).toBe(target);
-      }
-    );
-    it(`rejects a Windows command script CODEX_PATH whose target cannot be found: ${DIRECT_RUNTIME_ISSUE}`, () => {
-      const npmFs = packageFs(WINDOWS_ENTRY, metadata(CODEX_MIN_VERSION));
-      jest
-        .mocked(npmFs.readFileSync)
-        .mockImplementation((file) =>
-          file.endsWith(".bat") ? "@echo off\r\n" : JSON.stringify(metadata(CODEX_MIN_VERSION))
-        );
+    it(`rejects a Windows command script CODEX_PATH with guidance to name a runnable Codex: ${DIRECT_RUNTIME_ISSUE}`, () => {
       expect(() =>
-        resolveCodexCommand(WINDOWS_ENTRY, { CODEX_PATH: "C:\\tools\\codex.bat" }, "win32", npmFs)
-      ).toThrow("CODEX_PATH");
+        resolveCodexCommand(
+          WINDOWS_ENTRY,
+          { CODEX_PATH: "C:\\Users\\Jane Doe\\AppData\\Roaming\\npm\\codex.CMD" },
+          "win32",
+          packageFs(WINDOWS_ENTRY, metadata(CODEX_MIN_VERSION))
+        )
+      ).toThrow("Point CODEX_PATH at codex.exe or Codex's bin\\codex.js instead.");
     });
     it("rejects an adapter below the supported minimum", () => {
       expect(() =>
