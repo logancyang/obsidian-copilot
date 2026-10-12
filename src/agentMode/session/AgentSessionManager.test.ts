@@ -3826,26 +3826,49 @@ describe("AgentSessionManager", () => {
           expect(await index.isTombstoned("opencode", sessionId)).toBe(true);
         });
 
-        it(`${issue} deletes the note an autosave that is already writing creates after delete starts`, async () => {
-          // Resolving in the same turn lets the save finish before delete reads the path, so the test would pass without the fix. https://github.com/logancyang/obsidian-copilot/issues/2888
-          const { setImmediate: nextLoopTurn } =
-            jest.requireActual<typeof import("timers")>("timers");
-          jest.useFakeTimers();
-          getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
-          const { manager, persistence, session, chatId } = await openChat();
-          let finishSave!: (saved: { path: string }) => void;
-          persistence.saveSession.mockImplementationOnce(
-            () => new Promise((resolve) => (finishSave = resolve))
-          );
-          getSessionTestHandle(session).setMessages([{ message: "First turn" }], true);
-          await jest.advanceTimersByTimeAsync(2000);
+        it.each(["a held autosave", "a held earlier autosave", "a held manual save"])(
+          `${issue} deletes the note %s writes after delete starts`,
+          async (scenario) => {
+            // Resolving in the same turn lets the save finish before delete reads the path, so the test would pass without the fix. https://github.com/logancyang/obsidian-copilot/issues/2888
+            const { setImmediate: nextLoopTurn } =
+              jest.requireActual<typeof import("timers")>("timers");
+            jest.useFakeTimers();
+            getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
+            const { manager, persistence, session, chatId } = await openChat();
+            let finishSave!: (saved: { path: string }) => void;
+            let heldSaveDone = false;
+            persistence.saveSession.mockImplementationOnce(
+              () => new Promise((resolve) => (finishSave = resolve))
+            );
+            getSessionTestHandle(session).setMessages([{ message: "First turn" }], true);
+            let manualSave: Promise<unknown> | undefined;
+            if (scenario === "a held manual save") {
+              manualSave = manager.saveActiveSession();
+            } else {
+              await jest.advanceTimersByTimeAsync(2000);
+              if (scenario === "a held earlier autosave") {
+                persistence.saveSession.mockResolvedValueOnce({ path: "chats/new.md" });
+                getSessionTestHandle(session).setMessages([{ message: "Second turn" }], true);
+                await jest.advanceTimersByTimeAsync(2000);
+              }
+            }
+            let heldSaveDoneAtDelete: boolean | undefined;
+            persistence.deleteFile.mockImplementationOnce(async () => {
+              heldSaveDoneAtDelete = heldSaveDone;
+            });
 
-          const deleting = manager.deleteChatHistory(chatId);
-          nextLoopTurn(() => finishSave({ path: "chats/new.md" }));
-          await deleting;
+            const deleting = manager.deleteChatHistory(chatId);
+            nextLoopTurn(() => {
+              heldSaveDone = true;
+              finishSave({ path: "chats/new.md" });
+            });
+            await deleting;
+            await manualSave;
 
-          expect(persistence.deleteFile).toHaveBeenCalledWith("chats/new.md");
-        });
+            expect(persistence.deleteFile).toHaveBeenCalledWith("chats/new.md");
+            expect(heldSaveDoneAtDelete).toBe(true);
+          }
+        );
 
         it(`${issue} leaves an open chat alone when another note shares its session`, async () => {
           const sharedSessionId = `backend-${nextBackendSessionId}`;

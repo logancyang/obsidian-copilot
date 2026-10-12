@@ -2346,7 +2346,7 @@ export class AgentSessionManager {
     if (state.timer) window.clearTimeout(state.timer);
     state.timer = window.setTimeout(() => {
       state.timer = undefined;
-      state.saving = this.flushAutoSave(session).catch((e) =>
+      this.flushAutoSave(session).catch((e) =>
         logWarn(`[AgentMode] auto-save failed for ${session.internalId}`, e)
       );
     }, AUTOSAVE_DEBOUNCE_MS);
@@ -2409,7 +2409,20 @@ export class AgentSessionManager {
     return state?.source?.path ?? "";
   }
 
-  private async flushAutoSave(session: AgentSession): Promise<{ path: string } | null> {
+  // One save chain per chat: each save runs after the previous one, and state.saving holds the
+  // tail so close and delete wait for every save that already started.
+  // https://github.com/logancyang/obsidian-copilot/issues/2888
+  private flushAutoSave(session: AgentSession): Promise<{ path: string } | null> {
+    const state = this.getSessionState(session.internalId);
+    const previous = state.saving;
+    const run = previous
+      ? previous.then(() => this.writeSession(session))
+      : this.writeSession(session);
+    state.saving = run.catch(() => {});
+    return run;
+  }
+
+  private async writeSession(session: AgentSession): Promise<{ path: string } | null> {
     const persistence = this.opts.persistenceManager;
     if (!persistence) return null;
     if (!this.sessions.has(session.internalId)) return null;
