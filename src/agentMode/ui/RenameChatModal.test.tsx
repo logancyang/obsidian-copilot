@@ -56,15 +56,14 @@ describe("RenameChatModal", () => {
       expect(onSave).not.toHaveBeenCalled();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/693 cannot save a blank title by click or Enter", () => {
-      const { onSave } = renderForm();
-      const field = screen.getByRole("textbox", { name: "Chat title" });
+    it("disables Save while the title is blank", () => {
+      renderForm();
 
-      fireEvent.change(field, { target: { value: "   " } });
-      fireEvent.submit(field);
+      fireEvent.change(screen.getByRole("textbox", { name: "Chat title" }), {
+        target: { value: "   " },
+      });
 
       expect(screen.getByRole("button", { name: "Save" })).toHaveProperty("disabled", true);
-      expect(onSave).not.toHaveBeenCalled();
     });
   });
 

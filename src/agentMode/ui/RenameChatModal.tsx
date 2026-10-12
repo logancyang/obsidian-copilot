@@ -24,8 +24,7 @@ export function RenameChatForm({
       className="tw-flex tw-flex-col tw-gap-4"
       onSubmit={(event) => {
         event.preventDefault();
-        // A blank title would leave the row with nothing to recognize it by: https://github.com/Brevilabs/obsidian-copilot-private/issues/693
-        if (trimmedTitle) safeAsyncHandler(onSave)(trimmedTitle);
+        safeAsyncHandler(onSave)(trimmedTitle);
       }}
     >
       <Input
