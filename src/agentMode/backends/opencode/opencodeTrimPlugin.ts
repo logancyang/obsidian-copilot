@@ -40,7 +40,7 @@ function trimRequest(event) {
 
 const MAX_WRITE_BYTES = ${AGENT_WRITE_MAX_BYTES};
 const IN_PARTS =
-  " Write the file in parts: create it with the first part, then add each next part with one edit call per reply.";
+  " Write the file in parts: create it with the first part, then add each next part with one edit call per reply. For an existing note, use several smaller edits.";
 const TOO_LARGE =
   "Nothing was written: this call is over ${AGENT_WRITE_MAX_BYTES / 1000} KB, too large to finish in one reply." + IN_PARTS;
 const EMPTY =
@@ -52,7 +52,10 @@ const refused = new Map();
 function writtenText(tool, input) {
   if (!input || typeof input !== "object") return undefined;
   if (tool === "write") return input.content;
-  if (tool === "edit") return input.newString;
+  if (tool === "edit") {
+    if (typeof input.oldString !== "string" || typeof input.newString !== "string") return undefined;
+    return input.oldString + input.newString;
+  }
   if (tool === "patch") return input.patchText;
   return undefined;
 }

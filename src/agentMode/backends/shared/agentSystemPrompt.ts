@@ -32,7 +32,7 @@ export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabl
 export const COPILOT_PROJECT_WORKSPACE_POLICY = `With <project_context>, the working directory is the project workspace. Write generated files, drafts and intermediates to outputs/ there (create it as needed), unless the user specifies another destination. Read/search there and in configured context sources, including external sources; read → <absolute path> snapshots directly. Access other locations only when instructions or the user name them.`;
 
 // A write cut off at the step's output limit still runs and saves an empty or partial note; the
-// hint keeps a model that follows it under the OpenCode guard's byte limit.
+// hint keeps English and most Latin-script writes under the OpenCode guard's byte limit.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/641
 export const COPILOT_LONG_WRITE_POLICY = `A single write or edit call must never contain more than ${AGENT_WRITE_HINT_WORDS.toLocaleString("en-US")} words. For a longer file, create it with the first part, then append each next part with a separate edit call until it is complete.`;
 

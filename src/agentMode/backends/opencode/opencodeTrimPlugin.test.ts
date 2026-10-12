@@ -180,24 +180,6 @@ describe("opencodeTrimPlugin", () => {
 
       expect(() => hook({ system: "not a list", messages: null })).not.toThrow();
     });
-  });
-
-  describe("OPENCODE_TRIM_PLUGIN_SOURCE write guard", () => {
-    let pluginRoot: string;
-    let plugin: LoadedPlugin;
-
-    beforeAll(async () => {
-      pluginRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-trim-guard-"));
-      await installOpencodeTrimPlugin(pluginRoot);
-      const source = await fs.promises.readFile(path.join(pluginRoot, "index.js"), "utf8");
-      const module = { exports: {} as LoadedPlugin };
-      vm.runInThisContext(`(function (module) {${source}\n})`)(module);
-      plugin = module.exports;
-    });
-
-    afterAll(async () => {
-      await fs.promises.rm(pluginRoot, { recursive: true, force: true });
-    });
 
     it(`${ISSUE_641} keeps a ${AGENT_WRITE_MAX_BYTES}-byte write and denies one byte more, telling the agent to write in parts`, async () => {
       const call = await writeGuard(plugin);
@@ -249,6 +231,43 @@ describe("opencodeTrimPlugin", () => {
       expect(call("shell", { command: "a".repeat(AGENT_WRITE_MAX_BYTES + 1) }, "ask")).toEqual({
         effect: "ask",
       });
+    });
+
+    it(`${ISSUE_641} counts an edit's old and new text together, because the step generates both`, async () => {
+      const call = await writeGuard(plugin);
+      const oldString = "a".repeat(30_000);
+
+      expect(
+        call("edit", { path: "note.md", oldString, newString: "b".repeat(10_000) }).effect
+      ).toBe("allow");
+      expect(
+        call("edit", { path: "note.md", oldString, newString: "b".repeat(10_001) }).effect
+      ).toBe("deny");
+    });
+
+    it(`${ISSUE_641} matches each refusal to its own call while another call is pending`, async () => {
+      const { toolHooks, permissionHooks } = await setUpPlugin(plugin);
+      const big = {
+        tool: "write",
+        id: "big",
+        input: { path: "a.md", content: "a".repeat(40_001) },
+      };
+      const small = { tool: "write", id: "small", input: { path: "b.md", content: "hello" } };
+      toolHooks.get("execute.before")!(big);
+      toolHooks.get("execute.before")!(small);
+      const evaluate = (id: string) => {
+        const event: Evaluation & Record<string, unknown> = {
+          action: "edit",
+          resources: ["note.md"],
+          source: { type: "tool", messageID: "message-1", id },
+          effect: "ask",
+        };
+        permissionHooks.get("evaluate")!(event);
+        return event.effect;
+      };
+
+      expect(evaluate("small")).toBe("ask");
+      expect(evaluate("big")).toBe("deny");
     });
   });
 
