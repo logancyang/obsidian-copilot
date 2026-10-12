@@ -51,6 +51,13 @@ const SECTION_BLOCK_TYPES: Readonly<Record<string, MarkdownBlockType>> = {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
 const LIST_FENCE = /^[ \t]*(?:`{3,}|~{3,})/m;
 
+// Obsidian labels only block-form comments as comment sections; an inline %%comment%% hides its
+// edit from a rendered word diff, so any block holding one gets a line diff.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+function blockOf(type: MarkdownBlockType, text: string): MarkdownBlock {
+  return { type: text.includes("%%") ? "code" : type, text };
+}
+
 // Items split only when no blank line separates them, so joining them with one newline restores the
 // exact source and a loose list keeps its paragraph spacing.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
@@ -68,7 +75,7 @@ function listBlocks(
       : [[first, last]];
   return spans.map(([start, end], index) => {
     const text = lines.slice(start, end + 1).join("\n");
-    const block: MarkdownBlock = { type: LIST_FENCE.test(text) ? "code" : "text", text };
+    const block = blockOf(LIST_FENCE.test(text) ? "code" : "text", text);
     return index > 0 ? { ...block, continuesList: true } : block;
   });
 }
@@ -99,7 +106,7 @@ export async function splitMarkdown(app: App, source: string): Promise<MarkdownS
     } else if (type === "list") {
       blocks.push(...listBlocks(lines, position.start.line, position.end.line, itemStarts));
     } else {
-      blocks.push({ type: SECTION_BLOCK_TYPES[type] ?? "text", text });
+      blocks.push(blockOf(SECTION_BLOCK_TYPES[type] ?? "text", text));
     }
   }
   return { frontmatter, blocks: blocks.length === 0 ? EMPTY_BLOCKS : blocks };

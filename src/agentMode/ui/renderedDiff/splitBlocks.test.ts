@@ -59,12 +59,12 @@ describe("splitBlocks", () => {
       expect(split.blocks).toEqual([{ type: "heading", text: "# Alpha pilot" }]);
     });
 
-    it("classifies callout sections and paragraphs holding inline comments as text blocks", async () => {
-      const source = "> [!note]\n> Hi\n\nAfter\n%%hidden%%\n";
+    it("classifies callout sections and paragraphs as text blocks", async () => {
+      const source = "> [!note]\n> Hi\n\nAfter\n";
       const app = appParsing({
         sections: [
           ["callout", 0, 1],
-          ["paragraph", 3, 4],
+          ["paragraph", 3, 3],
         ],
       });
 
@@ -72,7 +72,31 @@ describe("splitBlocks", () => {
 
       expect(split.blocks).toEqual([
         { type: "text", text: "> [!note]\n> Hi" },
-        { type: "text", text: "After\n%%hidden%%" },
+        { type: "text", text: "After" },
+      ]);
+    });
+
+    it("classifies any paragraph, heading or list item holding an inline %%comment%% as code so its edit stays visible (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", async () => {
+      const source = "# Plan %%draft%%\n\nAfter\n%%hidden%%\n\n- One\n- Two %%todo%%\n";
+      const app = appParsing({
+        sections: [
+          ["heading", 0, 0],
+          ["paragraph", 2, 3],
+          ["list", 5, 6],
+        ],
+        listItems: [
+          [5, 5, -5],
+          [6, 6, -5],
+        ],
+      });
+
+      const split = await splitMarkdown(app, source);
+
+      expect(split.blocks).toEqual([
+        { type: "code", text: "# Plan %%draft%%" },
+        { type: "code", text: "After\n%%hidden%%" },
+        { type: "text", text: "- One" },
+        { type: "code", text: "- Two %%todo%%", continuesList: true },
       ]);
     });
 
