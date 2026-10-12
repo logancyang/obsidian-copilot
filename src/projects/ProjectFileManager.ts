@@ -217,7 +217,7 @@ export class ProjectFileManager {
           : 0;
 
       try {
-        if (isInVaultCache(this.app, folderPath)) {
+        if (isInVaultCache(this.app, getProjectsFolder())) {
           const file = await this.vault.create(filePath, project.systemPrompt || "");
           await writeProjectFrontmatter(this.app, file, project, folderName, {
             createdMs,
