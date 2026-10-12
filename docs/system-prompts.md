@@ -72,7 +72,7 @@ If you already use saved Quick Chat system prompts, you can still select one for
 <Copilot folder>/system-prompts/
 ```
 
-Create a `.md` file in that folder. The filename becomes the prompt name, and the file body contains the instructions. Copilot refreshes the prompt list when you create, edit, rename, or delete a file.
+Create a `.md` file in that folder. The filename becomes the prompt name, and the file body contains the instructions. Copilot refreshes the prompt list when you create, edit, rename, or delete a file. If the Copilot folder is hidden, such as `.copilot`, Obsidian does not watch it, so prompts edited outside Copilot appear after you reload Obsidian.
 
 In Quick Chat, open **Chat Settings** and choose a **System Prompt**. Select **Default (AGENTS.md)** to return to the vault instructions.
 
