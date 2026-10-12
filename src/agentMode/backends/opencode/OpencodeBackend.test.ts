@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { verifyOpencodeBinary } from "./OpencodeBinaryManager";
-import { OPENCODE_TRIM_PLUGIN_SOURCE } from "./opencodeTrimPlugin";
+import { OPENCODE_COPILOT_PLUGIN_SOURCE } from "./opencodeCopilotPlugin";
 import { updateAgentModeBackendFields } from "@/settings/model";
 import { logWarn } from "@/logger";
 import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
@@ -826,17 +826,17 @@ describe("OpencodeBackend", () => {
       expect(cfg.permissions).toEqual(BASE_DENIES);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/665 loads the prompt-trimming plugin from its folder alongside the variant removal", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/665 loads Copilot's plugin from its folder alongside the variant removal", async () => {
       const cfg = await buildOpencodeConfig(
         getSettings(),
         NO_MODELS_DEPS,
         undefined,
-        "/home/.obsidian-copilot/opencode/plugins/copilot-trim"
+        "/home/.obsidian-copilot/opencode/plugins/copilot"
       );
 
       expect(cfg.plugins).toEqual([
         "-opencode.variant",
-        "/home/.obsidian-copilot/opencode/plugins/copilot-trim",
+        "/home/.obsidian-copilot/opencode/plugins/copilot",
       ]);
     });
 
@@ -1192,14 +1192,14 @@ describe("OpencodeBackend", () => {
         expect(logWarn).not.toHaveBeenCalled();
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/665 writes the prompt-trimming plugin and has OpenCode load it from that folder", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/665 writes Copilot's plugin and has OpenCode load it from that folder", async () => {
         setOpencodeSettings({ binaryPath: "/path/to/opencode" });
         const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-backend-"));
-        const pluginDir = path.join(root, "copilot-trim");
+        const pluginDir = path.join(root, "copilot");
         try {
           const desc = await new OpencodeBackend({
             ...NO_MODELS_DEPS,
-            getTrimPluginDir: () => pluginDir,
+            getCopilotPluginDir: () => pluginDir,
           }).buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
 
           const cfg: GeneratedOpencodeConfig = JSON.parse(
@@ -1207,7 +1207,7 @@ describe("OpencodeBackend", () => {
           );
           expect(cfg.plugins).toEqual(["-opencode.variant", pluginDir]);
           expect(await fs.promises.readFile(path.join(pluginDir, "index.js"), "utf8")).toBe(
-            OPENCODE_TRIM_PLUGIN_SOURCE
+            OPENCODE_COPILOT_PLUGIN_SOURCE
           );
         } finally {
           await fs.promises.rm(root, { recursive: true, force: true });
@@ -1222,7 +1222,7 @@ describe("OpencodeBackend", () => {
         try {
           const desc = await new OpencodeBackend({
             ...NO_MODELS_DEPS,
-            getTrimPluginDir: () => path.join(blocker, "copilot-trim"),
+            getCopilotPluginDir: () => path.join(blocker, "copilot"),
           }).buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
 
           const cfg: GeneratedOpencodeConfig = JSON.parse(

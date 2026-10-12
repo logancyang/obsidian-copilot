@@ -4,10 +4,10 @@ import * as path from "path";
 import * as vm from "vm";
 import { logWarn } from "@/logger";
 import {
-  installOpencodeTrimPlugin,
-  OPENCODE_TRIM_PLUGIN_SOURCE,
-  opencodeTrimPluginDir,
-} from "./opencodeTrimPlugin";
+  installOpencodeCopilotPlugin,
+  OPENCODE_COPILOT_PLUGIN_SOURCE,
+  opencodeCopilotPluginDir,
+} from "./opencodeCopilotPlugin";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -68,14 +68,14 @@ async function setUpPlugin(plugin: LoadedPlugin, directory = "/vault") {
   return { hooks, toolHooks, skills };
 }
 
-describe("opencodeTrimPlugin", () => {
-  describe("OPENCODE_TRIM_PLUGIN_SOURCE", () => {
+describe("opencodeCopilotPlugin", () => {
+  describe("OPENCODE_COPILOT_PLUGIN_SOURCE", () => {
     let pluginRoot: string;
     let plugin: LoadedPlugin;
 
     beforeAll(async () => {
-      pluginRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-trim-load-"));
-      await installOpencodeTrimPlugin(pluginRoot);
+      pluginRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-copilot-load-"));
+      await installOpencodeCopilotPlugin(pluginRoot);
       const source = await fs.promises.readFile(path.join(pluginRoot, "index.js"), "utf8");
       const module = { exports: {} as LoadedPlugin };
       vm.runInThisContext(`(function (module, require) {${source}\n})`)(module, require);
@@ -94,7 +94,7 @@ describe("opencodeTrimPlugin", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/665 trims every request kind and removes only the built-in report skill", async () => {
       const { hooks, skills } = await setUpPlugin(plugin);
 
-      expect(plugin.id).toBe("copilot.trim");
+      expect(plugin.id).toBe("copilot");
       expect([...hooks.keys()]).toEqual(["context", "compaction", "generate"]);
       expect(new Set(hooks.values()).size).toBe(1);
       expect([...skills.keys()]).toEqual(["opencode"]);
@@ -278,19 +278,19 @@ describe("opencodeTrimPlugin", () => {
     });
   });
 
-  describe("opencodeTrimPluginDir()", () => {
+  describe("opencodeCopilotPluginDir()", () => {
     it("places the plugin in Copilot's managed OpenCode folder outside the vault", () => {
-      expect(opencodeTrimPluginDir()).toBe(
-        path.join(os.homedir(), ".obsidian-copilot", "opencode", "plugins", "copilot-trim")
+      expect(opencodeCopilotPluginDir()).toBe(
+        path.join(os.homedir(), ".obsidian-copilot", "opencode", "plugins", "copilot")
       );
     });
   });
 
-  describe("installOpencodeTrimPlugin()", () => {
+  describe("installOpencodeCopilotPlugin()", () => {
     let root: string;
 
     beforeEach(async () => {
-      root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-trim-plugin-"));
+      root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-copilot-plugin-"));
       jest.mocked(logWarn).mockClear();
     });
 
@@ -299,23 +299,23 @@ describe("opencodeTrimPlugin", () => {
     });
 
     it("writes the plugin as a folder whose index.js holds the plugin source", async () => {
-      const dir = path.join(root, "plugins", "copilot-trim");
+      const dir = path.join(root, "plugins", "copilot");
 
-      await expect(installOpencodeTrimPlugin(dir)).resolves.toBe(dir);
+      await expect(installOpencodeCopilotPlugin(dir)).resolves.toBe(dir);
 
       expect(await fs.promises.readdir(dir)).toEqual(["index.js"]);
       expect(await fs.promises.readFile(path.join(dir, "index.js"), "utf8")).toBe(
-        OPENCODE_TRIM_PLUGIN_SOURCE
+        OPENCODE_COPILOT_PLUGIN_SOURCE
       );
     });
 
     it("leaves a current plugin file untouched so running OpenCode sessions do not reload it", async () => {
       const entry = path.join(root, "index.js");
-      await fs.promises.writeFile(entry, OPENCODE_TRIM_PLUGIN_SOURCE);
+      await fs.promises.writeFile(entry, OPENCODE_COPILOT_PLUGIN_SOURCE);
       const past = new Date("2026-01-01T00:00:00Z");
       await fs.promises.utimes(entry, past, past);
 
-      await expect(installOpencodeTrimPlugin(root)).resolves.toBe(root);
+      await expect(installOpencodeCopilotPlugin(root)).resolves.toBe(root);
 
       expect((await fs.promises.stat(entry)).mtime).toEqual(past);
     });
@@ -323,10 +323,10 @@ describe("opencodeTrimPlugin", () => {
     it("replaces a plugin file left by another Copilot version", async () => {
       await fs.promises.writeFile(path.join(root, "index.js"), "module.exports = {};");
 
-      await installOpencodeTrimPlugin(root);
+      await installOpencodeCopilotPlugin(root);
 
       expect(await fs.promises.readFile(path.join(root, "index.js"), "utf8")).toBe(
-        OPENCODE_TRIM_PLUGIN_SOURCE
+        OPENCODE_COPILOT_PLUGIN_SOURCE
       );
     });
 
@@ -334,7 +334,7 @@ describe("opencodeTrimPlugin", () => {
       const blocker = path.join(root, "blocker");
       await fs.promises.writeFile(blocker, "");
 
-      await expect(installOpencodeTrimPlugin(path.join(blocker, "copilot-trim"))).resolves.toBe(
+      await expect(installOpencodeCopilotPlugin(path.join(blocker, "copilot"))).resolves.toBe(
         undefined
       );
 

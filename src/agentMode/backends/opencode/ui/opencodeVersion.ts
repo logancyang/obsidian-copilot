@@ -1,4 +1,4 @@
-// Before bumping, check that opencodeTrimPlugin.ts still matches OpenCode's
+// Before bumping, check that opencodeCopilotPlugin.ts still matches OpenCode's
 // temp-folder line, worktree hint, session_move tool and report skill: a
 // reworded prompt makes the plugin silently stop removing it.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/665
