@@ -324,6 +324,23 @@ describe("activityGroups", () => {
       expect(failed).toBe(1);
     });
 
+    it("does not claim a failed edit as an edited file (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
+      const { line, failed } = summarizeActivity([
+        member("a", { vendorToolName: "Edit", status: "failed", input: { file_path: "plan.md" } }),
+        member("b", { vendorToolName: "Edit", input: { file_path: "todo.md" } }),
+      ]);
+      expect(line).toBe("Ran 2 commands, edited 1 file");
+      expect(failed).toBe(1);
+    });
+
+    it("omits the edit phrase when every edit in the group failed (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
+      const { line } = summarizeActivity([
+        member("a", { vendorToolName: "Read" }),
+        member("b", { toolKind: "edit", status: "failed" }),
+      ]);
+      expect(line).toBe("Ran 2 commands, read 1 file");
+    });
+
     it("reports no failures for a clean group", () => {
       expect(summarizeActivity([member("a", { vendorToolName: "Bash" })]).failed).toBe(0);
     });

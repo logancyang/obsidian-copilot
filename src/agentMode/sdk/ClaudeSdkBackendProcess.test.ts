@@ -555,7 +555,7 @@ describe("ClaudeSdkBackendProcess", () => {
         ]);
       });
 
-      it("starts the first query with the claude_code preset, tool allow and deny lists, the foreground hook, and a fresh session id", async () => {
+      it("starts the first query with the claude_code preset, the tool deny list, the foreground hook, and a fresh session id", async () => {
         queryMock.mockImplementation(() => makeQuery([resultMessage()]));
         const proc = makeProc();
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
@@ -567,7 +567,6 @@ describe("ClaudeSdkBackendProcess", () => {
         const { options } = promptCalls[0][0] as { options: Record<string, unknown> };
         expect(options.pathToClaudeCodeExecutable).toBe("/usr/local/bin/claude");
         expect(options.mcpServers).toBeUndefined();
-        expect(options.allowedTools).toEqual(["Read", "Write", "Edit", "Glob", "Grep", "LS"]);
         expect(options.disallowedTools).toEqual(["TaskOutput", "Workflow", "Monitor"]);
         expect(options.hooks).toEqual({ PreToolUse: [{ hooks: [enforceForegroundToolUse] }] });
         expect(options.sessionId).toBe(sessionId);
@@ -578,6 +577,17 @@ describe("ClaudeSdkBackendProcess", () => {
           excludeDynamicSections: true,
           append: undefined,
         });
+      });
+
+      it("auto-allows only read tools so Write and Edit follow the session's permission mode and reach Copilot's prompt in Default mode (https://github.com/Brevilabs/obsidian-copilot-private/issues/690)", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const { options } = getPromptQueryCalls()[0][0] as { options: Record<string, unknown> };
+        expect(options.allowedTools).toEqual(["Read", "Glob", "Grep", "LS"]);
       });
 
       it("forwards the composed system prompt via systemPrompt append on the claude_code preset", async () => {
