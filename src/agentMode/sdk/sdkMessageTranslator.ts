@@ -379,6 +379,7 @@ function translateUserMessage(
   const content = (msg.message as { content?: unknown }).content;
   if (!Array.isArray(content)) return [];
   const decision = state.backgroundTasks.accept({ kind: "sdk_message", message: msg });
+  const originalFiles = preEditContent(msg);
 
   const out: SessionEvent[] = [];
   for (const block of content) {
@@ -390,7 +391,7 @@ function translateUserMessage(
 
     const status =
       resultAction?.kind === "preserve_status" ? resultAction.status : toolResultStatus(b);
-    out.push(...toolResultEvents(sessionId, state, b.tool_use_id, b, status));
+    out.push(...toolResultEvents(sessionId, state, b.tool_use_id, b, status, originalFiles));
   }
   out.push(...taskUpdateEvents(sessionId, decision.updates));
   return out;
@@ -412,7 +413,8 @@ function toolResultEvents(
   state: TranslatorState,
   toolUseId: string,
   block: ToolResultBlock,
-  status: AgentToolStatus
+  status: AgentToolStatus,
+  originalFiles?: Record<string, string | null>
 ): SessionEvent[] {
   const out = [
     event(sessionId, {
@@ -420,6 +422,7 @@ function toolResultEvents(
       toolCallId: toolUseId,
       status,
       content: toolResultContent(block.content),
+      ...(originalFiles ? { originalFiles } : {}),
     }),
   ];
   const planUpdate = planUpdateFromClaudeToolResult(
@@ -429,6 +432,20 @@ function toolResultEvents(
   );
   if (!block.is_error && planUpdate) out.push(event(sessionId, planUpdate));
   return out;
+}
+
+// The in-process backend can read the vault after the write lands; the SDK's reported
+// originalFile is the only reliable pre-edit text. The SDK also nulls it for an existing file too
+// large to include, so only a Write typed "create" proves the file did not exist.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+function preEditContent(msg: SDKUserMessage): Record<string, string | null> | undefined {
+  const result = msg.tool_use_result;
+  if (typeof result !== "object" || result === null) return undefined;
+  if (!("filePath" in result) || typeof result.filePath !== "string") return undefined;
+  if (!("originalFile" in result)) return undefined;
+  if (typeof result.originalFile === "string") return { [result.filePath]: result.originalFile };
+  const created = result.originalFile === null && "type" in result && result.type === "create";
+  return created ? { [result.filePath]: null } : undefined;
 }
 
 function makeToolCallUpdate(
