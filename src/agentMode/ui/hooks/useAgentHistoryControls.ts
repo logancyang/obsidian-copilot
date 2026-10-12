@@ -6,7 +6,6 @@ import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPo
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { buildChatDeepLink, getSavedChatDeepLinkId } from "@/utils/chatDeepLink";
-import { isNativeChatId } from "@/utils/nativeChatId";
 import { getUrlBookmarks, isBookmarksPluginDisabled } from "@/utils/obsidianBookmarks";
 import { type App, Notice } from "obsidian";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -124,13 +123,18 @@ export function useAgentHistoryControls(
           "delete chat",
           async () => {
             const item = chatHistoryItems.find((chat) => chat.id === id);
-            const bookmarks = isNativeChatId(id) ? null : getUrlBookmarks(plugin.app);
-            const bookmarkedLink = bookmarks && (await getChatLink(plugin.app, id));
+            const link = await getChatLink(plugin.app, id);
             await manager.deleteChatHistory(id);
-            if (bookmarkedLink) bookmarks.remove(bookmarkedLink);
             new Notice(
               formatChatDeleteNotice(item?.backendId ? backendRegistry[item.backendId] : undefined)
             );
+            // Obsidian's Bookmarks internals have no public API, so a failure there must not undo or hide a completed delete.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/694
+            if (link) {
+              await runWithNotice("remove chat bookmark", async () =>
+                getUrlBookmarks(plugin.app)?.remove(link)
+              );
+            }
           },
           true
         );
@@ -175,9 +179,6 @@ export function useAgentHistoryControls(
         // A turned-off Bookmarks plugin still shows the item, so users can find the feature and how to enable it.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/694
         if (!bookmarks) return isBookmarksPluginDisabled(plugin.app) ? "off" : "unavailable";
-        // A chat with no note has no link to look up until bookmarking saves it.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/694
-        if (isNativeChatId(id)) return "not-bookmarked";
         const link = await getChatLink(plugin.app, id);
         return link && bookmarks.has(link) ? "bookmarked" : "not-bookmarked";
       });

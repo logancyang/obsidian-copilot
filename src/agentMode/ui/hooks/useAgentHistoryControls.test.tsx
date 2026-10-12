@@ -3,6 +3,7 @@ import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import type CopilotPlugin from "@/main";
+import { buildNativeChatId } from "@/utils/nativeChatId";
 import { act, renderHook } from "@testing-library/react";
 import { type App, Notice } from "obsidian";
 
@@ -25,6 +26,7 @@ function makeManager() {
   };
 }
 
+const NATIVE_ID = buildNativeChatId("opencode", "s1");
 const LINK_A = "obsidian://copilot-chat?vault=Notes&id=epoch%3A1000";
 const LINK_SAVED = "obsidian://copilot-chat?vault=Notes&id=epoch%3A3000";
 
@@ -59,7 +61,7 @@ function makeBookmarkingPlugin(bookmarks: ReturnType<typeof makeBookmarks> | nul
   return { app } as unknown as CopilotPlugin;
 }
 
-const plugin = { app: {} } as unknown as CopilotPlugin;
+const plugin = makeBookmarkingPlugin(null);
 
 const renderControls = (manager: AgentSessionManager, scope?: string) =>
   renderHook(({ s }: { s?: string }) => useAgentHistoryControls(manager, plugin, s), {
@@ -370,6 +372,26 @@ describe("useAgentHistoryControls", () => {
       expect(Object.keys(bookmarks.urlBookmarkLookup)).toEqual([LINK_SAVED]);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 still deletes the chat and reloads history when removing its bookmark throws", async () => {
+      const plugin = makeBookmarkingPlugin(makeBookmarks([LINK_A]));
+      (
+        plugin.app as unknown as { internalPlugins: { getEnabledPluginById: jest.Mock } }
+      ).internalPlugins.getEnabledPluginById.mockImplementation(() => {
+        throw new Error("internal plugin API changed");
+      });
+      const manager = makeManager();
+      const { result } = renderHook(() => useAgentHistoryControls(manager, plugin));
+
+      await act(async () => {
+        await result.current.deleteChat("chats/agent__a.md");
+      });
+
+      expect(manager.deleteChatHistory).toHaveBeenCalledWith("chats/agent__a.md");
+      expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(1);
+      expect(Notice).toHaveBeenCalledWith("Failed to remove chat bookmark.");
+      expect(Notice).not.toHaveBeenCalledWith("Failed to delete chat.");
+    });
+
     it("keeps the chat's bookmark when deleting the chat fails", async () => {
       const bookmarks = makeBookmarks([LINK_A]);
       const manager = makeManager();
@@ -405,14 +427,12 @@ describe("useAgentHistoryControls", () => {
       );
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 reports a chat with no saved note as not bookmarked, since it has no chat link yet", async () => {
+    it("reports a chat with no saved note as not bookmarked, since it has no chat link yet", async () => {
       const { result } = renderHook(() =>
         useAgentHistoryControls(makeManager(), makeBookmarkingPlugin(makeBookmarks()))
       );
 
-      await expect(result.current.getChatBookmarkState("native:opencode:s1")).resolves.toBe(
-        "not-bookmarked"
-      );
+      await expect(result.current.getChatBookmarkState(NATIVE_ID)).resolves.toBe("not-bookmarked");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 reports bookmarks as off when the Bookmarks core plugin is turned off", async () => {
@@ -484,7 +504,7 @@ describe("useAgentHistoryControls", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 saves a chat with no note before bookmarking the new note's link and shows the row as that note", async () => {
       const bookmarks = makeBookmarks();
       const manager = makeManager();
-      manager.getChatHistoryItems.mockResolvedValue([{ id: "native:opencode:s1" }]);
+      manager.getChatHistoryItems.mockResolvedValue([{ id: NATIVE_ID }]);
       manager.ensureChatNote.mockResolvedValue("chats/saved.md");
       const { result } = renderHook(() =>
         useAgentHistoryControls(manager, makeBookmarkingPlugin(bookmarks))
@@ -494,10 +514,10 @@ describe("useAgentHistoryControls", () => {
       });
 
       await act(async () => {
-        await result.current.setChatBookmarked("native:opencode:s1", "Unsaved chat", true);
+        await result.current.setChatBookmarked(NATIVE_ID, "Unsaved chat", true);
       });
 
-      expect(manager.ensureChatNote).toHaveBeenCalledWith("native:opencode:s1");
+      expect(manager.ensureChatNote).toHaveBeenCalledWith(NATIVE_ID);
       expect(Object.keys(bookmarks.urlBookmarkLookup)).toEqual([LINK_SAVED]);
       expect(result.current.chatHistoryItems).toEqual([{ id: "chats/saved.md" }]);
     });
@@ -511,7 +531,7 @@ describe("useAgentHistoryControls", () => {
       );
 
       await act(async () => {
-        await result.current.setChatBookmarked("native:opencode:s1", "Unsaved chat", true);
+        await result.current.setChatBookmarked(NATIVE_ID, "Unsaved chat", true);
       });
 
       expect(bookmarks.addItem).not.toHaveBeenCalled();

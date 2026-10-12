@@ -837,7 +837,7 @@ describe("GlobalRecentChatsSection", () => {
 
     it.each([["claude", "Claude Code"]])(
       "https://github.com/logancyang/obsidian-copilot/issues/2888 says in the Delete chat dialog that the %s agent may keep its own copy",
-      (backendId, agent) => {
+      async (backendId, agent) => {
         renderSection({
           items: [makeItem("chats/agent__a.md", { title: "Agent chat", backendId })],
         });
