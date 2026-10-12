@@ -180,6 +180,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     loadChat: handleLoadChat,
     updateChatTitle: handleUpdateChatTitle,
     deleteChat: handleDeleteChat,
+    setChatPinned: handleSetChatPinned,
     openSourceFile: handleOpenSourceFile,
     copyChatLink: handleCopyHistoryChatLink,
   } = useAgentHistoryControls(manager, plugin, activeProjectId);
@@ -383,6 +384,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             openChatIds={openChatIds}
             onOpenSourceFile={handleOpenSourceFile}
             onCopyChatLink={handleCopyHistoryChatLink}
+            onSetChatPinned={handleSetChatPinned}
             onLoadHistory={handleLoadChatHistorySafely}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
@@ -437,6 +439,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleLoadChat,
       handleUpdateChatTitle,
       handleDeleteChat,
+      handleSetChatPinned,
       handleOpenSourceFile,
       handleCopyHistoryChatLink,
       handleLoadChatHistorySafely,
@@ -469,6 +472,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             openChatIds={openChatIds}
             onOpenSourceFile={handleOpenSourceFile}
             onCopyChatLink={handleCopyHistoryChatLink}
+            onSetChatPinned={handleSetChatPinned}
             onLoadHistory={handleLoadChatHistorySafely}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
@@ -495,6 +499,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleLoadChat,
       handleUpdateChatTitle,
       handleDeleteChat,
+      handleSetChatPinned,
       handleOpenSourceFile,
       handleCopyHistoryChatLink,
       handleLoadChatHistorySafely,

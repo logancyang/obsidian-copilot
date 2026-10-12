@@ -41,6 +41,7 @@ jest.mock("@/utils", () => ({
 jest.mock("@/utils/vaultAdapterUtils", () => ({
   isInVaultCache: jest.fn(() => false),
   listMarkdownFiles: jest.fn().mockResolvedValue([]),
+  patchFrontmatter: jest.requireActual("@/utils/vaultAdapterUtils").patchFrontmatter,
 }));
 
 interface FakeFile {
@@ -474,6 +475,38 @@ describe("AgentChatPersistenceManager", () => {
       expect(contents).toContain('sessionId: "new-session"\n');
       expect(contents).not.toContain("old-session");
       expect(contents).not.toContain("Old agent");
+    });
+  });
+
+  describe("setPinnedAt()", () => {
+    it("pins a chat by writing the pin time to its note's frontmatter", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
+
+      await manager.setPinnedAt(saved!.path, 1_760_000_000_000);
+
+      expect(app.files.get(saved!.path)!.contents).toContain("pinnedAt: 1760000000000\n");
+    });
+
+    it("unpins a chat by removing the pinnedAt key from its note's frontmatter", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
+      await manager.setPinnedAt(saved!.path, 1_760_000_000_000);
+
+      await manager.setPinnedAt(saved!.path, null);
+
+      expect(app.files.get(saved!.path)!.contents).not.toContain("pinnedAt");
+    });
+
+    it("keeps the pin of a note in a hidden folder through later autosaves", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
+      await manager.setPinnedAt(saved!.path, 1_760_000_000_000);
+
+      await manager.saveSession(
+        [makeMessage(USER_SENDER, "hi"), makeMessage(AI_SENDER, "hi again")],
+        "claude",
+        { existingPath: saved!.path }
+      );
+
+      expect(app.files.get(saved!.path)!.contents).toContain("pinnedAt: 1760000000000\n");
     });
   });
 

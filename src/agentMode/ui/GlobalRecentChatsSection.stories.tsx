@@ -26,8 +26,17 @@ const defaultArgs: GlobalRecentChatsSectionProps = {
   onDeleteChat: noop,
   onOpenSourceFile: noop,
   onCopyChatLink: noop,
+  onSetChatPinned: noop,
   onLoadHistory: noopSync,
 };
+
+const pinnedItems: GlobalRecentChatsSectionProps["items"] = items
+  .slice(0, 6)
+  .map((item, index) =>
+    index === 2 || index === 4
+      ? { ...item, pinnedAt: Date.parse("2026-08-27T12:00:00Z") + index }
+      : item
+  );
 
 const meta = {
   title: "Agent Mode/Global Recent Chats Section",
@@ -117,4 +126,19 @@ export const OpenSessionMoreActionsMenu: StoryObj<GlobalRecentChatsSectionProps>
     onCloseSession: noop,
   },
   render: OpenMenuFirstRowShelf,
+};
+
+export const PinnedChats: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: { items: pinnedItems },
+  render: renderShelf,
+};
+
+export const PinnedRowActions: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: { items: pinnedItems },
+  render: FocusedFirstRowShelf,
+};
+
+export const OnlyPinnedChats: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: { items: pinnedItems.filter((item) => item.pinnedAt !== undefined) },
+  render: renderShelf,
 };

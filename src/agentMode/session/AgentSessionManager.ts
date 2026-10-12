@@ -32,7 +32,11 @@ import type {
 } from "@/context/contextCacheStore";
 import { err2String } from "@/utils";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
-import { fileToHistoryItem, readChatPathProjectId } from "@/utils/chatHistoryUtils";
+import {
+  fileToHistoryItem,
+  parseChatPinnedAt,
+  readChatPathProjectId,
+} from "@/utils/chatHistoryUtils";
 import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
@@ -120,6 +124,15 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
   });
 }
 
+function sessionRefFromFrontmatter(
+  frontmatter: Record<string, unknown> | undefined
+): { backendId: BackendId; sessionId: string } | null {
+  const backendId = typeof frontmatter?.backendId === "string" ? frontmatter.backendId.trim() : "";
+  const sessionId = typeof frontmatter?.sessionId === "string" ? frontmatter.sessionId.trim() : "";
+  if (!backendId || !sessionId) return null;
+  return { backendId, sessionId };
+}
+
 function isSameCwd(a: string, b: string): boolean {
   const norm = (p: string) => p.replace(/[/\\]+$/, "");
   return norm(a) === norm(b);
@@ -170,6 +183,11 @@ export type PermissionPrompter = (req: PermissionPrompt) => Promise<PermissionDe
 export type AskUserQuestionPrompter = (req: AskUserQuestionPrompt) => Promise<AgentQuestionAnswers>;
 
 export type DescriptorResolver = (id: BackendId) => BackendDescriptor | undefined;
+
+export interface PinnedChat {
+  id: string;
+  pinnedAt?: number;
+}
 
 export interface ReplaceSessionOptions {
   preserveChatInput?: boolean;
@@ -479,10 +497,15 @@ export class AgentSessionManager {
       const tracker = this.plugin.getChatHistoryLastAccessedAtManager();
       markdownEntries = await Promise.all(
         files.map(async (file) => {
-          const ref = await this.readSessionRefFromFile(file.path);
+          const frontmatter = await this.readChatFrontmatter(file.path);
+          const ref = sessionRefFromFrontmatter(frontmatter);
           const item = fileToHistoryItem(this.app, file, tracker);
           return {
-            item: liveAttentionPaths.has(item.id) ? { ...item, needsAttention: true } : item,
+            item: {
+              ...item,
+              pinnedAt: parseChatPinnedAt(frontmatter?.pinnedAt),
+              ...(liveAttentionPaths.has(item.id) ? { needsAttention: true } : {}),
+            },
             backendId: ref?.backendId,
             sessionId: ref?.sessionId,
           };
@@ -618,6 +641,27 @@ export class AgentSessionManager {
     await persistence.updateTopic(fileId, newTitle);
   }
 
+  async setChatPinned(id: string, pinned: boolean): Promise<PinnedChat> {
+    const persistence = this.opts.persistenceManager;
+    if (!persistence) throw new Error("Agent chat persistence is not configured.");
+    const native = parseNativeChatId(id);
+    // The pin lives in the chat's note, so a chat that has none is saved as one first.
+    // https://github.com/logancyang/obsidian-copilot/issues/3195
+    const path = native ? await this.saveNativeChatAsNote(native.backendId, native.sessionId) : id;
+    const pinnedAt = pinned ? Date.now() : null;
+    await persistence.setPinnedAt(path, pinnedAt);
+    return { id: path, pinnedAt: pinnedAt ?? undefined };
+  }
+
+  private async saveNativeChatAsNote(backendId: BackendId, sessionId: string): Promise<string> {
+    const session =
+      this.findLiveSession(backendId, sessionId) ??
+      (await this.loadNativeSessionFromHistory(backendId, sessionId));
+    const saved = await this.saveSessionNow(session);
+    if (!saved) throw new Error(`Could not save chat ${sessionId} as a note.`);
+    return saved.path;
+  }
+
   async deleteChatHistory(fileId: string): Promise<void> {
     const index = this.opts.sessionIndex;
     const persistence = this.opts.persistenceManager;
@@ -672,22 +716,19 @@ export class AgentSessionManager {
   private async readSessionRefFromFile(
     fileId: string
   ): Promise<{ backendId: BackendId; sessionId: string } | null> {
-    let fm: Record<string, unknown> | undefined;
+    return sessionRefFromFrontmatter(await this.readChatFrontmatter(fileId));
+  }
+
+  private async readChatFrontmatter(fileId: string): Promise<Record<string, unknown> | undefined> {
     const file = this.app.vault.getAbstractFileByPath(fileId);
-    if (file instanceof TFile) {
-      fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    const cached =
+      file instanceof TFile ? this.app.metadataCache.getFileCache(file)?.frontmatter : undefined;
+    if (cached) return cached;
+    try {
+      return (await readFrontmatterViaAdapter(this.app, fileId)) ?? undefined;
+    } catch {
+      return undefined;
     }
-    if (!fm) {
-      try {
-        fm = (await readFrontmatterViaAdapter(this.app, fileId)) ?? undefined;
-      } catch {
-        return null;
-      }
-    }
-    const backendId = typeof fm?.backendId === "string" ? fm.backendId.trim() : "";
-    const sessionId = typeof fm?.sessionId === "string" ? fm.sessionId.trim() : "";
-    if (!backendId || !sessionId) return null;
-    return { backendId, sessionId };
   }
 
   private async refreshNativeSessionsFromBackends(): Promise<void> {
@@ -2384,9 +2425,12 @@ export class AgentSessionManager {
     });
   }
 
-  async saveActiveSession(): Promise<{ path: string } | null> {
+  saveActiveSession(): Promise<{ path: string } | null> {
     const session = this.getActiveSession();
-    if (!session) return null;
+    return session ? this.saveSessionNow(session) : Promise.resolve(null);
+  }
+
+  private async saveSessionNow(session: AgentSession): Promise<{ path: string } | null> {
     const state = this.sessionState.get(session.internalId);
     if (state?.timer) {
       window.clearTimeout(state.timer);

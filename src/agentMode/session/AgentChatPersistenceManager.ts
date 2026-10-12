@@ -224,6 +224,10 @@ export class AgentChatPersistenceManager {
     await patchFrontmatter(this.app, fileId, { topic: newTopic.trim() });
   }
 
+  async setPinnedAt(fileId: string, pinnedAt: number | null): Promise<void> {
+    await patchFrontmatter(this.app, fileId, { pinnedAt });
+  }
+
   async deleteFile(fileId: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file) {
