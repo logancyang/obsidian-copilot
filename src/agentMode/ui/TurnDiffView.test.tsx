@@ -5,7 +5,10 @@ import {
   TurnDiffView,
   type TurnDiffViewState,
 } from "@/agentMode/ui/TurnDiffView";
-import { appParsing, type RecordedParse } from "@/agentMode/ui/renderedDiff/recordedParserApp";
+import {
+  appParsing,
+  type RecordedParse,
+} from "@/agentMode/ui/renderedDiff/testing/recordedParserApp";
 import { TURN_DIFF_VIEW_TYPE } from "@/constants";
 import { act, fireEvent, waitFor, within } from "@testing-library/react";
 import { App, Notice, TFile, Workspace, WorkspaceLeaf } from "obsidian";
