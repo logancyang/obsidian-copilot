@@ -1,5 +1,5 @@
 import type { App } from "obsidian";
-import { appParsing } from "@/agentMode/ui/renderedDiff/recordedParserApp";
+import { appParsing } from "@/agentMode/ui/renderedDiff/testing/recordedParserApp";
 import { splitMarkdown } from "@/agentMode/ui/renderedDiff/splitBlocks";
 
 describe("splitBlocks", () => {
