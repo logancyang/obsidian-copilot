@@ -17,11 +17,10 @@ const STRUCTURAL_PREFIX =
 
 const EMPHASIS_DELIMITER = /^(?:\*{1,3}|_{1,3}|~~|==)/;
 
-// Obsidian comments and inline math render as hidden text or TeX, where a marker inside would break them.
+// Inline math renders as TeX, where a marker inside would break it.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
 const TOKEN_PATTERNS: readonly RegExp[] = [
   /^!?\[\[[^\]]*\]\]/,
-  /^%%.*?%%/,
   /^\$[^$\n]+\$(?!\$)/,
   // A bare URL is one token so an emphasis character inside it (`a_b`) cannot split it around a marker;
   // like an autolink it never ends on emphasis, so a delimiter wrapping it stays outside the mark.

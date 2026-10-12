@@ -147,12 +147,6 @@ describe("tokenDiff", () => {
       expect(diffInline("The pilot runs.", "The pilot runs.")).toBe("The pilot runs.");
     });
 
-    it("replaces an edited Obsidian comment whole so no marker lands inside the hidden text (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)", () => {
-      expect(diffInline("Ship it %%draft note%% today.", "Ship it %%final note%% today.")).toBe(
-        `Ship it ${deleted("%%draft note%%")}${inserted("%%final note%%")} today.`
-      );
-    });
-
     it("replaces edited inline math whole so no marker lands inside the TeX (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)", () => {
       expect(diffInline("Area is $\\pi r^2$ here.", "Area is $\\pi d^2$ here.")).toBe(
         `Area is ${deleted("$\\pi r^2$")}${inserted("$\\pi d^2$")} here.`
