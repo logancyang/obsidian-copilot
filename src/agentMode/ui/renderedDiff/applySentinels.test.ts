@@ -27,8 +27,8 @@ describe("applySentinels", () => {
 
       applySentinels(root);
 
-      expect(marked(root, "del.copilot-diff-del")).toEqual(["six"]);
-      expect(marked(root, "ins.copilot-diff-ins")).toEqual(["eight"]);
+      expect(marked(root, "del[data-change=deleted]")).toEqual(["six"]);
+      expect(marked(root, "ins[data-change=inserted]")).toEqual(["eight"]);
       expect(root.textContent).toBe("The pilot runs for sixeight weeks.");
     });
 
@@ -51,8 +51,8 @@ describe("applySentinels", () => {
 
       applySentinels(root);
 
-      expect(marked(root, "del.copilot-diff-del")).toEqual(["plain ", "bold", " tail"]);
-      expect(root.querySelector("strong del.copilot-diff-del")).not.toBeNull();
+      expect(marked(root, "del[data-change=deleted]")).toEqual(["plain ", "bold", " tail"]);
+      expect(root.querySelector("strong del[data-change=deleted]")).not.toBeNull();
     });
 
     it("marks link text inside the anchor so the link still renders as a link", () => {
@@ -62,7 +62,7 @@ describe("applySentinels", () => {
 
       applySentinels(root);
 
-      expect(root.querySelector("a del.copilot-diff-del")?.textContent).toBe("the checklist");
+      expect(root.querySelector("a del[data-change=deleted]")?.textContent).toBe("the checklist");
       expect(root.querySelector("a")?.getAttribute("href")).toBe("https://example.com/v1");
     });
 
@@ -71,7 +71,7 @@ describe("applySentinels", () => {
 
       applySentinels(root);
 
-      expect(root.querySelector("h2 ins.copilot-diff-ins")?.textContent).toBe("Rollout plan");
+      expect(root.querySelector("h2 ins[data-change=inserted]")?.textContent).toBe("Rollout plan");
     });
 
     it("tags a table row whose every cell was deleted so the whole row reads as removed", () => {
@@ -88,7 +88,7 @@ describe("applySentinels", () => {
 
       applySentinels(root);
 
-      expect(root.querySelector("tr")?.classList.contains("copilot-diff-row-del")).toBe(true);
+      expect(root.querySelector("tr")?.getAttribute("data-change")).toBe("deleted");
     });
 
     it("tags a table row whose every cell was inserted so the whole row reads as added", () => {
@@ -105,7 +105,7 @@ describe("applySentinels", () => {
 
       applySentinels(root);
 
-      expect(root.querySelector("tr")?.classList.contains("copilot-diff-row-ins")).toBe(true);
+      expect(root.querySelector("tr")?.getAttribute("data-change")).toBe("inserted");
     });
 
     it("leaves a row with one edited cell untagged so only that cell is highlighted", () => {
@@ -122,8 +122,19 @@ describe("applySentinels", () => {
 
       applySentinels(root);
 
-      expect(root.querySelector("tr")?.className).toBe("");
-      expect(marked(root, "ins.copilot-diff-ins")).toEqual(["3"]);
+      expect(root.querySelector("tr")?.hasAttribute("data-change")).toBe(false);
+      expect(marked(root, "ins[data-change=inserted]")).toEqual(["3"]);
+    });
+
+    it("leaves a row whose cells hold the note's own ins elements untagged so authored markup never reads as a change (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      const root = el(
+        "div",
+        el("table", el("tbody", el("tr", el("td", el("ins", "AMER")), el("td", el("ins", "4")))))
+      );
+
+      applySentinels(root);
+
+      expect(root.querySelector("tr")?.hasAttribute("data-change")).toBe(false);
     });
 
     it("leaves a fully inserted header row untagged so its words keep their own tint", () => {
@@ -144,8 +155,8 @@ describe("applySentinels", () => {
 
       applySentinels(root);
 
-      expect(root.querySelector("tr")?.className).toBe("");
-      expect(marked(root, "ins.copilot-diff-ins")).toEqual(["Region", "Owner"]);
+      expect(root.querySelector("tr")?.hasAttribute("data-change")).toBe(false);
+      expect(marked(root, "ins[data-change=inserted]")).toEqual(["Region", "Owner"]);
     });
 
     it("leaves a row mixing inserted and deleted cells untagged so each cell keeps its own tint", () => {
@@ -162,7 +173,7 @@ describe("applySentinels", () => {
 
       applySentinels(root);
 
-      expect(root.querySelector("tr")?.className).toBe("");
+      expect(root.querySelector("tr")?.hasAttribute("data-change")).toBe(false);
     });
 
     it("marks only the last segment of a deletion split by inline markup as its end so one gap separates it from what follows", () => {
@@ -178,8 +189,8 @@ describe("applySentinels", () => {
 
       applySentinels(root);
 
-      expect(marked(root, "del.copilot-diff-del")).toEqual(["un", "believ", "able"]);
-      expect(marked(root, "del.copilot-diff-del-end")).toEqual(["able"]);
+      expect(marked(root, "del[data-change=deleted]")).toEqual(["un", "believ", "able"]);
+      expect(marked(root, "del.tw-me-1")).toEqual(["able"]);
     });
 
     it("ends a mark whose closing sentinel the renderer swallowed at the end of its block so the next block stays unmarked (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
@@ -187,7 +198,7 @@ describe("applySentinels", () => {
 
       applySentinels(root);
 
-      expect(marked(root, "ins.copilot-diff-ins")).toEqual(["added"]);
+      expect(marked(root, "ins[data-change=inserted]")).toEqual(["added"]);
       expect(root.textContent).toBe("Kept addedNext paragraph.");
     });
 

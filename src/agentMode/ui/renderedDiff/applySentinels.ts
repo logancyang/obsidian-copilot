@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+
 // Sentinel marks are private-use characters U+E000-U+E003 so they pass through the renderer as plain text;
 // the post-pass cannot tell literal ones from inserted ones, so callers must keep them out of raw input.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
@@ -7,15 +9,25 @@ export const INS_CLOSE = String.fromCharCode(SENTINEL_BLOCK_START + 1);
 export const DEL_OPEN = String.fromCharCode(SENTINEL_BLOCK_START + 2);
 export const DEL_CLOSE = String.fromCharCode(SENTINEL_BLOCK_START + 3);
 
-const INS_CLASS = "copilot-diff-ins";
-const DEL_CLASS = "copilot-diff-del";
-const ROW_INS_CLASS = "copilot-diff-row-ins";
-const ROW_DEL_CLASS = "copilot-diff-row-del";
-const DEL_END_CLASS = "copilot-diff-del-end";
-
 const SENTINEL = new RegExp(`[${INS_OPEN}-${DEL_CLOSE}]`);
 
-type Mode = "ins" | "del" | null;
+type Change = "inserted" | "deleted";
+type Mode = Change | null;
+
+// A wholly changed row carries the tint on its cells, so word tints inside it would stack into patches.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+const MARK_CLASS: Record<Change, string> = {
+  inserted: cn("tw-bg-success tw-no-underline [tr[data-change]_&]:tw-bg-transparent"),
+  deleted: cn("tw-bg-error tw-text-muted tw-line-through [tr[data-change]_&]:tw-bg-transparent"),
+};
+const ROW_CLASS: Record<Change, string> = {
+  inserted: cn("[&>td]:tw-bg-overlay-success"),
+  deleted: cn("[&>td]:tw-bg-overlay-error"),
+};
+// A replaced link puts the old and new text in separate anchors, so the gap that keeps them from
+// reading as one word sits on the deletion's last segment rather than on the insertion.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+const DELETION_END_CLASS = "tw-me-1";
 
 const BLOCK_SELECTOR = "p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, pre, dt, dd, div";
 
@@ -46,7 +58,7 @@ export function applySentinels(root: HTMLElement): void {
       if (mode === null) fragment.appendChild(doc.createTextNode(buffer));
       else {
         const element = markedElement(doc, mode, buffer);
-        if (mode === "del") lastDeleted = element;
+        if (mode === "deleted") lastDeleted = element;
         fragment.appendChild(element);
       }
       buffer = "";
@@ -54,12 +66,12 @@ export function applySentinels(root: HTMLElement): void {
     for (const character of value) {
       if (character === INS_OPEN || character === DEL_OPEN) {
         flush();
-        mode = character === INS_OPEN ? "ins" : "del";
+        mode = character === INS_OPEN ? "inserted" : "deleted";
         continue;
       }
       if (character === INS_CLOSE || character === DEL_CLOSE) {
         flush();
-        if (mode === "del") lastDeleted?.classList.add(DEL_END_CLASS);
+        if (mode === "deleted") lastDeleted?.classList.add(DELETION_END_CLASS);
         mode = null;
         continue;
       }
@@ -71,15 +83,18 @@ export function applySentinels(root: HTMLElement): void {
 
   for (const row of Array.from(root.querySelectorAll("tbody tr"))) {
     const change = rowChange(row);
-    if (change !== null) row.classList.add(change === "ins" ? ROW_INS_CLASS : ROW_DEL_CLASS);
+    if (change === null) continue;
+    row.setAttribute("data-change", change);
+    row.classList.add(ROW_CLASS[change]);
   }
 }
 
-function markedElement(doc: Document, mode: Exclude<Mode, null>, text: string): HTMLElement {
-  const element = doc.win.createEl(mode === "ins" ? "ins" : "del");
-  element.className = mode === "ins" ? INS_CLASS : DEL_CLASS;
-  element.appendChild(doc.createTextNode(text));
-  return element;
+function markedElement(doc: Document, change: Change, text: string): HTMLElement {
+  return doc.win.createEl(change === "inserted" ? "ins" : "del", {
+    cls: MARK_CLASS[change],
+    attr: { "data-change": change },
+    text,
+  });
 }
 
 function rowChange(row: Element): Mode {
@@ -87,9 +102,9 @@ function rowChange(row: Element): Mode {
   const walker = row.ownerDocument.createTreeWalker(row, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
     if ((node.nodeValue ?? "").trim() === "") continue;
-    const marked = node.parentElement?.closest(`ins.${INS_CLASS}, del.${DEL_CLASS}`);
+    const marked = node.parentElement?.closest("ins[data-change], del[data-change]");
     if (!marked) return null;
-    const kind = marked.tagName === "INS" ? "ins" : "del";
+    const kind = marked.tagName === "INS" ? "inserted" : "deleted";
     if (change !== null && change !== kind) return null;
     change = kind;
   }
