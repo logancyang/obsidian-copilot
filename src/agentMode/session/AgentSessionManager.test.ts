@@ -675,7 +675,7 @@ function buildHistoryHarness(opts?: {
   listSessions?: jest.Mock;
   warmListSessions?: jest.Mock;
   warmSessionExistsLocally?: jest.Mock;
-  indexWriteError?: Error;
+  indexStorage?: ReturnType<typeof makeIndexStorage>;
   probeSessionId?: string;
   summarizesSessionTitle?: boolean;
   backendId?: BackendId;
@@ -727,13 +727,7 @@ function buildHistoryHarness(opts?: {
     deleteFile: jest.fn(async () => undefined),
     saveSession: jest.fn(async () => ({ path: "chats/new.md" })),
   };
-  const indexStorage = makeIndexStorage();
-  if (opts?.indexWriteError) {
-    const error = opts.indexWriteError;
-    indexStorage.write = async () => {
-      throw error;
-    };
-  }
+  const indexStorage = opts?.indexStorage ?? makeIndexStorage();
   const index = new AgentSessionIndex(indexStorage, "plugins/copilot/index.json");
   const backendId = opts?.backendId ?? "opencode";
   const descriptor = buildDescriptor({
@@ -3715,14 +3709,90 @@ describe("AgentSessionManager", () => {
         await expect(manager.deleteChatHistory("chats/agent__a.md")).rejects.toThrow("locked");
       });
 
-      it("rejects with the storage error when the index write fails", async () => {
-        const { manager, persistence } = buildHistoryHarness({
-          indexWriteError: new Error("disk full"),
-          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", sessionId: "s1" } },
+      async function persistedNoteFixture() {
+        const notePath = "chats/agent__a.md";
+        const content =
+          "---\nbackendId: opencode\nsessionId: s1\nepoch: 1000\n---\nSaved conversation";
+        const notes: Record<string, string> = { [notePath]: content };
+        const indexStorage = makeIndexStorage();
+        const reload = () => {
+          const harness = buildHistoryHarness({ hiddenFiles: notes, indexStorage });
+          harness.persistence.deleteFile.mockImplementation(async () => {
+            delete notes[notePath];
+            harness.persistence.getAgentChatHistoryFiles.mockResolvedValue([]);
+            return undefined;
+          });
+          return harness;
+        };
+        const harness = reload();
+        await harness.index.recordSession({
+          backendId: "opencode",
+          sessionId: "s1",
+          title: "Saved conversation",
+          createdAtMs: 1000,
+          lastAccessedAtMs: 2000,
+        });
+        await harness.index.flushOrThrow();
+        return { ...harness, notePath, content, notes, indexStorage, reload };
+      }
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/2888 preserves the note while the index write is pending or fails, keeps it visible after reload, and allows retry", async () => {
+        const { manager, persistence, notePath, content, notes, indexStorage, reload } =
+          await persistedNoteFixture();
+        let rejectWrite!: (error: Error) => void;
+        let signalWriteStarted!: () => void;
+        const writeStarted = new Promise<void>((resolve) => {
+          signalWriteStarted = resolve;
+        });
+        jest.spyOn(indexStorage, "write").mockImplementationOnce(() => {
+          signalWriteStarted();
+          return new Promise<void>((_resolve, reject) => {
+            rejectWrite = reject;
+          });
         });
 
-        await expect(manager.deleteChatHistory("chats/agent__a.md")).rejects.toThrow("disk full");
-        expect(persistence.deleteFile).toHaveBeenCalledWith("chats/agent__a.md");
+        const deleting = manager.deleteChatHistory(notePath);
+        const failed = expect(deleting).rejects.toThrow("disk full");
+        await writeStarted;
+        try {
+          expect(persistence.deleteFile).not.toHaveBeenCalled();
+          expect(notes[notePath]).toBe(content);
+        } finally {
+          rejectWrite(new Error("disk full"));
+          await failed;
+        }
+        expect(persistence.deleteFile).not.toHaveBeenCalled();
+        expect(notes[notePath]).toBe(content);
+        expect((await manager.getChatHistoryItems()).map((item) => item.id)).toContain(notePath);
+
+        const reloaded = reload();
+        expect(await reloaded.index.isTombstoned("opencode", "s1")).toBe(false);
+        expect((await reloaded.manager.getChatHistoryItems()).map((item) => item.id)).toContain(
+          notePath
+        );
+        await reloaded.manager.deleteChatHistory(notePath);
+        expect(notes[notePath]).toBeUndefined();
+        expect(await reload().manager.getChatHistoryItems()).toEqual([]);
+        expect(await reload().index.isTombstoned("opencode", "s1")).toBe(true);
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/2888 keeps a note visible after file-removal failure and reload despite its persisted marker, and allows retry", async () => {
+        const { manager, persistence, notePath, content, notes, reload } =
+          await persistedNoteFixture();
+        persistence.deleteFile.mockRejectedValueOnce(new Error("locked"));
+
+        await expect(manager.deleteChatHistory(notePath)).rejects.toThrow("locked");
+        expect(notes[notePath]).toBe(content);
+        expect((await manager.getChatHistoryItems()).map((item) => item.id)).toContain(notePath);
+        const reloaded = reload();
+        expect(await reloaded.index.isTombstoned("opencode", "s1")).toBe(true);
+        expect((await reloaded.manager.getChatHistoryItems()).map((item) => item.id)).toContain(
+          notePath
+        );
+
+        await reloaded.manager.deleteChatHistory(notePath);
+        expect(notes[notePath]).toBeUndefined();
+        expect(await reload().manager.getChatHistoryItems()).toEqual([]);
       });
 
       describe("when the chat is open", () => {

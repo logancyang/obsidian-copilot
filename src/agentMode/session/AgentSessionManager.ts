@@ -629,14 +629,15 @@ export class AgentSessionManager {
 
     const savedPaths = await this.closeOpenChatForDelete(fileId);
 
-    const notePaths = new Set(native ? savedPaths : [fileId, ...savedPaths]);
-    if (persistence) {
-      for (const path of notePaths) await persistence.deleteFile(path);
-    }
+    // Keep the note recoverable when the history write fails. https://github.com/logancyang/obsidian-copilot/issues/2888
     if (ref && index) {
       this.cancelPendingIndexTouch(ref.backendId, ref.sessionId);
       await index.deleteSession(ref.backendId, ref.sessionId);
       await index.flushOrThrow();
+    }
+    const notePaths = new Set(native ? savedPaths : [fileId, ...savedPaths]);
+    if (persistence) {
+      for (const path of notePaths) await persistence.deleteFile(path);
     }
   }
 
