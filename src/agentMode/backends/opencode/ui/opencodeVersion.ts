@@ -3,8 +3,7 @@
 // reworded prompt makes the plugin silently stop removing it.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/665
 // Also check the write guard's hooks (tool execute.before/after, permission evaluate with
-// source.id) and the write `content`, edit `oldString` and `newString`, and patch `patchText` fields: a rename
-// makes the guard silently let cut-off writes through.
+// source.id) and the write `content` field: a rename lets cut-off writes through silently.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/641
 export const OPENCODE_PINNED_VERSION = "2.0.22";
 

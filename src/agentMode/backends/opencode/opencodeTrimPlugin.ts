@@ -1,4 +1,3 @@
-import { AGENT_WRITE_MAX_BYTES } from "@/agentMode/backends/shared/agentWriteLimit";
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { opencodeManagedDataDir } from "./OpencodeBinaryManager";
@@ -8,8 +7,9 @@ import { opencodeManagedDataDir } from "./OpencodeBinaryManager";
 // The plugin also drops the built-in `report` skill, because a skill deny rule
 // would hide a user's own skill named `report` too.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/665
-// It also refuses an empty write and any write over the byte limit before it runs: OpenCode runs a
-// write cut off at the step's output limit and saves an empty or partial note.
+// It also refuses an empty write and any write, edit or patch whose arguments are over the byte
+// limit before it runs: OpenCode runs a write cut off at the step's output limit and saves an empty
+// or partial note.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/641
 export const OPENCODE_TRIM_PLUGIN_SOURCE = `"use strict";
 const TEMP_DIR_LINE = /^[ \\t]*Prefer .+ over generic system temporary directories[^\\n]*\\n?/gm;
@@ -38,49 +38,24 @@ function trimRequest(event) {
   } catch {}
 }
 
-const MAX_WRITE_BYTES = ${AGENT_WRITE_MAX_BYTES};
+const MAX_WRITE_BYTES = 40000;
 const IN_PARTS =
   " Write the file in parts: create it with the first part, then add each next part with one edit call per reply. For an existing note, use several smaller edits.";
 const TOO_LARGE =
-  "Nothing was written: this call is over ${AGENT_WRITE_MAX_BYTES / 1000} KB, too large to finish in one reply." + IN_PARTS;
+  "Nothing was written: this call is over " + MAX_WRITE_BYTES / 1000 + " KB, too large to finish in one reply." + IN_PARTS;
 const EMPTY =
   "Nothing was written: the content is empty, which usually means your reply hit the output limit." +
   IN_PARTS +
   " For an intended empty file, write a single newline.";
+const WRITE_TOOLS = new Set(["write", "edit", "patch"]);
 const refused = new Map();
-
-function writtenText(tool, input) {
-  if (!input || typeof input !== "object") return undefined;
-  if (tool === "write") return input.content;
-  if (tool === "edit") {
-    if (typeof input.oldString !== "string" || typeof input.newString !== "string") return undefined;
-    return input.oldString + input.newString;
-  }
-  if (tool === "patch") return input.patchText;
-  return undefined;
-}
-
-function utf8Bytes(text) {
-  let bytes = 0;
-  for (const char of text) {
-    const code = char.codePointAt(0);
-    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
-  }
-  return bytes;
-}
-
-function refusal(tool, input) {
-  const text = writtenText(tool, input);
-  if (typeof text !== "string") return undefined;
-  if (tool === "write" && text === "") return EMPTY;
-  if (utf8Bytes(text) > MAX_WRITE_BYTES) return TOO_LARGE;
-  return undefined;
-}
 
 function recordRefusal(event) {
   try {
-    const message = refusal(event.tool, event.input);
-    if (message) refused.set(event.id, message);
+    if (!WRITE_TOOLS.has(event.tool)) return;
+    if (event.tool === "write" && event.input.content === "") refused.set(event.id, EMPTY);
+    else if (new TextEncoder().encode(JSON.stringify(event.input)).length > MAX_WRITE_BYTES)
+      refused.set(event.id, TOO_LARGE);
   } catch {}
 }
 

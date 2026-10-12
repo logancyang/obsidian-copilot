@@ -10,7 +10,6 @@ import {
   COPILOT_MIYO_DOCUMENT_STEERING,
   COPILOT_MIYO_SEARCH_STEERING,
   COPILOT_INSTRUCTION_PRECEDENCE,
-  COPILOT_LONG_WRITE_POLICY,
   COPILOT_PROJECT_WORKSPACE_POLICY,
   COPILOT_PROMPT_BASE,
   COPILOT_SKILL_FALLBACK,
@@ -73,17 +72,6 @@ describe("agentSystemPrompt", () => {
       expect(prompt).toContain("{folder_name}");
       expect(prompt).toContain("{activeNote}");
       expect(prompt).not.toContain("<user_custom_instructions>");
-    });
-
-    it("tells every agent to write long files in parts, even with the built-in prompt disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/641)", () => {
-      for (const backendId of ["claude", "codex", "opencode"] as const) {
-        expect(buildAgentSystemPrompt(backendId)).toContain(COPILOT_LONG_WRITE_POLICY);
-      }
-      setDisableBuiltinSystemPrompt(true);
-      expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_LONG_WRITE_POLICY);
-      expect(COPILOT_LONG_WRITE_POLICY).toBe(
-        "A single write or edit call must never contain more than 5,000 words. For a longer file, create it with the first part, then append each next part with a separate edit call until it is complete."
-      );
     });
 
     it("suppresses the base prompt when 'disable builtin' is on, keeping the pill directive", () => {

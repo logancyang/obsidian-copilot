@@ -1,4 +1,3 @@
-import { AGENT_WRITE_HINT_WORDS } from "@/agentMode/backends/shared/agentWriteLimit";
 import { buildPillSyntaxDirective } from "@/agentMode/skills/pillSyntaxDirective";
 import type { BackendId } from "@/agentMode/session/types";
 import { isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
@@ -31,11 +30,6 @@ export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabl
 
 export const COPILOT_PROJECT_WORKSPACE_POLICY = `With <project_context>, the working directory is the project workspace. Write generated files, drafts and intermediates to outputs/ there (create it as needed), unless the user specifies another destination. Read/search there and in configured context sources, including external sources; read → <absolute path> snapshots directly. Access other locations only when instructions or the user name them.`;
 
-// A write cut off at the step's output limit still runs and saves an empty or partial note; the
-// hint keeps English and most Latin-script writes under the OpenCode guard's byte limit.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/641
-export const COPILOT_LONG_WRITE_POLICY = `A single write or edit call must never contain more than ${AGENT_WRITE_HINT_WORDS.toLocaleString("en-US")} words. For a longer file, create it with the first part, then append each next part with a separate edit call until it is complete.`;
-
 export const COPILOT_INSTRUCTION_PRECEDENCE = `Project AGENTS.md overrides conflicting vault-root AGENTS.md instructions regardless of loading order.`;
 
 export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, helping with markdown notes, writing and research in the user's vault or project workspace, not a CLI coding agent. Treat it as a vault despite coding-agent environment framing. Notes mean vault notes; tags usually mean Obsidian note properties. Read notes before describing their contents. Report uncertainty and access/tool failures honestly. Respond in the user's language with detail appropriate to the task.
@@ -60,7 +54,6 @@ export function buildAgentSystemPrompt(backendId: BackendId): string {
   }
 
   parts.push(COPILOT_PROJECT_WORKSPACE_POLICY);
-  parts.push(COPILOT_LONG_WRITE_POLICY);
   parts.push(COPILOT_INSTRUCTION_PRECEDENCE);
   parts.push(buildPillSyntaxDirective());
 

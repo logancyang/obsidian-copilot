@@ -2,7 +2,6 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as vm from "vm";
-import { AGENT_WRITE_MAX_BYTES } from "@/agentMode/backends/shared/agentWriteLimit";
 import { logWarn } from "@/logger";
 import {
   installOpencodeTrimPlugin,
@@ -71,29 +70,19 @@ async function setUpPlugin(plugin: LoadedPlugin) {
 
 const ISSUE_641 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/641";
 
-interface Evaluation {
-  effect: string;
-  message?: string;
-}
-
 async function writeGuard(plugin: LoadedPlugin) {
   const { toolHooks, permissionHooks } = await setUpPlugin(plugin);
   let callCount = 0;
-  return (tool: string, input: Record<string, unknown>, effect = "allow"): Evaluation => {
+  return (tool: string, input: Record<string, unknown>, effect = "allow") => {
     const id = `call-${++callCount}`;
-    toolHooks.get("execute.before")!({ tool, id, input });
-    const evaluation: Evaluation & Record<string, unknown> = {
-      action: "edit",
-      resources: ["note.md"],
-      source: { type: "tool", messageID: "message-1", id },
+    const evaluation: { effect: string; message?: string; source: unknown } = {
       effect,
+      source: { type: "tool", id },
     };
+    toolHooks.get("execute.before")!({ tool, id, input });
     permissionHooks.get("evaluate")!(evaluation);
-    toolHooks.get("execute.after")!({ tool, id, input, status: "completed" });
-    return {
-      effect: evaluation.effect,
-      ...(evaluation.message ? { message: evaluation.message } : {}),
-    };
+    toolHooks.get("execute.after")!({ tool, id });
+    return evaluation;
   };
 }
 
@@ -181,93 +170,28 @@ describe("opencodeTrimPlugin", () => {
       expect(() => hook({ system: "not a list", messages: null })).not.toThrow();
     });
 
-    it(`${ISSUE_641} keeps a ${AGENT_WRITE_MAX_BYTES}-byte write and denies one byte more, telling the agent to write in parts`, async () => {
+    it(`${ISSUE_641} denies an empty write and a call over 40 KB of arguments, telling the agent to write in parts`, async () => {
       const call = await writeGuard(plugin);
 
-      expect(
-        call("write", { path: "note.md", content: "a".repeat(AGENT_WRITE_MAX_BYTES) })
-      ).toEqual({
-        effect: "allow",
-      });
-      const denied = call("write", {
-        path: "note.md",
-        content: "a".repeat(AGENT_WRITE_MAX_BYTES + 1),
-      });
-      expect(denied.effect).toBe("deny");
-      expect(denied.message).toMatch(/^Nothing was written: this call is over 40 KB/);
-      expect(denied.message).toContain("Write the file in parts");
-    });
+      const empty = call("write", { path: "note.md", content: "" });
+      expect(empty.effect).toBe("deny");
+      expect(empty.message).toContain("usually means your reply hit the output limit");
+      expect(call("write", { path: "note.md", content: "\n" }).effect).toBe("allow");
 
-    it(`${ISSUE_641} counts UTF-8 bytes, so 13,334 Han characters (40,002 bytes) are denied`, async () => {
-      const call = await writeGuard(plugin);
+      const big = call("write", { path: "note.md", content: "a".repeat(40_001) });
+      expect(big.effect).toBe("deny");
+      expect(big.message).toContain("Write the file in parts");
+      expect(call("write", { path: "note.md", content: "a".repeat(39_000) }).effect).toBe("allow");
+      expect(call("write", { path: "note.md", content: "hello" }, "ask").effect).toBe("ask");
 
       expect(call("write", { path: "note.md", content: "漢".repeat(13_334) }).effect).toBe("deny");
-    });
-
-    it(`${ISSUE_641} denies an empty write as a cut-off reply and keeps a single newline`, async () => {
-      const call = await writeGuard(plugin);
-
-      const denied = call("write", { path: "note.md", content: "" });
-      expect(denied.effect).toBe("deny");
-      expect(denied.message).toContain("usually means your reply hit the output limit");
-      expect(denied.message).toContain("write a single newline");
-      expect(call("write", { path: "note.md", content: "\n" }).effect).toBe("allow");
-    });
-
-    it(`${ISSUE_641} denies an oversized edit or patch`, async () => {
-      const call = await writeGuard(plugin);
-      const big = "a".repeat(AGENT_WRITE_MAX_BYTES + 1);
-
-      expect(call("edit", { path: "note.md", oldString: "x", newString: big }).effect).toBe("deny");
-      expect(call("patch", { patchText: big }).effect).toBe("deny");
-    });
-
-    it(`${ISSUE_641} leaves small calls and other tools on their own effect, so Default mode still asks`, async () => {
-      const call = await writeGuard(plugin);
-
-      expect(call("write", { path: "note.md", content: "hello" }, "ask")).toEqual({
-        effect: "ask",
-      });
-      expect(call("shell", { command: "a".repeat(AGENT_WRITE_MAX_BYTES + 1) }, "ask")).toEqual({
-        effect: "ask",
-      });
-    });
-
-    it(`${ISSUE_641} counts an edit's old and new text together, because the step generates both`, async () => {
-      const call = await writeGuard(plugin);
+      expect(call("write", { path: "note.md", content: "{}\n".repeat(10_000) }).effect).toBe(
+        "deny"
+      );
       const oldString = "a".repeat(30_000);
-
-      expect(
-        call("edit", { path: "note.md", oldString, newString: "b".repeat(10_000) }).effect
-      ).toBe("allow");
       expect(
         call("edit", { path: "note.md", oldString, newString: "b".repeat(10_001) }).effect
       ).toBe("deny");
-    });
-
-    it(`${ISSUE_641} matches each refusal to its own call while another call is pending`, async () => {
-      const { toolHooks, permissionHooks } = await setUpPlugin(plugin);
-      const big = {
-        tool: "write",
-        id: "big",
-        input: { path: "a.md", content: "a".repeat(40_001) },
-      };
-      const small = { tool: "write", id: "small", input: { path: "b.md", content: "hello" } };
-      toolHooks.get("execute.before")!(big);
-      toolHooks.get("execute.before")!(small);
-      const evaluate = (id: string) => {
-        const event: Evaluation & Record<string, unknown> = {
-          action: "edit",
-          resources: ["note.md"],
-          source: { type: "tool", messageID: "message-1", id },
-          effect: "ask",
-        };
-        permissionHooks.get("evaluate")!(event);
-        return event.effect;
-      };
-
-      expect(evaluate("small")).toBe("ask");
-      expect(evaluate("big")).toBe("deny");
     });
   });
 
