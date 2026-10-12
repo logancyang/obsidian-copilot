@@ -6,11 +6,13 @@ import {
   INS_OPEN,
   SENTINEL,
 } from "@/agentMode/ui/renderedDiff/applySentinels";
-import type { MarkdownBlockType } from "@/agentMode/ui/renderedDiff/splitBlocks";
-import { splitBlocks, splitFrontmatter } from "@/agentMode/ui/renderedDiff/splitBlocks";
+import type { MarkdownBlock, MarkdownSplit } from "@/agentMode/ui/renderedDiff/splitBlocks";
+import { splitMarkdown } from "@/agentMode/ui/renderedDiff/splitBlocks";
 import { diffTableBlock } from "@/agentMode/ui/renderedDiff/tableDiff";
 import { diffTextBlock } from "@/agentMode/ui/renderedDiff/tokenDiff";
+import { logWarn } from "@/logger";
 import { diffLines } from "diff";
+import type { App } from "obsidian";
 
 export type DiffChange = "unchanged" | "deleted" | "inserted";
 
@@ -20,7 +22,7 @@ export interface CodeDiffLine {
 }
 
 export type DiffSegment =
-  | { kind: "markdown"; markdown: string }
+  | { kind: "markdown"; markdown: string; continuesList?: true }
   | { kind: "block"; change: "deleted" | "inserted"; markdown: string }
   | { kind: "code"; lines: CodeDiffLine[] };
 
@@ -47,11 +49,12 @@ export function diffCodeLines(before: string, after: string): CodeDiffLine[] {
   return lines;
 }
 
-export function buildRenderedDiffPlan(
+export async function buildRenderedDiffPlan(
+  app: App,
   before: string | null,
   after: string | null,
   markdown: boolean
-): DiffSegment[] {
+): Promise<DiffSegment[]> {
   // A CRLF-to-LF conversion would otherwise mark every line changed; the engine assumes LF.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
   const beforeText = (before ?? "").replace(/\r\n/g, "\n");
@@ -62,8 +65,19 @@ export function buildRenderedDiffPlan(
     return verbatimPlan(beforeText, afterText);
   }
 
-  const beforeSplit = splitFrontmatter(beforeText);
-  const afterSplit = splitFrontmatter(afterText);
+  let beforeSplit: MarkdownSplit;
+  let afterSplit: MarkdownSplit;
+  try {
+    [beforeSplit, afterSplit] = await Promise.all([
+      splitMarkdown(app, beforeText),
+      splitMarkdown(app, afterText),
+    ]);
+  } catch (error) {
+    // Obsidian's parser is a private API that may disappear; a line diff still shows every change.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+    logWarn("[RenderedDiff] Markdown parsing failed, showing a line diff", error);
+    return verbatimPlan(beforeText, afterText);
+  }
   const segments: DiffSegment[] = [];
   // Unchanged frontmatter stays out of the diff: showing it above every change buries the edit.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
@@ -74,10 +88,14 @@ export function buildRenderedDiffPlan(
     });
   }
 
-  for (const pairing of alignBlocks(splitBlocks(beforeSplit.body), splitBlocks(afterSplit.body))) {
+  for (const pairing of alignBlocks(beforeSplit.blocks, afterSplit.blocks)) {
     switch (pairing.kind) {
       case "unchanged":
-        segments.push({ kind: "markdown", markdown: pairing.after.text });
+        segments.push({
+          kind: "markdown",
+          markdown: pairing.after.text,
+          continuesList: pairing.after.continuesList,
+        });
         break;
       case "deleted":
         segments.push({ kind: "block", change: "deleted", markdown: pairing.before.text });
@@ -86,9 +104,7 @@ export function buildRenderedDiffPlan(
         segments.push({ kind: "block", change: "inserted", markdown: pairing.after.text });
         break;
       default:
-        segments.push(
-          ...modifiedSegments(pairing.before.type, pairing.before.text, pairing.after.text)
-        );
+        segments.push(...modifiedSegments(pairing.before, pairing.after));
     }
   }
   const collapsed = collapseMarkdown(segments);
@@ -107,17 +123,25 @@ function verbatimPlan(before: string, after: string): DiffSegment[] {
   return lines.length === 0 ? [] : [{ kind: "code", lines }];
 }
 
-function modifiedSegments(type: MarkdownBlockType, before: string, after: string): DiffSegment[] {
-  if (type === "code") return [{ kind: "code", lines: diffCodeLines(before, after) }];
-  if (type === "table") {
-    const merged = diffTableBlock(before, after);
+function modifiedSegments(before: MarkdownBlock, after: MarkdownBlock): DiffSegment[] {
+  if (after.type === "code") {
+    return [{ kind: "code", lines: diffCodeLines(before.text, after.text) }];
+  }
+  if (after.type === "table") {
+    const merged = diffTableBlock(before.text, after.text);
     if (merged !== null) return [{ kind: "markdown", markdown: merged }];
     return [
-      { kind: "block", change: "deleted", markdown: before },
-      { kind: "block", change: "inserted", markdown: after },
+      { kind: "block", change: "deleted", markdown: before.text },
+      { kind: "block", change: "inserted", markdown: after.text },
     ];
   }
-  return [{ kind: "markdown", markdown: diffTextBlock(before, after) }];
+  return [
+    {
+      kind: "markdown",
+      markdown: diffTextBlock(before.text, after.text),
+      continuesList: after.continuesList,
+    },
+  ];
 }
 
 function collapseMarkdown(segments: readonly DiffSegment[]): DiffSegment[] {
@@ -131,7 +155,7 @@ function collapseMarkdown(segments: readonly DiffSegment[]): DiffSegment[] {
     if (previous?.kind === "markdown") {
       collapsed[collapsed.length - 1] = {
         kind: "markdown",
-        markdown: `${previous.markdown}\n\n${segment.markdown}`,
+        markdown: `${previous.markdown}${segment.continuesList ? "\n" : "\n\n"}${segment.markdown}`,
       };
       continue;
     }

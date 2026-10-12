@@ -1,26 +1,38 @@
 import {
   BLOCK_MOVED,
   NON_MARKDOWN_FILE,
+  TASK_BLOCK_INSERTED,
   TASK_CHECKBOX_TOGGLED,
   WORDING_CHANGE,
   type RenderedDiffFixture,
 } from "@/agentMode/ui/renderedDiff/fixtures";
 import * as mergeMarkdown from "@/agentMode/ui/renderedDiff/mergeMarkdown";
+import { appParsingRecordedFixtures } from "@/agentMode/ui/renderedDiff/fixtureParserApp";
 import { RenderedDiff } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import { AppContext } from "@/context";
 import { renderMarkdown } from "@/utils/renderMarkdown";
-import { render, waitFor } from "@testing-library/react";
-import { App } from "obsidian";
+import { act, render, waitFor } from "@testing-library/react";
+import type { App } from "obsidian";
 import * as React from "react";
 
 jest.mock("@/utils/renderMarkdown", () => ({ renderMarkdown: jest.fn() }));
 
-function diffElement(fixture: RenderedDiffFixture): React.ReactElement {
+const recordedApp = appParsingRecordedFixtures();
+
+function diffElement(fixture: RenderedDiffFixture, app: App = recordedApp): React.ReactElement {
   return (
-    <AppContext.Provider value={new App()}>
+    <AppContext.Provider value={app}>
       <RenderedDiff after={fixture.after} before={fixture.before} path={fixture.path} />
     </AppContext.Provider>
   );
+}
+
+function appHoldingParse(source: string): { app: App; release: () => void } {
+  let release!: () => void;
+  const until = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { app: appParsingRecordedFixtures({ source, until }), release };
 }
 
 const textOf = (root: HTMLElement, selector: string): string[] =>
@@ -64,9 +76,10 @@ describe("RenderedDiff", () => {
       expect(inserted.classList).toContain("tw-bg-success");
     });
 
-    it("shows a non-Markdown file as tinted verbatim lines without rendering it as Markdown", () => {
+    it("shows a non-Markdown file as tinted verbatim lines without rendering it as Markdown", async () => {
       const { container } = render(diffElement(NON_MARKDOWN_FILE));
 
+      await waitFor(() => expect(container.querySelector("pre")).not.toBeNull());
       const inserted = Array.from(container.querySelectorAll("pre [data-change=inserted]"));
       expect(inserted.map((line) => line.textContent)).toEqual([
         '    { "id": "a", "text": "Pilot" },',
@@ -83,7 +96,7 @@ describe("RenderedDiff", () => {
 
     it.each([
       ["a changed task list", TASK_CHECKBOX_TOGGLED],
-      ["an inserted task block", { path: "Tasks.md", before: null, after: "- [ ] Book it\n" }],
+      ["an inserted task block", TASK_BLOCK_INSERTED],
     ])(
       "disables the task checkboxes in %s so a click cannot rewrite the note https://github.com/Brevilabs/obsidian-copilot-private/issues/348",
       async (_name, fixture) => {
@@ -104,13 +117,46 @@ describe("RenderedDiff", () => {
       }
     );
 
-    it("keeps the diff plan when re-rendered with the same file contents and path", () => {
+    it("keeps the diff plan when re-rendered with the same file contents and path", async () => {
       const build = jest.spyOn(mergeMarkdown, "buildRenderedDiffPlan");
-      const { rerender } = render(diffElement(NON_MARKDOWN_FILE));
+      const { container, rerender } = render(diffElement(NON_MARKDOWN_FILE));
+      await waitFor(() => expect(container.querySelector("pre")).not.toBeNull());
 
       rerender(diffElement({ ...NON_MARKDOWN_FILE }));
 
       expect(build).toHaveBeenCalledTimes(1);
+    });
+
+    it("renders nothing until Obsidian's parser has produced the plan", async () => {
+      const { app, release } = appHoldingParse(WORDING_CHANGE.before!);
+      const { container } = render(diffElement(WORDING_CHANGE, app));
+
+      expect(container.firstChild).toBeNull();
+
+      release();
+      await waitFor(() => expect(textOf(container, "del")).toEqual(["six", "two"]));
+    });
+
+    it("ignores a plan that finishes after the props moved to another file", async () => {
+      const { app, release } = appHoldingParse(WORDING_CHANGE.before!);
+      const build = jest.spyOn(mergeMarkdown, "buildRenderedDiffPlan");
+      const { container, rerender } = render(diffElement(WORDING_CHANGE, app));
+      rerender(diffElement(BLOCK_MOVED, app));
+      await waitFor(() =>
+        expect(textOf(container, "[data-change=deleted]")).toEqual([
+          "Budget is fixed for the quarter.",
+        ])
+      );
+
+      await act(async () => {
+        release();
+        await build.mock.results[0].value;
+      });
+
+      expect(textOf(container, "del")).toEqual([]);
+      expect(textOf(container, "[data-change=deleted]")).toEqual([
+        "Budget is fixed for the quarter.",
+      ]);
     });
   });
 });

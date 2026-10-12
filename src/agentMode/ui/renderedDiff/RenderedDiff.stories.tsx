@@ -9,12 +9,15 @@ import {
   FRONTMATTER_UNCHANGED_BODY_EDIT,
   HEADING_LEVEL_CHANGE,
   LINK_HREF_CHANGE,
+  LIST_ITEM_WITH_CODE_EDIT,
   NON_MARKDOWN_FILE,
+  ORDERED_LIST_ITEM_APPENDED,
   REMOVED_LIST_ITEM,
   TABLE_CELL_EDIT,
   TABLE_ROW_ADDED,
   TABLE_ROW_REMOVED,
   TASK_CHECKBOX_TOGGLED,
+  TASK_LIST_REORDERED,
   WHOLE_NOTE,
   WIKILINK_RENAME,
   WORDING_CHANGE,
@@ -43,6 +46,14 @@ export const AddedListItem: StoryObj<RenderedDiffProps> = story(ADDED_LIST_ITEM)
 export const RemovedListItem: StoryObj<RenderedDiffProps> = story(REMOVED_LIST_ITEM);
 
 export const TaskCheckboxToggled: StoryObj<RenderedDiffProps> = story(TASK_CHECKBOX_TOGGLED);
+
+export const TaskListReordered: StoryObj<RenderedDiffProps> = story(TASK_LIST_REORDERED);
+
+export const OrderedListItemAppended: StoryObj<RenderedDiffProps> = story(
+  ORDERED_LIST_ITEM_APPENDED
+);
+
+export const ListItemWithCodeEdit: StoryObj<RenderedDiffProps> = story(LIST_ITEM_WITH_CODE_EDIT);
 
 export const LinkHrefChange: StoryObj<RenderedDiffProps> = story(LINK_HREF_CHANGE);
 

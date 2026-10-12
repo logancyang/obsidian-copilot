@@ -2,6 +2,7 @@ import { applySentinels } from "@/agentMode/ui/renderedDiff/applySentinels";
 import type { CodeDiffLine, DiffSegment } from "@/agentMode/ui/renderedDiff/mergeMarkdown";
 import { buildRenderedDiffPlan, isMarkdownPath } from "@/agentMode/ui/renderedDiff/mergeMarkdown";
 import { Markdown } from "@/components/Markdown";
+import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 
@@ -11,11 +12,23 @@ export interface RenderedDiffProps {
   path: string;
 }
 
-export function RenderedDiff({ before, after, path }: RenderedDiffProps): React.ReactElement {
-  const segments = React.useMemo(
-    () => buildRenderedDiffPlan(before, after, isMarkdownPath(path)),
-    [before, after, path]
-  );
+export function RenderedDiff({
+  before,
+  after,
+  path,
+}: RenderedDiffProps): React.ReactElement | null {
+  const app = useApp();
+  const [segments, setSegments] = React.useState<readonly DiffSegment[] | null>(null);
+  React.useEffect(() => {
+    let stale = false;
+    void buildRenderedDiffPlan(app, before, after, isMarkdownPath(path)).then((plan) => {
+      if (!stale) setSegments(plan);
+    });
+    return () => {
+      stale = true;
+    };
+  }, [app, before, after, path]);
+  if (segments === null) return null;
   return (
     // Strikethrough marks deletions here, so completed tasks drop Obsidian's done strike at every nesting depth.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
