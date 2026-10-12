@@ -493,7 +493,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 6;
+const OPENARTIFACTS_PUBLISH_VERSION = 7;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
 const OPENARTIFACTS_DEFAULT_THEME = "research-memo";
@@ -574,9 +574,14 @@ anyway. The original file remains user-owned; never delete the original HTML fil
 
 ## 2. Let the user review
 
-Tell the user the absolute path of the HTML file and that, subject to any relative-asset
-warning above, opening it in a browser shows the page as it will be uploaded; OpenArtifacts
-adds its own header and footer bylines when it serves the page. Then end your turn.
+Give the user a clickable Markdown link to the exact HTML file under review, as plain text
+in your reply (not in inline code or a code block). Write the link as
+\`[page.html](/absolute/path/to/page.html)\`, with the absolute path percent-encoded
+(\`%20\` for spaces, UTF-8 percent-encoding for non-ASCII characters; on Windows use
+forward slashes, such as \`C:/Users/me/page.html\`). Copilot opens this link in the
+default browser. Also say that, subject to any relative-asset warning above, opening it in
+a browser shows the page as it will be uploaded; OpenArtifacts adds its own header and
+footer bylines when it serves the page. Then end your turn.
 
 Never publish in the same turn that generated the HTML. Publish only when a later
 message from the user clearly asks to publish this page. Treat anything else as feedback

@@ -223,7 +223,7 @@ describe("builtinSkills", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes over HTTPS with the injected license key and never touches the Obsidian CLI", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(6);
+      expect(skill!.version).toBe(7);
 
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",
@@ -238,6 +238,8 @@ describe("builtinSkills", () => {
         `$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/`
       );
       expect(md).toContain(`\`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes`);
+      expect(md).toContain("clickable Markdown link to the exact HTML file");
+      expect(md).toContain("`[page.html](/absolute/path/to/page.html)`");
       expect(md).toContain("Then end your turn");
       expect(md).toContain("Never publish in the same turn that generated the HTML");
       expect(md).toContain("Never simulate the user's approval");
