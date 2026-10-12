@@ -7,6 +7,7 @@ export type Pairing<T> =
   | { kind: "inserted"; after: T }
   | { kind: "modified"; before: T; after: T };
 
+const EMPTY_PAIRINGS: readonly Pairing<never>[] = Object.freeze([]);
 const PAIR_SIMILARITY_THRESHOLD = 0.5;
 // Scoring every removed line against every added line made large rewrites freeze rendering for seconds.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
@@ -78,7 +79,7 @@ export function alignSequences<T>(
   before: readonly T[],
   after: readonly T[],
   rules: AlignmentRules<T>
-): Pairing<T>[] {
+): readonly Pairing<T>[] {
   const parts = diffArrays([...before], [...after], {
     comparator: (left, right) => rules.isEqual(left, right),
   });
@@ -102,13 +103,13 @@ export function alignSequences<T>(
       );
     }
   }
-  return pairings;
+  return pairings.length === 0 ? EMPTY_PAIRINGS : pairings;
 }
 
 export function alignBlocks(
   before: readonly MarkdownBlock[],
   after: readonly MarkdownBlock[]
-): Pairing<MarkdownBlock>[] {
+): readonly Pairing<MarkdownBlock>[] {
   return alignSequences(before, after, {
     isEqual: (left, right) => left.type === right.type && left.text === right.text,
     similarity: (left, right) =>

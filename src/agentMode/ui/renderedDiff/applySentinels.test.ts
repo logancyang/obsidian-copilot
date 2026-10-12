@@ -193,6 +193,15 @@ describe("applySentinels", () => {
       expect(marked(root, "del.tw-me-1")).toEqual(["able"]);
     });
 
+    it("adds no trailing gap to a deletion that no insertion follows so the source spacing alone separates the words", () => {
+      const root = el("div", el("p", `keep ${DEL_OPEN}obsolete${DEL_CLOSE} text`));
+
+      applySentinels(root);
+
+      expect(marked(root, "del[data-change=deleted]")).toEqual(["obsolete"]);
+      expect(root.querySelector("del.tw-me-1")).toBeNull();
+    });
+
     it("ends a mark whose closing sentinel the renderer swallowed at the end of its block so the next block stays unmarked (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
       const root = el("div", el("p", `Kept ${INS_OPEN}added`), el("p", "Next paragraph."));
 

@@ -25,7 +25,7 @@ const ROW_CLASS: Record<Change, string> = {
   deleted: cn("[&>td]:tw-bg-overlay-error"),
 };
 // A replaced link puts the old and new text in separate anchors, so the gap that keeps them from
-// reading as one word sits on the deletion's last segment rather than on the insertion.
+// reading as one word sits on the last segment of a deletion that an insertion directly follows.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
 const DELETION_END_CLASS = "tw-me-1";
 
@@ -41,16 +41,23 @@ export function applySentinels(root: HTMLElement): void {
 
   let mode: Mode = null;
   let lastDeleted = null as HTMLElement | null;
+  let endedDeletion = null as HTMLElement | null;
   let block: Element | null = null;
   for (const node of textNodes) {
     const nodeBlock = node.parentElement?.closest(BLOCK_SELECTOR) ?? null;
     // Marks never span lines, so a closing sentinel the renderer swallowed (comment, math, callout table)
     // must not leak the mark into every block after it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-    if (nodeBlock !== block) mode = null;
+    if (nodeBlock !== block) {
+      mode = null;
+      endedDeletion = null;
+    }
     block = nodeBlock;
     const value = node.nodeValue ?? "";
-    if (mode === null && !SENTINEL.test(value)) continue;
+    if (mode === null && !SENTINEL.test(value)) {
+      endedDeletion = null;
+      continue;
+    }
     const fragment = doc.win.createFragment();
     let buffer = "";
     const flush = (): void => {
@@ -66,15 +73,18 @@ export function applySentinels(root: HTMLElement): void {
     for (const character of value) {
       if (character === INS_OPEN || character === DEL_OPEN) {
         flush();
+        if (character === INS_OPEN) endedDeletion?.classList.add(DELETION_END_CLASS);
+        endedDeletion = null;
         mode = character === INS_OPEN ? "inserted" : "deleted";
         continue;
       }
       if (character === INS_CLOSE || character === DEL_CLOSE) {
         flush();
-        if (mode === "deleted") lastDeleted?.classList.add(DELETION_END_CLASS);
+        endedDeletion = mode === "deleted" ? lastDeleted : null;
         mode = null;
         continue;
       }
+      endedDeletion = null;
       buffer += character;
     }
     flush();

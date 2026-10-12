@@ -45,6 +45,14 @@ describe("alignBlocks", () => {
       ]);
     });
 
+    it("returns the same frozen empty alignment for every pair of empty inputs so identity-based consumers see no change", () => {
+      const first = alignSequences([], [], rules);
+
+      expect(first).toEqual([]);
+      expect(Object.isFrozen(first)).toBe(true);
+      expect(alignSequences([], [], rules)).toBe(first);
+    });
+
     it("pairs a removed element with the similar added element that replaces it", () => {
       expect(alignSequences(["six weeks"], ["eight weeks"], rules)).toEqual([
         { kind: "modified", before: "six weeks", after: "eight weeks" },
