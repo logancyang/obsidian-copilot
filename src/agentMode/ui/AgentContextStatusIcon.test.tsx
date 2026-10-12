@@ -119,15 +119,16 @@ describe("AgentContextStatusIcon", () => {
     });
 
     it("shows real-count step rows when present", () => {
-      const v = buildStatusView(
-        entry({ phase: "done", resolved: 243, prefetch: { done: 4, total: 4 } }),
-        true
-      );
+      const v = buildStatusView(entry({ phase: "done", prefetch: { done: 4, total: 4 } }), true);
       const labels = v.steps.map((s) => s.label);
-      expect(labels).toContain("Resolve files (243)");
-      expect(labels).toContain("Prefetch 4 URLs · 4/4");
-      expect(labels).not.toContain("Apply 100-cap");
+      expect(labels).toEqual(["Prefetch 4 URLs · 4/4"]);
       expect(v.steps.every((s) => s.status === "done")).toBe(true);
+    });
+
+    it("is ready with no conversion steps for a project whose context is only binary files, which are read in place", () => {
+      const v = buildStatusView(entry({ phase: "done" }), true);
+      expect(v.kind).toBe("ready");
+      expect(v.steps).toEqual([]);
     });
 
     it("treats a synthetic whole-context failure as failed", () => {

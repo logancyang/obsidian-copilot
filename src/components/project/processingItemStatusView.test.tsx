@@ -10,8 +10,6 @@ function makeItem(overrides: Partial<ProcessingItem>): ProcessingItem {
   return {
     id: "x",
     name: "x",
-    source: "url",
-    fileType: "web",
     status: "ready",
     cacheKind: "web",
     ...overrides,
@@ -20,25 +18,20 @@ function makeItem(overrides: Partial<ProcessingItem>): ProcessingItem {
 
 describe("processingItemStatusView", () => {
   describe("processingSourceKey()", () => {
-    it("keys files by path and URLs by url under their cache bucket", () => {
-      expect(processingSourceKey("file", "data/x.xlsx")).toBe("file:data/x.xlsx");
+    it("keys URLs by url under their cache bucket", () => {
       expect(processingSourceKey("web", "https://a.com")).toBe("web:https://a.com");
+      expect(processingSourceKey("youtube", "https://youtu.be/x")).toBe(
+        "youtube:https://youtu.be/x"
+      );
     });
   });
 
   describe("buildProcessingItemLookup()", () => {
-    it("indexes file and url items in one lookup", () => {
-      const file = makeItem({
-        id: "notes/a.pdf",
-        source: "file",
-        cacheKind: "file",
-        fileType: "pdf",
-      });
-      const url = makeItem({ id: "https://a.com", source: "url", cacheKind: "web" });
-      const lookup = buildProcessingItemLookup([file, url]);
+    it("indexes items by cache bucket and id", () => {
+      const url = makeItem({ id: "https://a.com", cacheKind: "web" });
+      const lookup = buildProcessingItemLookup([url]);
 
-      expect(lookup.get(processingItemKey(file))).toBe(file);
-      expect(lookup.get(processingSourceKey("file", "notes/a.pdf"))).toBe(file);
+      expect(lookup.get(processingItemKey(url))).toBe(url);
       expect(lookup.get(processingSourceKey("web", "https://a.com"))).toBe(url);
     });
 

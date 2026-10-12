@@ -1,4 +1,3 @@
-import { mockTFile } from "@/__tests__/mockObsidian";
 import type { AgentProjectContextLoadState } from "@/aiParams";
 import {
   aggregateAgentCacheDirState,
@@ -15,10 +14,10 @@ import {
 } from "@/context/contextCacheStore";
 
 const URL_A = "https://a.example.com/page";
-const PDF = "docs/spec.pdf";
+const URL_B = "https://b.example.com/x";
 
 const webSource: AgentProcessingSource = { kind: "web", source: URL_A };
-const fileSource: AgentProcessingSource = { kind: "file", source: PDF, fingerprint: "100:5" };
+const youtubeSource: AgentProcessingSource = { kind: "youtube", source: "https://youtu.be/x" };
 
 function entry(over: Partial<AgentProjectContextLoadState> = {}): AgentProjectContextLoadState {
   return { phase: "done", blocking: false, ...over };
@@ -28,12 +27,11 @@ function disk(over: Partial<AgentCacheDirState> = {}): AgentCacheDirState {
   return {
     snapshotNames: new Set(),
     markersByName: new Map(),
-    fingerprintsByName: new Map(),
     ...over,
   };
 }
 
-const SAVED_ALL = new Set([`web:${URL_A}`, `file:${PDF}`]);
+const SAVED_ALL = new Set([`web:${URL_A}`, `youtube:${youtubeSource.source}`]);
 
 function fakeReader(files: Record<string, string>): AgentCacheDirReader {
   return {
@@ -54,47 +52,38 @@ const throwingReader: AgentCacheDirReader = {
   },
 };
 
-function snapshotBody(over: {
-  sourceType: string;
-  fingerprint: string;
-  sourcePath?: string;
-}): string {
+function snapshotBody(sourceType: string): string {
   const meta = {
     schemaVersion: CACHE_SCHEMA_VERSION,
-    sourceType: over.sourceType,
-    ...(over.sourcePath ? { sourcePath: over.sourcePath } : { sourceUrl: "https://x" }),
+    sourceType,
+    sourceUrl: "https://x",
     fetchedAt: "2026-01-01T00:00:00.000Z",
-    fingerprint: over.fingerprint,
+    fingerprint: "web:x",
   };
   return `<!-- copilot-context-cache\n${JSON.stringify(meta)}\n-->\n\nbody\n`;
 }
 
-function markerBody(source: string, kind: string, error: string, fingerprint?: string): string {
+function markerBody(source: string, kind: string, error: string): string {
   return JSON.stringify({
     schemaVersion: CACHE_SCHEMA_VERSION,
     source,
     kind,
     error,
     failedAt: 1,
-    ...(fingerprint !== undefined ? { fingerprint } : {}),
   });
 }
 
 describe("agentProcessingAdapter", () => {
   describe("buildAgentProcessingSources()", () => {
-    it("lists URL sources by type, then file sources fingerprinted by mtime and size", () => {
-      const sources = buildAgentProcessingSources(
-        [
-          { id: "1", url: URL_A, type: "web" },
-          { id: "2", url: "https://youtu.be/x", type: "youtube" },
-        ],
-        [mockTFile({ path: PDF, stat: { ctime: 0, mtime: 100, size: 5 } })]
-      );
+    it("lists each URL source with its type", () => {
+      const sources = buildAgentProcessingSources([
+        { id: "1", url: URL_A, type: "web" },
+        { id: "2", url: "https://youtu.be/x", type: "youtube" },
+      ]);
 
       expect(sources).toEqual([
         { kind: "web", source: URL_A },
         { kind: "youtube", source: "https://youtu.be/x" },
-        { kind: "file", source: PDF, fingerprint: "100:5" },
       ]);
     });
   });
@@ -102,7 +91,7 @@ describe("agentProcessingAdapter", () => {
   describe("buildAgentProcessingItems()", () => {
     it("marks sources Queued when there is no live entry and no disk state", () => {
       const items = buildAgentProcessingItems(
-        [webSource, fileSource],
+        [webSource, youtubeSource],
         undefined,
         undefined,
         SAVED_ALL
@@ -114,30 +103,6 @@ describe("agentProcessingAdapter", () => {
       const d = disk({ snapshotNames: new Set([cacheFileName("web", URL_A)]) });
       const [web] = buildAgentProcessingItems([webSource], undefined, d, SAVED_ALL);
       expect(web.status).toBe("ready");
-    });
-
-    it("downgrades a file snapshot to Queued when the file changed since conversion", () => {
-      const name = cacheFileName("file", PDF);
-      const d = disk({
-        snapshotNames: new Set([name]),
-        fingerprintsByName: new Map([[name, "100:5"]]),
-      });
-      const fresh = buildAgentProcessingItems([fileSource], undefined, d, SAVED_ALL)[0];
-      expect(fresh.status).toBe("ready");
-
-      const changed = buildAgentProcessingItems(
-        [{ ...fileSource, fingerprint: "200:9" }],
-        undefined,
-        d,
-        SAVED_ALL
-      )[0];
-      expect(changed.status).toBe("pending");
-    });
-
-    it("keeps a file snapshot Queued when its fingerprint is unknown (unreadable/old meta)", () => {
-      const d = disk({ snapshotNames: new Set([cacheFileName("file", PDF)]) });
-      const [file] = buildAgentProcessingItems([fileSource], undefined, d, SAVED_ALL);
-      expect(file.status).toBe("pending");
     });
 
     it("marks a source Failed with the persisted error when a disk failure marker exists", () => {
@@ -172,39 +137,30 @@ describe("agentProcessingAdapter", () => {
       expect(web.status).toBe("ready");
     });
 
-    it("matches live nonMd failures to file sources", () => {
-      const live = entry({
-        failedSources: [{ path: PDF, type: "nonMd", error: "parse", usedStaleSnapshot: false }],
-      });
-      const [file] = buildAgentProcessingItems([fileSource], live, undefined, SAVED_ALL);
-      expect(file.status).toBe("failed");
-    });
-
     it("shows in-flight sources (processingSources) as Converting and queues the rest", () => {
       const live = entry({
         phase: "prefetch",
         prefetch: { done: 0, total: 2 },
         processingSources: [{ kind: "web", source: URL_A }],
       });
-      const [web, file] = buildAgentProcessingItems(
-        [webSource, fileSource],
+      const [web, youtube] = buildAgentProcessingItems(
+        [webSource, youtubeSource],
         live,
         disk(),
         SAVED_ALL
       );
       expect(web.status).toBe("processing");
-      expect(file.status).toBe("pending");
+      expect(youtube.status).toBe("pending");
     });
 
     it("never shows an unsaved draft as processing, even when a run is in flight", () => {
       const live = entry({ phase: "prefetch", prefetch: { done: 0, total: 1 } });
-      const savedOnlyFile = new Set([`file:${PDF}`]);
-      const [web] = buildAgentProcessingItems([webSource], live, disk(), savedOnlyFile);
+      const savedOnlyYoutube = new Set([`youtube:${youtubeSource.source}`]);
+      const [web] = buildAgentProcessingItems([webSource], live, disk(), savedOnlyYoutube);
       expect(web.status).toBe("pending");
     });
 
     it("shows all parallel-fetched URLs as Converting together", () => {
-      const URL_B = "https://b.example.com/x";
       const live = entry({
         phase: "prefetch",
         prefetch: { done: 0, total: 2 },
@@ -249,54 +205,6 @@ describe("agentProcessingAdapter", () => {
       expect(buildAgentProcessingItems([webSource], retrying, d, SAVED_ALL)[0].status).toBe("processing"); // prettier-ignore
     });
 
-    it("honors a file failure marker only while its fingerprint matches (changed/legacy → re-attempt)", () => {
-      const markerName = failureMarkerName("file", PDF);
-      const withMarker = (fingerprint?: string) =>
-        disk({
-          markersByName: new Map([
-            [
-              markerName,
-              {
-                schemaVersion: CACHE_SCHEMA_VERSION,
-                source: PDF,
-                kind: "file" as const,
-                error: "parse boom",
-                failedAt: 1,
-                ...(fingerprint !== undefined ? { fingerprint } : {}),
-              },
-            ],
-          ]),
-        });
-      const duringRun = entry({ phase: "parse", parsed: { done: 0, total: 1 } });
-
-      const matched = buildAgentProcessingItems([fileSource], duringRun, withMarker("100:5"), SAVED_ALL)[0]; // prettier-ignore
-      expect(matched.status).toBe("failed");
-      expect(matched.error).toBe("parse boom");
-
-      expect(buildAgentProcessingItems([fileSource], duringRun, withMarker("999:9"), SAVED_ALL)[0].status).toBe("pending"); // prettier-ignore
-
-      expect(buildAgentProcessingItems([fileSource], duringRun, withMarker(undefined), SAVED_ALL)[0].status).toBe("pending"); // prettier-ignore
-    });
-
-    it("shows a stale file snapshot as Converting only while it's in processingSources", () => {
-      const name = cacheFileName("file", PDF);
-      const d = disk({
-        snapshotNames: new Set([name]),
-        fingerprintsByName: new Map([[name, "100:5"]]),
-      });
-      const changed = { ...fileSource, fingerprint: "200:9" };
-      const queued = entry({ phase: "parse", parsed: { done: 0, total: 1 } });
-      expect(buildAgentProcessingItems([changed], queued, d, SAVED_ALL)[0].status).toBe("pending");
-      const active = entry({
-        phase: "parse",
-        parsed: { done: 0, total: 1 },
-        processingSources: [{ kind: "file", source: PDF }],
-      });
-      expect(buildAgentProcessingItems([changed], active, d, SAVED_ALL)[0].status).toBe(
-        "processing"
-      );
-    });
-
     it("distinguishes a same-URL web and youtube pair by cacheKind (matches the CAG id contract)", () => {
       const dual: AgentProcessingSource[] = [
         { kind: "web", source: URL_A },
@@ -307,42 +215,20 @@ describe("agentProcessingAdapter", () => {
       expect(items[0].cacheKind).toBe("web");
       expect(items[1].cacheKind).toBe("youtube");
     });
-
-    it("maps kinds onto the panel's source/fileType model", () => {
-      const items = buildAgentProcessingItems(
-        [webSource, fileSource],
-        undefined,
-        undefined,
-        SAVED_ALL
-      );
-      expect(items[0]).toMatchObject({ source: "url", fileType: "web", cacheKind: "web" });
-      expect(items[1]).toMatchObject({ source: "file", fileType: "pdf", cacheKind: "file" });
-    });
   });
 
   describe("aggregateAgentCacheDirState()", () => {
     const webName = cacheFileName("web", URL_A);
-    const fileName = cacheFileName("file", PDF);
-    const fileMarker = failureMarkerName("file", PDF);
+    const webMarker = failureMarkerName("web", URL_A);
 
-    it("unions snapshots from remotes + files and reads markers from the marker dir", async () => {
-      const state = await aggregateAgentCacheDirState(
-        {
-          remotes: fakeReader({
-            [webName]: snapshotBody({ sourceType: "web", fingerprint: "web:x" }),
-          }),
-          files: fakeReader({
-            [fileName]: snapshotBody({ sourceType: "file", sourcePath: PDF, fingerprint: "100:5" }),
-          }),
-          markers: fakeReader({ [fileMarker]: markerBody(PDF, "file", "parse boom", "100:5") }),
-        },
-        new Set([fileName])
-      );
+    it("collects snapshots from the remotes dir and reads markers from the marker dir", async () => {
+      const state = await aggregateAgentCacheDirState({
+        remotes: fakeReader({ [webName]: snapshotBody("web") }),
+        markers: fakeReader({ [webMarker]: markerBody(URL_A, "web", "fetch 404") }),
+      });
 
       expect(state.snapshotNames.has(webName)).toBe(true);
-      expect(state.snapshotNames.has(fileName)).toBe(true);
-      expect(state.fingerprintsByName.get(fileName)).toBe("100:5");
-      expect(state.markersByName.get(fileMarker)?.error).toBe("parse boom");
+      expect(state.markersByName.get(webMarker)?.error).toBe("fetch 404");
     });
 
     it("does not read remote snapshot bodies (identity-fingerprinted)", async () => {
@@ -351,39 +237,28 @@ describe("agentProcessingAdapter", () => {
         list: async () => [webName],
         readText: async () => {
           remoteReads++;
-          return snapshotBody({ sourceType: "web", fingerprint: "web:x" });
+          return snapshotBody("web");
         },
       };
-      const state = await aggregateAgentCacheDirState(
-        { remotes, files: fakeReader({}), markers: fakeReader({}) },
-        new Set([webName])
-      );
+      const state = await aggregateAgentCacheDirState({ remotes, markers: fakeReader({}) });
       expect(state.snapshotNames.has(webName)).toBe(true);
       expect(remoteReads).toBe(0);
     });
 
     it("degrades to empty sets when a directory is missing/unreadable", async () => {
-      const state = await aggregateAgentCacheDirState(
-        { remotes: throwingReader, files: throwingReader, markers: throwingReader },
-        new Set()
-      );
+      const state = await aggregateAgentCacheDirState({
+        remotes: throwingReader,
+        markers: throwingReader,
+      });
       expect(state.snapshotNames.size).toBe(0);
       expect(state.markersByName.size).toBe(0);
-      expect(state.fingerprintsByName.size).toBe(0);
     });
 
     it("skips unparseable marker bodies and non-marker files in the marker dir", async () => {
-      const state = await aggregateAgentCacheDirState(
-        {
-          remotes: fakeReader({}),
-          files: fakeReader({}),
-          markers: fakeReader({
-            [fileMarker]: "{not json",
-            "stray.txt": "ignored",
-          }),
-        },
-        new Set()
-      );
+      const state = await aggregateAgentCacheDirState({
+        remotes: fakeReader({}),
+        markers: fakeReader({ [webMarker]: "{not json", "stray.txt": "ignored" }),
+      });
       expect(state.markersByName.size).toBe(0);
     });
   });

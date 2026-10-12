@@ -9,7 +9,6 @@ import {
   reconcileMarkers,
   type CacheEntryMeta,
   type ContextConverters,
-  type FileSource,
   type MaterializeProgress,
   type RemoteSource,
 } from "./contextCacheStore";
@@ -47,10 +46,9 @@ function memFs(seed: Record<string, string> = {}): ContextCacheFs & { files: Map
 }
 
 const REMOTES_DIR = "/cache/remotes";
-const FILES_DIR = "/cache/files";
 const MARKER_DIR = "/cache/markers/projA";
 const MARKER_DIR_B = "/cache/markers/projB";
-const DIRS = { remotesDir: REMOTES_DIR, filesDir: FILES_DIR, markerDir: MARKER_DIR };
+const DIRS = { remotesDir: REMOTES_DIR, markerDir: MARKER_DIR };
 const T0 = 1_700_000_000_000;
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -69,19 +67,7 @@ function sharedLock(): <T>(key: string, run: () => Promise<T>) => Promise<T> {
 function converters(overrides: Partial<ContextConverters> = {}): ContextConverters {
   return {
     fetchRemote: jest.fn(async (s: RemoteSource) => `content for ${s.url}`),
-    parseFile: jest.fn(async (_bytes: ArrayBuffer, ext: string) => `parsed ${ext}`),
     ...overrides,
-  };
-}
-
-function fileSource(over: Partial<FileSource> = {}): FileSource {
-  return {
-    vaultPath: "Proj/doc.pdf",
-    ext: "pdf",
-    mtime: 1000,
-    size: 50,
-    read: jest.fn(async () => new ArrayBuffer(8)),
-    ...over,
   };
 }
 
@@ -89,7 +75,7 @@ const flushMicrotasks = () => new Promise((resolve) => window.setTimeout(resolve
 
 describe("contextCacheStore", () => {
   describe("materializeSources()", () => {
-    it("writes remote snapshots to remotesDir and file snapshots to filesDir, named by source md5 and stamped with the schema version", async () => {
+    it("writes remote snapshots to remotesDir, named by source md5 and stamped with the schema version", async () => {
       const fs = memFs();
       const remotes: RemoteSource[] = [
         { type: "web", url: "https://a.com" },
@@ -100,14 +86,12 @@ describe("contextCacheStore", () => {
         fs,
         converters: converters(),
         remotes,
-        files: [fileSource()],
         nowMs: T0,
       });
 
-      expect(entries).toHaveLength(3);
+      expect(entries).toHaveLength(2);
       const written = [...fs.files.keys()];
       expect(written.filter((p) => p.startsWith(`${REMOTES_DIR}/`))).toHaveLength(2);
-      expect(written.filter((p) => p.startsWith(`${FILES_DIR}/`))).toHaveLength(1);
 
       const webEntry = entries.find((e) => e.type === "web")!;
       const body = fs.files.get(join(REMOTES_DIR, webEntry.cacheFileName))!;
@@ -118,17 +102,15 @@ describe("contextCacheStore", () => {
       expect(body).toContain("content for https://a.com");
     });
 
-    it("cheap-skips an unchanged successful source indefinitely (no re-fetch / re-parse)", async () => {
+    it("cheap-skips an unchanged successful source indefinitely (no re-fetch)", async () => {
       const fs = memFs();
       const conv = converters();
       const remotes: RemoteSource[] = [{ type: "web", url: "https://a.com" }];
-      const file = fileSource();
 
-      await materializeSources({ ...DIRS, fs, converters: conv, remotes, files: [file], nowMs: T0 }); // prettier-ignore
-      await materializeSources({ ...DIRS, fs, converters: conv, remotes, files: [file], nowMs: T0 + 365 * DAY }); // prettier-ignore
+      await materializeSources({ ...DIRS, fs, converters: conv, remotes, nowMs: T0 });
+      await materializeSources({ ...DIRS, fs, converters: conv, remotes, nowMs: T0 + 365 * DAY });
 
       expect(conv.fetchRemote).toHaveBeenCalledTimes(1);
-      expect(conv.parseFile).toHaveBeenCalledTimes(1);
     });
 
     it("re-materializes a snapshot whose schema version no longer matches (not cheap-skipped)", async () => {
@@ -136,53 +118,13 @@ describe("contextCacheStore", () => {
       const conv = converters();
       const remotes: RemoteSource[] = [{ type: "web", url: "https://a.com" }];
 
-      const { entries } = await materializeSources({ ...DIRS, fs, converters: conv, remotes, files: [], nowMs: T0 }); // prettier-ignore
+      const { entries } = await materializeSources({ ...DIRS, fs, converters: conv, remotes, nowMs: T0 }); // prettier-ignore
       const key = join(REMOTES_DIR, entries[0].cacheFileName);
       fs.files.set(key, fs.files.get(key)!.replace('"schemaVersion":1', '"schemaVersion":999'));
 
-      await materializeSources({ ...DIRS, fs, converters: conv, remotes, files: [], nowMs: T0 + DAY }); // prettier-ignore
+      await materializeSources({ ...DIRS, fs, converters: conv, remotes, nowMs: T0 + DAY }); // prettier-ignore
 
       expect(conv.fetchRemote).toHaveBeenCalledTimes(2);
-    });
-
-    it("re-parses a file when its mtime/size fingerprint changes", async () => {
-      const fs = memFs();
-      const conv = converters();
-
-      await materializeSources({ ...DIRS, fs, converters: conv, remotes: [], files: [fileSource({ mtime: 1000, size: 50 })], nowMs: T0 }); // prettier-ignore
-      await materializeSources({ ...DIRS, fs, converters: conv, remotes: [], files: [fileSource({ mtime: 2000, size: 50 })], nowMs: T0 }); // prettier-ignore
-
-      expect(conv.parseFile).toHaveBeenCalledTimes(2);
-    });
-
-    it("keeps a stale file snapshot when a re-parse fails", async () => {
-      const fs = memFs();
-      const good = converters();
-      await materializeSources({ ...DIRS, fs, converters: good, remotes: [], files: [fileSource({ mtime: 1000, size: 50 })], nowMs: T0 }); // prettier-ignore
-      const fileName = [...fs.files.keys()].find((k) => k.includes("file-"))!;
-      const staleBody = fs.files.get(fileName)!;
-
-      const failing = converters({
-        parseFile: jest.fn(async () => {
-          throw new Error("bad parse");
-        }),
-      });
-      const { entries, failures } = await materializeSources({
-        ...DIRS,
-        fs,
-        converters: failing,
-        remotes: [],
-        files: [fileSource({ mtime: 2000, size: 99 })],
-        nowMs: T0 + 1,
-      });
-
-      expect(failing.parseFile).toHaveBeenCalledTimes(1);
-      expect(entries).toHaveLength(1);
-      expect(fs.files.get(fileName)).toBe(staleBody);
-      expect(failures).toHaveLength(1);
-      expect(failures[0]).toMatchObject({ source: "Proj/doc.pdf", kind: "file", usedStaleSnapshot: true }); // prettier-ignore
-      expect(failures[0].error).toContain("bad parse");
-      expect([...fs.files.keys()].some((k) => k.includes("failed-"))).toBe(false);
     });
 
     it("skips a brand-new source whose fetch fails (no file written) and writes a marker in markerDir", async () => {
@@ -197,7 +139,6 @@ describe("contextCacheStore", () => {
         fs,
         converters: failing,
         remotes: [{ type: "web", url: "https://a.com" }],
-        files: [],
         nowMs: T0,
       });
 
@@ -218,14 +159,13 @@ describe("contextCacheStore", () => {
         }),
       });
       const remotes: RemoteSource[] = [{ type: "web", url: "https://a.com" }];
-      await materializeSources({ ...DIRS, fs, converters: failing, remotes, files: [], nowMs: T0 }); // prettier-ignore
+      await materializeSources({ ...DIRS, fs, converters: failing, remotes, nowMs: T0 }); // prettier-ignore
       const events: MaterializeProgress[] = [];
       const { failures, wantedMarkerNames } = await materializeSources({
         ...DIRS,
         fs,
         converters: failing,
         remotes,
-        files: [],
         nowMs: T0 + 1,
         onProgress: (p) => events.push(p),
       });
@@ -247,57 +187,10 @@ describe("contextCacheStore", () => {
         }),
       });
       const remotes: RemoteSource[] = [{ type: "web", url: "https://a.com" }];
-      await materializeSources({ ...DIRS, fs, converters: failing, remotes, files: [], nowMs: T0 }); // prettier-ignore
-      await materializeSources({ ...DIRS, fs, converters: failing, remotes, files: [], nowMs: T0 + 1, forceRetryFailed: true }); // prettier-ignore
+      await materializeSources({ ...DIRS, fs, converters: failing, remotes, nowMs: T0 }); // prettier-ignore
+      await materializeSources({ ...DIRS, fs, converters: failing, remotes, nowMs: T0 + 1, forceRetryFailed: true }); // prettier-ignore
 
       expect(failing.fetchRemote).toHaveBeenCalledTimes(2);
-    });
-
-    it("cheap-skips a known-bad file on the next automatic run while unchanged", async () => {
-      const fs = memFs();
-      const failing = converters({
-        parseFile: jest.fn(async () => {
-          throw new Error("bad parse");
-        }),
-      });
-      const file = fileSource({ mtime: 1000, size: 50 });
-      await materializeSources({ ...DIRS, fs, converters: failing, remotes: [], files: [file], nowMs: T0 }); // prettier-ignore
-      const { failures } = await materializeSources({ ...DIRS, fs, converters: failing, remotes: [], files: [file], nowMs: T0 + 1 }); // prettier-ignore
-
-      expect(failing.parseFile).toHaveBeenCalledTimes(1);
-      expect(failures).toHaveLength(1);
-      expect(failures[0]).toMatchObject({ source: "Proj/doc.pdf", kind: "file", usedStaleSnapshot: false }); // prettier-ignore
-    });
-
-    it("re-parses a known-bad file when its mtime/size fingerprint changes (marker stale)", async () => {
-      const fs = memFs();
-      const failing = converters({
-        parseFile: jest.fn(async () => {
-          throw new Error("bad parse");
-        }),
-      });
-      await materializeSources({ ...DIRS, fs, converters: failing, remotes: [], files: [fileSource({ mtime: 1000, size: 50 })], nowMs: T0 }); // prettier-ignore
-      await materializeSources({ ...DIRS, fs, converters: failing, remotes: [], files: [fileSource({ mtime: 2000, size: 99 })], nowMs: T0 + 1 }); // prettier-ignore
-
-      expect(failing.parseFile).toHaveBeenCalledTimes(2);
-    });
-
-    it("re-parses a known-bad file when its marker predates the fingerprint field", async () => {
-      const fs = memFs();
-      const failing = converters({
-        parseFile: jest.fn(async () => {
-          throw new Error("bad parse");
-        }),
-      });
-      const file = fileSource({ mtime: 1000, size: 50 });
-      await materializeSources({ ...DIRS, fs, converters: failing, remotes: [], files: [file], nowMs: T0 }); // prettier-ignore
-      const markerKey = [...fs.files.keys()].find((k) => k.includes("failed-file-"))!;
-      const legacy = JSON.parse(fs.files.get(markerKey)!) as Record<string, unknown>;
-      delete legacy.fingerprint;
-      fs.files.set(markerKey, JSON.stringify(legacy));
-
-      await materializeSources({ ...DIRS, fs, converters: failing, remotes: [], files: [file], nowMs: T0 + 1 }); // prettier-ignore
-      expect(failing.parseFile).toHaveBeenCalledTimes(2);
     });
 
     it("keeps a newly-written failure marker wanted so a same-run reconcile can't delete it", async () => {
@@ -313,7 +206,6 @@ describe("contextCacheStore", () => {
         fs,
         converters: failing,
         remotes,
-        files: [],
         nowMs: T0,
       });
       const markerKey = [...fs.files.keys()].find((k) => k.includes("failed-web-"))!;
@@ -331,7 +223,7 @@ describe("contextCacheStore", () => {
           throw new Error("boom");
         }),
       });
-      await materializeSources({ ...DIRS, fs, converters: failing, remotes, files: [], nowMs: T0 }); // prettier-ignore
+      await materializeSources({ ...DIRS, fs, converters: failing, remotes, nowMs: T0 }); // prettier-ignore
       expect([...fs.files.keys()].some((k) => k.includes("failed-web-"))).toBe(true);
 
       const { entries, failures } = await materializeSources({
@@ -339,7 +231,6 @@ describe("contextCacheStore", () => {
         fs,
         converters: converters(),
         remotes,
-        files: [],
         nowMs: T0 + 1,
         forceRetryFailed: true,
       });
@@ -359,7 +250,6 @@ describe("contextCacheStore", () => {
           { type: "web", url: "https://a.com" },
           { type: "web", url: "https://a.com" },
         ],
-        files: [],
         nowMs: T0,
       });
       expect(conv.fetchRemote).toHaveBeenCalledTimes(1);
@@ -378,7 +268,6 @@ describe("contextCacheStore", () => {
           { type: "web", url: "https://a.com" },
           { type: "youtube", url: "https://youtu.be/x" },
         ],
-        files: [fileSource()],
         nowMs: T0,
         onProgress: (p) => progress.push(p),
       });
@@ -388,10 +277,6 @@ describe("contextCacheStore", () => {
         { phase: "prefetch", done: 1, total: 2 },
         { phase: "prefetch", done: 2, total: 2 },
       ]);
-      expect(progress.filter((p) => p.phase === "parse")).toEqual([
-        { phase: "parse", done: 0, total: 1 },
-        { phase: "parse", done: 1, total: 1 },
-      ]);
     });
 
     it("emits itemStart/itemSettled only for sources that do work (cheap-skips stay silent)", async () => {
@@ -399,14 +284,14 @@ describe("contextCacheStore", () => {
       const conv = converters();
       const remotes: RemoteSource[] = [{ type: "web", url: "https://a.com" }];
       const first: MaterializeProgress[] = [];
-      await materializeSources({ ...DIRS, fs, converters: conv, remotes, files: [], nowMs: T0, onProgress: (p) => first.push(p) }); // prettier-ignore
+      await materializeSources({ ...DIRS, fs, converters: conv, remotes, nowMs: T0, onProgress: (p) => first.push(p) }); // prettier-ignore
       expect(first.filter((p) => p.phase === "itemStart")).toEqual([
         { phase: "itemStart", item: { kind: "web", source: "https://a.com" } },
       ]);
       expect(first.some((p) => p.phase === "itemSettled")).toBe(true);
 
       const second: MaterializeProgress[] = [];
-      await materializeSources({ ...DIRS, fs, converters: conv, remotes, files: [], nowMs: T0 + 1, onProgress: (p) => second.push(p) }); // prettier-ignore
+      await materializeSources({ ...DIRS, fs, converters: conv, remotes, nowMs: T0 + 1, onProgress: (p) => second.push(p) }); // prettier-ignore
       expect(second.some((p) => p.phase.startsWith("item"))).toBe(false);
     });
 
@@ -418,7 +303,7 @@ describe("contextCacheStore", () => {
         }),
       });
       const events: MaterializeProgress[] = [];
-      await materializeSources({ ...DIRS, fs, converters: failing, remotes: [{ type: "web", url: "https://a.com" }], files: [], nowMs: T0, onProgress: (p) => events.push(p) }); // prettier-ignore
+      await materializeSources({ ...DIRS, fs, converters: failing, remotes: [{ type: "web", url: "https://a.com" }], nowMs: T0, onProgress: (p) => events.push(p) }); // prettier-ignore
       expect(events.filter((p) => p.phase.startsWith("item")).map((p) => p.phase)).toEqual([
         "itemStart",
         "itemFailed",
@@ -444,7 +329,7 @@ describe("contextCacheStore", () => {
           return `content ${s.url}`;
         }),
       });
-      const done = materializeSources({ ...DIRS, fs, converters: conv, remotes: [{ type: "web", url: "https://a.com" }, { type: "web", url: "https://b.com" }], files: [], nowMs: T0 }); // prettier-ignore
+      const done = materializeSources({ ...DIRS, fs, converters: conv, remotes: [{ type: "web", url: "https://a.com" }, { type: "web", url: "https://b.com" }], nowMs: T0 }); // prettier-ignore
       await flushMicrotasks();
       expect(new Set(inFlight)).toEqual(new Set(["https://a.com", "https://b.com"]));
       gates["https://a.com"]();
@@ -471,7 +356,7 @@ describe("contextCacheStore", () => {
         }),
       });
       const events: MaterializeProgress[] = [];
-      const done = materializeSources({ ...DIRS, fs, converters: conv, remotes: [{ type: "web", url: "https://a.com" }, { type: "web", url: "https://b.com" }], files: [], nowMs: T0, onProgress: (p) => events.push(p) }); // prettier-ignore
+      const done = materializeSources({ ...DIRS, fs, converters: conv, remotes: [{ type: "web", url: "https://a.com" }, { type: "web", url: "https://b.com" }], nowMs: T0, onProgress: (p) => events.push(p) }); // prettier-ignore
       await flushMicrotasks();
       releaseB();
       const result = await done;
@@ -485,21 +370,6 @@ describe("contextCacheStore", () => {
       expect(itemPhasesFor("https://b.com")).toEqual(["itemStart", "itemSettled"]);
       const prefetch = events.filter((p) => p.phase === "prefetch");
       expect(prefetch[prefetch.length - 1]).toEqual({ phase: "prefetch", done: 2, total: 2 });
-    });
-
-    it("omits onProgress for an empty loop", async () => {
-      const fs = memFs();
-      const progress: MaterializeProgress[] = [];
-      await materializeSources({
-        ...DIRS,
-        fs,
-        converters: converters(),
-        remotes: [{ type: "web", url: "https://a.com" }],
-        files: [],
-        nowMs: T0,
-        onProgress: (p) => progress.push(p),
-      });
-      expect(progress.some((p) => p.phase === "parse")).toBe(false);
     });
 
     it("merges two projects cold-converting the same URL into one fetch; the second does not overwrite", async () => {
@@ -519,9 +389,9 @@ describe("contextCacheStore", () => {
       });
       const remotes: RemoteSource[] = [{ type: "web", url: "https://shared.com" }];
 
-      const runA = materializeSources({ remotesDir: REMOTES_DIR, filesDir: FILES_DIR, markerDir: MARKER_DIR, fs, converters: conv, remotes, files: [], nowMs: T0, withSourceLock }); // prettier-ignore
+      const runA = materializeSources({ remotesDir: REMOTES_DIR, markerDir: MARKER_DIR, fs, converters: conv, remotes, nowMs: T0, withSourceLock }); // prettier-ignore
       await flushMicrotasks();
-      const runB = materializeSources({ remotesDir: REMOTES_DIR, filesDir: FILES_DIR, markerDir: MARKER_DIR_B, fs, converters: conv, remotes, files: [], nowMs: T0 + 1, withSourceLock }); // prettier-ignore
+      const runB = materializeSources({ remotesDir: REMOTES_DIR, markerDir: MARKER_DIR_B, fs, converters: conv, remotes, nowMs: T0 + 1, withSourceLock }); // prettier-ignore
       await flushMicrotasks();
       release();
       const [resA, resB] = await Promise.all([runA, runB]);
@@ -543,45 +413,18 @@ describe("contextCacheStore", () => {
           throw new Error("down");
         }),
       });
-      await materializeSources({ remotesDir: REMOTES_DIR, filesDir: FILES_DIR, markerDir: MARKER_DIR, fs, converters: failing, remotes, files: [], nowMs: T0 }); // prettier-ignore
+      await materializeSources({ remotesDir: REMOTES_DIR, markerDir: MARKER_DIR, fs, converters: failing, remotes, nowMs: T0 }); // prettier-ignore
       const markerKey = [...fs.files.keys()].find((k) => k.startsWith(`${MARKER_DIR}/`))!;
       expect(markerKey).toBeDefined();
 
-      await materializeSources({ remotesDir: REMOTES_DIR, filesDir: FILES_DIR, markerDir: MARKER_DIR_B, fs, converters: converters(), remotes, files: [], nowMs: T0 + 1 }); // prettier-ignore
+      await materializeSources({ remotesDir: REMOTES_DIR, markerDir: MARKER_DIR_B, fs, converters: converters(), remotes, nowMs: T0 + 1 }); // prettier-ignore
       expect([...fs.files.keys()].some((k) => k.startsWith(`${REMOTES_DIR}/`))).toBe(true);
 
       const conv = converters();
-      const { failures } = await materializeSources({ remotesDir: REMOTES_DIR, filesDir: FILES_DIR, markerDir: MARKER_DIR, fs, converters: conv, remotes, files: [], nowMs: T0 + 2 }); // prettier-ignore
+      const { failures } = await materializeSources({ remotesDir: REMOTES_DIR, markerDir: MARKER_DIR, fs, converters: conv, remotes, nowMs: T0 + 2 }); // prettier-ignore
 
       expect(conv.fetchRemote).not.toHaveBeenCalled();
       expect(failures).toHaveLength(0);
-      expect(fs.files.has(markerKey)).toBe(false);
-    });
-
-    it("clears project A's marker when a re-parse fails but a usable (stale) snapshot exists", async () => {
-      const fs = memFs();
-
-      const failingF1 = converters({
-        parseFile: jest.fn(async () => {
-          throw new Error("bad parse F1");
-        }),
-      });
-      await materializeSources({ remotesDir: REMOTES_DIR, filesDir: FILES_DIR, markerDir: MARKER_DIR, fs, converters: failingF1, remotes: [], files: [fileSource({ mtime: 1000, size: 50 })], nowMs: T0 }); // prettier-ignore
-      const markerKey = [...fs.files.keys()].find((k) => k.startsWith(`${MARKER_DIR}/`))!;
-      expect(markerKey).toBeDefined();
-
-      await materializeSources({ remotesDir: REMOTES_DIR, filesDir: FILES_DIR, markerDir: MARKER_DIR_B, fs, converters: converters(), remotes: [], files: [fileSource({ mtime: 1000, size: 50 })], nowMs: T0 + 1 }); // prettier-ignore
-      expect([...fs.files.keys()].some((k) => k.startsWith(`${FILES_DIR}/`))).toBe(true);
-
-      const failingF2 = converters({
-        parseFile: jest.fn(async () => {
-          throw new Error("bad parse F2");
-        }),
-      });
-      const { failures } = await materializeSources({ remotesDir: REMOTES_DIR, filesDir: FILES_DIR, markerDir: MARKER_DIR, fs, converters: failingF2, remotes: [], files: [fileSource({ mtime: 2000, size: 99 })], nowMs: T0 + 2 }); // prettier-ignore
-
-      expect(failingF2.parseFile).toHaveBeenCalledTimes(1);
-      expect(failures[0]).toMatchObject({ usedStaleSnapshot: true });
       expect(fs.files.has(markerKey)).toBe(false);
     });
   });
@@ -590,53 +433,62 @@ describe("contextCacheStore", () => {
     it("deletes obsolete owned markers in markerDir but preserves unknown files", async () => {
       const fs = memFs({
         [join(MARKER_DIR, "failed-web-deadbeef01.json")]: "{}",
-        [join(MARKER_DIR, "failed-file-cafe02.json")]: "{}",
+        [join(MARKER_DIR, "failed-youtube-cafe02.json")]: "{}",
         [join(MARKER_DIR, "user-notes.md")]: "not ours",
       });
-      const wanted = new Set(["failed-file-cafe02.json"]);
+      const wanted = new Set(["failed-youtube-cafe02.json"]);
 
       await reconcileMarkers(fs, MARKER_DIR, wanted);
 
       expect(fs.files.has(join(MARKER_DIR, "failed-web-deadbeef01.json"))).toBe(false);
-      expect(fs.files.has(join(MARKER_DIR, "failed-file-cafe02.json"))).toBe(true);
+      expect(fs.files.has(join(MARKER_DIR, "failed-youtube-cafe02.json"))).toBe(true);
       expect(fs.files.has(join(MARKER_DIR, "user-notes.md"))).toBe(true);
     });
 
     it("never touches shared snapshots — it only lists and prunes the marker dir", async () => {
       const fs = memFs({
         [join(REMOTES_DIR, "web-abc01.md")]: "shared snapshot",
-        [join(FILES_DIR, "file-abc02.md")]: "shared snapshot",
         [join(MARKER_DIR, "failed-youtube-abc03.json")]: "{}",
       });
 
       await reconcileMarkers(fs, MARKER_DIR, new Set());
 
       expect(fs.files.has(join(REMOTES_DIR, "web-abc01.md"))).toBe(true);
-      expect(fs.files.has(join(FILES_DIR, "file-abc02.md"))).toBe(true);
       expect(fs.files.has(join(MARKER_DIR, "failed-youtube-abc03.json"))).toBe(false);
     });
   });
 
   describe("parseSnapshotMeta()", () => {
-    const buildSnapshot = (meta: CacheEntryMeta): string =>
-      `<!-- copilot-context-cache\n${JSON.stringify(meta)}\n-->\n\n# File: x\n\ncontent\n`;
+    const buildSnapshot = (meta: object): string =>
+      `<!-- copilot-context-cache\n${JSON.stringify(meta)}\n-->\n\n# URL: x\n\ncontent\n`;
 
-    const fileMeta = (sourcePath: string): CacheEntryMeta => ({
+    const remoteMeta = (sourceUrl: string): CacheEntryMeta => ({
       schemaVersion: CACHE_SCHEMA_VERSION,
-      sourceType: "file",
-      sourcePath,
+      sourceType: "web",
+      sourceUrl,
       fetchedAt: "2026-01-01T00:00:00.000Z",
-      fingerprint: "123:456",
+      fingerprint: `web:${sourceUrl}`,
     });
 
     it("parses a well-formed meta block", () => {
-      const meta = fileMeta("Notes/foo.md");
+      const meta = remoteMeta("https://a.com/foo");
       expect(parseSnapshotMeta(buildSnapshot(meta))).toEqual(meta);
     });
 
-    it("does not truncate the JSON on a '-->' inside the source path", () => {
-      const meta = fileMeta("Notes/a-->b.md");
+    it("does not truncate the JSON on a '-->' inside the source URL", () => {
+      const meta = remoteMeta("https://a.com/a-->b");
       expect(parseSnapshotMeta(buildSnapshot(meta))).toEqual(meta);
+    });
+
+    it("ignores a converted-file snapshot left by an earlier version because binary files are no longer converted", () => {
+      const legacyFileSnapshot = buildSnapshot({
+        schemaVersion: CACHE_SCHEMA_VERSION,
+        sourceType: "file",
+        sourcePath: "Notes/report.pdf",
+        fetchedAt: "2026-01-01T00:00:00.000Z",
+        fingerprint: "123:456",
+      });
+      expect(parseSnapshotMeta(legacyFileSnapshot)).toBeNull();
     });
   });
 });

@@ -4,22 +4,15 @@ import { logInfo, logWarn } from "@/logger";
 import { getCachedProjectRecordById } from "@/projects/state";
 import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import { getMatchingPatterns, shouldIndexFile, type PatternCategory } from "@/search/searchUtils";
-import { listMaterializeCandidates } from "@/context/materializeCandidates";
+import { listProjectDocumentFiles } from "@/context/projectDocumentFiles";
 import { Mutex } from "async-mutex";
 import { App, FileSystemAdapter, TFile, TFolder } from "obsidian";
 import { createNodeContextCacheFs } from "./contextCacheFs";
-import {
-  cacheRoot,
-  filesDir,
-  markersDir,
-  remotesDir,
-  snapshotAbsPath,
-} from "./conversionsLocation";
+import { cacheRoot, markersDir, remotesDir, snapshotAbsPath } from "./conversionsLocation";
 import {
   materializeSources,
   reconcileMarkers,
   type ContextConverters,
-  type FileSource,
   type MaterializedSourceType,
   type MaterializeSourceIdentity,
   type RemoteSource,
@@ -34,9 +27,7 @@ export interface ContextMaterializationResult {
 }
 
 export type ContextMaterializeProgress =
-  | { phase: "resolve"; resolved: number }
   | { phase: "prefetch"; done: number; total: number }
-  | { phase: "parse"; done: number; total: number }
   | { phase: "itemStart"; item: MaterializeSourceIdentity }
   | { phase: "itemFailed"; item: MaterializeSourceIdentity; failure: SourceFailure }
   | { phase: "itemSettled"; item: MaterializeSourceIdentity }
@@ -198,19 +189,14 @@ async function runMaterialize(
       adapter
     ).filter((entry) => !declaredNotePaths.has(manifestEntryKey(entry)));
 
-    const files: FileSource[] = inclusions
-      ? listMaterializeCandidates(app, contextSource).map((file) => ({
-          vaultPath: file.path,
-          ext: file.extension.toLowerCase(),
-          mtime: file.stat.mtime,
-          size: file.stat.size,
-          read: () => app.vault.readBinary(file),
-        }))
-      : [];
+    const documentEntries = resolveDocumentPaths(
+      listProjectDocumentFiles(app, contextSource),
+      adapter
+    );
 
     const hasAnySource =
       remotes.length > 0 ||
-      files.length > 0 ||
+      documentEntries.length > 0 ||
       folders.length > 0 ||
       notes.length > 0 ||
       extensions.length > 0 ||
@@ -225,22 +211,17 @@ async function runMaterialize(
       };
     }
 
-    onProgress?.({ phase: "resolve", resolved: files.length });
-
     const root = cacheRoot(app);
     const fs = createNodeContextCacheFs(root);
     const remotesRel = cacheRootRelativeDir(root, remotesDir(app));
-    const filesRel = cacheRootRelativeDir(root, filesDir(app));
     const markersRel = cacheRootRelativeDir(root, markersDir(app, projectId));
 
     const { entries, wantedMarkerNames, failures } = await materializeSources({
       remotesDir: remotesRel,
-      filesDir: filesRel,
       markerDir: markersRel,
       fs,
       converters: createConverters(),
       remotes,
-      files,
       nowMs: Date.now(),
       forceRetryFailed,
       onProgress,
@@ -251,7 +232,7 @@ async function runMaterialize(
 
     const manifestEntries = entries.map((entry) => ({
       ...entry,
-      snapshotAbsPath: snapshotAbsPath(app, entry.type, entry.cacheFileName),
+      snapshotAbsPath: snapshotAbsPath(app, entry.cacheFileName),
     }));
 
     const projectContextBlock = buildProjectContextBlock({
@@ -263,6 +244,7 @@ async function runMaterialize(
       propertyNotes: propertyNoteEntries,
       webUrls,
       youtubeUrls,
+      documents: documentEntries,
       materialized: manifestEntries,
     });
     await reconcileMarkers(fs, markersRel, wantedMarkerNames);
@@ -283,7 +265,7 @@ async function runMaterialize(
     logWarn(`[project-context] materialize failed for ${projectId}; continuing`, err);
     onProgress?.({
       phase: "failures",
-      failures: [{ source: "Project context", kind: "file", error, usedStaleSnapshot: false }],
+      failures: [{ source: "Project context", kind: "web", error, usedStaleSnapshot: false }],
     });
     return EMPTY_RESULT;
   }
@@ -298,12 +280,6 @@ function createConverters(): ContextConverters {
           ? ((await client.youtube4llm(source.url)).response?.transcript ?? "")
           : ((await client.url4llm(source.url)).response ?? "");
       if (!content.trim()) throw new Error(`empty content for ${source.url}`);
-      return content;
-    },
-    parseFile: async (bytes, ext) => {
-      const { response } = await BrevilabsClient.getInstance().docs4llm(bytes, ext);
-      const content = docs4llmToText(response);
-      if (!content.trim()) throw new Error(`empty parse result for .${ext}`);
       return content;
     },
   };
@@ -326,44 +302,17 @@ export async function materializeProjectContextSource(
     ];
   }
 
-  let remotes: RemoteSource[] = [];
-  let files: FileSource[] = [];
-  if (item.kind === "file") {
-    const file = app.vault.getAbstractFileByPath(item.source);
-    if (!(file instanceof TFile)) {
-      return [
-        {
-          source: item.source,
-          kind: "file",
-          error: "File not found in vault",
-          usedStaleSnapshot: false,
-        },
-      ];
-    }
-    files = [
-      {
-        vaultPath: file.path,
-        ext: file.extension.toLowerCase(),
-        mtime: file.stat.mtime,
-        size: file.stat.size,
-        read: () => app.vault.readBinary(file),
-      },
-    ];
-  } else {
-    remotes = [{ type: item.kind, url: item.source }];
-  }
+  const remotes: RemoteSource[] = [{ type: item.kind, url: item.source }];
 
   try {
     const root = cacheRoot(app);
     const fs = createNodeContextCacheFs(root);
     const { failures } = await materializeSources({
       remotesDir: cacheRootRelativeDir(root, remotesDir(app)),
-      filesDir: cacheRootRelativeDir(root, filesDir(app)),
       markerDir: cacheRootRelativeDir(root, markersDir(app, projectId)),
       fs,
       converters: createConverters(),
       remotes,
-      files,
       nowMs: Date.now(),
       forceRetryFailed: true,
       withSourceLock,
@@ -373,16 +322,6 @@ export async function materializeProjectContextSource(
     return [
       { source: item.source, kind: item.kind, error: err2String(err), usedStaleSnapshot: false },
     ];
-  }
-}
-
-function docs4llmToText(response: unknown): string {
-  if (typeof response === "string") return response;
-  try {
-    return JSON.stringify(response, null, 2);
-  } catch (err) {
-    logWarn(`[project-context] could not stringify docs4llm response: ${err2String(err)}`);
-    return "";
   }
 }
 
@@ -433,6 +372,17 @@ function resolveNotePaths(
       absPath: adapter.getFullPath(file.path),
     }));
   });
+}
+
+function resolveDocumentPaths(
+  files: readonly TFile[],
+  adapter: FileSystemAdapter | null
+): ManifestPathEntry[] {
+  return files.map((file) =>
+    adapter
+      ? { vaultPath: file.path, absPath: adapter.getFullPath(file.path) }
+      : { vaultPath: file.path }
+  );
 }
 
 function resolvePropertyNotePaths(

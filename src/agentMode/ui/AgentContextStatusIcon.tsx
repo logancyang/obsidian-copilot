@@ -52,13 +52,12 @@ const PHASE_RANK: Record<AgentProjectContextLoadState["phase"], number> = {
   idle: -1,
   resolve: 0,
   prefetch: 1,
-  parse: 2,
-  done: 3,
+  done: 2,
 };
 
 function stepStatus(
   current: AgentProjectContextLoadState["phase"],
-  stepPhase: "resolve" | "prefetch" | "parse",
+  stepPhase: "resolve" | "prefetch",
   countComplete: boolean
 ): StatusStep["status"] {
   if (current === "done") return "done";
@@ -91,12 +90,6 @@ export function buildStatusView(
     (entry.retryingSources?.length ?? 0) > 0 || (entry.processingSources?.length ?? 0) > 0;
 
   const steps: StatusStep[] = [];
-  if (entry.resolved !== undefined && entry.resolved > 0) {
-    steps.push({
-      label: `Resolve files (${entry.resolved})`,
-      status: stepStatus(entry.phase, "resolve", true),
-    });
-  }
   if (entry.prefetch) {
     const { done: d, total } = entry.prefetch;
     steps.push({
@@ -104,17 +97,10 @@ export function buildStatusView(
       status: stepStatus(entry.phase, "prefetch", d >= total),
     });
   }
-  if (entry.parsed) {
-    const { done: d, total } = entry.parsed;
-    steps.push({
-      label: `Parse ${total} ${total === 1 ? "file" : "files"} · ${d}/${total}`,
-      status: stepStatus(entry.phase, "parse", d >= total),
-    });
-  }
 
   if (!done || inFlight) {
-    const totalCount = (entry.prefetch?.total ?? 0) + (entry.parsed?.total ?? 0);
-    const doneCount = (entry.prefetch?.done ?? 0) + (entry.parsed?.done ?? 0);
+    const totalCount = entry.prefetch?.total ?? 0;
+    const doneCount = entry.prefetch?.done ?? 0;
     const headline =
       !done && totalCount > 0
         ? `Indexing context · ${doneCount}/${totalCount}`

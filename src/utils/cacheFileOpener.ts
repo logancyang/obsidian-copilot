@@ -16,10 +16,9 @@ export async function openAgentCachedItemPreview(
   }
   const fileName = cacheFileName(item.cacheKind, item.id);
   try {
-    const { remotesDir, filesDir } = await import("@/context/conversionsLocation");
+    const { remotesDir } = await import("@/context/conversionsLocation");
     const { createNodeContextCacheFs } = await import("@/context/contextCacheFs");
-    const dir = item.cacheKind === "file" ? filesDir(app) : remotesDir(app);
-    const content = await createNodeContextCacheFs(dir).readText(fileName);
+    const content = await createNodeContextCacheFs(remotesDir(app)).readText(fileName);
     if (!content.trim()) {
       new Notice("No content available for this item.");
       return;

@@ -165,7 +165,6 @@ export function AgentContextConversionModalContent({
         <ProcessingStatus
           items={filteredItems}
           onRetryItem={onRetryItem}
-          skippedMarkdownCount={skippedMarkdownCount}
           maxHeight="none"
           onOpenCachedItem={onOpenCachedItem}
         />

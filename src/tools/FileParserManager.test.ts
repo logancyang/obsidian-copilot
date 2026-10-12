@@ -48,8 +48,8 @@ import type { CopilotSettings } from "@/settings/model";
 import * as obsidianModule from "obsidian";
 import type { TFile, Vault } from "obsidian";
 import {
-  Docs4LLMParser,
   FileParserManager,
+  MiyoEpubParser,
   PDF_NEEDS_MIYO_MESSAGE,
   PDFParser,
 } from "./FileParserManager";
@@ -68,10 +68,6 @@ const pdf = (name: string): TFile =>
 const epub = (name: string): TFile =>
   // eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- test fixture; not a real TFile
   ({ extension: "epub", path: `books/${name}.epub`, basename: name }) as unknown as TFile;
-
-const docx = (name: string): TFile =>
-  // eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- test fixture; not a real TFile
-  ({ extension: "docx", path: `docs/${name}.docx`, basename: name }) as unknown as TFile;
 
 const vault = { getName: () => "MyVault", readBinary: jest.fn(async () => new ArrayBuffer(8)) };
 const asVault = vault as unknown as Vault;
@@ -93,14 +89,14 @@ beforeEach(() => {
 });
 
 describe("FileParserManager", () => {
-  describe("Docs4LLMParser", () => {
+  describe("MiyoEpubParser", () => {
     describe("parseFile()", () => {
       it("parses an EPUB through Miyo with the vault name and vault-relative path when Miyo document processing is on and Miyo is available", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
         mockAvailable.mockReturnValue(true);
         mockParseDoc.mockResolvedValue({ text: "epub text" });
 
-        const result = await new Docs4LLMParser().parseFile(epub("book"), asVault);
+        const result = await new MiyoEpubParser().parseFile(epub("book"), asVault);
 
         expect(result).toBe("epub text");
         expect(mockParseDoc).toHaveBeenCalledWith(
@@ -110,61 +106,94 @@ describe("FileParserManager", () => {
         );
       });
 
-      it("returns content for a parsable PDF and throws for a failing one in the same batch", async () => {
+      it("throws that Miyo failed to parse the book when Miyo returns an error", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
         mockAvailable.mockReturnValue(true);
-        mockParseDoc
-          .mockResolvedValueOnce({ text: "extracted one" })
-          .mockRejectedValueOnce(new Error("connection reset"));
-        const parser = new Docs4LLMParser();
+        mockParseDoc.mockRejectedValue(new Error("connection reset"));
 
-        await expect(parser.parseFile(pdf("a"), asVault)).resolves.toBe("extracted one");
-        await expect(parser.parseFile(pdf("b"), asVault)).rejects.toThrow(/Miyo failed to parse b/);
+        await expect(new MiyoEpubParser().parseFile(epub("book"), asVault)).rejects.toThrow(
+          /Miyo failed to parse book: connection reset/
+        );
       });
 
-      it.each([
-        ["PDF", pdf],
-        ["EPUB", epub],
-      ])(
-        "throws that no processor is available when Miyo document processing is on but Miyo is unavailable for %s files",
-        async (_format, makeFile) => {
-          mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
-          mockAvailable.mockReturnValue(false);
-
-          await expect(new Docs4LLMParser().parseFile(makeFile("a"), asVault)).rejects.toThrow(
-            /No document processor available/
-          );
-          expect(mockParseDoc).not.toHaveBeenCalled();
-        }
-      );
-
-      it("throws that no processor is available for a non-PDF/EPUB format even when Miyo is available", async () => {
+      it("throws that no processor is available when Miyo document processing is on but Miyo is unavailable", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
-        mockAvailable.mockReturnValue(true);
+        mockAvailable.mockReturnValue(false);
 
-        await expect(new Docs4LLMParser().parseFile(docx("report"), asVault)).rejects.toThrow(
+        await expect(new MiyoEpubParser().parseFile(epub("book"), asVault)).rejects.toThrow(
           /No document processor available/
         );
         expect(mockParseDoc).not.toHaveBeenCalled();
       });
 
-      it("throws without probing Miyo for a PDF when Miyo document processing is off", async () => {
+      it("throws without probing Miyo when Miyo document processing is off", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: false }));
         mockSnapshot.mockReturnValue({ documentProcessor: "unknown" });
 
-        await expect(new Docs4LLMParser().parseFile(pdf("a"), asVault)).rejects.toThrow(
+        await expect(new MiyoEpubParser().parseFile(epub("book"), asVault)).rejects.toThrow(
           /No document processor available/
         );
         expect(mockRefresh).not.toHaveBeenCalled();
         expect(mockParseDoc).not.toHaveBeenCalled();
       });
+    });
+  });
 
-      it("throws that no processor is available for a non-local format when Miyo document processing is off", async () => {
+  describe("FileParserManager", () => {
+    describe("supportsExtension()", () => {
+      it.each(["md", "base", "canvas", "pdf", "epub"])("accepts .%s", (extension) => {
+        expect(new FileParserManager().supportsExtension(extension)).toBe(true);
+      });
+
+      it.each(["docx", "xlsx", "png", "txt"])(
+        "rejects .%s because no document processor reads it in Quick Chat",
+        (extension) => {
+          expect(new FileParserManager().supportsExtension(extension)).toBe(false);
+        }
+      );
+    });
+
+    describe("forOneSend()", () => {
+      const note = (name: string): TFile =>
+        // eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- test fixture; not a real TFile
+        ({ extension: "md", path: `${name}.md`, basename: name }) as unknown as TFile;
+
+      beforeEach(() => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: false }));
+      });
 
-        await expect(new Docs4LLMParser().parseFile(docx("report"), asVault)).rejects.toThrow(
-          /No document processor available/
-        );
+      it("explains the first unreadable PDF in full and shortens every later one in the same send https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
+        const send = new FileParserManager().forOneSend();
+
+        const results = [
+          await send.parseFile(pdf("a"), asVault),
+          await send.parseFile(pdf("b"), asVault),
+          await send.parseFile(pdf("c"), asVault),
+        ];
+
+        expect(results).toEqual([
+          `[Error: Could not extract content from PDF a. ${PDF_NEEDS_MIYO_MESSAGE}]`,
+          "[Error: Could not extract content from PDF b. Same reason as the other unreadable PDF in this message.]",
+          "[Error: Could not extract content from PDF c. Same reason as the other unreadable PDF in this message.]",
+        ]);
+      });
+
+      it("explains in full again in the next send https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
+        const manager = new FileParserManager();
+        await manager.forOneSend().parseFile(pdf("a"), asVault);
+
+        const next = await manager.forOneSend().parseFile(pdf("a"), asVault);
+
+        expect(next).toContain(PDF_NEEDS_MIYO_MESSAGE);
+      });
+
+      it("returns note text that quotes the message unchanged after a PDF was explained https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
+        const quoted = `${PDF_NEEDS_MIYO_MESSAGE}\n${PDF_NEEDS_MIYO_MESSAGE}`;
+        const noteVault = { ...vault, read: async () => quoted } as unknown as Vault;
+        const send = new FileParserManager().forOneSend();
+        await send.parseFile(pdf("a"), noteVault);
+
+        expect(await send.parseFile(note("Saved chat"), noteVault)).toBe(quoted);
       });
     });
   });
@@ -301,52 +330,6 @@ describe("FileParserManager", () => {
         expect(result).toBe(
           `[Error: Could not extract content from PDF solo. ${PDF_NEEDS_MIYO_MESSAGE}]`
         );
-      });
-    });
-  });
-
-  describe("FileParserManager", () => {
-    describe("forOneSend()", () => {
-      const note = (name: string): TFile =>
-        // eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- test fixture; not a real TFile
-        ({ extension: "md", path: `${name}.md`, basename: name }) as unknown as TFile;
-
-      beforeEach(() => {
-        mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: false }));
-      });
-
-      it("explains the first unreadable PDF in full and shortens every later one in the same send https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
-        const send = new FileParserManager().forOneSend();
-
-        const results = [
-          await send.parseFile(pdf("a"), asVault),
-          await send.parseFile(pdf("b"), asVault),
-          await send.parseFile(pdf("c"), asVault),
-        ];
-
-        expect(results).toEqual([
-          `[Error: Could not extract content from PDF a. ${PDF_NEEDS_MIYO_MESSAGE}]`,
-          "[Error: Could not extract content from PDF b. Same reason as the other unreadable PDF in this message.]",
-          "[Error: Could not extract content from PDF c. Same reason as the other unreadable PDF in this message.]",
-        ]);
-      });
-
-      it("explains in full again in the next send https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
-        const manager = new FileParserManager();
-        await manager.forOneSend().parseFile(pdf("a"), asVault);
-
-        const next = await manager.forOneSend().parseFile(pdf("a"), asVault);
-
-        expect(next).toContain(PDF_NEEDS_MIYO_MESSAGE);
-      });
-
-      it("returns note text that quotes the message unchanged after a PDF was explained https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
-        const quoted = `${PDF_NEEDS_MIYO_MESSAGE}\n${PDF_NEEDS_MIYO_MESSAGE}`;
-        const noteVault = { ...vault, read: async () => quoted } as unknown as Vault;
-        const send = new FileParserManager().forOneSend();
-        await send.parseFile(pdf("a"), noteVault);
-
-        expect(await send.parseFile(note("Saved chat"), noteVault)).toBe(quoted);
       });
     });
   });

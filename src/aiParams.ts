@@ -45,11 +45,9 @@ export interface ContextLoadStepCount {
 }
 
 export interface AgentProjectContextLoadState {
-  phase: "idle" | "resolve" | "prefetch" | "parse" | "done";
+  phase: "idle" | "resolve" | "prefetch" | "done";
   blocking: boolean;
-  resolved?: number;
   prefetch?: ContextLoadStepCount;
-  parsed?: ContextLoadStepCount;
   failedSources?: FailedItem[];
   processingSources?: AgentInFlightSource[];
   retryingSources?: AgentRetryingSource[];

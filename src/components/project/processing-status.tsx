@@ -7,15 +7,7 @@ import {
   processingItemKey,
   ProcessingStatusIcon,
 } from "@/components/project/processingItemStatusView";
-import {
-  ArrowUpRight,
-  FileImage,
-  FileText,
-  FileVideo,
-  FolderOpen,
-  Globe,
-  RefreshCw,
-} from "lucide-react";
+import { ArrowUpRight, Globe, RefreshCw } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 
 interface ProcessingStatusProps {
@@ -23,23 +15,6 @@ interface ProcessingStatusProps {
   onOpenCachedItem?: (item: ProcessingItem) => void;
   maxHeight?: string;
   onRetryItem?: (item: ProcessingItem) => void;
-  skippedMarkdownCount?: number;
-}
-
-function FileTypeIcon({ fileType }: { fileType: ProcessingItem["fileType"] }) {
-  switch (fileType) {
-    case "pdf":
-      return <FileText className="tw-size-3.5 tw-text-error" />;
-    case "image":
-      return <FileImage className="tw-size-3.5 tw-text-accent" />;
-    case "web":
-    case "youtube":
-      return <Globe className="tw-size-3.5 tw-text-accent" />;
-    case "audio":
-      return <FileVideo className="tw-size-3.5 tw-text-warning" />;
-    default:
-      return <FileText className="tw-size-3.5 tw-text-muted" />;
-  }
 }
 
 const STATUS_SORT_PRIORITY: Record<ProcessingItem["status"], number> = {
@@ -61,76 +36,35 @@ export function ProcessingStatus({
   onOpenCachedItem,
   maxHeight,
   onRetryItem,
-  skippedMarkdownCount = 0,
 }: ProcessingStatusProps) {
-  const sortedFileItems = sortByStatusPriority(items.filter((i) => i.source === "file"));
-  const sortedUrlItems = sortByStatusPriority(items.filter((i) => i.source === "url"));
+  const sortedUrlItems = sortByStatusPriority(items);
 
   const groupsBody = (
     <div className="tw-space-y-3 tw-p-3">
-      {sortedFileItems.length > 0 && (
-        <div className="tw-space-y-2">
-          <div className="tw-flex tw-items-center tw-gap-1.5 tw-px-1">
-            <FolderOpen className="tw-size-3.5 tw-text-accent" />
-            <span className="tw-text-ui-smaller tw-font-medium tw-text-muted">
-              From Files ({sortedFileItems.length})
-            </span>
-          </div>
-          <ScrollableList maxHeight={maxHeight || "200px"}>
-            {sortedFileItems.map((item) => (
-              <ProcessingItemRow
-                key={processingItemKey(item)}
-                item={item}
-                onRetryItem={onRetryItem}
-                onOpenCached={onOpenCachedItem ? () => onOpenCachedItem(item) : undefined}
-              />
-            ))}
-          </ScrollableList>
-          {skippedMarkdownCount > 0 && (
-            <div className="tw-px-1 tw-text-ui-smaller tw-text-faint">
-              {skippedMarkdownCount} markdown {skippedMarkdownCount === 1 ? "file" : "files"} — no
-              conversion needed
-            </div>
-          )}
+      <div className="tw-space-y-2">
+        <div className="tw-flex tw-items-center tw-gap-1.5 tw-px-1">
+          <Globe className="tw-size-3.5 tw-text-accent" />
+          <span className="tw-text-ui-smaller tw-font-medium tw-text-muted">
+            From URLs ({sortedUrlItems.length})
+          </span>
         </div>
-      )}
-
-      {sortedUrlItems.length > 0 && (
-        <div className="tw-space-y-2">
-          <div className="tw-flex tw-items-center tw-gap-1.5 tw-px-1">
-            <Globe className="tw-size-3.5 tw-text-accent" />
-            <span className="tw-text-ui-smaller tw-font-medium tw-text-muted">
-              From URLs ({sortedUrlItems.length})
-            </span>
-          </div>
-          <ScrollableList maxHeight={maxHeight || "200px"}>
-            {sortedUrlItems.map((item) => (
-              <ProcessingItemRow
-                key={processingItemKey(item)}
-                item={item}
-                onRetryItem={onRetryItem}
-                onOpenCached={onOpenCachedItem ? () => onOpenCachedItem(item) : undefined}
-              />
-            ))}
-          </ScrollableList>
-        </div>
-      )}
+        <ScrollableList maxHeight={maxHeight || "200px"}>
+          {sortedUrlItems.map((item) => (
+            <ProcessingItemRow
+              key={processingItemKey(item)}
+              item={item}
+              onRetryItem={onRetryItem}
+              onOpenCached={onOpenCachedItem ? () => onOpenCachedItem(item) : undefined}
+            />
+          ))}
+        </ScrollableList>
+      </div>
     </div>
   );
 
   return (
     <div className="tw-space-y-2">
-      {items.length === 0 && (
-        <div className="tw-rounded-lg tw-border tw-border-border tw-p-3 tw-bg-muted/10">
-          <div className="tw-text-ui-smaller tw-text-muted">
-            No non-markdown files or URLs need conversion for this project.
-          </div>
-        </div>
-      )}
-
-      {items.length > 0 && (
-        <div className="tw-rounded-lg tw-border tw-border-border">{groupsBody}</div>
-      )}
+      <div className="tw-rounded-lg tw-border tw-border-border">{groupsBody}</div>
     </div>
   );
 }
@@ -186,12 +120,10 @@ function ProcessingItemRow({
   return (
     <div className="tw-group tw-rounded-md tw-border tw-border-border tw-bg-primary tw-p-2.5">
       <div className="tw-flex tw-items-center tw-gap-2">
-        <FileTypeIcon fileType={item.fileType} />
+        <Globe className="tw-size-3.5 tw-text-accent" />
         <div className="tw-min-w-0 tw-flex-1">
           <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
-            <TruncatedText className="tw-text-sm tw-text-normal">
-              {item.source === "url" ? item.id : item.name}
-            </TruncatedText>
+            <TruncatedText className="tw-text-sm tw-text-normal">{item.id}</TruncatedText>
             <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5">
               {canOpenCached && (
                 <Button

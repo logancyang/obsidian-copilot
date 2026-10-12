@@ -14,6 +14,7 @@ export interface ManifestSources {
   tags: string[];
   properties: string[];
   propertyNotes: ManifestPathEntry[];
+  documents: ManifestPathEntry[];
   webUrls: string[];
   youtubeUrls: string[];
   materialized: MaterializedEntry[];
@@ -46,9 +47,7 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
     ...sources.youtubeUrls.map((u) => line("Included YouTube", withPointer("youtube", u))),
   ];
   const expanded: ManifestLine[] = [
-    ...sources.materialized
-      .filter((e) => e.type === "file")
-      .map((e) => line("Materialized files", withPointer(e.type, e.source))),
+    ...sources.documents.map((e) => line("Document files", pathText(e))),
     ...sources.propertyNotes.map((e) => line("Notes matching an included property", pathText(e))),
   ];
   const lines: ManifestLine[] = [...declared, ...expanded];
@@ -64,10 +63,12 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
     "(grep/glob/read) to enumerate them. Properties are listed as source labels and",
     'also expanded into the notes they match, under "Notes matching an included',
     'property" (the label is listed first so it survives the entry cap).',
-    "Materialized snapshots of URLs, YouTube transcripts, and PDFs/images are shown",
-    "inline as an absolute path after the source, formatted `<source> → <absolute path>`",
-    "— read that path directly. A source with no path isn't cached (not yet converted",
-    "or conversion failed); use the source itself.",
+    "Materialized snapshots of URLs and YouTube transcripts are shown inline as an",
+    "absolute path after the source, formatted `<source> → <absolute path>` — read",
+    "that path directly. A source with no path isn't cached (not yet converted or",
+    "conversion failed); use the source itself. Document files (PDFs, Office files,",
+    "EPUBs, images) are not converted: each is listed by the absolute path of the",
+    "original file — open it with your own tools.",
   ];
 
   let currentSection = "";

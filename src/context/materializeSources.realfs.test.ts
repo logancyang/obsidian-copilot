@@ -7,7 +7,6 @@ import {
   cacheFileName,
   materializeSources,
   type ContextConverters,
-  type FileSource,
   type RemoteSource,
 } from "./contextCacheStore";
 
@@ -17,7 +16,6 @@ describe("materializeSources.realfs", () => {
     let root: string;
 
     const REMOTES = "remotes";
-    const FILES = "files";
     const MARKERS_A = "markers/projA";
     const MARKERS_B = "markers/projB";
     const T0 = 1_700_000_000_000;
@@ -56,13 +54,13 @@ describe("materializeSources.realfs", () => {
       const url = "https://shared.example.com/page";
       const remotes: RemoteSource[] = [{ type: "web", url }];
       const fetchRemote = jest.fn(async (s: RemoteSource) => `content for ${s.url}`);
-      const converters: ContextConverters = { fetchRemote, parseFile: jest.fn() };
+      const converters: ContextConverters = { fetchRemote };
       const withSourceLock = sharedLock();
 
       const cacheA = createNodeContextCacheFs(root);
       const resA = await materializeSources({
-      remotesDir: REMOTES, filesDir: FILES, markerDir: MARKERS_A,
-      fs: cacheA, converters, remotes, files: [], nowMs: T0, withSourceLock,
+      remotesDir: REMOTES, markerDir: MARKERS_A,
+      fs: cacheA, converters, remotes, nowMs: T0, withSourceLock,
     }); // prettier-ignore
 
       const expectedName = cacheFileName("web", url);
@@ -72,8 +70,8 @@ describe("materializeSources.realfs", () => {
 
       const cacheB = createNodeContextCacheFs(root);
       const resB = await materializeSources({
-      remotesDir: REMOTES, filesDir: FILES, markerDir: MARKERS_B,
-      fs: cacheB, converters, remotes, files: [], nowMs: T0 + 1, withSourceLock,
+      remotesDir: REMOTES, markerDir: MARKERS_B,
+      fs: cacheB, converters, remotes, nowMs: T0 + 1, withSourceLock,
     }); // prettier-ignore
 
       expect(fetchRemote).toHaveBeenCalledTimes(1);
@@ -82,35 +80,6 @@ describe("materializeSources.realfs", () => {
       expect(fs.readFileSync(path.join(root, REMOTES, expectedName), "utf-8")).toContain(
         `content for ${url}`
       );
-    });
-
-    it("on the real filesystem, stores a PDF shared by two projects as one files/file-<md5>.md parsed once", async () => {
-      const vaultPath = "Shared/report.pdf";
-      const parseFile = jest.fn(async (_bytes: ArrayBuffer, ext: string) => `parsed ${ext}`);
-      const converters: ContextConverters = { fetchRemote: jest.fn(), parseFile };
-      const withSourceLock = sharedLock();
-      const makeFile = (): FileSource => ({
-        vaultPath,
-        ext: "pdf",
-        mtime: 1000,
-        size: 2048,
-        read: async () => new ArrayBuffer(8),
-      });
-
-      await materializeSources({
-      remotesDir: REMOTES, filesDir: FILES, markerDir: MARKERS_A,
-      fs: createNodeContextCacheFs(root), converters, remotes: [], files: [makeFile()], nowMs: T0, withSourceLock,
-    }); // prettier-ignore
-      const expectedName = cacheFileName("file", vaultPath);
-      expect(onDisk(FILES)).toEqual([expectedName]);
-
-      await materializeSources({
-      remotesDir: REMOTES, filesDir: FILES, markerDir: MARKERS_B,
-      fs: createNodeContextCacheFs(root), converters, remotes: [], files: [makeFile()], nowMs: T0 + 1, withSourceLock,
-    }); // prettier-ignore
-
-      expect(parseFile).toHaveBeenCalledTimes(1);
-      expect(onDisk(FILES)).toEqual([expectedName]);
     });
   });
 });

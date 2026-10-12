@@ -3,13 +3,7 @@ import { FileSystemAdapter } from "obsidian";
 import * as path from "node:path";
 import { getVaultId } from "@/utils/appPaths";
 import { md5 } from "@/utils/hash";
-import {
-  cacheRoot,
-  filesDir,
-  markersDir,
-  remotesDir,
-  snapshotAbsPath,
-} from "./conversionsLocation";
+import { cacheRoot, markersDir, remotesDir, snapshotAbsPath } from "./conversionsLocation";
 
 const FsAdapter = FileSystemAdapter as unknown as new (basePath: string) => FileSystemAdapter;
 const appWith = (basePath: string): App =>
@@ -27,11 +21,9 @@ describe("conversionsLocation", () => {
     });
   });
 
-  describe("remotesDir() and filesDir()", () => {
-    it("place the remotes and files directories directly under the cache root", () => {
-      const root = cacheRoot(app);
-      expect(remotesDir(app)).toBe(path.join(root, "remotes"));
-      expect(filesDir(app)).toBe(path.join(root, "files"));
+  describe("remotesDir()", () => {
+    it("places the remotes directory directly under the cache root", () => {
+      expect(remotesDir(app)).toBe(path.join(cacheRoot(app), "remotes"));
     });
   });
 
@@ -44,12 +36,8 @@ describe("conversionsLocation", () => {
   });
 
   describe("snapshotAbsPath()", () => {
-    it("places file snapshots in filesDir and remote snapshots in remotesDir", () => {
-      expect(snapshotAbsPath(app, "file", "file-1.md")).toBe(path.join(filesDir(app), "file-1.md"));
-      expect(snapshotAbsPath(app, "web", "web-1.md")).toBe(path.join(remotesDir(app), "web-1.md"));
-      expect(snapshotAbsPath(app, "youtube", "youtube-1.md")).toBe(
-        path.join(remotesDir(app), "youtube-1.md")
-      );
+    it("places a snapshot in remotesDir", () => {
+      expect(snapshotAbsPath(app, "web-1.md")).toBe(path.join(remotesDir(app), "web-1.md"));
     });
   });
 });

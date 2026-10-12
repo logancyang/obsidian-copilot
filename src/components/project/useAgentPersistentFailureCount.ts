@@ -5,8 +5,6 @@ import {
   readAgentCacheDirState,
   type AgentProcessingSource,
 } from "@/components/project/agentProcessingAdapter";
-import { cacheFileName } from "@/context/contextCacheStore";
-import { listMaterializeCandidates } from "@/context/materializeCandidates";
 import { parseProjectUrls } from "@/utils/urlTagUtils";
 import type { App } from "obsidian";
 import { useEffect, useMemo, useState } from "react";
@@ -27,17 +25,8 @@ export function useAgentPersistentFailureCount(
     if (!settled) return EMPTY_SOURCES;
     const contextSource = project.contextSource;
     const urls = parseProjectUrls(contextSource?.webUrls || "", contextSource?.youtubeUrls || "");
-    return buildAgentProcessingSources(urls, listMaterializeCandidates(app, contextSource));
-  }, [app, project.contextSource, settled]);
-
-  const fileSnapshotNames = useMemo<ReadonlySet<string>>(() => {
-    let names: Set<string> | undefined;
-    for (const source of sources) {
-      if (source.kind !== "file") continue;
-      (names ??= new Set<string>()).add(cacheFileName("file", source.source));
-    }
-    return names ?? EMPTY_FILE_SNAPSHOT_NAMES;
-  }, [sources]);
+    return buildAgentProcessingSources(urls);
+  }, [project.contextSource, settled]);
 
   const savedKeys = useMemo<ReadonlySet<string>>(
     () =>
@@ -45,7 +34,7 @@ export function useAgentPersistentFailureCount(
     [sources]
   );
   const sourceKey = useMemo(
-    () => sources.map((s) => `${s.kind}:${s.source}:${s.fingerprint ?? ""}`).join("\n"),
+    () => sources.map((s) => `${s.kind}:${s.source}`).join("\n"),
     [sources]
   );
 
@@ -54,7 +43,7 @@ export function useAgentPersistentFailureCount(
   useEffect(() => {
     if (!settled || sources.length === 0) return;
     let cancelled = false;
-    void readAgentCacheDirState(app, project.id, fileSnapshotNames).then((disk) => {
+    void readAgentCacheDirState(app, project.id).then((disk) => {
       if (cancelled) return;
       const count = disk
         ? buildAgentProcessingItems(sources, undefined, disk, savedKeys).filter(
@@ -66,7 +55,7 @@ export function useAgentPersistentFailureCount(
     return () => {
       cancelled = true;
     };
-  }, [app, project.id, sources, savedKeys, sourceKey, liveEntry, settled, fileSnapshotNames]);
+  }, [app, project.id, sources, savedKeys, sourceKey, liveEntry, settled]);
 
   const fresh =
     settled &&
@@ -86,4 +75,3 @@ interface FailureCountResult {
 
 const EMPTY_SOURCES = Object.freeze([] as AgentProcessingSource[]) as AgentProcessingSource[];
 const EMPTY_KEYS: ReadonlySet<string> = new Set<string>();
-const EMPTY_FILE_SNAPSHOT_NAMES: ReadonlySet<string> = new Set<string>();

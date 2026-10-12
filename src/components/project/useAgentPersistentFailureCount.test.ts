@@ -1,24 +1,12 @@
 import type { AgentProjectContextLoadState, ProjectConfig } from "@/aiParams";
 import * as adapter from "@/components/project/agentProcessingAdapter";
 import { useAgentPersistentFailureCount } from "@/components/project/useAgentPersistentFailureCount";
-import {
-  CACHE_SCHEMA_VERSION,
-  cacheFileName,
-  failureMarkerName,
-} from "@/context/contextCacheStore";
-import { listMaterializeCandidates } from "@/context/materializeCandidates";
+import { CACHE_SCHEMA_VERSION, failureMarkerName } from "@/context/contextCacheStore";
 import * as projectState from "@/projects/state";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { App } from "obsidian";
 
-jest.mock("@/context/materializeCandidates", () => ({
-  listMaterializeCandidates: jest.fn(() => []),
-}));
-
 const readSpy = jest.spyOn(adapter, "readAgentCacheDirState");
-const listCandidatesMock = listMaterializeCandidates as jest.MockedFunction<
-  typeof listMaterializeCandidates
->;
 jest
   .spyOn(projectState, "getCachedProjectRecordById")
   .mockReturnValue({ filePath: "Projects/p1/project.md" } as never);
@@ -41,15 +29,12 @@ const webMarkerDisk = {
       { schemaVersion: CACHE_SCHEMA_VERSION, source: "https://a.com", kind: "web" as const, error: "boom", failedAt: 1 }, // prettier-ignore
     ],
   ]),
-  fingerprintsByName: new Map<string, string>(),
 };
 
 describe("useAgentPersistentFailureCount", () => {
   describe("useAgentPersistentFailureCount()", () => {
     beforeEach(() => {
       readSpy.mockReset();
-      listCandidatesMock.mockReset();
-      listCandidatesMock.mockReturnValue([]);
     });
 
     it("does not read disk while a run is in flight (live atom is authoritative)", () => {
@@ -79,35 +64,27 @@ describe("useAgentPersistentFailureCount", () => {
       expect(readSpy).toHaveBeenCalledTimes(1);
     });
 
-    it("does not count a stale file marker when a SHARED snapshot is fresh", async () => {
-      const filePath = "Docs/source.pdf";
-      const fingerprint = "10:20";
-      const snapshotName = cacheFileName("file", filePath);
-      listCandidatesMock.mockReturnValue([
-        { path: filePath, extension: "pdf", stat: { mtime: 10, size: 20 } } as never,
-      ]);
+    it("reports nothing for a project whose only sources are PDFs, even when an earlier version left a failure marker for one", async () => {
       readSpy.mockResolvedValue({
-        snapshotNames: new Set([snapshotName]),
+        snapshotNames: new Set<string>(),
         markersByName: new Map([
           [
-            failureMarkerName("file", filePath),
-            { schemaVersion: CACHE_SCHEMA_VERSION, source: filePath, kind: "file" as const, error: "stale parse failure", failedAt: 1, fingerprint }, // prettier-ignore
+            "failed-file-0123456789abcdef.json",
+            { schemaVersion: CACHE_SCHEMA_VERSION, source: "Docs/source.pdf", kind: "file" as never, error: "quota exceeded", failedAt: 1 }, // prettier-ignore
           ],
         ]),
-        fingerprintsByName: new Map([[snapshotName, fingerprint]]),
       });
-
-      const fileProject = {
+      const pdfProject = {
         id: "p1",
-        contextSource: { webUrls: "", youtubeUrls: "" },
+        contextSource: { webUrls: "", youtubeUrls: "", inclusions: "Docs" },
       } as unknown as ProjectConfig;
+
       const { result } = renderHook(() =>
-        useAgentPersistentFailureCount(app, fileProject, entry(), true)
+        useAgentPersistentFailureCount(app, pdfProject, entry(), true)
       );
 
-      await waitFor(() => expect(readSpy).toHaveBeenCalledTimes(1));
-      expect(readSpy.mock.calls[0][2]).toEqual(new Set([snapshotName]));
       expect(result.current).toBe(0);
+      expect(readSpy).not.toHaveBeenCalled();
     });
 
     it("does not surface a slow read's count after the live entry changed under it", async () => {

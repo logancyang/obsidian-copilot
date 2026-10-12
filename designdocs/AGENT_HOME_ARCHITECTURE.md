@@ -30,7 +30,7 @@ and are not covered here.
 | Projects section                                          | ✅ read-only list + picker                 | real entry + CRUD                       |
 | Enter a project (header + per-project sessions + Context) | ❌ coming-soon `Notice`                    | ✅                                      |
 | `projectId` on sessions, scoped history, scope cwd        | ❌                                         | ✅                                      |
-| Project context materialization (URL/YouTube/PDF)         | ❌                                         | ✅ off-vault shared cache               |
+| Project context materialization (URL/YouTube)             | ❌                                         | ✅ off-vault shared cache               |
 | Project instructions (`project.md` + `AGENTS.md` mirror)  | ❌                                         | ✅                                      |
 | Drag-to-add context, Welcome onboarding card              | ❌                                         | ✅                                      |
 | Built-in MCP tool surface, Outputs / Discover URLs        | ❌                                         | PR3                                     |
@@ -202,14 +202,23 @@ Two behaviors preserve the invariant across the rough edges:
 ## Context materialization
 
 A project can attach **URL / YouTube** links and **in-vault binary files** (PDFs,
-Office docs, e-books, images — all materialized under the single `file` kind).
-Before a session
-opens, `projectContextMaterializer` captures them once per session
-(single-flight per project), converts each via brevilabs into a text snapshot,
-and builds a `<project_context>` block that is inlined into the session's first
-user prompt. The block lists absolute paths to the snapshots so the agent can
-read them directly; the composer shows a context status icon and queues sends
-while context is still materializing.
+Office docs, e-books, images — the extensions in `projectDocumentFiles.ts`).
+Before a session opens, `projectContextMaterializer` captures the links once per
+session (single-flight per project), converts each via brevilabs into a text
+snapshot, and builds a `<project_context>` block that is inlined into the
+session's first user prompt. The block lists absolute paths to the snapshots so
+the agent can read them directly; the composer shows a context status icon and
+queues sends while context is still materializing.
+
+Binary files are never converted. The block lists each one under `## Document
+files` by the absolute path of the original vault file
+(`FileSystemAdapter.getFullPath`), and its preamble tells the agent the files are
+not converted and to open them with its own tools. Claude Code reads PDFs and
+images natively; with Miyo document processing on, the `miyo-parse` Skill
+parses PDFs and EPUBs for any agent. A document file has no snapshot, failure
+marker, or status row, so the status icon reports only link conversion. A
+`files/` snapshot or `failed-file-*` marker left in the cache stays unread until
+`Clear Copilot cache` removes it.
 
 Folders, notes, tags, extensions, and properties are listed in the same block by
 path/pattern (they need no conversion); folders that live outside the session cwd
@@ -238,7 +247,6 @@ existing per-vault namespace that already hosts the recent-chats index:
 ```
 ~/.obsidian-copilot/vaults/<vaultId>/context-cache/
   remotes/   web-<md5(url)>.md · youtube-<md5(url)>.md          # shared by all projects
-  files/     file-<md5(vaultPath)>.md                           # shared by all projects
   markers/   <md5(projectId)>/failed-<type>-<md5(source)>.json  # failure markers, per project
 ```
 
@@ -247,16 +255,14 @@ existing per-vault namespace that already hosts the recent-chats index:
 registry is the cache's complete reference set, so garbage collection needs no
 cross-vault refs subsystem — at the cost of the same URL being converted once in
 each of two different vaults (rare). **All paths derive from one source of truth,
-`context/conversionsLocation.ts`** (`cacheRoot` / `remotesDir` / `filesDir` /
+`context/conversionsLocation.ts`** (`cacheRoot` / `remotesDir` /
 `markersDir(projectId)`), shared by the writer and every reader.
 
 **Identity keys + internal freshness.** Snapshot filenames hash the **source
-identity** (`md5(url)` / `md5(vaultPath)`) — never content, never `projectId`.
-Freshness is a `fingerprint` stored in the snapshot's own metadata header, and it
-differs by kind: a **file** uses `mtime:size` (an edit changes the fingerprint, so
-the cheap-skip misses and the **same file is overwritten** — no orphans), while a
-**remote** uses its identity (`type:url`), so a successfully fetched URL is kept
-until its configured string changes. A URL's identity is the exact trimmed string
+identity** (`md5(url)`) — never content, never `projectId`. Freshness is a
+`fingerprint` stored in the snapshot's own metadata header: a remote uses its
+identity (`type:url`), so a successfully fetched URL is kept until its configured
+string changes. A URL's identity is the exact trimmed string
 the user configured — there is no semantic canonicalization (`x.com` ≠ `x.com/`).
 
 **Per-artifact lock.** A module-level lock (keyed by the snapshot filename, via
@@ -269,11 +275,10 @@ re-fetching or overwriting**. Two projects cold-converting one URL converge to a
 single brevilabs call.
 
 **Failure markers (CAG-style negative cache).** A source that fails to
-fetch/parse with no usable snapshot writes a `failed-…json` marker in _its own
-project's_ marker bucket, carrying the error and (for files) the `mtime:size`
-fingerprint. A later automatic run cheap-skips that known-bad source — re-surfacing
-the stored error instead of re-hitting brevilabs every session — until the file
-changes or the user forces a retry (`forceRetryFailed`, the status popover's
+fetch with no usable snapshot writes a `failed-…json` marker in _its own
+project's_ marker bucket, carrying the error. A later automatic run cheap-skips that known-bad source — re-surfacing
+the stored error instead of re-hitting brevilabs every session — until the user
+forces a retry (`forceRetryFailed`, the status popover's
 "Retry"). Markers are bucketed per project because a failure is meaningful only to
 the project that hit it; snapshots are shared, so they are **never reconciled
 against a single project's sources** (that would delete files other projects
@@ -339,12 +344,12 @@ this boundary over the cache consumers.
 ### Cleanup
 
 There is **no automatic garbage collection** in this version — the existing
-`Clear Copilot cache` command additionally wipes `context-cache/` (all three
-subdirectories) while leaving the sibling `agent-chat-index.json` intact. Marker
+`Clear Copilot cache` command additionally wipes `context-cache/` (the
+`remotes` and `markers` directories) while leaving the sibling `agent-chat-index.json` intact. Marker
 cleanup happens incrementally (a stale marker is cleared when its source later
 succeeds, as above). The released CAG caches (`.copilot/*`) are a separate system
 and are left untouched. Source kinds are a single source of truth,
-`MATERIALIZED_SOURCE_TYPES` (`web` / `youtube` / `file`), so adding a kind updates
+`MATERIALIZED_SOURCE_TYPES` (`web` / `youtube`), so adding a kind updates
 the filename patterns and marker-pruning regex together.
 
 ## Project instructions (`project.md` + `AGENTS.md`)
@@ -401,8 +406,7 @@ the awaited spawn means the user has moved on).
 The cache and scope behavior are covered by unit + integration suites, including
 a real-filesystem dedup integration test that drives the production
 `createNodeContextCacheFs` and the real per-artifact lock against a temp
-directory (two projects sharing a URL → one snapshot on disk, one fetch; the same
-for a shared PDF; a failed project's marker cleared once another project
-materializes the source). The opencode `external_directory` allow injection, the
+directory (two projects sharing a URL → one snapshot on disk, one fetch; a failed
+project's marker cleared once another project materializes the source). The opencode `external_directory` allow injection, the
 mobile static-import boundary, and the three-backend snapshot read were validated
 against a real vault.

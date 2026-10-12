@@ -148,7 +148,7 @@ const RESUMED_SESSION_BEHIND_EPOCH = -1;
 function toFailedItem(failure: SourceFailure): FailedItem {
   return {
     path: failure.source,
-    type: failure.kind === "file" ? "nonMd" : failure.kind,
+    type: failure.kind,
     error: failure.error,
     usedStaleSnapshot: failure.usedStaleSnapshot,
   };
@@ -156,7 +156,7 @@ function toFailedItem(failure: SourceFailure): FailedItem {
 
 function failedItemIsSource(failed: FailedItem, item: MaterializeSourceIdentity): boolean {
   if (failed.path !== item.source) return false;
-  return item.kind === "file" ? failed.type === "nonMd" : failed.type === item.kind;
+  return failed.type === item.kind;
 }
 
 function addProcessingSource(
@@ -1089,14 +1089,10 @@ export class AgentSessionManager {
     forceRetryFailed?: boolean,
     revisionKey?: string
   ): Promise<ContextMaterializationResult> {
-    const counts: {
-      resolved?: number;
-      prefetch?: ContextLoadStepCount;
-      parsed?: ContextLoadStepCount;
-    } = {};
+    const counts: { prefetch?: ContextLoadStepCount } = {};
     let failedSources: FailedItem[] = [];
     let processingSources: AgentInFlightSource[] = [];
-    let stepPhase: "resolve" | "prefetch" | "parse" = "resolve";
+    let stepPhase: "resolve" | "prefetch" = "resolve";
 
     const prior = settingsStore.get(agentProjectContextLoadAtom)[projectId];
     const ownsPublish = !prior?.blocking;
@@ -1135,19 +1131,9 @@ export class AgentSessionManager {
               processingSources = removeProcessingSource(processingSources, progress.item);
               publishProgress();
               return;
-            case "resolve":
-              counts.resolved = progress.resolved;
-              stepPhase = "resolve";
-              publishProgress();
-              return;
             case "prefetch":
               counts.prefetch = { done: progress.done, total: progress.total };
               stepPhase = "prefetch";
-              publishProgress();
-              return;
-            case "parse":
-              counts.parsed = { done: progress.done, total: progress.total };
-              stepPhase = "parse";
               publishProgress();
               return;
           }
@@ -1221,8 +1207,7 @@ export class AgentSessionManager {
     const before = settingsStore.get(agentProjectContextLoadAtom)[projectId];
     if (before?.blocking) return false;
 
-    const matchesItem = (f: FailedItem) =>
-      f.path === item.source && (item.kind === "file" ? f.type === "nonMd" : f.type === item.kind);
+    const matchesItem = (f: FailedItem) => f.path === item.source && f.type === item.kind;
     const sameSource = (r: { kind: MaterializedSourceType; source: string }) =>
       r.kind === item.kind && r.source === item.source;
 

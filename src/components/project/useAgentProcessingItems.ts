@@ -7,11 +7,7 @@ import {
   type AgentProcessingSource,
 } from "@/components/project/agentProcessingAdapter";
 import type { ProcessingItem } from "@/components/project/processingAdapter";
-import { cacheFileName } from "@/context/contextCacheStore";
-import {
-  listMaterializeCandidates,
-  listMaterializeContextFileSummary,
-} from "@/context/materializeCandidates";
+import { countProjectMarkdownFiles } from "@/context/projectDocumentFiles";
 import { settingsStore } from "@/settings/model";
 import { parseProjectUrls } from "@/utils/urlTagUtils";
 import { useAtomValue } from "jotai";
@@ -37,20 +33,16 @@ export function useAgentProcessingItems(
 
   const inclusions = enabled ? contextSource?.inclusions : undefined;
   const exclusions = enabled ? contextSource?.exclusions : undefined;
-  const summary = useMemo(
-    () =>
-      enabled
-        ? listMaterializeContextFileSummary(app, { inclusions, exclusions })
-        : { candidates: [], skippedMarkdownCount: 0 },
+  const skippedMarkdownCount = useMemo(
+    () => (enabled ? countProjectMarkdownFiles(app, { inclusions, exclusions }) : 0),
     [app, enabled, inclusions, exclusions]
   );
-  const candidates = summary.candidates;
 
   const sources = useMemo<AgentProcessingSource[]>(() => {
     if (!enabled) return [];
     const urls = parseProjectUrls(contextSource?.webUrls || "", contextSource?.youtubeUrls || "");
-    return buildAgentProcessingSources(urls, candidates);
-  }, [enabled, contextSource?.webUrls, contextSource?.youtubeUrls, candidates]);
+    return buildAgentProcessingSources(urls);
+  }, [enabled, contextSource?.webUrls, contextSource?.youtubeUrls]);
 
   const savedContextSource = project.contextSource;
   const savedKeys = useMemo(() => {
@@ -61,14 +53,8 @@ export function useAgentProcessingItems(
       savedContextSource?.youtubeUrls || ""
     );
     for (const u of urls) keys.add(u.id);
-    for (const f of listMaterializeCandidates(app, savedContextSource)) keys.add(`file:${f.path}`);
     return keys;
-  }, [app, enabled, savedContextSource]);
-
-  const fileSnapshotNames = useMemo(
-    () => new Set(candidates.map((f) => cacheFileName("file", f.path))),
-    [candidates]
-  );
+  }, [enabled, savedContextSource]);
 
   const [disk, setDisk] = useState<AgentCacheDirState | undefined>(undefined);
   useEffect(() => {
@@ -77,13 +63,13 @@ export function useAgentProcessingItems(
       return;
     }
     let cancelled = false;
-    void readAgentCacheDirState(app, project.id, fileSnapshotNames).then((state) => {
+    void readAgentCacheDirState(app, project.id).then((state) => {
       if (!cancelled) setDisk(state);
     });
     return () => {
       cancelled = true;
     };
-  }, [app, enabled, project.id, fileSnapshotNames, liveEntry]);
+  }, [app, enabled, project.id, liveEntry]);
 
   const items = useMemo(
     () =>
@@ -93,5 +79,5 @@ export function useAgentProcessingItems(
     [enabled, sources, liveEntry, disk, savedKeys]
   );
 
-  return { items, skippedMarkdownCount: summary.skippedMarkdownCount };
+  return { items, skippedMarkdownCount };
 }

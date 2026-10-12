@@ -4,7 +4,7 @@ import { md5 } from "@/utils/hash";
 import type { UrlKind } from "@/utils/urlTagUtils";
 import type { ContextCacheFs } from "./contextCacheFs";
 
-export const MATERIALIZED_SOURCE_TYPES = ["web", "youtube", "file"] as const;
+export const MATERIALIZED_SOURCE_TYPES = ["web", "youtube"] as const;
 export type MaterializedSourceType = (typeof MATERIALIZED_SOURCE_TYPES)[number];
 
 export interface RemoteSource {
@@ -12,17 +12,8 @@ export interface RemoteSource {
   url: string;
 }
 
-export interface FileSource {
-  vaultPath: string;
-  ext: string;
-  mtime: number;
-  size: number;
-  read: () => Promise<ArrayBuffer>;
-}
-
 export interface ContextConverters {
   fetchRemote: (source: RemoteSource) => Promise<string>;
-  parseFile: (bytes: ArrayBuffer, ext: string) => Promise<string>;
 }
 
 export interface MaterializedEntry {
@@ -45,19 +36,17 @@ export interface MaterializeSourceIdentity {
 }
 
 export type MaterializeProgress =
-  | { phase: "prefetch" | "parse"; done: number; total: number }
+  | { phase: "prefetch"; done: number; total: number }
   | { phase: "itemStart"; item: MaterializeSourceIdentity }
   | { phase: "itemFailed"; item: MaterializeSourceIdentity; failure: SourceFailure }
   | { phase: "itemSettled"; item: MaterializeSourceIdentity };
 
 export interface MaterializeSourcesInput {
   remotesDir: string;
-  filesDir: string;
   markerDir: string;
   fs: ContextCacheFs;
   converters: ContextConverters;
   remotes: RemoteSource[];
-  files: FileSource[];
   nowMs: number;
   forceRetryFailed?: boolean;
   onProgress?: (progress: MaterializeProgress) => void;
@@ -74,7 +63,6 @@ export interface CacheEntryMeta {
   schemaVersion: number;
   sourceType: MaterializedSourceType;
   sourceUrl?: string;
-  sourcePath?: string;
   fetchedAt: string;
   fingerprint: string;
 }
@@ -95,12 +83,11 @@ export interface FailureMarker {
 export async function materializeSources(
   input: MaterializeSourcesInput
 ): Promise<MaterializeSourcesResult> {
-  const { remotesDir, filesDir, markerDir, fs, converters, nowMs, onProgress } = input;
+  const { remotesDir, markerDir, fs, converters, nowMs, onProgress } = input;
   const forceRetryFailed = input.forceRetryFailed ?? false;
   const withSourceLock =
     input.withSourceLock ?? (<T>(_key: string, run: () => Promise<T>) => run());
   await fs.mkdirRecursive(remotesDir);
-  await fs.mkdirRecursive(filesDir);
   await fs.mkdirRecursive(markerDir);
 
   const entries: MaterializedEntry[] = [];
@@ -108,7 +95,6 @@ export async function materializeSources(
   const wantedMarkerNames = new Set<string>();
 
   const remotes = dedupeBy(input.remotes, (r) => `${r.type}:${r.url}`);
-  const files = dedupeBy(input.files, (f) => f.vaultPath);
 
   if (remotes.length > 0) onProgress?.({ phase: "prefetch", done: 0, total: remotes.length });
   let prefetchDone = 0;
@@ -148,38 +134,6 @@ export async function materializeSources(
       failures.push(result.failure);
       if (result.markerWanted) wantedMarkerNames.add(markerName);
     }
-  }
-
-  if (files.length > 0) onProgress?.({ phase: "parse", done: 0, total: files.length });
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const item: MaterializeSourceIdentity = { kind: "file", source: file.vaultPath };
-    const fileName = cacheFileName("file", file.vaultPath);
-    const markerName = failureMarkerName("file", file.vaultPath);
-    const result = await runWithLifecycle(item, onProgress, (onStart) =>
-      withSourceLock(fileName, () =>
-        upsertFile(
-          filesDir,
-          markerDir,
-          fileName,
-          markerName,
-          file,
-          converters,
-          fs,
-          nowMs,
-          forceRetryFailed,
-          onStart
-        )
-      )
-    );
-    if (result.present) {
-      entries.push({ type: "file", source: file.vaultPath, cacheFileName: fileName });
-    }
-    if (result.failure) {
-      failures.push(result.failure);
-      if (result.markerWanted) wantedMarkerNames.add(markerName);
-    }
-    onProgress?.({ phase: "parse", done: i + 1, total: files.length });
   }
 
   return { entries, wantedMarkerNames, failures };
@@ -273,63 +227,6 @@ async function upsertRemote(
     return {
       present: usedStaleSnapshot,
       failure: { source: remote.url, kind: remote.type, error, usedStaleSnapshot },
-      markerWanted,
-    };
-  }
-}
-
-async function upsertFile(
-  snapshotDir: string,
-  markerDir: string,
-  fileName: string,
-  markerName: string,
-  file: FileSource,
-  converters: ContextConverters,
-  fs: ContextCacheFs,
-  nowMs: number,
-  forceRetryFailed: boolean,
-  onStart?: () => void
-): Promise<UpsertResult> {
-  const filePath = joinCachePath(snapshotDir, fileName);
-  const markerPath = joinCachePath(markerDir, markerName);
-  const existing = await readMeta(fs, filePath);
-  const fingerprint = `${file.mtime}:${file.size}`;
-  if (existing !== null && existing.fingerprint === fingerprint) {
-    await removeMarkerBestEffort(fs, markerPath);
-    return { present: true };
-  }
-
-  if (!forceRetryFailed && existing === null) {
-    const marker = await readFailureMarker(fs, markerPath);
-    if (marker !== null && marker.fingerprint === fingerprint) {
-      return {
-        present: false,
-        failure: { source: file.vaultPath, kind: "file", error: marker.error, usedStaleSnapshot: false }, // prettier-ignore
-        markerWanted: true,
-      };
-    }
-  }
-
-  try {
-    onStart?.();
-    const content = await converters.parseFile(await file.read(), file.ext);
-    await writeEntry(fs, filePath, "file", file.vaultPath, fingerprint, content, nowMs);
-    await removeMarkerBestEffort(fs, markerPath);
-    return { present: true };
-  } catch (err) {
-    const error = err2String(err);
-    logWarn(`[project-context] parse failed for ${file.vaultPath}: ${error}`);
-    const usedStaleSnapshot = existing !== null;
-    let markerWanted = false;
-    if (!usedStaleSnapshot) {
-      await writeFailureMarker(fs, markerPath, file.vaultPath, "file", error, nowMs, fingerprint);
-      markerWanted = true;
-    } else {
-      await removeMarkerBestEffort(fs, markerPath);
-    }
-    return {
-      present: usedStaleSnapshot,
-      failure: { source: file.vaultPath, kind: "file", error, usedStaleSnapshot },
       markerWanted,
     };
   }
@@ -430,14 +327,14 @@ async function writeEntry(
   const meta: CacheEntryMeta = {
     schemaVersion: CACHE_SCHEMA_VERSION,
     sourceType,
-    ...(sourceType === "file" ? { sourcePath: source } : { sourceUrl: source }),
+    sourceUrl: source,
     fetchedAt,
     fingerprint,
   };
   const body = content.trim();
   const text =
     `${META_OPEN}\n${JSON.stringify(meta)}\n${META_CLOSE}\n\n` +
-    `# ${sourceType === "file" ? "File" : sourceType === "youtube" ? "YouTube" : "URL"}: ${source}\n` +
+    `# ${sourceType === "youtube" ? "YouTube" : "URL"}: ${source}\n` +
     `_Materialized ${fetchedAt} — snapshot; refresh if the source changed._\n\n` +
     `${body}\n`;
   await fs.writeText(filePath, text);
@@ -461,8 +358,7 @@ export function parseSnapshotMeta(raw: string): CacheEntryMeta | null {
   try {
     const parsed = JSON.parse(json) as Partial<CacheEntryMeta>;
     if (parsed.schemaVersion !== CACHE_SCHEMA_VERSION) return null;
-    const hasSource = Boolean(parsed.sourceUrl ?? parsed.sourcePath);
-    if (!parsed.sourceType || !hasSource || !parsed.fetchedAt || !parsed.fingerprint) {
+    if (!parsed.sourceType || !parsed.sourceUrl || !parsed.fetchedAt || !parsed.fingerprint) {
       return null;
     }
     return parsed as CacheEntryMeta;

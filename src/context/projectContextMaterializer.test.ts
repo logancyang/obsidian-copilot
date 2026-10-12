@@ -24,6 +24,7 @@ jest.mock("@/LLMProviders/brevilabsClient", () => ({
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { getCachedProjectRecordById } from "@/projects/state";
 import { shouldIndexFile } from "@/search/searchUtils";
+import { md5 } from "@/utils/hash";
 import {
   ensureProjectContextMaterialized,
   materializeProjectContextSource,
@@ -95,7 +96,6 @@ beforeEach(() => {
   getClient.mockReturnValue({
     url4llm: jest.fn(async () => ({ response: "url text" })),
     youtube4llm: jest.fn(async () => ({ response: { transcript: "yt text" } })),
-    docs4llm: jest.fn(async () => ({ response: "pdf text" })),
   });
 });
 
@@ -204,30 +204,63 @@ describe("projectContextMaterializer", () => {
       expect(result.projectContextBlock).not.toContain("## Included notes");
     });
 
-    it("materializes in-vault PDFs but ignores markdown files", async () => {
+    it("lists in-vault binary files by their original absolute path without calling the hosted converter", async () => {
       getRecord.mockReturnValue(record({ inclusions: "Proj" }));
       const app = fakeApp([
         { path: "Proj/a.pdf", ext: "pdf" },
+        { path: "Notes/brief.DOCX", ext: "DOCX" },
         { path: "Proj/note.md", ext: "md" },
       ]);
 
-      await ensureProjectContextMaterialized(app, "p1", CWD);
+      const result = await ensureProjectContextMaterialized(app, "p1", CWD);
 
-      const client = getClient.mock.results[0].value as { docs4llm: jest.Mock };
-      expect(client.docs4llm).toHaveBeenCalledTimes(1);
-      expect([...mockFs.files.keys()].some((k) => k.includes("/file-"))).toBe(true);
+      const block = result.projectContextBlock ?? "";
+      expect(block).toContain("## Document files");
+      expect(block).toContain("- `/vault/Proj/a.pdf`");
+      expect(block).toContain("- `/vault/Notes/brief.DOCX`");
+      expect(block).not.toContain("note.md");
+      expect(block).toContain("not converted");
+      expect(getClient).not.toHaveBeenCalled();
+      expect([...mockFs.files.keys()]).toEqual([]);
     });
 
-    it("reports resolve + per-loop progress through onProgress", async () => {
+    it("points an existing project at the original file when its cache still holds an old converted snapshot", async () => {
+      getRecord.mockReturnValue(record({ inclusions: "Proj" }));
+      const app = fakeApp([{ path: "Proj/a.pdf", ext: "pdf" }]);
+      const staleName = `file-${md5("Proj/a.pdf")}.md`;
+      mockFs.files.set(
+        `files/${staleName}`,
+        "<!-- copilot-context-cache\n{}\n-->\n\nold converted text"
+      );
+
+      const result = await ensureProjectContextMaterialized(app, "p1", CWD);
+
+      const block = result.projectContextBlock ?? "";
+      expect(block).toContain("- `/vault/Proj/a.pdf`");
+      expect(block).not.toContain(staleName);
+      expect(block).not.toContain("a.pdf →");
+      expect(mockFs.files.get(`files/${staleName}`)).toContain("old converted text");
+    });
+
+    it("keeps a project with only binary sources out of the empty-context block", async () => {
+      getRecord.mockReturnValue(record({ inclusions: "Proj" }));
+      const app = fakeApp([{ path: "Proj/scan.png", ext: "png" }]);
+
+      const result = await ensureProjectContextMaterialized(app, "p1", CWD);
+
+      expect(result.projectContextBlock).not.toContain("No context sources are configured");
+      expect(result.projectContextBlock).toContain("`/vault/Proj/scan.png`");
+    });
+
+    it("reports only URL prefetch progress for a project that mixes URLs and binary files", async () => {
       getRecord.mockReturnValue(record({ inclusions: "Proj", webUrls: "https://example.com" }));
       const app = fakeApp([{ path: "Proj/a.pdf", ext: "pdf" }]);
 
       const progress: ContextMaterializeProgress[] = [];
       await ensureProjectContextMaterialized(app, "p1", CWD, (p) => progress.push(p));
 
-      expect(progress[0]).toEqual({ phase: "resolve", resolved: 1 });
       expect(progress).toContainEqual({ phase: "prefetch", done: 1, total: 1 });
-      expect(progress).toContainEqual({ phase: "parse", done: 1, total: 1 });
+      expect(progress.map((p) => p.phase)).not.toContain("parse");
     });
 
     it("resolves with the declared URL listed and no snapshot written when its fetch fails", async () => {
@@ -237,7 +270,6 @@ describe("projectContextMaterializer", () => {
           throw new Error("network down");
         }),
         youtube4llm: jest.fn(),
-        docs4llm: jest.fn(),
       });
 
       const result = await ensureProjectContextMaterialized(fakeApp(), "p1", CWD);
@@ -299,7 +331,7 @@ describe("projectContextMaterializer", () => {
         await gate;
         return { response: `content #${calls}` };
       });
-      getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn(), docs4llm: jest.fn() });
+      getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn() });
 
       const a = ensureProjectContextMaterialized(fakeApp(), "pA", "/vault/PA");
       await flushMicrotasks();
@@ -338,7 +370,7 @@ describe("projectContextMaterializer", () => {
         if (url === "https://a.com") await gate;
         return { response: url === "https://a.com" ? "A text" : "B text" };
       });
-      getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn(), docs4llm: jest.fn() });
+      getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn() });
 
       const a = ensureProjectContextMaterialized(app, "p1", CWD);
       await flushMicrotasks();
@@ -364,7 +396,7 @@ describe("projectContextMaterializer", () => {
         await gate;
         return { response: `${url} text` };
       });
-      getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn(), docs4llm: jest.fn() });
+      getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn() });
 
       const a = ensureProjectContextMaterialized(app, "p1", CWD, undefined, undefined, "sig#0");
       await flushMicrotasks();
@@ -382,7 +414,7 @@ describe("projectContextMaterializer", () => {
       const url4llm = jest.fn(async () => {
         throw new Error("network down");
       });
-      getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn(), docs4llm: jest.fn() });
+      getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn() });
 
       await ensureProjectContextMaterialized(app, "p1", CWD);
       expect([...mockFs.files.keys()].some((k) => k.includes("failed-web-"))).toBe(true);
@@ -404,14 +436,13 @@ describe("projectContextMaterializer", () => {
           throw new Error("down");
         }),
         youtube4llm: jest.fn(),
-        docs4llm: jest.fn(),
       });
       await ensureProjectContextMaterialized(app, "p1", CWD);
       expect([...mockFs.files.keys()].some((k) => k.includes("failed-web-"))).toBe(true);
 
       getRecord.mockReturnValue(record({ webUrls: "https://a.com\nhttps://b.com" }));
       const url4llm = jest.fn(async (url: string) => ({ response: url === "https://a.com" ? "A recovered" : "B text" })); // prettier-ignore
-      getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn(), docs4llm: jest.fn() });
+      getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn() });
 
       const warm = ensureProjectContextMaterialized(app, "p1", CWD);
       const forced = ensureProjectContextMaterialized(app, "p1", CWD, undefined, true);
@@ -437,7 +468,7 @@ describe("projectContextMaterializer", () => {
       const url4llm = jest.fn(async (): Promise<{ response: string }> => {
         throw new Error("network down");
       });
-      getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn(), docs4llm: jest.fn() });
+      getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn() });
       await ensureProjectContextMaterialized(app, "p1", CWD);
       expect(url4llm).toHaveBeenCalledTimes(1);
 
@@ -463,7 +494,6 @@ describe("projectContextMaterializer", () => {
           throw new Error("down");
         }),
         youtube4llm: jest.fn(),
-        docs4llm: jest.fn(),
       });
       await ensureProjectContextMaterialized(app, "p1", CWD);
       expect([...mockFs.files.keys()].some((k) => k.includes("failed-web-"))).toBe(true);
@@ -476,7 +506,7 @@ describe("projectContextMaterializer", () => {
         await gate;
         return { response: "recovered" };
       });
-      getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn(), docs4llm: jest.fn() });
+      getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn() });
 
       const retry = materializeProjectContextSource(app, "p1", { kind: "web", source: "https://a.com" }); // prettier-ignore
       await flushMicrotasks();
@@ -507,24 +537,6 @@ describe("projectContextMaterializer", () => {
           source: "https://a.com",
           kind: "web",
           error: "Project not found",
-          usedStaleSnapshot: false,
-        },
-      ]);
-    });
-
-    it("returns a File not found in vault failure for a file source that is not in the vault", async () => {
-      getRecord.mockReturnValue(record({ inclusions: "Proj" }));
-
-      const failures = await materializeProjectContextSource(fakeApp(), "p1", {
-        kind: "file",
-        source: "Proj/gone.pdf",
-      });
-
-      expect(failures).toEqual([
-        {
-          source: "Proj/gone.pdf",
-          kind: "file",
-          error: "File not found in vault",
           usedStaleSnapshot: false,
         },
       ]);

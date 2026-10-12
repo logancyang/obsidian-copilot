@@ -18,6 +18,7 @@ function sources(over: Partial<ManifestSources> = {}): ManifestSources {
     tags: [],
     properties: [],
     propertyNotes: [],
+    documents: [],
     webUrls: [],
     youtubeUrls: [],
     materialized: [],
@@ -167,19 +168,30 @@ describe("manifestBuilder", () => {
       expect(md).toContain("https://youtu.be/abc");
     });
 
-    it("keeps a declared note when materialized file rows overflow the entry cap", () => {
-      const materialized: MaterializedEntry[] = Array.from(
-        { length: MAX_MANIFEST_ENTRIES + 20 },
-        (_, i) => ({
-          type: "file" as const,
-          source: `Papers/p${i}.pdf`,
-          cacheFileName: `file-${i}.md`,
-          snapshotAbsPath: `/cache/files/file-${i}.md`,
+    it("lists document files by the absolute path of the original file under their own section", () => {
+      const md = buildProjectContextBlock(
+        sources({
+          documents: [
+            abs("Papers/a.pdf", "/vault/Papers/a.pdf"),
+            abs("Slides/deck.pptx", "/vault/Slides/deck.pptx"),
+          ],
         })
+      );
+
+      expect(md).toContain(
+        "## Document files\n- `/vault/Papers/a.pdf`\n- `/vault/Slides/deck.pptx`"
+      );
+      expect(md).toContain("not converted");
+      expect(md).not.toContain("→ `/vault/Papers");
+    });
+
+    it("keeps a declared note when document file rows overflow the entry cap", () => {
+      const documents = Array.from({ length: MAX_MANIFEST_ENTRIES + 20 }, (_, i) =>
+        abs(`Papers/p${i}.pdf`, `/vault/Papers/p${i}.pdf`)
       );
       const md = buildProjectContextBlock(
         sources({
-          materialized,
+          documents,
           folders: [abs("Papers", "/vault/Papers")],
           notes: [abs("Outside/Spec.md", "/elsewhere/Outside/Spec.md")],
           tags: ["#physics"],
