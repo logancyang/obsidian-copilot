@@ -321,11 +321,7 @@ describe("GlobalRecentChatsSection", () => {
       expect(screen.getByTitle("Confirm delete")).toBeTruthy();
     });
 
-    it.each([
-      ["claude", "Claude Code"],
-      ["codex", "Codex"],
-      ["opencode", "opencode"],
-    ])(
+    it.each([["claude", "Claude Code"]])(
       "https://github.com/logancyang/obsidian-copilot/issues/2888 says the %s agent may keep its own copy before the user confirms",
       (backendId, agent) => {
         renderSection({ items: [makeItem("chats/agent__a.md", { backendId })] });

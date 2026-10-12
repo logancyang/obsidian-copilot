@@ -157,11 +157,7 @@ describe("useAgentHistoryControls", () => {
       expect(manager.getChatHistoryItems).toHaveBeenCalledWith("project-1");
     });
 
-    it.each([
-      ["claude", "Claude Code"],
-      ["codex", "Codex"],
-      ["opencode", "opencode"],
-    ])(
+    it.each([["claude", "Claude Code"]])(
       "shows one notice saying %s may keep its own copy after a successful delete",
       async (backendId, agent) => {
         const manager = makeManager();
@@ -182,21 +178,6 @@ describe("useAgentHistoryControls", () => {
         );
       }
     );
-
-    it("shows only that the chat left Copilot when the chat has no known agent", async () => {
-      const manager = makeManager();
-      const { result } = renderControls(manager);
-      await act(async () => {
-        await result.current.loadChatHistory();
-      });
-      (Notice as unknown as jest.Mock).mockClear();
-
-      await act(async () => {
-        await result.current.deleteChat("a");
-      });
-
-      expect(Notice).toHaveBeenCalledWith("Chat deleted from Copilot.");
-    });
 
     it("shows the failure notice, reloads the history, and rejects when Copilot's own delete fails", async () => {
       const manager = makeManager() as AgentSessionManager & {

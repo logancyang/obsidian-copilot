@@ -650,14 +650,7 @@ export class AgentSessionManager {
     for (const [internalId, session] of Array.from(this.sessions)) {
       if (!this.recentChatIdsForSession(internalId, session).includes(historyId)) continue;
       const state = this.sessionState.get(internalId);
-      if (state) {
-        state.unsub?.();
-        state.unsub = undefined;
-        window.clearTimeout(state.timer);
-        state.timer = undefined;
-        window.clearTimeout(state.indexTimer);
-        state.indexTimer = undefined;
-      }
+      if (state) this.stopAutoSave(state);
       await this.closeSession(internalId);
       if (state?.source?.path) savedPaths.push(state.source.path);
     }
@@ -2492,11 +2485,18 @@ export class AgentSessionManager {
   private detachAutoSave(internalId: string): void {
     const state = this.sessionState.get(internalId);
     if (!state) return;
-    if (state.timer) window.clearTimeout(state.timer);
-    if (state.indexTimer) window.clearTimeout(state.indexTimer);
-    state.unsub?.();
+    this.stopAutoSave(state);
     state.attentionUnsub?.();
     this.sessionState.delete(internalId);
+  }
+
+  private stopAutoSave(state: { timer?: number; indexTimer?: number; unsub?: () => void }): void {
+    window.clearTimeout(state.timer);
+    state.timer = undefined;
+    window.clearTimeout(state.indexTimer);
+    state.indexTimer = undefined;
+    state.unsub?.();
+    state.unsub = undefined;
   }
 
   private attachAttentionTracking(session: AgentSession): void {

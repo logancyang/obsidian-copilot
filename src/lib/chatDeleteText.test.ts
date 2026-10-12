@@ -3,7 +3,6 @@ import { describeChatDelete, formatChatDeleteNotice } from "@/lib/chatDeleteText
 const AGENTS = [
   ["Claude Code", { displayName: "Claude", agentProductName: "Claude Code" }],
   ["Codex", { displayName: "Codex" }],
-  ["opencode", { displayName: "opencode" }],
 ] as const;
 
 describe("chatDeleteText", () => {

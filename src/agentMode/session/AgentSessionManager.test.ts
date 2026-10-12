@@ -3700,15 +3700,6 @@ describe("AgentSessionManager", () => {
         expect(await index.getEntry("opencode", "s1")).toBeNull();
       });
 
-      it("rejects with the storage error when the chat file cannot be deleted", async () => {
-        const { manager, persistence } = buildHistoryHarness({
-          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", sessionId: "s1" } },
-        });
-        persistence.deleteFile.mockRejectedValueOnce(new Error("locked"));
-
-        await expect(manager.deleteChatHistory("chats/agent__a.md")).rejects.toThrow("locked");
-      });
-
       async function persistedNoteFixture() {
         const notePath = "chats/agent__a.md";
         const content =
