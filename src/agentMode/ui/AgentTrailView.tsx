@@ -1,7 +1,8 @@
 import React, { useMemo } from "react";
 import { agentResponseText, buildAgentTrail } from "@/agentMode/ui/agentTrail";
-import type { AgentMessagePart, StopReason } from "@/agentMode/session/types";
+import type { AgentMessagePart, StopReason, TurnFileChange } from "@/agentMode/session/types";
 import { ActionCard } from "@/agentMode/ui/ActionCard";
+import { FilesChangedCard } from "@/agentMode/ui/FilesChangedCard";
 import { ActivityGroupCard } from "@/agentMode/ui/ActivityGroupCard";
 import {
   foldActivityGroups,
@@ -30,7 +31,11 @@ interface AgentTrailProps {
   timestamp?: string;
   app: App;
   turnStopReason?: StopReason;
+  fileChanges?: TurnFileChange[];
+  onOpenFileChange?: (change: TurnFileChange) => void;
 }
+
+const noopOpenFileChange = () => {};
 
 export const AgentTrail: React.FC<AgentTrailProps> = ({
   parts,
@@ -40,6 +45,8 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   timestamp,
   app,
   turnStopReason,
+  fileChanges,
+  onOpenFileChange = noopOpenFileChange,
 }) => {
   const answer = agentResponseText(parts);
   const hasRunningDuration = isStreaming && turnStartedAtMs !== undefined;
@@ -64,6 +71,9 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   return (
     <div className="tw-group tw-flex tw-flex-col tw-gap-1">
       <LinearTrail parts={parts} isStreaming={isStreaming} app={app} />
+      {turnStopReason !== undefined && fileChanges && fileChanges.length > 0 ? (
+        <FilesChangedCard changes={fileChanges} onOpen={onOpenFileChange} />
+      ) : null}
       {hasRunningDuration ? (
         <AgentTurnDurationIndicator status="running" startedAtMs={turnStartedAtMs} />
       ) : null}

@@ -1,13 +1,16 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
   AgentChatMessage,
+  TurnFileChange,
   AskUserQuestionPrompt,
   CurrentPlan,
   PermissionPrompt,
 } from "@/agentMode/session/types";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { AI_SENDER } from "@/constants";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
+import { logError } from "@/logger";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 type AgentChatMessagesProps = React.ComponentProps<typeof AgentChatMessages>;
@@ -51,11 +54,35 @@ jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
 }));
 
 jest.mock("@/agentMode/ui/AgentTrailView", () => ({
-  AgentTrail: ({ timestamp, parts }: { timestamp?: string; parts: unknown[] }) => {
+  AgentTrail: ({
+    timestamp,
+    parts,
+    fileChanges,
+    onOpenFileChange,
+  }: {
+    timestamp?: string;
+    parts: unknown[];
+    fileChanges?: TurnFileChange[];
+    onOpenFileChange?: (change: TurnFileChange) => void;
+  }) => {
     mockTrailRender(parts);
-    return <div data-testid="agent-trail-timestamp">{timestamp}</div>;
+    return (
+      <div data-testid="agent-trail-timestamp">
+        {timestamp}
+        {fileChanges?.map((change) => (
+          <button key={change.path} type="button" onClick={() => onOpenFileChange?.(change)}>
+            {change.path}
+          </button>
+        ))}
+      </div>
+    );
   },
 }));
+
+jest.mock("@/agentMode/ui/TurnDiffView", () => ({
+  openTurnDiff: jest.fn(() => Promise.resolve()),
+}));
+jest.mock("@/logger", () => ({ ...jest.requireActual("@/logger"), logError: jest.fn() }));
 
 jest.mock("@/agentMode/ui/ToolPermissionCard", () => ({
   ToolPermissionCard: ({ request, toolName }: { request: PermissionPrompt; toolName?: string }) => (
@@ -75,6 +102,15 @@ jest.mock("@/agentMode/ui/AskUserQuestionCard", () => ({
 jest.mock("@/agentMode/ui/PlanProposalCard", () => ({
   PlanProposalCard: ({ plan }: { plan: CurrentPlan }) => <div>Plan {plan.id}</div>,
 }));
+
+const FILE_CHANGE: TurnFileChange = {
+  path: "notes/diff-demo/alpha.md",
+  status: "modified",
+  before: "The quick brown fox.\n",
+  after: "The quick red fox.\n",
+  additions: 1,
+  deletions: 1,
+};
 
 function assistantMessage(
   id: string,
@@ -259,6 +295,49 @@ describe("AgentChatMessages", () => {
       expect(mockTrailRender).toHaveBeenCalledTimes(3);
       expect(mockTrailRender.mock.calls[0][0]).toBe(originalCompletedParts);
       expect(screen.getAllByTestId("agent-trail-timestamp")).toHaveLength(2);
+    });
+
+    it("opens the clicked file's diff against the turn that changed it", () => {
+      const app = {} as never;
+      renderMessages(
+        [
+          assistantMessage("answer-1", 62_000, {
+            parts: [{ kind: "thought", text: "Revise the note." }],
+            turnStopReason: "end_turn",
+            fileChanges: [FILE_CHANGE],
+          }),
+        ],
+        false,
+        { app }
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "notes/diff-demo/alpha.md" }));
+
+      expect(openTurnDiff).toHaveBeenCalledWith(app, FILE_CHANGE, "answer-1");
+    });
+
+    it("logs a diff tab that fails to open instead of leaving the rejection unhandled", async () => {
+      const failure = new Error("leaf detached");
+      jest.mocked(openTurnDiff).mockRejectedValueOnce(failure);
+      renderMessages(
+        [
+          assistantMessage("answer-1", 62_000, {
+            parts: [{ kind: "thought", text: "Revise the note." }],
+            turnStopReason: "end_turn",
+            fileChanges: [FILE_CHANGE],
+          }),
+        ],
+        false
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: FILE_CHANGE.path }));
+
+      await waitFor(() =>
+        expect(logError).toHaveBeenCalledWith(
+          "[AgentChatMessages] failed to open the turn diff",
+          failure
+        )
+      );
     });
 
     it("shows questions before permissions and reveals a permission after questions clear for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
