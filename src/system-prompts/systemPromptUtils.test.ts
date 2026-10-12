@@ -1,4 +1,5 @@
 import {
+  updatePromptDefaultFlag,
   getSystemPromptsFolder,
   getPromptFilePath,
   isSystemPromptFile,
@@ -11,10 +12,16 @@ import * as settingsModel from "@/settings/model";
 import * as state from "@/system-prompts/state";
 import type { CopilotSettings } from "@/settings/model";
 import { mockTFile } from "@/__tests__/mockObsidian";
+import { createMemoryVault } from "@/__tests__/memoryVault";
 
 jest.mock("obsidian", () => ({
   TFile: jest.fn(),
   TAbstractFile: jest.fn(),
+  TFolder: jest.fn(),
+  stringifyYaml: (value: unknown) =>
+    jest.requireActual<typeof import("yaml")>("yaml").stringify(value),
+  parseYaml: (text: string): unknown =>
+    jest.requireActual<typeof import("yaml")>("yaml").parse(text) as unknown,
   normalizePath: jest.fn((path: string) => path),
 }));
 
@@ -166,7 +173,8 @@ describe("systemPromptUtils", () => {
 
       window.app = {
         vault: {
-          read: jest.fn(),
+          getAbstractFileByPath: jest.fn(() => null),
+          adapter: { exists: jest.fn().mockResolvedValue(true), read: jest.fn() },
         },
         metadataCache: {
           getFileCache: jest.fn(),
@@ -186,7 +194,7 @@ copilot-system-prompt-last-used: 1234567892
 ---
 This is the prompt content.`;
 
-      (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
+      (app.vault.adapter.read as jest.Mock).mockResolvedValue(rawContent);
       (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({
         frontmatter: {
           "copilot-system-prompt-created": 1234567890,
@@ -209,7 +217,7 @@ This is the prompt content.`;
     it("parses a file without frontmatter", async () => {
       const rawContent = "This is the prompt content without frontmatter.";
 
-      (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
+      (app.vault.adapter.read as jest.Mock).mockResolvedValue(rawContent);
       (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({});
 
       const result = await parseSystemPromptFile(app, mockFile);
@@ -229,7 +237,7 @@ copilot-system-prompt-created: 1234567890
 ---
 Content here.`;
 
-      (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
+      (app.vault.adapter.read as jest.Mock).mockResolvedValue(rawContent);
       (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({
         frontmatter: {
           "copilot-system-prompt-created": 1234567890,
@@ -253,7 +261,7 @@ copilot-system-prompt-created: 1234567890
 ---
 Content with --- separator in the middle.`;
 
-      (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
+      (app.vault.adapter.read as jest.Mock).mockResolvedValue(rawContent);
       (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({
         frontmatter: {
           "copilot-system-prompt-created": 1234567890,
@@ -279,8 +287,13 @@ Content with --- separator in the middle.`;
       Object.setPrototypeOf(promptFile, TFile.prototype);
       const app = {
         vault: {
-          getFiles: jest.fn().mockReturnValue([promptFile]),
-          read: jest.fn().mockResolvedValue("Prompt content"),
+          getAbstractFileByPath: jest.fn(() => null),
+          adapter: {
+            exists: jest.fn().mockResolvedValue(true),
+            list: jest.fn().mockResolvedValue({ files: [promptFile.path], folders: [] }),
+            read: jest.fn().mockResolvedValue("Prompt content"),
+            stat: jest.fn().mockResolvedValue({ ctime: 0, mtime: 0, size: 0 }),
+          },
         },
         metadataCache: {
           getFileCache: jest.fn().mockReturnValue({}),
@@ -312,8 +325,13 @@ Content with --- separator in the middle.`;
       Object.setPrototypeOf(promptFile, TFile.prototype);
       const app = {
         vault: {
-          getFiles: jest.fn().mockReturnValue([promptFile]),
-          read: jest.fn().mockResolvedValue("Prompt content"),
+          getAbstractFileByPath: jest.fn(() => null),
+          adapter: {
+            exists: jest.fn().mockResolvedValue(true),
+            list: jest.fn().mockResolvedValue({ files: [promptFile.path], folders: [] }),
+            read: jest.fn().mockResolvedValue("Prompt content"),
+            stat: jest.fn().mockResolvedValue({ ctime: 0, mtime: 0, size: 0 }),
+          },
         },
         metadataCache: {
           getFileCache: jest.fn().mockReturnValue({}),
@@ -324,6 +342,26 @@ Content with --- separator in the middle.`;
 
       expect(prompts.map((prompt) => prompt.title)).toEqual(["Test Prompt"]);
       expect(state.getCachedSystemPrompts()).toBe(prompts);
+    });
+  });
+
+  describe("hidden prompts folder", () => {
+    it("lists prompts and sets or clears the default flag https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
+      const folder = ".copilot/copilot-system-prompts";
+      jest.spyOn(settingsModel, "getSettings").mockReturnValue({
+        userSystemPromptsFolder: folder,
+      } as CopilotSettings);
+      const { app, files } = createMemoryVault({ [`${folder}/Mine.md`]: "---\n---\nPrompt body" });
+
+      const prompts = await fetchAllSystemPrompts(app);
+      expect(prompts.map((p) => [p.title, p.content])).toEqual([["Mine", "Prompt body"]]);
+
+      await updatePromptDefaultFlag(app, "Mine", true, folder);
+      expect(files.get(`${folder}/Mine.md`)).toContain("copilot-system-prompt-default: true");
+
+      await updatePromptDefaultFlag(app, "Mine", false, folder);
+      expect(files.get(`${folder}/Mine.md`)).not.toContain("copilot-system-prompt-default");
+      expect(files.get(`${folder}/Mine.md`)?.endsWith("Prompt body")).toBe(true);
     });
   });
 });
