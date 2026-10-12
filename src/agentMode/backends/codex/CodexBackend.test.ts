@@ -240,5 +240,44 @@ describe("CodexBackend", () => {
         ).rejects.toThrow(/Codex adapter path not configured/);
       });
     });
+
+    describe("clientCapabilitiesMeta", () => {
+      it("opts into Codex's own turn diff when the client initializes https://github.com/agentclientprotocol/codex-acp/issues/601", () => {
+        expect(new CodexBackend().clientCapabilitiesMeta).toEqual({ codex: { turnDiff: true } });
+      });
+    });
+
+    describe("readTurnDiff()", () => {
+      it("returns the unified diff and its root from a completed turn's prompt result https://github.com/agentclientprotocol/codex-acp/issues/601", () => {
+        const meta = {
+          quota: { token_count: { totalTokens: 10 } },
+          codex: {
+            turnDiff: {
+              status: "reported",
+              turnId: "turn-1",
+              root: "/repo",
+              diff: "diff --git a/vault/a.md b/vault/a.md\n",
+            },
+          },
+        };
+
+        expect(new CodexBackend().readTurnDiff(meta)).toEqual({
+          root: "/repo",
+          unifiedDiff: "diff --git a/vault/a.md b/vault/a.md\n",
+        });
+      });
+
+      it("returns null when Codex withholds an oversized diff or the result carries none, as a cancelled turn or an older adapter sends https://github.com/agentclientprotocol/codex-acp/issues/601", () => {
+        const backend = new CodexBackend();
+
+        expect(
+          backend.readTurnDiff({
+            codex: { turnDiff: { status: "unavailable", turnId: "turn-1", reason: "tooLarge" } },
+          })
+        ).toBeNull();
+        expect(backend.readTurnDiff({ quota: {} })).toBeNull();
+        expect(backend.readTurnDiff(null)).toBeNull();
+      });
+    });
   });
 });

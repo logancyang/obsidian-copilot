@@ -193,6 +193,34 @@ const testAcpNotificationToEvents = () => {
     expect(cleared[1].update).toEqual({ sessionUpdate: "plan", entries: [] });
   });
 
+  it("attaches the file texts Copilot's OpenCode plugin recorded before a tool wrote them https://github.com/Brevilabs/obsidian-copilot-private/issues/687", () => {
+    const originalFiles = { "/vault/a.md": "before\n", "/vault/new.md": null };
+
+    const [event] = acpNotificationToEvents(
+      notification({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "call-1",
+        status: "completed",
+        rawOutput: { metadata: { files: [], copilot: { originalFiles } } },
+      })
+    );
+
+    expect(event.update).toMatchObject({ originalFiles });
+  });
+
+  it("attaches no file texts when a tool result has none or they are not text", () => {
+    const toolResult = (rawOutput: unknown) =>
+      acpNotificationToEvents(
+        notification({ sessionUpdate: "tool_call_update", toolCallId: "call-1", rawOutput })
+      )[0].update;
+
+    expect(toolResult(undefined)).not.toHaveProperty("originalFiles");
+    expect(toolResult({ metadata: { files: [] } })).not.toHaveProperty("originalFiles");
+    expect(
+      toolResult({ metadata: { copilot: { originalFiles: { "/vault/a.md": 42 } } } })
+    ).not.toHaveProperty("originalFiles");
+  });
+
   it("passes a real plan notification through unchanged as a single event", () => {
     const events = acpNotificationToEvents(
       notification({

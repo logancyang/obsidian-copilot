@@ -3,7 +3,7 @@ import { OpencodeBackendDescriptor } from "@/agentMode/backends/opencode/descrip
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
 import { waitFor } from "@testing-library/react";
-import type { TFile } from "obsidian";
+import { FileSystemAdapter, type App, type TFile } from "obsidian";
 import {
   AgentSession,
   buildPromptBlocks,
@@ -18,6 +18,7 @@ import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plus
 import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { GLOBAL_SCOPE } from "./scope";
+import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
 import { FANOUT_READONLY_PREAMBLE, type FanoutTurn } from "./fanout/fanoutTypes";
@@ -2312,6 +2313,473 @@ describe("AgentSession", () => {
           expect(text).toContain("answer a");
           expect(text).toContain("answer b");
           expect(text).not.toContain("a combined summary could not be generated");
+        });
+      });
+
+      describe("turn file changes", () => {
+        function makeVault(initial: Record<string, string>) {
+          const files = new Map(Object.entries(initial));
+          const adapter = new FileSystemAdapter();
+          adapter.read = jest.fn((p: string) => {
+            const content = files.get(p);
+            return content === undefined
+              ? Promise.reject(new Error(`ENOENT: ${p}`))
+              : Promise.resolve(content);
+          });
+          const app = { vault: { adapter } } as unknown as App;
+          return { files, adapter, app };
+        }
+
+        function makeSession(mock: ReturnType<typeof makeMockBackend>, app: App) {
+          const session = new AgentSession({
+            backend: mock.asBackend,
+            backendSessionId: "acp-1",
+            internalId: "internal-1",
+            backendId: "claude",
+            getApp: () => app,
+          });
+          session.completeResume(null);
+          return session;
+        }
+
+        const toolCall = (
+          toolCallId: string,
+          kind: "edit" | "delete" | "read",
+          locations: string[]
+        ) => ({
+          sessionId: "acp-1",
+          update: {
+            sessionUpdate: "tool_call" as const,
+            toolCallId,
+            title: kind,
+            kind,
+            status: "in_progress" as const,
+            locations: locations.map((path) => ({ path })),
+          },
+        });
+
+        const editCall = (toolCallId: string, filePath: string) =>
+          toolCall(toolCallId, "edit", [filePath]);
+
+        const toolResult = (toolCallId: string, originalFiles: Record<string, string | null>) => ({
+          sessionId: "acp-1",
+          update: {
+            sessionUpdate: "tool_call_update" as const,
+            toolCallId,
+            status: "completed" as const,
+            originalFiles,
+          },
+        });
+
+        function fileChangesOf(session: AgentSession) {
+          const messages = session.store.getDisplayMessages().filter((m) => m.sender === AI_SENDER);
+          return messages[messages.length - 1]?.fileChanges;
+        }
+
+        beforeEach(() => {
+          __resetVaultBaseCache();
+        });
+
+        afterEach(() => {
+          __resetVaultBaseCache();
+        });
+
+        it("reports one change per file, from the file the turn first saw to the file at turn end", async () => {
+          const vault = makeVault({ "notes/a.md": "one\ntwo\n" });
+          const mock = makeMockBackend();
+          mock.prompt.mockImplementation(async () => {
+            mock.emit(editCall("t1", "/vault/notes/a.md"));
+            mock.emit(editCall("t2", "/vault/notes/a.md"));
+            mock.emit(editCall("t3", "/vault/notes/a.md"));
+            vault.files.set("notes/a.md", "ONE\ntwo\nthree\n");
+            return { stopReason: "end_turn" as const };
+          });
+          const session = makeSession(mock, vault.app);
+
+          await session.sendPrompt("edit it three times").turn;
+
+          expect(fileChangesOf(session)).toEqual([
+            {
+              path: "notes/a.md",
+              status: "modified",
+              before: "one\ntwo\n",
+              after: "ONE\ntwo\nthree\n",
+              additions: 2,
+              deletions: 1,
+            },
+          ]);
+        });
+
+        it("reports a file missing when the turn first named it as created, and one missing at turn end as deleted", async () => {
+          const vault = makeVault({ "notes/old.md": "stale\n" });
+          const mock = makeMockBackend();
+          mock.prompt.mockImplementation(async () => {
+            mock.emit(editCall("t1", "/vault/notes/new.md"));
+            mock.emit(toolCall("t2", "delete", ["/vault/notes/old.md"]));
+            vault.files.set("notes/new.md", "fresh\n");
+            vault.files.delete("notes/old.md");
+            return { stopReason: "end_turn" as const };
+          });
+          const session = makeSession(mock, vault.app);
+
+          await session.sendPrompt("replace the old note").turn;
+
+          expect(fileChangesOf(session)).toEqual([
+            {
+              path: "notes/new.md",
+              status: "created",
+              before: null,
+              after: "fresh\n",
+              additions: 1,
+              deletions: 0,
+            },
+            {
+              path: "notes/old.md",
+              status: "deleted",
+              before: "stale\n",
+              after: null,
+              additions: 0,
+              deletions: 1,
+            },
+          ]);
+        });
+
+        it("reports nothing for a file the turn edited and then restored", async () => {
+          const vault = makeVault({ "notes/a.md": "original\n" });
+          const mock = makeMockBackend();
+          mock.prompt.mockImplementation(async () => {
+            mock.emit(editCall("t1", "/vault/notes/a.md"));
+            vault.files.set("notes/a.md", "changed\n");
+            vault.files.set("notes/a.md", "original\n");
+            return { stopReason: "end_turn" as const };
+          });
+          const session = makeSession(mock, vault.app);
+
+          await session.sendPrompt("edit and undo").turn;
+
+          expect(fileChangesOf(session)).toBeUndefined();
+        });
+
+        it("leaves a file the turn only read out of the reported changes https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
+          const vault = makeVault({ "notes/a.md": "unchanged\n" });
+          const mock = makeMockBackend();
+          mock.prompt.mockImplementation(async () => {
+            mock.emit(toolCall("t1", "read", ["/vault/notes/a.md"]));
+            vault.files.set("notes/a.md", "changed by someone else\n");
+            return { stopReason: "end_turn" as const };
+          });
+          const session = makeSession(mock, vault.app);
+
+          await session.sendPrompt("read it").turn;
+
+          expect(fileChangesOf(session)).toBeUndefined();
+        });
+
+        it("ignores paths outside the vault and inside hidden folders https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
+          const vault = makeVault({});
+          const mock = makeMockBackend();
+          mock.prompt.mockImplementation(async () => {
+            mock.emit(editCall("t1", "/tmp/scratch.md"));
+            mock.emit(editCall("t2", "/vault/.config/plugins/copilot/data.json"));
+            vault.files.set(".config/plugins/copilot/data.json", "{}");
+            return { stopReason: "end_turn" as const };
+          });
+          const session = makeSession(mock, vault.app);
+
+          await session.sendPrompt("touch everything").turn;
+
+          expect(fileChangesOf(session)).toBeUndefined();
+          expect(vault.adapter.read).not.toHaveBeenCalled();
+        });
+
+        it("still reports what landed when the user cancels the turn", async () => {
+          const vault = makeVault({ "notes/a.md": "one\n" });
+          const mock = makeMockBackend();
+          let markPromptEntered!: () => void;
+          const promptEntered = new Promise<void>((resolve) => {
+            markPromptEntered = resolve;
+          });
+          mock.prompt.mockImplementation(() => {
+            mock.emit(editCall("t1", "/vault/notes/a.md"));
+            vault.files.set("notes/a.md", "one\ntwo\n");
+            markPromptEntered();
+            return new Promise<never>(() => {});
+          });
+          const session = makeSession(mock, vault.app);
+
+          const { turn } = session.sendPrompt("edit it");
+          await promptEntered;
+          await session.cancel();
+          await turn;
+
+          expect(fileChangesOf(session)).toMatchObject([
+            { path: "notes/a.md", status: "modified", additions: 1, deletions: 0 },
+          ]);
+        });
+
+        it("starts each turn from a clean slate so an earlier turn's files are not re-reported", async () => {
+          const vault = makeVault({ "notes/a.md": "one\n" });
+          const mock = makeMockBackend();
+          mock.prompt.mockImplementationOnce(async () => {
+            mock.emit(editCall("t1", "/vault/notes/a.md"));
+            vault.files.set("notes/a.md", "one\ntwo\n");
+            return { stopReason: "end_turn" as const };
+          });
+          mock.prompt.mockImplementationOnce(async () => ({ stopReason: "end_turn" as const }));
+          const session = makeSession(mock, vault.app);
+
+          await session.sendPrompt("edit it").turn;
+          expect(fileChangesOf(session)).toHaveLength(1);
+
+          await session.sendPrompt("say hello").turn;
+          expect(fileChangesOf(session)).toBeUndefined();
+        });
+
+        it("ignores a late update to an earlier turn's edit so the current turn does not report it https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
+          const vault = makeVault({ "notes/a.md": "one\n" });
+          const mock = makeMockBackend();
+          mock.prompt.mockImplementationOnce(async () => {
+            mock.emit(editCall("t1", "/vault/notes/a.md"));
+            vault.files.set("notes/a.md", "one\ntwo\n");
+            return { stopReason: "end_turn" as const };
+          });
+          mock.prompt.mockImplementationOnce(async () => {
+            mock.emit(toolResult("t1", { "/vault/notes/a.md": "one\n" }));
+            return { stopReason: "end_turn" as const };
+          });
+          const session = makeSession(mock, vault.app);
+
+          await session.sendPrompt("edit it").turn;
+          expect(fileChangesOf(session)).toHaveLength(1);
+
+          await session.sendPrompt("say hello").turn;
+          expect(fileChangesOf(session)).toBeUndefined();
+        });
+
+        it("captures nothing when the session has no app to read the vault through", async () => {
+          const mock = makeMockBackend();
+          mock.prompt.mockImplementation(async () => {
+            mock.emit(editCall("t1", "notes/a.md"));
+            return { stopReason: "end_turn" as const };
+          });
+          const session = new AgentSession({
+            backend: mock.asBackend,
+            backendSessionId: "acp-1",
+            internalId: "internal-1",
+            backendId: "claude",
+          });
+          session.completeResume(null);
+
+          await session.sendPrompt("edit it").turn;
+
+          expect(fileChangesOf(session)).toBeUndefined();
+        });
+
+        describe("before text from the first-mention snapshot", () => {
+          it("snapshots as soon as a permission request names the file it wants to edit", async () => {
+            const vault = makeVault({ "notes/a.md": "before the turn\n" });
+            const mock = makeMockBackend();
+            mock.prompt.mockImplementation(async () => {
+              void session.handleToolPermission({
+                sessionId: "acp-1",
+                toolCall: {
+                  toolCallId: "t1",
+                  title: "write",
+                  kind: "edit",
+                  locations: [{ path: "/vault/notes/a.md" }],
+                },
+                options: [{ optionId: "once", name: "Allow once", kind: "allow_once" }],
+              });
+              vault.files.set("notes/a.md", "written by the agent\n");
+              mock.emit(editCall("t1", "/vault/notes/a.md"));
+              return { stopReason: "end_turn" as const };
+            });
+            const session = makeSession(mock, vault.app);
+
+            await session.sendPrompt("write it").turn;
+
+            expect(fileChangesOf(session)).toMatchObject([
+              { path: "notes/a.md", before: "before the turn\n", after: "written by the agent\n" },
+            ]);
+          });
+
+          it("keeps the snapshot from an earlier read so a later write's announcement cannot overtake it", async () => {
+            const vault = makeVault({ "notes/a.md": "before the turn\n" });
+            const mock = makeMockBackend();
+            mock.prompt.mockImplementation(async () => {
+              mock.emit(toolCall("t1", "read", ["/vault/notes/a.md"]));
+              vault.files.set("notes/a.md", "written by the agent\n");
+              mock.emit(editCall("t2", "/vault/notes/a.md"));
+              return { stopReason: "end_turn" as const };
+            });
+            const session = makeSession(mock, vault.app);
+
+            await session.sendPrompt("rewrite it").turn;
+
+            expect(fileChangesOf(session)).toMatchObject([
+              { path: "notes/a.md", before: "before the turn\n", after: "written by the agent\n" },
+            ]);
+          });
+
+          it("captures an edit whose path and kind arrive only in later updates to the tool call", async () => {
+            const vault = makeVault({ "notes/a.md": "one\n" });
+            const mock = makeMockBackend();
+            mock.prompt.mockImplementation(async () => {
+              mock.emit({
+                sessionId: "acp-1",
+                update: {
+                  sessionUpdate: "tool_call",
+                  toolCallId: "t1",
+                  title: "edit",
+                  kind: "edit",
+                  status: "pending",
+                },
+              });
+              mock.emit({
+                sessionId: "acp-1",
+                update: {
+                  sessionUpdate: "tool_call_update",
+                  toolCallId: "t1",
+                  status: "in_progress",
+                  locations: [{ path: "/vault/notes/a.md" }],
+                },
+              });
+              vault.files.set("notes/a.md", "one\ntwo\n");
+              return { stopReason: "end_turn" as const };
+            });
+            const session = makeSession(mock, vault.app);
+
+            await session.sendPrompt("edit it").turn;
+
+            expect(fileChangesOf(session)).toMatchObject([
+              { path: "notes/a.md", before: "one\n", after: "one\ntwo\n" },
+            ]);
+          });
+        });
+
+        describe("before text from tool result originals", () => {
+          it("takes the original a tool result reports over a snapshot the write overtook https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
+            const vault = makeVault({ "notes/a.md": "already written by the agent\n" });
+            const mock = makeMockBackend();
+            mock.prompt.mockImplementation(async () => {
+              mock.emit(editCall("t1", "/vault/notes/a.md"));
+              mock.emit(toolResult("t1", { "/vault/notes/a.md": "the true original\n" }));
+              return { stopReason: "end_turn" as const };
+            });
+            const session = makeSession(mock, vault.app);
+
+            await session.sendPrompt("edit it").turn;
+
+            expect(fileChangesOf(session)).toMatchObject([
+              { before: "the true original\n", after: "already written by the agent\n" },
+            ]);
+          });
+
+          it("keeps the first original when a later edit to the same file reports its own https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
+            const vault = makeVault({ "notes/a.md": "third\n" });
+            const mock = makeMockBackend();
+            mock.prompt.mockImplementation(async () => {
+              mock.emit(editCall("t1", "/vault/notes/a.md"));
+              mock.emit(toolResult("t1", { "/vault/notes/a.md": "first\n" }));
+              mock.emit(editCall("t2", "/vault/notes/a.md"));
+              mock.emit(toolResult("t2", { "/vault/notes/a.md": "second\n" }));
+              return { stopReason: "end_turn" as const };
+            });
+            const session = makeSession(mock, vault.app);
+
+            await session.sendPrompt("edit it twice").turn;
+
+            expect(fileChangesOf(session)).toMatchObject([
+              { path: "notes/a.md", before: "first\n", after: "third\n" },
+            ]);
+          });
+
+          it("matches each original to its own file when one call changes several https://github.com/Brevilabs/obsidian-copilot-private/issues/687", async () => {
+            const vault = makeVault({ "notes/a.md": "a after\n", "notes/moved.md": "moved\n" });
+            const mock = makeMockBackend();
+            mock.prompt.mockImplementation(async () => {
+              mock.emit(
+                toolCall("t1", "edit", [
+                  "/vault/notes/a.md",
+                  "/vault/notes/old.md",
+                  "/vault/notes/moved.md",
+                ])
+              );
+              mock.emit(
+                toolResult("t1", {
+                  "/vault/notes/a.md": "a before\n",
+                  "/vault/notes/old.md": "moved\n",
+                  "/vault/notes/moved.md": null,
+                })
+              );
+              return { stopReason: "end_turn" as const };
+            });
+            const session = makeSession(mock, vault.app);
+
+            await session.sendPrompt("patch and move").turn;
+
+            expect(fileChangesOf(session)).toEqual([
+              expect.objectContaining({ path: "notes/a.md", before: "a before\n" }),
+              expect.objectContaining({ path: "notes/old.md", status: "deleted" }),
+              expect.objectContaining({ path: "notes/moved.md", status: "created" }),
+            ]);
+          });
+        });
+
+        describe("before text from the backend's turn diff", () => {
+          const turnDiff = {
+            root: "/vault",
+            unifiedDiff: [
+              "diff --git a/notes/a.md b/notes/a.md",
+              "--- a/notes/a.md",
+              "+++ b/notes/a.md",
+              "@@ -1,3 +1,4 @@",
+              " one",
+              "-two",
+              "+TWO",
+              "+inserted",
+              " three",
+              "",
+            ].join("\n"),
+          };
+
+          it("recovers a file's before text by reversing the turn diff over a snapshot the write overtook https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
+            const vault = makeVault({ "notes/a.md": "one\nTWO\ninserted\nthree\n" });
+            const mock = makeMockBackend();
+            mock.prompt.mockImplementation(async () => {
+              mock.emit(editCall("t1", "/vault/notes/a.md"));
+              return { stopReason: "end_turn" as const, turnDiff };
+            });
+            const session = makeSession(mock, vault.app);
+
+            await session.sendPrompt("patch it").turn;
+
+            expect(fileChangesOf(session)).toMatchObject([
+              {
+                path: "notes/a.md",
+                status: "modified",
+                before: "one\ntwo\nthree\n",
+                after: "one\nTWO\ninserted\nthree\n",
+              },
+            ]);
+          });
+
+          it("falls back to the snapshot for a file the turn diff no longer applies to https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
+            const vault = makeVault({ "notes/a.md": "snapshot\n" });
+            const mock = makeMockBackend();
+            mock.prompt.mockImplementation(async () => {
+              mock.emit(editCall("t1", "/vault/notes/a.md"));
+              vault.files.set("notes/a.md", "rewritten after the patch\n");
+              return { stopReason: "end_turn" as const, turnDiff };
+            });
+            const session = makeSession(mock, vault.app);
+
+            await session.sendPrompt("patch it").turn;
+
+            expect(fileChangesOf(session)).toMatchObject([
+              { path: "notes/a.md", before: "snapshot\n", after: "rewritten after the patch\n" },
+            ]);
+          });
         });
       });
     });

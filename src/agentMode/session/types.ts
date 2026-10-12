@@ -367,6 +367,12 @@ export interface PromptInput {
 
 export interface PromptOutput {
   stopReason: StopReason;
+  turnDiff?: TurnDiff;
+}
+
+export interface TurnDiff {
+  root: string;
+  unifiedDiff: string;
 }
 
 export interface ListSessionsInput {
