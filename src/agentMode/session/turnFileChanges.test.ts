@@ -15,7 +15,7 @@ describe("turnFileChanges", () => {
       });
     });
 
-    it("reports a file that did not exist before the turn as created", () => {
+    it("reports a file that did not exist before the turn as created (https://github.com/Brevilabs/obsidian-copilot-private/issues/347)", () => {
       const change = buildTurnFileChange("notes/new.md", null, "fresh\nnote\n");
       expect(change).toMatchObject({
         status: "created",
@@ -25,7 +25,7 @@ describe("turnFileChanges", () => {
       });
     });
 
-    it("reports a file the turn removed as deleted", () => {
+    it("reports a file the turn removed as deleted (https://github.com/Brevilabs/obsidian-copilot-private/issues/347)", () => {
       const change = buildTurnFileChange("notes/gone.md", "one\ntwo\n", null);
       expect(change).toMatchObject({
         status: "deleted",
@@ -39,11 +39,11 @@ describe("turnFileChanges", () => {
       expect(buildTurnFileChange("notes/a.md", "same\n", "same\n")).toBeNull();
     });
 
-    it("returns null for a file that never existed on either side", () => {
+    it("returns null for a file that never existed on either side (https://github.com/Brevilabs/obsidian-copilot-private/issues/347)", () => {
       expect(buildTurnFileChange("notes/ghost.md", null, null)).toBeNull();
     });
 
-    it("counts an emptied file's every line as removed", () => {
+    it("counts an emptied file's every line as removed (https://github.com/Brevilabs/obsidian-copilot-private/issues/347)", () => {
       expect(buildTurnFileChange("notes/a.md", "one\ntwo\n", "")).toMatchObject({
         status: "modified",
         additions: 0,
