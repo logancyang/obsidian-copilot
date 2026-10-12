@@ -25,7 +25,8 @@ export function splitTableRow(line: string): string[] {
 }
 
 // A column-count mismatch returns null: cells could only be matched by guessing, so the caller shows
-// the old table removed and the new one added.
+// the old table removed and the new one added. An alignment change does too, since the delimiter row
+// renders no cell a mark could show it on.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
 export function diffTableBlock(before: string, after: string): string | null {
   const beforeLines = before.split("\n");
@@ -34,6 +35,7 @@ export function diffTableBlock(before: string, after: string): string | null {
   const beforeHeader = splitTableRow(beforeLines[0]);
   const afterHeader = splitTableRow(afterLines[0]);
   if (beforeHeader.length !== afterHeader.length) return null;
+  if (alignmentOf(beforeLines[1]) !== alignmentOf(afterLines[1])) return null;
   const columns = afterHeader.length;
 
   const merged = [renderRow(diffCells(beforeHeader, afterHeader)), afterLines[1]];
@@ -52,6 +54,12 @@ export function diffTableBlock(before: string, after: string): string | null {
     merged.push(renderRow(diffCells(cellsOf(beforeRow, columns), cellsOf(afterRow, columns))));
   }
   return merged.join("\n");
+}
+
+function alignmentOf(delimiterRow: string): string {
+  return splitTableRow(delimiterRow)
+    .map((cell) => cell.replace(/-+/g, "-"))
+    .join("|");
 }
 
 function cellsOf(row: string, columns: number): string[] {

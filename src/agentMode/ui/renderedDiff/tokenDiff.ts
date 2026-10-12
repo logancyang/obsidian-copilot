@@ -12,8 +12,14 @@ export interface StructuralLine {
   content: string;
 }
 
+// Quote and list markers repeat in any order because a list item can open a blockquote (`- > Quote`).
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/348
 const STRUCTURAL_PREFIX =
-  /^([ \t]*(?:>[ \t]?)*)(\[![^\]]*\][+-]?[ \t]*)?((?:[-*+]|\d{1,9}[.)])[ \t]+)?(\[.\][ \t]+)?(#{1,6}[ \t]+)?/;
+  /^[ \t]*(?:>[ \t]?|(?:[-*+]|\d{1,9}[.)])[ \t]+)*(?:\[![^\]]*\][+-]?[ \t]*)?(?:\[.\][ \t]+)?(?:#{1,6}[ \t]+)?/;
+
+const ORDERED_LIST_NUMBER = /\d+(?=[.)])/g;
+
+const HARD_BREAK = / {2,}$/;
 
 const EMPHASIS_DELIMITER = /^(?:\*{1,3}|_{1,3}|~~|==)/;
 
@@ -21,7 +27,7 @@ const EMPHASIS_DELIMITER = /^(?:\*{1,3}|_{1,3}|~~|==)/;
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
 const TOKEN_PATTERNS: readonly RegExp[] = [
   /^!?\[\[[^\]]*\]\]/,
-  /^\$[^$\n]+\$(?!\$)/,
+  /^\$(?:\\.|[^$\\\n])+\$(?!\$)/,
   // A bare URL is one token so an emphasis character inside it (`a_b`) cannot split it around a marker;
   // like an autolink it never ends on emphasis, so a delimiter wrapping it stays outside the mark.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
@@ -146,8 +152,9 @@ export function markInsertedLine(line: string): string {
 
 function markLine(line: string, open: string, close: string): string {
   const { prefix, content } = splitStructuralPrefix(line);
-  if (content.trim() === "") return line;
-  return prefix + open + content + close;
+  const body = content.trimEnd();
+  if (body === "") return line;
+  return prefix + open + body + close + content.slice(body.length);
 }
 
 // Lines whose structural prefixes differ (checkbox, heading level, callout type) become a deleted plus an
@@ -174,10 +181,17 @@ function visibleLength(text: string): number {
 function diffModifiedLine(beforeLine: string, afterLine: string): string {
   const before = splitStructuralPrefix(beforeLine);
   const after = splitStructuralPrefix(afterLine);
-  const parts = diffArrays(tokenizeInline(before.content), tokenizeInline(after.content));
+  const afterBody = after.content.trimEnd();
+  const parts = diffArrays(tokenizeInline(before.content.trimEnd()), tokenizeInline(afterBody));
   // Renumbering an ordered list is not a content change, so item numbers are ignored when comparing prefixes.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-  const samePrefix = before.prefix.replace(/\d+/g, "") === after.prefix.replace(/\d+/g, "");
+  const samePrefix =
+    before.prefix.replace(ORDERED_LIST_NUMBER, "") ===
+    after.prefix.replace(ORDERED_LIST_NUMBER, "");
+  // Trailing spaces are a hard break only while they end the line, so they stay outside marks and a
+  // gained or lost break is shown like other syntax the renderer consumes.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+  const sameBreak = HARD_BREAK.test(beforeLine) === HARD_BREAK.test(afterLine);
   // Interleaved word marks are unreadable once most of a line is rewritten, so such a line is shown whole twice.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
   const keptLength = visibleLength(
@@ -185,7 +199,7 @@ function diffModifiedLine(beforeLine: string, afterLine: string): string {
   );
   const mostlyRewritten =
     keptLength * 2 < Math.max(visibleLength(before.content), visibleLength(after.content));
-  if (!samePrefix || changesEmphasis(parts) || mostlyRewritten)
+  if (!samePrefix || !sameBreak || changesEmphasis(parts) || mostlyRewritten)
     return `${markDeletedLine(beforeLine)}\n${markInsertedLine(afterLine)}`;
-  return after.prefix + renderInline(parts);
+  return after.prefix + renderInline(parts) + after.content.slice(afterBody.length);
 }

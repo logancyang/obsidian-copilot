@@ -33,6 +33,7 @@ const atomicEdits = [
   ["longer internal backtick runs", "`alpha `` beta`", "`alpha `` gamma`"],
   ["multi-backtick delimiters", "``alpha ``` beta``", "``alpha ``` gamma``"],
   ["shorter internal backtick runs", "````alpha ``` beta````", "````alpha ``` gamma````"],
+  ["inline math with an escaped dollar", "$x+\\$y$", "$x+\\$z$"],
 ] as const;
 
 describe("tokenDiff", () => {
@@ -69,6 +70,13 @@ describe("tokenDiff", () => {
       expect(splitStructuralPrefix("> [!warning]- Rollout risks")).toEqual({
         prefix: "> [!warning]- ",
         content: "Rollout risks",
+      });
+    });
+
+    it("keeps a blockquote nested in a list item in the prefix so the quote still renders (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      expect(splitStructuralPrefix("- > Quoted risk")).toEqual({
+        prefix: "- > ",
+        content: "Quoted risk",
       });
     });
 
@@ -188,6 +196,10 @@ describe("tokenDiff", () => {
     it("marks the content of a heading while leaving its hashes renderable", () => {
       expect(markInsertedLine("## Rollout plan")).toBe(`## ${inserted("Rollout plan")}`);
     });
+
+    it("leaves trailing hard-break spaces outside the mark so the line break still renders (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      expect(markInsertedLine("Ship it  ")).toBe(`${inserted("Ship it")}  `);
+    });
   });
 
   describe("diffTextBlock()", () => {
@@ -276,6 +288,18 @@ describe("tokenDiff", () => {
       expect(merged).toBe(
         `> [!note] ${deleted("Risks")}\n> [!warning] ${inserted("Risks")}\n> Body`
       );
+    });
+
+    it("emits a callout whose numbered type changed as a removed line and an added line (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      const merged = diffTextBlock("> [!type1] Risks", "> [!type2] Risks");
+
+      expect(merged).toBe(`> [!type1] ${deleted("Risks")}\n> [!type2] ${inserted("Risks")}`);
+    });
+
+    it("emits a line that gained a hard break as a removed line and an added line because the renderer consumes the trailing spaces (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      const merged = diffTextBlock("Ship it\nnow", "Ship it  \nnow");
+
+      expect(merged).toBe(`${deleted("Ship it")}\n${inserted("Ship it")}  \nnow`);
     });
 
     it("keeps renumbered ordered-list items unmarked when only their numbers changed (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {

@@ -98,5 +98,14 @@ describe("tableDiff", () => {
 
       expect(merged).toBeNull();
     });
+
+    it("refuses to merge tables whose column alignment changed because the delimiter row has no cell to mark (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)", () => {
+      const merged = diffTableBlock(
+        `${header}\n| EMEA | 2 | Ready |`,
+        "| Region | Partners | Status |\n| :--- | ---: | --- |\n| EMEA | 2 | Ready |"
+      );
+
+      expect(merged).toBeNull();
+    });
   });
 });
