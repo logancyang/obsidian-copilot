@@ -158,5 +158,21 @@ describe("RenderedDiff", () => {
         "Budget is fixed for the quarter.",
       ]);
     });
+
+    it("hides the previous file's diff while the next file is still parsing (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", async () => {
+      const { app, release } = appHoldingParse(BLOCK_MOVED.before!);
+      const { container, rerender } = render(diffElement(WORDING_CHANGE, app));
+      await waitFor(() => expect(textOf(container, "del")).toEqual(["six", "two"]));
+
+      rerender(diffElement(BLOCK_MOVED, app));
+
+      expect(container.firstChild).toBeNull();
+      release();
+      await waitFor(() =>
+        expect(textOf(container, "[data-change=deleted]")).toEqual([
+          "Budget is fixed for the quarter.",
+        ])
+      );
+    });
   });
 });

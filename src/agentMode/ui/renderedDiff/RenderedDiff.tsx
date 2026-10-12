@@ -12,28 +12,36 @@ export interface RenderedDiffProps {
   path: string;
 }
 
+interface ResolvedPlan extends RenderedDiffProps {
+  segments: readonly DiffSegment[];
+}
+
 export function RenderedDiff({
   before,
   after,
   path,
 }: RenderedDiffProps): React.ReactElement | null {
   const app = useApp();
-  const [segments, setSegments] = React.useState<readonly DiffSegment[] | null>(null);
+  const [plan, setPlan] = React.useState<ResolvedPlan | null>(null);
   React.useEffect(() => {
     let stale = false;
-    void buildRenderedDiffPlan(app, before, after, isMarkdownPath(path)).then((plan) => {
-      if (!stale) setSegments(plan);
+    void buildRenderedDiffPlan(app, before, after, isMarkdownPath(path)).then((segments) => {
+      if (!stale) setPlan({ before, after, path, segments });
     });
     return () => {
       stale = true;
     };
   }, [app, before, after, path]);
-  if (segments === null) return null;
+  // A plan built for earlier props would show the previous file's changes under the new path until the new parse lands.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+  if (plan === null || plan.before !== before || plan.after !== after || plan.path !== path) {
+    return null;
+  }
   return (
     // Strikethrough marks deletions here, so completed tasks drop Obsidian's done strike at every nesting depth.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
     <div className="[--checklist-done-decoration:none]">
-      {segments.map((segment, index) => (
+      {plan.segments.map((segment, index) => (
         <DiffSegmentView
           // eslint-disable-next-line @eslint-react/no-array-index-key -- the plan is rebuilt whole whenever the file content changes and nothing reorders it, so position is a segment identity
           key={index}
