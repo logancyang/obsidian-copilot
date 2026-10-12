@@ -131,13 +131,17 @@ export class AgentChatPersistenceManager {
         projectId: options?.projectId,
         usage: options?.usage,
       });
-      // Autosave rewrites only the keys it owns, from the note as it is at write time, so renames, pins, and user properties survive.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/698
       const renderNote = (current: string) =>
         `${mergeFrontmatter(current, updates)}\n\n${chatContent}`;
+      // Autosave rewrites only the keys it owns, from the note as it is at write time, so renames, pins, and user properties survive; a new chat colliding with another note's name must not inherit its session.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/698
+      const rewriteNote = (path: string) =>
+        this.updateTranscript(path, (current) =>
+          renderNote(path === options?.existingPath ? current : "")
+        );
 
       if (existingFile && isInVaultCache(this.app, existingFile.path)) {
-        await this.updateTranscript(existingFile.path, renderNote);
+        await rewriteNote(existingFile.path);
         return { path: existingFile.path };
       }
 
@@ -145,7 +149,7 @@ export class AgentChatPersistenceManager {
         !isInVaultCache(this.app, preferredFileName) &&
         (await this.app.vault.adapter.exists(preferredFileName))
       ) {
-        await this.updateTranscript(preferredFileName, renderNote);
+        await rewriteNote(preferredFileName);
         return { path: preferredFileName };
       }
 
@@ -154,7 +158,7 @@ export class AgentChatPersistenceManager {
         return { path: created.path };
       } catch (err) {
         if (isFileAlreadyExistsError(err)) {
-          await this.updateTranscript(preferredFileName, renderNote);
+          await rewriteNote(preferredFileName);
           return { path: preferredFileName };
         }
         if (isNameTooLongError(err)) {
@@ -165,7 +169,7 @@ export class AgentChatPersistenceManager {
             return { path: created.path };
           } catch (fallbackErr) {
             if (isFileAlreadyExistsError(fallbackErr)) {
-              await this.updateTranscript(fallback, renderNote);
+              await rewriteNote(fallback);
               return { path: fallback };
             }
             throw fallbackErr;
@@ -404,6 +408,8 @@ export class AgentChatPersistenceManager {
     const projectId = coerceProjectId(args.projectId);
     const quoted = (key: string, value: string | null | undefined) =>
       value ? `${key}: "${escapeYamlString(value)}"` : undefined;
+    // A merged save keeps keys it omits, so leaving global scope must delete the stale projectId explicitly.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/698
     return [
       ["epoch", `epoch: ${args.firstMessageEpoch}`],
       ["mode", `mode: ${AGENT_CHAT_MODE}`],

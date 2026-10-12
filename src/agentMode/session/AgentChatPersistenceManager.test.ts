@@ -447,7 +447,7 @@ describe("AgentChatPersistenceManager", () => {
       expect(note.contents).toContain('agentLabel: "Claude"\n');
     });
 
-    it("drops the projectId of a project chat that is saved again as a global chat", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/698 drops the projectId of a project chat that is saved again as a global chat", async () => {
       const first = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
         projectId: "proj-123",
       });
@@ -458,6 +458,22 @@ describe("AgentChatPersistenceManager", () => {
       });
 
       expect(app.files.get(first!.path)!.contents).not.toContain("projectId:");
+    });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/698 writes a new chat's own properties instead of keeping another chat's when their filenames collide", async () => {
+      const first = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        sessionId: "old-session",
+        label: "Old agent",
+      });
+
+      const second = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        sessionId: "new-session",
+      });
+
+      expect(second!.path).toBe(first!.path);
+      const contents = app.files.get(second!.path)!.contents!;
+      expect(contents).toContain('sessionId: "new-session"\n');
+      expect(contents).not.toContain("old-session");
+      expect(contents).not.toContain("Old agent");
     });
   });
 
