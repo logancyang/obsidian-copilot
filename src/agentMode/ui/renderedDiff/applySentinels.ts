@@ -9,7 +9,7 @@ export const INS_CLOSE = String.fromCharCode(SENTINEL_BLOCK_START + 1);
 export const DEL_OPEN = String.fromCharCode(SENTINEL_BLOCK_START + 2);
 export const DEL_CLOSE = String.fromCharCode(SENTINEL_BLOCK_START + 3);
 
-const SENTINEL = new RegExp(`[${INS_OPEN}-${DEL_CLOSE}]`);
+export const SENTINEL = new RegExp(`[${INS_OPEN}-${DEL_CLOSE}]`);
 
 type Change = "inserted" | "deleted";
 type Mode = Change | null;
@@ -29,21 +29,36 @@ const ROW_CLASS: Record<Change, string> = {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
 const DELETION_END_CLASS = "tw-me-1";
 
+// Images render without text, so text marks cannot show a replaced image; the element itself carries the change.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+const MEDIA_SELECTOR = "img, .internal-embed";
+const MEDIA_CLASS: Record<Change, string> = {
+  inserted: cn("tw-ring-2 tw-ring-[color:rgba(var(--color-green-rgb),0.6)]"),
+  deleted: cn("tw-opacity-60 tw-ring-2 tw-ring-[color:rgba(var(--color-red-rgb),0.6)]"),
+};
+
 const BLOCK_SELECTOR = "p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, pre, dt, dd, div";
 
 export function applySentinels(root: HTMLElement): void {
   const doc = root.ownerDocument;
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const textNodes: Text[] = [];
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+    acceptNode: (node) => {
+      if (node.parentElement?.closest(MEDIA_SELECTOR)) return NodeFilter.FILTER_REJECT;
+      return node.nodeType === Node.TEXT_NODE || (node as Element).matches(MEDIA_SELECTOR)
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_SKIP;
+    },
+  });
+  const nodes: Node[] = [];
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-    textNodes.push(node as Text);
+    nodes.push(node);
   }
 
   let mode: Mode = null;
   let lastDeleted = null as HTMLElement | null;
   let endedDeletion = null as HTMLElement | null;
   let block: Element | null = null;
-  for (const node of textNodes) {
+  for (const node of nodes) {
     const nodeBlock = node.parentElement?.closest(BLOCK_SELECTOR) ?? null;
     // Marks never span lines, so a closing sentinel the renderer swallowed (comment, math, callout table)
     // must not leak the mark into every block after it.
@@ -53,6 +68,15 @@ export function applySentinels(root: HTMLElement): void {
       endedDeletion = null;
     }
     block = nodeBlock;
+    if (node.nodeType !== Node.TEXT_NODE) {
+      endedDeletion = null;
+      if (mode === null) continue;
+      const media = node as HTMLElement;
+      media.setAttribute("data-change", mode);
+      media.classList.add(...MEDIA_CLASS[mode].split(" "));
+      if (mode === "deleted") lastDeleted = media;
+      continue;
+    }
     const value = node.nodeValue ?? "";
     if (mode === null && !SENTINEL.test(value)) {
       endedDeletion = null;
