@@ -244,6 +244,7 @@ export class AgentSessionManager {
     {
       source?: { path: string };
       timer?: number;
+      saving?: Promise<unknown>;
       indexTimer?: number;
       unsub?: () => void;
       signature?: string;
@@ -619,23 +620,41 @@ export class AgentSessionManager {
 
   async deleteChatHistory(fileId: string): Promise<void> {
     const index = this.opts.sessionIndex;
-    const native = parseNativeChatId(fileId);
-    if (native) {
-      if (!index) throw new Error("Agent session index is not configured.");
-      this.cancelPendingIndexTouch(native.backendId, native.sessionId);
-      await index.deleteSession(native.backendId, native.sessionId);
-      return;
-    }
     const persistence = this.opts.persistenceManager;
-    if (!persistence) throw new Error("Agent chat persistence is not configured.");
-    if (index) {
-      const ref = await this.readSessionRefFromFile(fileId);
-      if (ref) {
-        this.cancelPendingIndexTouch(ref.backendId, ref.sessionId);
-        await index.deleteSession(ref.backendId, ref.sessionId);
-      }
+    const native = parseNativeChatId(fileId);
+    if (native && !index) throw new Error("Agent session index is not configured.");
+    if (!native && !persistence) throw new Error("Agent chat persistence is not configured.");
+
+    const ref = native ?? (await this.readSessionRefFromFile(fileId));
+
+    const savedPaths = await this.closeOpenChatForDelete(fileId);
+
+    // Keep the note recoverable when the history write fails. https://github.com/logancyang/obsidian-copilot/issues/2888
+    if (ref && index) {
+      this.cancelPendingIndexTouch(ref.backendId, ref.sessionId);
+      await index.deleteSession(ref.backendId, ref.sessionId);
+      await index.flushOrThrow();
     }
-    await persistence.deleteFile(fileId);
+    const notePaths = new Set(native ? savedPaths : [fileId, ...savedPaths]);
+    if (persistence) {
+      for (const path of notePaths) await persistence.deleteFile(path);
+    }
+  }
+
+  // An open chat must be gone before its files are, or autosave writes the note again. Delete never
+  // saves: it stops new autosaves first, and only waits for a save that is already writing, so this
+  // returns the notes the closed chats already have. State stays so that running save is awaited.
+  // https://github.com/logancyang/obsidian-copilot/issues/2888
+  private async closeOpenChatForDelete(historyId: string): Promise<string[]> {
+    const savedPaths: string[] = [];
+    for (const [internalId, session] of Array.from(this.sessions)) {
+      if (!this.recentChatIdsForSession(internalId, session).includes(historyId)) continue;
+      const state = this.sessionState.get(internalId);
+      if (state) this.stopAutoSave(state);
+      await this.closeSession(internalId);
+      if (state?.source?.path) savedPaths.push(state.source.path);
+    }
+    return savedPaths;
   }
 
   private cancelPendingIndexTouch(backendId: BackendId, sessionId: string): void {
@@ -2383,7 +2402,20 @@ export class AgentSessionManager {
     return state?.source?.path ?? "";
   }
 
-  private async flushAutoSave(session: AgentSession): Promise<{ path: string } | null> {
+  // One save chain per chat: each save runs after the previous one, and state.saving holds the
+  // tail so close and delete wait for every save that already started.
+  // https://github.com/logancyang/obsidian-copilot/issues/2888
+  private flushAutoSave(session: AgentSession): Promise<{ path: string } | null> {
+    const state = this.getSessionState(session.internalId);
+    const previous = state.saving;
+    const run = previous
+      ? previous.then(() => this.writeSession(session))
+      : this.writeSession(session);
+    state.saving = run.catch(() => {});
+    return run;
+  }
+
+  private async writeSession(session: AgentSession): Promise<{ path: string } | null> {
     const persistence = this.opts.persistenceManager;
     if (!persistence) return null;
     if (!this.sessions.has(session.internalId)) return null;
@@ -2437,6 +2469,9 @@ export class AgentSessionManager {
         logWarn(`[AgentMode] drain session-index update failed for ${session.internalId}`, e);
       }
     }
+    // A save that already started is in neither timer; closing must still wait for it.
+    // https://github.com/logancyang/obsidian-copilot/issues/2888
+    await state?.saving;
     if (!state?.timer) return;
     window.clearTimeout(state.timer);
     state.timer = undefined;
@@ -2450,11 +2485,18 @@ export class AgentSessionManager {
   private detachAutoSave(internalId: string): void {
     const state = this.sessionState.get(internalId);
     if (!state) return;
-    if (state.timer) window.clearTimeout(state.timer);
-    if (state.indexTimer) window.clearTimeout(state.indexTimer);
-    state.unsub?.();
+    this.stopAutoSave(state);
     state.attentionUnsub?.();
     this.sessionState.delete(internalId);
+  }
+
+  private stopAutoSave(state: { timer?: number; indexTimer?: number; unsub?: () => void }): void {
+    window.clearTimeout(state.timer);
+    state.timer = undefined;
+    window.clearTimeout(state.indexTimer);
+    state.indexTimer = undefined;
+    state.unsub?.();
+    state.unsub = undefined;
   }
 
   private attachAttentionTracking(session: AgentSession): void {

@@ -1,3 +1,5 @@
+import { backendRegistry } from "@/agentMode/backends/registry";
+import { formatChatDeleteNotice } from "@/lib/chatDeleteText";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
@@ -93,16 +95,23 @@ export function useAgentHistoryControls(
 
   const deleteChat = useCallback(
     async (id: string) => {
-      await runWithNotice(
-        "delete chat",
-        async () => {
-          await manager.deleteChatHistory(id);
-          await loadChatHistory();
-        },
-        true
-      );
+      try {
+        await runWithNotice(
+          "delete chat",
+          async () => {
+            const item = chatHistoryItems.find((chat) => chat.id === id);
+            await manager.deleteChatHistory(id);
+            new Notice(
+              formatChatDeleteNotice(item?.backendId ? backendRegistry[item.backendId] : undefined)
+            );
+          },
+          true
+        );
+      } finally {
+        await loadChatHistory();
+      }
     },
-    [manager, loadChatHistory, runWithNotice]
+    [manager, chatHistoryItems, loadChatHistory, runWithNotice]
   );
 
   const openSourceFile = useCallback(

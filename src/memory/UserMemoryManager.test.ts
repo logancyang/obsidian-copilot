@@ -67,6 +67,11 @@ describe("UserMemoryManager", () => {
       modify: jest.fn(),
       create: jest.fn(),
       createFolder: jest.fn(),
+      adapter: {
+        exists: jest.fn(async (p: string) => mockVault.getAbstractFileByPath(p) != null),
+        // New files go through the adapter; record them as creates. https://github.com/logancyang/obsidian-copilot/issues/3075
+        write: jest.fn(async (p: string, text: string) => mockVault.create(p, text)),
+      },
     } as unknown as jest.Mocked<Vault>;
 
     mockApp = {
@@ -370,6 +375,21 @@ describe("UserMemoryManager", () => {
       expect(result).toContain(mockContent);
       expect(result).toContain("<recent_conversations>");
       expect(result).toContain("</recent_conversations>");
+    });
+
+    it("reads and writes Saved Memories in a hidden folder https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
+      const path = "copilot/memory/Saved Memories.md";
+      mockVault.getAbstractFileByPath.mockReturnValue(null);
+      (mockVault.adapter.exists as jest.Mock).mockResolvedValue(true);
+      (mockVault.adapter.read as jest.Mock) = jest.fn().mockResolvedValue("- Hidden fact");
+      mockChatModel.invoke.mockResolvedValue(
+        new AIMessageChunk({ content: "- Hidden fact\n- New" })
+      );
+
+      expect(await userMemoryManager.getUserMemoryPrompt()).toContain("- Hidden fact");
+      await userMemoryManager.updateSavedMemory("New", mockChatModel);
+
+      expect(mockVault.adapter.write).toHaveBeenCalledWith(path, "- Hidden fact\n- New");
     });
 
     it("returns null when no memory content exists", async () => {

@@ -16,6 +16,7 @@ import {
   deleteCachedCommand,
   getCachedCustomCommands,
   isFileWritePending,
+  subscribeToCustomCommandsChange,
   updateCachedCommand,
   updateCachedCommands,
 } from "@/commands/state";
@@ -29,8 +30,9 @@ export class CustomCommandRegister {
   private app: App;
   private vault: Vault;
   private settingsUnsubscriber?: () => void;
+  private commandsUnsubscriber?: () => void;
+  private registeredTitles = new Set<string>();
   private folderChangeRequestId = 0;
-  private disposed = false;
 
   constructor(plugin: Plugin, app: App) {
     this.plugin = plugin;
@@ -41,23 +43,14 @@ export class CustomCommandRegister {
 
   async initialize() {
     await loadAllCustomCommands(this.app);
-    // Startup migrations outlive an unload that lands while commands load, and commands added
-    // to an unloaded plugin are never removed. https://github.com/logancyang/obsidian-copilot/issues/3518
-    if (this.disposed) return;
-    this.registerCommands();
-  }
-
-  private registerCommands() {
-    const commands = getCachedCustomCommands();
-    commands.forEach((command) => {
-      this.registerCommand(command);
-    });
   }
 
   cleanup() {
-    this.disposed = true;
     ++this.folderChangeRequestId;
     this.settingsUnsubscriber?.();
+    // After this no change to the command store can reach the palette, so commands loaded for an
+    // unloaded plugin are never added. https://github.com/logancyang/obsidian-copilot/issues/3518
+    this.commandsUnsubscriber?.();
     this.vault.off("create", this.handleFileCreation);
     this.vault.off("delete", this.handleFileDeletion);
     this.vault.off("rename", this.handleFileRename);
@@ -70,7 +63,18 @@ export class CustomCommandRegister {
     this.vault.on("rename", this.handleFileRename);
     this.vault.on("modify", this.handleFileModify);
     this.settingsUnsubscriber = subscribeToSettingsChange(this.handleSettingsChange);
+    this.commandsUnsubscriber = subscribeToCustomCommandsChange(this.syncPalette);
   }
+
+  private syncPalette = (): void => {
+    const commands = getCachedCustomCommands();
+    const titles = new Set(commands.map((command) => command.title));
+    for (const title of this.registeredTitles) {
+      if (!titles.has(title)) this.removeRegisteredCommand(title);
+    }
+    commands.forEach((command) => this.registerCommand(command));
+    this.registeredTitles = titles;
+  };
 
   private handleSettingsChange = (
     prev: ReturnType<typeof getSettings>,
@@ -87,17 +91,8 @@ export class CustomCommandRegister {
     try {
       const nextCommands = await fetchAllCustomCommands(this.app);
 
-      if (this.disposed) return;
-
       if (currentRequestId !== this.folderChangeRequestId) return;
 
-      const nextTitles = new Set(nextCommands.map((command) => command.title));
-      for (const stale of getCachedCustomCommands()) {
-        if (!nextTitles.has(stale.title)) {
-          this.removeRegisteredCommand(stale.title);
-        }
-      }
-      nextCommands.forEach((command) => this.registerCommand(command));
       updateCachedCommands(nextCommands);
     } catch (error) {
       if (currentRequestId !== this.folderChangeRequestId) return;
@@ -116,7 +111,6 @@ export class CustomCommandRegister {
         return;
       }
       const customCommand = await parseCustomCommandFile(this.app, file);
-      this.registerCommand(customCommand);
       updateCachedCommand(customCommand, customCommand.title);
     },
     1000,
@@ -132,13 +126,12 @@ export class CustomCommandRegister {
     }
     try {
       let customCommand = await parseCustomCommandFile(this.app, file);
-      if (!hasOrderFrontmatter(this.app, file)) {
+      if (!(await hasOrderFrontmatter(this.app, file))) {
         const newOrder = getNextCustomCommandOrder();
         customCommand = { ...customCommand, order: newOrder };
       }
       await ensureCommandFrontmatter(this.app, file, customCommand);
       updateCachedCommand(customCommand, customCommand.title);
-      this.registerCommand(customCommand);
     } catch (error) {
       logError(`Error processing custom command creation: ${file.path}`, error);
     }
@@ -148,8 +141,6 @@ export class CustomCommandRegister {
     if (!isCustomCommandFile(file) || isFileWritePending(file.path)) {
       return;
     }
-    const commandId = getCommandId(file.basename);
-    (this.plugin as unknown as { removeCommand: (id: string) => void }).removeCommand(commandId);
     deleteCachedCommand(file.basename);
   };
 
@@ -159,15 +150,10 @@ export class CustomCommandRegister {
     }
     const oldFilename = oldPath.split("/").pop()?.replace(/\.md$/, "");
     if (oldFilename) {
-      const oldCommandId = getCommandId(oldFilename);
-      (this.plugin as unknown as { removeCommand: (id: string) => void }).removeCommand(
-        oldCommandId
-      );
       deleteCachedCommand(oldFilename);
     }
     if (isCustomCommandFile(file)) {
       const parsedCommand = await parseCustomCommandFile(this.app, file);
-      this.registerCommand(parsedCommand);
       updateCachedCommand(parsedCommand, parsedCommand.title);
       await ensureCommandFrontmatter(this.app, file, parsedCommand);
     }

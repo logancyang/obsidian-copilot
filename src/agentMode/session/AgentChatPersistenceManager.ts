@@ -27,7 +27,6 @@ import {
 } from "@/utils/vaultAdapterUtils";
 import { joinPosix } from "@/utils/pathUtils";
 import { TFile, type App } from "obsidian";
-import { Notice } from "obsidian";
 import { coerceProjectId, escapeYamlString, unescapeYamlString } from "./agentChatYaml";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage, BackendId, SessionUsage } from "./types";
@@ -234,12 +233,10 @@ export class AgentChatPersistenceManager {
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file) {
       await trashFile(this.app, file);
-      new Notice("Chat moved to trash.");
       return;
     }
     if (await this.app.vault.adapter.exists(fileId)) {
       await this.app.vault.adapter.remove(fileId);
-      new Notice("Chat deleted.");
       return;
     }
     throw new Error("Chat file not found.");
