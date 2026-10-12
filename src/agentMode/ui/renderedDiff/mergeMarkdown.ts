@@ -26,6 +26,8 @@ export type DiffSegment =
   | { kind: "block"; change: "deleted" | "inserted"; markdown: string }
   | { kind: "code"; lines: CodeDiffLine[] };
 
+const EMPTY_PLAN: readonly DiffSegment[] = Object.freeze([]);
+
 const VISIBLE_MARK = new RegExp(`[${INS_OPEN}${DEL_OPEN}]\\s*[^\\s${INS_CLOSE}${DEL_CLOSE}]`);
 
 export function isMarkdownPath(path: string): boolean {
@@ -54,7 +56,7 @@ export async function buildRenderedDiffPlan(
   before: string | null,
   after: string | null,
   markdown: boolean
-): Promise<DiffSegment[]> {
+): Promise<readonly DiffSegment[]> {
   // A CRLF-to-LF conversion would otherwise mark every line changed; the engine assumes LF.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
   const beforeText = (before ?? "").replace(/\r\n/g, "\n");
@@ -113,14 +115,13 @@ export async function buildRenderedDiffPlan(
   const rendersChange = collapsed.some(
     (segment) => segment.kind !== "markdown" || VISIBLE_MARK.test(segment.markdown)
   );
-  return rendersChange || beforeText === afterText
-    ? collapsed
-    : verbatimPlan(beforeText, afterText);
+  if (!rendersChange && beforeText !== afterText) return verbatimPlan(beforeText, afterText);
+  return collapsed.length === 0 ? EMPTY_PLAN : collapsed;
 }
 
-function verbatimPlan(before: string, after: string): DiffSegment[] {
+function verbatimPlan(before: string, after: string): readonly DiffSegment[] {
   const lines = diffCodeLines(before, after);
-  return lines.length === 0 ? [] : [{ kind: "code", lines }];
+  return lines.length === 0 ? EMPTY_PLAN : [{ kind: "code", lines }];
 }
 
 function modifiedSegments(before: MarkdownBlock, after: MarkdownBlock): DiffSegment[] {

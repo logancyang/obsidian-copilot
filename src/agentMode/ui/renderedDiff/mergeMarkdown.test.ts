@@ -14,6 +14,7 @@ import {
   FILE_EMPTIED,
   FRONTMATTER_TAG_ADDED,
   FRONTMATTER_UNCHANGED_BODY_EDIT,
+  INNER_SPACE_WIDENED,
   LIST_HEAD_REMOVED,
   LIST_ITEM_WITH_CODE_EDIT,
   LOOSE_LIST_ITEM_EDIT,
@@ -24,7 +25,6 @@ import {
   TABLE_COLUMN_ADDED,
   TASK_CHECKBOX_TOGGLED,
   TASK_LIST_REORDERED,
-  TRAILING_SPACES_ADDED,
   UNCHANGED_HEADING_AND_LIST,
 } from "@/agentMode/ui/renderedDiff/testing/fixtures";
 import {
@@ -139,14 +139,14 @@ describe("mergeMarkdown", () => {
     });
 
     it("falls back to a verbatim line diff when the only marks wrap spaces rendering would hide (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", async () => {
-      const { before, after } = TRAILING_SPACES_ADDED;
+      const { before, after } = INNER_SPACE_WIDENED;
 
       expect(await buildRenderedDiffPlan(app, before, after, true)).toEqual([
         {
           kind: "code",
           lines: [
             { change: "deleted", text: "The pilot runs." },
-            { change: "inserted", text: "The pilot runs.  " },
+            { change: "inserted", text: "The pilot  runs." },
             { change: "unchanged", text: "We report weekly." },
           ],
         },
@@ -378,8 +378,13 @@ describe("mergeMarkdown", () => {
       ]);
     });
 
-    it("returns nothing for two empty texts", async () => {
-      expect(await buildRenderedDiffPlan(app, "", "", true)).toEqual([]);
+    it("returns one shared frozen empty plan for two empty texts, Markdown or not", async () => {
+      const markdownPlan = await buildRenderedDiffPlan(app, "", "", true);
+      const verbatimPlan = await buildRenderedDiffPlan(app, null, null, false);
+
+      expect(markdownPlan).toEqual([]);
+      expect(Object.isFrozen(markdownPlan)).toBe(true);
+      expect(verbatimPlan).toBe(markdownPlan);
     });
 
     it("shows a verbatim line diff and logs a warning when Obsidian's parser rejects (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", async () => {

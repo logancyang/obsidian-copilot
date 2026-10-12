@@ -177,10 +177,10 @@ export const BLANK_LINE_ADDED: RenderedDiffFixture = {
   after: "Alpha\n\n\nBeta\n",
 };
 
-export const TRAILING_SPACES_ADDED: RenderedDiffFixture = {
+export const INNER_SPACE_WIDENED: RenderedDiffFixture = {
   path: "projects/Alpha/Project brief.md",
   before: "The pilot runs.\nWe report weekly.\n",
-  after: "The pilot runs.  \nWe report weekly.\n",
+  after: "The pilot  runs.\nWe report weekly.\n",
 };
 
 export const TABLE_COLUMN_ADDED: RenderedDiffFixture = {
@@ -619,7 +619,7 @@ export const RECORDED_PARSES: ReadonlyMap<
     },
   ],
   [
-    TRAILING_SPACES_ADDED,
+    INNER_SPACE_WIDENED,
     { before: { sections: [["paragraph", 0, 1]] }, after: { sections: [["paragraph", 0, 1]] } },
   ],
   [
