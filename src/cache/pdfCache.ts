@@ -1,7 +1,10 @@
-import { Pdf4llmResponse } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo } from "@/logger";
 import { md5 } from "@/utils/hash";
 import { TFile, Vault } from "obsidian";
+
+interface CachedPdf {
+  response: string;
+}
 
 export class PDFCache {
   private static instance: PDFCache;
@@ -34,7 +37,7 @@ export class PDFCache {
     return `${this.cacheDir}/${cacheKey}.json`;
   }
 
-  async get(vault: Vault, file: TFile): Promise<Pdf4llmResponse | null> {
+  async get(vault: Vault, file: TFile): Promise<CachedPdf | null> {
     try {
       const cacheKey = this.getCacheKey(file);
       const cachePath = this.getCachePath(cacheKey);
@@ -42,7 +45,7 @@ export class PDFCache {
       if (await vault.adapter.exists(cachePath)) {
         logInfo("Cache hit for PDF:", file.path);
         const cacheContent = await vault.adapter.read(cachePath);
-        return JSON.parse(cacheContent) as Pdf4llmResponse;
+        return JSON.parse(cacheContent) as CachedPdf;
       }
       logInfo("Cache miss for PDF:", file.path);
       return null;
@@ -52,7 +55,7 @@ export class PDFCache {
     }
   }
 
-  async set(vault: Vault, file: TFile, response: Pdf4llmResponse): Promise<void> {
+  async set(vault: Vault, file: TFile, response: CachedPdf): Promise<void> {
     try {
       await this.ensureCacheDir(vault);
       const cacheKey = this.getCacheKey(file);

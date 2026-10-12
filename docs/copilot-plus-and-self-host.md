@@ -89,9 +89,8 @@ A Claude or ChatGPT subscription is not an API key. Use the Claude or Codex Agen
 The selected model is only one possible route. A feature may call another service for the part of the task you asked it to perform:
 
 - A **Copilot-hosted Skill** sends the search query or URL needed by that Skill to Brevilabs.
-- **Plus document processing** sends the supported document to Copilot's hosted processor.
 - In **Agent Chat**, **Miyo document processing** installs the `miyo-parse` Skill, which runs the local Miyo CLI, so PDF and EPUB parsing stays on this computer even when search uses a remote Miyo server. If Miyo cannot parse a file, the agent reads it with its own tools.
-- In **Quick Chat**, **Miyo document processing** uses the connected Miyo service. A configured remote Miyo server processes the document there rather than on this computer.
+- In **Quick Chat**, **Miyo document processing** uses the connected Miyo service to read PDFs. A configured remote Miyo server processes the document there rather than on this computer. Without Miyo document processing, Quick Chat does not send PDFs anywhere and tells you to use Miyo or Agent Chat.
 - Saved **project context** that needs web, YouTube, or binary-file conversion can use Copilot's hosted project service. The **Miyo document processing** switch does not change that project route.
 - An agent can read a local note and include relevant text in the prompt sent to the selected model. Opening Agent Chat alone does not upload the whole vault.
 

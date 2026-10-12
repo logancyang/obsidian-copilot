@@ -43,11 +43,16 @@ jest.mock("@/settings/model", () => ({
   getSettings: () => mockGetSettings(),
 }));
 
-import type { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { isMiyoAvailableForCapability } from "@/miyo/miyoStatusStore";
 import type { CopilotSettings } from "@/settings/model";
+import * as obsidianModule from "obsidian";
 import type { TFile, Vault } from "obsidian";
-import { Docs4LLMParser, PDFParser } from "./FileParserManager";
+import {
+  Docs4LLMParser,
+  keepFirstPdfNeedsMiyoMessage,
+  PDF_NEEDS_MIYO_MESSAGE,
+  PDFParser,
+} from "./FileParserManager";
 
 const mockAvailable = isMiyoAvailableForCapability as jest.MockedFunction<
   typeof isMiyoAvailableForCapability
@@ -71,8 +76,15 @@ const docx = (name: string): TFile =>
 const vault = { getName: () => "MyVault", readBinary: jest.fn(async () => new ArrayBuffer(8)) };
 const asVault = vault as unknown as Vault;
 
+const { __setRequestUrlImpl: setRequestUrlImpl } = obsidianModule as unknown as {
+  __setRequestUrlImpl: (impl: unknown) => void;
+};
+
+const mockRequestUrl = jest.fn();
+
 beforeEach(() => {
   jest.clearAllMocks();
+  setRequestUrlImpl(mockRequestUrl);
   mockPdfCacheGet.mockResolvedValue(null);
   mockResolveBaseUrl.mockResolvedValue("http://localhost:8742");
   mockSnapshot.mockReturnValue({ documentProcessor: "available" });
@@ -114,13 +126,13 @@ describe("FileParserManager", () => {
         ["PDF", pdf],
         ["EPUB", epub],
       ])(
-        "throws instead of falling back to cloud when Miyo document processing is on but Miyo is unavailable for %s files",
+        "throws that no processor is available instead of falling back to cloud when Miyo document processing is on but Miyo is unavailable for %s files",
         async (_format, makeFile) => {
           mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
           mockAvailable.mockReturnValue(false);
 
           await expect(new Docs4LLMParser().parseFile(makeFile("a"), asVault)).rejects.toThrow(
-            /Miyo.*is unavailable/
+            /No document processor available/
           );
           expect(mockParseDoc).not.toHaveBeenCalled();
         }
@@ -163,39 +175,50 @@ describe("FileParserManager", () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
         mockAvailable.mockReturnValue(true);
         mockParseDoc.mockResolvedValue({ text: "extracted via miyo" });
-        const pdf4llm = jest.fn();
 
-        const parser = new PDFParser({ pdf4llm } as unknown as BrevilabsClient);
+        const parser = new PDFParser();
         const result = await parser.parseFile(pdf("solo"), asVault);
 
         expect(result).toBe("extracted via miyo");
-        expect(pdf4llm).not.toHaveBeenCalled();
+        expect(mockPdfCacheSet).toHaveBeenCalledWith(vault, pdf("solo"), {
+          response: "extracted via miyo",
+        });
+        expect(mockRequestUrl).not.toHaveBeenCalled();
+      });
+
+      it("returns previously cached text without consulting Miyo even when Miyo document processing is off https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
+        mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: false }));
+        mockPdfCacheGet.mockResolvedValue({ response: "cached earlier", elapsed_time_ms: 1200 });
+
+        const result = await new PDFParser().parseFile(pdf("solo"), asVault);
+
+        expect(result).toBe("cached earlier");
+        expect(mockRefresh).not.toHaveBeenCalled();
+        expect(mockParseDoc).not.toHaveBeenCalled();
       });
 
       it("returns an error string rather than throwing or falling back to cloud when Miyo parsing fails", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
         mockAvailable.mockReturnValue(true);
         mockParseDoc.mockRejectedValue(new Error("endpoint down"));
-        const pdf4llm = jest.fn();
 
-        const parser = new PDFParser({ pdf4llm } as unknown as BrevilabsClient);
+        const parser = new PDFParser();
         const result = await parser.parseFile(pdf("solo"), asVault);
 
         expect(result).toContain("[Error: Could not extract content from PDF solo");
-        expect(pdf4llm).not.toHaveBeenCalled();
+        expect(mockRequestUrl).not.toHaveBeenCalled();
       });
 
       it("returns an unavailable error and never uploads to cloud when Miyo document processing is on but Miyo is unreachable", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
         mockAvailable.mockReturnValue(false);
-        const pdf4llm = jest.fn().mockResolvedValue({ response: "cloud pdf" });
 
-        const parser = new PDFParser({ pdf4llm } as unknown as BrevilabsClient);
+        const parser = new PDFParser();
         const result = await parser.parseFile(pdf("solo"), asVault);
 
-        expect(result).toContain("Miyo (local document processor) is unavailable");
+        expect(result).toContain(PDF_NEEDS_MIYO_MESSAGE);
         expect(mockParseDoc).not.toHaveBeenCalled();
-        expect(pdf4llm).not.toHaveBeenCalled();
+        expect(mockRequestUrl).not.toHaveBeenCalled();
       });
 
       it("refreshes Miyo status once when it is 'unknown' and then routes to Miyo if it became available", async () => {
@@ -203,28 +226,26 @@ describe("FileParserManager", () => {
         mockSnapshot.mockReturnValue({ documentProcessor: "unknown" });
         mockAvailable.mockReturnValue(true);
         mockParseDoc.mockResolvedValue({ text: "extracted via miyo" });
-        const pdf4llm = jest.fn();
 
-        const parser = new PDFParser({ pdf4llm } as unknown as BrevilabsClient);
+        const parser = new PDFParser();
         const result = await parser.parseFile(pdf("solo"), asVault);
 
         expect(mockRefresh).toHaveBeenCalledTimes(1);
         expect(result).toBe("extracted via miyo");
-        expect(pdf4llm).not.toHaveBeenCalled();
+        expect(mockRequestUrl).not.toHaveBeenCalled();
       });
 
       it("refreshes once and still fails closed without cloud when a 'stale' status is confirmed unavailable", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
         mockSnapshot.mockReturnValue({ documentProcessor: "stale" });
         mockAvailable.mockReturnValue(false);
-        const pdf4llm = jest.fn().mockResolvedValue({ response: "cloud pdf" });
 
-        const parser = new PDFParser({ pdf4llm } as unknown as BrevilabsClient);
+        const parser = new PDFParser();
         const result = await parser.parseFile(pdf("solo"), asVault);
 
         expect(mockRefresh).toHaveBeenCalledTimes(1);
-        expect(result).toContain("Miyo (local document processor) is unavailable");
-        expect(pdf4llm).not.toHaveBeenCalled();
+        expect(result).toContain(PDF_NEEDS_MIYO_MESSAGE);
+        expect(mockRequestUrl).not.toHaveBeenCalled();
         expect(mockParseDoc).not.toHaveBeenCalled();
       });
 
@@ -232,14 +253,13 @@ describe("FileParserManager", () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
         mockShouldUseMiyo.mockReturnValue(false);
         mockSnapshot.mockReturnValue({ documentProcessor: "unknown" });
-        const pdf4llm = jest.fn().mockResolvedValue({ response: "cloud pdf" });
 
-        const parser = new PDFParser({ pdf4llm } as unknown as BrevilabsClient);
+        const parser = new PDFParser();
         const result = await parser.parseFile(pdf("solo"), asVault);
 
         expect(mockRefresh).not.toHaveBeenCalled();
-        expect(result).toContain("Miyo (local document processor) is unavailable");
-        expect(pdf4llm).not.toHaveBeenCalled();
+        expect(result).toContain(PDF_NEEDS_MIYO_MESSAGE);
+        expect(mockRequestUrl).not.toHaveBeenCalled();
         expect(mockParseDoc).not.toHaveBeenCalled();
       });
 
@@ -248,14 +268,13 @@ describe("FileParserManager", () => {
         mockSnapshot.mockReturnValue({ documentProcessor: "available" });
         mockAvailable.mockReturnValueOnce(true).mockReturnValue(false);
         mockParseDoc.mockResolvedValue({ text: "extracted via miyo" });
-        const pdf4llm = jest.fn();
 
-        const parser = new PDFParser({ pdf4llm } as unknown as BrevilabsClient);
+        const parser = new PDFParser();
         const result = await parser.parseFile(pdf("solo"), asVault);
 
         expect(mockParseDoc).toHaveBeenCalledTimes(1);
         expect(result).toBe("extracted via miyo");
-        expect(pdf4llm).not.toHaveBeenCalled();
+        expect(mockRequestUrl).not.toHaveBeenCalled();
       });
 
       it("does not refresh Miyo status when it is already conclusive", async () => {
@@ -264,23 +283,47 @@ describe("FileParserManager", () => {
         mockAvailable.mockReturnValue(true);
         mockParseDoc.mockResolvedValue({ text: "extracted" });
 
-        const parser = new PDFParser({ pdf4llm: jest.fn() } as unknown as BrevilabsClient);
+        const parser = new PDFParser();
         await parser.parseFile(pdf("solo"), asVault);
 
         expect(mockRefresh).not.toHaveBeenCalled();
       });
 
-      it("sends the PDF to the cloud without probing Miyo when Miyo document processing is off", async () => {
+      it("returns the Miyo and Agent Chat message without probing Miyo or calling the cloud when Miyo document processing is off https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: false }));
         mockSnapshot.mockReturnValue({ documentProcessor: "unknown" });
-        const pdf4llm = jest.fn().mockResolvedValue({ response: "cloud pdf" });
 
-        const parser = new PDFParser({ pdf4llm } as unknown as BrevilabsClient);
+        const parser = new PDFParser();
         const result = await parser.parseFile(pdf("solo"), asVault);
 
         expect(mockRefresh).not.toHaveBeenCalled();
-        expect(result).toBe("cloud pdf");
+        expect(mockRequestUrl).not.toHaveBeenCalled();
+        expect(result).toBe(
+          `[Error: Could not extract content from PDF solo. ${PDF_NEEDS_MIYO_MESSAGE}]`
+        );
       });
+    });
+  });
+
+  describe("keepFirstPdfNeedsMiyoMessage()", () => {
+    const block = (name: string) =>
+      `<note_context><title>${name}</title><content>[Error: Could not extract content from PDF ${name}. ${PDF_NEEDS_MIYO_MESSAGE}]</content></note_context>`;
+
+    it("keeps the full message on the first unreadable PDF and shortens it on every later one https://github.com/Brevilabs/obsidian-copilot-private/issues/653", () => {
+      const result = keepFirstPdfNeedsMiyoMessage(`${block("a")}${block("b")}${block("c")}`);
+
+      expect(result.split(PDF_NEEDS_MIYO_MESSAGE)).toHaveLength(2);
+      expect(result).toContain("PDF b. Same reason as above.]");
+      expect(result).toContain("PDF c. Same reason as above.]");
+      expect(result.indexOf(PDF_NEEDS_MIYO_MESSAGE)).toBeLessThan(result.indexOf("PDF b."));
+    });
+
+    it("leaves a single occurrence unchanged https://github.com/Brevilabs/obsidian-copilot-private/issues/653", () => {
+      expect(keepFirstPdfNeedsMiyoMessage(block("a"))).toBe(block("a"));
+    });
+
+    it("leaves context without the message unchanged https://github.com/Brevilabs/obsidian-copilot-private/issues/653", () => {
+      expect(keepFirstPdfNeedsMiyoMessage("plain note text")).toBe("plain note text");
     });
   });
 });

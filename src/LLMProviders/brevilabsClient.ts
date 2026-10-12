@@ -3,7 +3,6 @@ import { MissingPlusLicenseError } from "@/error";
 import { logInfo } from "@/logger";
 import { applyEntitlement, markPaidPendingEntitlement, turnOffPaid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
-import { arrayBufferToBase64 } from "@/utils/base64";
 import { App, requestUrl } from "obsidian";
 
 async function buildMultipartFromFormData(
@@ -109,11 +108,6 @@ export interface ToolCall {
 }
 
 export interface Url4llmResponse {
-  response: string;
-  elapsed_time_ms: number;
-}
-
-export interface Pdf4llmResponse {
   response: string;
   elapsed_time_ms: number;
 }
@@ -417,22 +411,6 @@ export class BrevilabsClient {
     }
     if (!data) {
       throw new Error("No data returned from url4llm");
-    }
-
-    return data;
-  }
-
-  async pdf4llm(binaryContent: ArrayBuffer): Promise<Pdf4llmResponse> {
-    const base64Content = arrayBufferToBase64(binaryContent);
-
-    const { data, error } = await this.makeRequest<Pdf4llmResponse>("/pdf4llm", {
-      pdf: base64Content,
-    });
-    if (error) {
-      throw error;
-    }
-    if (!data) {
-      throw new Error("No data returned from pdf4llm");
     }
 
     return data;
