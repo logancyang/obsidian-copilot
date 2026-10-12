@@ -10,9 +10,11 @@ import {
   type RecordedParse,
 } from "@/agentMode/ui/renderedDiff/testing/recordedParserApp";
 import { TURN_DIFF_VIEW_TYPE } from "@/constants";
+import { logError } from "@/logger";
 import { act, fireEvent, waitFor, within } from "@testing-library/react";
 import { App, Notice, TFile, Workspace, WorkspaceLeaf } from "obsidian";
 
+jest.mock("@/logger");
 jest.mock("@/utils/renderMarkdown", () => ({
   renderMarkdown: jest.fn((_app, markdown: string, el: HTMLElement) => {
     el.textContent = markdown;
@@ -43,7 +45,10 @@ function fakeApp(
 ): App {
   return {
     ...appParsing(async () => parse),
-    workspace: { getActiveFile: () => null, getLeaf: jest.fn(() => ({ openFile: jest.fn() })) },
+    workspace: {
+      getActiveFile: () => null,
+      getLeaf: jest.fn(() => ({ openFile: jest.fn().mockResolvedValue(undefined) })),
+    },
     vault: {
       getAbstractFileByPath: (path: string) => files.find((file) => file.path === path) ?? null,
     },
@@ -220,6 +225,23 @@ describe("TurnDiffView", () => {
 
         expect(app.workspace.getLeaf).not.toHaveBeenCalled();
         expect(Notice).toHaveBeenCalledWith("notes/diff-demo/alpha.md no longer exists.");
+      });
+
+      it("logs the failure when Obsidian cannot open the note", async () => {
+        const file = Object.assign(new TFile(), { path: "notes/diff-demo/alpha.md" });
+        const app = fakeApp([file]);
+        const failure = new Error("view failed to load");
+        jest
+          .mocked(app.workspace.getLeaf)
+          .mockReturnValue({ openFile: jest.fn().mockRejectedValue(failure) } as never);
+        const view = await openView(app);
+        await hydrate(view, { ...change("notes/diff-demo/alpha.md"), turnId: "turn-1" });
+
+        fireEvent.click(within(header(view)).getByText("Open note"));
+
+        await waitFor(() =>
+          expect(logError).toHaveBeenCalledWith("[TurnDiffView] failed to open the note", failure)
+        );
       });
 
       it("offers no Open note for a deleted file, which the vault could only recreate", async () => {

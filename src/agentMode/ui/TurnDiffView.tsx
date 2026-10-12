@@ -3,6 +3,7 @@ import { RenderedDiff } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import { TurnDiffHeader } from "@/agentMode/ui/TurnDiffHeader";
 import { TURN_DIFF_VIEW_TYPE } from "@/constants";
 import { useApp } from "@/context";
+import { logError } from "@/logger";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import { App, ItemView, Notice, TFile, Workspace, WorkspaceLeaf } from "obsidian";
 import React, { type ReactNode } from "react";
@@ -133,7 +134,10 @@ function openNote(app: App, path: string): void {
     new Notice(`${path} no longer exists.`);
     return;
   }
-  void app.workspace.getLeaf(true).openFile(file);
+  void app.workspace
+    .getLeaf(true)
+    .openFile(file)
+    .catch((error: unknown) => logError("[TurnDiffView] failed to open the note", error));
 }
 
 function basename(path: string): string {
