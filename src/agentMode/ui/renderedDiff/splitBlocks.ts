@@ -1,3 +1,5 @@
+import type { App } from "obsidian";
+
 export type MarkdownBlockType = "code" | "heading" | "table" | "text";
 
 export interface MarkdownBlock {
@@ -5,101 +7,54 @@ export interface MarkdownBlock {
   text: string;
 }
 
-export interface FrontmatterSplit {
+export interface MarkdownSplit {
   frontmatter: string | null;
-  body: string;
+  blocks: readonly MarkdownBlock[];
 }
 
-// Obsidian indents list content with tabs, so a fence nested in a list item sits past CommonMark's
-// three-space limit and would otherwise split at its inner blank lines.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/349
-const FENCE = /^[ \t]*(`{3,}|~{3,})/;
-const HEADING = /^ {0,3}#{1,6}(?:\s|$)/;
-const DELIMITER_CELL = /^[ \t]*:?-+:?[ \t]*$/;
-const FRONTMATTER_FENCE = /^---[ \t]*$/;
+interface ParsedSection {
+  type: string;
+  position: { start: { line: number }; end: { line: number } };
+}
+
+interface MetadataParser {
+  computeMetadataAsync?: (buffer: ArrayBuffer) => Promise<{ sections?: ParsedSection[] }>;
+}
+
 const EMPTY_BLOCKS: readonly MarkdownBlock[] = Object.freeze([]);
+const SECTION_BLOCK_TYPES: Readonly<Record<string, MarkdownBlockType>> = {
+  code: "code",
+  heading: "heading",
+  table: "table",
+};
 
-// Frontmatter is split off first: a diff marker beside a `---` fence turns it into a thematic break
-// and spills its keys into the body.
+// Obsidian indents list content with tabs, so its parser keeps a fence nested in a list item inside
+// the list section; the fence still has to stay out of word diffs.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+const LIST_FENCE = /^[ \t]*(?:`{3,}|~{3,})/m;
+
+// Sections come from Obsidian's own parser, through the undocumented computeMetadataAsync, so the
+// split matches what the editor renders. A missing method rejects and the caller falls back to a line diff.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-export function splitFrontmatter(source: string): FrontmatterSplit {
+export async function splitMarkdown(app: App, source: string): Promise<MarkdownSplit> {
+  const parser = app.metadataCache as unknown as MetadataParser;
+  if (typeof parser.computeMetadataAsync !== "function") {
+    throw new Error("Obsidian's Markdown parser is unavailable");
+  }
+  const buffer = new TextEncoder().encode(source).buffer as ArrayBuffer;
+  const metadata = await parser.computeMetadataAsync(buffer);
   const lines = source.split("\n");
-  if (!FRONTMATTER_FENCE.test(lines[0])) return { frontmatter: null, body: source };
-  for (let index = 1; index < lines.length; index++) {
-    if (!FRONTMATTER_FENCE.test(lines[index])) continue;
-    return {
-      frontmatter: lines.slice(0, index + 1).join("\n"),
-      body: lines.slice(index + 1).join("\n"),
-    };
-  }
-  return { frontmatter: null, body: source };
-}
-
-// Blocks come from a line-based splitter, not a parser: re-serialising an AST loses Obsidian-flavoured
-// syntax (callouts, embeds, Dataview) the diff must preserve verbatim.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-export function splitBlocks(body: string): readonly MarkdownBlock[] {
-  const lines = body.split("\n");
   const blocks: MarkdownBlock[] = [];
-  let index = 0;
-  while (index < lines.length) {
-    const line = lines[index];
-    if (line.trim() === "") {
-      index++;
-      continue;
+  let frontmatter: string | null = null;
+  for (const { type, position } of metadata.sections ?? []) {
+    const text = lines.slice(position.start.line, position.end.line + 1).join("\n");
+    if (type === "yaml" && position.start.line === 0) {
+      frontmatter = text;
+    } else if (type === "list" && LIST_FENCE.test(text)) {
+      blocks.push({ type: "code", text });
+    } else {
+      blocks.push({ type: SECTION_BLOCK_TYPES[type] ?? "text", text });
     }
-    const fence = FENCE.exec(line);
-    if (fence) {
-      const start = index;
-      index = skipFencedCode(lines, index, fence[1]);
-      blocks.push({ type: "code", text: lines.slice(start, index).join("\n") });
-      continue;
-    }
-    if (HEADING.test(line)) {
-      blocks.push({ type: "heading", text: line });
-      index++;
-      continue;
-    }
-    if (startsTable(lines, index)) {
-      const start = index;
-      index += 2;
-      while (index < lines.length && lines[index].trim() !== "" && lines[index].includes("|"))
-        index++;
-      blocks.push({ type: "table", text: lines.slice(start, index).join("\n") });
-      continue;
-    }
-    const start = index;
-    index++;
-    while (index < lines.length && continuesTextBlock(lines, index)) index++;
-    blocks.push({ type: "text", text: lines.slice(start, index).join("\n") });
   }
-  return blocks.length === 0 ? EMPTY_BLOCKS : blocks;
-}
-
-function skipFencedCode(lines: string[], start: number, marker: string): number {
-  const closing = new RegExp(`^[ \\t]*${marker[0]}{${marker.length},}[ \\t]*$`);
-  let index = start + 1;
-  while (index < lines.length && !closing.test(lines[index])) index++;
-  return Math.min(index + 1, lines.length);
-}
-
-function startsTable(lines: string[], index: number): boolean {
-  const delimiter = lines[index + 1];
-  return (
-    lines[index].includes("|") &&
-    delimiter !== undefined &&
-    delimiter.includes("|") &&
-    delimiter
-      .trim()
-      .replace(/^\||\|$/g, "")
-      .split("|")
-      .every((cell) => DELIMITER_CELL.test(cell))
-  );
-}
-
-function continuesTextBlock(lines: string[], index: number): boolean {
-  const line = lines[index];
-  return (
-    line.trim() !== "" && !HEADING.test(line) && !FENCE.test(line) && !startsTable(lines, index)
-  );
+  return { frontmatter, blocks: blocks.length === 0 ? EMPTY_BLOCKS : blocks };
 }
