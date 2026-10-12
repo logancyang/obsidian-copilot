@@ -1,10 +1,17 @@
 import { FileSystemAdapter, App } from "obsidian";
+import { getSettings } from "@/settings/model";
 import { sliceLines, VaultClient } from "./VaultClient";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
   logError: jest.fn(),
+}));
+
+jest.mock("@/settings/model", () => ({
+  getSettings: jest.fn(() => ({ copilotFolder: "copilot" })),
+  validateCopilotFolder:
+    jest.requireActual<typeof import("@/settings/model")>("@/settings/model").validateCopilotFolder,
 }));
 
 type MockAdapter = { read: jest.Mock; exists: jest.Mock; mkdir: jest.Mock; write: jest.Mock };
@@ -27,6 +34,12 @@ function buildClient(
 }
 
 describe("VaultClient", () => {
+  beforeEach(() => {
+    jest
+      .mocked(getSettings)
+      .mockReturnValue({ copilotFolder: "copilot" } as ReturnType<typeof getSettings>);
+  });
+
   describe("sliceLines()", () => {
     const text = "a\nb\nc\nd\ne";
 
@@ -111,6 +124,26 @@ describe("VaultClient", () => {
             path: ".obsidian/plugins/copilot/data.json",
           })
         ).rejects.toThrow(/hidden directory/);
+      });
+    });
+
+    describe("hidden Copilot folder", () => {
+      it("allows the configured hidden folder and denies other hidden roots https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
+        jest
+          .mocked(getSettings)
+          .mockReturnValue({ copilotFolder: ".copilot" } as ReturnType<typeof getSettings>);
+        const { app, adapter } = buildApp();
+        adapter.read.mockResolvedValue("skill");
+        const client = buildClient(app);
+
+        await expect(
+          client.readTextFile({ sessionId: "s1", path: ".copilot/skills/a/SKILL.md" })
+        ).resolves.toEqual({ content: "skill" });
+        for (const path of [".other/file.md", ".copilot-other/file.md"]) {
+          await expect(client.readTextFile({ sessionId: "s1", path })).rejects.toThrow(
+            /hidden directory/
+          );
+        }
       });
     });
 

@@ -43,9 +43,11 @@ import { RecentUsageManager } from "@/utils/recentUsageManager";
 import {
   isInVaultCache,
   patchFrontmatter,
+  readFrontmatterFile,
   readFrontmatterViaAdapter,
   resolveFileByPath,
   trashFile,
+  writeTextFile,
 } from "@/utils/vaultAdapterUtils";
 import { App, normalizePath, stringifyYaml, TFile, TFolder, Vault } from "obsidian";
 import { ensureProjectsMigratedIfNeeded } from "@/projects/projectMigration";
@@ -107,7 +109,8 @@ export class ProjectFileManager {
       } else if (await this.vault.adapter.exists(folderPath)) {
         const listing = await this.vault.adapter.list(folderPath);
         if (listing.files.length === 0 && listing.folders.length === 0) {
-          await this.vault.adapter.rmdir(folderPath, false);
+          // Obsidian's desktop adapter rejects a non-recursive rmdir even for an empty folder. https://github.com/logancyang/obsidian-copilot/issues/3075
+          await this.vault.adapter.rmdir(folderPath, true);
         }
       }
     } catch (rollbackError) {
@@ -124,12 +127,14 @@ export class ProjectFileManager {
   private buildProjectFileContent(
     project: ProjectConfig,
     folderName: string,
-    timestamps: { createdMs: number; lastUsedMs: number }
+    timestamps: { createdMs: number; lastUsedMs: number },
+    base: Record<string, unknown> = {}
   ): string {
     const webUrls = splitUrlsStringToArray(project.contextSource?.webUrls || "");
     const youtubeUrls = splitUrlsStringToArray(project.contextSource?.youtubeUrls || "");
 
     const fm: Record<string, unknown> = {
+      ...base,
       [COPILOT_PROJECT_ID]: project.id.trim(),
       [COPILOT_PROJECT_NAME]: (project.name || folderName).trim(),
       [COPILOT_PROJECT_DESCRIPTION]: (project.description || "").trim(),
@@ -144,9 +149,13 @@ export class ProjectFileManager {
 
     if (project.modelConfigs?.temperature != null) {
       fm[COPILOT_PROJECT_TEMPERATURE] = project.modelConfigs.temperature;
+    } else {
+      delete fm[COPILOT_PROJECT_TEMPERATURE];
     }
     if (project.modelConfigs?.maxTokens != null) {
       fm[COPILOT_PROJECT_MAX_TOKENS] = project.modelConfigs.maxTokens;
+    } else {
+      delete fm[COPILOT_PROJECT_MAX_TOKENS];
     }
 
     return `---\n${stringifyYaml(fm)}---\n${project.systemPrompt || ""}`;
@@ -207,13 +216,20 @@ export class ProjectFileManager {
           ? project.UsageTimestamps
           : 0;
 
-      const file = await this.vault.create(filePath, project.systemPrompt || "");
-
       try {
-        await writeProjectFrontmatter(this.app, file, project, folderName, {
-          createdMs,
-          lastUsedMs,
-        });
+        if (isInVaultCache(this.app, getProjectsFolder())) {
+          const file = await this.vault.create(filePath, project.systemPrompt || "");
+          await writeProjectFrontmatter(this.app, file, project, folderName, {
+            createdMs,
+            lastUsedMs,
+          });
+        } else {
+          // Obsidian does not index hidden folders, so write through the adapter. https://github.com/logancyang/obsidian-copilot/issues/3075
+          await this.vault.adapter.write(
+            filePath,
+            this.buildProjectFileContent(project, folderName, { createdMs, lastUsedMs })
+          );
+        }
       } catch (fmError) {
         await this.rollbackCreatedFile(filePath, folderPath);
         throw fmError;
@@ -323,7 +339,10 @@ export class ProjectFileManager {
         const folderPath = projectFolderIn(folderName);
         await ensureFolderExists(this.vault, projectsRoot);
         await ensureFolderExists(this.vault, folderPath);
-        file = await this.vault.create(filePath, nextProject.systemPrompt || "");
+        // vault.create returns null for hidden paths, so write first and resolve after. https://github.com/logancyang/obsidian-copilot/issues/3075
+        await writeTextFile(this.app, filePath, nextProject.systemPrompt || "");
+        file = await resolveFileByPath(this.app, filePath);
+        if (!file) throw new Error(`Could not create project file: ${filePath}`);
         materialized = true;
       }
 
@@ -362,10 +381,12 @@ export class ProjectFileManager {
           frontmatterBlock + separator + (nextProject.systemPrompt || "")
         );
       } else {
-        const content = this.buildProjectFileContent(projectForWrite, folderName, {
-          createdMs,
-          lastUsedMs,
-        });
+        const content = this.buildProjectFileContent(
+          projectForWrite,
+          folderName,
+          { createdMs, lastUsedMs },
+          (await readFrontmatterFile(this.app, filePath))?.frontmatter
+        );
         await this.vault.adapter.write(filePath, content);
       }
 
@@ -438,7 +459,8 @@ export class ProjectFileManager {
         } else if (await this.vault.adapter.exists(folderPath)) {
           const listing = await this.vault.adapter.list(folderPath);
           if (listing.files.length === 0 && listing.folders.length === 0) {
-            await this.vault.adapter.rmdir(folderPath, false);
+            // Obsidian's desktop adapter rejects a non-recursive rmdir even for an empty folder. https://github.com/logancyang/obsidian-copilot/issues/3075
+            await this.vault.adapter.rmdir(folderPath, true);
           }
         }
       } catch (cleanupError) {
