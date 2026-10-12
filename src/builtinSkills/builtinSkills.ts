@@ -575,11 +575,13 @@ anyway. The original file remains user-owned; never delete the original HTML fil
 ## 2. Let the user review
 
 Give the user a clickable Markdown link to the exact HTML file under review, as plain text
-in your reply (not in inline code or a code block). Write the link as
-\`[page.html](/absolute/path/to/page.html)\`, with the absolute path percent-encoded
-(\`%20\` for spaces, UTF-8 percent-encoding for non-ASCII characters; on Windows use
-forward slashes, such as \`C:/Users/me/page.html\`). Copilot opens this link in the
-default browser. Also say that, subject to any relative-asset warning above, opening it in
+in your reply (not in inline code or a code block). Percent-encode the target (\`%20\` for
+spaces, UTF-8 percent-encoding for non-ASCII characters). For a file inside the vault, such as
+a generated handoff, link its vault-root path:
+\`[page name.html](/.openartifacts/handoffs/page%20name.html)\`. Use the absolute path,
+such as \`[page.html](/Users/me/page.html)\`, only for a file outside the vault. Never put a
+drive letter or other \`:\` in the target; Obsidian treats such links as external. Copilot
+opens the link in the default browser. Also say that, subject to any relative-asset warning above, opening it in
 a browser shows the page as it will be uploaded; OpenArtifacts adds its own header and
 footer bylines when it serves the page. Then end your turn.
 

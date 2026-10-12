@@ -239,7 +239,7 @@ describe("builtinSkills", () => {
       );
       expect(md).toContain(`\`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes`);
       expect(md).toContain("clickable Markdown link to the exact HTML file");
-      expect(md).toContain("`[page.html](/absolute/path/to/page.html)`");
+      expect(md).toContain("`[page name.html](/.openartifacts/handoffs/page%20name.html)`");
       expect(md).toContain("Then end your turn");
       expect(md).toContain("Never publish in the same turn that generated the HTML");
       expect(md).toContain("Never simulate the user's approval");
