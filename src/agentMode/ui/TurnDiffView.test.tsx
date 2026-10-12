@@ -5,8 +5,9 @@ import {
   TurnDiffView,
   type TurnDiffViewState,
 } from "@/agentMode/ui/TurnDiffView";
+import { appParsing, type RecordedParse } from "@/agentMode/ui/renderedDiff/recordedParserApp";
 import { TURN_DIFF_VIEW_TYPE } from "@/constants";
-import { act, fireEvent, within } from "@testing-library/react";
+import { act, fireEvent, waitFor, within } from "@testing-library/react";
 import { App, Notice, TFile, Workspace, WorkspaceLeaf } from "obsidian";
 
 jest.mock("@/utils/renderMarkdown", () => ({
@@ -18,6 +19,7 @@ jest.mock("@/utils/renderMarkdown", () => ({
 
 const ALPHA_BEFORE = "The quick brown fox.\n";
 const ALPHA_AFTER = "The quick red fox.\n";
+const ALPHA_PARSE: RecordedParse = { sections: [["paragraph", 0, 0]] };
 const openViews: TurnDiffView[] = [];
 
 function change(path: string, overrides: Partial<TurnFileChange> = {}): TurnFileChange {
@@ -32,8 +34,12 @@ function change(path: string, overrides: Partial<TurnFileChange> = {}): TurnFile
   };
 }
 
-function fakeApp(files: TFile[] = []): App {
+function fakeApp(
+  files: TFile[] = [],
+  parse: RecordedParse | Promise<RecordedParse> = ALPHA_PARSE
+): App {
   return {
+    ...appParsing(async () => parse),
     workspace: { getActiveFile: () => null, getLeaf: jest.fn(() => ({ openFile: jest.fn() })) },
     vault: {
       getAbstractFileByPath: (path: string) => files.find((file) => file.path === path) ?? null,
@@ -55,6 +61,9 @@ async function hydrate(view: TurnDiffView, state: TurnDiffViewState): Promise<vo
     await view.setState(state);
   });
 }
+
+const textOf = (root: HTMLElement, selector: string): string[] =>
+  Array.from(root.querySelectorAll(selector)).map((element) => element.textContent ?? "");
 
 function header(view: TurnDiffView): HTMLElement {
   const path = within(view.containerEl).getByTitle(/\.(md|canvas|json)$/);
@@ -98,12 +107,27 @@ describe("TurnDiffView", () => {
           turnId: "turn-1",
         });
 
-        const body = view.containerEl.textContent ?? "";
         expect(within(header(view)).getByTitle("notes/diff-demo/alpha.md")).toBeTruthy();
         expect(within(header(view)).getByText("+4")).toBeTruthy();
         expect(within(header(view)).getByText("−2")).toBeTruthy();
-        expect(body).toContain("quick");
-        expect(body).toContain("red");
+        await waitFor(() => expect(textOf(view.containerEl, "del")).toEqual(["brown"]));
+        expect(textOf(view.containerEl, "ins")).toEqual(["red"]);
+        expect(view.containerEl.querySelector("pre")).toBeNull();
+      });
+
+      it("shows the header at once and leaves the body empty until Obsidian has parsed the note", async () => {
+        let finishParsing!: (parse: RecordedParse) => void;
+        const parsing = new Promise<RecordedParse>((resolve) => {
+          finishParsing = resolve;
+        });
+        const view = await openView(fakeApp([], parsing));
+
+        await hydrate(view, { ...change("notes/diff-demo/alpha.md"), turnId: "turn-1" });
+
+        expect(within(header(view)).getByTitle("notes/diff-demo/alpha.md")).toBeTruthy();
+        expect(view.containerEl.querySelector(".markdown-rendered")?.childNodes).toHaveLength(0);
+        finishParsing(ALPHA_PARSE);
+        await waitFor(() => expect(textOf(view.containerEl, "del")).toEqual(["brown"]));
       });
 
       it("badges a created file as new", async () => {
@@ -157,7 +181,7 @@ describe("TurnDiffView", () => {
         jest.spyOn(HTMLElement.prototype, "onWindowMigrated").mockReturnValueOnce(detachMigration);
         const view = await openView();
         await hydrate(view, { ...change("notes/diff-demo/alpha.md"), turnId: "turn-1" });
-        expect(view.containerEl.textContent).toContain("red");
+        await waitFor(() => expect(textOf(view.containerEl, "ins")).toEqual(["red"]));
 
         await act(async () => {
           await view.onClose();
