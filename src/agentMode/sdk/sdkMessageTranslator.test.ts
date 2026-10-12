@@ -489,6 +489,30 @@ describe("sdkMessageTranslator", () => {
       });
     });
 
+    it("omits the original when a Write updates an existing file the SDK reports no original for (https://github.com/Brevilabs/obsidian-copilot-private/issues/347)", () => {
+      const state = createTranslatorState();
+      const out = translateSdkMessage(
+        {
+          type: "user",
+          tool_use_result: {
+            type: "update",
+            filePath: "/vault/notes/large.md",
+            content: "rewritten\n",
+            originalFile: null,
+          },
+          message: {
+            content: [{ type: "tool_result", tool_use_id: "tu-write", content: "ok" }],
+          } as never,
+          parent_tool_use_id: null,
+          session_id: SESSION_ID,
+        } as never,
+        SESSION_ID,
+        state
+      );
+      expect(out[0].update).toMatchObject({ toolCallId: "tu-write", status: "completed" });
+      expect(out[0].update).not.toHaveProperty("originalFiles");
+    });
+
     it("omits originals for a tool result that carries no pre-edit content", () => {
       const state = createTranslatorState();
       const out = translateSdkMessage(
