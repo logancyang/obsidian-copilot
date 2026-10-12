@@ -8,6 +8,7 @@ import {
   FRONTMATTER_TAG_ADDED,
   FRONTMATTER_UNCHANGED_BODY_EDIT,
   HEADING_LEVEL_CHANGE,
+  IMAGE_REPLACED,
   LINK_HREF_CHANGE,
   LIST_ITEM_WITH_CODE_EDIT,
   NON_MARKDOWN_FILE,
@@ -56,6 +57,8 @@ export const OrderedListItemAppended: StoryObj<RenderedDiffProps> = story(
 export const ListItemWithCodeEdit: StoryObj<RenderedDiffProps> = story(LIST_ITEM_WITH_CODE_EDIT);
 
 export const LinkHrefChange: StoryObj<RenderedDiffProps> = story(LINK_HREF_CHANGE);
+
+export const ImageReplaced: StoryObj<RenderedDiffProps> = story(IMAGE_REPLACED);
 
 export const WikilinkRename: StoryObj<RenderedDiffProps> = story(WIKILINK_RENAME);
 

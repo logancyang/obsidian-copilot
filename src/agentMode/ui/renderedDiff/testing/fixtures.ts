@@ -46,6 +46,14 @@ export const LINK_HREF_CHANGE: RenderedDiffFixture = {
   after: "See the [rollout checklist](https://example.com/checklists/v2) before you start.\n",
 };
 
+export const IMAGE_REPLACED: RenderedDiffFixture = {
+  path: "projects/Alpha/Report.md",
+  before:
+    "Pipeline by stage:\n\n![Q2 chart](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iNjAiPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iNjAiIGZpbGw9IiM2NDc0OGIiLz48dGV4dCB4PSI4MCIgeT0iMzgiIGZvbnQtc2l6ZT0iMjAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IndoaXRlIj5RMiBjaGFydCB2MTwvdGV4dD48L3N2Zz4=)\n",
+  after:
+    "Pipeline by stage:\n\n![Q2 chart](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iNjAiPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iNjAiIGZpbGw9IiM2NDc0OGIiLz48dGV4dCB4PSI4MCIgeT0iMzgiIGZvbnQtc2l6ZT0iMjAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IndoaXRlIj5RMiBjaGFydCB2MjwvdGV4dD48L3N2Zz4=)\n",
+};
+
 export const WIKILINK_RENAME: RenderedDiffFixture = {
   path: "projects/Alpha/Resources.md",
   before: "Context lives in [[Migration runbook]] and nowhere else.\n",

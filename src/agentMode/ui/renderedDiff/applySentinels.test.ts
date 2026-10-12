@@ -211,6 +211,49 @@ describe("applySentinels", () => {
       expect(root.textContent).toBe("Kept addedNext paragraph.");
     });
 
+    it("marks a replaced image element as deleted and its replacement as inserted, leaving unchanged images alone (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      const image = (src: string): HTMLElement => {
+        const element = el("img");
+        element.setAttribute("src", src);
+        return element;
+      };
+      const root = el(
+        "div",
+        el(
+          "p",
+          DEL_OPEN,
+          image("chart-v1.png"),
+          DEL_CLOSE,
+          INS_OPEN,
+          image("chart-v2.png"),
+          INS_CLOSE
+        ),
+        el("p", image("logo.png"))
+      );
+
+      applySentinels(root);
+
+      const sources = (selector: string): Array<string | null> =>
+        Array.from(root.querySelectorAll(selector)).map((img) => img.getAttribute("src"));
+      expect(sources("img[data-change=deleted]")).toEqual(["chart-v1.png"]);
+      expect(sources("img[data-change=inserted]")).toEqual(["chart-v2.png"]);
+      expect(sources("img:not([data-change])")).toEqual(["logo.png"]);
+      expect(root.querySelector("img[data-change=deleted]")?.classList).toContain("tw-me-1");
+      expect(root.querySelectorAll("del, ins")).toHaveLength(0);
+      expect(PRIVATE_USE.test(root.textContent ?? "")).toBe(false);
+    });
+
+    it("marks an inserted embed once on its container rather than on the content it loaded (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+      const embed = el("span", el("img"), "caption");
+      embed.className = "internal-embed";
+      const root = el("div", el("p", INS_OPEN, embed, INS_CLOSE));
+
+      applySentinels(root);
+
+      expect(embed.getAttribute("data-change")).toBe("inserted");
+      expect(root.querySelectorAll("[data-change]")).toHaveLength(1);
+    });
+
     it("leaves a fragment without sentinels exactly as the renderer produced it", () => {
       const root = el("div", el("p", "The pilot runs for six weeks."));
       const original = root.querySelector("p")?.firstChild;
