@@ -1,5 +1,8 @@
-import { RECORDED_PARSES } from "@/agentMode/ui/renderedDiff/fixtures";
-import { appParsing, type RecordedParse } from "@/agentMode/ui/renderedDiff/recordedParserApp";
+import { RECORDED_PARSES } from "@/agentMode/ui/renderedDiff/testing/fixtures";
+import {
+  appParsing,
+  type RecordedParse,
+} from "@/agentMode/ui/renderedDiff/testing/recordedParserApp";
 import type { App } from "obsidian";
 
 export interface HeldParse {

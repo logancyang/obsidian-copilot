@@ -5,9 +5,9 @@ import {
   TASK_CHECKBOX_TOGGLED,
   WORDING_CHANGE,
   type RenderedDiffFixture,
-} from "@/agentMode/ui/renderedDiff/fixtures";
+} from "@/agentMode/ui/renderedDiff/testing/fixtures";
 import * as mergeMarkdown from "@/agentMode/ui/renderedDiff/mergeMarkdown";
-import { appParsingRecordedFixtures } from "@/agentMode/ui/renderedDiff/fixtureParserApp";
+import { appParsingRecordedFixtures } from "@/agentMode/ui/renderedDiff/testing/fixtureParserApp";
 import { RenderedDiff } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import { AppContext } from "@/context";
 import { renderMarkdown } from "@/utils/renderMarkdown";

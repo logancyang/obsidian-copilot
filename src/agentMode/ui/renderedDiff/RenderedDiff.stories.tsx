@@ -22,7 +22,7 @@ import {
   WIKILINK_RENAME,
   WORDING_CHANGE,
   type RenderedDiffFixture,
-} from "@/agentMode/ui/renderedDiff/fixtures";
+} from "@/agentMode/ui/renderedDiff/testing/fixtures";
 import { RenderedDiff, type RenderedDiffProps } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import type { Meta, StoryObj } from "@/lib/story";
 

@@ -26,13 +26,13 @@ import {
   TASK_LIST_REORDERED,
   TRAILING_SPACES_ADDED,
   UNCHANGED_HEADING_AND_LIST,
-} from "@/agentMode/ui/renderedDiff/fixtures";
+} from "@/agentMode/ui/renderedDiff/testing/fixtures";
 import {
   buildRenderedDiffPlan,
   diffCodeLines,
   isMarkdownPath,
 } from "@/agentMode/ui/renderedDiff/mergeMarkdown";
-import { appParsingRecordedFixtures } from "@/agentMode/ui/renderedDiff/fixtureParserApp";
+import { appParsingRecordedFixtures } from "@/agentMode/ui/renderedDiff/testing/fixtureParserApp";
 import { logWarn } from "@/logger";
 import type { App } from "obsidian";
 

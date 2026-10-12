@@ -1,4 +1,4 @@
-import type { RecordedParse } from "@/agentMode/ui/renderedDiff/recordedParserApp";
+import type { RecordedParse } from "@/agentMode/ui/renderedDiff/testing/recordedParserApp";
 
 export interface RenderedDiffFixture {
   path: string;
