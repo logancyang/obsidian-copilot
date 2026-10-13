@@ -22,7 +22,7 @@ import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 import { CopilotPlusUsageReader } from "@/agentMode/backends/shared/copilotPlusUsage";
 import type { SelfHostWebSearchAgentChannel } from "@/LLMProviders/selfHostServices";
 import type { Config } from "@opencode/schema/config";
-import { installOpencodeTrimPlugin } from "./opencodeTrimPlugin";
+import { installOpencodeCopilotPlugin } from "./opencodeCopilotPlugin";
 
 export const OPENCODE_PROVIDER_MAP: Partial<Record<ChatModelProviders, string>> = {
   [ChatModelProviders.ANTHROPIC]: "anthropic",
@@ -50,7 +50,7 @@ export interface OpencodeModelDeps {
   backendConfigRegistry: BackendConfigRegistry;
   clientVersion?: string;
   getCacheRoot?: () => string | undefined;
-  getTrimPluginDir?: () => string;
+  getCopilotPluginDir?: () => string;
   getSelfHostWebSearchChannel?: () => Promise<Readonly<SelfHostWebSearchAgentChannel>>;
 }
 
@@ -115,8 +115,8 @@ export class OpencodeBackend implements AcpBackend {
           settings,
           this.#deps,
           cacheRoot,
-          this.#deps.getTrimPluginDir &&
-            (await installOpencodeTrimPlugin(this.#deps.getTrimPluginDir()))
+          this.#deps.getCopilotPluginDir &&
+            (await installOpencodeCopilotPlugin(this.#deps.getCopilotPluginDir()))
         )
       );
     if (settings.enableSelfHostMode === true && configOverride !== undefined) {
@@ -230,7 +230,7 @@ export async function buildOpencodeConfig(
   s: CopilotSettings,
   deps: OpencodeModelDeps,
   cacheRoot?: string,
-  trimPluginDir?: string
+  copilotPluginDir?: string
 ): Promise<GeneratedOpencodeConfig> {
   const { providerRegistry, backendConfigRegistry } = deps;
 
@@ -386,7 +386,7 @@ export async function buildOpencodeConfig(
     // gains `max`) and merges them over configured variants, which cannot be
     // disabled individually. Only published levels are trusted, so drop it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/557
-    plugins: ["-opencode.variant", ...(trimPluginDir ? [trimPluginDir] : [])],
+    plugins: ["-opencode.variant", ...(copilotPluginDir ? [copilotPluginDir] : [])],
     // Without a configured provider, native web search asks the user to pick
     // one through OpenCode's form service, and OpenCode's ACP bridge cancels
     // every form, so each search ends as "Web search cancelled". "random" is

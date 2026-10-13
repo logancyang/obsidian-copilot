@@ -193,6 +193,9 @@ export class AcpBackendProcess implements BackendProcess {
           // Without this, codex-acp also streams the plan body as chat text, duplicating the
           // plan-approval card. https://github.com/Brevilabs/obsidian-copilot-private/issues/551
           plan: {},
+          ...(this.backend.clientCapabilitiesMeta
+            ? { _meta: this.backend.clientCapabilitiesMeta }
+            : {}),
         },
         clientInfo: {
           name: COPILOT_CLIENT_NAME,
@@ -355,7 +358,8 @@ export class AcpBackendProcess implements BackendProcess {
       }
     }
     void this.refreshPlanUsage();
-    return { stopReason: stopReasonFromAcp(resp.stopReason) };
+    const turnDiff = this.backend.readTurnDiff?.(resp._meta);
+    return { stopReason: stopReasonFromAcp(resp.stopReason), ...(turnDiff ? { turnDiff } : {}) };
   }
 
   // A failed read keeps the last snapshot; a successful read with no caps clears it. The result

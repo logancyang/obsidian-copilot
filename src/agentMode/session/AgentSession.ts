@@ -5,6 +5,7 @@ import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 import {
   AgentChatMessage,
   AgentMessagePart,
+  AgentToolKind,
   AgentPlanEntry,
   AgentQuestionAnswers,
   AgentTodoListEntry,
@@ -37,6 +38,8 @@ import {
   ToolCallContent,
   ToolCallDelta,
   ToolCallSnapshot,
+  TurnDiff,
+  TurnFileChange,
 } from "@/agentMode/session/types";
 import {
   isNoteSelectedTextContext,
@@ -45,8 +48,21 @@ import {
 } from "@/types/message";
 import { err2String, formatDateTime, type FormattedDateTime } from "@/utils";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
-import type { App } from "obsidian";
+import type { App, DataAdapter } from "obsidian";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import {
+  diffTargetPaths,
+  editTargetPaths,
+  isCapturableVaultPath,
+  toVaultTargetPath,
+  type EditTargetSource,
+} from "@/agentMode/session/editTargets";
+import {
+  buildTurnFileChange,
+  filePatchesByVaultPath,
+  revertFilePatch,
+} from "@/agentMode/session/turnFileChanges";
+import { getVaultBase } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
 import { ContextProcessor } from "@/contextProcessor";
 import type { ContextMaterializationResult } from "@/context/projectContextMaterializer";
@@ -85,6 +101,28 @@ const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
 const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as string[];
+
+interface TurnFileCapture {
+  edited: boolean;
+  snapshot: Promise<string | null>;
+  writeTimeBefore?: string | null;
+}
+
+function toolCallTarget(call: ToolCallSnapshot | ToolCallDelta): EditTargetSource {
+  return {
+    locations: call.locations,
+    input: call.rawInput,
+    diffPaths: diffTargetPaths(call.content),
+  };
+}
+
+async function readVaultText(adapter: DataAdapter, path: string): Promise<string | null> {
+  try {
+    return await adapter.read(path);
+  } catch {
+    return null;
+  }
+}
 
 export type AgentSessionStatus =
   | "starting"
@@ -180,6 +218,7 @@ export class AgentSession {
   private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private placeholderId: string | null = null;
+  private turnFiles = new Map<string, TurnFileCapture>();
   private currentTurnHadRoutedToolActivity = false;
   private currentMessageIds = new Set<string>();
   private settledStream: {
@@ -649,6 +688,7 @@ export class AgentSession {
     this.placeholderId = this.store.addMessage(placeholder);
     this.currentMessageIds = new Set();
     this.currentTurnHadRoutedToolActivity = false;
+    this.turnFiles = new Map();
     this.notifyMessages();
 
     if (this.label === null && !this.backendSummarizesTitle()) {
@@ -802,6 +842,7 @@ export class AgentSession {
         );
         this.store.markMessageError(placeholderId, message);
       }
+      if (placeholderId) await this.finalizeTurnFileChanges(placeholderId, resp.turnDiff);
       if (
         placeholderId &&
         this.store.markTurnComplete(placeholderId, resp.stopReason, Date.now() - turnStartedAtMs)
@@ -1165,6 +1206,7 @@ export class AgentSession {
 
   handleToolPermission(request: PermissionPrompt): Promise<PermissionDecision> {
     const toolCallId = request.toolCall.toolCallId;
+    this.observeToolCall(request.toolCall.kind, toolCallTarget(request.toolCall));
     return new Promise<PermissionDecision>((resolve) => {
       this.pendingToolResolvers.set(toolCallId, { request, resolve });
       this.recomputeStatusIfChanged();
@@ -1374,6 +1416,7 @@ export class AgentSession {
 
     switch (update.sessionUpdate) {
       case "tool_call": {
+        this.observeToolCall(update.kind, toolCallTarget(update));
         const exitPlan = tryReadExitPlanModeCall({
           kind: update.kind,
           rawInput: update.rawInput,
@@ -1395,6 +1438,19 @@ export class AgentSession {
         if (targetMessageId !== placeholderId) this.currentTurnHadRoutedToolActivity = true;
         const existing = this.findToolCallPart(targetMessageId, update.toolCallId);
         const merged = mergeToolCallUpdate(existing, update);
+        // A late update to an earlier turn's call must not count as this turn's edit.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+        if (!isPriorToolUpdate && merged.kind === "tool_call") {
+          this.observeToolCall(
+            merged.toolKind,
+            {
+              locations: merged.locations,
+              input: merged.input,
+              diffPaths: diffTargetPaths(merged.output),
+            },
+            update.originalFiles
+          );
+        }
         if (merged.kind === "tool_call") {
           const exitPlan = tryReadExitPlanModeCall({
             kind: update.kind ?? merged.toolKind,
@@ -1543,6 +1599,72 @@ export class AgentSession {
     if (!placeholderId) return null;
     if (messageId) this.currentMessageIds.add(messageId);
     return placeholderId;
+  }
+
+  private observeToolCall(
+    kind: AgentToolKind | undefined,
+    target: EditTargetSource,
+    originalFiles?: Readonly<Record<string, string | null>>
+  ): void {
+    const changes = kind === "edit" || kind === "delete";
+    if (!changes && kind !== "read") return;
+    const app = this.getApp?.();
+    const adapter = app?.vault?.adapter;
+    if (!app || !adapter) return;
+    const vaultBase = getVaultBase(app);
+    const originals = new Map(
+      Object.entries(originalFiles ?? {}).map(([path, text]) => [
+        toVaultTargetPath(path, vaultBase),
+        text,
+      ])
+    );
+    for (const path of editTargetPaths(target, vaultBase)) {
+      if (!isCapturableVaultPath(path)) continue;
+      let capture = this.turnFiles.get(path);
+      if (!capture) {
+        // Read as the call is announced; an Auto-mode write can land first, so a write-time original wins.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/687
+        capture = { edited: false, snapshot: readVaultText(adapter, path) };
+        this.turnFiles.set(path, capture);
+      }
+      if (!changes) continue;
+      capture.edited = true;
+      // Later results report text this turn already changed; the first is the turn's starting file.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+      if (capture.writeTimeBefore === undefined) capture.writeTimeBefore = originals.get(path);
+    }
+  }
+
+  // Before text comes from a source that saw the file at write time; the first-mention snapshot
+  // is only the fallback. https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+  private async finalizeTurnFileChanges(
+    messageId: string,
+    turnDiff: TurnDiff | undefined
+  ): Promise<void> {
+    const edited = [...this.turnFiles].filter(([, capture]) => capture.edited);
+    this.turnFiles = new Map();
+    const app = this.getApp?.();
+    const adapter = app?.vault?.adapter;
+    if (edited.length === 0 || !app || !adapter) return;
+    const turnPatches = turnDiff ? filePatchesByVaultPath(turnDiff, getVaultBase(app)) : undefined;
+    const changes = (
+      await Promise.all(
+        edited.map(async ([path, capture]) => {
+          const after = await readVaultText(adapter, path);
+          const patch = turnPatches?.get(path);
+          if (capture.writeTimeBefore === undefined && patch) {
+            capture.writeTimeBefore = revertFilePatch(patch, after);
+          }
+          const before =
+            capture.writeTimeBefore === undefined
+              ? await capture.snapshot
+              : capture.writeTimeBefore;
+          return buildTurnFileChange(path, before, after);
+        })
+      )
+    ).filter((change): change is TurnFileChange => change !== null);
+    if (changes.length === 0) return;
+    if (this.store.setFileChanges(messageId, changes)) this.notifyMessages();
   }
 
   private findToolCallPart(messageId: string, toolCallId: string): AgentMessagePart | undefined {

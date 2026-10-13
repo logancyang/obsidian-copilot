@@ -9,6 +9,7 @@ import {
   sanitizeBuiltinSkillEnvOverrides,
 } from "@/agentMode/backends/shared/builtinSkillEnv";
 import type { PlanUsageReading } from "@/agentMode/session/planUsage";
+import type { TurnDiff } from "@/agentMode/session/types";
 import { defaultCodexHome, readCodexPlanUsage } from "./codexPlanUsage";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";
 import { buildCodexAcpInvocation, inspectCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
@@ -22,6 +23,10 @@ export const CODEX_QUESTION_CARD_STEERING =
 export class CodexBackend implements AcpBackend {
   readonly id = "codex" as const;
   readonly displayName = "Codex";
+
+  // Codex records each file's baseline inside apply_patch and sends its turn diff only to clients that opt in.
+  // https://github.com/agentclientprotocol/codex-acp/issues/601
+  readonly clientCapabilitiesMeta = { codex: { turnDiff: true } };
 
   private codexHome: string | null = null;
 
@@ -78,5 +83,20 @@ export class CodexBackend implements AcpBackend {
 
   async readPlanUsage(): Promise<PlanUsageReading> {
     return this.codexHome === null ? { kind: "unavailable" } : readCodexPlanUsage(this.codexHome);
+  }
+
+  readTurnDiff(
+    promptResultMeta: Readonly<Record<string, unknown>> | null | undefined
+  ): TurnDiff | null {
+    const codex = promptResultMeta?.codex as { turnDiff?: Record<string, unknown> } | undefined;
+    const report = codex?.turnDiff;
+    if (
+      report?.status !== "reported" ||
+      typeof report.root !== "string" ||
+      typeof report.diff !== "string"
+    ) {
+      return null;
+    }
+    return { root: report.root, unifiedDiff: report.diff };
   }
 }

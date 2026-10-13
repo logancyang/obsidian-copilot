@@ -228,6 +228,7 @@ export interface ToolCallDelta {
   kind?: AgentToolKind;
   status?: AgentToolStatus;
   rawInput?: unknown;
+  originalFiles?: Readonly<Record<string, string | null>>;
   content?: ToolCallContent[] | null;
   locations?: Array<{ path: string; line?: number | null }> | null;
   vendorToolName?: string;
@@ -366,6 +367,12 @@ export interface PromptInput {
 
 export interface PromptOutput {
   stopReason: StopReason;
+  turnDiff?: TurnDiff;
+}
+
+export interface TurnDiff {
+  root: string;
+  unifiedDiff: string;
 }
 
 export interface ListSessionsInput {
@@ -467,6 +474,16 @@ export interface AgentChatMessage {
   turnStopReason?: StopReason;
   turnDurationMs?: number;
   fanout?: FanoutTurn;
+  fileChanges?: TurnFileChange[];
+}
+
+export interface TurnFileChange {
+  path: string;
+  status: "modified" | "created" | "deleted";
+  before: string | null;
+  after: string | null;
+  additions: number;
+  deletions: number;
 }
 
 export type NewAgentChatMessage = Omit<AgentChatMessage, "id"> & { id?: string };

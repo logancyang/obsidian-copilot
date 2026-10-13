@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://www.obsidiancopilot.com/en/register?utm_source=github&utm_medium=readme&utm_campaign=discord"><img src="./images/copilot-discord-banner.svg" width="880" alt="Shape what Copilot builds next. The most-downloaded AI plugin for Obsidian. Sign up free and join our Discord to bring your ideas and bugs straight to the dev team."></a>
+</p>
+
+<p align="center">Free for every Copilot user. Sign up on <a href="https://www.obsidiancopilot.com/en/register?utm_source=github&utm_medium=readme&utm_campaign=discord">obsidiancopilot.com</a>, then join our Discord from your dashboard.</p>
+
 <h1 align="center">Copilot for Obsidian</h1>
 
 <p align="center"><strong>Agents for your Obsidian vault</strong></p>
@@ -6,10 +12,6 @@
 
 <p align="center">
   <a href="https://obsidian.md/blog/2024-goty-winners/"><img src="./images/llm-integration.svg" width="640" alt="Best LLM Integration Award"></a>
-</p>
-
-<p align="center">
-  <a href="https://obsidian.md/plugins?id=copilot"><strong>No. 1 Obsidian AI Plugin</strong></a>
 </p>
 
 <p align="center">
@@ -121,7 +123,7 @@ Your notes remain files in your vault, and local Miyo indexes stay on your devic
 
 ## Help and links
 
-[Documentation](./docs/index.md) · [YouTube](https://www.youtube.com/@loganhallucinates) · [Report a bug](https://github.com/logancyang/obsidian-copilot/issues/new?template=bug_report.md) · [Request a feature](https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md) · [Privacy](https://www.obsidiancopilot.com/en/privacy)
+[Documentation](./docs/index.md) · [YouTube](https://www.youtube.com/@loganhallucinates) · [Report a bug](https://github.com/logancyang/obsidian-copilot/issues/new?template=bug_report.md) · [Request a feature](https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md) · [Join Discord](https://www.obsidiancopilot.com/en/register?utm_source=github&utm_medium=readme&utm_campaign=discord) · [Privacy](https://www.obsidiancopilot.com/en/privacy)
 
 To report a bug with its evidence attached, use **Settings → Copilot → Advanced → Debugging & support → Report an issue**. It packs a screenshot and recent logs into a zip you review before anything is sent, uploads it privately, and opens a prefilled issue carrying the report ID.
 

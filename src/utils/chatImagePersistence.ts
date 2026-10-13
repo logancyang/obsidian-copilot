@@ -73,20 +73,21 @@ export function preserveChatImageReferences(next: string, existing: string, load
 export async function updateChatTranscript(
   app: App,
   path: string,
-  next: string,
+  render: (current: string) => string,
   loaded = ""
 ): Promise<string> {
-  const baseline = restoreChatImageReceipts(next, loaded);
+  let next = "";
+  const update = (current: string) => {
+    next = render(current);
+    return preserveChatImageReferences(next, current, loaded);
+  };
   const file = app.vault.getAbstractFileByPath(path);
   if (file instanceof TFile) {
-    await app.vault.process(file, (current) => preserveChatImageReferences(next, current, loaded));
+    await app.vault.process(file, update);
   } else {
-    await app.vault.adapter.write(
-      path,
-      preserveChatImageReferences(next, await app.vault.adapter.read(path), loaded)
-    );
+    await app.vault.adapter.write(path, update(await app.vault.adapter.read(path)));
   }
-  return baseline;
+  return restoreChatImageReceipts(next, loaded);
 }
 
 export async function prepareChatImagesForSave<T extends MessageWithImages>(
