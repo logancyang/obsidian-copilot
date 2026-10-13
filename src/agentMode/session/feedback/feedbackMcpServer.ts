@@ -1,8 +1,12 @@
-import { logError } from "@/logger";
 import type { AgentMcpServer } from "@/agentMode/session/types";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import {
+  readRequestText,
+  startLoopbackServer,
+  writeJson,
+  type LoopbackServer,
+} from "@/utils/loopbackServer";
 
-type HttpServer = import("node:http").Server;
 type IncomingMessage = import("node:http").IncomingMessage;
 type ServerResponse = import("node:http").ServerResponse;
 
@@ -85,37 +89,16 @@ type JsonRpcReply = { result: unknown } | { error: { code: number; message: stri
 export function createFeedbackMcpServer(): FeedbackMcpServer {
   const handlersByToken = new Map<string, FeedbackOfferHandler>();
   const tokensBySession = new Map<string, string>();
-  let server: HttpServer | null = null;
-  let urlPromise: Promise<string> | null = null;
-  let rejectStart: ((error: Error) => void) | null = null;
+  let server: LoopbackServer | null = null;
   let disposed = false;
-
-  const start = (): Promise<string> => {
-    const http = requireNodeModule<typeof import("node:http")>("http");
-    return new Promise((resolve, reject) => {
-      const next = http.createServer((request, response) => {
-        void handleHttpRequest(request, response, handlersByToken);
-      });
-      server = next;
-      // Closing a server whose listen() is still pending cancels the listen callback, so dispose must settle the promise itself.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-      rejectStart = reject;
-      next.once("error", reject);
-      next.listen(0, "127.0.0.1", () => {
-        rejectStart = null;
-        next.on("error", (error) => logError("[AgentMode] feedback MCP server failed", error));
-        next.unref();
-        const { port } = next.address() as import("node:net").AddressInfo;
-        resolve(`http://127.0.0.1:${port}${MCP_PATH}`);
-      });
-    });
-  };
 
   return Object.freeze({
     async connect(sessionKey: string, onOffer: FeedbackOfferHandler): Promise<AgentMcpServer> {
       if (disposed) throw new Error("The feedback MCP server is closed.");
-      urlPromise ??= start();
-      const url = await urlPromise;
+      server ??= startLoopbackServer("feedback MCP server", (request, response) =>
+        handleHttpRequest(request, response, handlersByToken)
+      );
+      const url = `${await server.origin}${MCP_PATH}`;
       const crypto = requireNodeModule<typeof import("node:crypto")>("crypto");
       const token = crypto.randomBytes(32).toString("hex");
       tokensBySession.set(sessionKey, token);
@@ -134,13 +117,10 @@ export function createFeedbackMcpServer(): FeedbackMcpServer {
     },
     dispose(): void {
       disposed = true;
-      rejectStart?.(new Error("The feedback MCP server is closed."));
-      rejectStart = null;
       handlersByToken.clear();
       tokensBySession.clear();
       server?.close();
       server = null;
-      urlPromise = null;
     },
   });
 }
@@ -162,7 +142,7 @@ async function handleHttpRequest(
 
   let message: JsonRpcRequest;
   try {
-    message = JSON.parse(await readBody(request)) as JsonRpcRequest;
+    message = JSON.parse(await readRequestText(request, MAX_REQUEST_BYTES)) as JsonRpcRequest;
   } catch (error) {
     return writeRpcError(response, -32700, error instanceof Error ? error.message : "Parse error.");
   }
@@ -231,23 +211,6 @@ function toolText(text: string, isError: boolean) {
   return { content: [{ type: "text", text }], isError };
 }
 
-async function readBody(request: IncomingMessage): Promise<string> {
-  const decoder = new TextDecoder();
-  let body = "";
-  let size = 0;
-  for await (const chunk of request as AsyncIterable<Uint8Array>) {
-    size += chunk.byteLength;
-    if (size > MAX_REQUEST_BYTES) throw new Error("Request body is too large.");
-    body += decoder.decode(chunk, { stream: true });
-  }
-  return body + decoder.decode();
-}
-
 function writeRpcError(response: ServerResponse, code: number, message: string): void {
   writeJson(response, 400, { jsonrpc: "2.0", id: null, error: { code, message } });
-}
-
-function writeJson(response: ServerResponse, status: number, body: unknown): void {
-  response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
-  response.end(JSON.stringify(body));
 }
