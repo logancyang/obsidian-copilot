@@ -137,3 +137,23 @@ export const UploadFailed: StoryObj<ReportIssueFlowProps> = {
     />
   ),
 };
+
+export const DraftedNote: StoryObj<ReportIssueFlowProps> = {
+  render: () => (
+    <ReportIssueFlow
+      {...BASE}
+      sources={SOURCES.map((source) => ({ ...source, defaultChecked: true }))}
+      initialNote={[
+        "Replied in Swedish to an English request",
+        "",
+        "What happened: The agent answered 'hej' instead of English.",
+        "",
+        'What the user said: "Why do you switch to a different language?"',
+        "",
+        "Steps to reproduce: 1. Type a garbled 'commit and push'. 2. Observe a Swedish reply.",
+        "",
+        "Evidence: backend opencode · model deepseek-v4-pro · session ses_8f2a · 2026-10-12T17:42:05Z",
+      ].join("\n")}
+    />
+  ),
+};

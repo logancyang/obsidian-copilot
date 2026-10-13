@@ -2,6 +2,7 @@ import {
   createReportDir,
   discardReport,
   openIssuePageWith,
+  openReportIssueModal,
   ReportIssueModal,
   uploadReport,
 } from "@/agentMode/ui/ReportIssueModal";
@@ -16,7 +17,7 @@ import { getSettings, setSettings } from "@/settings/model";
 import type { ReportInput } from "@/utils/issueReport";
 import { ReportUploadError, type ReportUploader } from "@/utils/reportUpload";
 import { unzipSync } from "fflate";
-import { Notice } from "obsidian";
+import { Modal, Notice, type App } from "obsidian";
 import nodeOs from "node:os";
 import nodePath from "node:path";
 
@@ -242,6 +243,71 @@ describe("ReportIssueModal", () => {
     });
   });
 
+  describe("openReportIssueModal()", () => {
+    beforeAll(() => {
+      Object.assign(Modal.prototype, { setTitle: jest.fn() });
+    });
+
+    function agentLeaf() {
+      const containerEl = window.document.createElement("div");
+      const contentEl = containerEl.appendChild(window.document.createElement("div"));
+      return { view: { containerEl, contentEl } };
+    }
+
+    function appWith(leaves: ReturnType<typeof agentLeaf>[]) {
+      return {
+        plugins: { getPlugin: () => ({ manifest: { version: "4.1.0" } }) },
+        workspace: { getLeavesOfType: jest.fn(() => leaves), revealLeaf: jest.fn() },
+        setting: { close: jest.fn() },
+      } as unknown as App & { setting: { close: jest.Mock } };
+    }
+
+    it("opens the dialog for the agent pane with the plugin's version and the card's prefill", () => {
+      const leaf = agentLeaf();
+      const app = appWith([leaf]);
+      const onReported = jest.fn();
+
+      const modal = openReportIssueModal(app, {
+        activeBackend: "codex",
+        initialNote: "Replied in Swedish",
+        preselectAllSources: true,
+        onReported,
+      }) as unknown as { open: jest.Mock; params: Record<string, unknown> };
+
+      expect(modal.open).toHaveBeenCalledTimes(1);
+      expect(modal.params).toMatchObject({
+        activeBackend: "codex",
+        pluginVersion: "4.1.0",
+        initialNote: "Replied in Swedish",
+        preselectAllSources: true,
+        onReported,
+      });
+      expect((modal.params.canCaptureTarget as () => boolean)()).toBe(true);
+      expect((modal.params.resolveCaptureTarget as () => HTMLElement)()).toBe(leaf.view.contentEl);
+      (modal.params.dismissSettings as () => void)();
+      expect(app.setting.close).toHaveBeenCalledTimes(1);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 captures the chat a report was opened from and leaves Settings open", () => {
+      const other = agentLeaf();
+      const reporting = agentLeaf();
+      const app = appWith([other, reporting]);
+      const card = reporting.view.contentEl.appendChild(window.document.createElement("button"));
+
+      const modal = openReportIssueModal(app, {
+        activeBackend: "codex",
+        origin: card,
+      }) as unknown as { params: Record<string, unknown> };
+
+      expect((modal.params.resolveCaptureTarget as () => HTMLElement)()).toBe(
+        reporting.view.contentEl
+      );
+      (modal.params.dismissSettings as () => void)();
+      expect(app.setting.close).not.toHaveBeenCalled();
+      expect(modal.params).not.toHaveProperty("origin");
+    });
+  });
+
   describe("ReportIssueModal", () => {
     interface ModalUnderTest {
       close: jest.Mock;
@@ -301,6 +367,25 @@ describe("ReportIssueModal", () => {
       it("offers the opencode log only when opencode is the active backend", () => {
         expect(ids({})).not.toContain("opencodeLog");
         expect(ids({ activeBackend: "opencode" })).toContain("opencodeLog");
+      });
+
+      it("pre-checks the opencode log when a feedback card opens the dialog", () => {
+        const checked = (preselectAllSources: boolean) =>
+          modalWith({
+            params: {
+              canCaptureTarget: () => true,
+              activeBackend: "opencode",
+              preselectAllSources,
+            },
+          })
+            .buildSources()
+            .filter((source) => source.defaultChecked)
+            .map((source) => source.id);
+
+        expect(checked(true)).toEqual(
+          expect.arrayContaining(["screenshot", "chatLog", "opencodeLog"])
+        );
+        expect(checked(false)).not.toContain("opencodeLog");
       });
 
       it("leaves the opencode log unchecked by default", () => {
@@ -463,6 +548,34 @@ describe("ReportIssueModal", () => {
 
     describe("upload()", () => {
       const uploaderResolving = () => jest.fn().mockResolvedValue({ reportId, expiresAt: "" });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 tells the feedback card a report landed, with its id and issue link, even after the dialog closed", async () => {
+        const onReported = jest.fn();
+        const open = modalWith({ params: { uploader: uploaderResolving(), onReported } });
+        const closed = modalWith({
+          params: { uploader: uploaderResolving(), onReported },
+          root: null,
+        });
+
+        await open.upload(prepared);
+        await closed.upload(prepared);
+
+        expect(onReported).toHaveBeenCalledTimes(2);
+        expect(onReported).toHaveBeenCalledWith({
+          reportId,
+          issueUrl: realIssueReport.buildLinkedReportIssueUrl(prepared.issueDraft, reportId),
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 leaves the feedback card untouched when the upload fails", async () => {
+        const onReported = jest.fn();
+        const uploader = jest.fn().mockRejectedValue(new ReportUploadError("Upload failed"));
+        const modal = modalWith({ params: { uploader, onReported } });
+
+        await modal.upload(prepared);
+
+        expect(onReported).not.toHaveBeenCalled();
+      });
 
       it("hands the outcome back while the dialog is up, with nothing announced", async () => {
         const modal = modalWith({ params: { uploader: uploaderResolving() } });
