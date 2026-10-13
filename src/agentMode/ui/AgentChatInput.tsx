@@ -222,7 +222,10 @@ export const AgentChatInput = memo(function AgentChatInput({
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/485
     setQueuedMessages([]);
     if (queuedMessages.length > 0) {
-      const restored = combineQueuedMessages(queuedMessages);
+      // Merged into one draft, /compact would swallow the queued messages as compaction input.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
+      const nonCompact = queuedMessages.filter((item) => !isCompactCommand(item.text));
+      const restored = combineQueuedMessages(nonCompact.length > 0 ? nonCompact : queuedMessages);
       // A fixed copy of the current page would duplicate its Active Web Tab badge and outlive
       // that badge's removal. https://github.com/Brevilabs/obsidian-copilot-private/issues/667
       const activeUrl = activeWebTabForMentions?.url;
