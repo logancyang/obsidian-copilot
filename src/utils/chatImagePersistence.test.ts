@@ -760,12 +760,12 @@ describe("chatImagePersistence", () => {
           disk = text;
         }),
       });
-      const baseline = await updateChatTranscript(app, "chat.md", next, loaded);
+      const baseline = await updateChatTranscript(app, "chat.md", () => next, loaded);
       expect(disk).toContain("![[moved.png]]");
       expect(disk).toContain("**user**: edited");
       expect(baseline).toContain("![[old.png]]");
       expect(baseline).toContain(`copilot-image:${sha256(DATA)}`);
-      await updateChatTranscript(app, "chat.md", next, baseline);
+      await updateChatTranscript(app, "chat.md", () => next, baseline);
       expect(disk).toContain("![[moved.png]]");
     });
 
@@ -787,9 +787,40 @@ describe("chatImagePersistence", () => {
         });
         Object.assign(vault, { process });
         Object.assign(vault.adapter, { read: jest.fn(async () => disk), write });
-        await updateChatTranscript(app, file.path, next);
+        await updateChatTranscript(app, file.path, () => next);
         expect(disk).toBe(next.replace("old.png", "moved.png"));
         expect(indexed ? process : write).toHaveBeenCalledTimes(1);
+      }
+    );
+
+    it.each([true, false])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/698 renders an indexed=%s transcript from the note's text at write time",
+      async (indexed) => {
+        const { app, vault } = makeApp();
+        const file = mockTFile({ path: "chat.md" });
+        vault.getAbstractFileByPath.mockReturnValue(indexed ? file : null);
+        let disk = "---\npinnedAt: 5\n---\n\n**user**: hi";
+        Object.assign(vault, {
+          process: jest.fn(async (_file: TFile, update: (content: string) => string) => {
+            disk = update(disk);
+            return disk;
+          }),
+        });
+        Object.assign(vault.adapter, {
+          read: jest.fn(async () => disk),
+          write: jest.fn(async (_path: string, value: string) => {
+            disk = value;
+          }),
+        });
+
+        const baseline = await updateChatTranscript(
+          app,
+          file.path,
+          (current) => `${current.split("\n\n")[0]}\n\n**user**: hi again`
+        );
+
+        expect(disk).toBe("---\npinnedAt: 5\n---\n\n**user**: hi again");
+        expect(baseline).toBe(disk);
       }
     );
   });

@@ -1,6 +1,5 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage } from "./types";
@@ -42,7 +41,6 @@ jest.mock("@/utils", () => ({
 jest.mock("@/utils/vaultAdapterUtils", () => ({
   isInVaultCache: jest.fn(() => false),
   listMarkdownFiles: jest.fn().mockResolvedValue([]),
-  readFrontmatterViaAdapter: jest.fn().mockResolvedValue(null),
 }));
 
 interface FakeFile {
@@ -123,10 +121,6 @@ describe("AgentChatPersistenceManager", () => {
   beforeEach(() => {
     app = makeApp();
     manager = new AgentChatPersistenceManager(app as unknown as App);
-  });
-
-  afterEach(() => {
-    (readFrontmatterViaAdapter as jest.Mock).mockResolvedValue(null);
   });
 
   describe("saveSession()", () => {
@@ -381,17 +375,6 @@ describe("AgentChatPersistenceManager", () => {
       const usage = { usedTokens: 5000, contextWindow: 200_000, updatedAt: 1 };
       const first = await manager.saveSession(messages, "claude", { usage });
       Object.setPrototypeOf(app.files.get(first!.path)!, TFile.prototype);
-      (readFrontmatterViaAdapter as jest.Mock).mockImplementation(async (_app, path: string) => {
-        const raw = app.files.get(path)?.contents ?? "";
-        const yaml = raw.match(/^---\n([\s\S]*?)\n---/)?.[1];
-        if (!yaml) return null;
-        const fm: Record<string, string> = {};
-        for (const line of yaml.split("\n")) {
-          const m = line.match(/^([\w-]+):\s*(.+)/);
-          if (m) fm[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
-        }
-        return fm;
-      });
       const second = await manager.saveSession(messages, "claude", {
         existingPath: first!.path,
       });
@@ -405,6 +388,92 @@ describe("AgentChatPersistenceManager", () => {
       expect(raw).not.toContain("usage:");
       const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
       expect(loaded.usage).toBeUndefined();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/698 keeps frontmatter properties it does not manage when it saves an existing chat again", async () => {
+      const first = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        sessionId: "s1",
+      });
+      const note = app.files.get(first!.path)!;
+      Object.setPrototypeOf(note, TFile.prototype);
+      note.contents = note.contents!.replace(
+        "backendId: claude\n",
+        'backendId: claude\ntopic: "Renamed"\nstatus: done\n'
+      );
+
+      await manager.saveSession(
+        [makeMessage(USER_SENDER, "hi"), makeMessage(AI_SENDER, "hello")],
+        "claude",
+        { existingPath: first!.path, usage: { usedTokens: 5, updatedAt: 1 } }
+      );
+
+      expect(note.contents).toContain(
+        'backendId: claude\ntopic: "Renamed"\nstatus: done\nsessionId: "s1"\n'
+      );
+      expect(note.contents).toContain('usage: \'{"usedTokens":5,"updatedAt":1}\'');
+      expect(note.contents).toContain("**ai**: hello");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/698 keeps a property written to the note even when the metadata cache still holds its older value", async () => {
+      const first = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
+      const note = app.files.get(first!.path)!;
+      Object.setPrototypeOf(note, TFile.prototype);
+      note.contents = note.contents!.replace("tags:", 'topic: "New"\ntags:');
+      app.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { topic: "Old" },
+      } as never);
+
+      await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        existingPath: first!.path,
+      });
+
+      expect(note.contents).toContain('topic: "New"\n');
+      expect(note.contents).not.toContain("Old");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/698 keeps the title of a chat saved in a hidden folder outside the vault cache", async () => {
+      const first = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        label: "Claude",
+      });
+      const note = app.files.get(first!.path)!;
+      note.contents = note.contents!.replace("tags:", 'topic: "Renamed"\ntags:');
+
+      const second = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        existingPath: first!.path,
+      });
+
+      expect(second!.path).toBe(first!.path);
+      expect(note.contents).toContain('topic: "Renamed"\n');
+      expect(note.contents).toContain('agentLabel: "Claude"\n');
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/698 drops the projectId of a project chat that is saved again as a global chat", async () => {
+      const first = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        projectId: "proj-123",
+      });
+
+      await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        existingPath: first!.path,
+        projectId: GLOBAL_SCOPE,
+      });
+
+      expect(app.files.get(first!.path)!.contents).not.toContain("projectId:");
+    });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/698 writes a new chat's own properties instead of keeping another chat's when their filenames collide", async () => {
+      const first = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        sessionId: "old-session",
+        label: "Old agent",
+      });
+
+      const second = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        sessionId: "new-session",
+      });
+
+      expect(second!.path).toBe(first!.path);
+      const contents = app.files.get(second!.path)!.contents!;
+      expect(contents).toContain('sessionId: "new-session"\n');
+      expect(contents).not.toContain("old-session");
+      expect(contents).not.toContain("Old agent");
     });
   });
 
