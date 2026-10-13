@@ -713,6 +713,33 @@ describe("OpencodeBackend", () => {
         expect(cfg.compaction).toEqual({ buffer: 50_000 });
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 measures a catalog model's headroom from its input limit, which OpenCode compacts against, and a Plus model's from its context", async () => {
+        setAutoCompactTokens(100_000);
+        const catalogModel = makeModel("p-openai", "gpt-wide");
+        catalogModel.info.limits = { context: 400_000, input: 272_000 };
+        const plusModel = makeModel("p-plus", "plus-wide");
+        plusModel.info.limits = { context: 400_000, input: 272_000 };
+        const deps = (entry: EnabledBackendEntry) =>
+          makeDeps({ resolved: [entry], keys: { "p-openai": "sk-1", "p-plus": "plus-token-123" } });
+
+        const catalogCfg = await buildOpencodeConfig(
+          getSettings(),
+          deps(
+            okEntry(
+              makeProvider("p-openai", { kind: "byok", catalogProviderId: "openai" }),
+              catalogModel
+            )
+          )
+        );
+        const plusCfg = await buildOpencodeConfig(
+          getSettings(),
+          deps(okEntry(makePlusProvider(), plusModel))
+        );
+
+        expect(catalogCfg.compaction).toEqual({ buffer: 172_000 });
+        expect(plusCfg.compaction).toEqual({ buffer: 300_000 });
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 adds no compaction block under the backend default", async () => {
         const cfg = await buildOpencodeConfig(getSettings(), plusDeps(262_144));
 

@@ -191,7 +191,8 @@ Each agent summarizes a long conversation on its own schedule. To choose that po
 
 - Claude applies a new threshold on its next message.
 - Codex and opencode read it when they start, so Agent Chat shows the **config has changed** notice with a **Reload** action. See [Applying a settings change](#applying-a-settings-change).
-- opencode needs each enabled opencode model to report its context window. If any enabled model does not, opencode keeps its own default. When several models have different windows, opencode measures from the smallest, so larger models compact later than the value you chose.
+- opencode needs each enabled opencode model to report its context window. If any enabled model does not, opencode keeps its own default. When a model publishes a separate input limit, opencode measures from that limit instead. When several models have different windows, opencode measures from the smallest, so larger models compact later than the value you chose.
+- An `OPENCODE_CONFIG_CONTENT` environment override on opencode replaces the configuration Copilot generates, including this threshold.
 - A `CLAUDE_CODE_AUTO_COMPACT_WINDOW` environment override on Claude takes precedence over this setting, and turning the setting on re-enables Claude's automatic compaction even if you turned it off in Claude's own settings.
 - The threshold applies to automatic compaction only. Choose **/compact** to compact a chat on demand.
 
