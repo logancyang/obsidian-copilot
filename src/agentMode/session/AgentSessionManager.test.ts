@@ -4459,6 +4459,36 @@ describe("AgentSessionManager", () => {
         );
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/635 keeps the replayed chat when the note also holds a /compact turn that the agent's replay omits", async () => {
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "replayed question", "u1"));
+            emit({
+              sessionUpdate: "tool_call",
+              toolCallId: "tool-read",
+              title: "Read note.md",
+              kind: "read",
+              status: "completed",
+            });
+            emit(replayChunk("agent_message_chunk", "replayed answer", "a1"));
+          },
+        });
+
+        const session = await openSavedChat(replay, [
+          ...savedTurn,
+          { id: "s3", sender: USER_SENDER, message: "/compact", isVisible: true, timestamp: null },
+        ]);
+
+        expect(senderAndText(session)).toEqual([
+          [USER_SENDER, "replayed question"],
+          [AI_SENDER, "replayed answer"],
+        ]);
+        expect(session.store.getDisplayMessages()[1].parts?.map((p) => p.kind)).toEqual([
+          "tool_call",
+          "text",
+        ]);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 shows the note's messages when the reattached session replays nothing", async () => {
         const replay = buildReplayingBackend({
           loadSession: jest.fn(async () => {
