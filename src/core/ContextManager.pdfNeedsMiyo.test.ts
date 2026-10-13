@@ -140,6 +140,18 @@ describe("ContextManager", () => {
         expect(requestUrl).not.toHaveBeenCalled();
       });
 
+      it("keeps a note that quotes the message intact when no PDF is in the send https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
+        const savedChat = addFile(
+          "Saved chat.md",
+          `First error: ${PDF_NEEDS_MIYO_MESSAGE}\nSecond error: ${PDF_NEEDS_MIYO_MESSAGE}`
+        );
+
+        const content = await process({ notes: [savedChat] });
+
+        expect(countOf(content, PDF_NEEDS_MIYO_MESSAGE)).toBe(2);
+        expect(content).not.toContain("Same reason as above.");
+      });
+
       it("explains the route again on the next send https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
         const report = addFile("report.pdf");
 

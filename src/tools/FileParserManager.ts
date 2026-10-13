@@ -13,16 +13,8 @@ export const PDF_NEEDS_MIYO_MESSAGE =
 
 const PDF_NEEDS_MIYO_REPEAT = "Same reason as above.";
 
-// One explanation per context keeps several unreadable PDFs from repeating it. https://github.com/Brevilabs/obsidian-copilot-private/issues/653
-export function keepFirstPdfNeedsMiyoMessage(text: string): string {
-  const firstEnd = text.indexOf(PDF_NEEDS_MIYO_MESSAGE) + PDF_NEEDS_MIYO_MESSAGE.length;
-  if (firstEnd < PDF_NEEDS_MIYO_MESSAGE.length) {
-    return text;
-  }
-  return (
-    text.slice(0, firstEnd) +
-    text.slice(firstEnd).replaceAll(PDF_NEEDS_MIYO_MESSAGE, PDF_NEEDS_MIYO_REPEAT)
-  );
+function pdfErrorText(file: TFile, reason: string): string {
+  return `[Error: Could not extract content from PDF ${file.basename}. ${reason}]`;
 }
 
 const MIYO_LOCAL_EXTENSIONS = new Set(["pdf", "epub"]);
@@ -103,7 +95,7 @@ export class PDFParser implements FileParser {
       // Quick Chat no longer sends PDFs to a cloud parser. https://github.com/Brevilabs/obsidian-copilot-private/issues/653
       if (!(await canProcessDocumentsWithMiyo())) {
         logWarn(`[PDFParser] Miyo document processing unavailable for ${file.path}`);
-        return `[Error: Could not extract content from PDF ${file.basename}. ${PDF_NEEDS_MIYO_MESSAGE}]`;
+        return pdfErrorText(file, PDF_NEEDS_MIYO_MESSAGE);
       }
 
       const miyoResult = await this.selfHostDocParser.parseDoc(file, vault);
@@ -329,6 +321,22 @@ export class FileParserManager {
 
   supportsExtension(extension: string): boolean {
     return this.parsers.has(extension);
+  }
+
+  // One explanation per send keeps several unreadable PDFs from repeating it, and only parser output is shortened so quoted note text stays intact. https://github.com/Brevilabs/obsidian-copilot-private/issues/653
+  forOneSend(): FileParserManager {
+    const scoped = Object.create(this) as FileParserManager;
+    let explained = false;
+    scoped.parseFile = async (file, vault) => {
+      const content = await this.parseFile(file, vault);
+      if (content !== pdfErrorText(file, PDF_NEEDS_MIYO_MESSAGE)) return content;
+      if (!explained) {
+        explained = true;
+        return content;
+      }
+      return pdfErrorText(file, PDF_NEEDS_MIYO_REPEAT);
+    };
+    return scoped;
   }
 
   async clearPDFCache(vault: Vault): Promise<void> {

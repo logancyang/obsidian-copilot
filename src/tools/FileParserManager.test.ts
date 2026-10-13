@@ -49,7 +49,7 @@ import * as obsidianModule from "obsidian";
 import type { TFile, Vault } from "obsidian";
 import {
   Docs4LLMParser,
-  keepFirstPdfNeedsMiyoMessage,
+  FileParserManager,
   PDF_NEEDS_MIYO_MESSAGE,
   PDFParser,
 } from "./FileParserManager";
@@ -305,25 +305,49 @@ describe("FileParserManager", () => {
     });
   });
 
-  describe("keepFirstPdfNeedsMiyoMessage()", () => {
-    const block = (name: string) =>
-      `<note_context><title>${name}</title><content>[Error: Could not extract content from PDF ${name}. ${PDF_NEEDS_MIYO_MESSAGE}]</content></note_context>`;
+  describe("FileParserManager", () => {
+    describe("forOneSend()", () => {
+      const note = (name: string): TFile =>
+        // eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- test fixture; not a real TFile
+        ({ extension: "md", path: `${name}.md`, basename: name }) as unknown as TFile;
 
-    it("keeps the full message on the first unreadable PDF and shortens it on every later one https://github.com/Brevilabs/obsidian-copilot-private/issues/653", () => {
-      const result = keepFirstPdfNeedsMiyoMessage(`${block("a")}${block("b")}${block("c")}`);
+      beforeEach(() => {
+        mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: false }));
+      });
 
-      expect(result.split(PDF_NEEDS_MIYO_MESSAGE)).toHaveLength(2);
-      expect(result).toContain("PDF b. Same reason as above.]");
-      expect(result).toContain("PDF c. Same reason as above.]");
-      expect(result.indexOf(PDF_NEEDS_MIYO_MESSAGE)).toBeLessThan(result.indexOf("PDF b."));
-    });
+      it("explains the first unreadable PDF in full and shortens every later one in the same send https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
+        const send = new FileParserManager().forOneSend();
 
-    it("leaves a single occurrence unchanged https://github.com/Brevilabs/obsidian-copilot-private/issues/653", () => {
-      expect(keepFirstPdfNeedsMiyoMessage(block("a"))).toBe(block("a"));
-    });
+        const results = [
+          await send.parseFile(pdf("a"), asVault),
+          await send.parseFile(pdf("b"), asVault),
+          await send.parseFile(pdf("c"), asVault),
+        ];
 
-    it("leaves context without the message unchanged https://github.com/Brevilabs/obsidian-copilot-private/issues/653", () => {
-      expect(keepFirstPdfNeedsMiyoMessage("plain note text")).toBe("plain note text");
+        expect(results).toEqual([
+          `[Error: Could not extract content from PDF a. ${PDF_NEEDS_MIYO_MESSAGE}]`,
+          "[Error: Could not extract content from PDF b. Same reason as above.]",
+          "[Error: Could not extract content from PDF c. Same reason as above.]",
+        ]);
+      });
+
+      it("explains in full again in the next send https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
+        const manager = new FileParserManager();
+        await manager.forOneSend().parseFile(pdf("a"), asVault);
+
+        const next = await manager.forOneSend().parseFile(pdf("a"), asVault);
+
+        expect(next).toContain(PDF_NEEDS_MIYO_MESSAGE);
+      });
+
+      it("returns note text that quotes the message unchanged after a PDF was explained https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
+        const quoted = `${PDF_NEEDS_MIYO_MESSAGE}\n${PDF_NEEDS_MIYO_MESSAGE}`;
+        const noteVault = { ...vault, read: async () => quoted } as unknown as Vault;
+        const send = new FileParserManager().forOneSend();
+        await send.parseFile(pdf("a"), noteVault);
+
+        expect(await send.parseFile(note("Saved chat"), noteVault)).toBe(quoted);
+      });
     });
   });
 });

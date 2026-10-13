@@ -5,7 +5,7 @@ import { logWarn, logInfo, logError } from "@/logger";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import { WebViewerTimeoutError } from "@/services/webViewerService/webViewerServiceTypes";
-import { FileParserManager, keepFirstPdfNeedsMiyoMessage } from "@/tools/FileParserManager";
+import { FileParserManager } from "@/tools/FileParserManager";
 import { isPlusChain, isTextReadableFile } from "@/utils";
 import { normalizeUrlString } from "@/utils/urlNormalization";
 import { App, TFile, Vault, Notice } from "obsidian";
@@ -545,7 +545,7 @@ export class ContextProcessor {
       includedFilePaths.add(note.path);
     }
 
-    return keepFirstPdfNeedsMiyoMessage(additionalContext);
+    return additionalContext;
   }
 
   processSelectedTextContexts(
