@@ -57,6 +57,7 @@ function renderSection(
         onDeleteChat={props.onDeleteChat ?? noop}
         onOpenSourceFile={props.onOpenSourceFile ?? noop}
         onCopyChatLink={props.onCopyChatLink ?? noop}
+        onSetChatPinned={props.onSetChatPinned ?? noop}
       />
     </AppContext.Provider>
   );
@@ -91,6 +92,13 @@ function lastModal(): Modal {
   const modal = mockOpenedModals.at(-1);
   if (!modal) throw new Error("No modal was opened");
   return modal;
+}
+
+function rowTitles(): string[] {
+  return screen
+    .getAllByRole("button")
+    .filter((element) => element.getAttribute("tabindex") === "0")
+    .map((row) => row.querySelector("[title]")?.getAttribute("title") ?? "");
 }
 
 function queryAttentionDot(container: HTMLElement): Element | null {
@@ -363,14 +371,14 @@ describe("GlobalRecentChatsSection", () => {
       expect(screen.getAllByText(/^Chat search-page-/)).toHaveLength(50);
     });
 
-    it("shows only Open source note and More actions when hovering a saved chat whose session is closed", () => {
+    it("shows only Pin chat, Open source note, and More actions when hovering a saved chat whose session is closed", () => {
       renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })] });
 
       const actions = within(rowFor("Saved chat"))
         .getAllByRole("button")
         .map((button) => button.getAttribute("aria-label"));
 
-      expect(actions).toEqual(["Open source note", "More actions"]);
+      expect(actions).toEqual(["Pin chat", "Open source note", "More actions"]);
     });
 
     it("leads the hover actions with Close session when the chat's session is open", () => {
@@ -384,7 +392,142 @@ describe("GlobalRecentChatsSection", () => {
         .getAllByRole("button")
         .map((button) => button.getAttribute("aria-label"));
 
-      expect(actions).toEqual(["Close session", "Open source note", "More actions"]);
+      expect(actions).toEqual(["Pin chat", "Close session", "Open source note", "More actions"]);
+    });
+
+    it("pins an unpinned chat from its Pin chat action without opening it", async () => {
+      const onSetChatPinned = jest.fn(noop);
+      const onLoadChat = jest.fn(noop);
+      renderSection({
+        items: [makeItem("chats/saved.md", { title: "Saved chat" })],
+        onSetChatPinned,
+        onLoadChat,
+      });
+
+      await act(async () => {
+        fireEvent.click(within(rowFor("Saved chat")).getByRole("button", { name: "Pin chat" }));
+      });
+
+      expect(onSetChatPinned).toHaveBeenCalledWith("chats/saved.md", true);
+      expect(onLoadChat).not.toHaveBeenCalled();
+    });
+
+    it("leads the hover actions with Unpin chat for a pinned chat and unpins it", async () => {
+      const onSetChatPinned = jest.fn(noop);
+      renderSection({
+        items: [makeItem("chats/pinned.md", { title: "Pinned chat", pinnedAt: 5_000 })],
+        onSetChatPinned,
+      });
+      const row = rowFor("Pinned chat");
+
+      expect(within(row).getAllByRole("button")[0].getAttribute("aria-label")).toBe("Unpin chat");
+      await act(async () => {
+        fireEvent.click(within(row).getByRole("button", { name: "Unpin chat" }));
+      });
+
+      expect(onSetChatPinned).toHaveBeenCalledWith("chats/pinned.md", false);
+    });
+
+    it.each([
+      ["Pin chat", "an unpinned", undefined, true],
+      ["Unpin chat", "a pinned", 5_000, false],
+    ])(
+      "offers %s in the menu for %s chat and sets its pinned state",
+      async (menuItem, _state, pinnedAt, pinned) => {
+        const onSetChatPinned = jest.fn(noop);
+        renderSection({
+          items: [makeItem("chats/saved.md", { title: "Saved chat", pinnedAt })],
+          onSetChatPinned,
+        });
+
+        const menu = openMenuFromButton("Saved chat");
+        await act(async () => chooseMenuItem(menu, menuItem));
+
+        expect(onSetChatPinned).toHaveBeenCalledWith("chats/saved.md", pinned);
+      }
+    );
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3195 lists pinned chats first with the newest pin on top, then the other chats in the saved sort order", () => {
+      renderSection({
+        items: [
+          makeItem("recent", { title: "Recent", lastAccessedAt: new Date(9_000) }),
+          makeItem("first-pin", {
+            title: "First pin",
+            lastAccessedAt: new Date(8_000),
+            pinnedAt: 1_000,
+          }),
+          makeItem("older", { title: "Older", lastAccessedAt: new Date(2_000) }),
+          makeItem("second-pin", {
+            title: "Second pin",
+            lastAccessedAt: new Date(1_000),
+            pinnedAt: 2_000,
+          }),
+        ],
+      });
+
+      expect(rowTitles()).toEqual(["Second pin", "First pin", "Recent", "Older"]);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3195 keeps pinned chats in pin order while the other chats follow a changed sort strategy", () => {
+      const items = [
+        makeItem("zulu-pin", { title: "Zulu pin", pinnedAt: 2_000 }),
+        makeItem("alpha-pin", { title: "Alpha pin", pinnedAt: 1_000 }),
+        makeItem("zulu", { title: "Zulu", lastAccessedAt: new Date(9_000) }),
+        makeItem("alpha", { title: "Alpha", lastAccessedAt: new Date(1_000) }),
+      ];
+
+      renderSection({ items, sortStrategy: "name" });
+
+      expect(rowTitles()).toEqual(["Zulu pin", "Alpha pin", "Alpha", "Zulu"]);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3195 renders every pinned chat in the first batch even when it is the least recently used", () => {
+      renderSection({
+        items: [
+          ...makeRecentItems("paged", 60),
+          makeItem("stale-pin", {
+            title: "Stale pin",
+            lastAccessedAt: new Date(0),
+            pinnedAt: 1_000,
+          }),
+        ],
+      });
+
+      expect(rowTitles()[0]).toBe("Stale pin");
+    });
+
+    it("separates pinned chats from the other chats with a divider only when both groups have chats", () => {
+      const { unmount } = renderSection({
+        items: [makeItem("pinned", { pinnedAt: 1_000 }), makeItem("unpinned")],
+      });
+      expect(screen.getAllByRole("separator")).toHaveLength(1);
+      unmount();
+
+      renderSection({ items: [makeItem("pinned", { pinnedAt: 1_000 })] });
+      expect(screen.queryByRole("separator")).toBeNull();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3195 keeps matching pinned chats above the divider while searching and drops the divider when no unpinned chat matches", () => {
+      renderSection({
+        items: [
+          makeItem("plan-pinned", {
+            title: "Plan launch",
+            lastAccessedAt: new Date(1_000),
+            pinnedAt: 1_000,
+          }),
+          makeItem("plan-unpinned", { title: "Plan budget", lastAccessedAt: new Date(9_000) }),
+          makeItem("notes", { title: "Meeting notes", pinnedAt: 2_000 }),
+        ],
+      });
+      const search = screen.getByPlaceholderText("Search chats...");
+
+      fireEvent.change(search, { target: { value: "plan" } });
+      expect(rowTitles()).toEqual(["Plan launch", "Plan budget"]);
+      expect(screen.getAllByRole("separator")).toHaveLength(1);
+
+      fireEvent.change(search, { target: { value: "launch" } });
+      expect(rowTitles()).toEqual(["Plan launch"]);
+      expect(screen.queryByRole("separator")).toBeNull();
     });
 
     it("lists every action, including the hover-strip ones, with a warning-styled Delete in the More actions menu", () => {
@@ -393,6 +536,7 @@ describe("GlobalRecentChatsSection", () => {
       const menu = openMenuFromButton("Saved chat");
 
       expect(menuEntries(menu)).toEqual([
+        "Pin chat",
         "Open source note",
         "Rename",
         "Copy chat link",
@@ -412,6 +556,7 @@ describe("GlobalRecentChatsSection", () => {
       });
 
       expect(menuEntries(openMenuFromButton("Open chat"))).toEqual([
+        "Pin chat",
         "Open source note",
         "Rename",
         "Copy chat link",
@@ -612,6 +757,7 @@ describe("GlobalRecentChatsSection", () => {
             onDeleteChat={noop}
             onOpenSourceFile={noop}
             onCopyChatLink={noop}
+            onSetChatPinned={noop}
             onLoadHistory={safeAsyncHandler(loadHistory)}
           />
         </AppContext.Provider>

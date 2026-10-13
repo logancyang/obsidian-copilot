@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { type ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { ChatIconWithAttention } from "@/components/chat-components/ChatIconWithAttention";
@@ -27,6 +28,8 @@ import {
   MessageCircle,
   MoreHorizontal,
   Pencil,
+  Pin,
+  PinOff,
   Power,
   Trash2,
 } from "lucide-react";
@@ -45,6 +48,7 @@ interface GlobalRecentChatsSectionProps {
   onDeleteChat: (id: string) => Promise<void>;
   onOpenSourceFile: (id: string) => Promise<void>;
   onCopyChatLink: (id: string) => Promise<void>;
+  onSetChatPinned: (id: string, pinned: boolean) => Promise<void>;
   onLoadHistory?: () => void;
   runningChatIds?: ReadonlySet<string>;
   openChatIds?: ReadonlySet<string>;
@@ -71,6 +75,23 @@ function sortChats(items: ChatHistoryItem[], strategy: SortStrategy): ChatHistor
     getCreatedAtMs: (item) => item.createdAt.getTime(),
     getLastUsedAtMs: (item) => item.lastAccessedAt.getTime(),
   });
+}
+
+function isPinned(item: ChatHistoryItem): boolean {
+  return item.pinnedAt !== undefined;
+}
+
+// Pinned chats stay in pin order so a sort change never reshuffles them.
+// https://github.com/logancyang/obsidian-copilot/issues/3195
+function orderChats(items: ChatHistoryItem[], strategy: SortStrategy): ChatHistoryItem[] {
+  const pinned = items.filter(isPinned).sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0));
+  return [
+    ...pinned,
+    ...sortChats(
+      items.filter((item) => !isPinned(item)),
+      strategy
+    ),
+  ];
 }
 
 const ChatIconTile = memo(
@@ -101,6 +122,7 @@ interface RecentChatActions {
   onDeleteChat: (id: string) => Promise<void>;
   onOpenSourceFile: (id: string) => void;
   onCloseSession?: (id: string) => Promise<void>;
+  onSetChatPinned: (id: string, pinned: boolean) => Promise<void>;
 }
 
 interface RowActionButtonProps extends React.ComponentPropsWithoutRef<typeof Button> {
@@ -142,9 +164,17 @@ function RecentChatMenu({
   isSessionOpen,
   open,
   onOpenChange,
-  actions: { onUpdateTitle, onCopyChatLink, onDeleteChat, onOpenSourceFile, onCloseSession },
+  actions: {
+    onUpdateTitle,
+    onCopyChatLink,
+    onDeleteChat,
+    onOpenSourceFile,
+    onCloseSession,
+    onSetChatPinned,
+  },
 }: RecentChatMenuProps): React.ReactElement {
   const app = useApp();
+  const pinned = isPinned(item);
   const [rowBody, setRowBody] = useState<HTMLElement | null>(null);
   const trackRowBody = useCallback(
     (node: HTMLButtonElement | null) => setRowBody(node?.ownerDocument.body ?? null),
@@ -164,6 +194,10 @@ function RecentChatMenu({
         container={rowBody}
         onClick={(event) => event.stopPropagation()}
       >
+        <DropdownMenuItem onSelect={() => safeAsyncHandler(onSetChatPinned)(item.id, !pinned)}>
+          {pinned ? <PinOff /> : <Pin />}
+          {pinned ? "Unpin chat" : "Pin chat"}
+        </DropdownMenuItem>
         {isNoteBacked && (
           <DropdownMenuItem onSelect={() => onOpenSourceFile(item.id)}>
             <ArrowUpRight />
@@ -234,9 +268,10 @@ const RecentChatRow = memo(function RecentChatRow({
   isSessionOpen,
   hasAttention,
 }: RecentChatRowProps): React.ReactElement {
-  const { onOpenSourceFile, onCloseSession } = actions;
+  const { onOpenSourceFile, onCloseSession, onSetChatPinned } = actions;
   const Icon = resolveChatIcon(item) ?? MessageCircle;
   const [menuOpen, setMenuOpen] = useState(false);
+  const pinned = isPinned(item);
 
   return (
     <div
@@ -293,6 +328,12 @@ const RecentChatRow = memo(function RecentChatRow({
             menuOpen ? "tw-flex" : "tw-hidden group-focus-within:tw-flex group-hover:tw-flex"
           )}
         >
+          <RowActionButton
+            label={pinned ? "Unpin chat" : "Pin chat"}
+            onClick={() => safeAsyncHandler(onSetChatPinned)(item.id, !pinned)}
+          >
+            {pinned ? <PinOff className="tw-size-3.5" /> : <Pin className="tw-size-3.5" />}
+          </RowActionButton>
           {isSessionOpen && onCloseSession && (
             <RowActionButton
               label="Close session"
@@ -329,6 +370,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   onDeleteChat,
   onOpenSourceFile,
   onCopyChatLink,
+  onSetChatPinned,
   onLoadHistory,
   runningChatIds,
   openChatIds,
@@ -344,7 +386,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
     onLoadHistory?.();
   }, [onLoadHistory]);
 
-  const sortedItems = useMemo(() => sortChats(items, sortStrategy), [items, sortStrategy]);
+  const sortedItems = useMemo(() => orderChats(items, sortStrategy), [items, sortStrategy]);
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return sortedItems;
@@ -355,6 +397,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
     () => filteredItems.slice(0, displayCount),
     [displayCount, filteredItems]
   );
+  const visiblePinnedCount = useMemo(() => visibleItems.filter(isPinned).length, [visibleItems]);
 
   const handleOpenSourceFile = useCallback(
     (id: string) => {
@@ -372,13 +415,34 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
       onDeleteChat,
       onOpenSourceFile: handleOpenSourceFile,
       onCloseSession,
+      onSetChatPinned,
     }),
-    [handleOpenSourceFile, onCloseSession, onCopyChatLink, onDeleteChat, onUpdateTitle]
+    [
+      handleOpenSourceFile,
+      onCloseSession,
+      onCopyChatLink,
+      onDeleteChat,
+      onSetChatPinned,
+      onUpdateTitle,
+    ]
   );
   const getProjectName = useCallback(
     (item: ChatHistoryItem): string | undefined =>
       variant === "global" && item.projectId ? projectNamesById?.[item.projectId] : undefined,
     [projectNamesById, variant]
+  );
+  const renderRow = (item: ChatHistoryItem) => (
+    <RecentChatRow
+      key={item.id}
+      item={item}
+      projectName={getProjectName(item)}
+      onOpen={handleOpen}
+      actions={actions}
+      isNoteBacked={!isNativeChatId(item.id)}
+      isRunning={runningChatIds?.has(item.id) ?? false}
+      isSessionOpen={openChatIds?.has(item.id) ?? false}
+      hasAttention={!!item.needsAttention || (attentionChatIds?.has(item.id) ?? false)}
+    />
   );
   return (
     <div
@@ -406,20 +470,16 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
         </div>
       ) : (
         <AgentHomePreviewList>
+          {visiblePinnedCount > 0 && (
+            <div className="tw-flex tw-flex-col tw-divide-y tw-divide-border">
+              {visibleItems.slice(0, visiblePinnedCount).map(renderRow)}
+            </div>
+          )}
+          {visiblePinnedCount > 0 && visiblePinnedCount < visibleItems.length && (
+            <Separator decorative={false} className="tw-my-1.5" />
+          )}
           <div className="tw-flex tw-flex-col tw-divide-y tw-divide-border">
-            {visibleItems.map((item) => (
-              <RecentChatRow
-                key={item.id}
-                item={item}
-                projectName={getProjectName(item)}
-                onOpen={handleOpen}
-                actions={actions}
-                isNoteBacked={!isNativeChatId(item.id)}
-                isRunning={runningChatIds?.has(item.id) ?? false}
-                isSessionOpen={openChatIds?.has(item.id) ?? false}
-                hasAttention={!!item.needsAttention || (attentionChatIds?.has(item.id) ?? false)}
-              />
-            ))}
+            {visibleItems.slice(visiblePinnedCount).map(renderRow)}
             {displayCount < filteredItems.length && (
               <div ref={sentinelRef} className="tw-h-1" aria-hidden="true" />
             )}

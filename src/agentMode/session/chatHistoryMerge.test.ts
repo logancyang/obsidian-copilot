@@ -86,6 +86,14 @@ describe("chatHistoryMerge", () => {
       expect(merged[0]?.createdAt.getTime()).toBe(1_500);
     });
 
+    it("keeps the pin time of a saved chat that also exists natively", () => {
+      const [merged] = mergeChatHistoryItems(
+        [{ item: mdItem({ pinnedAt: 7_000 }), backendId: "opencode", sessionId: "s1" }],
+        [nativeEntry({ sessionId: "s1", lastAccessedAtMs: 9_000 })]
+      );
+      expect(merged?.pinnedAt).toBe(7_000);
+    });
+
     it("fills missing markdown project ownership from its native twin", () => {
       const [merged] = mergeChatHistoryItems(
         [{ item: mdItem(), backendId: "opencode", sessionId: "s1" }],

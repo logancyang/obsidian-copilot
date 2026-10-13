@@ -17,6 +17,7 @@ export interface AgentHistoryControls {
   loadChat: (id: string) => Promise<void>;
   updateChatTitle: (id: string, newTitle: string) => Promise<void>;
   deleteChat: (id: string) => Promise<void>;
+  setChatPinned: (id: string, pinned: boolean) => Promise<void>;
   openSourceFile: (id: string) => Promise<void>;
   copyChatLink: (id: string) => Promise<void>;
 }
@@ -59,16 +60,26 @@ export function useAgentHistoryControls(
     []
   );
 
+  // Only the newest history request may land, and a pin retires every earlier one: a load that
+  // read the notes before the pin was written would otherwise drop the row back below the divider.
+  // https://github.com/logancyang/obsidian-copilot/issues/3195
+  const historyRequestRef = useRef(0);
+
   const loadChatHistory = useCallback(async () => {
     const requestScope = scope ?? GLOBAL_SCOPE;
+    const request = ++historyRequestRef.current;
+    const isCurrent = () =>
+      isMountedRef.current &&
+      latestScopeRef.current === requestScope &&
+      historyRequestRef.current === request;
     await runWithNotice("load chat history", async () => {
       const items = await manager.getChatHistoryItems(scope);
-      if (isMountedRef.current && latestScopeRef.current === requestScope) {
+      if (isCurrent()) {
         setLoadedScope(requestScope);
         setChatHistoryItems(items);
       }
     });
-    if (isMountedRef.current && latestScopeRef.current === requestScope) {
+    if (isCurrent()) {
       setSettledScope(requestScope);
     }
   }, [manager, runWithNotice, scope]);
@@ -115,6 +126,24 @@ export function useAgentHistoryControls(
     [manager, chatHistoryItems, loadChatHistory, runWithNotice]
   );
 
+  const setChatPinned = useCallback(
+    async (id: string, pinned: boolean) => {
+      await runWithNotice(pinned ? "pin chat" : "unpin chat", async () => {
+        const chat = await manager.setChatPinned(id, pinned);
+        if (!isMountedRef.current) return;
+        historyRequestRef.current++;
+        // A reload right after the frontmatter write reads the metadata cache's previous pin state.
+        // https://github.com/logancyang/obsidian-copilot/issues/3195
+        setChatHistoryItems((items) =>
+          items.map((item) =>
+            item.id === id ? { ...item, id: chat.id, pinnedAt: chat.pinnedAt } : item
+          )
+        );
+      });
+    },
+    [manager, runWithNotice]
+  );
+
   const openSourceFile = useCallback(
     async (id: string) => {
       await runWithNotice("open chat source", () => plugin.openChatSourceFile(id));
@@ -131,6 +160,7 @@ export function useAgentHistoryControls(
     loadChat,
     updateChatTitle,
     deleteChat,
+    setChatPinned,
     openSourceFile,
     copyChatLink,
   };

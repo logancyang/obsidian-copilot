@@ -14,10 +14,12 @@ function makeManager() {
     getChatHistoryItems: jest.fn(async () => [item("a"), item("b")]),
     updateChatTitle: jest.fn(async () => {}),
     deleteChatHistory: jest.fn(async () => {}),
+    setChatPinned: jest.fn(async (id: string) => ({ id, pinnedAt: 5_000 })),
   } as unknown as AgentSessionManager & {
     getChatHistoryItems: jest.Mock;
     updateChatTitle: jest.Mock;
     deleteChatHistory: jest.Mock;
+    setChatPinned: jest.Mock;
   };
 }
 
@@ -197,6 +199,124 @@ describe("useAgentHistoryControls", () => {
       expect(Notice).toHaveBeenCalledTimes(1);
       expect(Notice).toHaveBeenCalledWith("Failed to delete chat.");
       expect(manager.getChatHistoryItems).toHaveBeenCalled();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3195 pins a chat on its row right away instead of reloading history the metadata cache has not caught up with", async () => {
+      const manager = makeManager();
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        await result.current.setChatPinned("a", true);
+      });
+
+      expect(manager.setChatPinned).toHaveBeenCalledWith("a", true);
+      expect(result.current.chatHistoryItems).toEqual([{ id: "a", pinnedAt: 5_000 }, item("b")]);
+      expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(1);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3195 keeps a pin when a history load that started before it resolves afterward", async () => {
+      const manager = makeManager();
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+      let resolveStaleLoad!: (items: ChatHistoryItem[]) => void;
+      manager.getChatHistoryItems.mockImplementationOnce(
+        () => new Promise<ChatHistoryItem[]>((resolve) => (resolveStaleLoad = resolve))
+      );
+      let staleLoad!: Promise<void>;
+      act(() => {
+        staleLoad = result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        await result.current.setChatPinned("a", true);
+      });
+      await act(async () => {
+        resolveStaleLoad([item("a"), item("b")]);
+        await staleLoad;
+      });
+
+      expect(result.current.chatHistoryItems).toEqual([{ id: "a", pinnedAt: 5_000 }, item("b")]);
+    });
+
+    it("shows only the latest history load when an earlier load resolves after it", async () => {
+      const manager = makeManager();
+      const resolvers: Array<(items: ChatHistoryItem[]) => void> = [];
+      manager.getChatHistoryItems.mockImplementation(
+        () => new Promise<ChatHistoryItem[]>((resolve) => resolvers.push(resolve))
+      );
+      const { result } = renderControls(manager);
+      let firstLoad!: Promise<void>;
+      let secondLoad!: Promise<void>;
+      act(() => {
+        firstLoad = result.current.loadChatHistory();
+        secondLoad = result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        resolvers[1]([item("new")]);
+        await secondLoad;
+      });
+      await act(async () => {
+        resolvers[0]([item("old")]);
+        await firstLoad;
+      });
+
+      expect(result.current.chatHistoryItems).toEqual([item("new")]);
+    });
+
+    it("unpins a chat on its row right away", async () => {
+      const manager = makeManager();
+      manager.getChatHistoryItems.mockResolvedValue([{ id: "a", pinnedAt: 5_000 }]);
+      manager.setChatPinned.mockImplementation(async (id: string) => ({ id, pinnedAt: undefined }));
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        await result.current.setChatPinned("a", false);
+      });
+
+      expect(result.current.chatHistoryItems).toEqual([{ id: "a", pinnedAt: undefined }]);
+    });
+
+    it("replaces a pinned chat that had no note with the note it was saved as", async () => {
+      const manager = makeManager();
+      manager.getChatHistoryItems.mockResolvedValue([{ id: "native:opencode:s1" }]);
+      manager.setChatPinned.mockResolvedValue({ id: "chats/agent__s1.md", pinnedAt: 5_000 });
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        await result.current.setChatPinned("native:opencode:s1", true);
+      });
+
+      expect(result.current.chatHistoryItems).toEqual([
+        { id: "chats/agent__s1.md", pinnedAt: 5_000 },
+      ]);
+    });
+
+    it("shows a notice and leaves every row as it was when pinning fails", async () => {
+      const manager = makeManager();
+      manager.setChatPinned.mockRejectedValue(new Error("backend is not installed"));
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        await result.current.setChatPinned("a", true);
+      });
+
+      expect(Notice).toHaveBeenCalledWith("Failed to pin chat.");
+      expect(result.current.chatHistoryItems).toEqual([item("a"), item("b")]);
     });
 
     it("copies the link of the saved chat note the chat id points to", async () => {

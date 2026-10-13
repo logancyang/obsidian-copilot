@@ -168,14 +168,17 @@ export async function writeFrontmatterFile(
 export async function patchFrontmatter(
   app: App,
   filePath: string,
-  updates: Record<string, string | number>
+  updates: Record<string, string | number | null>
 ): Promise<void> {
   const file = app.vault.getAbstractFileByPath(filePath);
 
   if (file instanceof TFile && app.fileManager?.processFrontMatter) {
     await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
       for (const [key, value] of Object.entries(updates)) {
-        frontmatter[key] = value;
+        // A null update removes the key so a cleared flag such as an unpin leaves no stale value.
+        // https://github.com/logancyang/obsidian-copilot/issues/3195
+        if (value === null) delete frontmatter[key];
+        else frontmatter[key] = value;
       }
     });
     return;
@@ -190,6 +193,10 @@ export async function patchFrontmatter(
     (_match, yamlBlock: string, closing: string) => {
       let patched = yamlBlock;
       for (const [key, value] of Object.entries(updates)) {
+        if (value === null) {
+          patched = patched.replace(new RegExp(`^${key}:.*\\r?\\n`, "m"), "");
+          continue;
+        }
         const formattedValue =
           typeof value === "string"
             ? `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
