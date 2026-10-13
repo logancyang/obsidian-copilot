@@ -126,12 +126,17 @@ describe("slashMenuItems", () => {
       ]);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/634 shadows a skill or command named compact with the built-in in agent mode", () => {
-      const skills = [makeSkill({ name: "Compact", enabledAgents: ["claude"] })];
-      const commands = [makeCommand({ title: "compact" }), makeCommand({ title: "polish" })];
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/634 shadows a skill or command named exactly compact with the built-in in agent mode, leaving other casings listed because /Compact still expands them", () => {
+      const skills = [makeSkill({ name: "compact", enabledAgents: ["claude"] })];
+      const commands = [
+        makeCommand({ title: "compact" }),
+        makeCommand({ title: "Compact" }),
+        makeCommand({ title: "polish" }),
+      ];
       const items = composeSlashMenuItems(skills, commands, "claude", true);
       expect(items.map((i) => [i.kind, i.name])).toEqual([
         ["builtin", "compact"],
+        ["command", "Compact"],
         ["command", "polish"],
       ]);
     });
@@ -160,7 +165,7 @@ describe("slashMenuItems", () => {
         makeSkill({ name: "compactor", enabledAgents: ["claude"] }),
         makeSkill({ name: "compact-notes", enabledAgents: ["claude"] }),
       ];
-      const commands = [makeCommand({ title: "a-compact" }), makeCommand({ title: "Compact" })];
+      const commands = [makeCommand({ title: "a-compact" }), makeCommand({ title: "compact" })];
       const options = composeSlashMenuItems(skills, commands, "claude", true).map((item) => ({
         title: item.name,
         content: item.body,

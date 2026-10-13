@@ -42,8 +42,9 @@ export function composeSlashMenuItems(
   activeBackend: BackendId | null,
   isAgentMode = false
 ): SlashMenuItem[] {
-  const isBuiltinName = (name: string) =>
-    isAgentMode && name.toLowerCase() === COMPACT_COMMAND_NAME;
+  // The send path treats exactly /compact as the built-in, so only that exact name is shadowed.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
+  const isBuiltinName = (name: string) => isAgentMode && name === COMPACT_COMMAND_NAME;
 
   const visibleSkills = skills.filter((skill) => {
     if (skill.userInvocable === false) return false;

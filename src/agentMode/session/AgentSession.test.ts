@@ -1649,174 +1649,164 @@ describe("AgentSession", () => {
         expect(markDelivered).not.toHaveBeenCalled();
       });
 
-      describe("with the /compact command", () => {
-        const COMPACT_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/634";
-        const PROJECT_CONTEXT =
-          "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>";
-        const UPDATES = {
-          epoch: 7,
-          block: "<project_context_updates>changed</project_context_updates>",
-        };
-        const noteFile = mockTFile({ path: "Notes/Active.md", basename: "Active" });
-        const richContext = {
-          notes: [noteFile],
-          urls: [],
-          selectedTextContexts: [
-            {
-              id: "sel-1",
-              sourceType: "web" as const,
-              title: "Page",
-              url: "https://example.com",
-              content: "selected words",
-            },
-          ],
-          webTabs: [{ url: "https://example.com/tab", title: "Tab" }],
-        };
-        const imageBlock = { type: "image" as const, mimeType: "image/png", data: "aGVsbG8=" };
-        const mockedEnsureMultiAgent = ensureMultiAgentEntitlement as jest.MockedFunction<
-          typeof ensureMultiAgentEntitlement
-        >;
+      const PROJECT_CONTEXT =
+        "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>";
+      const UPDATES = {
+        epoch: 7,
+        block: "<project_context_updates>changed</project_context_updates>",
+      };
+      const noteFile = mockTFile({ path: "Notes/Active.md", basename: "Active" });
+      const richContext = {
+        notes: [noteFile],
+        urls: [],
+        selectedTextContexts: [
+          {
+            id: "sel-1",
+            sourceType: "web" as const,
+            title: "Page",
+            url: "https://example.com",
+            content: "selected words",
+          },
+        ],
+        webTabs: [{ url: "https://example.com/tab", title: "Tab" }],
+      };
+      const imageBlock = { type: "image" as const, mimeType: "image/png", data: "aGVsbG8=" };
 
-        beforeEach(() => {
-          mockedEnsureMultiAgent.mockReset();
-          mockedEnsureMultiAgent.mockResolvedValue(true);
+      const promptBlocks = (mock: MockBackend, call: number) =>
+        (mock.prompt.mock.calls[call][0] as { prompt: unknown[] }).prompt;
+
+      async function startProjectSession(
+        mock: MockBackend,
+        overrides: Partial<AgentSessionStartOptions> = {}
+      ): Promise<AgentSession> {
+        const session = startSession(mock, {
+          cwd: "/vault/Projects/p",
+          projectId: "proj-7",
+          getProjectContextBlock: () => PROJECT_CONTEXT,
+          getProjectContextUpdates: () => UPDATES,
+          ...overrides,
         });
+        await session.ready;
+        return session;
+      }
 
-        const promptBlocks = (mock: MockBackend, call: number) =>
-          (mock.prompt.mock.calls[call][0] as { prompt: unknown[] }).prompt;
-
-        async function startProjectSession(
-          mock: MockBackend,
-          overrides: Partial<AgentSessionStartOptions> = {}
-        ): Promise<AgentSession> {
-          const session = startSession(mock, {
-            cwd: "/vault/Projects/p",
-            projectId: "proj-7",
-            getProjectContextBlock: () => PROJECT_CONTEXT,
-            getProjectContextUpdates: () => UPDATES,
-            ...overrides,
-          });
-          await session.ready;
-          return session;
-        }
-
-        it(`${COMPACT_ISSUE} sends /compact as the whole prompt even with every context source present`, async () => {
-          const processContextWebTabs = jest.fn().mockResolvedValue("<active_web_tab />");
-          const getInstance = jest
-            .spyOn(ContextProcessor, "getInstance")
-            .mockReturnValue({ processContextWebTabs } as never);
-          try {
-            const mock = makeMockBackend();
-            const session = await startProjectSession(mock);
-
-            await session.sendPrompt("/compact", richContext, [imageBlock]).turn;
-
-            expect(promptBlocks(mock, 0)).toEqual([{ type: "text", text: "/compact" }]);
-            expect(processContextWebTabs).not.toHaveBeenCalled();
-          } finally {
-            getInstance.mockRestore();
-          }
-        });
-
-        it(`${COMPACT_ISSUE} shows the /compact message without the attachments that were not sent`, async () => {
-          const mock = makeMockBackend();
-          const session = makeSession(mock);
-
-          await session.sendPrompt("/compact", richContext, [imageBlock]).turn;
-
-          const [userMessage] = session.store.getDisplayMessages();
-          expect(userMessage.message).toBe("/compact");
-          expect(userMessage.context).toBeUndefined();
-          expect(userMessage.content).toBeUndefined();
-        });
-
-        it(`${COMPACT_ISSUE} passes arguments after /compact through unchanged on the trimmed text`, async () => {
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 sends /compact as the whole prompt even with every context source present`, async () => {
+        const processContextWebTabs = jest.fn().mockResolvedValue("<active_web_tab />");
+        const getInstance = jest
+          .spyOn(ContextProcessor, "getInstance")
+          .mockReturnValue({ processContextWebTabs } as never);
+        try {
           const mock = makeMockBackend();
           const session = await startProjectSession(mock);
 
-          await session.sendPrompt("  /compact keep the API shapes \n", richContext).turn;
+          await session.sendPrompt("/compact", richContext, [imageBlock]).turn;
 
-          expect(promptBlocks(mock, 0)).toEqual([
-            { type: "text", text: "/compact keep the API shapes" },
-          ]);
-        });
-
-        it(`${COMPACT_ISSUE} leaves project context and project-context updates for the next normal turn`, async () => {
-          const mock = makeMockBackend();
-          const markDelivered = jest.fn();
-          const session = await startProjectSession(mock, {
-            markProjectContextUpdatesDelivered: markDelivered,
-          });
-
-          await session.sendPrompt("/compact").turn;
-          expect(markDelivered).not.toHaveBeenCalled();
-
-          await session.sendPrompt("now continue").turn;
-          const nextText = (promptBlocks(mock, 1)[0] as { text: string }).text;
-          expect(nextText).toContain("<project_context>");
-          expect(nextText).toContain("<project_context_updates>changed</project_context_updates>");
-          expect(markDelivered).toHaveBeenCalledWith(7);
-        });
-
-        it(`${COMPACT_ISSUE} keeps buffered fan-out context for the next normal turn`, async () => {
-          const mock = makeMockBackend();
-          const fanoutTurn: FanoutTurn = {
-            answers: {
-              opencode: { backendId: "opencode", status: "done", text: "a" },
-              claude: { backendId: "claude", status: "done", text: "b" },
-            },
-            summary: { status: "done", text: "the fan-out summary", complete: true },
-          };
-          const runFanoutTurn = jest.fn(async (input: FanoutRunInput) => {
-            input.onChange(fanoutTurn);
-            return fanoutTurn;
-          });
-          const session = makeSession(mock, { runFanoutTurn });
-          await session.sendPrompt("compare X and Y", undefined, undefined, ["opencode", "claude"])
-            .turn;
-
-          await session.sendPrompt("/compact").turn;
           expect(promptBlocks(mock, 0)).toEqual([{ type: "text", text: "/compact" }]);
+          expect(processContextWebTabs).not.toHaveBeenCalled();
+        } finally {
+          getInstance.mockRestore();
+        }
+      });
 
-          await session.sendPrompt("now expand").turn;
-          expect((promptBlocks(mock, 1)[0] as { text: string }).text).toContain(
-            "the fan-out summary"
-          );
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 shows the /compact message without the attachments that were not sent`, async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+
+        await session.sendPrompt("/compact", richContext, [imageBlock]).turn;
+
+        const [userMessage] = session.store.getDisplayMessages();
+        expect(userMessage.message).toBe("/compact");
+        expect(userMessage.context).toBeUndefined();
+        expect(userMessage.content).toBeUndefined();
+      });
+
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 passes arguments after /compact through unchanged on the trimmed text`, async () => {
+        const mock = makeMockBackend();
+        const session = await startProjectSession(mock);
+
+        await session.sendPrompt("  /compact keep the API shapes \n", richContext).turn;
+
+        expect(promptBlocks(mock, 0)).toEqual([
+          { type: "text", text: "/compact keep the API shapes" },
+        ]);
+      });
+
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 leaves project context and project-context updates for the next normal turn`, async () => {
+        const mock = makeMockBackend();
+        const markDelivered = jest.fn();
+        const session = await startProjectSession(mock, {
+          markProjectContextUpdatesDelivered: markDelivered,
         });
 
-        it(`${COMPACT_ISSUE} compacts only this chat's agent when other agents are @mentioned`, async () => {
-          const mock = makeMockBackend();
-          const runFanoutTurn = jest.fn();
-          const session = makeSession(mock, { runFanoutTurn });
+        await session.sendPrompt("/compact").turn;
+        expect(markDelivered).not.toHaveBeenCalled();
 
-          await session.sendPrompt("/compact", undefined, undefined, ["opencode", "claude"]).turn;
+        await session.sendPrompt("now continue").turn;
+        const nextText = (promptBlocks(mock, 1)[0] as { text: string }).text;
+        expect(nextText).toContain("<project_context>");
+        expect(nextText).toContain("<project_context_updates>changed</project_context_updates>");
+        expect(markDelivered).toHaveBeenCalledWith(7);
+      });
 
-          expect(mockedEnsureMultiAgent).not.toHaveBeenCalled();
-          expect(runFanoutTurn).not.toHaveBeenCalled();
-          expect(promptBlocks(mock, 0)).toEqual([{ type: "text", text: "/compact" }]);
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 keeps buffered fan-out context for the next normal turn`, async () => {
+        const mock = makeMockBackend();
+        const fanoutTurn: FanoutTurn = {
+          answers: {
+            opencode: { backendId: "opencode", status: "done", text: "a" },
+            claude: { backendId: "claude", status: "done", text: "b" },
+          },
+          summary: { status: "done", text: "the fan-out summary", complete: true },
+        };
+        const runFanoutTurn = jest.fn(async (input: FanoutRunInput) => {
+          input.onChange(fanoutTurn);
+          return fanoutTurn;
         });
+        const session = makeSession(mock, { runFanoutTurn });
+        await session.sendPrompt("compare X and Y", undefined, undefined, ["opencode", "claude"])
+          .turn;
 
-        it(`${COMPACT_ISSUE} does not title a chat from its /compact message`, async () => {
-          const mock = makeMockBackend();
-          const session = makeSession(mock, { getDescriptor: nonSummarizingDescriptor });
+        await session.sendPrompt("/compact").turn;
+        expect(promptBlocks(mock, 0)).toEqual([{ type: "text", text: "/compact" }]);
 
-          await session.sendPrompt("/compact").turn;
-          expect(session.getLabel()).toBeNull();
+        await session.sendPrompt("now expand").turn;
+        expect((promptBlocks(mock, 1)[0] as { text: string }).text).toContain(
+          "the fan-out summary"
+        );
+      });
 
-          await session.sendPrompt("Plan the migration").turn;
-          expect(session.getLabel()).toBe("Plan the migration");
-        });
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 compacts only this chat's agent when other agents are @mentioned`, async () => {
+        const mock = makeMockBackend();
+        const runFanoutTurn = jest.fn();
+        const session = makeSession(mock, { runFanoutTurn });
+        jest.mocked(ensureMultiAgentEntitlement).mockClear();
 
-        it(`${COMPACT_ISSUE} wraps text that only mentions /compact like any other message`, async () => {
-          const mock = makeMockBackend();
-          const session = makeSession(mock);
+        await session.sendPrompt("/compact", undefined, undefined, ["opencode", "claude"]).turn;
 
-          await session.sendPrompt("please /compact", { notes: [noteFile], urls: [] }).turn;
+        expect(ensureMultiAgentEntitlement).not.toHaveBeenCalled();
+        expect(runFanoutTurn).not.toHaveBeenCalled();
+        expect(promptBlocks(mock, 0)).toEqual([{ type: "text", text: "/compact" }]);
+      });
 
-          const text = (promptBlocks(mock, 0)[0] as { text: string }).text;
-          expect(text).toContain("<copilot-context>");
-          expect(text).toContain("<user-message>\nplease /compact\n</user-message>");
-        });
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 does not title a chat from its /compact message`, async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { getDescriptor: nonSummarizingDescriptor });
+
+        await session.sendPrompt("/compact").turn;
+        expect(session.getLabel()).toBeNull();
+
+        await session.sendPrompt("Plan the migration").turn;
+        expect(session.getLabel()).toBe("Plan the migration");
+      });
+
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 wraps text that only mentions /compact like any other message`, async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+
+        await session.sendPrompt("please /compact", { notes: [noteFile], urls: [] }).turn;
+
+        const text = (promptBlocks(mock, 0)[0] as { text: string }).text;
+        expect(text).toContain("<copilot-context>");
+        expect(text).toContain("<user-message>\nplease /compact\n</user-message>");
       });
 
       it("marks an empty completed turn as a visible error message", async () => {

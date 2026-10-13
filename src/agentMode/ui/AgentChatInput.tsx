@@ -9,6 +9,7 @@ import {
   removeSelectedTextContext,
   useSelectedTextContexts,
 } from "@/aiParams";
+import { isCompactCommand } from "@/commands/compactCommand";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCachedCustomCommands } from "@/commands/state";
 import ChatInput, {
@@ -113,6 +114,16 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
     promptContent: allPromptContent.length > 0 ? allPromptContent : undefined,
     mentionedAgents: mergedAgents.length > 0 ? mergedAgents : undefined,
   };
+};
+
+// Agents only compact when /compact is the whole prompt, so a queued one never merges with neighbours.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/634
+const takeNextQueuedBatch = (
+  items: QueuedAgentMessage[]
+): { batch: QueuedAgentMessage[]; rest: QueuedAgentMessage[] } => {
+  const nextCompact = items.findIndex((item) => isCompactCommand(item.text));
+  const end = nextCompact === 0 ? 1 : nextCompact === -1 ? items.length : nextCompact;
+  return { batch: items.slice(0, end), rest: items.slice(end) };
 };
 
 async function fileToImageBlock(file: File): Promise<PromptContent | null> {
@@ -382,7 +393,8 @@ export const AgentChatInput = memo(function AgentChatInput({
 
   useEffect(() => {
     if (disabled || loading || isStarting || queuedMessages.length === 0) return;
-    const combined = combineQueuedMessages(queuedMessages);
+    const { batch, rest } = takeNextQueuedBatch(queuedMessages);
+    const combined = combineQueuedMessages(batch);
     if (
       combined.promptContent?.some((content) => content.type === "image") &&
       unsupportedImageModelLabel
@@ -392,7 +404,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       );
       return;
     }
-    setQueuedMessages([]);
+    setQueuedMessages(rest);
     void runSend(combined);
   }, [
     disabled,

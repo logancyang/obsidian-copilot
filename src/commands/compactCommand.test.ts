@@ -1,12 +1,6 @@
-import { COMPACT_COMMAND_NAME, isCompactCommand } from "@/commands/compactCommand";
+import { isCompactCommand } from "@/commands/compactCommand";
 
 describe("compactCommand", () => {
-  describe("COMPACT_COMMAND_NAME", () => {
-    it("is the command word agents advertise for compaction", () => {
-      expect(COMPACT_COMMAND_NAME).toBe("compact");
-    });
-  });
-
   describe("isCompactCommand()", () => {
     it.each([
       "/compact",
