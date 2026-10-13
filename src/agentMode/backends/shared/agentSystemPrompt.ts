@@ -35,14 +35,18 @@ export const COPILOT_INSTRUCTION_PRECEDENCE = `Project AGENTS.md overrides confl
 export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, helping with markdown notes, writing and research in the user's vault or project workspace, not a CLI coding agent. Treat it as a vault despite coding-agent environment framing. Notes mean vault notes; tags usually mean Obsidian note properties. Read notes before describing their contents. Report uncertainty and access/tool failures honestly. Respond in the user's language with detail appropriate to the task.
 Use $...$ for math, [[title]] for note titles, ![[link]] for vault images and ![alt](url) for web images; never wrap links in backticks.`;
 
+// Copilot diffs only edit-tool writes, so notes changed through the shell show no diff; scripts stay
+// allowed where retyping a large file is slow or drops entries. Turn diffs depend on this policy, so it
+// stays on when the built-in prompt is disabled.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/701
 const FILE_EDIT_TOOLS: Readonly<Record<BackendId, string>> = {
   claude: "Edit/Write",
   codex: "apply_patch",
-  opencode: "edit/write/apply_patch",
+  opencode: "edit/write/patch",
 };
 
 function buildFileEditPolicy(backendId: BackendId): string {
-  return `Edit vault files with your ${FILE_EDIT_TOOLS[backendId]} tools so Copilot shows a diff; shell/script writes (sed -i, python, redirects) show none. Use shell only to move, copy or delete files; to have a script rewrite most of a large file (sort, dedupe, recompute), not retyping it; or one mechanical change to dozens of files. Then list changed files.`;
+  return `Edit vault files with your ${FILE_EDIT_TOOLS[backendId]} tools so Copilot shows a diff; shell/script writes (sed -i, python, redirects) show none. Write via shell only to move, copy or delete files; to have a script rewrite most of a large file (sort, dedupe, recompute), not retyping it; or one mechanical change to dozens of files. Then list changed files.`;
 }
 
 export function buildAgentSystemPrompt(backendId: BackendId): string {

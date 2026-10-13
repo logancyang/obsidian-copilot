@@ -88,7 +88,7 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_PROJECT_WORKSPACE_POLICY);
     });
 
-    it("tells each agent to edit vault files with its own edit tools so Copilot can show a diff", () => {
+    it("tells each agent to edit vault files with its own edit tools so Copilot can show a diff (https://github.com/Brevilabs/obsidian-copilot-private/issues/701)", () => {
       expect(buildAgentSystemPrompt("claude")).toContain(
         "Edit vault files with your Edit/Write tools so Copilot shows a diff"
       );
@@ -96,20 +96,20 @@ describe("agentSystemPrompt", () => {
         "Edit vault files with your apply_patch tools so Copilot shows a diff"
       );
       expect(buildAgentSystemPrompt("opencode")).toContain(
-        "Edit vault files with your edit/write/apply_patch tools so Copilot shows a diff"
+        "Edit vault files with your edit/write/patch tools so Copilot shows a diff"
       );
     });
 
-    it("limits shell file writes to moves, script rewrites of most of a large file, and bulk changes across dozens of files", () => {
+    it("limits shell file writes, not other shell use, to moves, script rewrites of most of a large file, and bulk changes across dozens of files (https://github.com/Brevilabs/obsidian-copilot-private/issues/701)", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(
-        "Use shell only to move, copy or delete files; to have a script rewrite most of a large file (sort, dedupe, recompute), not retyping it; or one mechanical change to dozens of files. Then list changed files."
+        "Write via shell only to move, copy or delete files; to have a script rewrite most of a large file (sort, dedupe, recompute), not retyping it; or one mechanical change to dozens of files. Then list changed files."
       );
     });
 
-    it("keeps the edit-tool policy when the builtin prompt is disabled", () => {
+    it("keeps the edit-tool policy when the builtin prompt is disabled, because turn diffs depend on it (https://github.com/Brevilabs/obsidian-copilot-private/issues/701)", () => {
       setDisableBuiltinSystemPrompt(true);
       expect(buildAgentSystemPrompt(AGENT)).toContain(
-        "Edit vault files with your edit/write/apply_patch tools"
+        "Edit vault files with your edit/write/patch tools"
       );
     });
 
