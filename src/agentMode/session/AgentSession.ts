@@ -868,7 +868,7 @@ export class AgentSession {
         );
         this.store.markMessageError(placeholderId, message);
       }
-      if (placeholderId) this.store.settleOpenCompactions(placeholderId, { status: "cancelled" });
+      if (placeholderId) this.store.settleOpenCompactions(placeholderId);
       if (placeholderId) await this.finalizeTurnFileChanges(placeholderId, resp.turnDiff);
       if (
         placeholderId &&
@@ -893,7 +893,7 @@ export class AgentSession {
       logWarn(`[AgentMode] prompt failed`, err);
       if (placeholderId) {
         const failure = formatPromptFailure(err);
-        this.store.settleOpenCompactions(placeholderId, { status: "failed", error: failure });
+        this.store.settleOpenCompactions(placeholderId, failure);
         this.store.markMessageError(placeholderId, failure, Date.now() - turnStartedAtMs);
         this.notifyMessages();
       }

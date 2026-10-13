@@ -26,9 +26,9 @@ describe("CompactionRow", () => {
     it("announces a running manual compaction with a shimmering label and the seconds elapsed so far", () => {
       const { container } = render(<CompactionRow part={part({ status: "in_progress" })} />);
 
-      expect(screen.getByRole("status").textContent).toBe("Compacting conversation");
-      expect(screen.getByText("Compacting conversation…").className).toContain(
-        "copilot-shimmer-text"
+      expect(screen.getByRole("status").textContent).toBe("Compacting conversation…");
+      expect(container.querySelector(".copilot-shimmer-text")?.textContent).toBe(
+        "Compacting conversation…"
       );
       expect(screen.getByText("12s")).toBeTruthy();
       expect(container.querySelector(".copilot-spinner-dot-0")).toBeTruthy();
@@ -39,10 +39,14 @@ describe("CompactionRow", () => {
     });
 
     it("words a running automatic compaction as the context being full", () => {
-      render(<CompactionRow part={part({ status: "in_progress", trigger: "auto" })} />);
+      const { container } = render(
+        <CompactionRow part={part({ status: "in_progress", trigger: "auto" })} />
+      );
 
-      expect(screen.getByText("Context is full, compacting…")).toBeTruthy();
-      expect(screen.getByRole("status").textContent).toBe("Context is full, compacting");
+      expect(container.querySelector(".copilot-shimmer-text")?.textContent).toBe(
+        "Context is full, compacting…"
+      );
+      expect(screen.getByRole("status").textContent).toBe("Context is full, compacting…");
     });
 
     it("settles a completed compaction into a quiet divider without a status announcement", () => {

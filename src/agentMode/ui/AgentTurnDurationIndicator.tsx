@@ -5,7 +5,6 @@ import React, { useEffect, useRef, useState } from "react";
 interface TurnDurationLayoutProps {
   inline?: boolean;
   label?: string;
-  announcement?: string;
 }
 
 interface RunningTurnDurationProps extends TurnDurationLayoutProps {
@@ -72,7 +71,7 @@ export const AgentTurnDurationIndicator: React.FC<AgentTurnDurationIndicatorProp
         </span>
         {isRunning ? (
           <span className="tw-sr-only" role="status" aria-live="polite">
-            {props.announcement ?? "Agent is working"}
+            {props.label ?? "Agent is working"}
           </span>
         ) : null}
       </div>
