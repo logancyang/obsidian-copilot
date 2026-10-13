@@ -10,6 +10,10 @@ import {
 } from "@/agentMode/ui/renderedDiff/testing/fixtures";
 import * as mergeMarkdown from "@/agentMode/ui/renderedDiff/mergeMarkdown";
 import { appParsingRecordedFixtures } from "@/agentMode/ui/renderedDiff/testing/fixtureParserApp";
+import {
+  appParsing,
+  type RecordedListItem,
+} from "@/agentMode/ui/renderedDiff/testing/recordedParserApp";
 import { RenderedDiff, type ChangeRun } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import { AppContext } from "@/context";
 import { renderMarkdown } from "@/utils/renderMarkdown";
@@ -44,9 +48,17 @@ function renderBlocks(markdown: string, target: HTMLElement): void {
     Object.assign(doc.createElement(tag), { textContent: text });
   for (const line of markdown.split("\n")) {
     const last = target.lastElementChild;
-    if (line.startsWith("- ")) {
+    if (line.startsWith("  - ")) {
+      const parent = last?.lastElementChild;
+      const list = parent?.querySelector(":scope > ul") ?? parent?.appendChild(element("ul"));
+      list?.append(element("li", line.slice(4)));
+    } else if (line.startsWith("- ")) {
       const list = last?.tagName === "UL" ? last : target.appendChild(element("ul"));
       list.append(element("li", line.slice(2)));
+    } else if (line.startsWith(">")) {
+      const quote =
+        last?.tagName === "BLOCKQUOTE" ? last : target.appendChild(element("blockquote"));
+      if (line.length > 1) quote.append(element("p", line.slice(2)));
     } else if (/^\|[\s|-]+\|$/.test(line)) {
       continue;
     } else if (line.startsWith("|")) {
@@ -60,9 +72,12 @@ function renderBlocks(markdown: string, target: HTMLElement): void {
   }
 }
 
-async function reportedRuns(fixture: RenderedDiffFixture): Promise<readonly ChangeRun[]> {
+async function reportedRuns(
+  fixture: RenderedDiffFixture,
+  app: App = recordedApp
+): Promise<readonly ChangeRun[]> {
   const onChangeRuns = jest.fn();
-  render(diffElement(fixture, recordedApp, onChangeRuns));
+  render(diffElement(fixture, app, onChangeRuns));
   await waitFor(() => expect(onChangeRuns).toHaveBeenCalled());
   return onChangeRuns.mock.calls[0][0];
 }
@@ -217,6 +232,46 @@ describe("RenderedDiff", () => {
         expect(runSummary(runs)).toEqual(expected);
       }
     );
+
+    it("marks each edited nested list item rather than the top-level item that holds them (https://github.com/Brevilabs/obsidian-copilot-private/issues/709)", async () => {
+      const before =
+        "- Launch plan\n  - Draft the runbook\n  - Book the review\n  - Send the invite\n";
+      const after =
+        "- Launch plan\n  - Draft the runbook today\n  - Book the review\n  - Send the invite now\n";
+      const items: RecordedListItem[] = [
+        [0, 0, -1],
+        [1, 1, 0],
+        [2, 2, 0],
+        [3, 3, 0],
+      ];
+
+      const runs = await reportedRuns(
+        { path: "projects/Alpha/Launch.md", before, after },
+        appParsing({ sections: [["list", 0, 3]], listItems: items })
+      );
+
+      expect(runSummary(runs)).toEqual([
+        ["inserted", ["Draft the runbook today"]],
+        ["inserted", ["Send the invite now"]],
+      ]);
+    });
+
+    it("marks each edited paragraph of a quote rather than the whole quote (https://github.com/Brevilabs/obsidian-copilot-private/issues/709)", async () => {
+      const before =
+        "> The pilot runs six weeks.\n>\n> Partners join in May.\n>\n> Budget is fixed.\n";
+      const after =
+        "> The pilot runs eight weeks.\n>\n> Partners join in May.\n>\n> Budget is final.\n";
+
+      const runs = await reportedRuns(
+        { path: "projects/Alpha/Brief.md", before, after },
+        appParsing({ sections: [["blockquote", 0, 4]] })
+      );
+
+      expect(runSummary(runs)).toEqual([
+        ["modified", ["The pilot runs sixeight weeks."]],
+        ["modified", ["Budget is fixed.final."]],
+      ]);
+    });
 
     it("reports changes only once every rendered section has finished rendering (https://github.com/Brevilabs/obsidian-copilot-private/issues/709)", async () => {
       let releaseLast!: () => void;

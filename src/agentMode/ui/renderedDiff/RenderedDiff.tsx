@@ -159,20 +159,31 @@ function collectChangeRuns(root: HTMLElement): readonly ChangeRun[] {
   return runs.length === 0 ? EMPTY_CHANGE_RUNS : runs;
 }
 
-// A bar beside a whole list or table would hide which item changed, so their items and rows are marked one by one.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/709
 function changeUnits(segment: Element): HTMLElement[] {
   if (segment.hasAttribute("data-change")) return [segment as HTMLElement];
-  return Array.from(segment.children).flatMap((child) => {
-    if (child.matches("ul, ol")) return Array.from(child.children);
-    if (child.matches("table")) return Array.from(child.querySelectorAll(":scope > * > tr"));
-    return [child];
-  }) as HTMLElement[];
+  return Array.from(segment.children).flatMap(blockUnits) as HTMLElement[];
+}
+
+// A bar beside a whole list, table, or quote would hide which item changed, so their items, rows, and
+// paragraphs are marked one by one, down through nested lists.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/709
+function blockUnits(block: Element): Element[] {
+  if (block.matches("ul, ol, blockquote")) return Array.from(block.children).flatMap(blockUnits);
+  if (block.matches("table")) return Array.from(block.querySelectorAll(":scope > * > tr"));
+  if (!block.matches("li")) return [block];
+  return [
+    block,
+    ...Array.from(block.querySelectorAll(":scope > ul, :scope > ol")).flatMap(blockUnits),
+  ];
 }
 
 function changeKind(element: Element): ChangeKind | null {
-  const inserted = element.matches(INSERTED) || element.querySelector(INSERTED) !== null;
-  const deleted = element.matches(DELETED) || element.querySelector(DELETED) !== null;
+  const owns = (marker: Element): boolean =>
+    !element.matches("li") || marker.closest("li") === element;
+  const marked = (selector: string): boolean =>
+    element.matches(selector) || Array.from(element.querySelectorAll(selector)).some(owns);
+  const inserted = marked(INSERTED);
+  const deleted = marked(DELETED);
   if (inserted && deleted) return "modified";
   if (inserted) return "inserted";
   return deleted ? "deleted" : null;
