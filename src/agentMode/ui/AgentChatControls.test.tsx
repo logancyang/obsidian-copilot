@@ -133,12 +133,22 @@ describe("AgentChatControls", () => {
       expect(onCopyChatLink).toHaveBeenCalledTimes(1);
     });
 
-    it("disables Copy chat link while the chat has nothing to link", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/702 disables Copy chat link and Add to bookmarks in an empty chat and explains on hover that a message is needed", async () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
-      renderSessionControls();
+      const onSetChatBookmarked = jest.fn(async () => {});
+      renderSessionControls({ onSetChatBookmarked });
 
-      const item = within(openMoreActions()).getByRole("menuitem", { name: "Copy chat link" });
-      expect(item.getAttribute("aria-disabled")).toBe("true");
+      const menu = openMoreActions();
+      for (const name of ["Copy chat link", "Add to bookmarks"]) {
+        const item = within(menu).getByRole("menuitem", { name });
+        expect(item.getAttribute("aria-disabled")).toBe("true");
+        fireEvent.focus(item.parentElement!);
+        expect((await screen.findByRole("tooltip")).textContent).toBe(
+          "Send a message to the chat first."
+        );
+        fireEvent.blur(item.parentElement!);
+      }
+      expect(onSetChatBookmarked).not.toHaveBeenCalled();
     });
 
     it("bookmarks the open chat from the More Actions menu", async () => {

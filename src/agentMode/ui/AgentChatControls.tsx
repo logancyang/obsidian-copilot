@@ -18,7 +18,15 @@ import { cn } from "@/lib/utils";
 import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
 import { useSettingsValue } from "@/settings/model";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
-import { Download, History, Link, MessageCirclePlus, MoreHorizontal, Sparkles } from "lucide-react";
+import {
+  Bookmark,
+  Download,
+  History,
+  Link,
+  MessageCirclePlus,
+  MoreHorizontal,
+  Sparkles,
+} from "lucide-react";
 import React from "react";
 
 const resolveDeleteSummary = (item: ChatHistoryItem) =>
@@ -26,6 +34,19 @@ const resolveDeleteSummary = (item: ChatHistoryItem) =>
 
 const resolveHistoryIcon = (item: ChatHistoryItem) =>
   item.backendId ? backendRegistry[item.backendId]?.Icon : undefined;
+
+// An empty chat has no note to link or bookmark, so its items stay visible but explain why they are off.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/702
+const NeedsMessageMenuItem: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <div>
+        <DropdownMenuItem disabled>{children}</DropdownMenuItem>
+      </div>
+    </TooltipTrigger>
+    <TooltipContent side="left">Send a message to the chat first.</TooltipContent>
+  </Tooltip>
+);
 
 interface AgentChatControlsProps {
   onNewChat?: () => void;
@@ -140,16 +161,29 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem disabled={!onCopyChatLink} onSelect={() => void onCopyChatLink?.()}>
-                <Link />
-                Copy chat link
-              </DropdownMenuItem>
-              {getChatBookmarkState && onSetChatBookmarked && (
-                <ChatBookmarkMenuItem
-                  getBookmarkState={getChatBookmarkState}
-                  onSetBookmarked={safeAsyncHandler(onSetChatBookmarked)}
-                />
+              {onCopyChatLink ? (
+                <DropdownMenuItem onSelect={() => void onCopyChatLink()}>
+                  <Link />
+                  Copy chat link
+                </DropdownMenuItem>
+              ) : (
+                <NeedsMessageMenuItem>
+                  <Link />
+                  Copy chat link
+                </NeedsMessageMenuItem>
               )}
+              {onSetChatBookmarked &&
+                (getChatBookmarkState ? (
+                  <ChatBookmarkMenuItem
+                    getBookmarkState={getChatBookmarkState}
+                    onSetBookmarked={safeAsyncHandler(onSetChatBookmarked)}
+                  />
+                ) : (
+                  <NeedsMessageMenuItem>
+                    <Bookmark />
+                    Add to bookmarks
+                  </NeedsMessageMenuItem>
+                ))}
               {!settings.autosaveChat && onSaveAsNote && (
                 <DropdownMenuItem onSelect={() => void onSaveAsNote()}>
                   <Download />
