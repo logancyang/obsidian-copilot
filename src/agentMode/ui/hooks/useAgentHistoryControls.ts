@@ -170,9 +170,23 @@ export function useAgentHistoryControls(
     [plugin, runWithNotice]
   );
 
+  // A row left on its native id after its note is saved would let Delete drop only the session entry and leave the note behind.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/699
+  const replaceChatRowId = useCallback((id: string, notePath: string) => {
+    if (notePath === id || !isMountedRef.current) return;
+    setChatHistoryItems((items) =>
+      items.map((item) => (item.id === id ? { ...item, id: notePath } : item))
+    );
+  }, []);
+
   const copyChatLink = useCallback(
-    (id: string) => plugin.copyChatLink(() => manager.ensureChatNote(id)),
-    [manager, plugin]
+    (id: string) =>
+      plugin.copyChatLink(async () => {
+        const notePath = await manager.ensureChatNote(id);
+        replaceChatRowId(id, notePath);
+        return notePath;
+      }),
+    [manager, plugin, replaceChatRowId]
   );
 
   const getChatBookmarkState = useCallback(
@@ -207,14 +221,10 @@ export function useAgentHistoryControls(
           bookmarks.remove(link);
           new Notice("Removed from bookmarks.");
         }
-        if (notePath !== id && isMountedRef.current) {
-          setChatHistoryItems((items) =>
-            items.map((item) => (item.id === id ? { ...item, id: notePath } : item))
-          );
-        }
+        replaceChatRowId(id, notePath);
       });
     },
-    [manager, plugin, runWithNotice]
+    [manager, plugin, runWithNotice, replaceChatRowId]
   );
 
   return {

@@ -770,7 +770,7 @@ describe("GlobalRecentChatsSection", () => {
       ).toBeNull();
     });
 
-    it("offers Copy chat link for a chat with no saved note and copies it by that chat's id", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/699 offers Copy chat link for a chat with no saved note and copies it by that chat's id", () => {
       const nativeId = buildNativeChatId("opencode", "session-1");
       const onCopyChatLink = jest.fn(noop);
       renderSection({ items: [makeItem(nativeId, { title: "Native chat" })], onCopyChatLink });

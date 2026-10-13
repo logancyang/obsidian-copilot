@@ -554,15 +554,19 @@ describe("useAgentHistoryControls", () => {
       expect(linkedNotePath).toBe("chats/agent__a.md");
     });
 
-    it("saves a chat with no note before copying, so the link points to the new note", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/699 saves a chat with no note before copying its link and shows the row as that note", async () => {
       let linkedNotePath: string | undefined;
       const copyChatLink = jest.fn(async (resolveNotePath: () => Promise<string>) => {
         linkedNotePath = await resolveNotePath();
       });
       const linkingPlugin = { copyChatLink } as unknown as CopilotPlugin;
       const manager = makeManager();
+      manager.getChatHistoryItems.mockResolvedValue([{ id: NATIVE_ID }]);
       manager.ensureChatNote.mockResolvedValue("chats/saved.md");
       const { result } = renderHook(() => useAgentHistoryControls(manager, linkingPlugin));
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
 
       await act(async () => {
         await result.current.copyChatLink(NATIVE_ID);
@@ -570,6 +574,7 @@ describe("useAgentHistoryControls", () => {
 
       expect(manager.ensureChatNote).toHaveBeenCalledWith(NATIVE_ID);
       expect(linkedNotePath).toBe("chats/saved.md");
+      expect(result.current.chatHistoryItems).toEqual([{ id: "chats/saved.md" }]);
     });
   });
 });
