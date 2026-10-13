@@ -140,6 +140,16 @@ export const BookmarkedChatMenu: StoryObj<GlobalRecentChatsSectionProps> = {
   render: OpenMenuFirstRowShelf,
 };
 
+export const UnsavedChatMenu: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: {
+    items: [
+      { ...items[0], id: "copilot-agent-session://opencode/session-1", title: "Chat with no note" },
+      ...items.slice(1, 3),
+    ],
+  },
+  render: OpenMenuFirstRowShelf,
+};
+
 export const PinnedChats: StoryObj<GlobalRecentChatsSectionProps> = {
   args: { items: pinnedItems },
   render: renderShelf,

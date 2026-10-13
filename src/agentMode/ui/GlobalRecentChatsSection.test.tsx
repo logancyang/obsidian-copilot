@@ -758,17 +758,26 @@ describe("GlobalRecentChatsSection", () => {
       expect(onLoadChat).not.toHaveBeenCalled();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/693 leaves Copy chat link and Open source note out for a chat with no saved note", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/693 leaves Open source note out for a chat with no saved note", () => {
       const nativeId = buildNativeChatId("opencode", "session-1");
       renderSection({ items: [makeItem(nativeId, { title: "Native chat" })] });
 
       const menu = openMenuFromButton("Native chat");
 
-      expect(menuEntries(menu)).not.toContain("Copy chat link");
       expect(menuEntries(menu)).not.toContain("Open source note");
       expect(
         within(rowFor("Native chat")).queryByRole("button", { name: "Open source note" })
       ).toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/699 offers Copy chat link for a chat with no saved note and copies it by that chat's id", () => {
+      const nativeId = buildNativeChatId("opencode", "session-1");
+      const onCopyChatLink = jest.fn(noop);
+      renderSection({ items: [makeItem(nativeId, { title: "Native chat" })], onCopyChatLink });
+
+      chooseMenuItem(openMenuFromButton("Native chat"), "Copy chat link");
+
+      expect(onCopyChatLink).toHaveBeenCalledWith(nativeId);
     });
 
     it("copies the link of the chosen chat when Copy chat link is selected", () => {

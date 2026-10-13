@@ -236,13 +236,10 @@ function RecentChatMenu({
           <Pencil />
           Rename
         </DropdownMenuItem>
-        {/* A chat with no saved note has nothing a link could open: https://github.com/Brevilabs/obsidian-copilot-private/issues/693 */}
-        {isNoteBacked && (
-          <DropdownMenuItem onSelect={() => safeAsyncHandler(onCopyChatLink)(item.id)}>
-            <Link />
-            Copy chat link
-          </DropdownMenuItem>
-        )}
+        <DropdownMenuItem onSelect={() => safeAsyncHandler(onCopyChatLink)(item.id)}>
+          <Link />
+          Copy chat link
+        </DropdownMenuItem>
         {bookmarkState === "off" && (
           <DropdownMenuItem
             className="tw-text-faint focus:tw-text-faint"
