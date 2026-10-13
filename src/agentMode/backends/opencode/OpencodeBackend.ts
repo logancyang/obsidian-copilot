@@ -376,9 +376,17 @@ export async function buildOpencodeConfig(
   }
 
   const compactionBuffer = opencodeCompactionBuffer(
-    enabledEntries.flatMap((entry) =>
-      entry.state === "ok" ? [entry.configuredModel.info.limits?.context] : []
-    ),
+    enabledEntries.flatMap((entry) => {
+      if (entry.state !== "ok") return [];
+      const limits = entry.configuredModel.info.limits;
+      // OpenCode compacts against a model's input limit when it has one; an injected Plus model
+      // carries only its context limit. https://github.com/Brevilabs/obsidian-copilot-private/issues/180
+      return [
+        entry.provider.origin.kind === "copilot-plus"
+          ? limits?.context
+          : (limits?.input ?? limits?.context),
+      ];
+    }),
     s.agentMode?.autoCompactTokens
   );
 
