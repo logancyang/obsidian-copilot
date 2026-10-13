@@ -137,6 +137,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
             timestamp={message.timestamp?.display}
             app={app}
             turnStopReason={message.turnStopReason}
+            errorText={message.isErrorMessage ? message.message : undefined}
             fileChanges={message.fileChanges}
             onOpenFileChange={(change) =>
               void openTurnDiff(app, change, message.id).catch((error: unknown) =>

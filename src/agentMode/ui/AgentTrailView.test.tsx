@@ -275,9 +275,31 @@ describe("AgentTrail", () => {
       turnStartedAtMs: Date.now() - 5_000,
     });
 
-    expect(screen.getByText("Compacting conversation…")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("Compacting conversation…");
     expect(screen.queryByText("Worked for")).toBeNull();
     expect(screen.getAllByRole("status")).toHaveLength(1);
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 shows a failed turn's error under a reply that holds parts but no answer text", () => {
+    renderTrail({
+      parts: [compaction()],
+      errorText: "**Error:** stream error",
+      turnDurationMs: 4_000,
+    });
+
+    expect(screen.getByText("Context compacted")).toBeTruthy();
+    expect(screen.getByTestId("agent-md").textContent).toBe("**Error:** stream error");
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 leaves a reply that has answer text alone, since its error text would repeat the answer", () => {
+    renderTrail({
+      parts: [text("Partial answer."), compaction()],
+      errorText: "Partial answer.\n\n**Error:** stream error",
+    });
+
+    expect(screen.getAllByTestId("agent-md").map((el) => el.textContent)).toEqual([
+      "Partial answer.",
+    ]);
   });
 
   it("uses one aligned folding header for reasoning and every tool-card family", () => {
