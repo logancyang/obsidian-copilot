@@ -46,7 +46,7 @@ import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import { CHAT_AGENT_VIEWTYPE, USER_SENDER } from "@/constants";
 import { playNotificationSound } from "@/utils/notificationSound";
-import type { AgentSessionIndex } from "./AgentSessionIndex";
+import type { AgentSessionIndex, AgentSessionIndexEntry } from "./AgentSessionIndex";
 import {
   deriveChatTitleFromMessages,
   mergeChatHistoryItems,
@@ -644,19 +644,34 @@ export class AgentSessionManager {
   async setChatPinned(id: string, pinned: boolean): Promise<PinnedChat> {
     const persistence = this.opts.persistenceManager;
     if (!persistence) throw new Error("Agent chat persistence is not configured.");
-    const native = parseNativeChatId(id);
     // The pin lives in the chat's note, so a chat that has none is saved as one first.
     // https://github.com/logancyang/obsidian-copilot/issues/3195
-    const path = native ? await this.saveNativeChatAsNote(native.backendId, native.sessionId) : id;
+    const path = await this.ensureChatNote(id);
     const pinnedAt = pinned ? Date.now() : null;
     await persistence.setPinnedAt(path, pinnedAt);
     return { id: path, pinnedAt: pinnedAt ?? undefined };
   }
 
+  async ensureChatNote(id: string): Promise<string> {
+    const native = parseNativeChatId(id);
+    return native ? this.saveNativeChatAsNote(native.backendId, native.sessionId) : id;
+  }
+
   private async saveNativeChatAsNote(backendId: BackendId, sessionId: string): Promise<string> {
-    const session =
-      this.findLiveSession(backendId, sessionId) ??
-      (await this.loadNativeSessionFromHistory(backendId, sessionId));
+    const live = this.findLiveSession(backendId, sessionId);
+    if (live) return this.saveAsNote(live, sessionId);
+    // Pinning or bookmarking a closed chat must not open it, so it is resumed off-screen and closed
+    // once saved, unless the user opened it meanwhile. https://github.com/logancyang/obsidian-copilot/issues/3195
+    const { entry, projectId } = await this.readNativeChatEntry(backendId, sessionId);
+    const session = await this.resumeNativeChat(backendId, sessionId, entry, projectId);
+    try {
+      return await this.saveAsNote(session, sessionId);
+    } finally {
+      if (this.activeSessionId !== session.internalId) await this.closeSession(session.internalId);
+    }
+  }
+
+  private async saveAsNote(session: AgentSession, sessionId: string): Promise<string> {
     const saved = await this.saveSessionNow(session);
     if (!saved) throw new Error(`Could not save chat ${sessionId} as a note.`);
     return saved.path;
@@ -2143,6 +2158,29 @@ export class AgentSessionManager {
       return existing;
     }
     const previousActiveId = this.activeSessionId;
+    const { entry, projectId } = await this.readNativeChatEntry(backendId, sessionId);
+    const previousActiveProjectId = this.activeProjectId;
+    const scopeSeq = this.setActiveScope(projectId);
+    let session: AgentSession;
+    try {
+      session = await this.resumeNativeChat(backendId, sessionId, entry, projectId);
+    } catch (err) {
+      this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
+      throw err;
+    }
+    await this.opts.sessionIndex?.touch(backendId, sessionId);
+    if (requestId === this.latestHistoryLoadRequestId) {
+      this.setActiveSession(session.internalId);
+      this.absorbIntoEmptyActiveTab(session, previousActiveId);
+      this.notify();
+    }
+    return session;
+  }
+
+  private async readNativeChatEntry(
+    backendId: BackendId,
+    sessionId: SessionId
+  ): Promise<{ entry: AgentSessionIndexEntry | null; projectId: ProjectScopeId }> {
     const index = this.opts.sessionIndex;
     const entry = index ? await index.getEntry(backendId, sessionId) : null;
     const projectId: ProjectScopeId = entry?.projectId ?? GLOBAL_SCOPE;
@@ -2150,29 +2188,21 @@ export class AgentSessionManager {
       new Notice("This chat belongs to a project that no longer exists.");
       throw new OrphanedProjectError(projectId);
     }
-    const previousActiveProjectId = this.activeProjectId;
-    const scopeSeq = this.setActiveScope(projectId);
-    let session: AgentSession;
-    try {
-      const resumed = await this.tryResumeSessionFromHistory(backendId, sessionId, projectId);
-      if (!resumed) {
-        throw new Error(
-          `Could not resume session ${sessionId} from the ${backendId} session store.`
-        );
-      }
-      session = resumed;
-    } catch (err) {
-      this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
-      throw err;
+    return { entry, projectId };
+  }
+
+  private async resumeNativeChat(
+    backendId: BackendId,
+    sessionId: SessionId,
+    entry: AgentSessionIndexEntry | null,
+    projectId: ProjectScopeId
+  ): Promise<AgentSession> {
+    const session = await this.tryResumeSessionFromHistory(backendId, sessionId, projectId);
+    if (!session) {
+      throw new Error(`Could not resume session ${sessionId} from the ${backendId} session store.`);
     }
     if (entry?.title) {
       session.restoreLabel(entry.title, entry.titleSource === "user" ? "user" : "agent");
-    }
-    if (index) await index.touch(backendId, sessionId);
-    if (requestId === this.latestHistoryLoadRequestId) {
-      this.setActiveSession(session.internalId);
-      this.absorbIntoEmptyActiveTab(session, previousActiveId);
-      this.notify();
     }
     return session;
   }

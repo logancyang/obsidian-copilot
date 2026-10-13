@@ -183,6 +183,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     setChatPinned: handleSetChatPinned,
     openSourceFile: handleOpenSourceFile,
     copyChatLink: handleCopyHistoryChatLink,
+    getChatBookmarkState,
+    setChatBookmarked: handleSetChatBookmarked,
   } = useAgentHistoryControls(manager, plugin, activeProjectId);
 
   const handleCloseSession = useCallback(
@@ -385,6 +387,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onOpenSourceFile={handleOpenSourceFile}
             onCopyChatLink={handleCopyHistoryChatLink}
             onSetChatPinned={handleSetChatPinned}
+            getChatBookmarkState={getChatBookmarkState}
+            onSetChatBookmarked={handleSetChatBookmarked}
             onLoadHistory={handleLoadChatHistorySafely}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
@@ -442,6 +446,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleSetChatPinned,
       handleOpenSourceFile,
       handleCopyHistoryChatLink,
+      getChatBookmarkState,
+      handleSetChatBookmarked,
       handleLoadChatHistorySafely,
       openChatIds,
       handleCloseSession,
@@ -473,6 +479,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onOpenSourceFile={handleOpenSourceFile}
             onCopyChatLink={handleCopyHistoryChatLink}
             onSetChatPinned={handleSetChatPinned}
+            getChatBookmarkState={getChatBookmarkState}
+            onSetChatBookmarked={handleSetChatBookmarked}
             onLoadHistory={handleLoadChatHistorySafely}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
@@ -502,6 +510,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleSetChatPinned,
       handleOpenSourceFile,
       handleCopyHistoryChatLink,
+      getChatBookmarkState,
+      handleSetChatBookmarked,
       handleLoadChatHistorySafely,
       openChatIds,
       handleCloseSession,

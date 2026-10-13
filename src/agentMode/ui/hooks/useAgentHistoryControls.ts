@@ -5,7 +5,9 @@ import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
-import { Notice } from "obsidian";
+import { buildChatDeepLink, getSavedChatDeepLinkId } from "@/utils/chatDeepLink";
+import { getUrlBookmarks, isBookmarksPluginDisabled } from "@/utils/obsidianBookmarks";
+import { type App, Notice } from "obsidian";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const EMPTY_CHAT_HISTORY_ITEMS = Object.freeze([]) as unknown as ChatHistoryItem[];
@@ -20,7 +22,16 @@ export interface AgentHistoryControls {
   setChatPinned: (id: string, pinned: boolean) => Promise<void>;
   openSourceFile: (id: string) => Promise<void>;
   copyChatLink: (id: string) => Promise<void>;
+  getChatBookmarkState: (id: string) => Promise<ChatBookmarkState>;
+  setChatBookmarked: (id: string, title: string, bookmarked: boolean) => Promise<void>;
 }
+
+export type ChatBookmarkState = "unavailable" | "off" | "bookmarked" | "not-bookmarked";
+async function getChatLink(app: App, notePath: string): Promise<string | null> {
+  const id = await getSavedChatDeepLinkId(app, notePath);
+  return id && buildChatDeepLink(app.vault.getName(), id);
+}
+
 export function useAgentHistoryControls(
   manager: AgentSessionManager,
   plugin: CopilotPlugin,
@@ -112,10 +123,18 @@ export function useAgentHistoryControls(
           "delete chat",
           async () => {
             const item = chatHistoryItems.find((chat) => chat.id === id);
+            const link = await getChatLink(plugin.app, id);
             await manager.deleteChatHistory(id);
             new Notice(
               formatChatDeleteNotice(item?.backendId ? backendRegistry[item.backendId] : undefined)
             );
+            // Obsidian's Bookmarks internals have no public API, so a failure there must not undo or hide a completed delete.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/694
+            if (link) {
+              await runWithNotice("remove chat bookmark", async () =>
+                getUrlBookmarks(plugin.app)?.remove(link)
+              );
+            }
           },
           true
         );
@@ -123,7 +142,7 @@ export function useAgentHistoryControls(
         await loadChatHistory();
       }
     },
-    [manager, chatHistoryItems, loadChatHistory, runWithNotice]
+    [manager, chatHistoryItems, loadChatHistory, plugin, runWithNotice]
   );
 
   const setChatPinned = useCallback(
@@ -153,6 +172,48 @@ export function useAgentHistoryControls(
 
   const copyChatLink = useCallback((id: string) => plugin.copyChatLink(async () => id), [plugin]);
 
+  const getChatBookmarkState = useCallback(
+    async (id: string): Promise<ChatBookmarkState> => {
+      const state = await runWithNotice("read bookmarks", async () => {
+        const bookmarks = getUrlBookmarks(plugin.app);
+        // A turned-off Bookmarks plugin still shows the item, so users can find the feature and how to enable it.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/694
+        if (!bookmarks) return isBookmarksPluginDisabled(plugin.app) ? "off" : "unavailable";
+        const link = await getChatLink(plugin.app, id);
+        return link && bookmarks.has(link) ? "bookmarked" : "not-bookmarked";
+      });
+      return state ?? "unavailable";
+    },
+    [plugin, runWithNotice]
+  );
+
+  const setChatBookmarked = useCallback(
+    async (id: string, title: string, bookmarked: boolean) => {
+      await runWithNotice(bookmarked ? "bookmark chat" : "remove bookmark", async () => {
+        const bookmarks = getUrlBookmarks(plugin.app);
+        if (!bookmarks) throw new Error("The Bookmarks core plugin is not enabled.");
+        // A bookmark opens the chat through its link, which only a saved note has.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/694
+        const notePath = bookmarked ? await manager.ensureChatNote(id) : id;
+        const link = await getChatLink(plugin.app, notePath);
+        if (!link) throw new Error(`No chat link for "${notePath}".`);
+        if (bookmarked) {
+          bookmarks.add(link, title);
+          new Notice("Bookmarked.");
+        } else {
+          bookmarks.remove(link);
+          new Notice("Removed from bookmarks.");
+        }
+        if (notePath !== id && isMountedRef.current) {
+          setChatHistoryItems((items) =>
+            items.map((item) => (item.id === id ? { ...item, id: notePath } : item))
+          );
+        }
+      });
+    },
+    [manager, plugin, runWithNotice]
+  );
+
   return {
     chatHistoryItems: visibleChatHistoryItems,
     chatHistorySettled,
@@ -163,5 +224,7 @@ export function useAgentHistoryControls(
     setChatPinned,
     openSourceFile,
     copyChatLink,
+    getChatBookmarkState,
+    setChatBookmarked,
   };
 }

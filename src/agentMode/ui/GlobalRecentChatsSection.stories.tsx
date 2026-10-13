@@ -27,6 +27,8 @@ const defaultArgs: GlobalRecentChatsSectionProps = {
   onOpenSourceFile: noop,
   onCopyChatLink: noop,
   onSetChatPinned: noop,
+  getChatBookmarkState: async () => "not-bookmarked",
+  onSetChatBookmarked: noop,
   onLoadHistory: noopSync,
 };
 
@@ -125,6 +127,16 @@ export const OpenSessionMoreActionsMenu: StoryObj<GlobalRecentChatsSectionProps>
     openChatIds: new Set([items[0].id]),
     onCloseSession: noop,
   },
+  render: OpenMenuFirstRowShelf,
+};
+
+export const BookmarksOffMenu: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: { items: items.slice(0, 3), getChatBookmarkState: async () => "off" },
+  render: OpenMenuFirstRowShelf,
+};
+
+export const BookmarkedChatMenu: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: { items: items.slice(0, 3), getChatBookmarkState: async () => "bookmarked" },
   render: OpenMenuFirstRowShelf,
 };
 

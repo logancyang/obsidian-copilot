@@ -1,4 +1,8 @@
-import { consumeRequestedCopilotSettingsTab, openCopilotSettings } from "@/settings/openSettings";
+import {
+  consumeRequestedCopilotSettingsTab,
+  openCopilotSettings,
+  openCorePluginSettings,
+} from "@/settings/openSettings";
 import { COPILOT_SETTINGS_TAB_IDS } from "@/settings/settingsTabs";
 import type { App } from "obsidian";
 
@@ -54,6 +58,48 @@ describe("openSettings", () => {
 
       expect(openTabById).toHaveBeenCalledWith("copilot");
       expect(consumedTabs).toEqual(["miyo"]);
+    });
+  });
+
+  describe("openCorePluginSettings()", () => {
+    function settingsWithCorePluginsTab() {
+      const search = document.createElement("input");
+      search.type = "search";
+      const onInput = jest.fn();
+      search.addEventListener("input", onInput);
+      const containerEl = document.createElement("div");
+      containerEl.appendChild(search);
+      const setting = { open: jest.fn(), openTabById: jest.fn(), activeTab: { containerEl } };
+      return { app: { setting } as unknown as App, setting, search, onInput };
+    }
+
+    it("opens Settings at Core plugins and filters the plugin list to the named plugin", () => {
+      const { app, setting, search, onInput } = settingsWithCorePluginsTab();
+
+      openCorePluginSettings(app, "Bookmarks");
+
+      expect(setting.open).toHaveBeenCalled();
+      expect(setting.openTabById).toHaveBeenCalledWith("plugins");
+      expect(search.value).toBe("Bookmarks");
+      expect(onInput).toHaveBeenCalledTimes(1);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 still opens Core plugins when the tab has no search box to fill", () => {
+      const openTabById = jest.fn();
+      const app = {
+        setting: {
+          open: jest.fn(),
+          openTabById,
+          activeTab: { containerEl: document.createElement("div") },
+        },
+      } as unknown as App;
+
+      expect(() => openCorePluginSettings(app, "Bookmarks")).not.toThrow();
+      expect(openTabById).toHaveBeenCalledWith("plugins");
+    });
+
+    it("does nothing instead of throwing when Obsidian's settings API is missing", () => {
+      expect(() => openCorePluginSettings({} as App, "Bookmarks")).not.toThrow();
     });
   });
 

@@ -34,15 +34,17 @@ jest.mock("obsidian", () => {
 type SectionItems = React.ComponentProps<typeof GlobalRecentChatsSection>["items"];
 
 const noop = async () => {};
+const unsettledBookmarkState = () => new Promise<never>(() => {});
 
 function renderSection(
   props: Partial<React.ComponentProps<typeof GlobalRecentChatsSection>> & {
     openChatIds?: ReadonlySet<string>;
     onCloseSession?: (id: string) => Promise<void>;
+    app?: App;
   } = {}
 ) {
   return render(
-    <AppContext.Provider value={new App()}>
+    <AppContext.Provider value={props.app ?? new App()}>
       <GlobalRecentChatsSection
         {...{ openChatIds: props.openChatIds, onCloseSession: props.onCloseSession }}
         items={props.items ?? []}
@@ -58,6 +60,8 @@ function renderSection(
         onOpenSourceFile={props.onOpenSourceFile ?? noop}
         onCopyChatLink={props.onCopyChatLink ?? noop}
         onSetChatPinned={props.onSetChatPinned ?? noop}
+        getChatBookmarkState={props.getChatBookmarkState ?? unsettledBookmarkState}
+        onSetChatBookmarked={props.onSetChatBookmarked ?? noop}
       />
     </AppContext.Provider>
   );
@@ -566,6 +570,26 @@ describe("GlobalRecentChatsSection", () => {
       ]);
     });
 
+    it("adds Add to bookmarks above the separator once a saved chat's bookmark state loads", async () => {
+      renderSection({
+        items: [makeItem("chats/saved.md", { title: "Saved chat" })],
+        getChatBookmarkState: async () => "not-bookmarked",
+      });
+
+      const menu = openMenuFromButton("Saved chat");
+      await within(menu).findByRole("menuitem", { name: "Add to bookmarks" });
+
+      expect(menuEntries(menu)).toEqual([
+        "Pin chat",
+        "Open source note",
+        "Rename",
+        "Copy chat link",
+        "Add to bookmarks",
+        "---",
+        "Delete",
+      ]);
+    });
+
     it("opens the chosen chat's source note when Open source note is selected from the menu", () => {
       const onOpenSourceFile = jest.fn(noop);
       const onLoadChat = jest.fn(noop);
@@ -593,6 +617,90 @@ describe("GlobalRecentChatsSection", () => {
       await act(async () => chooseMenuItem(menu, "Close session"));
 
       expect(onCloseSession).toHaveBeenCalledWith("chats/open.md");
+    });
+
+    it("bookmarks the chosen chat under its title when Add to bookmarks is selected", async () => {
+      const onSetChatBookmarked = jest.fn(noop);
+      renderSection({
+        items: [makeItem("chats/saved.md", { title: "Saved chat" })],
+        getChatBookmarkState: async () => "not-bookmarked",
+        onSetChatBookmarked,
+      });
+
+      const menu = openMenuFromButton("Saved chat");
+      fireEvent.click(await within(menu).findByRole("menuitem", { name: "Add to bookmarks" }));
+
+      expect(onSetChatBookmarked).toHaveBeenCalledWith("chats/saved.md", "Saved chat", true);
+    });
+
+    it("offers Remove from bookmarks for a bookmarked chat and removes its bookmark when selected", async () => {
+      const onSetChatBookmarked = jest.fn(noop);
+      const getChatBookmarkState = jest.fn(async () => "bookmarked" as const);
+      renderSection({
+        items: [makeItem("chats/saved.md", { title: "Saved chat" })],
+        getChatBookmarkState,
+        onSetChatBookmarked,
+      });
+
+      const menu = openMenuFromButton("Saved chat");
+      fireEvent.click(await within(menu).findByRole("menuitem", { name: "Remove from bookmarks" }));
+
+      expect(getChatBookmarkState).toHaveBeenCalledWith("chats/saved.md");
+      expect(menuEntries(menu)).not.toContain("Add to bookmarks");
+      expect(onSetChatBookmarked).toHaveBeenCalledWith("chats/saved.md", "Saved chat", false);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 leaves the bookmark item out when Obsidian's Bookmarks internals are unavailable", async () => {
+      const lookup = Promise.resolve("unavailable" as const);
+      renderSection({
+        items: [makeItem("chats/saved.md", { title: "Saved chat" })],
+        getChatBookmarkState: () => lookup,
+      });
+
+      const menu = openMenuFromButton("Saved chat");
+      await act(async () => {
+        await lookup;
+      });
+
+      expect(menuEntries(menu)).toEqual([
+        "Pin chat",
+        "Open source note",
+        "Rename",
+        "Copy chat link",
+        "---",
+        "Delete",
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 shows a muted Add to bookmarks that explains Bookmarks is off and opens it in Settings when selected", async () => {
+      const search = document.createElement("input");
+      search.type = "search";
+      const containerEl = document.createElement("div");
+      containerEl.appendChild(search);
+      const setting = { open: jest.fn(), openTabById: jest.fn(), activeTab: { containerEl } };
+      const app = Object.assign(new App(), {
+        setting,
+        internalPlugins: {
+          getPluginById: () => ({ enabled: false, instance: { name: "Bookmarks" } }),
+        },
+      });
+      const onSetChatBookmarked = jest.fn(noop);
+      renderSection({
+        app,
+        items: [makeItem("chats/saved.md", { title: "Saved chat" })],
+        getChatBookmarkState: async () => "off",
+        onSetChatBookmarked,
+      });
+
+      const menu = openMenuFromButton("Saved chat");
+      const item = await within(menu).findByRole("menuitem", { name: /Add to bookmarks/ });
+      expect(item.className).toContain("tw-text-faint");
+      expect(within(item).getByLabelText("Bookmarks is turned off")).toBeTruthy();
+      fireEvent.click(item);
+
+      expect(setting.openTabById).toHaveBeenCalledWith("plugins");
+      expect(search.value).toBe("Bookmarks");
+      expect(onSetChatBookmarked).not.toHaveBeenCalled();
     });
 
     it("opens the menu from the More actions button without opening the chat", () => {
@@ -729,7 +837,7 @@ describe("GlobalRecentChatsSection", () => {
 
     it.each([["claude", "Claude Code"]])(
       "https://github.com/logancyang/obsidian-copilot/issues/2888 says in the Delete chat dialog that the %s agent may keep its own copy",
-      (backendId, agent) => {
+      async (backendId, agent) => {
         renderSection({
           items: [makeItem("chats/agent__a.md", { title: "Agent chat", backendId })],
         });
@@ -758,6 +866,8 @@ describe("GlobalRecentChatsSection", () => {
             onOpenSourceFile={noop}
             onCopyChatLink={noop}
             onSetChatPinned={noop}
+            getChatBookmarkState={async () => "unavailable"}
+            onSetChatBookmarked={noop}
             onLoadHistory={safeAsyncHandler(loadHistory)}
           />
         </AppContext.Provider>
