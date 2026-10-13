@@ -4533,7 +4533,7 @@ describe("AgentSessionManager", () => {
         ]);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 shows only the note's messages, with no compaction row, when the note holds a /compact turn the replay never repeats", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 keeps the replayed chat and its compaction row when the note also holds the /compact turn the replay never repeats", async () => {
         const replay = buildReplayingBackend({
           onLoad: (emit) => {
             emit(replayChunk("user_message_chunk", "replayed question", "u1"));
@@ -4549,17 +4549,15 @@ describe("AgentSessionManager", () => {
         ]);
 
         expect(senderAndText(session)).toEqual([
-          [USER_SENDER, "saved question"],
-          [AI_SENDER, "saved answer"],
-          [USER_SENDER, "/compact"],
-          [AI_SENDER, ""],
+          [USER_SENDER, "replayed question"],
+          [AI_SENDER, "replayed answer"],
         ]);
         expect(
           session.store
             .getDisplayMessages()
             .flatMap((m) => m.parts ?? [])
-            .map((p) => p.kind)
-        ).not.toContain("compaction");
+            .filter((p) => p.kind === "compaction")
+        ).toHaveLength(1);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 shows a replayed compaction once when the note lists every turn the replay has", async () => {
