@@ -1,4 +1,5 @@
 import fuzzysort from "fuzzysort";
+import { $getSelection, $isRangeSelection, $isRootNode, type LexicalNode } from "lexical";
 import type { BackendId, Skill } from "@/agentMode";
 import { COMPACT_COMMAND_NAME } from "@/commands/compactCommand";
 import type { CustomCommand } from "@/commands/type";
@@ -91,4 +92,20 @@ export function filterSlashMenuOptions<T extends { title: string; content?: stri
   return fuzzysort
     .go(query, options, { key: "content", threshold: -10000 })
     .map((result) => result.obj);
+}
+
+// Agents only compact when /compact is the whole prompt, so the built-in is offered only there.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/634
+export function $slashStartsPrompt(): boolean {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection)) return false;
+  const anchorNode = selection.anchor.getNode();
+  const text = anchorNode.getTextContent();
+  const slashIndex = text.lastIndexOf("/", selection.anchor.offset);
+  if (slashIndex === -1 || text.slice(0, slashIndex).trim()) return false;
+  for (let node: LexicalNode | null = anchorNode; node && !$isRootNode(node); ) {
+    if (node.getPreviousSiblings().some((sibling) => sibling.getTextContent().trim())) return false;
+    node = node.getParent();
+  }
+  return true;
 }

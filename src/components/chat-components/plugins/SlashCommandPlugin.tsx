@@ -17,6 +17,7 @@ import {
 import type { BackendId, Skill } from "@/agentMode";
 
 import {
+  $slashStartsPrompt,
   composeSlashMenuItems,
   filterSlashMenuOptions,
   type SlashMenuItem,
@@ -105,6 +106,7 @@ export function SlashCommandPlugin({ isAgentMode = false }: SlashCommandPluginPr
   const agentSlashData = useAgentSlashData();
   const activeBackend = useActiveSlashBackend(agentSlashData.enabled, agentSlashData.backendIds);
   const [currentQuery, setCurrentQuery] = useState("");
+  const [slashStartsPrompt, setSlashStartsPrompt] = useState(false);
 
   const sortedCommands = useMemo(() => sortSlashCommands(commands), [commands]);
 
@@ -113,7 +115,7 @@ export function SlashCommandPlugin({ isAgentMode = false }: SlashCommandPluginPr
       agentSlashData.skills,
       sortedCommands,
       activeBackend,
-      isAgentMode
+      isAgentMode && slashStartsPrompt
     );
     return items.map((item) => ({
       key: item.key,
@@ -122,7 +124,7 @@ export function SlashCommandPlugin({ isAgentMode = false }: SlashCommandPluginPr
       content: item.body,
       item,
     }));
-  }, [agentSlashData.skills, sortedCommands, activeBackend, isAgentMode]);
+  }, [agentSlashData.skills, sortedCommands, activeBackend, isAgentMode, slashStartsPrompt]);
 
   const filteredOptions = useMemo(
     () => filterSlashMenuOptions(allOptions, currentQuery),
@@ -171,6 +173,7 @@ export function SlashCommandPlugin({ isAgentMode = false }: SlashCommandPluginPr
     onSelect: handleSelect,
     onStateChange: (newState: TypeaheadState) => {
       setCurrentQuery(newState.query);
+      if (newState.isOpen) setSlashStartsPrompt(editor.getEditorState().read($slashStartsPrompt));
     },
   });
 

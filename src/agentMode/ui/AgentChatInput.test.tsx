@@ -441,6 +441,30 @@ describe("AgentChatInput", () => {
       await act(async () => settleCancel());
     });
 
+    it.each([
+      { queued: ["/compact", "foo"], restored: "foo" },
+      { queued: ["foo", "/compact", "bar"], restored: "foo\n\nbar" },
+      { queued: ["/compact keep the API"], restored: "/compact keep the API" },
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/634 restores queue $queued as $restored, keeping /compact only when it was queued alone",
+      async ({ queued, restored }) => {
+        const { backend, getDraft, settleCancel } = setupCancellation();
+        act(() => getDraft().setInput("first turn"));
+        fireEvent.click(screen.getByText("send"));
+        await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+        for (const [index, text] of queued.entries()) {
+          act(() => getDraft().setInput(text));
+          fireEvent.click(screen.getByText("send"));
+          await waitFor(() => expect(getDraft().queue).toHaveLength(index + 1));
+        }
+
+        await act(async () => fireEvent.click(screen.getByText("stop")));
+
+        expect(getDraft().input).toBe(restored);
+        await act(async () => settleCancel());
+      }
+    );
+
     it("returns a queued follow-up's notes and images to the composer https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
       const note = makeFile("Queued.md");
       const { backend, getDraft, settleCancel } = setupCancellation();

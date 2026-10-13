@@ -14,7 +14,7 @@ export interface TypeaheadOption {
   disabledReason?: string;
 }
 
-interface TypeaheadMenuContentProps {
+export interface TypeaheadMenuContentProps {
   options: TypeaheadOption[];
   selectedIndex: number;
   onSelect: (option: TypeaheadOption) => void;

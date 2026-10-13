@@ -1,6 +1,11 @@
 import type { Skill } from "@/agentMode";
 import type { CustomCommand } from "@/commands/type";
-import { composeSlashMenuItems, filterSlashMenuOptions } from "./slashMenuItems";
+import { $createParagraphNode, $createTextNode, $getRoot, createEditor } from "lexical";
+import {
+  $slashStartsPrompt,
+  composeSlashMenuItems,
+  filterSlashMenuOptions,
+} from "./slashMenuItems";
 
 function makeSkill(overrides: Partial<Skill> & { name: string }): Skill {
   const name = overrides.name;
@@ -181,6 +186,39 @@ describe("slashMenuItems", () => {
         "a-compact",
         "compact-notes",
       ]);
+    });
+  });
+
+  describe("$slashStartsPrompt()", () => {
+    function slashStartsPromptFor(paragraphs: string[]): boolean {
+      const editor = createEditor({
+        namespace: "slash-starts-prompt-test",
+        onError: (e) => {
+          throw e;
+        },
+      });
+      let result: boolean | undefined;
+      editor.update(
+        () => {
+          const nodes = paragraphs.map((text) => $createTextNode(text));
+          for (const node of nodes) $getRoot().append($createParagraphNode().append(node));
+          const last = nodes[nodes.length - 1];
+          last.select(last.getTextContentSize(), last.getTextContentSize());
+          result = $slashStartsPrompt();
+        },
+        { discrete: true }
+      );
+      return result!;
+    }
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/634 is true when the slash begins an otherwise empty prompt", () => {
+      expect(slashStartsPromptFor(["/co"])).toBe(true);
+      expect(slashStartsPromptFor(["", "  /co"])).toBe(true);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/634 is false when text precedes the slash in the same or an earlier paragraph", () => {
+      expect(slashStartsPromptFor(["review this /co"])).toBe(false);
+      expect(slashStartsPromptFor(["review this", "/co"])).toBe(false);
     });
   });
 });
