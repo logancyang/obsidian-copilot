@@ -1,3 +1,4 @@
+import { isCompactCommand } from "@/commands/compactCommand";
 import type { AgentMcpServer, BackendState } from "@/agentMode/session/types";
 import type {
   FeedbackMcpServer,
@@ -1846,8 +1847,10 @@ export class AgentSessionManager {
     const replayedUserTurns = session.store
       .getDisplayMessages()
       .filter((m) => m.sender === USER_SENDER).length;
+    // Claude's transcript keeps /compact only as command bookkeeping, which its replay drops.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/635
     const savedUserTurns = loaded.messages.filter(
-      (m) => m.isVisible && m.sender === USER_SENDER
+      (m) => m.isVisible && m.sender === USER_SENDER && !isCompactCommand(m.message)
     ).length;
     if (replayedUserTurns > 0 && replayedUserTurns >= savedUserTurns) {
       session.store.fillMissingTimestamps(loaded.messages);
