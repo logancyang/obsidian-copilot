@@ -597,10 +597,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   );
 
   const activeSession = manager.getSession(sessionId);
-  const activeSourcePath = manager.getSessionSourcePath(sessionId);
   const getActiveChatBookmarkState = useCallback(
-    () => getChatBookmarkState(activeSourcePath),
-    [getChatBookmarkState, activeSourcePath]
+    () => getChatBookmarkState(manager.getSessionSourcePath(sessionId)),
+    [getChatBookmarkState, manager, sessionId]
   );
   const handleCopyChatLink = () =>
     plugin.copyChatLink(async () => {

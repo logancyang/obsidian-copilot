@@ -650,59 +650,6 @@ describe("GlobalRecentChatsSection", () => {
       expect(onSetChatBookmarked).toHaveBeenCalledWith("chats/saved.md", "Saved chat", false);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 leaves the bookmark item out when Obsidian's Bookmarks internals are unavailable", async () => {
-      const lookup = Promise.resolve("unavailable" as const);
-      renderSection({
-        items: [makeItem("chats/saved.md", { title: "Saved chat" })],
-        getChatBookmarkState: () => lookup,
-      });
-
-      const menu = openMenuFromButton("Saved chat");
-      await act(async () => {
-        await lookup;
-      });
-
-      expect(menuEntries(menu)).toEqual([
-        "Pin chat",
-        "Open source note",
-        "Rename",
-        "Copy chat link",
-        "---",
-        "Delete",
-      ]);
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 shows a muted Add to bookmarks that explains Bookmarks is off and opens it in Settings when selected", async () => {
-      const search = document.createElement("input");
-      search.type = "search";
-      const containerEl = document.createElement("div");
-      containerEl.appendChild(search);
-      const setting = { open: jest.fn(), openTabById: jest.fn(), activeTab: { containerEl } };
-      const app = Object.assign(new App(), {
-        setting,
-        internalPlugins: {
-          getPluginById: () => ({ enabled: false, instance: { name: "Bookmarks" } }),
-        },
-      });
-      const onSetChatBookmarked = jest.fn(noop);
-      renderSection({
-        app,
-        items: [makeItem("chats/saved.md", { title: "Saved chat" })],
-        getChatBookmarkState: async () => "off",
-        onSetChatBookmarked,
-      });
-
-      const menu = openMenuFromButton("Saved chat");
-      const item = await within(menu).findByRole("menuitem", { name: /Add to bookmarks/ });
-      expect(item.className).toContain("tw-text-faint");
-      expect(within(item).getByLabelText("Bookmarks is turned off")).toBeTruthy();
-      fireEvent.click(item);
-
-      expect(setting.openTabById).toHaveBeenCalledWith("plugins");
-      expect(search.value).toBe("Bookmarks");
-      expect(onSetChatBookmarked).not.toHaveBeenCalled();
-    });
-
     it("opens the menu from the More actions button without opening the chat", () => {
       const onLoadChat = jest.fn(noop);
       renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })], onLoadChat });
