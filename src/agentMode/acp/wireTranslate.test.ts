@@ -257,6 +257,84 @@ const testAcpNotificationToEvents = () => {
     expect(event.update).toEqual({ sessionUpdate: "session_info_update" });
   });
 
+  it.each(["in_progress", "completed", "failed", "cancelled"])(
+    "maps a %s compaction_update to a compaction event keyed by its compactionId (https://github.com/Brevilabs/obsidian-copilot-private/issues/636)",
+    (status) => {
+      expect(
+        acpNotificationToEvents(
+          notification({ sessionUpdate: "compaction_update", compactionId: "cmp-1", status })
+        )
+      ).toEqual([
+        {
+          sessionId: SESSION_ID,
+          update: { sessionUpdate: "compaction", id: "cmp-1", status, trigger: "auto" },
+        },
+      ]);
+    }
+  );
+
+  it("passes a failed compaction_update's error through to the compaction event", () => {
+    expect(
+      acpNotificationToEvents(
+        notification({
+          sessionUpdate: "compaction_update",
+          compactionId: "cmp-1",
+          status: "failed",
+          error: "context too large",
+        })
+      )
+    ).toEqual([
+      {
+        sessionId: SESSION_ID,
+        update: {
+          sessionUpdate: "compaction",
+          id: "cmp-1",
+          status: "failed",
+          trigger: "auto",
+          error: "context too large",
+        },
+      },
+    ]);
+  });
+
+  it("labels a compaction_update with the trigger the caller supplies", () => {
+    const [event] = acpNotificationToEvents(
+      notification({
+        sessionUpdate: "compaction_update",
+        compactionId: "cmp-1",
+        status: "in_progress",
+      }),
+      undefined,
+      "manual"
+    );
+
+    expect(event.update).toMatchObject({ sessionUpdate: "compaction", trigger: "manual" });
+  });
+
+  it("emits no event for a compaction_update with an unknown status because the status set is open (https://github.com/Brevilabs/obsidian-copilot-private/issues/636)", () => {
+    expect(
+      acpNotificationToEvents(
+        notification({
+          sessionUpdate: "compaction_update",
+          compactionId: "cmp-1",
+          status: "paused",
+        })
+      )
+    ).toEqual([]);
+  });
+
+  it("emits no event for a compaction_summary_chunk because the compaction row shows no summary text (https://github.com/Brevilabs/obsidian-copilot-private/issues/636)", () => {
+    expect(
+      acpNotificationToEvents(
+        notification({
+          sessionUpdate: "compaction_summary_chunk",
+          compactionId: "cmp-1",
+          content: { type: "text", text: "summary" },
+        })
+      )
+    ).toEqual([]);
+  });
+
   it("passes a real plan notification through unchanged as a single event", () => {
     const events = acpNotificationToEvents(
       notification({
