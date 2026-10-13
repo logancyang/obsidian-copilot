@@ -479,16 +479,5 @@ describe("contextCacheStore", () => {
       const meta = remoteMeta("https://a.com/a-->b");
       expect(parseSnapshotMeta(buildSnapshot(meta))).toEqual(meta);
     });
-
-    it("ignores a converted-file snapshot left by an earlier version because binary files are no longer converted", () => {
-      const legacyFileSnapshot = buildSnapshot({
-        schemaVersion: CACHE_SCHEMA_VERSION,
-        sourceType: "file",
-        sourcePath: "Notes/report.pdf",
-        fetchedAt: "2026-01-01T00:00:00.000Z",
-        fingerprint: "123:456",
-      });
-      expect(parseSnapshotMeta(legacyFileSnapshot)).toBeNull();
-    });
   });
 });

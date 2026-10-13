@@ -1093,7 +1093,6 @@ export class AgentSessionManager {
     const counts: { prefetch?: ContextLoadStepCount } = {};
     let failedSources: FailedItem[] = [];
     let processingSources: AgentInFlightSource[] = [];
-    let stepPhase: "resolve" | "prefetch" = "resolve";
 
     const prior = settingsStore.get(agentProjectContextLoadAtom)[projectId];
     const ownsPublish = !prior?.blocking;
@@ -1104,7 +1103,7 @@ export class AgentSessionManager {
 
     const publishProgress = () => {
       this.setContextLoadState(projectId, {
-        phase: stepPhase,
+        phase: "prefetch",
         blocking: true,
         ...counts,
         failedSources,
@@ -1134,7 +1133,6 @@ export class AgentSessionManager {
               return;
             case "prefetch":
               counts.prefetch = { done: progress.done, total: progress.total };
-              stepPhase = "prefetch";
               publishProgress();
               return;
           }

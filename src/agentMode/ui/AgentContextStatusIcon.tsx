@@ -48,25 +48,12 @@ interface StatusStep {
   status: "done" | "active" | "pending";
 }
 
-const PHASE_RANK: Record<AgentProjectContextLoadState["phase"], number> = {
-  idle: -1,
-  resolve: 0,
-  prefetch: 1,
-  done: 2,
-};
-
-function stepStatus(
+function prefetchStepStatus(
   current: AgentProjectContextLoadState["phase"],
-  stepPhase: "resolve" | "prefetch",
   countComplete: boolean
 ): StatusStep["status"] {
-  if (current === "done") return "done";
-  if (countComplete) return "done";
-  const rank = PHASE_RANK[current];
-  const stepRank = PHASE_RANK[stepPhase];
-  if (rank > stepRank) return "done";
-  if (rank === stepRank) return "active";
-  return "pending";
+  if (current === "done" || countComplete) return "done";
+  return current === "prefetch" ? "active" : "pending";
 }
 
 export function buildStatusView(
@@ -94,7 +81,7 @@ export function buildStatusView(
     const { done: d, total } = entry.prefetch;
     steps.push({
       label: `Prefetch ${total} ${total === 1 ? "URL" : "URLs"} · ${d}/${total}`,
-      status: stepStatus(entry.phase, "prefetch", d >= total),
+      status: prefetchStepStatus(entry.phase, d >= total),
     });
   }
 

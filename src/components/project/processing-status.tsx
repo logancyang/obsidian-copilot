@@ -39,32 +39,24 @@ export function ProcessingStatus({
 }: ProcessingStatusProps) {
   const sortedUrlItems = sortByStatusPriority(items);
 
-  const groupsBody = (
-    <div className="tw-space-y-3 tw-p-3">
-      <div className="tw-space-y-2">
-        <div className="tw-flex tw-items-center tw-gap-1.5 tw-px-1">
-          <Globe className="tw-size-3.5 tw-text-accent" />
-          <span className="tw-text-ui-smaller tw-font-medium tw-text-muted">
-            From URLs ({sortedUrlItems.length})
-          </span>
-        </div>
-        <ScrollableList maxHeight={maxHeight || "200px"}>
-          {sortedUrlItems.map((item) => (
-            <ProcessingItemRow
-              key={processingItemKey(item)}
-              item={item}
-              onRetryItem={onRetryItem}
-              onOpenCached={onOpenCachedItem ? () => onOpenCachedItem(item) : undefined}
-            />
-          ))}
-        </ScrollableList>
-      </div>
-    </div>
-  );
-
   return (
-    <div className="tw-space-y-2">
-      <div className="tw-rounded-lg tw-border tw-border-border">{groupsBody}</div>
+    <div className="tw-space-y-2 tw-rounded-lg tw-border tw-border-border tw-p-3">
+      <div className="tw-flex tw-items-center tw-gap-1.5 tw-px-1">
+        <Globe className="tw-size-3.5 tw-text-accent" />
+        <span className="tw-text-ui-smaller tw-font-medium tw-text-muted">
+          From URLs ({sortedUrlItems.length})
+        </span>
+      </div>
+      <ScrollableList maxHeight={maxHeight || "200px"}>
+        {sortedUrlItems.map((item) => (
+          <ProcessingItemRow
+            key={processingItemKey(item)}
+            item={item}
+            onRetryItem={onRetryItem}
+            onOpenCached={onOpenCachedItem ? () => onOpenCachedItem(item) : undefined}
+          />
+        ))}
+      </ScrollableList>
     </div>
   );
 }

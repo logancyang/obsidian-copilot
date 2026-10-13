@@ -79,7 +79,6 @@ export interface FailureMarker {
   kind: MaterializedSourceType;
   error: string;
   failedAt: number;
-  fingerprint?: string;
 }
 
 export async function materializeSources(
@@ -278,10 +277,15 @@ async function writeFailureMarker(
   source: string,
   kind: MaterializedSourceType,
   error: string,
-  nowMs: number,
-  fingerprint?: string
+  nowMs: number
 ): Promise<void> {
-  const marker: FailureMarker = { schemaVersion: CACHE_SCHEMA_VERSION, source, kind, error, failedAt: nowMs, ...(fingerprint !== undefined ? { fingerprint } : {}) }; // prettier-ignore
+  const marker: FailureMarker = {
+    schemaVersion: CACHE_SCHEMA_VERSION,
+    source,
+    kind,
+    error,
+    failedAt: nowMs,
+  };
   await fs.writeText(markerPath, JSON.stringify(marker));
 }
 

@@ -191,10 +191,9 @@ async function runMaterialize(
     ).filter((entry) => !declaredNotePaths.has(manifestEntryKey(entry)));
 
     // A document picked in the Files picker is already listed under Included notes, and a duplicate would spend the manifest cap. https://github.com/Brevilabs/obsidian-copilot-private/issues/657
-    const documentEntries = resolveDocumentPaths(
-      listProjectDocumentFiles(app, contextSource),
-      adapter
-    ).filter((entry) => !declaredNotePaths.has(manifestEntryKey(entry)));
+    const documentEntries = listProjectDocumentFiles(app, contextSource)
+      .map((file) => toManifestEntry(file, adapter))
+      .filter((entry) => !declaredNotePaths.has(manifestEntryKey(entry)));
 
     const hasAnySource =
       remotes.length > 0 ||
@@ -378,15 +377,10 @@ function resolveNotePaths(
   });
 }
 
-function resolveDocumentPaths(
-  files: readonly TFile[],
-  adapter: FileSystemAdapter | null
-): ManifestPathEntry[] {
-  return files.map((file) =>
-    adapter
-      ? { vaultPath: file.path, absPath: adapter.getFullPath(file.path) }
-      : { vaultPath: file.path }
-  );
+function toManifestEntry(file: TFile, adapter: FileSystemAdapter | null): ManifestPathEntry {
+  return adapter
+    ? { vaultPath: file.path, absPath: adapter.getFullPath(file.path) }
+    : { vaultPath: file.path };
 }
 
 function resolvePropertyNotePaths(
@@ -401,11 +395,7 @@ function resolvePropertyNotePaths(
     .getMarkdownFiles()
     .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
     .sort((a, b) => a.path.localeCompare(b.path))
-    .map((file) =>
-      adapter
-        ? { vaultPath: file.path, absPath: adapter.getFullPath(file.path) }
-        : { vaultPath: file.path }
-    );
+    .map((file) => toManifestEntry(file, adapter));
 }
 
 function isUnderCwd(cwd: string, abs: string): boolean {
