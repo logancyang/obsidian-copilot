@@ -3717,6 +3717,76 @@ describe("AgentSession", () => {
         expect(onMessagesChanged).toHaveBeenCalled();
       });
 
+      it.each([
+        ["without a prior reading", undefined],
+        ["keeping the held context window", 200_000],
+      ])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/635 sets the meter to a completed compaction's post-compaction tokens %s",
+        async (_label, contextWindow) => {
+          const mock = makeMockBackend();
+          const finishPrompt = holdPrompt(mock);
+          const session = makeSession(mock);
+          if (contextWindow) {
+            mock.emitUpdate({
+              sessionUpdate: "usage_update",
+              usage: { usedTokens: 103_000, contextWindow, updatedAt: 1 },
+            });
+          }
+          const { turn } = session.sendPrompt("/compact");
+
+          mock.emitUpdate({
+            sessionUpdate: "compaction",
+            id: "c1",
+            status: "completed",
+            trigger: "manual",
+            preTokens: 103_249,
+            postTokens: 4_046,
+          });
+
+          expect(session.getSessionUsage()).toEqual({
+            usedTokens: 4_046,
+            contextWindow,
+            updatedAt: expect.any(Number),
+          });
+          finishPrompt();
+          await turn;
+        }
+      );
+
+      it.each([
+        ["still running", { status: "in_progress" as const }],
+        ["skipped", { status: "skipped" as const }],
+        ["failed", { status: "failed" as const, error: "boom" }],
+        ["completed without a post-compaction count", { status: "completed" as const }],
+      ])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/635 leaves the meter alone for a compaction that is %s",
+        async (_label, snapshot) => {
+          const mock = makeMockBackend();
+          const finishPrompt = holdPrompt(mock);
+          const session = makeSession(mock);
+          mock.emitUpdate({
+            sessionUpdate: "usage_update",
+            usage: { usedTokens: 103_000, contextWindow: 200_000, updatedAt: 1 },
+          });
+          const { turn } = session.sendPrompt("/compact");
+
+          mock.emitUpdate({
+            sessionUpdate: "compaction",
+            id: "c1",
+            trigger: "manual",
+            ...snapshot,
+          });
+
+          expect(session.getSessionUsage()).toEqual({
+            usedTokens: 103_000,
+            contextWindow: 200_000,
+            updatedAt: 1,
+          });
+          finishPrompt();
+          await turn;
+        }
+      );
+
       it("lets a fuller snapshot's contextWindow replace an earlier one", () => {
         const mock = makeMockBackend();
         const session = makeSession(mock);

@@ -1,3 +1,4 @@
+import { isCompactCommand } from "@/commands/compactCommand";
 import { logError, logInfo, logWarn } from "@/logger";
 import { err2String } from "@/utils";
 import {
@@ -355,7 +356,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       onStall: (idleMs) => logSdkError("←", "stream:stalled", { idleMs }, params.sessionId),
     });
 
-    const translatorState = createTranslatorState(session.claudeTaskPlan, session.backgroundTasks);
+    const translatorState = createTranslatorState(
+      session.claudeTaskPlan,
+      session.backgroundTasks,
+      typeof messageContent === "string" && isCompactCommand(messageContent) ? "manual" : "auto"
+    );
     let stopReason: StopReason = "end_turn";
     let resultErrorMessage: string | null = null;
     try {
