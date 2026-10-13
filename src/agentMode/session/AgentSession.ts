@@ -660,7 +660,8 @@ export class AgentSession {
   ): { userMessageId: string; turn: Promise<StopReason> } {
     // Agents only compact when /compact is the whole prompt, so nothing rides along with it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
-    if (isCompactCommand(displayText)) {
+    const sendsCompact = isCompactCommand(displayText);
+    if (sendsCompact) {
       displayText = displayText.trim();
       context = undefined;
       promptContent = undefined;
@@ -712,7 +713,14 @@ export class AgentSession {
     this.lastTurnError = false;
     this.recomputeStatusIfChanged();
 
-    const turn = this.runTurn(displayText, userMessageId, context, turnStartedAtMs, promptContent);
+    const turn = this.runTurn(
+      displayText,
+      userMessageId,
+      context,
+      turnStartedAtMs,
+      promptContent,
+      sendsCompact
+    );
     return { userMessageId, turn };
   }
 
@@ -721,7 +729,8 @@ export class AgentSession {
     userMessageId: string,
     context: MessageContext | undefined,
     turnStartedAtMs: number,
-    promptContent?: PromptContent[]
+    promptContent?: PromptContent[],
+    sendsCompact = false
   ): Promise<StopReason> {
     const placeholderId = this.placeholderId;
     const sessionId = this.backendSessionId!;
@@ -746,7 +755,8 @@ export class AgentSession {
           `This chat's model isn't enabled for ${this.displayNameFor(this.backendId)}. Pick an enabled model to continue.`
         );
       }
-      const sendsCompact = isCompactCommand(displayText);
+      // Project context, its updates and fanout history ride the next normal turn.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
       const isFirstTurn = !this.firstPromptSent && !sendsCompact;
       const projectContextBlock = isFirstTurn ? (this.getProjectContextBlockFn?.() ?? null) : null;
       const projectContextUpdates = sendsCompact

@@ -606,6 +606,69 @@ describe("AgentChatInput", () => {
       await act(async () => settleTurn());
       expect(getDraft().loading).toBe(false);
     });
+    it.each([
+      {
+        scenario: "a queued follow-up before it",
+        queued: ["foo", "/compact"],
+        firstBatch: "foo",
+        secondBatch: "/compact",
+      },
+      {
+        scenario: "a queued follow-up after it",
+        queued: ["/compact", "foo"],
+        firstBatch: "/compact",
+        secondBatch: "foo",
+      },
+      {
+        scenario: "arguments",
+        queued: ["/compact keep the API"],
+        firstBatch: "/compact keep the API",
+        secondBatch: null,
+      },
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/634 sends a queued /compact with $scenario as its own turn",
+      async ({ queued, firstBatch, secondBatch }) => {
+        const { backend, getDraft, settleTurn } = setupCancellation();
+        act(() => getDraft().setInput("first turn"));
+        fireEvent.click(screen.getByText("send"));
+        await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+        for (const [index, text] of queued.entries()) {
+          act(() => getDraft().setInput(text));
+          fireEvent.click(screen.getByText("send"));
+          await waitFor(() => expect(getDraft().queue).toHaveLength(index + 1));
+        }
+
+        await act(async () => settleTurn());
+
+        const sentTexts = () => jest.mocked(backend.sendMessage).mock.calls.map((call) => call[0]);
+        expect(sentTexts().slice(1)).toEqual([firstBatch]);
+        expect(getDraft().queue).toHaveLength(secondBatch === null ? 0 : 1);
+        if (secondBatch !== null) {
+          await act(async () => settleTurn());
+          expect(sentTexts().slice(1)).toEqual([firstBatch, secondBatch]);
+          expect(getDraft().queue).toHaveLength(0);
+        }
+        await act(async () => settleTurn());
+      }
+    );
+
+    it("joins queued follow-ups that surround no /compact into one turn", async () => {
+      const { backend, getDraft, settleTurn } = setupCancellation();
+      act(() => getDraft().setInput("first turn"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      for (const [index, text] of ["foo", "bar"].entries()) {
+        act(() => getDraft().setInput(text));
+        fireEvent.click(screen.getByText("send"));
+        await waitFor(() => expect(getDraft().queue).toHaveLength(index + 1));
+      }
+
+      await act(async () => settleTurn());
+
+      expect(jest.mocked(backend.sendMessage).mock.calls[1][0]).toBe("foo\n\nbar");
+      await act(async () => settleTurn());
+    });
+
     it("regression: clears draft.loading when the turn resolves after the composer unmounted", async () => {
       let resolveTurn!: () => void;
       const turn = new Promise<void>((resolve) => {
