@@ -681,6 +681,69 @@ describe("OpencodeBackend", () => {
       });
     });
 
+    describe("auto-compact threshold", () => {
+      function plusDeps(...windows: Array<number | undefined>): OpencodeModelDeps {
+        return makeDeps({
+          resolved: windows.map((context, index) => {
+            const model = makeModel("p-plus", `plus-model-${index}`);
+            if (context !== undefined) model.info.limits = { context };
+            return okEntry(makePlusProvider(), model);
+          }),
+          keys: { "p-plus": "plus-token-123" },
+        });
+      }
+
+      function setAutoCompactTokens(autoCompactTokens: number | undefined): void {
+        setSettings((cur) => ({ agentMode: { ...cur.agentMode, autoCompactTokens } }));
+      }
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 reserves the headroom between the model's context window and the threshold", async () => {
+        setAutoCompactTokens(150_000);
+
+        const cfg = await buildOpencodeConfig(getSettings(), plusDeps(262_144));
+
+        expect(cfg.compaction).toEqual({ buffer: 112_144 });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 measures headroom from the smallest enabled window so no model can compact after every step", async () => {
+        setAutoCompactTokens(150_000);
+
+        const cfg = await buildOpencodeConfig(getSettings(), plusDeps(1_000_000, 200_000, 400_000));
+
+        expect(cfg.compaction).toEqual({ buffer: 50_000 });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 adds no compaction block under the backend default", async () => {
+        const cfg = await buildOpencodeConfig(getSettings(), plusDeps(262_144));
+
+        expect(cfg).not.toHaveProperty("compaction");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 adds no compaction block when an enabled model's context window is unknown", async () => {
+        setAutoCompactTokens(150_000);
+
+        const cfg = await buildOpencodeConfig(getSettings(), plusDeps(262_144, undefined));
+
+        expect(cfg).not.toHaveProperty("compaction");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 adds no compaction block when no model is enabled", async () => {
+        setAutoCompactTokens(150_000);
+
+        const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+
+        expect(cfg).not.toHaveProperty("compaction");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 adds no compaction block when the threshold reaches the smallest context window", async () => {
+        setAutoCompactTokens(262_144);
+
+        const cfg = await buildOpencodeConfig(getSettings(), plusDeps(262_144));
+
+        expect(cfg).not.toHaveProperty("compaction");
+      });
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 offers only the effort levels Copilot Plus published", async () => {
       const model = makePlusReasoningModel("copilot-plus-flash", ["high", "max"]);
       const deps = makeDeps({

@@ -239,6 +239,20 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
   });
   subscribeToSettingsChange((prev, next) => {
+    if (prev.agentMode.autoCompactTokens === next.agentMode.autoCompactTokens) return;
+    for (const descriptor of listBackendDescriptors()) {
+      if (!descriptor.restartOnAutoCompactChange) continue;
+      void manager
+        .noteSpawnConfigChanged(descriptor.id, "auto-compact threshold changed")
+        .catch((error) =>
+          logError(
+            `[AgentMode] restart after auto-compact threshold change failed: ${descriptor.id}`,
+            error
+          )
+        );
+    }
+  });
+  subscribeToSettingsChange((prev, next) => {
     for (const descriptor of listBackendDescriptors()) {
       if (
         backendEnvOverridesKey(prev, descriptor.id) === backendEnvOverridesKey(next, descriptor.id)

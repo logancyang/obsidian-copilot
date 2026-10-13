@@ -2,6 +2,7 @@ import { ChainType } from "@/chainType";
 import {
   COPILOT_FOLDER_ROOT,
   DEFAULT_QA_EXCLUSIONS_SETTING,
+  AGENT_AUTO_COMPACT_TOKENS,
   DEFAULT_SETTINGS,
   SEND_SHORTCUT,
   BUILTIN_CHAT_MODELS,
@@ -330,6 +331,56 @@ describe("model", () => {
         } as unknown as CopilotSettings["agentMode"],
       });
       expect(sanitized.agentMode.welcomeDismissed).toBe(false);
+    });
+
+    const sanitizeAutoCompact = (autoCompactTokens: unknown) =>
+      sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: { byok: {}, autoCompactTokens } as unknown as CopilotSettings["agentMode"],
+      }).agentMode.autoCompactTokens;
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 keeps a threshold inside the range", () => {
+      expect(sanitizeAutoCompact(250_000)).toBe(250_000);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 leaves the backend default in place when the key is missing", () => {
+      const sanitized = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: { byok: {} } as unknown as CopilotSettings["agentMode"],
+      });
+      expect(sanitized.agentMode).not.toHaveProperty("autoCompactTokens");
+    });
+
+    it.each([["250000"], [Number.NaN], [null], [true], [{}]])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/180 falls back to the backend default for the non-numeric value %p",
+      (value) => {
+        expect(sanitizeAutoCompact(value)).toBeUndefined();
+      }
+    );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 raises a threshold below the range so compaction cannot loop", () => {
+      expect(sanitizeAutoCompact(20_000)).toBe(AGENT_AUTO_COMPACT_TOKENS.min);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 lowers a threshold above the range", () => {
+      expect(sanitizeAutoCompact(5_000_000)).toBe(AGENT_AUTO_COMPACT_TOKENS.max);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 rounds a fractional threshold to whole tokens", () => {
+      expect(sanitizeAutoCompact(150_000.6)).toBe(150_001);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 leaves the v3 autoCompactThreshold alone", () => {
+      const sanitized = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        autoCompactThreshold: 200_000,
+        agentMode: {
+          byok: {},
+          autoCompactTokens: 150_000,
+        } as unknown as CopilotSettings["agentMode"],
+      });
+      expect(sanitized.autoCompactThreshold).toBe(200_000);
+      expect(sanitized.agentMode.autoCompactTokens).toBe(150_000);
     });
 
     it("drops invalid envOverrides keys from the Claude backend slice while keeping valid ones", () => {

@@ -17,6 +17,7 @@ import { MODEL_SECRET_FIELDS, TOP_LEVEL_SECRET_FIELDS } from "@/services/setting
 import { isNotificationSoundId, type NotificationSoundId } from "@/utils/notificationSoundCatalog";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
+  AGENT_AUTO_COMPACT_TOKENS,
   BUILTIN_CHAT_MODELS,
   DEFAULT_OPEN_AREA,
   DEFAULT_QA_EXCLUSIONS_SETTING,
@@ -144,6 +145,7 @@ export interface CopilotSettings {
     notificationSound: boolean;
     notificationSoundId: NotificationSoundId;
     welcomeDismissed: boolean;
+    autoCompactTokens?: number;
     skills: {
       folder: string;
       suppressMigrationConfirm?: boolean;
@@ -834,6 +836,14 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
       ? r.welcomeDismissed
       : DEFAULT_SETTINGS.agentMode.welcomeDismissed;
 
+  const autoCompactTokens =
+    typeof r.autoCompactTokens === "number" && Number.isFinite(r.autoCompactTokens)
+      ? Math.min(
+          AGENT_AUTO_COMPACT_TOKENS.max,
+          Math.max(AGENT_AUTO_COMPACT_TOKENS.min, Math.round(r.autoCompactTokens))
+        )
+      : undefined;
+
   const claudeCliRaw =
     r.claudeCli && typeof r.claudeCli === "object"
       ? (r.claudeCli as Record<string, unknown>)
@@ -870,6 +880,7 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     notificationSoundId,
     welcomeDismissed,
     skills,
+    ...(autoCompactTokens !== undefined ? { autoCompactTokens } : {}),
     ...(claudeCli ? { claudeCli } : {}),
     ...(deviceProfiles ? { deviceProfiles } : {}),
   };

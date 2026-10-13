@@ -211,6 +211,20 @@ const NATIVE_WEB_DENIES: readonly PermissionRule[] = [
 
 const OPENCODE_1_PERMISSION_KEYS = ["permission", "tools", "agent", "mode"] as const;
 
+// OpenCode compacts when the context comes within `buffer` tokens of the model's window, so a
+// token threshold needs the window. The smallest one keeps every other model from compacting
+// before the threshold, and an unknown window leaves OpenCode's own point in place.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/180
+function opencodeCompactionBuffer(
+  contextWindows: ReadonlyArray<number | undefined>,
+  autoCompactTokens: number | undefined
+): number | undefined {
+  if (autoCompactTokens === undefined || contextWindows.length === 0) return undefined;
+  if (contextWindows.some((window) => window === undefined)) return undefined;
+  const smallest = Math.min(...(contextWindows as number[]));
+  return autoCompactTokens < smallest ? smallest - autoCompactTokens : undefined;
+}
+
 export async function buildOpencodeConfig(
   s: CopilotSettings,
   deps: OpencodeModelDeps,
@@ -222,7 +236,8 @@ export async function buildOpencodeConfig(
   const modelsByProvider: Record<string, Record<string, ModelConfig>> = {};
   const injected: string[] = [];
 
-  for (const entry of backendConfigRegistry.resolveEnabled("opencode")) {
+  const enabledEntries = backendConfigRegistry.resolveEnabled("opencode");
+  for (const entry of enabledEntries) {
     if (entry.state !== "ok") continue;
     const mapping = mapProviderToOpencodeId(entry.provider);
     if (!mapping) continue;
@@ -360,8 +375,16 @@ export async function buildOpencodeConfig(
     );
   }
 
+  const compactionBuffer = opencodeCompactionBuffer(
+    enabledEntries.flatMap((entry) =>
+      entry.state === "ok" ? [entry.configuredModel.info.limits?.context] : []
+    ),
+    s.agentMode?.autoCompactTokens
+  );
+
   return {
     providers,
+    ...(compactionBuffer === undefined ? {} : { compaction: { buffer: compactionBuffer } }),
     // OpenCode's variant plugin guesses effort levels from model ids (glm-5.2
     // gains `max`) and merges them over configured variants, which cannot be
     // disabled individually. Only published levels are trusted, so drop it.

@@ -109,6 +109,30 @@ describe("CodexBackend", () => {
         }
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 compacts at the configured threshold", async () => {
+        setSettings((cur) => ({ agentMode: { ...cur.agentMode, autoCompactTokens: 150_000 } }));
+
+        const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+
+        expect(JSON.parse(desc.env.CODEX_CONFIG as string).model_auto_compact_token_limit).toBe(
+          150_000
+        );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 leaves Codex's own auto-compact limit alone under the backend default", async () => {
+        const userLimit = JSON.stringify({ model_auto_compact_token_limit: 300_000 });
+        useCodexSettings({
+          binaryPath: "/usr/local/bin/codex-acp",
+          envOverrides: { CODEX_CONFIG: userLimit },
+        });
+
+        const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+
+        expect(JSON.parse(desc.env.CODEX_CONFIG as string).model_auto_compact_token_limit).toBe(
+          300_000
+        );
+      });
+
       it("passes the plugin version to built-in Copilot Plus skills", async () => {
         setSettings({ isPaidUser: true, plusLicenseKey: "plus-token", userId: "user-1" });
 

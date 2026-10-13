@@ -52,7 +52,11 @@ export class CodexBackend implements AcpBackend {
       }
     );
     const directive = `${buildAgentSystemPrompt("codex")}\n\n${CODEX_QUESTION_CARD_STEERING}`;
-    descriptor.env.CODEX_CONFIG = mergeCodexConfigEnv(descriptor.env.CODEX_CONFIG, directive);
+    descriptor.env.CODEX_CONFIG = mergeCodexConfigEnv(
+      descriptor.env.CODEX_CONFIG,
+      directive,
+      settings.agentMode?.autoCompactTokens
+    );
     const installed = inspectCodexAcpPackage(descriptor.command);
     const entryPath = installed.entryPath;
     // Native bundles include their runtime; only user-owned npm entries need Node.

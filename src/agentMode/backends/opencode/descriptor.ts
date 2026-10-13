@@ -83,6 +83,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   restartOnManagedSkillsChange: true,
   restartOnProviderConfigChange: true,
   restartOnSystemPromptChange: true,
+  restartOnAutoCompactChange: true,
   summarizesSessionTitle: true,
   sharesMcpServersAcrossSessions: true,
   wire: opencodeWire,

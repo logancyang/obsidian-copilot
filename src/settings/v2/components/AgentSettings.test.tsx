@@ -19,6 +19,7 @@ let mockSettings: {
     backends: Record<string, unknown>;
     notificationSound: boolean;
     notificationSoundId: string;
+    autoCompactTokens?: number;
   };
   enableSelfHostMode: boolean;
 };
@@ -136,6 +137,14 @@ jest.mock("./ConfiguredModelEnableList", () => ({
 }));
 
 describe("AgentSettings", () => {
+  beforeAll(() => {
+    window.ResizeObserver = jest.fn(() => ({
+      observe: jest.fn(),
+      unobserve: jest.fn(),
+      disconnect: jest.fn(),
+    }));
+  });
+
   describe("AgentSettings()", () => {
     beforeEach(() => {
       jest.clearAllMocks();
@@ -210,7 +219,7 @@ describe("AgentSettings", () => {
 
     it("mutes the chime when the notification sound switch is turned off", () => {
       render(<AgentSettings />);
-      const toggle = screen.getByRole("switch");
+      const toggle = screen.getAllByRole("switch")[0];
       expect(toggle.getAttribute("aria-checked")).toBe("true");
 
       fireEvent.click(toggle);
@@ -221,6 +230,40 @@ describe("AgentSettings", () => {
       expect(applyUpdate(mockSettings)).toEqual({
         agentMode: { ...mockSettings.agentMode, notificationSound: false },
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 offers the backend default until a custom auto-compact threshold is switched on", () => {
+      render(<AgentSettings />);
+
+      const toggle = screen.getAllByRole("switch")[1];
+      expect(screen.getByText("Custom auto-compact threshold")).not.toBeNull();
+      expect(toggle.getAttribute("aria-checked")).toBe("false");
+
+      fireEvent.click(toggle);
+
+      const applyUpdate = (setSettings as jest.Mock).mock.calls[0][0] as (
+        current: typeof mockSettings
+      ) => { agentMode: typeof mockSettings.agentMode };
+      expect(applyUpdate(mockSettings).agentMode).toEqual({
+        ...mockSettings.agentMode,
+        autoCompactTokens: 200_000,
+      });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 shows a saved auto-compact threshold and clears it when switched off", () => {
+      mockSettings.agentMode.autoCompactTokens = 300_000;
+      render(<AgentSettings />);
+
+      const toggle = screen.getAllByRole("switch")[1];
+      expect(toggle.getAttribute("aria-checked")).toBe("true");
+      expect(screen.getByText("300k")).not.toBeNull();
+
+      fireEvent.click(toggle);
+
+      const applyUpdate = (setSettings as jest.Mock).mock.calls[0][0] as (
+        current: typeof mockSettings
+      ) => { agentMode: typeof mockSettings.agentMode };
+      expect(applyUpdate(mockSettings).agentMode.autoCompactTokens).toBeUndefined();
     });
 
     it("plays a sound as soon as one is picked, and remembers the pick", () => {

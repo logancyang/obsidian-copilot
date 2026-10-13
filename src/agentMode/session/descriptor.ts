@@ -93,6 +93,8 @@ export interface BackendDescriptor {
 
   readonly restartOnSystemPromptChange: boolean;
 
+  readonly restartOnAutoCompactChange: boolean;
+
   readonly summarizesSessionTitle: boolean;
 
   // OpenCode registers a session's MCP servers on the instance for its folder, so every chat there shares one connection per server name.

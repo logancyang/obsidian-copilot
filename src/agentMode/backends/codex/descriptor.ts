@@ -100,6 +100,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   restartOnManagedSkillsChange: false,
   restartOnProviderConfigChange: false,
   restartOnSystemPromptChange: true,
+  restartOnAutoCompactChange: true,
   summarizesSessionTitle: false,
   // Codex ends its turn on revise_plan without acting on the deny message.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/41

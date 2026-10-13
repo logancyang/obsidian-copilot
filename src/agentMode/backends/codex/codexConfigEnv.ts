@@ -31,7 +31,8 @@ function parseCodexConfig(value: string | undefined): Record<string, unknown> {
 
 export function mergeCodexConfigEnv(
   existing: string | undefined,
-  developerInstructions: string
+  developerInstructions: string,
+  autoCompactTokens?: number
 ): string {
   const userConfig = parseCodexConfig(existing);
   const managed: CodexManagedConfig = {
@@ -43,6 +44,9 @@ export function mergeCodexConfigEnv(
   return JSON.stringify({
     ...CODEX_DEFAULT_CONFIG,
     ...userConfig,
+    ...(autoCompactTokens === undefined
+      ? {}
+      : { model_auto_compact_token_limit: autoCompactTokens }),
     // Codex gates structured questions in Default separately from permission modes.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
     features: {
