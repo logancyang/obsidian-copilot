@@ -180,7 +180,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     loadChat: handleLoadChat,
     updateChatTitle: handleUpdateChatTitle,
     deleteChat: handleDeleteChat,
+    setChatPinned: handleSetChatPinned,
     openSourceFile: handleOpenSourceFile,
+    copyChatLink: handleCopyHistoryChatLink,
+    getChatBookmarkState,
+    setChatBookmarked: handleSetChatBookmarked,
   } = useAgentHistoryControls(manager, plugin, activeProjectId);
 
   const handleCloseSession = useCallback(
@@ -381,6 +385,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onCloseSession={handleCloseSession}
             openChatIds={openChatIds}
             onOpenSourceFile={handleOpenSourceFile}
+            onCopyChatLink={handleCopyHistoryChatLink}
+            onSetChatPinned={handleSetChatPinned}
+            getChatBookmarkState={getChatBookmarkState}
+            onSetChatBookmarked={handleSetChatBookmarked}
             onLoadHistory={handleLoadChatHistorySafely}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
@@ -435,7 +443,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleLoadChat,
       handleUpdateChatTitle,
       handleDeleteChat,
+      handleSetChatPinned,
       handleOpenSourceFile,
+      handleCopyHistoryChatLink,
+      getChatBookmarkState,
+      handleSetChatBookmarked,
       handleLoadChatHistorySafely,
       openChatIds,
       handleCloseSession,
@@ -465,6 +477,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onCloseSession={handleCloseSession}
             openChatIds={openChatIds}
             onOpenSourceFile={handleOpenSourceFile}
+            onCopyChatLink={handleCopyHistoryChatLink}
+            onSetChatPinned={handleSetChatPinned}
+            getChatBookmarkState={getChatBookmarkState}
+            onSetChatBookmarked={handleSetChatBookmarked}
             onLoadHistory={handleLoadChatHistorySafely}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
@@ -491,7 +507,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleLoadChat,
       handleUpdateChatTitle,
       handleDeleteChat,
+      handleSetChatPinned,
       handleOpenSourceFile,
+      handleCopyHistoryChatLink,
+      getChatBookmarkState,
+      handleSetChatBookmarked,
       handleLoadChatHistorySafely,
       openChatIds,
       handleCloseSession,

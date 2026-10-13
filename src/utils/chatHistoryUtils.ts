@@ -138,6 +138,11 @@ export function extractChatLastAccessedAtMs(app: App, file: TFile): number | nul
   return null;
 }
 
+export function parseChatPinnedAt(raw: unknown): number | undefined {
+  const value = typeof raw === "string" ? Number(raw) : raw;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 export function fileToHistoryItem(
   app: App,
   file: TFile,

@@ -12,6 +12,7 @@ const mockApp = {};
 const mockRunTurn = jest.fn(async () => "Answer");
 const mockStop = jest.fn();
 const mockReset = jest.fn();
+/* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hooks; names must match the exports */
 jest.mock("@/context", () => ({ useApp: () => mockApp }));
 jest.mock("@/hooks/useResolvedChatBackendModel", () => ({
   useResolvedChatBackendModel: jest.fn(() => mockModel),
@@ -25,6 +26,7 @@ jest.mock("@/hooks/use-streaming-chat-session", () => ({
     reset: mockReset,
   }),
 }));
+/* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/commands/customCommandUtils", () => ({ processCommandPrompt: jest.fn() }));
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
 

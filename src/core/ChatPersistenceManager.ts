@@ -51,7 +51,7 @@ export class ChatPersistenceManager {
     const baseline = await updateChatTranscript(
       this.app,
       path,
-      content,
+      () => content,
       this.loadedTranscripts.get(key)
     );
     this.loadedTranscripts.set(key, baseline);
