@@ -185,6 +185,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     copyChatLink: handleCopyHistoryChatLink,
     getChatBookmarkState,
     setChatBookmarked: handleSetChatBookmarked,
+    setActiveChatBookmarked: handleSetActiveChatBookmarked,
   } = useAgentHistoryControls(manager, plugin, activeProjectId);
 
   const handleCloseSession = useCallback(
@@ -596,6 +597,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   );
 
   const activeSession = manager.getSession(sessionId);
+  const getActiveChatBookmarkState = useCallback(
+    () => getChatBookmarkState(manager.getSessionSourcePath(sessionId)),
+    [getChatBookmarkState, manager, sessionId]
+  );
   const handleCopyChatLink = () =>
     plugin.copyChatLink(async () => {
       // A native session link only opens on this device: https://github.com/Brevilabs/obsidian-copilot-private/issues/601
@@ -719,6 +724,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       onCopyChatLink={
                         activeSession?.hasUserVisibleMessages() ? handleCopyChatLink : undefined
                       }
+                      getChatBookmarkState={
+                        activeSession?.hasUserVisibleMessages()
+                          ? getActiveChatBookmarkState
+                          : undefined
+                      }
+                      onSetChatBookmarked={handleSetActiveChatBookmarked}
                       onNewChat={handleNewChat}
                       onSaveAsNote={handleSaveAsNote}
                       chatHistoryItems={chatHistoryItems}

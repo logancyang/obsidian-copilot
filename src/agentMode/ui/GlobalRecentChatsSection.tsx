@@ -2,6 +2,7 @@ import { backendRegistry } from "@/agentMode/backends/registry";
 import { AgentHomePreviewList } from "@/agentMode/ui/AgentHomeSection";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
 import { RenameChatModal } from "@/agentMode/ui/RenameChatModal";
+import { ChatBookmarkMenuItem } from "@/agentMode/ui/ChatBookmarkMenuItem";
 import type { ChatBookmarkState } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { describeChatDelete } from "@/lib/chatDeleteText";
@@ -13,7 +14,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Separator } from "@/components/ui/separator";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { type ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
@@ -21,14 +21,10 @@ import { ChatIconWithAttention } from "@/components/chat-components/ChatIconWith
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
 import { isNativeChatId } from "@/utils/nativeChatId";
-import { openBookmarksPluginSettings } from "@/utils/obsidianBookmarks";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
 import {
   ArrowUpRight,
-  Bookmark,
-  BookmarkMinus,
-  Info,
   Link,
   LoaderCircle,
   MessageCircle,
@@ -187,18 +183,10 @@ function RecentChatMenu({
 }: RecentChatMenuProps): React.ReactElement {
   const app = useApp();
   const pinned = isPinned(item);
-  const [bookmarkState, setBookmarkState] = useState<ChatBookmarkState | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    let current = true;
-    void getChatBookmarkState(item.id).then((state) => {
-      if (current) setBookmarkState(state);
-    });
-    return () => {
-      current = false;
-      setBookmarkState(null);
-    };
-  }, [getChatBookmarkState, item.id, open]);
+  const readBookmarkState = useCallback(
+    () => getChatBookmarkState(item.id),
+    [getChatBookmarkState, item.id]
+  );
   const [rowBody, setRowBody] = useState<HTMLElement | null>(null);
   const trackRowBody = useCallback(
     (node: HTMLButtonElement | null) => setRowBody(node?.ownerDocument.body ?? null),
@@ -240,38 +228,12 @@ function RecentChatMenu({
           <Link />
           Copy chat link
         </DropdownMenuItem>
-        {bookmarkState === "off" && (
-          <DropdownMenuItem
-            className="tw-text-faint focus:tw-text-faint"
-            onSelect={() => openBookmarksPluginSettings(app)}
-          >
-            <Bookmark />
-            Add to bookmarks
-            <span className="tw-ml-auto">
-              <HelpTooltip
-                side="bottom"
-                contentClassName="tw-max-w-60"
-                content="Turn on the Bookmarks core plugin to bookmark chats. Select to open it in Settings."
-              >
-                <Info className="tw-size-3.5" aria-label="Bookmarks is turned off" />
-              </HelpTooltip>
-            </span>
-          </DropdownMenuItem>
-        )}
-        {(bookmarkState === "bookmarked" || bookmarkState === "not-bookmarked") && (
-          <DropdownMenuItem
-            onSelect={() =>
-              safeAsyncHandler(onSetChatBookmarked)(
-                item.id,
-                item.title,
-                bookmarkState === "not-bookmarked"
-              )
-            }
-          >
-            {bookmarkState === "bookmarked" ? <BookmarkMinus /> : <Bookmark />}
-            {bookmarkState === "bookmarked" ? "Remove from bookmarks" : "Add to bookmarks"}
-          </DropdownMenuItem>
-        )}
+        <ChatBookmarkMenuItem
+          getBookmarkState={readBookmarkState}
+          onSetBookmarked={(bookmarked) =>
+            safeAsyncHandler(onSetChatBookmarked)(item.id, item.title, bookmarked)
+          }
+        />
         <DropdownMenuSeparator />
         {isSessionOpen && onCloseSession && (
           <DropdownMenuItem onSelect={() => safeAsyncHandler(onCloseSession)(item.id)}>
