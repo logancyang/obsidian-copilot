@@ -109,7 +109,6 @@ export function useChangeNavigation(): ChangeNavigation {
   const step = React.useCallback(
     (direction: ChangeStep) => {
       const total = layout.ticks.length;
-      if (total === 0) return;
       const from = currentRef.current ?? (direction === 1 ? -1 : 0);
       goTo((from + direction + total) % total);
     },
