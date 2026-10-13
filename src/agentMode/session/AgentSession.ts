@@ -893,7 +893,9 @@ export class AgentSession {
       logWarn(`[AgentMode] prompt failed`, err);
       if (placeholderId) {
         const failure = formatPromptFailure(err);
-        this.store.settleOpenCompactions(placeholderId, failure);
+        // The turn's error already shows the failure, so the row must not repeat it.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
+        this.store.settleOpenCompactions(placeholderId, "failed");
         this.store.markMessageError(placeholderId, failure, Date.now() - turnStartedAtMs);
         this.notifyMessages();
       }

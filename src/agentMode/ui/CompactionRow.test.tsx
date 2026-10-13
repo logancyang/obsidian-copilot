@@ -77,12 +77,14 @@ describe("CompactionRow", () => {
       expect(screen.getByText("Context compacted automatically · 90k → 8k tokens")).toBeTruthy();
     });
 
-    it("shows a failed compaction with its error and a warning icon", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 announces a failed compaction with its error and a warning icon", () => {
       const { container } = render(
         <CompactionRow part={part({ status: "failed", error: "Summary request overloaded" })} />
       );
 
-      expect(screen.getByText("Couldn't compact: Summary request overloaded")).toBeTruthy();
+      expect(screen.getByRole("alert").textContent).toBe(
+        "Couldn't compact: Summary request overloaded"
+      );
       expect(
         container.querySelector("svg.lucide-triangle-alert, svg.lucide-alert-triangle")
       ).toBeTruthy();

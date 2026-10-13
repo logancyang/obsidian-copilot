@@ -254,18 +254,37 @@ describe("AgentTrail", () => {
     expect(screen.getByTitle("Copy")).toBeTruthy();
   });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 hides Worked for and the copy action on a completed reply that holds only a compaction", () => {
-    renderTrail({
-      parts: [compaction()],
-      turnDurationMs: 138_000,
-      timestamp: "2026/08/07 20:31:10",
-    });
+  it.each([
+    { scenario: "only a compaction", parts: [compaction()] },
+    {
+      scenario: "a compaction beside a hidden ToolSearch call and blank text",
+      parts: [
+        compaction(),
+        {
+          kind: "tool_call",
+          id: "ts1",
+          title: "ToolSearch",
+          status: "completed",
+          vendorToolName: "ToolSearch",
+        },
+        text("  "),
+      ] satisfies AgentMessagePart[],
+    },
+  ])(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/633 hides Worked for and the copy action on a completed reply that renders $scenario",
+    ({ parts }) => {
+      renderTrail({
+        parts,
+        turnDurationMs: 138_000,
+        timestamp: "2026/08/07 20:31:10",
+      });
 
-    expect(screen.getByText("Context compacted")).toBeTruthy();
-    expect(screen.queryByText("Worked for")).toBeNull();
-    expect(screen.queryByTitle("Copy")).toBeNull();
-    expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
-  });
+      expect(screen.getByText("Context compacted")).toBeTruthy();
+      expect(screen.queryByText("Worked for")).toBeNull();
+      expect(screen.queryByTitle("Copy")).toBeNull();
+      expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
+    }
+  );
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 shows only the compaction's own elapsed time while a compaction-only reply is running", () => {
     renderTrail({
