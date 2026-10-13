@@ -7,6 +7,8 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import type {
   AgentToolStatus,
+  CompactionStatus,
+  CompactionTrigger,
   SessionEvent,
   SessionId,
   SessionUpdate,
@@ -40,6 +42,8 @@ export interface TranslatorState {
   backgroundTasks: ClaudeBackgroundTaskStateMachine;
   claudeTasks: ClaudeTaskPlanState;
   lastAssistantUsage?: AssistantUsageSample;
+  compactionTrigger: CompactionTrigger;
+  openCompaction?: { id: string; trigger: CompactionTrigger };
 }
 
 interface AssistantUsageSample {
@@ -53,9 +57,11 @@ interface AssistantUsageSample {
 
 export function createTranslatorState(
   claudeTasks?: ClaudeTaskPlanState,
-  backgroundTasks?: ClaudeBackgroundTaskStateMachine
+  backgroundTasks?: ClaudeBackgroundTaskStateMachine,
+  compactionTrigger: CompactionTrigger = "auto"
 ): TranslatorState {
   return {
+    compactionTrigger,
     toolUseBlocks: new Map(),
     emittedToolUseIds: new Set(),
     backgroundTasks: backgroundTasks ?? new ClaudeBackgroundTaskStateMachine(),
@@ -134,7 +140,68 @@ function translateSystemMessage(
   state: TranslatorState
 ): SessionEvent[] {
   const decision = state.backgroundTasks.accept({ kind: "sdk_message", message: msg });
-  return taskUpdateEvents(sessionId, decision.updates);
+  return [
+    ...compactionEvents(msg, sessionId, state),
+    ...taskUpdateEvents(sessionId, decision.updates),
+  ];
+}
+
+// Claude names no compaction and repeats `compacting` every 30s, so one is open at a time and the
+// first status that opens it names it. A reported nothing-to-compact is a failure only in wording.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/635
+const NOTHING_TO_COMPACT = /not enough messages to compact/i;
+
+function compactionEvents(
+  msg: SDKSystemLike,
+  sessionId: SessionId,
+  state: TranslatorState
+): SessionEvent[] {
+  if (msg.subtype === "status" && msg.status === "compacting") {
+    state.openCompaction ??= { id: msg.uuid, trigger: state.compactionTrigger };
+    return [compactionEvent(sessionId, state.openCompaction, "in_progress")];
+  }
+  if (msg.subtype === "status" && msg.compact_result === "failed") {
+    const nothingToCompact = NOTHING_TO_COMPACT.test(msg.compact_error ?? "");
+    return [
+      compactionEvent(
+        sessionId,
+        closeCompaction(state, msg.uuid),
+        nothingToCompact ? "skipped" : "failed",
+        nothingToCompact ? {} : { error: msg.compact_error }
+      ),
+    ];
+  }
+  if (msg.subtype === "compact_boundary") {
+    const { trigger, pre_tokens, post_tokens } = msg.compact_metadata;
+    // A sample taken before the compaction would restore the full meter at the turn's result.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/635
+    state.lastAssistantUsage = undefined;
+    return [
+      compactionEvent(sessionId, { ...closeCompaction(state, msg.uuid), trigger }, "completed", {
+        preTokens: pre_tokens,
+        postTokens: post_tokens,
+      }),
+    ];
+  }
+  return [];
+}
+
+function closeCompaction(
+  state: TranslatorState,
+  fallbackId: string
+): { id: string; trigger: CompactionTrigger } {
+  const open = state.openCompaction ?? { id: fallbackId, trigger: state.compactionTrigger };
+  state.openCompaction = undefined;
+  return open;
+}
+
+function compactionEvent(
+  sessionId: SessionId,
+  compaction: { id: string; trigger: CompactionTrigger },
+  status: CompactionStatus,
+  details: { error?: string; preTokens?: number; postTokens?: number } = {}
+): SessionEvent {
+  return event(sessionId, { sessionUpdate: "compaction", ...compaction, status, ...details });
 }
 
 export function mapStopReason(msg: SDKResultMessage): "end_turn" | "cancelled" | "refusal" {
@@ -537,6 +604,7 @@ interface ClaudeTranscriptEntry {
   isMeta?: boolean;
   isSidechain?: boolean;
   isCompactSummary?: boolean;
+  isVisibleInTranscriptOnly?: boolean;
   message?: { content?: unknown };
 }
 
@@ -551,7 +619,15 @@ export function replayClaudeTranscript(
   for (const line of jsonl.split(/\r?\n/)) {
     const entry = parseTranscriptEntry(line);
     // Meta, subagent, and compaction entries are transcript bookkeeping the live chat never showed. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
-    if (!entry || entry.isMeta || entry.isSidechain || entry.isCompactSummary) continue;
+    if (
+      !entry ||
+      entry.isMeta ||
+      entry.isSidechain ||
+      entry.isCompactSummary ||
+      entry.isVisibleInTranscriptOnly
+    ) {
+      continue;
+    }
     const content = entry.message?.content;
     const events =
       entry.type === "assistant"
@@ -621,6 +697,10 @@ function replayAssistantContent(
   return out;
 }
 
+// Claude records a local command such as /compact as a user entry of tagged text, not as a prompt.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/635
+const LOCAL_COMMAND_ECHO = /^<(command-name|local-command-stdout)>/;
+
 function replayUserContent(
   content: unknown,
   messageId: string | undefined,
@@ -628,6 +708,7 @@ function replayUserContent(
   state: TranslatorState
 ): SessionEvent[] {
   if (typeof content === "string") {
+    if (LOCAL_COMMAND_ECHO.test(content)) return [];
     return [textChunk(sessionId, "user_message_chunk", content, messageId)];
   }
   if (!Array.isArray(content)) return [];
