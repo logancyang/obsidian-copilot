@@ -217,6 +217,58 @@ describe("useAgentHistoryControls", () => {
       expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(1);
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3195 keeps a pin when a history load that started before it resolves afterward", async () => {
+      const manager = makeManager();
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+      let resolveStaleLoad!: (items: ChatHistoryItem[]) => void;
+      manager.getChatHistoryItems.mockImplementationOnce(
+        () => new Promise<ChatHistoryItem[]>((resolve) => (resolveStaleLoad = resolve))
+      );
+      let staleLoad!: Promise<void>;
+      act(() => {
+        staleLoad = result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        await result.current.setChatPinned("a", true);
+      });
+      await act(async () => {
+        resolveStaleLoad([item("a"), item("b")]);
+        await staleLoad;
+      });
+
+      expect(result.current.chatHistoryItems).toEqual([{ id: "a", pinnedAt: 5_000 }, item("b")]);
+    });
+
+    it("shows only the latest history load when an earlier load resolves after it", async () => {
+      const manager = makeManager();
+      const resolvers: Array<(items: ChatHistoryItem[]) => void> = [];
+      manager.getChatHistoryItems.mockImplementation(
+        () => new Promise<ChatHistoryItem[]>((resolve) => resolvers.push(resolve))
+      );
+      const { result } = renderControls(manager);
+      let firstLoad!: Promise<void>;
+      let secondLoad!: Promise<void>;
+      act(() => {
+        firstLoad = result.current.loadChatHistory();
+        secondLoad = result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        resolvers[1]([item("new")]);
+        await secondLoad;
+      });
+      await act(async () => {
+        resolvers[0]([item("old")]);
+        await firstLoad;
+      });
+
+      expect(result.current.chatHistoryItems).toEqual([item("new")]);
+    });
+
     it("unpins a chat on its row right away", async () => {
       const manager = makeManager();
       manager.getChatHistoryItems.mockResolvedValue([{ id: "a", pinnedAt: 5_000 }]);

@@ -496,6 +496,13 @@ describe("AgentChatPersistenceManager", () => {
       expect(app.files.get(saved!.path)!.contents).not.toContain("pinnedAt");
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3195 rejects pinning a note that was moved or deleted so the row is not shown pinned", async () => {
+      await expect(
+        manager.setPinnedAt("test-folder/agent__gone.md", 1_760_000_000_000)
+      ).rejects.toThrow("test-folder/agent__gone.md");
+      expect(app.files.has("test-folder/agent__gone.md")).toBe(false);
+    });
+
     it("keeps the pin of a note in a hidden folder through later autosaves", async () => {
       const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
       await manager.setPinnedAt(saved!.path, 1_760_000_000_000);

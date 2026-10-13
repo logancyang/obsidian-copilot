@@ -225,6 +225,11 @@ export class AgentChatPersistenceManager {
   }
 
   async setPinnedAt(fileId: string, pinnedAt: number | null): Promise<void> {
+    // A row whose note was moved or deleted must fail the pin instead of showing a pin that was never written.
+    // https://github.com/logancyang/obsidian-copilot/issues/3195
+    if (!(await this.app.vault.adapter.exists(fileId))) {
+      throw new Error(`Chat note not found: ${fileId}`);
+    }
     await patchFrontmatter(this.app, fileId, { pinnedAt });
   }
 

@@ -60,16 +60,26 @@ export function useAgentHistoryControls(
     []
   );
 
+  // Only the newest history request may land, and a pin retires every earlier one: a load that
+  // read the notes before the pin was written would otherwise drop the row back below the divider.
+  // https://github.com/logancyang/obsidian-copilot/issues/3195
+  const historyRequestRef = useRef(0);
+
   const loadChatHistory = useCallback(async () => {
     const requestScope = scope ?? GLOBAL_SCOPE;
+    const request = ++historyRequestRef.current;
+    const isCurrent = () =>
+      isMountedRef.current &&
+      latestScopeRef.current === requestScope &&
+      historyRequestRef.current === request;
     await runWithNotice("load chat history", async () => {
       const items = await manager.getChatHistoryItems(scope);
-      if (isMountedRef.current && latestScopeRef.current === requestScope) {
+      if (isCurrent()) {
         setLoadedScope(requestScope);
         setChatHistoryItems(items);
       }
     });
-    if (isMountedRef.current && latestScopeRef.current === requestScope) {
+    if (isCurrent()) {
       setSettledScope(requestScope);
     }
   }, [manager, runWithNotice, scope]);
@@ -121,6 +131,7 @@ export function useAgentHistoryControls(
       await runWithNotice(pinned ? "pin chat" : "unpin chat", async () => {
         const chat = await manager.setChatPinned(id, pinned);
         if (!isMountedRef.current) return;
+        historyRequestRef.current++;
         // A reload right after the frontmatter write reads the metadata cache's previous pin state.
         // https://github.com/logancyang/obsidian-copilot/issues/3195
         setChatHistoryItems((items) =>
