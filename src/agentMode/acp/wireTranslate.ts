@@ -327,8 +327,9 @@ function opencodeCompactionFromMeta(meta: Record<string, unknown>): SessionUpdat
   switch (marker.error?.type) {
     case "aborted":
       return { ...base, status: "cancelled" };
+    // opencode returns this only for a history with no text, and an automatic compaction always runs inside a prompt that has a user message, so it never fires for auto. https://github.com/Brevilabs/obsidian-copilot-private/issues/637
     case "compaction.unavailable":
-      return trigger === "manual" ? { ...base, status: "skipped" } : null;
+      return { ...base, status: "skipped" };
     default:
       return {
         ...base,
