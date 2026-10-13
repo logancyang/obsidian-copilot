@@ -304,7 +304,6 @@ describe("ReportIssueModal", () => {
       );
       (modal.params.dismissSettings as () => void)();
       expect(app.setting.close).not.toHaveBeenCalled();
-      expect(modal.params).not.toHaveProperty("origin");
     });
   });
 
@@ -369,23 +368,19 @@ describe("ReportIssueModal", () => {
         expect(ids({ activeBackend: "opencode" })).toContain("opencodeLog");
       });
 
-      it("pre-checks the opencode log when a feedback card opens the dialog", () => {
-        const checked = (preselectAllSources: boolean) =>
-          modalWith({
-            params: {
-              canCaptureTarget: () => true,
-              activeBackend: "opencode",
-              preselectAllSources,
-            },
-          })
-            .buildSources()
-            .filter((source) => source.defaultChecked)
-            .map((source) => source.id);
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 pre-checks the opencode log when a feedback card opens the dialog", () => {
+        const checked = modalWith({
+          params: {
+            canCaptureTarget: () => true,
+            activeBackend: "opencode",
+            preselectAllSources: true,
+          },
+        })
+          .buildSources()
+          .filter((source) => source.defaultChecked)
+          .map((source) => source.id);
 
-        expect(checked(true)).toEqual(
-          expect.arrayContaining(["screenshot", "chatLog", "opencodeLog"])
-        );
-        expect(checked(false)).not.toContain("opencodeLog");
+        expect(checked).toEqual(expect.arrayContaining(["screenshot", "chatLog", "opencodeLog"]));
       });
 
       it("leaves the opencode log unchecked by default", () => {

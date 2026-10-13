@@ -251,6 +251,8 @@ export class ReportIssueModal extends Modal {
         id: "opencodeLog",
         label: "OpenCode backend log",
         description: "may include unrelated sessions",
+        // A feedback card's report is about this chat, so it ticks the log Settings leaves off for privacy.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
         defaultChecked: this.params.preselectAllSources === true,
       });
     }
