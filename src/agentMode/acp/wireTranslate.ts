@@ -25,6 +25,8 @@ import type {
   RawModeState,
   BackendState,
   CancelInput,
+  CompactionStatus,
+  CompactionTrigger,
   ListedSessionInfo,
   PermissionDecision,
   PermissionOption,
@@ -229,14 +231,15 @@ function toolCallDeltaFromAcp(
 
 export function acpNotificationToEvents(
   n: SessionNotification,
-  todoToolCallIds?: Set<string>
+  todoToolCallIds?: Set<string>,
+  compactionTrigger: CompactionTrigger = "auto"
 ): SessionEvent[] {
   const kind = n.update.sessionUpdate;
   if (kind === "plan_update" || kind === "plan_removed") {
     return [];
   }
   const sessionId = sessionIdFromAcp(n.sessionId);
-  const update = acpUpdateToSessionUpdate(n.update);
+  const update = acpUpdateToSessionUpdate(n.update, compactionTrigger);
   if (!update) return [];
   const events: SessionEvent[] = [{ sessionId, update }];
   const todoPlan = todoToolPlanFromAcp(n.update, todoToolCallIds);
@@ -287,7 +290,21 @@ function todoToolPlanFromAcp(
   return { sessionUpdate: "plan", entries };
 }
 
-function acpUpdateToSessionUpdate(update: SessionNotification["update"]): SessionUpdate | null {
+const ACP_COMPACTION_STATUSES: readonly CompactionStatus[] = [
+  "in_progress",
+  "completed",
+  "failed",
+  "cancelled",
+];
+
+function isCompactionStatus(status: string): status is CompactionStatus {
+  return (ACP_COMPACTION_STATUSES as readonly string[]).includes(status);
+}
+
+function acpUpdateToSessionUpdate(
+  update: SessionNotification["update"],
+  compactionTrigger: CompactionTrigger
+): SessionUpdate | null {
   switch (update.sessionUpdate) {
     case "user_message_chunk":
     case "agent_message_chunk":
@@ -316,6 +333,17 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
           status: e.status,
         })),
       };
+    case "compaction_update": {
+      // ACP leaves the status set open, so an unrecognised value is dropped rather than guessed. https://github.com/Brevilabs/obsidian-copilot-private/issues/636
+      if (!isCompactionStatus(update.status)) return null;
+      return {
+        sessionUpdate: "compaction",
+        id: update.compactionId,
+        status: update.status,
+        trigger: compactionTrigger,
+        ...(update.error ? { error: update.error } : {}),
+      };
+    }
     case "session_info_update":
       return { sessionUpdate: "session_info_update", title: update.title };
     case "current_mode_update":
