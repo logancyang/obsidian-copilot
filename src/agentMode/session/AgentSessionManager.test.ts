@@ -3983,6 +3983,50 @@ describe("AgentSessionManager", () => {
         );
       });
 
+      it("https://github.com/logancyang/obsidian-copilot/issues/3195 saves a closed chat that has no note without opening it or leaving it open", async () => {
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "closed question", "u1"));
+          },
+        });
+        const { manager, persistence } = buildHistoryHarness({
+          createBackendProcess: jest.fn(() => replay.backend),
+        });
+
+        await expect(manager.ensureChatNote(buildNativeChatId("opencode", "closed"))).resolves.toBe(
+          "chats/agent__saved.md"
+        );
+
+        expect(persistence.saveSession).toHaveBeenCalledWith(
+          [expect.objectContaining({ sender: USER_SENDER, message: "closed question" })],
+          "opencode",
+          expect.objectContaining({ sessionId: "closed" })
+        );
+        expect(manager.getActiveSession()).toBeNull();
+        expect(manager.getSessions()).toEqual([]);
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/3195 keeps a closed chat open when the user opens it while it is being saved", async () => {
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "closed question", "u1"));
+          },
+        });
+        const { manager, persistence } = buildHistoryHarness({
+          createBackendProcess: jest.fn(() => replay.backend),
+        });
+        const saveGate = deferred<{ path: string }>();
+        persistence.saveSession.mockImplementationOnce(() => saveGate.promise);
+
+        const saving = manager.ensureChatNote(buildNativeChatId("opencode", "closed"));
+        const opened = await manager.loadNativeSessionFromHistory("opencode", "closed");
+        saveGate.resolve({ path: "chats/agent__saved.md" });
+
+        await expect(saving).resolves.toBe("chats/agent__saved.md");
+        expect(manager.getActiveSession()).toBe(opened);
+        expect(manager.getSessions()).toEqual([opened]);
+      });
+
       it("rejects without saving when a chat with no note cannot be loaded from its backend", async () => {
         const replay = buildReplayingBackend({
           loadSession: jest.fn(async () => {
