@@ -170,7 +170,10 @@ export function useAgentHistoryControls(
     [plugin, runWithNotice]
   );
 
-  const copyChatLink = useCallback((id: string) => plugin.copyChatLink(async () => id), [plugin]);
+  const copyChatLink = useCallback(
+    (id: string) => plugin.copyChatLink(() => manager.ensureChatNote(id)),
+    [manager, plugin]
+  );
 
   const getChatBookmarkState = useCallback(
     async (id: string): Promise<ChatBookmarkState> => {

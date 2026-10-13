@@ -553,5 +553,23 @@ describe("useAgentHistoryControls", () => {
       expect(copyChatLink).toHaveBeenCalledTimes(1);
       expect(linkedNotePath).toBe("chats/agent__a.md");
     });
+
+    it("saves a chat with no note before copying, so the link points to the new note", async () => {
+      let linkedNotePath: string | undefined;
+      const copyChatLink = jest.fn(async (resolveNotePath: () => Promise<string>) => {
+        linkedNotePath = await resolveNotePath();
+      });
+      const linkingPlugin = { copyChatLink } as unknown as CopilotPlugin;
+      const manager = makeManager();
+      manager.ensureChatNote.mockResolvedValue("chats/saved.md");
+      const { result } = renderHook(() => useAgentHistoryControls(manager, linkingPlugin));
+
+      await act(async () => {
+        await result.current.copyChatLink(NATIVE_ID);
+      });
+
+      expect(manager.ensureChatNote).toHaveBeenCalledWith(NATIVE_ID);
+      expect(linkedNotePath).toBe("chats/saved.md");
+    });
   });
 });
