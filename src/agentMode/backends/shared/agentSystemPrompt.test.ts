@@ -100,9 +100,9 @@ describe("agentSystemPrompt", () => {
       );
     });
 
-    it("limits shell file writes to moves, many-line sort/dedupe/calculation, and bulk changes across dozens of files", () => {
+    it("limits shell file writes to moves, script rewrites of most of a large file, and bulk changes across dozens of files", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(
-        "Use the shell only to move, copy or delete files; to sort, dedupe or calculate across many lines (a script beats retyping); or one mechanical change across dozens of files. Then list changed files."
+        "Use shell only to move, copy or delete files; to have a script rewrite most of a large file (sort, dedupe, recompute), not retyping it; or one mechanical change to dozens of files. Then list changed files."
       );
     });
 

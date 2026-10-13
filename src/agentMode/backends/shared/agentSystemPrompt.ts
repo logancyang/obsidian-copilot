@@ -42,7 +42,7 @@ const FILE_EDIT_TOOLS: Readonly<Record<BackendId, string>> = {
 };
 
 function buildFileEditPolicy(backendId: BackendId): string {
-  return `Edit vault files with your ${FILE_EDIT_TOOLS[backendId]} tools so Copilot shows a diff; shell/script writes (sed -i, perl, python, redirects) show none. Use the shell only to move, copy or delete files; to sort, dedupe or calculate across many lines (a script beats retyping); or one mechanical change across dozens of files. Then list changed files.`;
+  return `Edit vault files with your ${FILE_EDIT_TOOLS[backendId]} tools so Copilot shows a diff; shell/script writes (sed -i, python, redirects) show none. Use shell only to move, copy or delete files; to have a script rewrite most of a large file (sort, dedupe, recompute), not retyping it; or one mechanical change to dozens of files. Then list changed files.`;
 }
 
 export function buildAgentSystemPrompt(backendId: BackendId): string {
