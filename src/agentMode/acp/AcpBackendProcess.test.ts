@@ -1436,6 +1436,30 @@ describe("AcpBackendProcess", () => {
           ]);
         });
 
+        it("labels a compaction auto after a /compact prompt is rejected because the subprocess is gone", async () => {
+          const backend = await makeBackend();
+          const handler = jest.fn();
+          backend.registerSessionHandler("s1", handler);
+          const client = getVaultClient(backend);
+          (backend as unknown as { connection: null }).connection = null;
+          await expect(
+            backend.prompt({ sessionId: "s1", prompt: [{ type: "text", text: "/compact" }] })
+          ).rejects.toThrow();
+
+          await client.sessionUpdate({
+            sessionId: "s1",
+            update: {
+              sessionUpdate: "compaction_update",
+              compactionId: "c2",
+              status: "in_progress",
+            },
+          } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+
+          expect(handler.mock.calls.map(([e]) => e.update)).toEqual([
+            expect.objectContaining({ sessionUpdate: "compaction", id: "c2", trigger: "auto" }),
+          ]);
+        });
+
         it("labels a compaction auto after a manual /compact turn fails", async () => {
           const backend = await makeBackend();
           const handler = jest.fn();
