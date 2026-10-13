@@ -1,5 +1,5 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
-import { BookmarkChatButton } from "@/agentMode/ui/BookmarkChatButton";
+import { ChatBookmarkMenuItem } from "@/agentMode/ui/ChatBookmarkMenuItem";
 import type { ChatBookmarkState } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { describeChatDelete } from "@/lib/chatDeleteText";
 import {
@@ -7,12 +7,18 @@ import {
   ChatHistoryPopover,
 } from "@/components/chat-components/ChatHistoryPopover";
 import { Button } from "@/components/ui/button";
-import { CopyChatLinkButton } from "@/components/chat-components/CopyChatLinkButton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
 import { useSettingsValue } from "@/settings/model";
-import { Download, History, MessageCirclePlus, Sparkles } from "lucide-react";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import { Download, History, Link, MessageCirclePlus, MoreHorizontal, Sparkles } from "lucide-react";
 import React from "react";
 
 const resolveDeleteSummary = (item: ChatHistoryItem) =>
@@ -87,37 +93,13 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
       <div className="tw-flex tw-items-center tw-gap-1">
         {usageMeter}
         {onNewChat && (
-          <>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost2" size="icon" title="New Chat" onClick={onNewChat}>
-                  <MessageCirclePlus className="tw-size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>New Chat</TooltipContent>
-            </Tooltip>
-            <CopyChatLinkButton onCopyLink={onCopyChatLink} />
-            {onSetChatBookmarked && (
-              <BookmarkChatButton
-                getBookmarkState={getChatBookmarkState}
-                onSetBookmarked={onSetChatBookmarked}
-              />
-            )}
-          </>
-        )}
-        {!settings.autosaveChat && onSaveAsNote && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                variant="ghost2"
-                size="icon"
-                title="Save Chat as Note"
-                onClick={() => void onSaveAsNote()}
-              >
-                <Download className="tw-size-4" />
+              <Button variant="ghost2" size="icon" title="New Chat" onClick={onNewChat}>
+                <MessageCirclePlus className="tw-size-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Save Chat as Note</TooltipContent>
+            <TooltipContent>New Chat</TooltipContent>
           </Tooltip>
         )}
         {historyAvailable && (
@@ -149,6 +131,33 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
             </ChatHistoryPopover>
             <TooltipContent>Chat History</TooltipContent>
           </Tooltip>
+        )}
+        {onNewChat && (
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost2" size="icon" title="More Actions">
+                <MoreHorizontal className="tw-size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem disabled={!onCopyChatLink} onSelect={() => void onCopyChatLink?.()}>
+                <Link />
+                Copy chat link
+              </DropdownMenuItem>
+              {getChatBookmarkState && onSetChatBookmarked && (
+                <ChatBookmarkMenuItem
+                  getBookmarkState={getChatBookmarkState}
+                  onSetBookmarked={safeAsyncHandler(onSetChatBookmarked)}
+                />
+              )}
+              {!settings.autosaveChat && onSaveAsNote && (
+                <DropdownMenuItem onSelect={() => void onSaveAsNote()}>
+                  <Download />
+                  Save chat as note
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
     </div>

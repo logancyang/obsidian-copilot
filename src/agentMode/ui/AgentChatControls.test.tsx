@@ -2,7 +2,8 @@ import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppContext } from "@/context";
 import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { useSettingsValue } from "@/settings/model";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { App } from "obsidian";
 import * as React from "react";
 
@@ -18,6 +19,7 @@ jest.mock("@/settings/model", () => ({
 const mockUseCanUseMultiAgent = useCanUseMultiAgent as jest.MockedFunction<
   typeof useCanUseMultiAgent
 >;
+const mockUseSettingsValue = useSettingsValue as jest.Mock;
 const mockNavigateToPlusPage = navigateToPlusPage as jest.MockedFunction<typeof navigateToPlusPage>;
 
 function renderControls({ showMultiAgentUpsell = true } = {}) {
@@ -28,12 +30,46 @@ function renderControls({ showMultiAgentUpsell = true } = {}) {
   );
 }
 
+function renderSessionControls(
+  props: Partial<React.ComponentProps<typeof AgentChatControls>> = {}
+) {
+  return render(
+    <AppContext.Provider value={new App()}>
+      <TooltipProvider>
+        <AgentChatControls
+          onNewChat={() => {}}
+          chatHistoryItems={[]}
+          onLoadChat={async () => {}}
+          onUpdateChatTitle={async () => {}}
+          onDeleteChat={async () => {}}
+          {...props}
+        />
+      </TooltipProvider>
+    </AppContext.Provider>
+  );
+}
+
+function openMoreActions(): HTMLElement {
+  fireEvent.pointerDown(screen.getByTitle("More Actions"), { button: 0, ctrlKey: false });
+  return screen.getByRole("menu");
+}
+
 const UPSELL_COPY = "Mention multiple agents with @ (needs Plus tier or above)";
 
 describe("AgentChatControls", () => {
+  beforeAll(() => {
+    if (!("PointerEvent" in window)) {
+      (window as unknown as { PointerEvent: typeof MouseEvent }).PointerEvent = MouseEvent;
+    }
+    Element.prototype.hasPointerCapture = () => false;
+    Element.prototype.releasePointerCapture = () => {};
+    Element.prototype.scrollIntoView = () => {};
+  });
+
   describe("AgentChatControls()", () => {
     beforeEach(() => {
       jest.clearAllMocks();
+      mockUseSettingsValue.mockReturnValue({ autosaveChat: true });
     });
 
     it("offers the multi-agent upsell when the user is not entitled", () => {
@@ -73,33 +109,69 @@ describe("AgentChatControls", () => {
           <AgentChatControls />
         </TooltipProvider>
       );
-      expect(screen.queryByTitle("Copy Chat Link")).toBeNull();
+      expect(screen.queryByTitle("More Actions")).toBeNull();
     });
 
-    it("places the bookmark toggle right after the copy-link control", async () => {
+    it("keeps the bar to the usage meter, New Chat, Chat History, and More Actions", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
-      render(
-        <AppContext.Provider value={new App()}>
-          <TooltipProvider>
-            <AgentChatControls
-              onNewChat={() => {}}
-              onCopyChatLink={() => {}}
-              getChatBookmarkState={async () => "not-bookmarked"}
-              onSetChatBookmarked={async () => {}}
-            />
-          </TooltipProvider>
-        </AppContext.Provider>
+      mockUseSettingsValue.mockReturnValue({ autosaveChat: false });
+      renderSessionControls({ usageMeter: <span title="Context usage" /> });
+
+      const titles = Array.from(document.querySelectorAll("[title]")).map((el) =>
+        el.getAttribute("title")
+      );
+      expect(titles).toEqual(["Context usage", "New Chat", "Chat History", "More Actions"]);
+    });
+
+    it("copies the chat link from the More Actions menu", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      const onCopyChatLink = jest.fn();
+      renderSessionControls({ onCopyChatLink });
+
+      fireEvent.click(within(openMoreActions()).getByRole("menuitem", { name: "Copy chat link" }));
+
+      expect(onCopyChatLink).toHaveBeenCalledTimes(1);
+    });
+
+    it("disables Copy chat link while the chat has nothing to link", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      renderSessionControls();
+
+      const item = within(openMoreActions()).getByRole("menuitem", { name: "Copy chat link" });
+      expect(item.getAttribute("aria-disabled")).toBe("true");
+    });
+
+    it("bookmarks the open chat from the More Actions menu", async () => {
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      const onSetChatBookmarked = jest.fn(async () => {});
+      renderSessionControls({
+        getChatBookmarkState: async () => "not-bookmarked",
+        onSetChatBookmarked,
+      });
+
+      const menu = openMoreActions();
+      fireEvent.click(await within(menu).findByRole("menuitem", { name: "Add to bookmarks" }));
+
+      expect(onSetChatBookmarked).toHaveBeenCalledWith(true);
+    });
+
+    it("offers Save chat as note in the More Actions menu only when autosave is off", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      const onSaveAsNote = jest.fn();
+      mockUseSettingsValue.mockReturnValue({ autosaveChat: true });
+      const { unmount } = renderSessionControls({ onSaveAsNote });
+      expect(
+        within(openMoreActions()).queryByRole("menuitem", { name: "Save chat as note" })
+      ).toBeNull();
+      unmount();
+
+      mockUseSettingsValue.mockReturnValue({ autosaveChat: false });
+      renderSessionControls({ onSaveAsNote });
+      fireEvent.click(
+        within(openMoreActions()).getByRole("menuitem", { name: "Save chat as note" })
       );
 
-      const bookmark = await screen.findByTitle("Bookmark Chat");
-      expect(screen.getByTitle("Copy Chat Link").nextElementSibling).toBe(bookmark);
-    });
-
-    it("leaves out the bookmark toggle when the caller does not support bookmarking", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
-      renderControls();
-
-      expect(screen.queryByTitle("Bookmark Chat")).toBeNull();
+      expect(onSaveAsNote).toHaveBeenCalledTimes(1);
     });
   });
 });
