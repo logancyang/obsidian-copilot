@@ -9,7 +9,7 @@ export interface ChangeNavigation {
   scrollerRef: React.RefObject<HTMLDivElement>;
   contentRef: React.RefObject<HTMLDivElement>;
   layout: ChangeLayout;
-  current: number | null;
+  current: number;
   goTo: (index: number) => void;
   step: (direction: ChangeStep) => void;
   syncToScroll: () => void;
@@ -108,8 +108,11 @@ export function useChangeNavigation(): ChangeNavigation {
 
   const step = React.useCallback(
     (direction: ChangeStep) => {
+      const scroller = scrollerRef.current;
+      if (!scroller) return;
       const total = layout.ticks.length;
-      const from = currentRef.current ?? (direction === 1 ? -1 : 0);
+      const from =
+        currentRef.current ?? reachedIndex(scroller, layout.ticks) ?? (direction === 1 ? -1 : 0);
       goTo((from + direction + total) % total);
     },
     [goTo, layout]
@@ -119,17 +122,25 @@ export function useChangeNavigation(): ChangeNavigation {
     const scroller = scrollerRef.current;
     if (!scroller || scroller.scrollTop === jumpedTo.current) return;
     jumpedTo.current = null;
-    const anchor = scroller.scrollTop + scroller.clientHeight * JUMP_ANCHOR;
-    // A change near the end of the note never scrolls up to the anchor, so reaching the end selects the last one.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/709
-    const atEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
-    const passed = atEnd
-      ? layout.ticks.length
-      : layout.ticks.filter((tick) => tick.top <= anchor + 1).length;
-    setCurrent(passed === 0 ? null : passed - 1);
+    setCurrent(reachedIndex(scroller, layout.ticks));
   }, [layout, setCurrent]);
 
-  return { scrollerRef, contentRef, layout, current, goTo, step, syncToScroll };
+  // Before the reader reaches the first change the header still names it, so the count never switches
+  // between a total and a position; the first step then goes to that change rather than past it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/709
+  return { scrollerRef, contentRef, layout, current: current ?? 0, goTo, step, syncToScroll };
+}
+
+function reachedIndex(scroller: HTMLElement, ticks: readonly ChangeTick[]): number | null {
+  const anchor = scroller.scrollTop + scroller.clientHeight * JUMP_ANCHOR;
+  // A change near the end of the note never scrolls up to the anchor, so scrolling to the end selects the
+  // last one; a note that fits the view is at its end without scrolling and keeps counting from the top.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/709
+  const atEnd =
+    scroller.scrollTop > 0 &&
+    scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+  const passed = atEnd ? ticks.length : ticks.filter((tick) => tick.top <= anchor + 1).length;
+  return passed === 0 ? null : passed - 1;
 }
 
 export function ChangeScroller({ navigation, children }: ChangeScrollerProps): React.ReactElement {

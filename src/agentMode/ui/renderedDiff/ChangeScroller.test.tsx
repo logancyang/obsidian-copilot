@@ -39,9 +39,7 @@ function Harness({ children }: { children: React.ReactNode }): React.ReactElemen
   const navigation = useChangeNavigation();
   return (
     <>
-      <output aria-label="Current change">
-        {navigation.current === null ? "none" : navigation.current + 1}
-      </output>
+      <output aria-label="Current change">{navigation.current + 1}</output>
       <button type="button" onClick={() => navigation.step(-1)}>
         Previous
       </button>
@@ -260,9 +258,9 @@ describe("ChangeScroller", () => {
   });
 
   describe("useChangeNavigation()", () => {
-    it("starts above every change and steps forward through the changes in note order", () => {
+    it("shows the first change as current before the reader reaches it, and steps to it and on through the changes in note order", () => {
       render(<ThreeChanges />);
-      expect(currentChange()).toBe("none");
+      expect([currentChange(), scroller().scrollTop]).toEqual(["1", 0]);
 
       press("Next");
       expect([currentChange(), scroller().scrollTop]).toEqual(["1", 200 - ANCHOR]);
@@ -288,6 +286,34 @@ describe("ChangeScroller", () => {
       expect(currentChange()).toBe("2");
     });
 
+    it("counts a change that already sits above the upper third when the note opens as reached, so the first step moves past it", () => {
+      render(
+        <Harness>
+          <Mark change="inserted" top={100} height={20} />
+          <Mark change="inserted" top={800} height={20} />
+        </Harness>
+      );
+      expect(currentChange()).toBe("1");
+
+      press("Next");
+
+      expect([currentChange(), scroller().scrollTop]).toEqual(["2", 800 - ANCHOR]);
+    });
+
+    it("steps from the first change to the second in a note short enough to fit the view, which is at its end from the start (https://github.com/Brevilabs/obsidian-copilot-private/issues/709)", () => {
+      jest.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(VIEW_HEIGHT);
+      render(
+        <Harness>
+          <Mark change="inserted" top={100} height={20} />
+          <Mark change="inserted" top={300} height={20} />
+        </Harness>
+      );
+
+      press("Next");
+
+      expect(currentChange()).toBe("2");
+    });
+
     it("goes to the last change when stepping back from above every change", () => {
       render(<ThreeChanges />);
 
@@ -305,7 +331,7 @@ describe("ChangeScroller", () => {
 
       scroller().scrollTop = 0;
       fireEvent.scroll(scroller());
-      expect(currentChange()).toBe("none");
+      expect(currentChange()).toBe("1");
     });
 
     it("makes the last change current once the reader scrolls to the end of a note too short for it to reach the upper third (https://github.com/Brevilabs/obsidian-copilot-private/issues/709)", () => {

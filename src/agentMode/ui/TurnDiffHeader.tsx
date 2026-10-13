@@ -6,7 +6,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import React from "react";
 
 export interface ChangeStepperProps {
-  current: number | null;
+  current: number;
   total: number;
   onStep: (direction: ChangeStep) => void;
 }
@@ -56,9 +56,7 @@ const ChangeStepper: React.FC<ChangeStepperProps> = ({ current, total, onStep })
       <ChevronUp className="tw-size-4" />
     </Button>
     <span className="tw-min-w-[6ch] tw-text-center tw-text-xs tw-tabular-nums tw-text-muted">
-      {current === null
-        ? `${total} ${total === 1 ? "change" : "changes"}`
-        : `${current + 1} of ${total}`}
+      {current + 1} of {total}
     </span>
     <Button variant="ghost2" size="icon" aria-label="Next change" onClick={() => onStep(1)}>
       <ChevronDown className="tw-size-4" />

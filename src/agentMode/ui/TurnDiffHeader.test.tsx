@@ -50,8 +50,8 @@ describe("TurnDiffHeader", () => {
       expect(onOpenNote).toHaveBeenCalledTimes(1);
     });
 
-    it("counts the changes before the reader has moved to one, then shows which change is current", () => {
-      const header = (current: number | null): React.ReactElement => (
+    it("shows which change is current out of the note's changes", () => {
+      const header = (current: number): React.ReactElement => (
         <TurnDiffHeader
           path="notes/a.md"
           status="modified"
@@ -60,8 +60,8 @@ describe("TurnDiffHeader", () => {
           changes={{ current, total: 6, onStep: jest.fn() }}
         />
       );
-      const { rerender } = render(header(null));
-      expect(screen.getByText("6 changes")).toBeTruthy();
+      const { rerender } = render(header(0));
+      expect(screen.getByText("1 of 6")).toBeTruthy();
 
       rerender(header(1));
 
@@ -76,10 +76,10 @@ describe("TurnDiffHeader", () => {
           status="modified"
           additions={1}
           deletions={1}
-          changes={{ current: null, total: 1, onStep }}
+          changes={{ current: 0, total: 1, onStep }}
         />
       );
-      expect(screen.getByText("1 change")).toBeTruthy();
+      expect(screen.getByText("1 of 1")).toBeTruthy();
 
       fireEvent.click(screen.getByRole("button", { name: "Previous change" }));
       fireEvent.click(screen.getByRole("button", { name: "Next change" }));
@@ -94,7 +94,7 @@ describe("TurnDiffHeader", () => {
           status="modified"
           additions={1}
           deletions={1}
-          changes={{ current: null, total: 0, onStep: jest.fn() }}
+          changes={{ current: 0, total: 0, onStep: jest.fn() }}
         />
       );
 

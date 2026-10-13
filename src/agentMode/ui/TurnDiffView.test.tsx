@@ -77,7 +77,7 @@ const textOf = (root: HTMLElement, selector: string): string[] =>
 async function renderedDiff(): Promise<TurnDiffView> {
   const view = await openView();
   await hydrate(view, { ...change("notes/diff-demo/alpha.md"), turnId: "turn-1" });
-  await waitFor(() => expect(within(header(view)).getByText("1 change")).toBeTruthy());
+  await waitFor(() => expect(within(header(view)).getByText("1 of 1")).toBeTruthy());
   return view;
 }
 
@@ -249,7 +249,7 @@ describe("TurnDiffView", () => {
         const view = await renderedDiff();
 
         expect(view.stepChange(1, true)).toBe(true);
-        expect(within(header(view)).getByText("1 change")).toBeTruthy();
+        expect(within(header(view)).getByText("1 of 1")).toBeTruthy();
       });
 
       it("reports nothing to step to before the note has rendered", async () => {
