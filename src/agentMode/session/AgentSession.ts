@@ -1560,14 +1560,7 @@ export class AgentSession {
         return;
       }
       case "compaction": {
-        const existing = this.store
-          .getMessage(targetMessageId)
-          ?.parts?.find((p) => p.kind === "compaction" && p.id === update.id);
-        const startedAtMs = existing?.kind === "compaction" ? existing.startedAtMs : Date.now();
-        const upserted = this.store.upsertAgentPart(
-          targetMessageId,
-          compactionToPart(update, startedAtMs)
-        );
+        const upserted = this.upsertCompactionPart(targetMessageId, update);
         const metered = this.applyCompactedUsage(update);
         if (upserted || metered) this.scheduleNotifyMessages();
         return;
@@ -1631,9 +1624,26 @@ export class AgentSession {
         // The last replayed task list is the one the chat closed with, so the project popover shows it again. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
         if (this.applyCurrentTodoList(update.entries)) this.notifyCurrentTodoListChanged();
         return true;
+      case "compaction": {
+        // A replayed compaction is already over, so one that never reports an end settles as cancelled rather than spinning. https://github.com/Brevilabs/obsidian-copilot-private/issues/638
+        const settled: CompactionSnapshot =
+          update.status === "in_progress" ? { ...update, status: "cancelled" } : update;
+        if (this.upsertCompactionPart(this.historyAiBubbleId(occurredAt), settled)) {
+          this.scheduleNotifyMessages();
+        }
+        return true;
+      }
       default:
         return false;
     }
+  }
+
+  private upsertCompactionPart(messageId: string, update: CompactionSnapshot): boolean {
+    const existing = this.store
+      .getMessage(messageId)
+      ?.parts?.find((p) => p.kind === "compaction" && p.id === update.id);
+    const startedAtMs = existing?.kind === "compaction" ? existing.startedAtMs : Date.now();
+    return this.store.upsertAgentPart(messageId, compactionToPart(update, startedAtMs));
   }
 
   // A prompt's context envelope stays hidden until its wrapper is complete, so a user bubble waits for the message to end. https://github.com/Brevilabs/obsidian-copilot-private/issues/602

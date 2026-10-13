@@ -113,6 +113,7 @@ export class AcpBackendProcess implements BackendProcess {
   private readonly sessionWireState = new Map<SessionId, SessionWireState>();
   private readonly todoToolCallIdsBySession = new Map<SessionId, Set<string>>();
   private readonly manualCompactSessions = new Set<SessionId>();
+  private readonly loadingSessions = new Set<SessionId>();
   private readonly sawLiveUsage = new Set<SessionId>();
   private lastPlanUsage: PlanUsage | null = null;
   private planUsageRead: Promise<void> | null = null;
@@ -595,6 +596,7 @@ export class AcpBackendProcess implements BackendProcess {
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
     const sessionId = params.sessionId;
+    this.loadingSessions.add(sessionId);
     const wireResp = await this.dispatchCapability(
       "session/load",
       (c) =>
@@ -604,7 +606,7 @@ export class AcpBackendProcess implements BackendProcess {
           mcpServers: this.mcpServersField(params.mcpServers),
         }),
       { mustBeAdvertised: true }
-    );
+    ).finally(() => this.loadingSessions.delete(sessionId));
     this.hasServedSession = true;
     this.recordWireState(sessionIdToAcp(sessionId), {
       modes: wireResp.modes ?? null,
@@ -687,8 +689,11 @@ export class AcpBackendProcess implements BackendProcess {
     return ids;
   }
 
+  // A replayed compaction carries no trigger, and "manual" is the label that does not claim it ran by itself. https://github.com/Brevilabs/obsidian-copilot-private/issues/638
   private compactionTriggerFor(sessionId: SessionId): CompactionTrigger {
-    return this.manualCompactSessions.has(sessionId) ? "manual" : "auto";
+    return this.manualCompactSessions.has(sessionId) || this.loadingSessions.has(sessionId)
+      ? "manual"
+      : "auto";
   }
 
   private computeState(sessionId: AcpSessionId): BackendState {
