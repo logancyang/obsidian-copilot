@@ -27,7 +27,7 @@ export const AgentAutoCompactSettings: React.FC<AgentAutoCompactSettingsProps> =
       <SettingItem
         type="slider"
         title="Compact at"
-        description="Approximate conversation size in tokens. opencode applies it only when every enabled opencode model reports its context window."
+        description="Approximate conversation size in tokens. opencode measures from the smallest enabled model's window, so larger models compact later, and when any enabled opencode model has no known window opencode keeps its default."
         value={tokens}
         onChange={onChange}
         min={AGENT_AUTO_COMPACT_TOKENS.min}
