@@ -1,6 +1,6 @@
 import type { Skill } from "@/agentMode";
 import type { CustomCommand } from "@/commands/type";
-import { composeSlashMenuItems } from "./slashMenuItems";
+import { composeSlashMenuItems, filterSlashMenuOptions } from "./slashMenuItems";
 
 function makeSkill(overrides: Partial<Skill> & { name: string }): Skill {
   const name = overrides.name;
@@ -98,6 +98,84 @@ describe("slashMenuItems", () => {
       const commands = [makeCommand({ title: "z-cmd" }), makeCommand({ title: "m-cmd" })];
       const items = composeSlashMenuItems(skills, commands, "claude");
       expect(items.map((i) => i.name)).toEqual(["b-skill", "a-skill", "z-cmd", "m-cmd"]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/634 lists the built-in compact item first in agent mode", () => {
+      const skills = [makeSkill({ name: "summarize", enabledAgents: ["claude"] })];
+      const commands = [makeCommand({ title: "polish" })];
+      const items = composeSlashMenuItems(skills, commands, "claude", true);
+      expect(items.map((i) => [i.kind, i.name])).toEqual([
+        ["builtin", "compact"],
+        ["skill", "summarize"],
+        ["command", "polish"],
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/634 lists compact in agent mode before the backend is known", () => {
+      const items = composeSlashMenuItems([], [], null, true);
+      expect(items.map((i) => i.name)).toEqual(["compact"]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/634 omits the built-in compact item outside agent mode", () => {
+      const skills = [makeSkill({ name: "compact", enabledAgents: ["claude"] })];
+      const commands = [makeCommand({ title: "polish" })];
+      const items = composeSlashMenuItems(skills, commands, null, false);
+      expect(items.map((i) => [i.kind, i.name])).toEqual([
+        ["skill", "compact"],
+        ["command", "polish"],
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/634 shadows a skill or command named compact with the built-in in agent mode", () => {
+      const skills = [makeSkill({ name: "Compact", enabledAgents: ["claude"] })];
+      const commands = [makeCommand({ title: "compact" }), makeCommand({ title: "polish" })];
+      const items = composeSlashMenuItems(skills, commands, "claude", true);
+      expect(items.map((i) => [i.kind, i.name])).toEqual([
+        ["builtin", "compact"],
+        ["command", "polish"],
+      ]);
+    });
+  });
+
+  describe("filterSlashMenuOptions()", () => {
+    const option = (title: string, content = "") => ({ title, content });
+
+    it("returns every option for an empty query", () => {
+      const options = [option("b"), option("a")];
+      expect(filterSlashMenuOptions(options, "")).toBe(options);
+    });
+
+    it("matches option titles by fuzzy query", () => {
+      const options = [option("summarize"), option("polish")];
+      expect(filterSlashMenuOptions(options, "smz").map((o) => o.title)).toEqual(["summarize"]);
+    });
+
+    it("falls back to matching option content when no title matches", () => {
+      const options = [option("polish", "make the prose tighter"), option("other", "unrelated")];
+      expect(filterSlashMenuOptions(options, "prose").map((o) => o.title)).toEqual(["polish"]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/634 ranks the built-in compact first for the exact query compact", () => {
+      const skills = [
+        makeSkill({ name: "compactor", enabledAgents: ["claude"] }),
+        makeSkill({ name: "compact-notes", enabledAgents: ["claude"] }),
+      ];
+      const commands = [makeCommand({ title: "a-compact" }), makeCommand({ title: "Compact" })];
+      const options = composeSlashMenuItems(skills, commands, "claude", true).map((item) => ({
+        title: item.name,
+        content: item.body,
+        item,
+      }));
+
+      const ranked = filterSlashMenuOptions(options, "compact");
+
+      expect(ranked[0].item.kind).toBe("builtin");
+      expect(ranked.map((o) => o.title)).toEqual([
+        "compact",
+        "compactor",
+        "a-compact",
+        "compact-notes",
+      ]);
     });
   });
 });

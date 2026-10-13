@@ -39,6 +39,16 @@ describe("expandCustomCommandPrefix", () => {
       expect(result).toEqual({ text: "/foo" });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/634 leaves /compact and its arguments unexpanded even when a custom command is titled compact", async () => {
+      const cmd = makeCommand({ title: "compact", content: "CUSTOM COMPACT BODY" });
+      expect(await expandCustomCommandPrefix("/compact", [cmd], "", null)).toEqual({
+        text: "/compact",
+      });
+      expect(await expandCustomCommandPrefix("/compact keep the API", [cmd], "", null)).toEqual({
+        text: "/compact keep the API",
+      });
+    });
+
     it("expands `/foo` exactly to the command body (no args)", async () => {
       const cmd = makeCommand({ title: "foo", content: "FOO BODY" });
       const result = await expandCustomCommandPrefix("/foo", [cmd], "", null);

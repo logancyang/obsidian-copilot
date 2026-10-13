@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getSelection, $isRangeSelection, TextNode } from "lexical";
-import fuzzysort from "fuzzysort";
 
 import { useCustomCommands } from "@/commands/state";
 import { CustomCommandManager } from "@/commands/customCommandManager";
@@ -17,7 +16,11 @@ import {
 } from "@/components/chat-components/hooks/useTypeaheadPlugin";
 import type { BackendId, Skill } from "@/agentMode";
 
-import { composeSlashMenuItems, type SlashMenuItem } from "./slashMenuItems";
+import {
+  composeSlashMenuItems,
+  filterSlashMenuOptions,
+  type SlashMenuItem,
+} from "./slashMenuItems";
 
 interface SlashCommandOption extends TypeaheadOption {
   item: SlashMenuItem;
@@ -92,7 +95,11 @@ function useActiveSlashBackend(
   return activeBackend;
 }
 
-export function SlashCommandPlugin(): JSX.Element {
+interface SlashCommandPluginProps {
+  isAgentMode?: boolean;
+}
+
+export function SlashCommandPlugin({ isAgentMode = false }: SlashCommandPluginProps): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const commands = useCustomCommands();
   const agentSlashData = useAgentSlashData();
@@ -102,7 +109,12 @@ export function SlashCommandPlugin(): JSX.Element {
   const sortedCommands = useMemo(() => sortSlashCommands(commands), [commands]);
 
   const allOptions = useMemo<SlashCommandOption[]>(() => {
-    const items = composeSlashMenuItems(agentSlashData.skills, sortedCommands, activeBackend);
+    const items = composeSlashMenuItems(
+      agentSlashData.skills,
+      sortedCommands,
+      activeBackend,
+      isAgentMode
+    );
     return items.map((item) => ({
       key: item.key,
       title: item.name,
@@ -110,23 +122,12 @@ export function SlashCommandPlugin(): JSX.Element {
       content: item.body,
       item,
     }));
-  }, [agentSlashData.skills, sortedCommands, activeBackend]);
+  }, [agentSlashData.skills, sortedCommands, activeBackend, isAgentMode]);
 
-  const filteredOptions = useMemo(() => {
-    if (!currentQuery) return allOptions;
-    const titleResults = fuzzysort.go(currentQuery, allOptions, {
-      key: "title",
-      threshold: -10000,
-    });
-    if (titleResults.length > 0) {
-      return titleResults.map((result) => result.obj);
-    }
-    const contentResults = fuzzysort.go(currentQuery, allOptions, {
-      key: "content",
-      threshold: -10000,
-    });
-    return contentResults.map((result) => result.obj);
-  }, [allOptions, currentQuery]);
+  const filteredOptions = useMemo(
+    () => filterSlashMenuOptions(allOptions, currentQuery),
+    [allOptions, currentQuery]
+  );
 
   const replaceSlashWithName = useCallback(
     (name: string) => {
