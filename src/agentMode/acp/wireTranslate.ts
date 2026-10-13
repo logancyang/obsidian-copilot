@@ -342,6 +342,7 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
       };
     }
     default:
+      // Mapping unknown update kinds to a title-less session_info_update cleared the chat title. https://github.com/Brevilabs/obsidian-copilot-private/issues/632
       return null;
   }
 }
