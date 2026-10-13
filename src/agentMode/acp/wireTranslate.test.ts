@@ -409,7 +409,7 @@ const testAcpNotificationToEvents = () => {
     });
   });
 
-  it("maps a failed marker without an error message to a failed compaction without error text", () => {
+  it("maps a failed marker without an error message to a failed compaction without error text (https://github.com/Brevilabs/obsidian-copilot-private/issues/637)", () => {
     const [event] = acpNotificationToEvents(
       opencodeMarker({ status: "failed", messageId: "msg-1", reason: "manual" })
     );
@@ -445,7 +445,7 @@ const testAcpNotificationToEvents = () => {
     ]);
   });
 
-  it("maps a manual compaction.unavailable failure to a skipped compaction (https://github.com/Brevilabs/obsidian-copilot-private/issues/637)", () => {
+  it("maps a compaction.unavailable failure to a skipped compaction (https://github.com/Brevilabs/obsidian-copilot-private/issues/637)", () => {
     expect(
       acpNotificationToEvents(
         opencodeMarker({
@@ -463,19 +463,6 @@ const testAcpNotificationToEvents = () => {
     ]);
   });
 
-  it("emits no event for an auto compaction.unavailable failure so a silent no-op stays silent (https://github.com/Brevilabs/obsidian-copilot-private/issues/637)", () => {
-    expect(
-      acpNotificationToEvents(
-        opencodeMarker({
-          status: "failed",
-          messageId: "msg-1",
-          reason: "auto",
-          error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
-        })
-      )
-    ).toEqual([]);
-  });
-
   it("emits no event for a marker from a child session so subagent compaction stays out of the main trail (https://github.com/Brevilabs/obsidian-copilot-private/issues/639)", () => {
     expect(
       acpNotificationToEvents(
@@ -490,9 +477,12 @@ const testAcpNotificationToEvents = () => {
   it.each([
     ["an unknown status", { status: "paused", messageId: "msg-1", reason: "auto" }],
     ["no messageId", { status: "started", reason: "auto" }],
-  ])("emits no event for an opencode marker with %s", (_label, marker) => {
-    expect(acpNotificationToEvents(opencodeMarker(marker))).toEqual([]);
-  });
+  ])(
+    "emits no event for an opencode marker with %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/637)",
+    (_label, marker) => {
+      expect(acpNotificationToEvents(opencodeMarker(marker))).toEqual([]);
+    }
+  );
 
   it("passes a real plan notification through unchanged as a single event", () => {
     const events = acpNotificationToEvents(
