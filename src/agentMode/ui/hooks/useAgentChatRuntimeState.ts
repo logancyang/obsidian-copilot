@@ -6,6 +6,7 @@ import type {
   CurrentPlan,
   PermissionPrompt,
 } from "@/agentMode/session/types";
+import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import { useEffect, useRef, useState } from "react";
 
 export interface AgentChatRuntimeState {
@@ -17,6 +18,7 @@ export interface AgentChatRuntimeState {
   currentTodoList: AgentTodoListEntry[] | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
+  feedbackOffer: FeedbackOffer | null;
 }
 
 interface BackendRuntimeSnapshot {
@@ -36,6 +38,7 @@ function readBackendRuntimeSnapshot(backend: AgentChatBackend): BackendRuntimeSn
       currentTodoList: backend.getCurrentTodoList(),
       pendingToolPermissions: backend.getPendingToolPermissions(),
       pendingAskUserQuestions: backend.getPendingAskUserQuestions(),
+      feedbackOffer: backend.getFeedbackOffer(),
     },
   };
 }

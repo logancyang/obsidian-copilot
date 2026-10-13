@@ -32,7 +32,7 @@ jest.mock("@/utils/appPaths", () => ({
 }));
 jest.mock("./backends/shared/agentSystemPrompt", () => ({
   buildAgentSystemPrompt: (id: string) =>
-    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}`,
+    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}`,
 }));
 jest.mock("./backends/shared/builtinSkillEnv", () => ({
   getBuiltinSkillEnvRestartPolicy: () => "none",
@@ -269,6 +269,23 @@ describe("agentMode", () => {
       expect(mockManager.noteSpawnConfigChanged).not.toHaveBeenCalled();
       reconciled.resolve();
       await noted.promise;
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledTimes(1);
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
+        "opencode",
+        "system prompt changed"
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 offers an OpenCode reload when feedback cards are turned off, so new chats drop the feedback prompt line", () => {
+      const withCards = (offerFeedbackCards: boolean) => ({
+        ...mockSettings,
+        agentMode: { ...mockSettings.agentMode, offerFeedbackCards },
+      });
+      mockSettings = withCards(true);
+      createAgentSessionManager({} as App, plugin);
+
+      emitSettingsChange(withCards(true), withCards(false));
+
       expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledTimes(1);
       expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
         "opencode",

@@ -4,6 +4,7 @@ import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 import {
   AgentChatMessage,
+  AgentMcpServer,
   AgentMessagePart,
   AgentToolKind,
   AgentPlanEntry,
@@ -89,6 +90,11 @@ import {
 } from "@/agentMode/session/enabledModelSelection";
 import { stripUserMessageWrapper } from "@/agentMode/session/promptEnvelope";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
+import type {
+  FeedbackDraft,
+  FeedbackOfferResult,
+} from "@/agentMode/session/feedback/feedbackMcpServer";
+import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
@@ -170,6 +176,7 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
   getProjectContextBlock?: () => string;
+  mcpServers?: ReadonlyArray<AgentMcpServer>;
 }
 
 export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
@@ -266,6 +273,7 @@ export class AgentSession {
   private currentTodoList: AgentTodoListEntry[] | null = null;
   private currentTodoListSignature: string | null = null;
   private currentUsage: SessionUsage | null = null;
+  private feedbackOffer: FeedbackOffer | null = null;
 
   private currentPlanUsage: PlanUsage | null = null;
   private planSeq = 0;
@@ -340,6 +348,7 @@ export class AgentSession {
       const resp = await backend.newSession({
         cwd,
         projectId: this.projectId,
+        mcpServers: opts.mcpServers,
       });
       if (this.disposed) return;
       const modelLog = resp.state.model
@@ -1047,6 +1056,46 @@ export class AgentSession {
 
   getCurrentTodoList(): AgentTodoListEntry[] | null {
     return this.currentTodoList;
+  }
+
+  getFeedbackOffer(): FeedbackOffer | null {
+    return this.feedbackOffer;
+  }
+
+  // One card per session, whatever became of it, so a frustrated user is never nagged.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+  offerFeedback(draft: FeedbackDraft): FeedbackOfferResult {
+    if (this.feedbackOffer) return "already_offered";
+    const userMessages = this.store
+      .getDisplayMessages()
+      .filter((message) => message.sender === USER_SENDER);
+    this.feedbackOffer = {
+      draft,
+      evidence: {
+        backendId: this.backendId,
+        model: this.currentState?.model?.current.baseModelId ?? null,
+        sessionId: this.backendSessionId,
+        raisedAt: new Date().toISOString(),
+      },
+      afterUserMessageId: userMessages[userMessages.length - 1]?.id ?? null,
+      status: "open",
+    };
+    this.notifyMessages();
+    return "shown";
+  }
+
+  dismissFeedbackOffer(): void {
+    if (this.feedbackOffer?.status !== "open") return;
+    this.feedbackOffer = { ...this.feedbackOffer, status: "dismissed" };
+    this.notifyMessages();
+  }
+
+  markFeedbackReported(report: { reportId: string; issueUrl: string }): void {
+    // An upload can land after the user closed the dialog and dismissed the card, which must stay dismissed.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+    if (this.feedbackOffer?.status !== "open") return;
+    this.feedbackOffer = { ...this.feedbackOffer, status: "reported", report };
+    this.notifyMessages();
   }
 
   getSessionUsage(): SessionUsage | null {

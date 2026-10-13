@@ -113,6 +113,7 @@ const actionRailArgs: AgentChatMessagesProps = {
   pendingAskUserQuestions: questions,
   chatBackend: {} as AgentChatBackend,
   isLoading: true,
+  feedbackOffer: null,
 };
 
 const meta = {
@@ -232,6 +233,97 @@ export const PlanResponses: StoryObj<AgentChatMessagesProps> = {
         ],
       },
     ],
+    isLoading: false,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};
+
+export const FeedbackAfterFileChanges: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      { ...message, id: "edit-request", sender: "user", message: "Tidy the launch brief." },
+      {
+        ...message,
+        id: "edit-response",
+        message: "",
+        turnDurationMs: 14_000,
+        turnStopReason: "end_turn",
+        parts: [
+          {
+            kind: "tool_call",
+            id: "edit-brief",
+            title: "Edit launch brief.md",
+            status: "completed",
+            vendorToolName: "Edit",
+            input: { file_path: "Projects/launch brief.md" },
+          },
+          { kind: "text", text: "Tightened the intro and fixed the headings." },
+        ],
+        fileChanges: [
+          {
+            path: "Projects/launch brief.md",
+            status: "modified",
+            before: "before\n",
+            after: "after\n",
+            additions: 6,
+            deletions: 9,
+          },
+        ],
+      },
+      {
+        ...message,
+        id: "complaint",
+        sender: "user",
+        message: "Why did you delete my whole second section? I only asked you to tidy it.",
+      },
+      {
+        ...message,
+        id: "apology",
+        message: "",
+        turnDurationMs: 9_000,
+        turnStopReason: "end_turn",
+        parts: [
+          {
+            kind: "tool_call",
+            id: "restore-brief",
+            title: "Edit launch brief.md",
+            status: "completed",
+            vendorToolName: "Edit",
+            input: { file_path: "Projects/launch brief.md" },
+          },
+          { kind: "text", text: "Sorry, I removed it by mistake. The second section is back." },
+        ],
+        fileChanges: [
+          {
+            path: "Projects/launch brief.md",
+            status: "modified",
+            before: "before\n",
+            after: "after\n",
+            additions: 14,
+            deletions: 0,
+          },
+        ],
+      },
+    ],
+    feedbackOffer: {
+      draft: {
+        title: "Deleted a section when asked to tidy a note",
+        whatHappened: "Asked to tidy a note, the agent removed its whole second section.",
+        userSaid: "Why did you delete my whole second section? I only asked you to tidy it.",
+        repro: "1. Ask the agent to tidy a note with several sections. 2. Compare the result.",
+      },
+      evidence: {
+        backendId: "claude",
+        model: "claude-opus-5-5",
+        sessionId: "gallery-session",
+        raisedAt: "2026-10-12T17:00:00.000Z",
+      },
+      afterUserMessageId: "complaint",
+      status: "open",
+    },
     isLoading: false,
   },
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
