@@ -1,10 +1,5 @@
 import { ChangeScroller } from "@/agentMode/ui/renderedDiff/ChangeScroller";
-import {
-  EMPTY_CHANGE_RUNS,
-  RenderedDiff,
-  type ChangeRun,
-  type RenderedDiffProps,
-} from "@/agentMode/ui/renderedDiff/RenderedDiff";
+import { RenderedDiff, type RenderedDiffProps } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import {
   LONG_NOTE_SCATTERED_EDITS,
   NON_MARKDOWN_FILE,
@@ -14,11 +9,10 @@ import type { Meta, StoryObj } from "@/lib/story";
 import * as React from "react";
 
 function ScrolledDiff(props: RenderedDiffProps): React.ReactElement {
-  const [runs, setRuns] = React.useState<readonly ChangeRun[]>(EMPTY_CHANGE_RUNS);
   return (
     <div className="tw-flex tw-h-[560px] tw-flex-col">
-      <ChangeScroller runs={runs}>
-        <RenderedDiff {...props} onChangeRuns={setRuns} />
+      <ChangeScroller>
+        <RenderedDiff {...props} />
       </ChangeScroller>
     </div>
   );

@@ -123,7 +123,7 @@ describe("TurnDiffView", () => {
         expect(view.containerEl.querySelector("pre")).toBeNull();
       });
 
-      it("marks the changed text in the margin and on the left strip once the note has rendered", async () => {
+      it("marks the changed text on the left strip once the note has rendered", async () => {
         const view = await openView();
 
         await hydrate(view, { ...change("notes/diff-demo/alpha.md"), turnId: "turn-1" });
@@ -133,7 +133,6 @@ describe("TurnDiffView", () => {
             within(view.containerEl).getByRole("button", { name: "Go to change 1 of 1" })
           ).toBeTruthy()
         );
-        expect(view.containerEl.querySelectorAll("[data-change-bar]")).toHaveLength(2);
       });
 
       it("shows the header at once and leaves the body empty until Obsidian has parsed the note", async () => {
@@ -149,6 +148,31 @@ describe("TurnDiffView", () => {
         expect(view.containerEl.querySelector(".markdown-rendered")?.childNodes).toHaveLength(0);
         finishParsing(ALPHA_PARSE);
         await waitFor(() => expect(textOf(view.containerEl, "del")).toEqual(["brown"]));
+      });
+
+      it("drops the previous file's change marks while the next file's diff is still parsing (https://github.com/Brevilabs/obsidian-copilot-private/issues/709)", async () => {
+        const app = {
+          ...fakeApp(),
+          ...appParsing(async (source) =>
+            source === ALPHA_BEFORE || source === ALPHA_AFTER ? ALPHA_PARSE : new Promise(() => {})
+          ),
+        };
+        const view = await openView(app);
+        await hydrate(view, { ...change("notes/diff-demo/alpha.md"), turnId: "turn-1" });
+        await waitFor(() =>
+          expect(
+            within(view.containerEl).getByRole("button", { name: "Go to change 1 of 1" })
+          ).toBeTruthy()
+        );
+
+        await hydrate(view, {
+          ...change("notes/diff-demo/beta.md", { before: "One.\n", after: "Two.\n" }),
+          turnId: "turn-1",
+        });
+
+        expect(within(view.containerEl).queryAllByRole("button", { name: /Go to change/ })).toEqual(
+          []
+        );
       });
 
       it("badges a created file as new", async () => {

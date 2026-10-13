@@ -1,30 +1,27 @@
-import type { ChangeKind, ChangeRun } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 
+type ChangeKind = "inserted" | "deleted" | "modified";
+
 export interface ChangeScrollerProps {
-  runs: readonly ChangeRun[];
   children: React.ReactNode;
 }
 
-interface ChangeSpan {
+interface ChangeTick {
   kind: ChangeKind;
   top: number;
-  height: number;
+  bottom: number;
 }
 
 interface ChangeLayout {
-  bars: readonly ChangeSpan[];
-  ticks: readonly ChangeSpan[];
+  ticks: readonly ChangeTick[];
   scrollHeight: number;
 }
 
-const EMPTY_SPANS: readonly ChangeSpan[] = Object.freeze([]);
-const EMPTY_LAYOUT: ChangeLayout = Object.freeze({
-  bars: EMPTY_SPANS,
-  ticks: EMPTY_SPANS,
-  scrollHeight: 0,
-});
+const EMPTY_TICKS: readonly ChangeTick[] = Object.freeze([]);
+const EMPTY_LAYOUT: ChangeLayout = Object.freeze({ ticks: EMPTY_TICKS, scrollHeight: 0 });
+
+const CHANGE_MARK = "[data-change=inserted], [data-change=deleted]";
 
 const KIND_COLOR: Record<ChangeKind, string> = {
   inserted: cn("!tw-bg-change-inserted"),
@@ -36,7 +33,7 @@ const KIND_COLOR: Record<ChangeKind, string> = {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/709
 const JUMP_ANCHOR = 0.3;
 
-export function ChangeScroller({ runs, children }: ChangeScrollerProps): React.ReactElement {
+export function ChangeScroller({ children }: ChangeScrollerProps): React.ReactElement {
   const scrollerRef = React.useRef<HTMLDivElement>(null);
   const contentRef = React.useRef<HTMLDivElement>(null);
   const [layout, setLayout] = React.useState<ChangeLayout>(EMPTY_LAYOUT);
@@ -45,17 +42,25 @@ export function ChangeScroller({ runs, children }: ChangeScrollerProps): React.R
     const scroller = scrollerRef.current;
     const content = contentRef.current;
     if (!scroller || !content) return;
-    const measure = (): void => setLayout(measureChanges(runs, scroller, content));
+    const measure = (): void => setLayout(measureChanges(scroller, content));
     measure();
-    // Images and embeds load after the first layout and push changes down the note.
+    // Sections render and mark their changes asynchronously, images and embeds load after the first
+    // layout and push changes down the note, and resizing the pane changes the scroll height that
+    // tick positions are a share of.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/709
-    const ResizeObserverConstructor = content.doc.defaultView?.ResizeObserver;
-    const observer = ResizeObserverConstructor ? new ResizeObserverConstructor(measure) : null;
-    observer?.observe(content);
-    return () => observer?.disconnect();
-  }, [runs]);
+    const view = content.doc.defaultView;
+    const mutations = view ? new view.MutationObserver(measure) : null;
+    mutations?.observe(content, { childList: true, subtree: true });
+    const resizes = view?.ResizeObserver ? new view.ResizeObserver(measure) : null;
+    resizes?.observe(content);
+    resizes?.observe(scroller);
+    return () => {
+      mutations?.disconnect();
+      resizes?.disconnect();
+    };
+  }, []);
 
-  const jumpTo = (tick: ChangeSpan): void => {
+  const jumpTo = (tick: ChangeTick): void => {
     const scroller = scrollerRef.current;
     if (scroller) scroller.scrollTop = tick.top - scroller.clientHeight * JUMP_ANCHOR;
   };
@@ -66,7 +71,7 @@ export function ChangeScroller({ runs, children }: ChangeScrollerProps): React.R
         <div className="tw-relative tw-w-2.5 tw-shrink-0 tw-border-0 tw-border-r tw-border-solid tw-border-border tw-bg-secondary">
           {layout.ticks.map((tick, index) => (
             <button
-              // eslint-disable-next-line @eslint-react/no-array-index-key -- ticks are rebuilt whole from the change list, so position is a tick identity
+              // eslint-disable-next-line @eslint-react/no-array-index-key -- ticks are rebuilt whole from the marks, so position is a tick identity
               key={index}
               type="button"
               aria-label={`Go to change ${index + 1} of ${layout.ticks.length}`}
@@ -76,7 +81,7 @@ export function ChangeScroller({ runs, children }: ChangeScrollerProps): React.R
               )}
               style={{
                 top: percentOf(tick.top, layout.scrollHeight),
-                height: percentOf(tick.height, layout.scrollHeight),
+                height: percentOf(tick.bottom - tick.top, layout.scrollHeight),
               }}
               onClick={() => jumpTo(tick)}
             />
@@ -86,48 +91,39 @@ export function ChangeScroller({ runs, children }: ChangeScrollerProps): React.R
       <div ref={scrollerRef} className="tw-flex-1 tw-overflow-y-auto tw-p-[var(--file-margins)]">
         <div
           ref={contentRef}
-          className="markdown-rendered tw-relative tw-mx-auto tw-max-w-[var(--file-line-width)]"
+          className="markdown-rendered tw-mx-auto tw-max-w-[var(--file-line-width)]"
         >
           {children}
-          {layout.bars.map((bar, index) => (
-            <div
-              // eslint-disable-next-line @eslint-react/no-array-index-key -- bars are rebuilt whole from the change list, so position is a bar identity
-              key={index}
-              aria-hidden="true"
-              data-change-bar={bar.kind}
-              className={cn(
-                "tw-absolute tw--left-3 tw-w-[3px] tw-rounded-full",
-                KIND_COLOR[bar.kind]
-              )}
-              style={{ top: bar.top, height: bar.height }}
-            />
-          ))}
         </div>
       </div>
     </div>
   );
 }
 
-function measureChanges(
-  runs: readonly ChangeRun[],
-  scroller: HTMLElement,
-  content: HTMLElement
-): ChangeLayout {
-  if (runs.length === 0) return EMPTY_LAYOUT;
-  const contentTop = content.getBoundingClientRect().top;
-  const scrollOrigin = scroller.getBoundingClientRect().top - scroller.scrollTop;
-  const bars = runs.flatMap((run) =>
-    run.blocks.map((block) => {
-      const rect = block.element.getBoundingClientRect();
-      return { kind: block.kind, top: rect.top - contentTop, height: rect.height };
-    })
+// Marks at most a line apart read as one change, so they share a tick.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/709
+function measureChanges(scroller: HTMLElement, content: HTMLElement): ChangeLayout {
+  const marks = Array.from(content.querySelectorAll<HTMLElement>(CHANGE_MARK)).filter(
+    (mark) => mark.parentElement?.closest(CHANGE_MARK) === null
   );
-  const ticks = runs.map((run) => {
-    const first = run.blocks[0].element.getBoundingClientRect();
-    const last = run.blocks[run.blocks.length - 1].element.getBoundingClientRect();
-    return { kind: run.kind, top: first.top - scrollOrigin, height: last.bottom - first.top };
-  });
-  return { bars, ticks, scrollHeight: scroller.scrollHeight };
+  if (marks.length === 0) return EMPTY_LAYOUT;
+  const lineHeight = parseFloat(content.win.getComputedStyle(content).lineHeight) || 0;
+  const scrollOrigin = scroller.getBoundingClientRect().top - scroller.scrollTop;
+  const ticks: ChangeTick[] = [];
+  for (const mark of marks) {
+    const rect = mark.getBoundingClientRect();
+    const kind = mark.dataset.change as ChangeKind;
+    const top = rect.top - scrollOrigin;
+    const bottom = rect.bottom - scrollOrigin;
+    const previous = ticks[ticks.length - 1];
+    if (previous && top - previous.bottom <= lineHeight) {
+      previous.bottom = Math.max(previous.bottom, bottom);
+      if (previous.kind !== kind) previous.kind = "modified";
+    } else {
+      ticks.push({ kind, top, bottom });
+    }
+  }
+  return { ticks, scrollHeight: scroller.scrollHeight };
 }
 
 function percentOf(value: number, total: number): string {
