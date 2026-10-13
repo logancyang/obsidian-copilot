@@ -580,8 +580,9 @@ spaces, UTF-8 percent-encoding for non-ASCII characters). For a file inside the 
 a generated handoff, link its vault-root path:
 \`[page name.html](/.openartifacts/handoffs/page%20name.html)\`. Use the absolute path,
 such as \`[page.html](/Users/me/page.html)\`, only for a file outside the vault. Never put a
-drive letter or other \`:\` in the target; Obsidian treats such links as external. Copilot
-opens the link in the default browser. Also say that, subject to any relative-asset warning above, opening it in
+drive letter or other \`:\` in the target; Obsidian treats such links as external. If a file
+outside the vault has such a path (for example on Windows), give its absolute path as plain
+text instead. Copilot opens the link in the default browser. Also say that, subject to any relative-asset warning above, opening it in
 a browser shows the page as it will be uploaded; OpenArtifacts adds its own header and
 footer bylines when it serves the page. Then end your turn.
 
