@@ -423,7 +423,7 @@ export function OpenArtifactsModalContent({
     confirmationAction === "delete"
       ? "Yes withdraws the link and deletes OpenArtifacts’s stored copy. Previously fetched or cached copies cannot be recalled."
       : confirmationAction === "update"
-        ? "Yes replaces the current public page with this note’s latest content."
+        ? "Yes replaces the current page with this note’s latest content."
         : confirmationAction === "publish"
           ? linkAccess === "invited"
             ? "Yes publishes this note privately. Only people you invite can open it."
