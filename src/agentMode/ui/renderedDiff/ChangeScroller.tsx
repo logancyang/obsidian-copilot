@@ -50,7 +50,7 @@ const JUMP_ANCHOR = 0.3;
 // A jump only flashes its change, so the highlight never outlasts the moment the reader lands on it.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/709
 const FLASH_KEYFRAMES: Keyframe[] = [
-  { backgroundColor: "hsla(var(--interactive-accent-hsl), 0.3)" },
+  { backgroundColor: "hsla(var(--interactive-accent-hsl), 0.3)", offset: 0 },
 ];
 const FLASH_TIMING: KeyframeAnimationOptions = { duration: 900, easing: "ease-out" };
 
@@ -121,7 +121,12 @@ export function useChangeNavigation(): ChangeNavigation {
     if (!scroller || scroller.scrollTop === jumpedTo.current) return;
     jumpedTo.current = null;
     const anchor = scroller.scrollTop + scroller.clientHeight * JUMP_ANCHOR;
-    const passed = layout.ticks.filter((tick) => tick.top <= anchor + 1).length;
+    // A change near the end of the note never scrolls up to the anchor, so reaching the end selects the last one.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/709
+    const atEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+    const passed = atEnd
+      ? layout.ticks.length
+      : layout.ticks.filter((tick) => tick.top <= anchor + 1).length;
     setCurrent(passed === 0 ? null : passed - 1);
   }, [layout, setCurrent]);
 

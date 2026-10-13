@@ -308,6 +308,20 @@ describe("ChangeScroller", () => {
       expect(currentChange()).toBe("none");
     });
 
+    it("makes the last change current once the reader scrolls to the end of a note too short for it to reach the upper third (https://github.com/Brevilabs/obsidian-copilot-private/issues/709)", () => {
+      render(
+        <Harness>
+          <Mark change="inserted" top={1500} height={40} />
+          <Mark change="inserted" top={1700} height={40} />
+        </Harness>
+      );
+
+      scroller().scrollTop = NOTE_HEIGHT - VIEW_HEIGHT;
+      fireEvent.scroll(scroller());
+
+      expect(currentChange()).toBe("2");
+    });
+
     it("keeps a jumped-to change current when the note ends before it reaches the upper third (https://github.com/Brevilabs/obsidian-copilot-private/issues/709)", () => {
       render(
         <Harness>
@@ -330,7 +344,7 @@ describe("ChangeScroller", () => {
       expect(currentChange()).toBe("2");
     });
 
-    it("flashes every mark of the change it jumps to", () => {
+    it("flashes every mark of the change it jumps to, starting at the highlight and fading back", () => {
       render(
         <Harness>
           <Mark change="inserted" top={200} height={40} />
@@ -340,10 +354,9 @@ describe("ChangeScroller", () => {
 
       press("Next");
 
-      expect(jest.mocked(HTMLElement.prototype.animate).mock.contexts).toEqual([
-        markAt(200),
-        markAt(260),
-      ]);
+      const animate = jest.mocked(HTMLElement.prototype.animate);
+      expect(animate.mock.contexts).toEqual([markAt(200), markAt(260)]);
+      expect(animate.mock.calls[0][0]).toEqual([expect.objectContaining({ offset: 0 })]);
     });
 
     it("jumps without flashing when the reader prefers reduced motion", () => {

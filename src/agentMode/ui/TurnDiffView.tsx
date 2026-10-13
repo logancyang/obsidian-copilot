@@ -28,6 +28,7 @@ export function registerTurnDiffCommands(plugin: Plugin): void {
     plugin.addCommand({
       id,
       name: COMMAND_NAMES[id],
+      repeatable: true,
       checkCallback: (checking) =>
         plugin.app.workspace.getActiveViewOfType(TurnDiffView)?.stepChange(direction, checking) ??
         false,

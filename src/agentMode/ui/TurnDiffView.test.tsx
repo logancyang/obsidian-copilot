@@ -360,6 +360,12 @@ describe("TurnDiffView", () => {
       expect(next.checkCallback?.(true)).toBe(true);
     });
 
+    it("repeats both commands while their hotkey is held", () => {
+      const commands = registeredCommands(null);
+
+      expect(commands.map((command) => command.repeatable)).toEqual([true, true]);
+    });
+
     it("hides both commands when the active tab is not a file diff", () => {
       const commands = registeredCommands(null);
 
