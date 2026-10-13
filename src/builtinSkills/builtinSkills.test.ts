@@ -223,7 +223,7 @@ describe("builtinSkills", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes over HTTPS with the injected license key and never touches the Obsidian CLI", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(6);
+      expect(skill!.version).toBe(7);
 
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",

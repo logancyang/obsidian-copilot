@@ -382,5 +382,103 @@ describe("OpenArtifactsClient", () => {
         }
       );
     });
+
+    describe("private sharing", () => {
+      const sent = (index: number) => mockedRequestUrl.mock.calls[index][0] as RequestUrlParam;
+      const ACCESS = {
+        docId: DOC_ID,
+        url: `https://openartifacts.site/d/${DOC_ID}`,
+        linkAccess: "invited",
+        people: [{ email: "a@b.co", addedAt: "2026-10-13T00:00:00Z" }],
+      };
+
+      it("creates a private page and removes it when the server does not echo invited", async () => {
+        const url = `https://openartifacts.site/d/${DOC_ID}`;
+        mockedRequestUrl
+          .mockResolvedValueOnce(response(201, { docId: DOC_ID, url, version: 1 }))
+          .mockResolvedValueOnce(response(204));
+
+        await expectClientError(
+          new OpenArtifactsClient().publish(DOCUMENT, "decrypted-license", "invited"),
+          {
+            message:
+              "This OpenArtifacts server does not support private documents. Copilot removed the new page; nothing was published.",
+            code: "private_unsupported",
+            status: null,
+            retryable: false,
+          }
+        );
+        expect(JSON.parse(sent(0).body as string)).toEqual({
+          title: DOCUMENT.title,
+          html: DOCUMENT.html,
+          linkAccess: "invited",
+        });
+        expect(sent(1)).toMatchObject({
+          url: `${OPENARTIFACTS_API_ORIGIN}/api/v1/docs/${DOC_ID}`,
+          method: "DELETE",
+        });
+
+        mockedRequestUrl.mockReset();
+        mockedRequestUrl.mockResolvedValue(
+          response(201, { docId: DOC_ID, url, version: 1, linkAccess: "invited" })
+        );
+        await expect(
+          new OpenArtifactsClient().publish(DOCUMENT, "decrypted-license", "invited")
+        ).resolves.toMatchObject({ linkAccess: "invited" });
+        expect(mockedRequestUrl).toHaveBeenCalledTimes(1);
+      });
+
+      it("changes access one address at a time and opens a page as its owner", async () => {
+        const client = new OpenArtifactsClient();
+        mockedRequestUrl.mockResolvedValue(response(200, ACCESS));
+
+        await client.setLinkAccess(DOC_ID, "invited", "k");
+        await client.addPerson(DOC_ID, "a+b@c.co", "k");
+        await client.removePerson(DOC_ID, "a+b@c.co", "k");
+
+        const base = `${OPENARTIFACTS_API_ORIGIN}/api/v1/docs/${DOC_ID}/access`;
+        expect(
+          mockedRequestUrl.mock.calls.map((_call, i) => [sent(i).method, sent(i).url])
+        ).toEqual([
+          ["PUT", base],
+          ["PUT", `${base}/people/a%2Bb%40c.co`],
+          ["DELETE", `${base}/people/a%2Bb%40c.co`],
+        ]);
+        expect(JSON.parse(sent(0).body as string)).toEqual({
+          linkAccess: "invited",
+        });
+
+        mockedRequestUrl.mockResolvedValue(
+          response(200, { url: "https://x.openartifacts.site/d/g?grant=1", expiresAt: "t" })
+        );
+        await expect(client.openAsOwner(DOC_ID, "k")).resolves.toBe(
+          "https://x.openartifacts.site/d/g?grant=1"
+        );
+        expect(sent(mockedRequestUrl.mock.calls.length - 1)).toMatchObject({
+          url: `${OPENARTIFACTS_API_ORIGIN}/api/v1/docs/${DOC_ID}/open`,
+          method: "POST",
+        });
+      });
+
+      it("carries the upgrade link from a privateSharing plan refusal", async () => {
+        mockedRequestUrl.mockResolvedValue(
+          response(402, {
+            error: {
+              code: "limit_reached",
+              message: "Your plan does not include private sharing.",
+              limit: "privateSharing",
+              upgrade_url: "https://openartifacts.ai/account",
+            },
+          })
+        );
+
+        await expect(
+          new OpenArtifactsClient().addPerson(DOC_ID, "a@b.co", "k")
+        ).rejects.toMatchObject({
+          status: 402,
+          upgradeUrl: "https://openartifacts.ai/account",
+        });
+      });
+    });
   });
 });

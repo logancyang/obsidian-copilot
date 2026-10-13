@@ -1,4 +1,5 @@
 import type {
+  OpenArtifactsAccessPort,
   OpenArtifactsModalOptions,
   OpenArtifactsModalResult,
 } from "@/components/modals/OpenArtifactsModal";
@@ -50,12 +51,14 @@ function renderModal(
   onConfirm: jest.MockedFunction<OpenArtifactsModalOptions["onConfirm"]>,
   docId: string | null = null,
   onClosed?: () => void,
-  initialResult?: OpenArtifactsModalResult
+  initialResult?: OpenArtifactsModalResult,
+  access?: OpenArtifactsAccessPort
 ): OpenArtifactsModal {
   const modal = new OpenArtifactsModal({} as App, {
     fileName: "Architecture",
     docId,
     initialResult,
+    access,
     onConfirm,
     onClosed,
   });
@@ -119,8 +122,58 @@ describe("OpenArtifactsModal", () => {
 
         const publishModal = renderModal(onConfirm);
         await clickButton("Yes, publish");
-        expect(onConfirm).toHaveBeenCalledWith("publish", activeDocument);
+        expect(onConfirm).toHaveBeenCalledWith("publish", activeDocument, "anyone");
         expect(publishModal.contentEl.childElementCount).toBeGreaterThan(0);
+      });
+
+      it("publishes privately when Only those invited is chosen", async () => {
+        const onConfirm = createConfirmMock().mockResolvedValue({
+          kind: "success",
+          action: "publish",
+          receipt: RECEIPT,
+        });
+        renderModal(onConfirm);
+
+        fireEvent.click(screen.getByRole("radio", { name: "Only those invited" }));
+        expect(screen.getByText(/only people you invite/i)).toBeTruthy();
+        await clickButton("Yes, publish");
+
+        expect(onConfirm).toHaveBeenCalledWith("publish", activeDocument, "invited");
+      });
+
+      it("adds and removes people and opens the page through the owner route", async () => {
+        const open = jest.spyOn(window, "open").mockImplementation(() => null);
+        const access = {
+          docId: DOC_ID,
+          url: `https://openartifacts.site/d/${DOC_ID}`,
+          linkAccess: "invited" as const,
+          people: [],
+        };
+        const withPerson = { ...access, people: [{ email: "a@b.co", addedAt: "t" }] };
+        const port: OpenArtifactsAccessPort = {
+          load: jest.fn().mockResolvedValue(access),
+          setLinkAccess: jest.fn(),
+          addPerson: jest.fn().mockResolvedValue(withPerson),
+          removePerson: jest.fn().mockResolvedValue(access),
+          open: jest.fn().mockResolvedValue("https://x.openartifacts.site/d/g?grant=1"),
+        };
+        await act(async () => {
+          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, port);
+        });
+
+        fireEvent.change(screen.getByLabelText("Add people"), { target: { value: "a@b.co" } });
+        await clickButton("Add");
+        expect(port.addPerson).toHaveBeenCalledWith(DOC_ID, "a@b.co");
+        expect(screen.getByText("a@b.co")).toBeTruthy();
+        await clickButton("Remove");
+        expect(port.removePerson).toHaveBeenCalledWith(DOC_ID, "a@b.co");
+
+        await clickButton("Open");
+        expect(open).toHaveBeenCalledWith(
+          "https://x.openartifacts.site/d/g?grant=1",
+          "_blank",
+          "noopener,noreferrer"
+        );
       });
 
       it("allows native close while a confirmed action is pending", async () => {
@@ -178,7 +231,7 @@ describe("OpenArtifactsModal", () => {
         expect(onConfirm).not.toHaveBeenCalled();
 
         await clickButton("Yes, delete");
-        expect(onConfirm).toHaveBeenCalledWith("delete", activeDocument);
+        expect(onConfirm).toHaveBeenCalledWith("delete", activeDocument, "anyone");
         expect(await screen.findByText("Removed from OpenArtifacts")).toBeTruthy();
       });
 

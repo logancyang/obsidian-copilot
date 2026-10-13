@@ -70,6 +70,11 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
     publish: jest.fn().mockResolvedValue(RECEIPT),
     update: jest.fn().mockResolvedValue({ ...RECEIPT, version: 2 }),
     delete: jest.fn().mockResolvedValue(undefined),
+    getAccess: jest.fn(),
+    setLinkAccess: jest.fn(),
+    addPerson: jest.fn(),
+    removePerson: jest.fn(),
+    openAsOwner: jest.fn(),
   };
   const loadLicenseKey = jest.fn().mockResolvedValue("decrypted-license");
   const buildDocument = jest.fn().mockResolvedValue(DOCUMENT);
@@ -123,6 +128,19 @@ async function openAndConfirm(
 describe("OpenArtifactsPublisher", () => {
   describe("OpenArtifactsPublisher", () => {
     describe("open()", () => {
+      it("sends the chosen link access with the first publish", async () => {
+        const harness = createHarness({});
+
+        await harness.publisher.open(harness.file);
+        await harness.modalOptions[0].onConfirm("publish", activeDocument, "invited");
+
+        expect(harness.client.publish).toHaveBeenCalledWith(
+          DOCUMENT,
+          "decrypted-license",
+          "invited"
+        );
+      });
+
       it("opens an unpublished confirmation and posts when the property is missing", async () => {
         const value = {};
         const harness = createHarness(value);

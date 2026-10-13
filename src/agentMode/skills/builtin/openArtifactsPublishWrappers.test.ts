@@ -161,6 +161,29 @@ describe("openArtifactsPublishWrappers", () => {
     expect(JSON.parse(requests[0].body).html).toBe(HTML);
   });
 
+  it("publishes privately and removes the page when the server ignores linkAccess", async () => {
+    const result = await run(["publish", "--private", htmlFile, "Note"]);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("does not support private documents");
+    expect(JSON.parse(requests[0].body)).toEqual({
+      title: "Note",
+      html: HTML,
+      linkAccess: "invited",
+    });
+    expect(requests[1].method).toBe("DELETE");
+    expect(requests[1].url).toBe("/api/v1/docs/9f2k4mvq7t0xbz3n");
+
+    requests.length = 0;
+    canned = {
+      status: 201,
+      body: '{"docId":"9f2k4mvq7t0xbz3n","url":"https://x/d/9f","version":1,"linkAccess":"invited"}',
+    };
+    const kept = await run(["publish", "--private", htmlFile, "Note"]);
+    expect(kept.status).toBe(0);
+    expect(requests).toHaveLength(1);
+  });
+
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 withdraws a page with DELETE and reports the id it removed", async () => {
     canned = { status: 204, body: "" };
     const result = await run(["unshare", "9f2k4mvq7t0xbz3n"]);

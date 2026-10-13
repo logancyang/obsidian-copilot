@@ -493,7 +493,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 6;
+const OPENARTIFACTS_PUBLISH_VERSION = 7;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
 const OPENARTIFACTS_DEFAULT_THEME = "research-memo";
@@ -601,6 +601,14 @@ An existing HTML file uses its original path directly:
 sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" publish "/absolute/path/to/page.html" "Page title"
 \`\`\`
 
+To publish a new page that only invited people can open, add \`--private\` right after
+\`publish\`. Do this only when the user asks for a private page. A new page is public
+by default, and updating a page never changes who can open it. The wrapper removes the
+new page and fails if the server does not support private pages, so never tell the user a
+page is private unless the wrapper succeeded. Invitees are added in Copilot's Share dialog
+and sign in with the invited address. A \`402\` means the plan does not include private
+sharing; relay the message.
+
 On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 
 \`\`\`powershell
@@ -646,7 +654,7 @@ Never tell the user to delete the page at its public URL.
 # Publish one HTML file to OpenArtifacts over HTTPS with the license key Copilot
 # supplies in the environment. Needs only sh, curl, and awk.
 usage() {
-  printf '%s\n' "Usage: sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh publish <html-file> <title> [docId]" >&2
+  printf '%s\n' "Usage: sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh publish [--private] <html-file> <title> [docId]" >&2
   printf '%s\n' "       sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh unshare <docId>" >&2
   exit 1
 }
@@ -662,9 +670,15 @@ API_HOST=$(printf '%s' "$API_HOST" | sed 's,/*$,,')
 
 COMMAND=$1
 DOC_ID=
+PRIVATE=
+if [ "$COMMAND" = publish ] && [ "$2" = --private ]; then
+  PRIVATE=1
+  shift 2
+  set -- publish "$@"
+fi
 case "$COMMAND" in
   publish)
-    [ "$#" -eq 3 ] || [ "$#" -eq 4 ] || usage
+    [ "$#" -eq 3 ] || { [ "$#" -eq 4 ] && [ -z "$PRIVATE" ]; } || usage
     HTML_FILE=$2
     TITLE=$3
     [ "$#" -eq 4 ] && DOC_ID=$4
@@ -727,6 +741,7 @@ else
     printf '%s' "$TITLE" | json_string
     printf ',"html":'
     json_string < "$HTML_FILE"
+    [ -z "$PRIVATE" ] || printf ',"linkAccess":"invited"'
     printf '}'
   } > "$BODY"
   if [ -n "$DOC_ID" ]; then
@@ -751,6 +766,13 @@ if [ "$COMMAND" = unshare ] && [ "$STATUS" = 404 ] && grep -q '"not_found"' "$RE
 fi
 case "$STATUS" in
   2??)
+    if [ -n "$PRIVATE" ] && ! grep -Eq '"linkAccess" *: *"invited"' "$RESPONSE"; then
+      # An older or self-hosted server ignores linkAccess and made a public page.
+      NEW_ID=$(sed -n 's/.*"docId" *: *"\([0-9a-z]*\)".*/\1/p' "$RESPONSE")
+      [ -z "$NEW_ID" ] || curl -sS -o /dev/null -X DELETE -H "@$HEADERS" "$API_HOST/api/v1/docs/$NEW_ID"
+      printf '%s\n' "This OpenArtifacts server does not support private documents. The new page was removed." >&2
+      exit 1
+    fi
     if [ "$COMMAND" = unshare ]; then
       printf '{"docId":"%s","status":"unshared"}\n' "$DOC_ID"
     else
@@ -780,7 +802,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 # supplies in the environment.
 
 function Show-Usage {
-  [Console]::Error.WriteLine('Usage: ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 publish <html-file> <title> [docId]')
+  [Console]::Error.WriteLine('Usage: ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 publish [--private] <html-file> <title> [docId]')
   [Console]::Error.WriteLine('       ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 unshare <docId>')
   exit 1
 }
@@ -796,9 +818,15 @@ $API_HOST = $API_HOST.TrimEnd('/')
 
 $COMMAND = if ($args.Count -ge 1) { [string]$args[0] } else { '' }
 $DOC_ID = ''
+$PRIVATE = $false
+if ($COMMAND -eq 'publish' -and $args.Count -ge 2 -and [string]$args[1] -eq '--private') {
+  $PRIVATE = $true
+  $args = @($args[0]) + @($args | Select-Object -Skip 2)
+}
 switch ($COMMAND) {
   'publish' {
     if ($args.Count -ne 3 -and $args.Count -ne 4) { Show-Usage }
+    if ($PRIVATE -and $args.Count -eq 4) { Show-Usage }
     $HTML_FILE = [string]$args[1]
     $TITLE = [string]$args[2]
     if ($args.Count -eq 4) { $DOC_ID = [string]$args[3] }
@@ -825,11 +853,20 @@ try {
     [Console]::Out.WriteLine('{"docId":"' + $DOC_ID + '","status":"unshared"}')
   } else {
     $html = [System.IO.File]::ReadAllText($HTML_FILE, (New-Object System.Text.UTF8Encoding($false)))
-    $body = @{ title = $TITLE; html = $html } | ConvertTo-Json -Compress -Depth 2
+    $payload = @{ title = $TITLE; html = $html }
+    if ($PRIVATE) { $payload.linkAccess = 'invited' }
+    $body = $payload | ConvertTo-Json -Compress -Depth 2
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
     $method = if ($DOC_ID) { 'Put' } else { 'Post' }
     $uri = if ($DOC_ID) { "$API_HOST/api/v1/docs/$DOC_ID" } else { "$API_HOST/api/v1/docs" }
     $response = Invoke-WebRequest -UseBasicParsing -Method $method -Uri $uri -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $bytes
+    if ($PRIVATE -and ([string]$response.Content | ConvertFrom-Json).linkAccess -ne 'invited') {
+      # An older or self-hosted server ignores linkAccess and made a public page.
+      $newId = ([string]$response.Content | ConvertFrom-Json).docId
+      if ($newId) { $null = Invoke-WebRequest -UseBasicParsing -Method Delete -Uri "$API_HOST/api/v1/docs/$newId" -Headers $headers }
+      [Console]::Error.WriteLine('This OpenArtifacts server does not support private documents. The new page was removed.')
+      exit 1
+    }
     [Console]::Out.WriteLine([string]$response.Content)
   }
 } catch {

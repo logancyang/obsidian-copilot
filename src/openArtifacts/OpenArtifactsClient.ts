@@ -4,14 +4,18 @@ import {
   OPENARTIFACTS_DOC_ID_PATTERN,
 } from "@/openArtifacts/constants";
 import type {
+  OpenArtifactsAccess,
   OpenArtifactsDocument,
   OpenArtifactsErrorResponse,
+  OpenArtifactsLinkAccess,
   OpenArtifactsReceipt,
 } from "@/openArtifacts/types";
 import { requestUrl, type RequestUrlParam, type RequestUrlResponse } from "obsidian";
 
 const DOCS_ENDPOINT = `${OPENARTIFACTS_API_ORIGIN}/api/v1/docs`;
 const NETWORK_ERROR_MESSAGE = "Could not reach OpenArtifacts. Please try again.";
+const PRIVATE_UNSUPPORTED_MESSAGE =
+  "This OpenArtifacts server does not support private documents. Copilot removed the new page; nothing was published.";
 const AMBIGUOUS_PUBLISH_MESSAGE =
   "OpenArtifacts may have published this note, but Copilot did not receive a valid receipt. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
 
@@ -20,7 +24,8 @@ export class OpenArtifactsClientError extends Error {
     message: string,
     public readonly code: string,
     public readonly status: number | null,
-    public readonly retryable: boolean
+    public readonly retryable: boolean,
+    public readonly upgradeUrl?: string
   ) {
     super(message);
     this.name = "OpenArtifactsClientError";
@@ -31,9 +36,27 @@ export class OpenArtifactsClientError extends Error {
 export class OpenArtifactsClient {
   async publish(
     document: OpenArtifactsDocument,
-    licenseKey: string
+    licenseKey: string,
+    linkAccess?: OpenArtifactsLinkAccess
   ): Promise<OpenArtifactsReceipt> {
-    return this.push("POST", DOCS_ENDPOINT, document, licenseKey);
+    const receipt = await this.push(
+      "POST",
+      DOCS_ENDPOINT,
+      document,
+      licenseKey,
+      undefined,
+      linkAccess
+    );
+    if (linkAccess === "invited" && receipt.linkAccess !== "invited") {
+      await this.delete(receipt.docId, licenseKey);
+      throw new OpenArtifactsClientError(
+        PRIVATE_UNSUPPORTED_MESSAGE,
+        "private_unsupported",
+        null,
+        false
+      );
+    }
+    return receipt;
   }
 
   async update(
@@ -69,12 +92,80 @@ export class OpenArtifactsClient {
     throw error;
   }
 
+  getAccess(docId: string, licenseKey: string): Promise<OpenArtifactsAccess> {
+    return this.access("GET", docId, "", licenseKey);
+  }
+
+  setLinkAccess(
+    docId: string,
+    linkAccess: OpenArtifactsLinkAccess,
+    licenseKey: string
+  ): Promise<OpenArtifactsAccess> {
+    return this.access("PUT", docId, "", licenseKey, { linkAccess });
+  }
+
+  addPerson(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess> {
+    return this.access("PUT", docId, `/people/${encodeURIComponent(email)}`, licenseKey);
+  }
+
+  removePerson(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess> {
+    return this.access("DELETE", docId, `/people/${encodeURIComponent(email)}`, licenseKey);
+  }
+
+  async openAsOwner(docId: string, licenseKey: string): Promise<string> {
+    const response = await this.request({
+      url: `${DOCS_ENDPOINT}/${encodeURIComponent(docId)}/open`,
+      method: "POST",
+      headers: authorizationHeaders(licenseKey),
+      throw: false,
+    });
+    if (response.status !== 200) {
+      throw errorFromResponse(response);
+    }
+    const value = responseJson(response);
+    if (!isRecord(value) || typeof value.url !== "string" || !isHttpsUrl(value.url)) {
+      throw malformedResponse(response.status);
+    }
+    return value.url;
+  }
+
+  private async access(
+    method: "GET" | "PUT" | "DELETE",
+    docId: string,
+    suffix: string,
+    licenseKey: string,
+    body?: { linkAccess: OpenArtifactsLinkAccess }
+  ): Promise<OpenArtifactsAccess> {
+    const response = await this.request({
+      url: `${DOCS_ENDPOINT}/${encodeURIComponent(docId)}/access${suffix}`,
+      method,
+      headers: authorizationHeaders(licenseKey),
+      ...(body && { contentType: "application/json", body: JSON.stringify(body) }),
+      throw: false,
+    });
+    if (response.status !== 200) {
+      throw errorFromResponse(response);
+    }
+    const value = responseJson(response);
+    if (
+      !isRecord(value) ||
+      value.docId !== docId ||
+      (value.linkAccess !== "anyone" && value.linkAccess !== "invited") ||
+      typeof value.url !== "string" ||
+      !Array.isArray(value.people)
+    ) {
+      throw malformedResponse(response.status);
+    }
+    return value as unknown as OpenArtifactsAccess;
+  }
+
   private async push(
     method: "POST" | "PUT",
     url: string,
     document: OpenArtifactsDocument,
     licenseKey: string,
-    expectedDocId?: string
+    expectedDocId?: string,
+    linkAccess?: OpenArtifactsLinkAccess
   ): Promise<OpenArtifactsReceipt> {
     let response: RequestUrlResponse;
     try {
@@ -83,7 +174,11 @@ export class OpenArtifactsClient {
         method,
         headers: authorizationHeaders(licenseKey),
         contentType: "application/json",
-        body: JSON.stringify({ title: document.title, html: document.html }),
+        body: JSON.stringify({
+          title: document.title,
+          html: document.html,
+          ...(linkAccess === "invited" && { linkAccess }),
+        }),
         throw: false,
       });
     } catch (error) {
@@ -140,7 +235,7 @@ function parseReceipt(response: RequestUrlResponse, expectedDocId?: string): Ope
     throw malformedResponse(response.status);
   }
 
-  const { docId, url, version } = value;
+  const { docId, url, version, linkAccess } = value;
   if (
     typeof docId !== "string" ||
     !OPENARTIFACTS_DOC_ID_PATTERN.test(docId) ||
@@ -154,7 +249,12 @@ function parseReceipt(response: RequestUrlResponse, expectedDocId?: string): Ope
     throw malformedResponse(response.status);
   }
 
-  return { docId, url, version };
+  return {
+    docId,
+    url,
+    version,
+    ...((linkAccess === "anyone" || linkAccess === "invited") && { linkAccess }),
+  };
 }
 
 function errorFromResponse(response: RequestUrlResponse): OpenArtifactsClientError {
@@ -163,12 +263,15 @@ function errorFromResponse(response: RequestUrlResponse): OpenArtifactsClientErr
     return malformedResponse(response.status);
   }
 
-  const { code, message } = value.error;
+  const { code, message, limit, upgrade_url: upgradeUrl } = value.error;
   return new OpenArtifactsClientError(
     message,
     code,
     response.status,
-    code === "internal" || response.status >= 500
+    code === "internal" || response.status >= 500,
+    response.status === 402 && limit === "privateSharing" && upgradeUrl && isHttpsUrl(upgradeUrl)
+      ? upgradeUrl
+      : undefined
   );
 }
 
@@ -205,6 +308,14 @@ function isOpenArtifactsDocumentUrl(value: string, docId: string): boolean {
       url.origin === OPENARTIFACTS_DOCUMENT_ORIGIN &&
       url.pathname.replace(/\/$/, "") === `/d/${docId}`
     );
+  } catch {
+    return false;
+  }
+}
+
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
   } catch {
     return false;
   }
