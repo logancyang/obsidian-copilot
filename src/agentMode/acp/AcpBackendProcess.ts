@@ -336,12 +336,13 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async prompt(params: PromptInput): Promise<PromptOutput> {
+    const connection = this.requireConnection();
     const [first] = params.prompt;
     if (first?.type === "text" && isCompactCommand(first.text)) {
       this.manualCompactSessions.add(params.sessionId);
     }
-    const resp = await this.requireConnection()
-      .agent.request("session/prompt", {
+    const resp = await connection.agent
+      .request("session/prompt", {
         sessionId: sessionIdToAcp(params.sessionId),
         prompt: promptContentToAcp(params.prompt),
       })
