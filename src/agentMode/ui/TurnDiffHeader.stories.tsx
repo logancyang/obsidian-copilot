@@ -28,6 +28,17 @@ export const Created: StoryObj<TurnDiffHeaderProps> = {
   },
 };
 
+export const SteppingThroughChanges: StoryObj<TurnDiffHeaderProps> = {
+  args: {
+    path: "Research/Onboarding interviews.md",
+    status: "modified",
+    additions: 9,
+    deletions: 7,
+    changes: { current: 1, total: 6, onStep: () => {} },
+    onOpenNote: () => {},
+  },
+};
+
 export const Deleted: StoryObj<TurnDiffHeaderProps> = {
   args: {
     path: "notes/diff-demo/zeta.md",

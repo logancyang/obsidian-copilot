@@ -50,6 +50,57 @@ describe("TurnDiffHeader", () => {
       expect(onOpenNote).toHaveBeenCalledTimes(1);
     });
 
+    it("shows which change is current out of the note's changes", () => {
+      const header = (current: number): React.ReactElement => (
+        <TurnDiffHeader
+          path="notes/a.md"
+          status="modified"
+          additions={3}
+          deletions={2}
+          changes={{ current, total: 6, onStep: jest.fn() }}
+        />
+      );
+      const { rerender } = render(header(0));
+      expect(screen.getByText("1 of 6")).toBeTruthy();
+
+      rerender(header(1));
+
+      expect(screen.getByText("2 of 6")).toBeTruthy();
+    });
+
+    it("steps back for the previous arrow and forward for the next arrow", () => {
+      const onStep = jest.fn();
+      render(
+        <TurnDiffHeader
+          path="notes/a.md"
+          status="modified"
+          additions={1}
+          deletions={1}
+          changes={{ current: 0, total: 1, onStep }}
+        />
+      );
+      expect(screen.getByText("1 of 1")).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Previous change" }));
+      fireEvent.click(screen.getByRole("button", { name: "Next change" }));
+
+      expect(onStep.mock.calls).toEqual([[-1], [1]]);
+    });
+
+    it("shows no stepper while the note has no changes to step through", () => {
+      render(
+        <TurnDiffHeader
+          path="notes/a.md"
+          status="modified"
+          additions={1}
+          deletions={1}
+          changes={{ current: 0, total: 0, onStep: jest.fn() }}
+        />
+      );
+
+      expect(screen.queryByRole("button", { name: "Next change" })).toBeNull();
+    });
+
     it("offers no Open note when the caller gives no handler, as for a deleted file", () => {
       render(<TurnDiffHeader path="notes/a.md" status="deleted" additions={0} deletions={9} />);
 
