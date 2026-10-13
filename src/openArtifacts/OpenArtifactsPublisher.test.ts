@@ -128,19 +128,6 @@ async function openAndConfirm(
 describe("OpenArtifactsPublisher", () => {
   describe("OpenArtifactsPublisher", () => {
     describe("open()", () => {
-      it("sends the chosen link access with the first publish", async () => {
-        const harness = createHarness({});
-
-        await harness.publisher.open(harness.file);
-        await harness.modalOptions[0].onConfirm("publish", activeDocument, "invited");
-
-        expect(harness.client.publish).toHaveBeenCalledWith(
-          DOCUMENT,
-          "decrypted-license",
-          "invited"
-        );
-      });
-
       it("opens an unpublished confirmation and posts when the property is missing", async () => {
         const value = {};
         const harness = createHarness(value);

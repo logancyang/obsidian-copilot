@@ -132,13 +132,23 @@ describe("OpenArtifactsModal", () => {
           action: "publish",
           receipt: RECEIPT,
         });
-        renderModal(onConfirm);
+        const port = {
+          load: jest.fn().mockResolvedValue({
+            docId: DOC_ID,
+            url: RECEIPT.url,
+            linkAccess: "invited",
+            people: [],
+          }),
+        } as unknown as OpenArtifactsAccessPort;
+        renderModal(onConfirm, null, undefined, undefined, port);
 
         fireEvent.click(screen.getByRole("radio", { name: "Only those invited" }));
         expect(screen.getByText(/only people you invite/i)).toBeTruthy();
         await clickButton("Yes, publish");
 
         expect(onConfirm).toHaveBeenCalledWith("publish", activeDocument, "invited");
+        expect(port.load).toHaveBeenCalledWith(DOC_ID);
+        expect(await screen.findByLabelText("Add people")).toBeTruthy();
       });
 
       it("adds and removes people and opens the page through the owner route", async () => {

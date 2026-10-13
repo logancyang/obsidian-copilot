@@ -145,7 +145,15 @@ function OpenArtifactsReceiptView({ receipt, access, actions }: OpenArtifactsRec
   );
 }
 
-function AccessPanel({ docId, access }: { docId: string; access: OpenArtifactsAccessPort }) {
+function AccessPanel({
+  docId,
+  access,
+  showLinkActions = true,
+}: {
+  docId: string;
+  access: OpenArtifactsAccessPort;
+  showLinkActions?: boolean;
+}) {
   const [state, setState] = useState<OpenArtifactsAccess | null>(null);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -264,15 +272,17 @@ function AccessPanel({ docId, access }: { docId: string; access: OpenArtifactsAc
               </div>
             ))}
           </div>
-          <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
-            {copyMessage && <span className="tw-text-small tw-text-muted">{copyMessage}</span>}
-            <Button variant="secondary" onClick={safeAsyncHandler(copyLink)}>
-              Copy link
-            </Button>
-            <Button variant="secondary" onClick={safeAsyncHandler(openPage)}>
-              Open
-            </Button>
-          </div>
+          {showLinkActions && (
+            <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
+              {copyMessage && <span className="tw-text-small tw-text-muted">{copyMessage}</span>}
+              <Button variant="secondary" onClick={safeAsyncHandler(copyLink)}>
+                Copy link
+              </Button>
+              <Button variant="secondary" onClick={safeAsyncHandler(openPage)}>
+                Open
+              </Button>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -343,6 +353,9 @@ export function OpenArtifactsModalContent({
           />
         ) : (
           <div className="tw-flex tw-justify-end">{closeButton}</div>
+        )}
+        {result.receipt && result.action !== "delete" && access && (
+          <AccessPanel docId={result.receipt.docId} access={access} showLinkActions={false} />
         )}
       </div>
     );
@@ -415,7 +428,7 @@ export function OpenArtifactsModalContent({
           ? linkAccess === "invited"
             ? "Yes publishes this note privately. Only people you invite can open it."
             : "Yes makes this note available to anyone with the public link."
-          : "Choose whether to replace the current public page or withdraw it.";
+          : "Choose whether to replace the current page or withdraw it.";
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
