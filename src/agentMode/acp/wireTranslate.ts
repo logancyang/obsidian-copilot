@@ -236,7 +236,9 @@ export function acpNotificationToEvents(
     return [];
   }
   const sessionId = sessionIdFromAcp(n.sessionId);
-  const events: SessionEvent[] = [{ sessionId, update: acpUpdateToSessionUpdate(n.update) }];
+  const update = acpUpdateToSessionUpdate(n.update);
+  if (!update) return [];
+  const events: SessionEvent[] = [{ sessionId, update }];
   const todoPlan = todoToolPlanFromAcp(n.update, todoToolCallIds);
   if (todoPlan) events.push({ sessionId, update: todoPlan });
   return events;
@@ -285,7 +287,7 @@ function todoToolPlanFromAcp(
   return { sessionUpdate: "plan", entries };
 }
 
-function acpUpdateToSessionUpdate(update: SessionNotification["update"]): SessionUpdate {
+function acpUpdateToSessionUpdate(update: SessionNotification["update"]): SessionUpdate | null {
   switch (update.sessionUpdate) {
     case "user_message_chunk":
     case "agent_message_chunk":
@@ -315,10 +317,9 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
         })),
       };
     case "session_info_update":
-      return {
-        sessionUpdate: "session_info_update",
-        title: (update as { title?: string | null }).title ?? null,
-      };
+      // Updates that omit `title` (opencode's meta-only compaction and retry markers) must not clear the title. https://github.com/Brevilabs/obsidian-copilot-private/issues/632
+      if (update.title === undefined) return null;
+      return { sessionUpdate: "session_info_update", title: update.title };
     case "current_mode_update":
       return {
         sessionUpdate: "current_mode_update",
@@ -341,7 +342,7 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
       };
     }
     default:
-      return { sessionUpdate: "session_info_update", title: null };
+      return null;
   }
 }
 
