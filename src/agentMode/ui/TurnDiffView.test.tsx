@@ -2,6 +2,7 @@ import type { TurnFileChange } from "@/agentMode/session/types";
 import {
   closeRestoredTurnDiffs,
   openTurnDiff,
+  registerTurnDiffCommands,
   TurnDiffView,
   type TurnDiffViewState,
 } from "@/agentMode/ui/TurnDiffView";
@@ -12,7 +13,7 @@ import {
 import { TURN_DIFF_VIEW_TYPE } from "@/constants";
 import { logError } from "@/logger";
 import { act, fireEvent, waitFor, within } from "@testing-library/react";
-import { App, Notice, TFile, Workspace, WorkspaceLeaf } from "obsidian";
+import { App, Command, Notice, Plugin, TFile, Workspace, WorkspaceLeaf } from "obsidian";
 
 jest.mock("@/logger");
 jest.mock("@/utils/renderMarkdown", () => ({
@@ -73,12 +74,23 @@ async function hydrate(view: TurnDiffView, state: TurnDiffViewState): Promise<vo
 const textOf = (root: HTMLElement, selector: string): string[] =>
   Array.from(root.querySelectorAll(selector)).map((element) => element.textContent ?? "");
 
+async function renderedDiff(): Promise<TurnDiffView> {
+  const view = await openView();
+  await hydrate(view, { ...change("notes/diff-demo/alpha.md"), turnId: "turn-1" });
+  await waitFor(() => expect(within(header(view)).getByText("1 change")).toBeTruthy());
+  return view;
+}
+
 function header(view: TurnDiffView): HTMLElement {
   const path = within(view.containerEl).getByTitle(/\.(md|canvas|json)$/);
   return path.parentElement!;
 }
 
 describe("TurnDiffView", () => {
+  beforeEach(() => {
+    HTMLElement.prototype.animate = jest.fn();
+  });
+
   afterEach(async () => {
     await act(async () => {
       for (const view of openViews.splice(0)) await view.onClose();
@@ -220,6 +232,33 @@ describe("TurnDiffView", () => {
       });
     });
 
+    describe("stepChange()", () => {
+      it("moves to the next change and shows its position in the header", async () => {
+        const view = await renderedDiff();
+
+        let available = false;
+        act(() => {
+          available = view.stepChange(1, false);
+        });
+
+        expect(available).toBe(true);
+        expect(within(header(view)).getByText("1 of 1")).toBeTruthy();
+      });
+
+      it("reports a change to step to without moving when only checking", async () => {
+        const view = await renderedDiff();
+
+        expect(view.stepChange(1, true)).toBe(true);
+        expect(within(header(view)).getByText("1 change")).toBeTruthy();
+      });
+
+      it("reports nothing to step to before the note has rendered", async () => {
+        const view = await openView();
+
+        expect(view.stepChange(1, true)).toBe(false);
+      });
+    });
+
     describe("onClose()", () => {
       it("removes the rendered diff and its window-migration listener when the tab closes", async () => {
         const detachMigration = jest.fn();
@@ -292,6 +331,39 @@ describe("TurnDiffView", () => {
         expect(within(header(view)).queryByText("Open note")).toBeNull();
         expect(within(header(view)).getByText("deleted")).toBeTruthy();
       });
+    });
+  });
+
+  describe("registerTurnDiffCommands()", () => {
+    function registeredCommands(activeView: unknown): Command[] {
+      const commands: Command[] = [];
+      const plugin = {
+        app: { workspace: { getActiveViewOfType: () => activeView } },
+        addCommand: (command: Command) => commands.push(command),
+      } as unknown as Plugin;
+      registerTurnDiffCommands(plugin);
+      return commands;
+    }
+
+    it("adds next and previous change commands that step the active diff tab", async () => {
+      const view = await renderedDiff();
+      const [next, previous] = registeredCommands(view);
+
+      expect([next.name, previous.name]).toEqual([
+        "Go to next change in file diff",
+        "Go to previous change in file diff",
+      ]);
+      act(() => {
+        previous.checkCallback?.(false);
+      });
+      expect(within(header(view)).getByText("1 of 1")).toBeTruthy();
+      expect(next.checkCallback?.(true)).toBe(true);
+    });
+
+    it("hides both commands when the active tab is not a file diff", () => {
+      const commands = registeredCommands(null);
+
+      expect(commands.map((command) => command.checkCallback?.(true))).toEqual([false, false]);
     });
   });
 

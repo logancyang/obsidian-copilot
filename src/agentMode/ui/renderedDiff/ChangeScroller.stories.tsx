@@ -1,4 +1,4 @@
-import { ChangeScroller } from "@/agentMode/ui/renderedDiff/ChangeScroller";
+import { ChangeScroller, useChangeNavigation } from "@/agentMode/ui/renderedDiff/ChangeScroller";
 import { RenderedDiff, type RenderedDiffProps } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import {
   LONG_NOTE_SCATTERED_EDITS,
@@ -9,9 +9,10 @@ import type { Meta, StoryObj } from "@/lib/story";
 import * as React from "react";
 
 function ScrolledDiff(props: RenderedDiffProps): React.ReactElement {
+  const navigation = useChangeNavigation();
   return (
     <div className="tw-flex tw-h-[560px] tw-flex-col">
-      <ChangeScroller>
+      <ChangeScroller navigation={navigation}>
         <RenderedDiff {...props} />
       </ChangeScroller>
     </div>

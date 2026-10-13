@@ -595,6 +595,8 @@ export const COMMAND_IDS = {
   DOWNLOAD_YOUTUBE_SCRIPT: "download-youtube-script",
   PUBLISH_FILE_TO_OPENARTIFACTS: "publish-file-to-symposium",
   TRIGGER_QUICK_ASK: "trigger-quick-ask",
+  NEXT_DIFF_CHANGE: "turn-diff-next-change",
+  PREVIOUS_DIFF_CHANGE: "turn-diff-previous-change",
 } as const;
 
 export const COMMAND_NAMES: Record<CommandId, string> = {
@@ -621,6 +623,8 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT]: "Download YouTube Script (plus)",
   [COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS]: "Publish file to OpenArtifacts",
   [COMMAND_IDS.TRIGGER_QUICK_ASK]: "Quick Ask",
+  [COMMAND_IDS.NEXT_DIFF_CHANGE]: "Go to next change in file diff",
+  [COMMAND_IDS.PREVIOUS_DIFF_CHANGE]: "Go to previous change in file diff",
 };
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
