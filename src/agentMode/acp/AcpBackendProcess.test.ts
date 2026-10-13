@@ -1119,6 +1119,38 @@ describe("AcpBackendProcess", () => {
         return backend;
       }
 
+      const FEEDBACK_SERVER = {
+        name: "obsidian-copilot",
+        url: "http://127.0.0.1:4100/mcp",
+        headers: { Authorization: "Bearer t0k3n" },
+      };
+
+      it("passes Copilot's MCP servers to session/new as HTTP servers when the agent advertises HTTP MCP", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { mcpCapabilities: { http: true } },
+        };
+        const backend = await startBackend();
+        await backend.newSession({ cwd: "/vault", mcpServers: [FEEDBACK_SERVER] });
+        const req = mockNewSession.mock.calls[0][0] as { mcpServers: unknown[] };
+        expect(req.mcpServers).toEqual([
+          {
+            type: "http",
+            name: "obsidian-copilot",
+            url: "http://127.0.0.1:4100/mcp",
+            headers: [{ name: "Authorization", value: "Bearer t0k3n" }],
+          },
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 starts the chat without Copilot's MCP servers when the agent never advertised HTTP MCP", async () => {
+        mockInitializeResult = { protocolVersion: 1 };
+        const backend = await startBackend();
+        await backend.newSession({ cwd: "/vault", mcpServers: [FEEDBACK_SERVER] });
+        const req = mockNewSession.mock.calls[0][0] as { mcpServers: unknown[] };
+        expect(req.mcpServers).toEqual([]);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 requests recovery and explains the failure when a new chat finds the internal service stopped", async () => {
         const backend = await makeListingBackend();
         await backend.newSession({ cwd: "/vault" });
@@ -1179,6 +1211,26 @@ describe("AcpBackendProcess", () => {
     });
 
     describe("resumeSession()", () => {
+      it("passes Copilot's MCP servers to session/resume when the agent advertises HTTP MCP", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: {
+            sessionCapabilities: { resume: {} },
+            mcpCapabilities: { http: true },
+          },
+        };
+        const backend = await startBackend();
+        await backend.resumeSession({
+          sessionId: "s1",
+          cwd: "/vault",
+          mcpServers: [{ name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: {} }],
+        });
+        const req = mockResumeSession.mock.calls[0][0] as { mcpServers: unknown[] };
+        expect(req.mcpServers).toEqual([
+          { type: "http", name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: [] },
+        ]);
+      });
+
       it("sends the session's cwd with no MCP servers to session/resume", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
@@ -1213,6 +1265,23 @@ describe("AcpBackendProcess", () => {
         await backend.start();
         return backend;
       }
+
+      it("passes Copilot's MCP servers to session/load when the agent advertises HTTP MCP", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { loadSession: true, mcpCapabilities: { http: true } },
+        };
+        const backend = await startBackend();
+        await backend.loadSession({
+          sessionId: "s1",
+          cwd: "/vault",
+          mcpServers: [{ name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: {} }],
+        });
+        const req = mockLoadSession.mock.calls[0][0] as { mcpServers: unknown[] };
+        expect(req.mcpServers).toEqual([
+          { type: "http", name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: [] },
+        ]);
+      });
 
       it("returns the session id and the state the agent reports", async () => {
         const backend = await startLoadCapableBackend();

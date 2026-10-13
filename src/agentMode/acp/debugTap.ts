@@ -138,8 +138,9 @@ function logFrame(
     const method = frame.method;
     const idLabel = idStr !== null ? `#${idStr}` : "(notif)";
     if (idStr !== null) ownPending.set(idStr, method);
-    logInfo(`[ACP ${arrow}][${tag}] ${method}  ${idLabel}  ${formatPayload(frame.params)}`);
-    emit?.(idStr !== null ? "request" : "notif", method, idStr, frame.params);
+    const params = redactMcpHeaders(frame.params);
+    logInfo(`[ACP ${arrow}][${tag}] ${method}  ${idLabel}  ${formatPayload(params)}`);
+    emit?.(idStr !== null ? "request" : "notif", method, idStr, params);
     return;
   }
 
@@ -153,4 +154,18 @@ function logFrame(
     logInfo(`[ACP ${arrow}][${tag}] ${method}  ${idLabel}  ${formatPayload(frame.result)}`);
     emit?.("result", method, idStr, frame.result);
   }
+}
+
+// Session requests carry each MCP server's bearer token, and these logs ship with Report an issue.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+function redactMcpHeaders(params: unknown): unknown {
+  const servers = (params as { mcpServers?: unknown } | null | undefined)?.mcpServers;
+  if (!Array.isArray(servers) || servers.length === 0) return params;
+  return {
+    ...(params as object),
+    mcpServers: servers.map((server: { headers?: Array<{ name: string }> }) => ({
+      ...server,
+      headers: server.headers?.map(({ name }) => ({ name, value: "[redacted]" })),
+    })),
+  };
 }
