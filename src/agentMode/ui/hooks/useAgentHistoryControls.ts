@@ -233,11 +233,16 @@ export function useAgentHistoryControls(
   const setActiveChatBookmarked = useCallback(
     async (bookmarked: boolean) => {
       await runWithNotice(bookmarked ? "bookmark chat" : "remove bookmark", async () => {
+        const label = manager.getActiveSession()?.getLabel();
         // A native session link only opens on this device: https://github.com/Brevilabs/obsidian-copilot-private/issues/601
         const path = (await manager.saveActiveSession())?.path;
         const file = path ? await resolveFileByPath(plugin.app, path) : null;
+        // A bookmark opens the chat through its note's link, so a chat that failed to save gets none.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/702
         if (!file) throw new Error("The active chat has no saved note.");
-        await setChatBookmarked(file.path, extractChatTitle(plugin.app, file), bookmarked);
+        // A renamed tab keeps its title in the session label, which the note's topic and filename miss.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/702
+        await setChatBookmarked(file.path, label ?? extractChatTitle(plugin.app, file), bookmarked);
       });
     },
     [manager, plugin, runWithNotice, setChatBookmarked]

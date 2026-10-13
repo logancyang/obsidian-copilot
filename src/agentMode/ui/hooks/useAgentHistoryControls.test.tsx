@@ -18,6 +18,7 @@ function makeManager() {
     setChatPinned: jest.fn(async (id: string) => ({ id, pinnedAt: 5_000 })),
     ensureChatNote: jest.fn(async (id: string) => id),
     saveActiveSession: jest.fn(async () => ({ path: "chats/saved.md" })),
+    getActiveSession: jest.fn(() => null),
   } as unknown as AgentSessionManager & {
     getChatHistoryItems: jest.Mock;
     updateChatTitle: jest.Mock;
@@ -25,6 +26,7 @@ function makeManager() {
     setChatPinned: jest.Mock;
     ensureChatNote: jest.Mock;
     saveActiveSession: jest.Mock;
+    getActiveSession: jest.Mock;
   };
 }
 
@@ -546,7 +548,7 @@ describe("useAgentHistoryControls", () => {
       expect(Notice).toHaveBeenCalledWith("Failed to bookmark chat.");
     });
 
-    it("saves the open chat and bookmarks its note's link under the note's title", async () => {
+    it("saves the open chat and bookmarks its note's link under the note's title when the session has no label", async () => {
       const bookmarks = makeBookmarks();
       const manager = makeManager();
       const { result } = renderHook(() =>
@@ -564,6 +566,23 @@ describe("useAgentHistoryControls", () => {
       expect(Notice).toHaveBeenCalledWith("Bookmarked.");
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/702 titles the open chat's bookmark with its session label, such as a renamed tab, over the note's title", async () => {
+      const bookmarks = makeBookmarks();
+      const manager = makeManager();
+      manager.getActiveSession.mockReturnValue({ getLabel: () => "Renamed chat" });
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(manager, makeBookmarkingPlugin(bookmarks))
+      );
+
+      await act(async () => {
+        await result.current.setActiveChatBookmarked(true);
+      });
+
+      expect(bookmarks.urlBookmarkLookup[LINK_SAVED]).toEqual(
+        expect.objectContaining({ url: LINK_SAVED, title: "Renamed chat" })
+      );
+    });
+
     it("removes the open chat's bookmark", async () => {
       const bookmarks = makeBookmarks([LINK_SAVED]);
       const { result } = renderHook(() =>
@@ -578,7 +597,7 @@ describe("useAgentHistoryControls", () => {
       expect(Notice).toHaveBeenCalledWith("Removed from bookmarks.");
     });
 
-    it("adds no bookmark and shows a notice when the open chat cannot be saved", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/702 adds no bookmark and shows a notice when the open chat cannot be saved", async () => {
       const bookmarks = makeBookmarks();
       const manager = makeManager();
       manager.saveActiveSession.mockResolvedValue(null);
