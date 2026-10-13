@@ -1,4 +1,6 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
+import { BookmarkChatButton } from "@/agentMode/ui/BookmarkChatButton";
+import type { ChatBookmarkState } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { describeChatDelete } from "@/lib/chatDeleteText";
 import {
   ChatHistoryItem,
@@ -32,6 +34,8 @@ interface AgentChatControlsProps {
   runningChatIds?: ReadonlySet<string>;
   onOpenSourceFile?: (id: string) => Promise<void>;
   onCopyChatLink?: () => void | Promise<void>;
+  getChatBookmarkState?: () => Promise<ChatBookmarkState>;
+  onSetChatBookmarked?: (bookmarked: boolean) => Promise<void>;
   usageMeter?: React.ReactNode;
   showMultiAgentUpsell?: boolean;
 }
@@ -49,6 +53,8 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   runningChatIds,
   onOpenSourceFile,
   onCopyChatLink,
+  getChatBookmarkState,
+  onSetChatBookmarked,
   usageMeter,
   showMultiAgentUpsell = false,
 }) => {
@@ -91,6 +97,12 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
               <TooltipContent>New Chat</TooltipContent>
             </Tooltip>
             <CopyChatLinkButton onCopyLink={onCopyChatLink} />
+            {onSetChatBookmarked && (
+              <BookmarkChatButton
+                getBookmarkState={getChatBookmarkState}
+                onSetBookmarked={onSetChatBookmarked}
+              />
+            )}
           </>
         )}
         {!settings.autosaveChat && onSaveAsNote && (

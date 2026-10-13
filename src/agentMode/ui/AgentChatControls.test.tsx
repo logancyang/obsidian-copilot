@@ -1,7 +1,9 @@
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppContext } from "@/context";
 import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { App } from "obsidian";
 import * as React from "react";
 
 jest.mock("@/plusUtils", () => ({
@@ -72,6 +74,32 @@ describe("AgentChatControls", () => {
         </TooltipProvider>
       );
       expect(screen.queryByTitle("Copy Chat Link")).toBeNull();
+    });
+
+    it("places the bookmark toggle right after the copy-link control", async () => {
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      render(
+        <AppContext.Provider value={new App()}>
+          <TooltipProvider>
+            <AgentChatControls
+              onNewChat={() => {}}
+              onCopyChatLink={() => {}}
+              getChatBookmarkState={async () => "not-bookmarked"}
+              onSetChatBookmarked={async () => {}}
+            />
+          </TooltipProvider>
+        </AppContext.Provider>
+      );
+
+      const bookmark = await screen.findByTitle("Bookmark Chat");
+      expect(screen.getByTitle("Copy Chat Link").nextElementSibling).toBe(bookmark);
+    });
+
+    it("leaves out the bookmark toggle when the caller does not support bookmarking", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      renderControls();
+
+      expect(screen.queryByTitle("Bookmark Chat")).toBeNull();
     });
   });
 });

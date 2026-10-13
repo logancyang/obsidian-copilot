@@ -5,7 +5,7 @@ import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPo
 import type CopilotPlugin from "@/main";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { act, renderHook } from "@testing-library/react";
-import { type App, Notice } from "obsidian";
+import { type App, Notice, TFile } from "obsidian";
 
 const item = (id: string, backendId?: string): ChatHistoryItem =>
   ({ id, backendId }) as unknown as ChatHistoryItem;
@@ -17,12 +17,14 @@ function makeManager() {
     deleteChatHistory: jest.fn(async () => {}),
     setChatPinned: jest.fn(async (id: string) => ({ id, pinnedAt: 5_000 })),
     ensureChatNote: jest.fn(async (id: string) => id),
+    saveActiveSession: jest.fn(async () => ({ path: "chats/saved.md" })),
   } as unknown as AgentSessionManager & {
     getChatHistoryItems: jest.Mock;
     updateChatTitle: jest.Mock;
     deleteChatHistory: jest.Mock;
     setChatPinned: jest.Mock;
     ensureChatNote: jest.Mock;
+    saveActiveSession: jest.Mock;
   };
 }
 
@@ -48,10 +50,16 @@ function makeBookmarks(urls: string[] = []) {
 function makeBookmarkingPlugin(bookmarks: ReturnType<typeof makeBookmarks> | null) {
   const epochs: Record<string, number> = { "chats/agent__a.md": 1_000, "chats/saved.md": 3_000 };
   const app = {
-    vault: { getName: () => "Notes" },
+    vault: {
+      getName: () => "Notes",
+      getAbstractFileByPath: (path: string) =>
+        path in epochs ? new (TFile as unknown as new (path: string) => TFile)(path) : null,
+    },
     metadataCache: {
       getCache: (path: string) =>
         path in epochs ? { frontmatter: { epoch: epochs[path] } } : null,
+      getFileCache: (file: TFile) =>
+        file.path === "chats/saved.md" ? { frontmatter: { topic: "Saved chat" } } : null,
     },
     internalPlugins: {
       getEnabledPluginById: jest.fn((id: string) => (id === "bookmarks" ? bookmarks : null)),
@@ -532,6 +540,54 @@ describe("useAgentHistoryControls", () => {
 
       await act(async () => {
         await result.current.setChatBookmarked(NATIVE_ID, "Unsaved chat", true);
+      });
+
+      expect(bookmarks.addItem).not.toHaveBeenCalled();
+      expect(Notice).toHaveBeenCalledWith("Failed to bookmark chat.");
+    });
+
+    it("saves the open chat and bookmarks its note's link under the note's title", async () => {
+      const bookmarks = makeBookmarks();
+      const manager = makeManager();
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(manager, makeBookmarkingPlugin(bookmarks))
+      );
+
+      await act(async () => {
+        await result.current.setActiveChatBookmarked(true);
+      });
+
+      expect(manager.saveActiveSession).toHaveBeenCalledTimes(1);
+      expect(bookmarks.urlBookmarkLookup[LINK_SAVED]).toEqual(
+        expect.objectContaining({ type: "url", url: LINK_SAVED, title: "Saved chat" })
+      );
+      expect(Notice).toHaveBeenCalledWith("Bookmarked.");
+    });
+
+    it("removes the open chat's bookmark", async () => {
+      const bookmarks = makeBookmarks([LINK_SAVED]);
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(makeManager(), makeBookmarkingPlugin(bookmarks))
+      );
+
+      await act(async () => {
+        await result.current.setActiveChatBookmarked(false);
+      });
+
+      expect(bookmarks.urlBookmarkLookup).toEqual({});
+      expect(Notice).toHaveBeenCalledWith("Removed from bookmarks.");
+    });
+
+    it("adds no bookmark and shows a notice when the open chat cannot be saved", async () => {
+      const bookmarks = makeBookmarks();
+      const manager = makeManager();
+      manager.saveActiveSession.mockResolvedValue(null);
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(manager, makeBookmarkingPlugin(bookmarks))
+      );
+
+      await act(async () => {
+        await result.current.setActiveChatBookmarked(true);
       });
 
       expect(bookmarks.addItem).not.toHaveBeenCalled();

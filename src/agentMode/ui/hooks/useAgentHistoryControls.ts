@@ -6,7 +6,9 @@ import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPo
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { buildChatDeepLink, getSavedChatDeepLinkId } from "@/utils/chatDeepLink";
+import { extractChatTitle } from "@/utils/chatHistoryUtils";
 import { getUrlBookmarks, isBookmarksPluginDisabled } from "@/utils/obsidianBookmarks";
+import { resolveFileByPath } from "@/utils/vaultAdapterUtils";
 import { type App, Notice } from "obsidian";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -24,6 +26,7 @@ export interface AgentHistoryControls {
   copyChatLink: (id: string) => Promise<void>;
   getChatBookmarkState: (id: string) => Promise<ChatBookmarkState>;
   setChatBookmarked: (id: string, title: string, bookmarked: boolean) => Promise<void>;
+  setActiveChatBookmarked: (bookmarked: boolean) => Promise<void>;
 }
 
 export type ChatBookmarkState = "unavailable" | "off" | "bookmarked" | "not-bookmarked";
@@ -227,6 +230,19 @@ export function useAgentHistoryControls(
     [manager, plugin, runWithNotice, replaceChatRowId]
   );
 
+  const setActiveChatBookmarked = useCallback(
+    async (bookmarked: boolean) => {
+      await runWithNotice(bookmarked ? "bookmark chat" : "remove bookmark", async () => {
+        // A native session link only opens on this device: https://github.com/Brevilabs/obsidian-copilot-private/issues/601
+        const path = (await manager.saveActiveSession())?.path;
+        const file = path ? await resolveFileByPath(plugin.app, path) : null;
+        if (!file) throw new Error("The active chat has no saved note.");
+        await setChatBookmarked(file.path, extractChatTitle(plugin.app, file), bookmarked);
+      });
+    },
+    [manager, plugin, runWithNotice, setChatBookmarked]
+  );
+
   return {
     chatHistoryItems: visibleChatHistoryItems,
     chatHistorySettled,
@@ -239,5 +255,6 @@ export function useAgentHistoryControls(
     copyChatLink,
     getChatBookmarkState,
     setChatBookmarked,
+    setActiveChatBookmarked,
   };
 }
