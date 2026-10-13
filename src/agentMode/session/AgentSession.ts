@@ -65,6 +65,7 @@ import {
 } from "@/agentMode/session/turnFileChanges";
 import { getVaultBase } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
+import { isCompactCommand } from "@/commands/compactCommand";
 import { ContextProcessor } from "@/contextProcessor";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
@@ -657,6 +658,14 @@ export class AgentSession {
     promptContent?: PromptContent[],
     mentionedAgents?: ReadonlyArray<BackendId>
   ): { userMessageId: string; turn: Promise<StopReason> } {
+    // Agents only compact when /compact is the whole prompt, so nothing rides along with it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
+    if (isCompactCommand(displayText)) {
+      displayText = displayText.trim();
+      context = undefined;
+      promptContent = undefined;
+      mentionedAgents = undefined;
+    }
     const status = this.getStatus();
     if (status === "starting") {
       throw new Error("Session is still starting");
@@ -737,9 +746,12 @@ export class AgentSession {
           `This chat's model isn't enabled for ${this.displayNameFor(this.backendId)}. Pick an enabled model to continue.`
         );
       }
-      const isFirstTurn = !this.firstPromptSent;
+      const sendsCompact = isCompactCommand(displayText);
+      const isFirstTurn = !this.firstPromptSent && !sendsCompact;
       const projectContextBlock = isFirstTurn ? (this.getProjectContextBlockFn?.() ?? null) : null;
-      const projectContextUpdates = this.getProjectContextUpdatesFn?.() ?? null;
+      const projectContextUpdates = sendsCompact
+        ? null
+        : (this.getProjectContextUpdatesFn?.() ?? null);
       const projectContextUpdatesBlock = projectContextUpdates?.block ?? null;
 
       if (
@@ -772,7 +784,9 @@ export class AgentSession {
         return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAtMs);
       }
 
-      const leadingContextBlock = buildPriorFanoutContextBlock(this.pendingFanoutContext);
+      const leadingContextBlock = sendsCompact
+        ? null
+        : buildPriorFanoutContextBlock(this.pendingFanoutContext);
       // The agent keeps every earlier turn, so resending an unchanged page fills its context
       // window with copies. https://github.com/Brevilabs/obsidian-copilot-private/issues/667
       const webTabPromptBlock = webTabBlock === this.lastSentWebTabBlock ? "" : webTabBlock;
