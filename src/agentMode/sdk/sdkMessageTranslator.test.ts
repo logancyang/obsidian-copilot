@@ -1286,7 +1286,7 @@ describe("sdkMessageTranslator", () => {
         }
       });
 
-      it("keeps repeated compacting statuses on the one open compaction", () => {
+      it(`keeps repeated compacting statuses on the one open compaction (${ISSUE_635})`, () => {
         const state = createTranslatorState();
         const ids = ["repeat-1", "repeat-2", "repeat-3"].flatMap((uuid) =>
           translateOne(statusFrame({ status: "compacting" }, uuid), state).map(
@@ -1297,7 +1297,7 @@ describe("sdkMessageTranslator", () => {
         expect(ids).toEqual(["repeat-1", "repeat-1", "repeat-1"]);
       });
 
-      it("gives a compaction that starts after the previous one finished its own id", () => {
+      it(`gives a compaction that starts after the previous one finished its own id (${ISSUE_635})`, () => {
         const state = createTranslatorState();
         translateOne(statusFrame({ status: "compacting" }, "first"), state);
         translateOne(statusFrame({ compact_result: "failed", compact_error: "boom" }, "f"), state);
@@ -1307,7 +1307,7 @@ describe("sdkMessageTranslator", () => {
         expect(next).toEqual([expect.objectContaining({ id: "second", status: "in_progress" })]);
       });
 
-      it("creates a completed row when a boundary arrives with no compacting status before it", () => {
+      it(`creates a completed row when a boundary arrives with no compacting status before it (${ISSUE_635})`, () => {
         const [boundary] = readFixture("claude-compact-manual").filter(
           (f) => (f.payload as { subtype?: string }).subtype === "compact_boundary"
         );
@@ -1326,7 +1326,7 @@ describe("sdkMessageTranslator", () => {
         ]);
       });
 
-      it("keeps the compaction running through the success status and completes the same row at the boundary", () => {
+      it(`keeps the compaction running through the success status and completes the same row at the boundary (${ISSUE_635})`, () => {
         const state = createTranslatorState();
         translateOne(statusFrame({ status: "compacting" }, "open"), state);
 
@@ -1353,7 +1353,7 @@ describe("sdkMessageTranslator", () => {
         ]);
       });
 
-      it("leaves the completed compaction without token counts when the boundary reports no post_tokens", () => {
+      it(`leaves the completed compaction without token counts when the boundary reports no post_tokens (${ISSUE_635})`, () => {
         const state = createTranslatorState();
         const updates = translateOne(
           {

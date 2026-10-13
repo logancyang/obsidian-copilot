@@ -170,6 +170,19 @@ When a conversation grows long, choose **/compact** at the start of an empty mes
 - Attached notes, web pages, images, and agent mentions are not sent with `/compact`. Project context waits for your next regular message.
 - A queued `/compact` runs as its own turn instead of joining other queued messages. If you stop the current turn, the other queued messages return to the message box without it.
 
+Agents also compact on their own when the context window fills up. Either way, the chat shows the progress in line with the conversation:
+
+| Status                                                       | Meaning                                                                                              |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| **Compacting conversation…**                                 | The agent is summarizing the chat after **/compact**                                                 |
+| **Context is full, compacting…**                             | The agent started compacting on its own                                                              |
+| **Context compacted** or **Context compacted automatically** | The summary is done. When the agent reports them, the token counts before and after follow the label |
+| **Couldn't compact**                                         | Compaction failed. The reason appears with the row or below it                                       |
+| **Compaction cancelled**                                     | You stopped the turn before compaction finished                                                      |
+| **Nothing to compact yet**                                   | The chat is too short to summarize                                                                   |
+
+When a finished compaction reports its new size, the context ring drops to that size instead of keeping the reading from before it.
+
 ## Review what a turn changed
 
 When a turn finishes after the agent has edited your vault, a **Files changed** card closes that turn. It lists one row per note, with the number of added and removed lines, and a **new** or **deleted** badge for notes the agent created or removed. The card totals the changes in its header and scrolls when a turn touched many files.
