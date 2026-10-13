@@ -8,7 +8,7 @@ import * as React from "react";
 
 export type ChangeKind = "inserted" | "deleted" | "modified";
 
-export interface ChangedBlock {
+interface ChangedBlock {
   element: HTMLElement;
   kind: ChangeKind;
 }
@@ -27,10 +27,7 @@ export interface RenderedDiffProps {
   onChangeRuns?: (runs: readonly ChangeRun[]) => void;
 }
 
-interface ResolvedPlan {
-  before: string | null;
-  after: string | null;
-  path: string;
+interface ResolvedPlan extends RenderedDiffProps {
   segments: readonly DiffSegment[];
 }
 
