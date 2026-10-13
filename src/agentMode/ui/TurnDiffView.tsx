@@ -73,10 +73,7 @@ export class TurnDiffView extends ItemView {
   }
 
   private renderTree(): ReactNode {
-    // Change marks belong to one file's rendered diff, so a new state starts a fresh pane instead of
-    // leaving the previous file's ticks over a body that is still parsing.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/709
-    return this.state ? <TurnDiffPane key={this.getDiffKey()} state={this.state} /> : null;
+    return this.state ? <TurnDiffPane state={this.state} /> : null;
   }
 }
 
