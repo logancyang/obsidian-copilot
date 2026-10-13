@@ -604,7 +604,6 @@ interface ClaudeTranscriptEntry {
   isMeta?: boolean;
   isSidechain?: boolean;
   isCompactSummary?: boolean;
-  isVisibleInTranscriptOnly?: boolean;
   message?: { content?: unknown };
 }
 
@@ -618,16 +617,10 @@ export function replayClaudeTranscript(
   const unansweredToolCallIds = new Set<string>();
   for (const line of jsonl.split(/\r?\n/)) {
     const entry = parseTranscriptEntry(line);
-    // Meta, subagent, and compaction entries are transcript bookkeeping the live chat never showed. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
-    if (
-      !entry ||
-      entry.isMeta ||
-      entry.isSidechain ||
-      entry.isCompactSummary ||
-      entry.isVisibleInTranscriptOnly
-    ) {
-      continue;
-    }
+    // Meta and subagent entries are transcript bookkeeping the live chat never showed. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
+    if (!entry || entry.isMeta || entry.isSidechain) continue;
+    // A compaction summary and the echo of a local command such as /compact are Claude CLI bookkeeping, not prompts. https://github.com/Brevilabs/obsidian-copilot-private/issues/635
+    if (entry.isCompactSummary || isLocalCommandEcho(entry.message?.content)) continue;
     const content = entry.message?.content;
     const events =
       entry.type === "assistant"
@@ -697,9 +690,11 @@ function replayAssistantContent(
   return out;
 }
 
-// Claude records a local command such as /compact as a user entry of tagged text, not as a prompt.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/635
 const LOCAL_COMMAND_ECHO = /^<(command-name|local-command-stdout)>/;
+
+function isLocalCommandEcho(content: unknown): boolean {
+  return typeof content === "string" && LOCAL_COMMAND_ECHO.test(content);
+}
 
 function replayUserContent(
   content: unknown,
@@ -708,7 +703,6 @@ function replayUserContent(
   state: TranslatorState
 ): SessionEvent[] {
   if (typeof content === "string") {
-    if (LOCAL_COMMAND_ECHO.test(content)) return [];
     return [textChunk(sessionId, "user_message_chunk", content, messageId)];
   }
   if (!Array.isArray(content)) return [];

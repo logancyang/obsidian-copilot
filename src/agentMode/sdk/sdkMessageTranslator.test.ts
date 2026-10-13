@@ -1848,7 +1848,7 @@ describe("sdkMessageTranslator", () => {
       });
     });
 
-    it(`skips meta, sidechain, compaction-summary, transcript-only, and non-conversation entries so they never become bubbles (${ISSUE_643})`, () => {
+    it(`skips meta, sidechain, compaction-summary, and non-conversation entries so they never become bubbles (${ISSUE_643})`, () => {
       const jsonl = transcript(
         { type: "queue-operation" },
         { type: "attachment", uuid: "att-1" },
@@ -1858,9 +1858,6 @@ describe("sdkMessageTranslator", () => {
         assistantEntry([{ type: "text", text: "subagent step" }], { isSidechain: true }),
         userEntry("summary-1", "This session is being continued from a previous conversation.", {
           isCompactSummary: true,
-        }),
-        userEntry("summary-2", "This session is being continued from a previous conversation.", {
-          isVisibleInTranscriptOnly: true,
         }),
         userEntry("u-1", "real prompt")
       );
