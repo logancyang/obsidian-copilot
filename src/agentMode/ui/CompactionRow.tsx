@@ -8,8 +8,8 @@ interface CompactionRowProps {
 }
 
 const RUNNING_LABEL = {
-  manual: { text: "Compacting conversation…", announcement: "Compacting conversation" },
-  auto: { text: "Context is full, compacting…", announcement: "Context is full, compacting" },
+  manual: "Compacting conversation…",
+  auto: "Context is full, compacting…",
 } as const;
 
 function formatTokens(count: number): string {
@@ -29,18 +29,15 @@ const Hairline: React.FC = () => (
 
 export const CompactionRow: React.FC<CompactionRowProps> = ({ part }) => {
   switch (part.status) {
-    case "in_progress": {
-      const label = RUNNING_LABEL[part.trigger];
+    case "in_progress":
       return (
         <AgentTurnDurationIndicator
           status="running"
           startedAtMs={part.startedAtMs}
-          label={label.text}
-          announcement={label.announcement}
+          label={RUNNING_LABEL[part.trigger]}
           inline
         />
       );
-    }
     case "completed":
       return (
         <div className="tw-flex tw-items-center tw-gap-2 tw-py-1 tw-text-ui-small tw-text-muted">

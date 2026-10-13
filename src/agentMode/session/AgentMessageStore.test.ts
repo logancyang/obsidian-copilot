@@ -455,7 +455,7 @@ describe("AgentMessageStore", () => {
       store.upsertAgentPart(id, done);
       store.upsertAgentPart(id, compaction({ id: "open", trigger: "auto" }));
 
-      expect(store.settleOpenCompactions(id, { status: "cancelled" })).toBe(true);
+      expect(store.settleOpenCompactions(id)).toBe(true);
 
       const parts = store.getMessage(id)?.parts ?? [];
       expect(parts[0]).toBe(done);
@@ -467,7 +467,7 @@ describe("AgentMessageStore", () => {
       const id = store.addMessage(placeholder());
       store.upsertAgentPart(id, compaction());
 
-      store.settleOpenCompactions(id, { status: "failed", error: "stream error" });
+      store.settleOpenCompactions(id, "stream error");
 
       expect(store.getMessage(id)?.parts?.[0]).toMatchObject({
         status: "failed",
@@ -481,9 +481,9 @@ describe("AgentMessageStore", () => {
       store.upsertAgentPart(id, compaction({ status: "skipped" }));
       const before = store.getMessage(id);
 
-      expect(store.settleOpenCompactions(id, { status: "cancelled" })).toBe(false);
+      expect(store.settleOpenCompactions(id)).toBe(false);
       expect(store.getMessage(id)).toBe(before);
-      expect(store.settleOpenCompactions("missing", { status: "cancelled" })).toBe(false);
+      expect(store.settleOpenCompactions("missing")).toBe(false);
     });
   });
 

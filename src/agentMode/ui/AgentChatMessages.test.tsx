@@ -58,11 +58,13 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
   AgentTrail: ({
     timestamp,
     parts,
+    errorText,
     fileChanges,
     onOpenFileChange,
   }: {
     timestamp?: string;
     parts: unknown[];
+    errorText?: string;
     fileChanges?: TurnFileChange[];
     onOpenFileChange?: (change: TurnFileChange) => void;
   }) => {
@@ -70,6 +72,7 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
     return (
       <div data-testid="agent-trail-timestamp">
         {timestamp}
+        {errorText ? <span data-testid="agent-trail-error">{errorText}</span> : null}
         {fileChanges?.map((change) => (
           <button key={change.path} type="button" onClick={() => onOpenFileChange?.(change)}>
             {change.path}
@@ -374,6 +377,34 @@ describe("AgentChatMessages", () => {
       );
 
       expect(screen.getByTestId("agent-trail-timestamp").textContent).toBe(timestamp);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 hands a failed structured turn's error to its trail, which shows no error text for a message without parts", () => {
+      renderMessages(
+        [
+          assistantMessage("failed-1", 62_000, {
+            message: "**Error:** stream error",
+            isErrorMessage: true,
+            parts: [
+              {
+                kind: "compaction",
+                id: "c1",
+                status: "completed",
+                trigger: "manual",
+                startedAtMs: 0,
+              },
+            ],
+          }),
+          assistantMessage("ok-1", 63_000, {
+            parts: [{ kind: "thought", text: "Fine." }],
+          }),
+        ],
+        false
+      );
+
+      expect(screen.getAllByTestId("agent-trail-error").map((el) => el.textContent)).toEqual([
+        "**Error:** stream error",
+      ]);
     });
 
     it("keeps completed plain and structured turns mounted without rendering them again while the live turn streams https://github.com/logancyang/obsidian-copilot/issues/3343", () => {

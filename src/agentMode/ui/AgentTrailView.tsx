@@ -32,6 +32,7 @@ interface AgentTrailProps {
   timestamp?: string;
   app: App;
   turnStopReason?: StopReason;
+  errorText?: string;
   fileChanges?: TurnFileChange[];
   onOpenFileChange?: (change: TurnFileChange) => void;
 }
@@ -46,6 +47,7 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   timestamp,
   app,
   turnStopReason,
+  errorText,
   fileChanges,
   onOpenFileChange = noopOpenFileChange,
 }) => {
@@ -75,6 +77,13 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   return (
     <div className="tw-group tw-flex tw-flex-col tw-gap-1">
       <LinearTrail parts={parts} isStreaming={isStreaming} app={app} />
+      {errorText && answer.length === 0 ? (
+        // A failed turn's error is stored as message text, which a reply with parts never shows.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
+        <div className="tw-text-error">
+          <AgentMarkdownText text={errorText} app={app} />
+        </div>
+      ) : null}
       {turnStopReason !== undefined && fileChanges && fileChanges.length > 0 ? (
         <FilesChangedCard changes={fileChanges} onOpen={onOpenFileChange} />
       ) : null}

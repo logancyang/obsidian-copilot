@@ -61,7 +61,6 @@ function partsEqual(a: AgentMessagePart, b: AgentMessagePart): boolean {
     case "compaction":
       if (b.kind !== "compaction") return false;
       return (
-        a.id === b.id &&
         a.status === b.status &&
         a.trigger === b.trigger &&
         a.error === b.error &&
@@ -367,16 +366,17 @@ export class AgentMessageStore {
 
   // A spinner must not outlive the turn that started it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
-  settleOpenCompactions(
-    id: string,
-    outcome: { status: "cancelled" } | { status: "failed"; error: string }
-  ): boolean {
+  settleOpenCompactions(id: string, error?: string): boolean {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg?.parts?.some((p) => p.kind === "compaction" && p.status === "in_progress")) {
       return false;
     }
     msg.parts = msg.parts.map((p) =>
-      p.kind === "compaction" && p.status === "in_progress" ? { ...p, ...outcome } : p
+      p.kind === "compaction" && p.status === "in_progress"
+        ? error === undefined
+          ? { ...p, status: "cancelled" }
+          : { ...p, status: "failed", error }
+        : p
     );
     this.touch(msg);
     return true;
