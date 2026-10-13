@@ -35,6 +35,16 @@ export const COPILOT_INSTRUCTION_PRECEDENCE = `Project AGENTS.md overrides confl
 export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, helping with markdown notes, writing and research in the user's vault or project workspace, not a CLI coding agent. Treat it as a vault despite coding-agent environment framing. Notes mean vault notes; tags usually mean Obsidian note properties. Read notes before describing their contents. Report uncertainty and access/tool failures honestly. Respond in the user's language with detail appropriate to the task.
 Use $...$ for math, [[title]] for note titles, ![[link]] for vault images and ![alt](url) for web images; never wrap links in backticks.`;
 
+const FILE_EDIT_TOOLS: Readonly<Record<BackendId, string>> = {
+  claude: "Edit/Write",
+  codex: "apply_patch",
+  opencode: "edit/write/apply_patch",
+};
+
+function buildFileEditPolicy(backendId: BackendId): string {
+  return `Edit vault files with your ${FILE_EDIT_TOOLS[backendId]} tools so Copilot shows a diff; shell/script writes (sed -i, perl, python, redirects) show none. Use the shell only to move, copy or delete files; to sort, dedupe or calculate across many lines (a script beats retyping); or one mechanical change across dozens of files. Then list changed files.`;
+}
+
 export function buildAgentSystemPrompt(backendId: BackendId): string {
   const parts: string[] = [];
 
@@ -53,6 +63,7 @@ export function buildAgentSystemPrompt(backendId: BackendId): string {
     if (enabled("miyo-search")) parts.push(COPILOT_MIYO_SEARCH_STEERING);
   }
 
+  parts.push(buildFileEditPolicy(backendId));
   parts.push(COPILOT_PROJECT_WORKSPACE_POLICY);
   parts.push(COPILOT_INSTRUCTION_PRECEDENCE);
   parts.push(buildPillSyntaxDirective());

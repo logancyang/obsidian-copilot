@@ -88,6 +88,31 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_PROJECT_WORKSPACE_POLICY);
     });
 
+    it("tells each agent to edit vault files with its own edit tools so Copilot can show a diff", () => {
+      expect(buildAgentSystemPrompt("claude")).toContain(
+        "Edit vault files with your Edit/Write tools so Copilot shows a diff"
+      );
+      expect(buildAgentSystemPrompt("codex")).toContain(
+        "Edit vault files with your apply_patch tools so Copilot shows a diff"
+      );
+      expect(buildAgentSystemPrompt("opencode")).toContain(
+        "Edit vault files with your edit/write/apply_patch tools so Copilot shows a diff"
+      );
+    });
+
+    it("limits shell file writes to moves, many-line sort/dedupe/calculation, and bulk changes across dozens of files", () => {
+      expect(buildAgentSystemPrompt(AGENT)).toContain(
+        "Use the shell only to move, copy or delete files; to sort, dedupe or calculate across many lines (a script beats retyping); or one mechanical change across dozens of files. Then list changed files."
+      );
+    });
+
+    it("keeps the edit-tool policy when the builtin prompt is disabled", () => {
+      setDisableBuiltinSystemPrompt(true);
+      expect(buildAgentSystemPrompt(AGENT)).toContain(
+        "Edit vault files with your edit/write/apply_patch tools"
+      );
+    });
+
     it("steers every agent to the enabled Copilot relay skills first, regardless of Plus status", () => {
       setBuiltinPreferences({});
       for (const agent of ["claude", "codex", "opencode"]) {
