@@ -5,6 +5,13 @@ import { RenameChatModal } from "@/agentMode/ui/RenameChatModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { describeChatDelete } from "@/lib/chatDeleteText";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { type ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { ChatIconWithAttention } from "@/components/chat-components/ChatIconWithAttention";
@@ -13,9 +20,17 @@ import { cn } from "@/lib/utils";
 import { isNativeChatId } from "@/utils/nativeChatId";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
-import { ArrowUpRight, LoaderCircle, MessageCircle, MoreHorizontal, Power } from "lucide-react";
-import { type App, Menu, type MenuPositionDef } from "obsidian";
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ArrowUpRight,
+  Link,
+  LoaderCircle,
+  MessageCircle,
+  MoreHorizontal,
+  Pencil,
+  Power,
+  Trash2,
+} from "lucide-react";
+import React, { forwardRef, memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
@@ -86,70 +101,97 @@ interface RecentChatMenuActions {
   onDeleteChat: (id: string) => Promise<void>;
 }
 
-function buildRecentChatMenu(
-  app: App,
-  item: ChatHistoryItem,
-  { onUpdateTitle, onCopyChatLink, onDeleteChat }: RecentChatMenuActions
-): Menu {
-  const menu = new Menu();
-  menu.addItem((menuItem) =>
-    menuItem
-      .setTitle("Rename")
-      .setIcon("pencil")
-      .onClick(() =>
-        new RenameChatModal(app, item.title, (title) => onUpdateTitle(item.id, title)).open()
-      )
-  );
-  // A chat with no saved note has nothing a link could open: https://github.com/Brevilabs/obsidian-copilot-private/issues/693
-  if (!isNativeChatId(item.id)) {
-    menu.addItem((menuItem) =>
-      menuItem
-        .setTitle("Copy chat link")
-        .setIcon("link")
-        .onClick(() => safeAsyncHandler(onCopyChatLink)(item.id))
+interface RowActionButtonProps extends React.ComponentPropsWithoutRef<typeof Button> {
+  label: string;
+}
+
+const RowActionButton = forwardRef<HTMLButtonElement, RowActionButtonProps>(
+  function RowActionButton({ label, onClick, ...props }, ref) {
+    return (
+      <Button
+        ref={ref}
+        size="sm"
+        variant="ghost"
+        className="tw-size-5 tw-p-0"
+        aria-label={label}
+        title={label}
+        {...props}
+        onClick={(event) => {
+          event.stopPropagation();
+          onClick?.(event);
+        }}
+      />
     );
   }
-  menu.addSeparator();
-  menu.addItem((menuItem) =>
-    menuItem
-      .setTitle("Delete")
-      .setIcon("trash-2")
-      .setWarning(true)
-      .onClick(() =>
-        new ConfirmModal(
-          app,
-          () => onDeleteChat(item.id),
-          describeChatDelete(item.backendId ? backendRegistry[item.backendId] : undefined),
-          "Delete chat",
-          "Delete",
-          "Cancel"
-        ).open()
-      )
+);
+
+interface RecentChatMenuProps {
+  item: ChatHistoryItem;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  actions: RecentChatMenuActions;
+}
+
+function RecentChatMenu({
+  item,
+  open,
+  onOpenChange,
+  actions: { onUpdateTitle, onCopyChatLink, onDeleteChat },
+}: RecentChatMenuProps): React.ReactElement {
+  const app = useApp();
+  const [rowBody, setRowBody] = useState<HTMLElement | null>(null);
+  const trackRowBody = useCallback(
+    (node: HTMLButtonElement | null) => setRowBody(node?.ownerDocument.body ?? null),
+    []
   );
-  return menu;
-}
-
-interface RowActionButtonProps {
-  label: string;
-  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  children: React.ReactNode;
-}
-
-function RowActionButton({ label, onClick, children }: RowActionButtonProps): React.ReactElement {
   return (
-    <Button
-      size="sm"
-      variant="ghost"
-      className="tw-size-5 tw-p-0"
-      aria-label={label}
-      title={label}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick(event);
-      }}
-    >
-      {children}
-    </Button>
+    <DropdownMenu open={open} onOpenChange={onOpenChange} modal={false}>
+      <DropdownMenuTrigger asChild>
+        <RowActionButton label="More actions" ref={trackRowBody}>
+          <MoreHorizontal className="tw-size-4" />
+        </RowActionButton>
+      </DropdownMenuTrigger>
+      {/* The menu renders in the row's own window, and React events bubble out of the portal to the row, which would open the chat.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/693 */}
+      <DropdownMenuContent
+        align="end"
+        container={rowBody}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <DropdownMenuItem
+          onSelect={() =>
+            new RenameChatModal(app, item.title, (title) => onUpdateTitle(item.id, title)).open()
+          }
+        >
+          <Pencil />
+          Rename
+        </DropdownMenuItem>
+        {/* A chat with no saved note has nothing a link could open: https://github.com/Brevilabs/obsidian-copilot-private/issues/693 */}
+        {!isNativeChatId(item.id) && (
+          <DropdownMenuItem onSelect={() => safeAsyncHandler(onCopyChatLink)(item.id)}>
+            <Link />
+            Copy chat link
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          className="tw-text-error focus:tw-text-error"
+          onSelect={() =>
+            new ConfirmModal(
+              app,
+              () => onDeleteChat(item.id),
+              describeChatDelete(item.backendId ? backendRegistry[item.backendId] : undefined),
+              "Delete chat",
+              "Delete",
+              "Cancel"
+            ).open()
+          }
+        >
+          <Trash2 />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -157,7 +199,7 @@ interface RecentChatRowProps {
   item: ChatHistoryItem;
   projectName?: string;
   onOpen: (id: string) => void;
-  onShowMenu: (item: ChatHistoryItem, position: MenuPositionDef, doc: Document) => void;
+  menuActions: RecentChatMenuActions;
   isNoteBacked: boolean;
   onOpenSourceFile: (id: string) => void;
   isRunning: boolean;
@@ -170,7 +212,7 @@ const RecentChatRow = memo(function RecentChatRow({
   item,
   projectName,
   onOpen,
-  onShowMenu,
+  menuActions,
   isNoteBacked,
   onOpenSourceFile,
   isRunning,
@@ -179,6 +221,7 @@ const RecentChatRow = memo(function RecentChatRow({
   hasAttention,
 }: RecentChatRowProps): React.ReactElement {
   const Icon = resolveChatIcon(item) ?? MessageCircle;
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div
@@ -191,7 +234,7 @@ const RecentChatRow = memo(function RecentChatRow({
       onClick={() => onOpen(item.id)}
       onContextMenu={(event) => {
         event.preventDefault();
-        onShowMenu(item, { x: event.clientX, y: event.clientY }, event.currentTarget.ownerDocument);
+        setMenuOpen(true);
       }}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return;
@@ -212,19 +255,29 @@ const RecentChatRow = memo(function RecentChatRow({
           <LoaderCircle
             className={cn(
               "tw-size-3.5 tw-shrink-0 tw-animate-spin tw-text-accent",
-              "group-focus-within:tw-hidden group-hover:tw-hidden"
+              menuOpen ? "tw-hidden" : "group-focus-within:tw-hidden group-hover:tw-hidden"
             )}
             aria-label="Responding"
           />
         ) : (
           <span
-            className="tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted group-focus-within:tw-hidden group-hover:tw-hidden"
+            className={cn(
+              "tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted",
+              menuOpen ? "tw-hidden" : "group-focus-within:tw-hidden group-hover:tw-hidden"
+            )}
             title={new Date(item.lastAccessedAt).toLocaleString()}
           >
             {formatCompactRelativeTime(item.lastAccessedAt.getTime())}
           </span>
         )}
-        <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-1.5 group-focus-within:tw-flex group-hover:tw-flex">
+        {/* The open menu is anchored to More actions, so the strip stays shown after the pointer leaves the row.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/693 */}
+        <div
+          className={cn(
+            "tw-shrink-0 tw-items-center tw-gap-1.5",
+            menuOpen ? "tw-flex" : "tw-hidden group-focus-within:tw-flex group-hover:tw-flex"
+          )}
+        >
           {isSessionOpen && onCloseSession && (
             <RowActionButton
               label="Close session"
@@ -238,15 +291,12 @@ const RecentChatRow = memo(function RecentChatRow({
               <ArrowUpRight className="tw-size-4" />
             </RowActionButton>
           )}
-          <RowActionButton
-            label="More actions"
-            onClick={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect();
-              onShowMenu(item, { x: rect.left, y: rect.bottom }, event.currentTarget.ownerDocument);
-            }}
-          >
-            <MoreHorizontal className="tw-size-4" />
-          </RowActionButton>
+          <RecentChatMenu
+            item={item}
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+            actions={menuActions}
+          />
         </div>
       </div>
     </div>
@@ -271,7 +321,6 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   sortStrategy = "recent",
   className,
 }: GlobalRecentChatsSectionProps): React.ReactElement {
-  const app = useApp();
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -299,15 +348,9 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
 
   const handleOpen = safeAsyncHandler(onLoadChat);
 
-  const handleShowMenu = useCallback(
-    (item: ChatHistoryItem, position: MenuPositionDef, doc: Document) => {
-      buildRecentChatMenu(app, item, {
-        onUpdateTitle,
-        onCopyChatLink,
-        onDeleteChat,
-      }).showAtPosition(position, doc);
-    },
-    [app, onCopyChatLink, onDeleteChat, onUpdateTitle]
+  const menuActions = useMemo(
+    () => ({ onUpdateTitle, onCopyChatLink, onDeleteChat }),
+    [onCopyChatLink, onDeleteChat, onUpdateTitle]
   );
   const getProjectName = useCallback(
     (item: ChatHistoryItem): string | undefined =>
@@ -347,7 +390,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
                 item={item}
                 projectName={getProjectName(item)}
                 onOpen={handleOpen}
-                onShowMenu={handleShowMenu}
+                menuActions={menuActions}
                 isNoteBacked={!isNativeChatId(item.id)}
                 onOpenSourceFile={handleOpenSourceFile}
                 isRunning={runningChatIds?.has(item.id) ?? false}

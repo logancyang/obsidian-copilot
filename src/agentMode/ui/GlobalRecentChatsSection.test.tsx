@@ -1,6 +1,6 @@
 import React from "react";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { App, Menu, type Modal } from "obsidian";
+import { App, type Modal } from "obsidian";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import { AppContext } from "@/context";
 import { buildNativeChatId } from "@/utils/nativeChatId";
@@ -32,18 +32,6 @@ jest.mock("obsidian", () => {
 });
 
 type SectionItems = React.ComponentProps<typeof GlobalRecentChatsSection>["items"];
-
-interface MockMenuItem {
-  title?: string;
-  icon?: string | null;
-  warning?: boolean;
-  separator?: boolean;
-  click?: () => void;
-}
-
-interface MockMenu {
-  items: MockMenuItem[];
-}
 
 const noop = async () => {};
 
@@ -80,16 +68,23 @@ function rowFor(title: string): HTMLElement {
   return row;
 }
 
-function openMenuFromButton(title: string): { menu: MockMenu; show: jest.SpyInstance } {
-  const show = jest.spyOn(Menu.prototype, "showAtPosition");
-  fireEvent.click(within(rowFor(title)).getByRole("button", { name: "More actions" }));
-  return { menu: show.mock.contexts.at(-1) as MockMenu, show };
+function moreActionsButton(title: string): HTMLElement {
+  return within(rowFor(title)).getByRole("button", { name: "More actions" });
 }
 
-function chooseMenuItem(menu: MockMenu, title: string): void {
-  const item = menu.items.find((candidate) => candidate.title === title);
-  if (!item?.click) throw new Error(`No menu item ${title}`);
-  item.click();
+function openMenuFromButton(title: string): HTMLElement {
+  fireEvent.pointerDown(moreActionsButton(title), { button: 0, ctrlKey: false });
+  return screen.getByRole("menu");
+}
+
+function menuEntries(menu: HTMLElement): string[] {
+  return Array.from(menu.querySelectorAll('[role="menuitem"], [role="separator"]')).map((entry) =>
+    entry.getAttribute("role") === "separator" ? "---" : (entry.textContent ?? "")
+  );
+}
+
+function chooseMenuItem(menu: HTMLElement, title: string): void {
+  fireEvent.click(within(menu).getByRole("menuitem", { name: title }));
 }
 
 function lastModal(): Modal {
@@ -126,6 +121,16 @@ function makeRecentItems(prefix: string, count: number): SectionItems {
 }
 
 describe("GlobalRecentChatsSection", () => {
+  beforeAll(() => {
+    (window as unknown as { activeDocument: Document }).activeDocument = window.document;
+    if (!("PointerEvent" in window)) {
+      (window as unknown as { PointerEvent: typeof MouseEvent }).PointerEvent = MouseEvent;
+    }
+    Element.prototype.hasPointerCapture = () => false;
+    Element.prototype.releasePointerCapture = () => {};
+    Element.prototype.scrollIntoView = () => {};
+  });
+
   const originalObserver = window.IntersectionObserver;
   let callback: IntersectionObserverCallback;
   const observer = { disconnect: jest.fn(), observe: jest.fn() } as unknown as IntersectionObserver;
@@ -385,44 +390,66 @@ describe("GlobalRecentChatsSection", () => {
     it("lists Rename, Copy chat link, a separator, and a warning-styled Delete in the More actions menu", () => {
       renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })] });
 
-      const { menu } = openMenuFromButton("Saved chat");
+      const menu = openMenuFromButton("Saved chat");
 
-      expect(menu.items.map((item) => (item.separator ? "---" : item.title))).toEqual([
-        "Rename",
-        "Copy chat link",
-        "---",
-        "Delete",
-      ]);
-      expect(menu.items.find((item) => item.title === "Delete")?.warning).toBe(true);
+      expect(menuEntries(menu)).toEqual(["Rename", "Copy chat link", "---", "Delete"]);
+      expect(within(menu).getByRole("menuitem", { name: "Delete" }).className).toContain(
+        "tw-text-error"
+      );
     });
 
-    it("opens the menu below the More actions button in the row's own window without opening the chat", () => {
+    it("opens the menu from the More actions button without opening the chat", () => {
       const onLoadChat = jest.fn(noop);
       renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })], onLoadChat });
 
-      const { show } = openMenuFromButton("Saved chat");
+      openMenuFromButton("Saved chat");
 
-      expect(show).toHaveBeenCalledWith(
-        expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
-        rowFor("Saved chat").ownerDocument
-      );
+      expect(moreActionsButton("Saved chat").getAttribute("aria-expanded")).toBe("true");
       expect(onLoadChat).not.toHaveBeenCalled();
     });
 
-    it("opens the same menu at the pointer instead of the browser menu when the row is right-clicked", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/693 opens the menu in the row's own window when another window is active", () => {
+      renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })] });
+      const otherWindowDocument = document.implementation.createHTMLDocument();
+      const globals = window as unknown as { activeDocument: Document };
+      globals.activeDocument = otherWindowDocument;
+      try {
+        openMenuFromButton("Saved chat");
+      } finally {
+        globals.activeDocument = document;
+      }
+
+      expect(otherWindowDocument.querySelector('[role="menu"]')).toBeNull();
+    });
+
+    it("opens the same menu instead of the browser menu when the row is right-clicked", () => {
       const onLoadChat = jest.fn(noop);
       renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })], onLoadChat });
-      const show = jest.spyOn(Menu.prototype, "showAtPosition");
 
-      const notPrevented = fireEvent.contextMenu(rowFor("Saved chat"), {
-        clientX: 120,
-        clientY: 80,
-      });
+      const notPrevented = fireEvent.contextMenu(rowFor("Saved chat"));
 
-      const menu = show.mock.contexts[0] as MockMenu;
       expect(notPrevented).toBe(false);
-      expect(show).toHaveBeenCalledWith({ x: 120, y: 80 }, rowFor("Saved chat").ownerDocument);
-      expect(menu.items.map((item) => item.title)).toContain("Rename");
+      expect(menuEntries(screen.getByRole("menu"))).toContain("Rename");
+      expect(onLoadChat).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/693 keeps the hover actions shown in place of the time while the menu is open", () => {
+      renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })] });
+
+      openMenuFromButton("Saved chat");
+
+      expect(moreActionsButton("Saved chat").parentElement?.className).toMatch(/(^| )tw-flex( |$)/);
+      expect(within(rowFor("Saved chat")).getByText(/ago|now/).className).toMatch(
+        /(^| )tw-hidden( |$)/
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/693 does not open the chat when a menu item is chosen", () => {
+      const onLoadChat = jest.fn(noop);
+      renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })], onLoadChat });
+
+      chooseMenuItem(openMenuFromButton("Saved chat"), "Copy chat link");
+
       expect(onLoadChat).not.toHaveBeenCalled();
     });
 
@@ -430,9 +457,9 @@ describe("GlobalRecentChatsSection", () => {
       const nativeId = buildNativeChatId("opencode", "session-1");
       renderSection({ items: [makeItem(nativeId, { title: "Native chat" })] });
 
-      const { menu } = openMenuFromButton("Native chat");
+      const menu = openMenuFromButton("Native chat");
 
-      expect(menu.items.map((item) => item.title)).not.toContain("Copy chat link");
+      expect(menuEntries(menu)).not.toContain("Copy chat link");
       expect(
         within(rowFor("Native chat")).queryByRole("button", { name: "Open source note" })
       ).toBeNull();
@@ -445,7 +472,7 @@ describe("GlobalRecentChatsSection", () => {
         onCopyChatLink,
       });
 
-      chooseMenuItem(openMenuFromButton("Saved chat").menu, "Copy chat link");
+      chooseMenuItem(openMenuFromButton("Saved chat"), "Copy chat link");
 
       expect(onCopyChatLink).toHaveBeenCalledWith("chats/saved.md");
     });
@@ -457,7 +484,8 @@ describe("GlobalRecentChatsSection", () => {
         onUpdateTitle,
       });
 
-      act(() => chooseMenuItem(openMenuFromButton("Saved chat").menu, "Rename"));
+      const menu = openMenuFromButton("Saved chat");
+      act(() => chooseMenuItem(menu, "Rename"));
       const dialog = lastModal();
       const field = within(dialog.contentEl).getByRole("textbox", { name: "Chat title" });
       expect(dialog.titleEl.textContent).toBe("Rename chat");
@@ -475,7 +503,8 @@ describe("GlobalRecentChatsSection", () => {
       const onDeleteChat = jest.fn(noop);
       renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })], onDeleteChat });
 
-      act(() => chooseMenuItem(openMenuFromButton("Saved chat").menu, "Delete"));
+      const menu = openMenuFromButton("Saved chat");
+      act(() => chooseMenuItem(menu, "Delete"));
       const dialog = lastModal();
       expect(dialog.titleEl.textContent).toBe("Delete chat");
       expect(within(dialog.contentEl).getByText("Delete this chat from Copilot?")).toBeTruthy();
@@ -490,7 +519,8 @@ describe("GlobalRecentChatsSection", () => {
       const onDeleteChat = jest.fn(noop);
       renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })], onDeleteChat });
 
-      act(() => chooseMenuItem(openMenuFromButton("Saved chat").menu, "Delete"));
+      const menu = openMenuFromButton("Saved chat");
+      act(() => chooseMenuItem(menu, "Delete"));
       act(() => {
         fireEvent.click(within(lastModal().contentEl).getByRole("button", { name: "Cancel" }));
       });
@@ -506,7 +536,8 @@ describe("GlobalRecentChatsSection", () => {
           items: [makeItem("chats/agent__a.md", { title: "Agent chat", backendId })],
         });
 
-        act(() => chooseMenuItem(openMenuFromButton("Agent chat").menu, "Delete"));
+        const menu = openMenuFromButton("Agent chat");
+        act(() => chooseMenuItem(menu, "Delete"));
 
         expect(
           within(lastModal().contentEl).getByText(

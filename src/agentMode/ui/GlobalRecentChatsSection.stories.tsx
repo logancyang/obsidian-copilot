@@ -94,3 +94,18 @@ export const OpenSessionRowActions: StoryObj<GlobalRecentChatsSectionProps> = {
   },
   render: FocusedFirstRowShelf,
 };
+
+function OpenMenuFirstRowShelf(args: Partial<GlobalRecentChatsSectionProps>) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    containerRef.current
+      ?.querySelector<HTMLElement>('[role="button"][tabindex="0"]')
+      ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  }, []);
+  return <div ref={containerRef}>{renderShelf(args)}</div>;
+}
+
+export const MoreActionsMenu: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: { items: items.slice(0, 3) },
+  render: OpenMenuFirstRowShelf,
+};
