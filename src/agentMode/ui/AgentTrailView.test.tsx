@@ -223,6 +223,63 @@ describe("AgentTrail", () => {
     expect(screen.getByText("Search vault")).toBeTruthy();
   });
 
+  const compaction = (
+    overrides: Partial<Extract<AgentMessagePart, { kind: "compaction" }>> = {}
+  ): AgentMessagePart => ({
+    kind: "compaction",
+    id: "c1",
+    status: "completed",
+    trigger: "manual",
+    startedAtMs: 0,
+    ...overrides,
+  });
+
+  it("renders a compaction row in line with the surrounding answer", () => {
+    renderTrail({ parts: [text("Before."), compaction(), text("After.")] });
+
+    expect(screen.getByText("Context compacted")).toBeTruthy();
+    expect(screen.getAllByTestId("agent-md").map((el) => el.textContent)).toEqual([
+      "Before.",
+      "After.",
+    ]);
+  });
+
+  it("keeps the Worked for line and copy actions on a reply that also holds an answer", () => {
+    renderTrail({
+      parts: [compaction({ trigger: "auto" }), text("The final answer.")],
+      turnDurationMs: 138_000,
+    });
+
+    expect(screen.getByText("Worked for")).toBeTruthy();
+    expect(screen.getByTitle("Copy")).toBeTruthy();
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 hides Worked for and the copy action on a completed reply that holds only a compaction", () => {
+    renderTrail({
+      parts: [compaction()],
+      turnDurationMs: 138_000,
+      timestamp: "2026/08/07 20:31:10",
+    });
+
+    expect(screen.getByText("Context compacted")).toBeTruthy();
+    expect(screen.queryByText("Worked for")).toBeNull();
+    expect(screen.queryByTitle("Copy")).toBeNull();
+    expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 shows only the compaction's own elapsed time while a compaction-only reply is running", () => {
+    renderTrail({
+      parts: [compaction({ status: "in_progress", startedAtMs: Date.now() - 5_000 })],
+      isStreaming: true,
+      turnStopReason: undefined,
+      turnStartedAtMs: Date.now() - 5_000,
+    });
+
+    expect(screen.getByText("Compacting conversation…")).toBeTruthy();
+    expect(screen.queryByText("Worked for")).toBeNull();
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+  });
+
   it("uses one aligned folding header for reasoning and every tool-card family", () => {
     const { container } = renderTrail({
       parts: [

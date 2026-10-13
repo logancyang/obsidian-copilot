@@ -10,6 +10,7 @@ import {
   type GroupedTrailNode,
 } from "@/agentMode/ui/activityGroups";
 import { activityLiveStep, isReasoningActive } from "@/agentMode/ui/activityLiveStep";
+import { CompactionRow } from "@/agentMode/ui/CompactionRow";
 import { AgentMessageActions } from "@/agentMode/ui/AgentMessageActions";
 import { SubAgentCard } from "@/agentMode/ui/SubAgentCard";
 import { ReasoningBlock } from "@/agentMode/ui/ReasoningBlock";
@@ -50,6 +51,9 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
 }) => {
   const answer = agentResponseText(parts);
   const hasRunningDuration = isStreaming && turnStartedAtMs !== undefined;
+  // A compaction row reports its own progress and is not a reply to time or copy.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
+  const compactionOnly = parts.length > 0 && parts.every((p) => p.kind === "compaction");
   const footer =
     !isStreaming && turnStopReason !== "cancelled" && answer.length > 0 ? (
       <AgentMessageActions
@@ -74,10 +78,10 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
       {turnStopReason !== undefined && fileChanges && fileChanges.length > 0 ? (
         <FilesChangedCard changes={fileChanges} onOpen={onOpenFileChange} />
       ) : null}
-      {hasRunningDuration ? (
+      {hasRunningDuration && !compactionOnly ? (
         <AgentTurnDurationIndicator status="running" startedAtMs={turnStartedAtMs} />
       ) : null}
-      {footer}
+      {compactionOnly ? null : footer}
     </div>
   );
 };
@@ -168,6 +172,8 @@ function renderNode(
       return <AgentMarkdownText key={key} text={node.part.text} app={ctx.app} />;
     case "plan":
       return <PlanPill key={key} entries={node.part.entries} />;
+    case "compaction":
+      return <CompactionRow key={key} part={node.part} />;
   }
 }
 

@@ -78,5 +78,21 @@ describe("AgentTurnDurationIndicator", () => {
 
       expect(screen.getByText("2m 18s")).toBeTruthy();
     });
+
+    it("shows the given label and announcement in place of the turn wording while running", () => {
+      render(
+        <AgentTurnDurationIndicator
+          status="running"
+          startedAtMs={62_000}
+          label="Compacting conversation…"
+          announcement="Compacting conversation"
+        />
+      );
+
+      expect(screen.getByText("Compacting conversation…")).toBeTruthy();
+      expect(screen.getByText("2m 18s")).toBeTruthy();
+      expect(screen.getByRole("status").textContent).toBe("Compacting conversation");
+      expect(screen.queryByText("Worked for")).toBeNull();
+    });
   });
 });
