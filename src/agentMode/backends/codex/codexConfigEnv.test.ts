@@ -54,6 +54,22 @@ describe("codexConfigEnv", () => {
       });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 sets the configured auto-compact limit over the product default", () => {
+      const config = JSON.parse(mergeCodexConfigEnv(undefined, "Use the vault.", 150_000));
+
+      expect(config.model_auto_compact_token_limit).toBe(150_000);
+      expect(config.model_context_window).toBe(1_000_000);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 lets the configured auto-compact limit win over a user CODEX_CONFIG value", () => {
+      const existing = JSON.stringify({ model_auto_compact_token_limit: 300_000 });
+
+      expect(
+        JSON.parse(mergeCodexConfigEnv(existing, "Use the vault.", 150_000))
+          .model_auto_compact_token_limit
+      ).toBe(150_000);
+    });
+
     it.each(["not-json", "[]", "null"])(
       "rejects the invalid CODEX_CONFIG override %s without echoing it",
       (existing) => {

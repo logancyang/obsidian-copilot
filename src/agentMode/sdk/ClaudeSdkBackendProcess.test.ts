@@ -737,6 +737,51 @@ describe("ClaudeSdkBackendProcess", () => {
         expect(call.options.thinking).toEqual({ type: "adaptive", display: "summarized" });
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 sends the configured auto-compact window as SDK settings", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProc({ getAutoCompactTokens: () => 150_000 });
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        proc.registerSessionHandler(sessionId, () => {});
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const call = getPromptQueryCalls()[0][0] as { options: { settings?: unknown } };
+        expect(call.options.settings).toEqual({
+          autoCompactEnabled: true,
+          autoCompactWindow: 150_000,
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 sends no SDK settings when the backend default applies", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProc({ getAutoCompactTokens: () => undefined });
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        proc.registerSessionHandler(sessionId, () => {});
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const call = getPromptQueryCalls()[0][0] as { options: Record<string, unknown> };
+        expect(call.options).not.toHaveProperty("settings");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 applies a changed auto-compact window on the next prompt without a restart", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        let tokens: number | undefined = 150_000;
+        const proc = makeProc({ getAutoCompactTokens: () => tokens });
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        proc.registerSessionHandler(sessionId, () => {});
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
+        tokens = 300_000;
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "2" }] });
+
+        const [first, second] = getPromptQueryCalls().map(
+          (call) => (call[0] as { options: { settings?: { autoCompactWindow?: number } } }).options
+        );
+        expect(first.settings?.autoCompactWindow).toBe(150_000);
+        expect(second.settings?.autoCompactWindow).toBe(300_000);
+      });
+
       it("preserves background task identity across prompt queries", async () => {
         queryMock
           .mockImplementationOnce(() =>

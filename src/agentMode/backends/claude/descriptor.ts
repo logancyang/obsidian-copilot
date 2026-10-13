@@ -210,6 +210,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   restartOnManagedSkillsChange: false,
   restartOnProviderConfigChange: false,
   restartOnSystemPromptChange: false,
+  restartOnAutoCompactChange: false,
   summarizesSessionTitle: false,
   agentProductName: "Claude Code",
   wire: claudeWire,
@@ -341,6 +342,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
       clientVersion: args.clientVersion,
       descriptor: args.descriptor,
       getEnableThinking: () => Boolean(getSettings().agentMode?.backends?.claude?.enableThinking),
+      getAutoCompactTokens: () => getSettings().agentMode?.autoCompactTokens,
       getEnvOverrides: () =>
         sanitizeBuiltinSkillEnvOverrides(getSettings().agentMode?.backends?.claude?.envOverrides),
       getManagedEnv: () =>

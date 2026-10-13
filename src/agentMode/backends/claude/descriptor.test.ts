@@ -278,6 +278,24 @@ describe("descriptor", () => {
         })
       );
     });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/180 reads the auto-compact threshold from settings at prompt time", () => {
+      resetSettings();
+      __resetVaultBaseCache();
+      mockResolveClaudeBinary.mockReturnValue("/usr/local/bin/claude");
+      const app = { vault: { getName: () => "vault" } } as unknown as App;
+      const process = ClaudeBackendDescriptor.createBackendProcess({
+        plugin: {} as never,
+        app,
+        clientVersion: "4.0.0",
+        descriptor: ClaudeBackendDescriptor,
+      }) as unknown as { opts: { getAutoCompactTokens?: () => number | undefined } };
+
+      expect(process.opts.getAutoCompactTokens?.()).toBeUndefined();
+      setSettings((cur) => ({ agentMode: { ...cur.agentMode, autoCompactTokens: 250_000 } }));
+      expect(process.opts.getAutoCompactTokens?.()).toBe(250_000);
+      resetSettings();
+    });
   });
 
   describe("getClaudeInstallState()", () => {

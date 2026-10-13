@@ -24,6 +24,7 @@ import { AlertTriangle, MessageCircle } from "lucide-react";
 import React from "react";
 import { QuickChatPanel } from "./QuickChatPanel";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
+import { AgentAutoCompactSettings } from "./ui/AgentAutoCompactSettings";
 import { AgentNotificationSoundSettings } from "./ui/AgentNotificationSoundSettings";
 import { getVaultBase } from "@/utils/vaultPath";
 
@@ -108,6 +109,12 @@ export const AgentSettings: React.FC = () => {
           }}
           soundId={settings.agentMode.notificationSoundId}
           soundOptions={NOTIFICATION_SOUND_OPTIONS}
+        />
+        <AgentAutoCompactSettings
+          tokens={settings.agentMode.autoCompactTokens}
+          onChange={(autoCompactTokens) =>
+            setSettings((cur) => ({ agentMode: { ...cur.agentMode, autoCompactTokens } }))
+          }
         />
       </SettingSection>
 

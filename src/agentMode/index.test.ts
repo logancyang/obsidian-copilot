@@ -82,6 +82,7 @@ jest.mock("./session/useBackendAuthState", () => ({}));
 
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
 const LINEUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/319";
+const COMPACT_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/180";
 const RELOAD_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/475";
 type SettingsSubscriber = (prev: CopilotSettings, next: CopilotSettings) => void;
 const mockSettingsSubscribers: SettingsSubscriber[] = [];
@@ -95,6 +96,7 @@ const mockDescriptors = ["claude", "opencode"].map((id) => ({
   skillsProjectDir: `.${id}/skills`,
   restartOnProviderConfigChange: id === "opencode",
   restartOnSystemPromptChange: id === "opencode",
+  restartOnAutoCompactChange: id === "opencode",
   getInstallState: () => mockStates[id],
   subscribeInstallState: (_plugin: unknown, listener: () => void) => {
     mockInstallListeners[id] = listener;
@@ -291,6 +293,47 @@ describe("agentMode", () => {
         "opencode",
         "system prompt changed"
       );
+    });
+
+    it(`${COMPACT_ISSUE} offers a reload only to backends that read the auto-compact threshold at spawn`, () => {
+      createAgentSessionManager({} as App, plugin);
+
+      emitSettingsChange(mockSettings, {
+        ...mockSettings,
+        agentMode: { ...mockSettings.agentMode, autoCompactTokens: 150_000 },
+      });
+
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledTimes(1);
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
+        "opencode",
+        "auto-compact threshold changed"
+      );
+    });
+
+    it(`${COMPACT_ISSUE} offers a reload when the threshold returns to the backend default`, () => {
+      mockSettings = {
+        ...mockSettings,
+        agentMode: { ...mockSettings.agentMode, autoCompactTokens: 150_000 },
+      };
+      createAgentSessionManager({} as App, plugin);
+
+      emitSettingsChange(mockSettings, {
+        ...mockSettings,
+        agentMode: { ...mockSettings.agentMode, autoCompactTokens: undefined },
+      });
+
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
+        "opencode",
+        "auto-compact threshold changed"
+      );
+    });
+
+    it(`${COMPACT_ISSUE} leaves running backends alone when the threshold is unchanged`, () => {
+      createAgentSessionManager({} as App, plugin);
+
+      emitSettingsChange(mockSettings, { ...mockSettings, enableSelfHostMode: true });
+
+      expect(mockManager.noteSpawnConfigChanged).not.toHaveBeenCalled();
     });
 
     it(`refreshes a spawn-config backend when a model's published effort levels change ${LINEUP_ISSUE}`, () => {

@@ -124,6 +124,7 @@ export interface ClaudeSdkBackendProcessOptions {
   clientVersion: string;
   descriptor: BackendDescriptor;
   getEnableThinking?: () => boolean;
+  getAutoCompactTokens?: () => number | undefined;
   isPlanModePlanFilePath?: (absolutePath: string) => boolean;
   getDefaultModelId?: () => string | undefined;
   getSystemPromptAppend?: () => string | undefined;
@@ -320,6 +321,10 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     options.thinking = this.opts.getEnableThinking?.()
       ? { type: "adaptive", display: "summarized" }
       : { type: "disabled" };
+    const autoCompactTokens = this.opts.getAutoCompactTokens?.();
+    if (autoCompactTokens !== undefined) {
+      options.settings = { autoCompactEnabled: true, autoCompactWindow: autoCompactTokens };
+    }
     const envOverrides = this.opts.getEnvOverrides?.();
     const managedEnv = (await this.opts.getManagedEnv?.()) ?? {};
     const extraEnv = { ...managedEnv, ...envOverrides };

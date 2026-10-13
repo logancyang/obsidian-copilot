@@ -185,6 +185,15 @@ When a finished compaction reports its new size, the context ring drops to that 
 
 Reopening a Codex or opencode chat from chat history shows its past compactions again, each in the place it happened. A compaction that never finished shows as **Compaction cancelled**. Reopening does not change the context ring.
 
+### Choose when long chats compact
+
+Each agent summarizes a long conversation on its own schedule. To choose that point yourself, open **Settings → Agents** and turn on **Custom auto-compact threshold**, then drag **Compact at** between 100k and 1M tokens. Turn the switch off to return every agent to its own default. The value applies to Claude, Codex, and opencode, and agents keep a small reserve for the summary, so compaction begins slightly before the size you choose.
+
+- Claude applies a new threshold on its next message.
+- Codex and opencode read it when they start, so Agent Chat shows the **config has changed** notice with a **Reload** action. See [Applying a settings change](#applying-a-settings-change).
+- opencode needs each enabled opencode model to report its context window. If any enabled model does not, opencode keeps its own default. When several models have different windows, opencode measures from the smallest, so larger models compact later than the value you chose.
+- The threshold applies to automatic compaction only. Choose **/compact** to compact a chat on demand.
+
 ## Review what a turn changed
 
 When a turn finishes after the agent has edited your vault, a **Files changed** card closes that turn. It lists one row per note, with the number of added and removed lines, and a **new** or **deleted** badge for notes the agent created or removed. The card totals the changes in its header and scrolls when a turn touched many files.

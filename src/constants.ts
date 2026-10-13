@@ -666,6 +666,14 @@ export const RESTRICTION_MESSAGES = {
     `${extension.toUpperCase()} files are not supported in the current mode.`,
 } as const;
 
+// Claude Code ignores a smaller window, and Codex compacts after every tool call below ~20k:
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/180
+export const AGENT_AUTO_COMPACT_TOKENS = {
+  min: 100_000,
+  max: 1_000_000,
+  initial: 200_000,
+} as const;
+
 export const DEFAULT_SETTINGS: CopilotSettings = {
   userId: uuidv4(),
   isPaidUser: false,
