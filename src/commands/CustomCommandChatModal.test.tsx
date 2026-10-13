@@ -18,6 +18,7 @@ const mockTurns: { model: string; prompt: string }[] = [];
 const mockStop = jest.fn();
 const mockReset = jest.fn();
 const mockLatest = () => "";
+/* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hooks; names must match the exports */
 jest.mock("@/context", () => ({ useApp: () => mockApp }));
 jest.mock("@/settings/model", () => ({
   useSettingsValue: () => mockSettings,
@@ -69,6 +70,7 @@ jest.mock("@/hooks/use-streaming-chat-session", () => ({
     };
   },
 }));
+/* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/components/command-ui", () => ({
   MenuCommandModal: (props: React.ComponentProps<typeof MenuCommandModal>) => (
     <div>

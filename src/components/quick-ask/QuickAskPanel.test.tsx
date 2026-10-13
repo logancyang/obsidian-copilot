@@ -8,6 +8,7 @@ import { updateSetting } from "@/settings/model";
 
 let mockDefaultModel: string | undefined;
 const mockSend = jest.fn(async () => undefined);
+/* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hooks; names must match the exports */
 jest.mock("@/settings/model", () => ({
   useSettingsValue: () => ({
     quickCommandModelKey: mockDefaultModel,
@@ -29,6 +30,7 @@ jest.mock("@/components/chat-components/useChatModelPicker", () => ({
     onChange: (value: string) => void;
   }) => ({ value: value ?? "", onChange, models: [] }),
 }));
+/* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/components/ui/ModelSelector", () => ({
   ModelSelector: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
     <select aria-label="Model" value={value} onChange={(event) => onChange(event.target.value)}>

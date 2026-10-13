@@ -18,6 +18,7 @@ const mockEntries = [
     },
   },
 ];
+/* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hooks; names must match the exports */
 jest.mock("jotai", () => ({ useAtomValue: () => mockEntries }));
 jest.mock("@/modelManagement", () => ({
   ...jest.requireActual<typeof import("@/modelManagement/chatModel/chatModelSelection")>(
@@ -34,6 +35,7 @@ jest.mock("@/settings/model", () => ({
   getModelKeyFromModel: (model: { name: string; provider: string }) =>
     `${model.name}|${model.provider}`,
 }));
+/* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/lib/lockedCopilotEntries", () => ({ shouldPreviewCopilotModels: () => false }));
 describe("useChatModelPicker", () => {
   describe("useChatModelPicker()", () => {
