@@ -99,6 +99,17 @@ const FAILED_FILE_CHANGES: AgentMessagePart[] = [
   tool("done-edit", "Edit", { input: { file_path: "Projects/plan.md" } }),
 ];
 
+type CompactionOverrides = Partial<Extract<AgentMessagePart, { kind: "compaction" }>>;
+
+const compaction = (overrides: CompactionOverrides = {}): AgentMessagePart => ({
+  kind: "compaction",
+  id: "compaction-1",
+  status: "completed",
+  trigger: "manual",
+  startedAtMs: Date.now() - 12_000,
+  ...overrides,
+});
+
 const TrailDemo: React.FC<{
   parts: AgentMessagePart[];
   isStreaming?: boolean;
@@ -170,4 +181,69 @@ const EDITED_FILES: TurnFileChange[] = [
 
 export const WithFilesChanged: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={TURN} fileChanges={EDITED_FILES} />,
+};
+
+export const CompactionRunningManual: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={[compaction({ status: "in_progress" })]} isStreaming />,
+};
+
+export const CompactionRunningAuto: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo
+      parts={[
+        say("Reading the remaining notes before I summarize them."),
+        compaction({ status: "in_progress", trigger: "auto" }),
+      ]}
+      isStreaming
+    />
+  ),
+};
+
+export const CompactionCompletedWithTokens: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo
+      parts={[compaction({ preTokens: 182_340, postTokens: 24_100 })]}
+      showCompletedDuration={false}
+    />
+  ),
+};
+
+export const CompactionCompletedWithoutTokens: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={[compaction()]} showCompletedDuration={false} />,
+};
+
+export const CompactionCompletedAutomatically: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo
+      parts={[
+        tool("b1", "Bash", { input: { description: "Search the vault" } }),
+        tool("b2", "Bash", { input: { description: "Read the matching notes" } }),
+        compaction({ trigger: "auto", preTokens: 910_000, postTokens: 31_000 }),
+        tool("b3", "Bash", { input: { description: "Draft the summary" } }),
+        tool("b4", "Bash", { input: { description: "Save it to the vault" } }),
+        say("Saved the summary to [[Weekly review]]."),
+      ]}
+    />
+  ),
+};
+
+export const CompactionFailed: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo
+      parts={[compaction({ status: "failed", error: "The summarization request timed out." })]}
+      showCompletedDuration={false}
+    />
+  ),
+};
+
+export const CompactionCancelled: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo parts={[compaction({ status: "cancelled" })]} showCompletedDuration={false} />
+  ),
+};
+
+export const CompactionSkipped: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo parts={[compaction({ status: "skipped" })]} showCompletedDuration={false} />
+  ),
 };

@@ -5,13 +5,15 @@ export type ToolCallPart = Extract<AgentMessagePart, { kind: "tool_call" }>;
 export type ThoughtPart = Extract<AgentMessagePart, { kind: "thought" }>;
 export type TextPart = Extract<AgentMessagePart, { kind: "text" }>;
 export type PlanPart = Extract<AgentMessagePart, { kind: "plan" }>;
+export type CompactionPart = Extract<AgentMessagePart, { kind: "compaction" }>;
 
 export type RenderNode =
   | { type: "action"; part: ToolCallPart }
   | { type: "subagent"; parent: ToolCallPart; children: RenderNode[]; truncated?: boolean }
   | { type: "reasoning"; part: ThoughtPart }
   | { type: "text"; part: TextPart }
-  | { type: "plan"; part: PlanPart };
+  | { type: "plan"; part: PlanPart }
+  | { type: "compaction"; part: CompactionPart };
 
 export interface BuildAgentTrailOptions {
   maxDepth?: number;
@@ -88,6 +90,10 @@ function foldNodes(
     }
     if (p.kind === "plan") {
       out.push({ type: "plan", part: p });
+      continue;
+    }
+    if (p.kind === "compaction") {
+      out.push({ type: "compaction", part: p });
       continue;
     }
     const children = childrenByParent.get(p.id);

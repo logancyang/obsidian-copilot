@@ -17,6 +17,7 @@ import {
   BackendProcess,
   BackendState,
   CopilotMode,
+  CompactionSnapshot,
   CurrentPlan,
   EnabledModelEntry,
   ModelSelection,
@@ -867,6 +868,7 @@ export class AgentSession {
         );
         this.store.markMessageError(placeholderId, message);
       }
+      if (placeholderId) this.store.settleOpenCompactions(placeholderId, { status: "cancelled" });
       if (placeholderId) await this.finalizeTurnFileChanges(placeholderId, resp.turnDiff);
       if (
         placeholderId &&
@@ -890,11 +892,9 @@ export class AgentSession {
     } catch (err) {
       logWarn(`[AgentMode] prompt failed`, err);
       if (placeholderId) {
-        this.store.markMessageError(
-          placeholderId,
-          formatPromptFailure(err),
-          Date.now() - turnStartedAtMs
-        );
+        const failure = formatPromptFailure(err);
+        this.store.settleOpenCompactions(placeholderId, { status: "failed", error: failure });
+        this.store.markMessageError(placeholderId, failure, Date.now() - turnStartedAtMs);
         this.notifyMessages();
       }
       this.lastTurnError = true;
@@ -1406,6 +1406,7 @@ export class AgentSession {
           return;
         case "tool_call":
         case "plan":
+        case "compaction":
           this.cancelledTurnActivity += 1;
           logWarn(
             `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
@@ -1540,6 +1541,16 @@ export class AgentSession {
       }
       case "plan": {
         if (this.store.upsertAgentPart(targetMessageId, planToPart(update))) {
+          this.scheduleNotifyMessages();
+        }
+        return;
+      }
+      case "compaction": {
+        const existing = this.store
+          .getMessage(targetMessageId)
+          ?.parts?.find((p) => p.kind === "compaction" && p.id === update.id);
+        const startedAtMs = existing?.kind === "compaction" ? existing.startedAtMs : Date.now();
+        if (this.store.upsertAgentPart(targetMessageId, compactionToPart(update, startedAtMs))) {
           this.scheduleNotifyMessages();
         }
         return;
@@ -2181,6 +2192,19 @@ function planToPart(plan: PlanSummary & { sessionUpdate?: "plan" }): AgentMessag
       priority: e.priority,
       status: e.status,
     })),
+  };
+}
+
+function compactionToPart(update: CompactionSnapshot, startedAtMs: number): AgentMessagePart {
+  return {
+    kind: "compaction",
+    id: update.id,
+    status: update.status,
+    trigger: update.trigger,
+    error: update.error,
+    preTokens: update.preTokens,
+    postTokens: update.postTokens,
+    startedAtMs,
   };
 }
 

@@ -246,6 +246,19 @@ export interface PlanSummary {
   entries: AgentPlanEntry[];
 }
 
+export type CompactionStatus = "in_progress" | "completed" | "failed" | "cancelled" | "skipped";
+
+export type CompactionTrigger = "manual" | "auto";
+
+export interface CompactionSnapshot {
+  id: string;
+  status: CompactionStatus;
+  trigger: CompactionTrigger;
+  error?: string;
+  preTokens?: number;
+  postTokens?: number;
+}
+
 export type SessionUpdate =
   | { sessionUpdate: "user_message_chunk"; content: PromptContent; messageId?: string }
   | { sessionUpdate: "agent_message_chunk"; content: PromptContent; messageId?: string }
@@ -253,6 +266,7 @@ export type SessionUpdate =
   | ({ sessionUpdate: "tool_call" } & ToolCallSnapshot)
   | ({ sessionUpdate: "tool_call_update" } & ToolCallDelta)
   | { sessionUpdate: "plan"; entries: AgentPlanEntry[] }
+  | ({ sessionUpdate: "compaction" } & CompactionSnapshot)
   | { sessionUpdate: "session_info_update"; title?: string | null }
   | { sessionUpdate: "current_mode_update"; currentModeId: string }
   | { sessionUpdate: "config_option_update"; configOptions: BackendConfigOption[] }
@@ -464,7 +478,8 @@ export type AgentMessagePart =
   | {
       kind: "plan";
       entries: AgentPlanEntry[];
-    };
+    }
+  | ({ kind: "compaction"; startedAtMs: number } & CompactionSnapshot);
 
 export interface AgentChatMessage {
   id: string;
