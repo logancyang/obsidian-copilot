@@ -462,17 +462,14 @@ describe("AgentMessageStore", () => {
       expect(parts[1]).toEqual(compaction({ id: "open", trigger: "auto", status: "cancelled" }));
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 records the turn's error on a compaction it fails", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 fails an in-progress compaction without a reason of its own", () => {
       const store = new AgentMessageStore();
       const id = store.addMessage(placeholder());
       store.upsertAgentPart(id, compaction());
 
-      store.settleOpenCompactions(id, "stream error");
+      store.settleOpenCompactions(id, "failed");
 
-      expect(store.getMessage(id)?.parts?.[0]).toMatchObject({
-        status: "failed",
-        error: "stream error",
-      });
+      expect(store.getMessage(id)?.parts?.[0]).toEqual(compaction({ status: "failed" }));
     });
 
     it("reports no change for a message with no in-progress compaction", () => {
