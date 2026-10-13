@@ -11,7 +11,6 @@ export const SEND_FEEDBACK_TOOL_NAME = "send_feedback";
 
 const MCP_PATH = "/mcp";
 const MAX_REQUEST_BYTES = 64 * 1024;
-const MAX_FIELD_CHARS = 8 * 1024;
 const LATEST_PROTOCOL_VERSION = "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = new Set([
   "2025-11-25",
@@ -167,7 +166,7 @@ async function handleHttpRequest(
   } catch (error) {
     return writeRpcError(response, -32700, error instanceof Error ? error.message : "Parse error.");
   }
-  if (!message || typeof message !== "object") {
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
     return writeRpcError(response, -32600, "Invalid request.");
   }
   if (message.id === undefined || typeof message.method !== "string") {
@@ -217,7 +216,7 @@ function parseDraft(args: unknown): FeedbackDraft | null {
   const record = args as Record<string, unknown>;
   const field = (key: string) => {
     const value = record[key];
-    return typeof value === "string" ? value.trim().slice(0, MAX_FIELD_CHARS) : "";
+    return typeof value === "string" ? value.trim() : "";
   };
   const draft = {
     title: field("title"),

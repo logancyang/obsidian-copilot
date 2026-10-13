@@ -233,23 +233,6 @@ describe("feedbackMcpServer", () => {
       expect(result.status).toBe(405);
     });
 
-    it("caps each field at 8 KiB so a runaway draft cannot flood the card", async () => {
-      const handler = jest.fn().mockReturnValue("shown");
-      const channel = await server.connect("session-a", handler);
-
-      await post(
-        channel,
-        rpc(5, "tools/call", {
-          name: "send_feedback",
-          arguments: { ...COMPLAINT, what_happened: "x".repeat(10_000) },
-        })
-      );
-
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ whatHappened: "x".repeat(8 * 1024) })
-      );
-    });
-
     it("rejects a request body over 64 KiB of UTF-8 without raising a card, even when it has fewer characters", async () => {
       const handler = jest.fn().mockReturnValue("shown");
       const channel = await server.connect("session-a", handler);
@@ -266,7 +249,7 @@ describe("feedbackMcpServer", () => {
       expect(handler).not.toHaveBeenCalled();
     });
 
-    it("answers other paths with 404, malformed JSON with a parse error and a non-object with an invalid request", async () => {
+    it("answers other paths with 404, malformed JSON with a parse error and a non-object or batch with an invalid request", async () => {
       const channel = await server.connect("session-a", jest.fn());
 
       const missing = await post(channel, rpc(1, "ping"), {
@@ -274,10 +257,12 @@ describe("feedbackMcpServer", () => {
       });
       const malformed = await post(channel, "{not json");
       const notAnObject = await post(channel, "null");
+      const batch = await post(channel, JSON.stringify([rpc(1, "ping")]));
 
       expect(missing.status).toBe(404);
       expect(malformed).toMatchObject({ status: 400, body: { error: { code: -32700 } } });
       expect(notAnObject).toMatchObject({ status: 400, body: { error: { code: -32600 } } });
+      expect(batch).toMatchObject({ status: 400, body: { error: { code: -32600 } } });
     });
 
     it("revokes a session's token on disconnect and leaves other sessions working", async () => {
