@@ -168,6 +168,8 @@ When a turn finishes after the agent has edited your vault, a **Files changed** 
 
 Select a row to open that note's before and after as a single tab. Removed text is struck through, added text is highlighted, and everything else reads as the note normally does, so you can see the exact wording the agent changed without leaving Obsidian. The tab is read-only and never writes to your vault; use **Open note** in its header to open the note itself and edit it there. Files that are not notes, such as canvases, are shown as a plain line-by-line comparison.
 
+In a long note, two markers help you find the changes. A thin bar in the left margin sits beside every changed paragraph, list item, table row, or line: green where text was added, red where it was removed, and blue where both happened. A narrow strip along the left edge of the tab shows the whole note at once, with one mark for each change at its position in the note; select a mark to jump to that change.
+
 Selecting the same row again returns you to the tab that is already open. This review is part of the current session only: closing Obsidian or reloading the plugin drops the cards and the diff tabs, and earlier turns show no card when you reopen a saved conversation.
 
 The card covers the notes an agent changed with its editing tools. Changes an agent makes by running a shell command, such as deleting a note with `rm`, are not listed. Treat the card as a review aid rather than a complete audit of the turn.

@@ -123,6 +123,19 @@ describe("TurnDiffView", () => {
         expect(view.containerEl.querySelector("pre")).toBeNull();
       });
 
+      it("marks the changed text in the margin and on the left strip once the note has rendered", async () => {
+        const view = await openView();
+
+        await hydrate(view, { ...change("notes/diff-demo/alpha.md"), turnId: "turn-1" });
+
+        await waitFor(() =>
+          expect(
+            within(view.containerEl).getByRole("button", { name: "Go to change 1 of 1" })
+          ).toBeTruthy()
+        );
+        expect(view.containerEl.querySelectorAll("[data-change-bar]")).toHaveLength(2);
+      });
+
       it("shows the header at once and leaves the body empty until Obsidian has parsed the note", async () => {
         let finishParsing!: (parse: RecordedParse) => void;
         const parsing = new Promise<RecordedParse>((resolve) => {

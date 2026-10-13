@@ -1,5 +1,10 @@
 import type { TurnFileChange } from "@/agentMode/session/types";
-import { RenderedDiff } from "@/agentMode/ui/renderedDiff/RenderedDiff";
+import { ChangeScroller } from "@/agentMode/ui/renderedDiff/ChangeScroller";
+import {
+  EMPTY_CHANGE_RUNS,
+  RenderedDiff,
+  type ChangeRun,
+} from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import { TurnDiffHeader } from "@/agentMode/ui/TurnDiffHeader";
 import { TURN_DIFF_VIEW_TYPE } from "@/constants";
 import { useApp } from "@/context";
@@ -82,6 +87,7 @@ interface TurnDiffPaneProps {
 
 const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state }) => {
   const app = useApp();
+  const [runs, setRuns] = React.useState<readonly ChangeRun[]>(EMPTY_CHANGE_RUNS);
   return (
     <div className="tw-flex tw-h-full tw-flex-col">
       <TurnDiffHeader
@@ -91,11 +97,14 @@ const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state }) => {
         deletions={state.deletions}
         onOpenNote={state.status === "deleted" ? undefined : () => openNote(app, state.path)}
       />
-      <div className="tw-flex-1 tw-overflow-y-auto tw-p-[var(--file-margins)]">
-        <div className="markdown-rendered tw-mx-auto tw-max-w-[var(--file-line-width)]">
-          <RenderedDiff before={state.before} after={state.after} path={state.path} />
-        </div>
-      </div>
+      <ChangeScroller runs={runs}>
+        <RenderedDiff
+          before={state.before}
+          after={state.after}
+          path={state.path}
+          onChangeRuns={setRuns}
+        />
+      </ChangeScroller>
     </div>
   );
 };
