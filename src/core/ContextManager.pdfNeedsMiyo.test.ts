@@ -136,7 +136,9 @@ describe("ContextManager", () => {
         const content = await process({ notes: [mentioned, source] }, active);
 
         expect(countOf(content, PDF_NEEDS_MIYO_MESSAGE)).toBe(1);
-        expect(countOf(content, "Same reason as above.")).toBe(3);
+        expect(countOf(content, "Same reason as the other unreadable PDF in this message.")).toBe(
+          3
+        );
         expect(requestUrl).not.toHaveBeenCalled();
       });
 
@@ -149,7 +151,7 @@ describe("ContextManager", () => {
         const content = await process({ notes: [savedChat] });
 
         expect(countOf(content, PDF_NEEDS_MIYO_MESSAGE)).toBe(2);
-        expect(content).not.toContain("Same reason as above.");
+        expect(content).not.toContain("Same reason as the other unreadable PDF in this message.");
       });
 
       it("explains the route again on the next send https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {

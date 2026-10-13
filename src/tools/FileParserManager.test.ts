@@ -326,8 +326,8 @@ describe("FileParserManager", () => {
 
         expect(results).toEqual([
           `[Error: Could not extract content from PDF a. ${PDF_NEEDS_MIYO_MESSAGE}]`,
-          "[Error: Could not extract content from PDF b. Same reason as above.]",
-          "[Error: Could not extract content from PDF c. Same reason as above.]",
+          "[Error: Could not extract content from PDF b. Same reason as the other unreadable PDF in this message.]",
+          "[Error: Could not extract content from PDF c. Same reason as the other unreadable PDF in this message.]",
         ]);
       });
 

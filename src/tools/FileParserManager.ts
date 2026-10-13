@@ -11,7 +11,7 @@ import { CanvasLoader } from "./CanvasLoader";
 export const PDF_NEEDS_MIYO_MESSAGE =
   "Quick Chat reads PDFs through Miyo document processing, which is off or not connected. Turn it on and connect Miyo, or ask in Agent Chat, where your agent can read the PDF directly.";
 
-const PDF_NEEDS_MIYO_REPEAT = "Same reason as above.";
+const PDF_NEEDS_MIYO_REPEAT = "Same reason as the other unreadable PDF in this message.";
 
 function pdfErrorText(file: TFile, reason: string): string {
   return `[Error: Could not extract content from PDF ${file.basename}. ${reason}]`;
