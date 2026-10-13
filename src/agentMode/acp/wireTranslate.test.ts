@@ -221,6 +221,43 @@ const testAcpNotificationToEvents = () => {
     ).not.toHaveProperty("originalFiles");
   });
 
+  it.each([
+    ["available_commands_update", { availableCommands: [] }],
+    ["notice", { message: "retrying" }],
+  ])(
+    "emits no event for an unmapped %s update so it cannot clear an agent-generated title (https://github.com/Brevilabs/obsidian-copilot-private/issues/632)",
+    (sessionUpdate, fields) => {
+      expect(acpNotificationToEvents(notification({ sessionUpdate, ...fields }))).toEqual([]);
+    }
+  );
+
+  it("maps a session_info_update carrying a title to a title event", () => {
+    expect(
+      acpNotificationToEvents(notification({ sessionUpdate: "session_info_update", title: "x" }))
+    ).toEqual([
+      { sessionId: SESSION_ID, update: { sessionUpdate: "session_info_update", title: "x" } },
+    ]);
+  });
+
+  it("maps a session_info_update with an explicit null title to a title-clearing event", () => {
+    expect(
+      acpNotificationToEvents(notification({ sessionUpdate: "session_info_update", title: null }))
+    ).toEqual([
+      { sessionId: SESSION_ID, update: { sessionUpdate: "session_info_update", title: null } },
+    ]);
+  });
+
+  it("emits no event for a meta-only session_info_update so compaction and retry markers leave the title alone (https://github.com/Brevilabs/obsidian-copilot-private/issues/632)", () => {
+    expect(
+      acpNotificationToEvents(
+        notification({
+          sessionUpdate: "session_info_update",
+          _meta: { opencode: { compaction: { phase: "started" } } },
+        })
+      )
+    ).toEqual([]);
+  });
+
   it("passes a real plan notification through unchanged as a single event", () => {
     const events = acpNotificationToEvents(
       notification({
