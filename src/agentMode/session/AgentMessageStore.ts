@@ -366,17 +366,13 @@ export class AgentMessageStore {
 
   // A spinner must not outlive the turn that started it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
-  settleOpenCompactions(id: string, error?: string): boolean {
+  settleOpenCompactions(id: string, status: "cancelled" | "failed" = "cancelled"): boolean {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg?.parts?.some((p) => p.kind === "compaction" && p.status === "in_progress")) {
       return false;
     }
     msg.parts = msg.parts.map((p) =>
-      p.kind === "compaction" && p.status === "in_progress"
-        ? error === undefined
-          ? { ...p, status: "cancelled" }
-          : { ...p, status: "failed", error }
-        : p
+      p.kind === "compaction" && p.status === "in_progress" ? { ...p, status } : p
     );
     this.touch(msg);
     return true;

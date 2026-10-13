@@ -1912,7 +1912,7 @@ describe("AgentSession", () => {
         ]);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 settles a compaction still in progress to failed, with the turn's error, when the prompt rejects", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 settles a compaction still in progress to failed and reports the prompt's error once, on the turn, when the prompt rejects", async () => {
         const mock = makeMockBackend();
         let rejectPrompt: (error: Error) => void = () => {};
         mock.prompt.mockImplementation(
@@ -1933,11 +1933,13 @@ describe("AgentSession", () => {
         rejectPrompt(new Error("stream error"));
         await expect(turn).rejects.toThrow("stream error");
 
-        expect(aiMessage(session)?.parts?.[0]).toMatchObject({
+        const message = aiMessage(session);
+        expect(message?.parts?.[0]).toMatchObject({
           kind: "compaction",
           status: "failed",
-          error: expect.stringContaining("stream error"),
+          error: undefined,
         });
+        expect(message?.message).toContain("stream error");
       });
 
       it("shows the nested provider error on the placeholder when the prompt rejects", async () => {

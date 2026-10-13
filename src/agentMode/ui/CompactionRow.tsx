@@ -47,8 +47,13 @@ export const CompactionRow: React.FC<CompactionRowProps> = ({ part }) => {
         </div>
       );
     case "failed":
+      // The running row's live region unmounts here, so a failure needs its own announcement.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
       return (
-        <div className="tw-flex tw-items-center tw-gap-1.5 tw-py-1 tw-pl-1 tw-text-ui-small tw-text-muted">
+        <div
+          role="alert"
+          className="tw-flex tw-items-center tw-gap-1.5 tw-py-1 tw-pl-1 tw-text-ui-small tw-text-muted"
+        >
           <AlertTriangle aria-hidden="true" className="tw-size-3 tw-shrink-0 tw-text-warning" />
           <span>{part.error ? `Couldn't compact: ${part.error}` : "Couldn't compact"}</span>
         </div>
