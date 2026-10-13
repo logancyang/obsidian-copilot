@@ -588,6 +588,37 @@ describe("ClaudeSdkBackendProcess", () => {
         ]);
       });
 
+      it.each([
+        ["/compact", "manual"],
+        ["/compact keep the file names", "manual"],
+        ["write a poem", "auto"],
+      ])(
+        "labels the compaction a %j turn reports as %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/635)",
+        async (text, trigger) => {
+          queryMock.mockImplementation(() =>
+            makeQuery([
+              {
+                type: "system",
+                subtype: "status",
+                status: "compacting",
+                uuid: "compaction-1",
+                session_id: "irrelevant",
+              } as unknown as SDKMessage,
+              resultMessage(),
+            ])
+          );
+          const proc = makeProc();
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          const events = registerCollector(proc, sessionId);
+
+          await proc.prompt({ sessionId, prompt: [{ type: "text", text }] });
+
+          expect(events.map((e) => e.update)).toEqual([
+            { sessionUpdate: "compaction", id: "compaction-1", status: "in_progress", trigger },
+          ]);
+        }
+      );
+
       it("starts the first query with the claude_code preset, the tool deny list, the foreground hook, and a fresh session id", async () => {
         queryMock.mockImplementation(() => makeQuery([resultMessage()]));
         const proc = makeProc();

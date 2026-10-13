@@ -1186,6 +1186,18 @@ export class AgentSession {
     this.notifyMessages();
   }
 
+  // Compaction reports the new context size directly, so it bypasses applyUsageUpdate's guards.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/635
+  private applyCompactedUsage(compaction: CompactionSnapshot): boolean {
+    if (compaction.status !== "completed" || compaction.postTokens === undefined) return false;
+    this.currentUsage = {
+      usedTokens: compaction.postTokens,
+      contextWindow: this.currentUsage?.contextWindow,
+      updatedAt: Date.now(),
+    };
+    return true;
+  }
+
   /**
    * Drop the held context window when the model changes, keeping the count. `applyUsageUpdate`
    * ignores windowless snapshots while a windowed one is held, so a stale window would stick.
@@ -1552,9 +1564,12 @@ export class AgentSession {
           .getMessage(targetMessageId)
           ?.parts?.find((p) => p.kind === "compaction" && p.id === update.id);
         const startedAtMs = existing?.kind === "compaction" ? existing.startedAtMs : Date.now();
-        if (this.store.upsertAgentPart(targetMessageId, compactionToPart(update, startedAtMs))) {
-          this.scheduleNotifyMessages();
-        }
+        const upserted = this.store.upsertAgentPart(
+          targetMessageId,
+          compactionToPart(update, startedAtMs)
+        );
+        const metered = this.applyCompactedUsage(update);
+        if (upserted || metered) this.scheduleNotifyMessages();
         return;
       }
       default:
