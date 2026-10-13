@@ -1,6 +1,7 @@
 import { mockTFile } from "@/__tests__/mockObsidian";
 import { resolveEffort } from "@/lib/model-effort";
 import { OpencodeBackendDescriptor } from "@/agentMode/backends/opencode/descriptor";
+import { logWarn } from "@/logger";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
 import { waitFor } from "@testing-library/react";
@@ -720,6 +721,119 @@ describe("AgentSession", () => {
         expect(ai.parts?.map((p) => p.kind)).toEqual(["thought", "tool_call", "plan", "text"]);
         const tool = ai.parts?.find((p) => p.kind === "tool_call");
         expect(tool).toMatchObject({ id: "t1", status: "completed" });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 attaches a replayed compaction to the reply it followed, ahead of the next user message, without a dropped-update warning", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+        jest.mocked(logWarn).mockClear();
+
+        mock.emitUpdate(replayText("user_message_chunk", "first", "u1"));
+        mock.emitUpdate(replayText("agent_message_chunk", "one", "a1"));
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "manual",
+        });
+        mock.emitUpdate(replayText("user_message_chunk", "second", "u2"));
+        mock.emitUpdate(replayText("agent_message_chunk", "two", "a2"));
+        session.completeResume(emptyState());
+
+        const [, firstReply, , secondReply] = session.store.getDisplayMessages();
+        expect(session.store.getDisplayMessages()).toHaveLength(4);
+        expect(firstReply.parts?.map((p) => p.kind)).toEqual(["text", "compaction"]);
+        expect(firstReply.parts?.[1]).toMatchObject({
+          kind: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "manual",
+        });
+        expect(secondReply.parts?.map((p) => p.kind)).toEqual(["text"]);
+        expect(logWarn).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 opens a reply bubble for a replayed compaction that no reply precedes", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "hello", "u1"));
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "auto",
+        });
+        session.completeResume(emptyState());
+
+        const [user, reply] = session.store.getDisplayMessages();
+        expect(user.sender).toBe(USER_SENDER);
+        expect(reply.sender).toBe(AI_SENDER);
+        expect(reply.parts?.map((p) => p.kind)).toEqual(["compaction"]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 upserts a replayed compaction's later status over its earlier one", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "hello", "u1"));
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "in_progress",
+          trigger: "auto",
+        });
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "auto",
+        });
+        session.completeResume(emptyState());
+
+        const parts = session.store.getDisplayMessages()[1].parts;
+        expect(parts).toHaveLength(1);
+        expect(parts?.[0]).toMatchObject({ kind: "compaction", status: "completed" });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 settles a replayed compaction that never reports an end as cancelled so no spinner shows", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "hello", "u1"));
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "in_progress",
+          trigger: "manual",
+        });
+        session.completeResume(emptyState());
+
+        const parts = session.store.getDisplayMessages()[1].parts;
+        expect(parts?.[0]).toMatchObject({ kind: "compaction", status: "cancelled" });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 keeps the meter reading a replayed compaction's post-compaction tokens would otherwise overwrite", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+        mock.emitUpdate({
+          sessionUpdate: "usage_update",
+          usage: { usedTokens: 90_000, contextWindow: 200_000, updatedAt: 1 },
+        });
+
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "manual",
+          postTokens: 4_000,
+        });
+
+        expect(session.getSessionUsage()).toEqual({
+          usedTokens: 90_000,
+          contextWindow: 200_000,
+          updatedAt: 1,
+        });
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/643 dates replayed bubbles from their frames' times and times the agent's turn from its prompt to its last frame", () => {
