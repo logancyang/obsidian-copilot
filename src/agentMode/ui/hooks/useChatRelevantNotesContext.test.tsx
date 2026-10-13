@@ -11,6 +11,7 @@ jest.mock("obsidian", () => ({
   ...jest.requireActual("obsidian"),
   MarkdownView: class MarkdownView {},
 }));
+/* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hooks; names must match the exports */
 jest.mock("@/aiParams", () => ({
   useSelectedTextContexts: () => [[{ content: "literal excerpt", notePath: "excerpt.md" }]],
 }));
@@ -19,6 +20,7 @@ jest.mock("@/components/chat-components/hooks/useActiveWebTabState", () => ({
   useActiveWebTabState: () => ({ activeWebTabForMentions: mockActiveWebTab }),
 }));
 jest.mock("@/hooks/useActiveFile", () => ({ useActiveFile: () => ({ path: "active.md" }) }));
+/* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoFolderName: () => "Vault",
   getMiyoFilePath: (_app: unknown, path: string) => `Vault/${path}`,

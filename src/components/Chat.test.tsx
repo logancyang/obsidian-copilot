@@ -44,7 +44,7 @@ jest.mock("@/context/ChatInputContext", () => ({
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/components/chat-components/ChatControls", () => ({
   ChatControls: ({ onCopyChatLink }: { onCopyChatLink?: () => void }) => (
-    <button disabled={!onCopyChatLink} onClick={onCopyChatLink}>
+    <button type="button" disabled={!onCopyChatLink} onClick={onCopyChatLink}>
       Copy chat link
     </button>
   ),

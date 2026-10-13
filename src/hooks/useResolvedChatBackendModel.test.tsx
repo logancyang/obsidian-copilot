@@ -20,6 +20,7 @@ const mockEntries = [
     },
   },
 ];
+// eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
 jest.mock("jotai", () => ({ useAtomValue: () => mockEntries }));
 jest.mock("@/modelManagement", () => ({
   ...jest.requireActual<typeof import("@/modelManagement/chatModel/chatModelSelection")>(
