@@ -2,6 +2,7 @@ import { agentProjectContextLoadAtom, type ProjectConfig } from "@/aiParams";
 import {
   buildAgentProcessingItems,
   buildAgentProcessingSources,
+  findProjectContextFailure,
   readAgentCacheDirState,
   type AgentCacheDirState,
   type AgentProcessingSource,
@@ -17,6 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 export interface AgentProcessingItemsState {
   items: ProcessingItem[];
   skippedMarkdownCount: number;
+  contextFailure?: string;
 }
 
 const EMPTY_PROCESSING_ITEMS: ProcessingItem[] = Object.freeze([]) as unknown as ProcessingItem[];
@@ -79,5 +81,5 @@ export function useAgentProcessingItems(
     [enabled, sources, liveEntry, disk, savedKeys]
   );
 
-  return { items, skippedMarkdownCount };
+  return { items, skippedMarkdownCount, contextFailure: findProjectContextFailure(liveEntry) };
 }

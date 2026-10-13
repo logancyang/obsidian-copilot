@@ -25,10 +25,11 @@ import {
   type ContextMaterializationResult,
   type ContextMaterializeProgress,
 } from "@/context/projectContextMaterializer";
-import type {
-  MaterializedSourceType,
-  MaterializeSourceIdentity,
-  SourceFailure,
+import {
+  PROJECT_CONTEXT_FAILURE_SOURCE,
+  type MaterializedSourceType,
+  type MaterializeSourceIdentity,
+  type SourceFailure,
 } from "@/context/contextCacheStore";
 import { err2String } from "@/utils";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
@@ -1165,7 +1166,9 @@ export class AgentSessionManager {
           this.setContextLoadState(projectId, {
             phase: "done",
             blocking: false,
-            failedSources: [{ path: "Project context", type: "nonMd", error: err2String(err) }],
+            failedSources: [
+              { path: PROJECT_CONTEXT_FAILURE_SOURCE, type: "nonMd", error: err2String(err) },
+            ],
           });
         }
         return EMPTY_CONTEXT_MATERIALIZATION_RESULT;
@@ -1186,7 +1189,9 @@ export class AgentSessionManager {
       this.setContextLoadState(projectId, {
         phase: "done",
         blocking: false,
-        failedSources: [{ path: "Project context", type: "nonMd", error: err2String(err) }],
+        failedSources: [
+          { path: PROJECT_CONTEXT_FAILURE_SOURCE, type: "nonMd", error: err2String(err) },
+        ],
       });
       return false;
     }

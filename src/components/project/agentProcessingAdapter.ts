@@ -8,6 +8,7 @@ import {
   cacheFileName,
   failureMarkerName,
   parseFailureMarker,
+  PROJECT_CONTEXT_FAILURE_SOURCE,
   type FailureMarker,
   type MaterializedSourceType,
 } from "@/context/contextCacheStore";
@@ -96,6 +97,13 @@ async function readJsonTolerant(
   } catch {
     return null;
   }
+}
+
+// A whole-context failure names no configured source, so it needs its own state or the popover reads as healthy. https://github.com/Brevilabs/obsidian-copilot-private/issues/657
+export function findProjectContextFailure(
+  liveEntry: AgentProjectContextLoadState | undefined
+): string | undefined {
+  return liveEntry?.failedSources?.find((f) => f.path === PROJECT_CONTEXT_FAILURE_SOURCE)?.error;
 }
 
 const IN_FLIGHT_PHASES = new Set<AgentProjectContextLoadState["phase"]>(["resolve", "prefetch"]);

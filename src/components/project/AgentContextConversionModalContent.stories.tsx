@@ -34,6 +34,13 @@ export const BinaryFilesReadInPlace: StoryObj<Props> = {
   args: { items: [], hasConfiguredContextSource: true, skippedMarkdownCount: 0 },
 };
 
+export const ContextFailed: StoryObj<Props> = {
+  args: {
+    items: [],
+    contextFailure: "EACCES: permission denied, mkdir '/vault/.copilot/context-cache'",
+  },
+};
+
 export const MarkdownOnly: StoryObj<Props> = {
   args: { items: [], hasConfiguredContextSource: true, skippedMarkdownCount: 12 },
 };

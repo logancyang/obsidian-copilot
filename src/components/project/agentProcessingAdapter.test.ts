@@ -3,6 +3,7 @@ import {
   aggregateAgentCacheDirState,
   buildAgentProcessingItems,
   buildAgentProcessingSources,
+  findProjectContextFailure,
   type AgentCacheDirReader,
   type AgentCacheDirState,
   type AgentProcessingSource,
@@ -214,6 +215,32 @@ describe("agentProcessingAdapter", () => {
       expect(items.map((i) => i.id)).toEqual([URL_A, URL_A]);
       expect(items[0].cacheKind).toBe("web");
       expect(items[1].cacheKind).toBe("youtube");
+    });
+  });
+
+  describe("findProjectContextFailure()", () => {
+    it("returns the error of a whole-context failure so the popover can show it https://github.com/Brevilabs/obsidian-copilot-private/issues/657", () => {
+      const entry: AgentProjectContextLoadState = {
+        phase: "done",
+        blocking: false,
+        failedSources: [
+          { path: "https://a.com", type: "web", error: "timeout" },
+          { path: "Project context", type: "web", error: "EACCES" },
+        ],
+      };
+
+      expect(findProjectContextFailure(entry)).toBe("EACCES");
+    });
+
+    it("returns undefined when only configured sources failed or nothing is loaded", () => {
+      const entry: AgentProjectContextLoadState = {
+        phase: "done",
+        blocking: false,
+        failedSources: [{ path: "https://a.com", type: "web", error: "timeout" }],
+      };
+
+      expect(findProjectContextFailure(entry)).toBeUndefined();
+      expect(findProjectContextFailure(undefined)).toBeUndefined();
     });
   });
 

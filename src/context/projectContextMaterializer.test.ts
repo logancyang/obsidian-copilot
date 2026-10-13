@@ -193,6 +193,18 @@ describe("projectContextMaterializer", () => {
       expect(block).not.toContain("## Notes matching an included property");
     });
 
+    it("lists a document picked as a file once, under Included notes, so it does not spend a second manifest entry https://github.com/Brevilabs/obsidian-copilot-private/issues/657", async () => {
+      getRecord.mockReturnValue(record({ inclusions: "[[report]]" }));
+      const app = fakeApp([{ path: "Docs/report.pdf", ext: "pdf" }]);
+
+      const result = await ensureProjectContextMaterialized(app, "p1", CWD);
+
+      const block = result.projectContextBlock ?? "";
+      expect(block.match(/\/vault\/Docs\/report\.pdf/g)).toHaveLength(1);
+      expect(block).toContain("## Included notes");
+      expect(block).not.toContain("## Document files");
+    });
+
     it("still emits <project_context> for a property-only project when no note currently matches", async () => {
       getRecord.mockReturnValue(record({ inclusions: "[Topics:Physics]" }));
       const app = fakeApp([{ path: "Notes/Cooking.md", ext: "md" }]);

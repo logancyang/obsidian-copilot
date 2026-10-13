@@ -1,6 +1,6 @@
 import { AgentContextConversionModalContent } from "@/components/project/AgentContextConversionModalContent";
 import type { ProcessingItem } from "@/components/project/processingAdapter";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 const noop = () => {};
@@ -28,6 +28,17 @@ describe("AgentContextConversionModalContent", () => {
 
       expect(screen.getByText("No conversion needed")).toBeTruthy();
       expect(screen.queryByText(/failed/i)).toBeNull();
+    });
+
+    it("reports a whole-context failure with its error and a retry instead of no conversion needed https://github.com/Brevilabs/obsidian-copilot-private/issues/657", () => {
+      const onRetryAll = jest.fn();
+      renderContent({ items: [], contextFailure: "EACCES: cache folder", onRetryAll });
+
+      expect(screen.getByText("Context failed to load")).toBeTruthy();
+      expect(screen.getByText("EACCES: cache folder")).toBeTruthy();
+      expect(screen.queryByText("No conversion needed")).toBeNull();
+      fireEvent.click(screen.getByText("Retry"));
+      expect(onRetryAll).toHaveBeenCalledTimes(1);
     });
 
     it("reports no context loaded when the project has no sources", () => {

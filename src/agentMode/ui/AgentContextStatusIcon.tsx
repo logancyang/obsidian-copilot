@@ -292,7 +292,7 @@ function ConversionPopoverBody({
   onRetryAll: () => void;
   onEditContext: () => void;
 }) {
-  const { items, skippedMarkdownCount } = useAgentProcessingItems(
+  const { items, skippedMarkdownCount, contextFailure } = useAgentProcessingItems(
     app,
     project,
     project.contextSource
@@ -307,6 +307,7 @@ function ConversionPopoverBody({
       items={items}
       hasConfiguredContextSource={hasConfiguredContextSource}
       skippedMarkdownCount={skippedMarkdownCount}
+      contextFailure={contextFailure}
       onRetryItem={onRetryItem}
       onRetryAll={onRetryAll}
       onEditContext={onEditContext}

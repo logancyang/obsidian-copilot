@@ -9,6 +9,7 @@ interface AgentContextConversionModalContentProps {
   items: ProcessingItem[];
   hasConfiguredContextSource: boolean;
   skippedMarkdownCount: number;
+  contextFailure?: string;
   onRetryItem: (item: ProcessingItem) => void;
   onRetryAll: () => void;
   onEditContext: () => void;
@@ -21,6 +22,7 @@ export function AgentContextConversionModalContent({
   items,
   hasConfiguredContextSource,
   skippedMarkdownCount,
+  contextFailure,
   onRetryItem,
   onRetryAll,
   onEditContext,
@@ -61,15 +63,23 @@ export function AgentContextConversionModalContent({
     return (
       <div className="tw-flex tw-w-[368px] tw-max-w-full tw-flex-col">
         <div className="tw-flex tw-items-center tw-gap-2 tw-border-x-0 tw-border-b tw-border-t-0 tw-border-solid tw-border-border tw-px-3.5 tw-py-3 tw-text-sm tw-font-semibold tw-text-normal">
-          {hasConversionFreeContext ? (
+          {contextFailure ? (
+            <XCircle className="tw-size-4 tw-text-error" />
+          ) : hasConversionFreeContext ? (
             <CheckCircle2 className="tw-size-4 tw-text-success" />
           ) : (
             <Inbox className="tw-size-4 tw-text-muted" />
           )}
-          {hasConversionFreeContext ? "No conversion needed" : "No context loaded"}
+          {contextFailure
+            ? "Context failed to load"
+            : hasConversionFreeContext
+              ? "No conversion needed"
+              : "No context loaded"}
         </div>
-        <div className="tw-px-3.5 tw-py-6 tw-text-center tw-text-sm tw-text-muted">
-          {hasConversionFreeContext ? (
+        <div className="tw-break-words tw-px-3.5 tw-py-6 tw-text-center tw-text-sm tw-text-muted">
+          {contextFailure ? (
+            contextFailure
+          ) : hasConversionFreeContext ? (
             <>
               Context sources are configured and ready to use.
               {skippedMarkdownCount > 0 && (
@@ -83,7 +93,18 @@ export function AgentContextConversionModalContent({
             "This project has no context sources yet."
           )}
         </div>
-        <div className="tw-flex tw-justify-end tw-border-x-0 tw-border-b-0 tw-border-t tw-border-solid tw-border-border tw-px-3.5 tw-py-2.5">
+        <div className="tw-flex tw-justify-end tw-gap-1.5 tw-border-x-0 tw-border-b-0 tw-border-t tw-border-solid tw-border-border tw-px-3.5 tw-py-2.5">
+          {contextFailure && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="tw-gap-1.5 tw-text-muted"
+              onClick={onRetryAll}
+            >
+              <RotateCcw className="tw-size-3.5" />
+              Retry
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"

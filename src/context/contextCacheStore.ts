@@ -23,6 +23,8 @@ export interface MaterializedEntry {
   snapshotAbsPath?: string;
 }
 
+export const PROJECT_CONTEXT_FAILURE_SOURCE = "Project context";
+
 export interface SourceFailure {
   source: string;
   kind: MaterializedSourceType;
