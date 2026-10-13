@@ -165,6 +165,21 @@ describe("AgentChatControls", () => {
       expect(onSetChatBookmarked).toHaveBeenCalledWith(true);
     });
 
+    it("opens the More Actions menu in the chat's own window when another window is active", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      renderSessionControls();
+      const otherWindowDocument = document.implementation.createHTMLDocument();
+      const globals = window as unknown as { activeDocument: Document };
+      globals.activeDocument = otherWindowDocument;
+      try {
+        openMoreActions();
+      } finally {
+        globals.activeDocument = document;
+      }
+
+      expect(otherWindowDocument.querySelector('[role="menu"]')).toBeNull();
+    });
+
     it("offers Save chat as note in the More Actions menu only when autosave is off", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       const onSaveAsNote = jest.fn();

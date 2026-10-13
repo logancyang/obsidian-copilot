@@ -19,6 +19,7 @@ function makeManager() {
     ensureChatNote: jest.fn(async (id: string) => id),
     saveActiveSession: jest.fn(async () => ({ path: "chats/saved.md" })),
     getActiveSession: jest.fn(() => null),
+    getSessionSourcePath: jest.fn(() => "chats/saved.md"),
   } as unknown as AgentSessionManager & {
     getChatHistoryItems: jest.Mock;
     updateChatTitle: jest.Mock;
@@ -27,6 +28,7 @@ function makeManager() {
     ensureChatNote: jest.Mock;
     saveActiveSession: jest.Mock;
     getActiveSession: jest.Mock;
+    getSessionSourcePath: jest.Mock;
   };
 }
 
@@ -583,16 +585,21 @@ describe("useAgentHistoryControls", () => {
       );
     });
 
-    it("removes the open chat's bookmark", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/702 removes the open chat's bookmark through its saved note without resaving the chat", async () => {
       const bookmarks = makeBookmarks([LINK_SAVED]);
+      const manager = makeManager();
+      manager.getActiveSession.mockReturnValue({ internalId: "live-1", getLabel: () => undefined });
+      manager.saveActiveSession.mockRejectedValue(new Error("read-only"));
       const { result } = renderHook(() =>
-        useAgentHistoryControls(makeManager(), makeBookmarkingPlugin(bookmarks))
+        useAgentHistoryControls(manager, makeBookmarkingPlugin(bookmarks))
       );
 
       await act(async () => {
         await result.current.setActiveChatBookmarked(false);
       });
 
+      expect(manager.getSessionSourcePath).toHaveBeenCalledWith("live-1");
+      expect(manager.saveActiveSession).not.toHaveBeenCalled();
       expect(bookmarks.urlBookmarkLookup).toEqual({});
       expect(Notice).toHaveBeenCalledWith("Removed from bookmarks.");
     });

@@ -27,7 +27,7 @@ import {
   MoreHorizontal,
   Sparkles,
 } from "lucide-react";
-import React from "react";
+import React, { useCallback, useState } from "react";
 
 const resolveDeleteSummary = (item: ChatHistoryItem) =>
   describeChatDelete(item.backendId ? backendRegistry[item.backendId] : undefined);
@@ -89,6 +89,11 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   const canUseMultiAgent = useCanUseMultiAgent();
   const historyAvailable = Boolean(
     chatHistoryItems && onLoadChat && onUpdateChatTitle && onDeleteChat
+  );
+  const [moreActionsBody, setMoreActionsBody] = useState<HTMLElement | null>(null);
+  const trackMoreActionsBody = useCallback(
+    (node: HTMLButtonElement | null) => setMoreActionsBody(node?.ownerDocument.body ?? null),
+    []
   );
 
   return (
@@ -156,11 +161,11 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
         {onNewChat && (
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost2" size="icon" title="More Actions">
+              <Button variant="ghost2" size="icon" title="More Actions" ref={trackMoreActionsBody}>
                 <MoreHorizontal className="tw-size-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" container={moreActionsBody}>
               {onCopyChatLink ? (
                 <DropdownMenuItem onSelect={() => void onCopyChatLink()}>
                   <Link />
