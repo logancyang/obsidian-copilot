@@ -66,6 +66,11 @@ module.exports = {
       success: "rgba(var(--color-green-rgb),0.2)",
       warning: "var(--text-warning)",
       error: "rgba(var(--color-red-rgb),0.2)",
+      change: {
+        inserted: "var(--color-green)",
+        deleted: "var(--color-red)",
+        modified: "var(--color-blue)",
+      },
       project: {
         red: "rgba(var(--color-red-rgb),0.16)",
         orange: "rgba(var(--color-orange-rgb),0.16)",

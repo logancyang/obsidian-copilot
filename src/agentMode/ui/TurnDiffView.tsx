@@ -1,4 +1,5 @@
 import type { TurnFileChange } from "@/agentMode/session/types";
+import { ChangeScroller } from "@/agentMode/ui/renderedDiff/ChangeScroller";
 import { RenderedDiff } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import { TurnDiffHeader } from "@/agentMode/ui/TurnDiffHeader";
 import { TURN_DIFF_VIEW_TYPE } from "@/constants";
@@ -91,11 +92,9 @@ const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state }) => {
         deletions={state.deletions}
         onOpenNote={state.status === "deleted" ? undefined : () => openNote(app, state.path)}
       />
-      <div className="tw-flex-1 tw-overflow-y-auto tw-p-[var(--file-margins)]">
-        <div className="markdown-rendered tw-mx-auto tw-max-w-[var(--file-line-width)]">
-          <RenderedDiff before={state.before} after={state.after} path={state.path} />
-        </div>
-      </div>
+      <ChangeScroller>
+        <RenderedDiff before={state.before} after={state.after} path={state.path} />
+      </ChangeScroller>
     </div>
   );
 };
