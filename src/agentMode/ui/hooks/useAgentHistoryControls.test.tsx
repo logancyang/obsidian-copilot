@@ -198,5 +198,21 @@ describe("useAgentHistoryControls", () => {
       expect(Notice).toHaveBeenCalledWith("Failed to delete chat.");
       expect(manager.getChatHistoryItems).toHaveBeenCalled();
     });
+
+    it("copies the link of the saved chat note the chat id points to", async () => {
+      let linkedNotePath: string | undefined;
+      const copyChatLink = jest.fn(async (resolveNotePath: () => Promise<string>) => {
+        linkedNotePath = await resolveNotePath();
+      });
+      const linkingPlugin = { copyChatLink } as unknown as CopilotPlugin;
+      const { result } = renderHook(() => useAgentHistoryControls(makeManager(), linkingPlugin));
+
+      await act(async () => {
+        await result.current.copyChatLink("chats/agent__a.md");
+      });
+
+      expect(copyChatLink).toHaveBeenCalledTimes(1);
+      expect(linkedNotePath).toBe("chats/agent__a.md");
+    });
   });
 });

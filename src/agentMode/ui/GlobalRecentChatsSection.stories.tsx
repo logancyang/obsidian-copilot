@@ -25,6 +25,7 @@ const defaultArgs: GlobalRecentChatsSectionProps = {
   onUpdateTitle: noop,
   onDeleteChat: noop,
   onOpenSourceFile: noop,
+  onCopyChatLink: noop,
   onLoadHistory: noopSync,
 };
 
@@ -72,25 +73,48 @@ export const OpenSessions: StoryObj<GlobalRecentChatsSectionProps> = {
   render: renderShelf,
 };
 
-const backendItems: GlobalRecentChatsSectionProps["items"] = [
-  { ...items[0], title: "Claude chat", backendId: "claude" },
-  { ...items[1], title: "Codex chat", backendId: "codex" },
-];
-
-const ConfirmingDelete: React.FC<{ row: number }> = ({ row }) => {
-  const ref = useRef<HTMLDivElement>(null);
-
+function FocusedFirstRowShelf(args: Partial<GlobalRecentChatsSectionProps>) {
+  const containerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    ref.current?.querySelectorAll<HTMLButtonElement>('button[title="Delete"]')[row]?.click();
-  }, [row]);
+    containerRef.current?.querySelector<HTMLElement>('[role="button"][tabindex="0"]')?.focus();
+  }, []);
+  return <div ref={containerRef}>{renderShelf(args)}</div>;
+}
 
-  return <div ref={ref}>{renderShelf({ items: backendItems })}</div>;
+export const RowActions: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: { items: items.slice(0, 3) },
+  render: FocusedFirstRowShelf,
 };
 
-export const ConfirmDeleteClaude: StoryObj<GlobalRecentChatsSectionProps> = {
-  render: () => <ConfirmingDelete row={0} />,
+export const OpenSessionRowActions: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: {
+    items: items.slice(0, 3),
+    openChatIds: new Set([items[0].id]),
+    onCloseSession: noop,
+  },
+  render: FocusedFirstRowShelf,
 };
 
-export const ConfirmDeleteCodex: StoryObj<GlobalRecentChatsSectionProps> = {
-  render: () => <ConfirmingDelete row={1} />,
+function OpenMenuFirstRowShelf(args: Partial<GlobalRecentChatsSectionProps>) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    containerRef.current
+      ?.querySelector<HTMLElement>('[role="button"][tabindex="0"]')
+      ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  }, []);
+  return <div ref={containerRef}>{renderShelf(args)}</div>;
+}
+
+export const MoreActionsMenu: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: { items: items.slice(0, 3) },
+  render: OpenMenuFirstRowShelf,
+};
+
+export const OpenSessionMoreActionsMenu: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: {
+    items: items.slice(0, 3),
+    openChatIds: new Set([items[0].id]),
+    onCloseSession: noop,
+  },
+  render: OpenMenuFirstRowShelf,
 };

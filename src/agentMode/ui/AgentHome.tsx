@@ -181,6 +181,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     updateChatTitle: handleUpdateChatTitle,
     deleteChat: handleDeleteChat,
     openSourceFile: handleOpenSourceFile,
+    copyChatLink: handleCopyHistoryChatLink,
   } = useAgentHistoryControls(manager, plugin, activeProjectId);
 
   const handleCloseSession = useCallback(
@@ -381,6 +382,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onCloseSession={handleCloseSession}
             openChatIds={openChatIds}
             onOpenSourceFile={handleOpenSourceFile}
+            onCopyChatLink={handleCopyHistoryChatLink}
             onLoadHistory={handleLoadChatHistorySafely}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
@@ -436,6 +438,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleUpdateChatTitle,
       handleDeleteChat,
       handleOpenSourceFile,
+      handleCopyHistoryChatLink,
       handleLoadChatHistorySafely,
       openChatIds,
       handleCloseSession,
@@ -465,6 +468,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onCloseSession={handleCloseSession}
             openChatIds={openChatIds}
             onOpenSourceFile={handleOpenSourceFile}
+            onCopyChatLink={handleCopyHistoryChatLink}
             onLoadHistory={handleLoadChatHistorySafely}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
@@ -492,6 +496,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleUpdateChatTitle,
       handleDeleteChat,
       handleOpenSourceFile,
+      handleCopyHistoryChatLink,
       handleLoadChatHistorySafely,
       openChatIds,
       handleCloseSession,
