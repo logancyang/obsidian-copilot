@@ -109,3 +109,12 @@ export const MoreActionsMenu: StoryObj<GlobalRecentChatsSectionProps> = {
   args: { items: items.slice(0, 3) },
   render: OpenMenuFirstRowShelf,
 };
+
+export const OpenSessionMoreActionsMenu: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: {
+    items: items.slice(0, 3),
+    openChatIds: new Set([items[0].id]),
+    onCloseSession: noop,
+  },
+  render: OpenMenuFirstRowShelf,
+};

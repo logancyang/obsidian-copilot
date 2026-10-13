@@ -387,15 +387,67 @@ describe("GlobalRecentChatsSection", () => {
       expect(actions).toEqual(["Close session", "Open source note", "More actions"]);
     });
 
-    it("lists Rename, Copy chat link, a separator, and a warning-styled Delete in the More actions menu", () => {
+    it("lists every action, including the hover-strip ones, with a warning-styled Delete in the More actions menu", () => {
       renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })] });
 
       const menu = openMenuFromButton("Saved chat");
 
-      expect(menuEntries(menu)).toEqual(["Rename", "Copy chat link", "---", "Delete"]);
+      expect(menuEntries(menu)).toEqual([
+        "Open source note",
+        "Rename",
+        "Copy chat link",
+        "---",
+        "Delete",
+      ]);
       expect(within(menu).getByRole("menuitem", { name: "Delete" }).className).toContain(
         "tw-text-error"
       );
+    });
+
+    it("adds Close session above Delete in the menu when the chat's session is open", () => {
+      renderSection({
+        items: [makeItem("chats/open.md", { title: "Open chat" })],
+        openChatIds: new Set(["chats/open.md"]),
+        onCloseSession: noop,
+      });
+
+      expect(menuEntries(openMenuFromButton("Open chat"))).toEqual([
+        "Open source note",
+        "Rename",
+        "Copy chat link",
+        "---",
+        "Close session",
+        "Delete",
+      ]);
+    });
+
+    it("opens the chosen chat's source note when Open source note is selected from the menu", () => {
+      const onOpenSourceFile = jest.fn(noop);
+      const onLoadChat = jest.fn(noop);
+      renderSection({
+        items: [makeItem("chats/saved.md", { title: "Saved chat" })],
+        onOpenSourceFile,
+        onLoadChat,
+      });
+
+      chooseMenuItem(openMenuFromButton("Saved chat"), "Open source note");
+
+      expect(onOpenSourceFile).toHaveBeenCalledWith("chats/saved.md");
+      expect(onLoadChat).not.toHaveBeenCalled();
+    });
+
+    it("closes the chosen chat's session when Close session is selected from the menu", async () => {
+      const onCloseSession = jest.fn(noop);
+      renderSection({
+        items: [makeItem("chats/open.md", { title: "Open chat" })],
+        openChatIds: new Set(["chats/open.md"]),
+        onCloseSession,
+      });
+
+      const menu = openMenuFromButton("Open chat");
+      await act(async () => chooseMenuItem(menu, "Close session"));
+
+      expect(onCloseSession).toHaveBeenCalledWith("chats/open.md");
     });
 
     it("opens the menu from the More actions button without opening the chat", () => {
@@ -460,6 +512,7 @@ describe("GlobalRecentChatsSection", () => {
       const menu = openMenuFromButton("Native chat");
 
       expect(menuEntries(menu)).not.toContain("Copy chat link");
+      expect(menuEntries(menu)).not.toContain("Open source note");
       expect(
         within(rowFor("Native chat")).queryByRole("button", { name: "Open source note" })
       ).toBeNull();

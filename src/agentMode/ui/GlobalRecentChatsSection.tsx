@@ -95,10 +95,12 @@ const ChatIconTile = memo(
 );
 ChatIconTile.displayName = "ChatIconTile";
 
-interface RecentChatMenuActions {
+interface RecentChatActions {
   onUpdateTitle: (id: string, newTitle: string) => Promise<void>;
   onCopyChatLink: (id: string) => Promise<void>;
   onDeleteChat: (id: string) => Promise<void>;
+  onOpenSourceFile: (id: string) => void;
+  onCloseSession?: (id: string) => Promise<void>;
 }
 
 interface RowActionButtonProps extends React.ComponentPropsWithoutRef<typeof Button> {
@@ -127,16 +129,20 @@ const RowActionButton = forwardRef<HTMLButtonElement, RowActionButtonProps>(
 
 interface RecentChatMenuProps {
   item: ChatHistoryItem;
+  isNoteBacked: boolean;
+  isSessionOpen: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  actions: RecentChatMenuActions;
+  actions: RecentChatActions;
 }
 
 function RecentChatMenu({
   item,
+  isNoteBacked,
+  isSessionOpen,
   open,
   onOpenChange,
-  actions: { onUpdateTitle, onCopyChatLink, onDeleteChat },
+  actions: { onUpdateTitle, onCopyChatLink, onDeleteChat, onOpenSourceFile, onCloseSession },
 }: RecentChatMenuProps): React.ReactElement {
   const app = useApp();
   const [rowBody, setRowBody] = useState<HTMLElement | null>(null);
@@ -158,6 +164,12 @@ function RecentChatMenu({
         container={rowBody}
         onClick={(event) => event.stopPropagation()}
       >
+        {isNoteBacked && (
+          <DropdownMenuItem onSelect={() => onOpenSourceFile(item.id)}>
+            <ArrowUpRight />
+            Open source note
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           onSelect={() =>
             new RenameChatModal(app, item.title, (title) => onUpdateTitle(item.id, title)).open()
@@ -167,13 +179,19 @@ function RecentChatMenu({
           Rename
         </DropdownMenuItem>
         {/* A chat with no saved note has nothing a link could open: https://github.com/Brevilabs/obsidian-copilot-private/issues/693 */}
-        {!isNativeChatId(item.id) && (
+        {isNoteBacked && (
           <DropdownMenuItem onSelect={() => safeAsyncHandler(onCopyChatLink)(item.id)}>
             <Link />
             Copy chat link
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
+        {isSessionOpen && onCloseSession && (
+          <DropdownMenuItem onSelect={() => safeAsyncHandler(onCloseSession)(item.id)}>
+            <Power />
+            Close session
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           className="tw-text-error focus:tw-text-error"
           onSelect={() =>
@@ -199,12 +217,10 @@ interface RecentChatRowProps {
   item: ChatHistoryItem;
   projectName?: string;
   onOpen: (id: string) => void;
-  menuActions: RecentChatMenuActions;
+  actions: RecentChatActions;
   isNoteBacked: boolean;
-  onOpenSourceFile: (id: string) => void;
   isRunning: boolean;
   isSessionOpen: boolean;
-  onCloseSession?: (id: string) => Promise<void>;
   hasAttention: boolean;
 }
 
@@ -212,14 +228,13 @@ const RecentChatRow = memo(function RecentChatRow({
   item,
   projectName,
   onOpen,
-  menuActions,
+  actions,
   isNoteBacked,
-  onOpenSourceFile,
   isRunning,
   isSessionOpen,
-  onCloseSession,
   hasAttention,
 }: RecentChatRowProps): React.ReactElement {
+  const { onOpenSourceFile, onCloseSession } = actions;
   const Icon = resolveChatIcon(item) ?? MessageCircle;
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -293,9 +308,11 @@ const RecentChatRow = memo(function RecentChatRow({
           )}
           <RecentChatMenu
             item={item}
+            isNoteBacked={isNoteBacked}
+            isSessionOpen={isSessionOpen}
             open={menuOpen}
             onOpenChange={setMenuOpen}
-            actions={menuActions}
+            actions={actions}
           />
         </div>
       </div>
@@ -348,9 +365,15 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
 
   const handleOpen = safeAsyncHandler(onLoadChat);
 
-  const menuActions = useMemo(
-    () => ({ onUpdateTitle, onCopyChatLink, onDeleteChat }),
-    [onCopyChatLink, onDeleteChat, onUpdateTitle]
+  const actions = useMemo(
+    () => ({
+      onUpdateTitle,
+      onCopyChatLink,
+      onDeleteChat,
+      onOpenSourceFile: handleOpenSourceFile,
+      onCloseSession,
+    }),
+    [handleOpenSourceFile, onCloseSession, onCopyChatLink, onDeleteChat, onUpdateTitle]
   );
   const getProjectName = useCallback(
     (item: ChatHistoryItem): string | undefined =>
@@ -390,12 +413,10 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
                 item={item}
                 projectName={getProjectName(item)}
                 onOpen={handleOpen}
-                menuActions={menuActions}
+                actions={actions}
                 isNoteBacked={!isNativeChatId(item.id)}
-                onOpenSourceFile={handleOpenSourceFile}
                 isRunning={runningChatIds?.has(item.id) ?? false}
                 isSessionOpen={openChatIds?.has(item.id) ?? false}
-                onCloseSession={onCloseSession}
                 hasAttention={!!item.needsAttention || (attentionChatIds?.has(item.id) ?? false)}
               />
             ))}
