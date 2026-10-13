@@ -3958,6 +3958,48 @@ describe("AgentSessionManager", () => {
       });
     });
 
+    describe("ensureChatNote()", () => {
+      it("returns the note path of a saved chat without saving it again", async () => {
+        const { manager, persistence } = buildHistoryHarness({
+          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "opencode" } },
+        });
+
+        await expect(manager.ensureChatNote("chats/agent__a.md")).resolves.toBe(
+          "chats/agent__a.md"
+        );
+        expect(persistence.saveSession).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 saves a live chat that has no note yet and returns the new note's path", async () => {
+        const { mgr, saveSession } = savedNoteFixture(false);
+        const session = await mgr.createSession();
+        getSessionTestHandle(session).setMessages([{ message: "Unsaved question" }]);
+
+        await expect(mgr.ensureChatNote(nativeIdOf(session))).resolves.toBe("chats/saved.md");
+        expect(saveSession).toHaveBeenCalledWith(
+          [{ message: "Unsaved question" }],
+          session.backendId,
+          expect.anything()
+        );
+      });
+
+      it("rejects without saving when a chat with no note cannot be loaded from its backend", async () => {
+        const replay = buildReplayingBackend({
+          loadSession: jest.fn(async () => {
+            throw new Error("backend is not installed");
+          }),
+        });
+        const { manager, persistence } = buildHistoryHarness({
+          createBackendProcess: jest.fn(() => replay.backend),
+        });
+
+        await expect(
+          manager.ensureChatNote(buildNativeChatId("opencode", "unreachable"))
+        ).rejects.toThrow();
+        expect(persistence.saveSession).not.toHaveBeenCalled();
+      });
+    });
+
     describe("setChatPinned()", () => {
       const PINNED_AT = 1_760_000_000_000;
       let nowSpy: jest.SpyInstance | undefined;

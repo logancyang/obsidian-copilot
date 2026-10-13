@@ -4,7 +4,7 @@ import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManage
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import type CopilotPlugin from "@/main";
 import { act, renderHook } from "@testing-library/react";
-import { Notice } from "obsidian";
+import { type App, Notice } from "obsidian";
 
 const item = (id: string, backendId?: string): ChatHistoryItem =>
   ({ id, backendId }) as unknown as ChatHistoryItem;
@@ -15,15 +15,51 @@ function makeManager() {
     updateChatTitle: jest.fn(async () => {}),
     deleteChatHistory: jest.fn(async () => {}),
     setChatPinned: jest.fn(async (id: string) => ({ id, pinnedAt: 5_000 })),
+    ensureChatNote: jest.fn(async (id: string) => id),
   } as unknown as AgentSessionManager & {
     getChatHistoryItems: jest.Mock;
     updateChatTitle: jest.Mock;
     deleteChatHistory: jest.Mock;
     setChatPinned: jest.Mock;
+    ensureChatNote: jest.Mock;
   };
 }
 
-const plugin = {} as unknown as CopilotPlugin;
+const LINK_A = "obsidian://copilot-chat?vault=Notes&id=epoch%3A1000";
+const LINK_SAVED = "obsidian://copilot-chat?vault=Notes&id=epoch%3A3000";
+
+function makeBookmarks(urls: string[] = []) {
+  const bookmarks = {
+    urlBookmarkLookup: Object.fromEntries(
+      urls.map((url) => [url, { type: "url", url, title: url }])
+    ) as Record<string, { type: string; url: string; title: string; ctime?: number }>,
+    addItem: jest.fn((item: { type: string; url: string; title: string }) => {
+      bookmarks.urlBookmarkLookup[item.url] = item;
+    }),
+    removeItem: jest.fn((item: { url: string }) => {
+      delete bookmarks.urlBookmarkLookup[item.url];
+    }),
+  };
+  return bookmarks;
+}
+
+function makeBookmarkingPlugin(bookmarks: ReturnType<typeof makeBookmarks> | null) {
+  const epochs: Record<string, number> = { "chats/agent__a.md": 1_000, "chats/saved.md": 3_000 };
+  const app = {
+    vault: { getName: () => "Notes" },
+    metadataCache: {
+      getCache: (path: string) =>
+        path in epochs ? { frontmatter: { epoch: epochs[path] } } : null,
+    },
+    internalPlugins: {
+      getEnabledPluginById: jest.fn((id: string) => (id === "bookmarks" ? bookmarks : null)),
+      getPluginById: (id: string) => (id === "bookmarks" ? { enabled: bookmarks !== null } : null),
+    },
+  } as unknown as App;
+  return { app } as unknown as CopilotPlugin;
+}
+
+const plugin = { app: {} } as unknown as CopilotPlugin;
 
 const renderControls = (manager: AgentSessionManager, scope?: string) =>
   renderHook(({ s }: { s?: string }) => useAgentHistoryControls(manager, plugin, s), {
@@ -31,6 +67,8 @@ const renderControls = (manager: AgentSessionManager, scope?: string) =>
   });
 
 describe("useAgentHistoryControls", () => {
+  beforeEach(() => (Notice as unknown as jest.Mock).mockClear());
+
   describe("useAgentHistoryControls()", () => {
     it("loads the history of every chat when no scope is given", async () => {
       const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
@@ -317,6 +355,167 @@ describe("useAgentHistoryControls", () => {
 
       expect(Notice).toHaveBeenCalledWith("Failed to pin chat.");
       expect(result.current.chatHistoryItems).toEqual([item("a"), item("b")]);
+    });
+
+    it("removes the deleted chat's bookmark from the Bookmarks pane", async () => {
+      const bookmarks = makeBookmarks([LINK_A, LINK_SAVED]);
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(makeManager(), makeBookmarkingPlugin(bookmarks))
+      );
+
+      await act(async () => {
+        await result.current.deleteChat("chats/agent__a.md");
+      });
+
+      expect(Object.keys(bookmarks.urlBookmarkLookup)).toEqual([LINK_SAVED]);
+    });
+
+    it("keeps the chat's bookmark when deleting the chat fails", async () => {
+      const bookmarks = makeBookmarks([LINK_A]);
+      const manager = makeManager();
+      manager.deleteChatHistory.mockRejectedValue(new Error("file is locked"));
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(manager, makeBookmarkingPlugin(bookmarks))
+      );
+
+      await act(async () => {
+        await expect(result.current.deleteChat("chats/agent__a.md")).rejects.toThrow();
+      });
+
+      expect(Object.keys(bookmarks.urlBookmarkLookup)).toEqual([LINK_A]);
+    });
+
+    it("reports a saved chat as bookmarked when the Bookmarks pane holds its chat link", async () => {
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(makeManager(), makeBookmarkingPlugin(makeBookmarks([LINK_A])))
+      );
+
+      await expect(result.current.getChatBookmarkState("chats/agent__a.md")).resolves.toBe(
+        "bookmarked"
+      );
+    });
+
+    it("reports a saved chat as not bookmarked when no bookmark holds its chat link", async () => {
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(makeManager(), makeBookmarkingPlugin(makeBookmarks([LINK_SAVED])))
+      );
+
+      await expect(result.current.getChatBookmarkState("chats/agent__a.md")).resolves.toBe(
+        "not-bookmarked"
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 reports a chat with no saved note as not bookmarked, since it has no chat link yet", async () => {
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(makeManager(), makeBookmarkingPlugin(makeBookmarks()))
+      );
+
+      await expect(result.current.getChatBookmarkState("native:opencode:s1")).resolves.toBe(
+        "not-bookmarked"
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 reports bookmarks as off when the Bookmarks core plugin is turned off", async () => {
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(makeManager(), makeBookmarkingPlugin(null))
+      );
+
+      await expect(result.current.getChatBookmarkState("chats/agent__a.md")).resolves.toBe("off");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 reports bookmarks as unavailable when the enabled Bookmarks plugin no longer has the expected shape", async () => {
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(
+          makeManager(),
+          makeBookmarkingPlugin({} as ReturnType<typeof makeBookmarks>)
+        )
+      );
+
+      await expect(result.current.getChatBookmarkState("chats/agent__a.md")).resolves.toBe(
+        "unavailable"
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 reports bookmarks as unavailable and shows a notice when reading Obsidian's bookmarks throws", async () => {
+      const plugin = makeBookmarkingPlugin(makeBookmarks());
+      (
+        plugin.app as unknown as { internalPlugins: { getEnabledPluginById: jest.Mock } }
+      ).internalPlugins.getEnabledPluginById.mockImplementation(() => {
+        throw new Error("internal plugin API changed");
+      });
+      const { result } = renderHook(() => useAgentHistoryControls(makeManager(), plugin));
+
+      await expect(result.current.getChatBookmarkState("chats/agent__a.md")).resolves.toBe(
+        "unavailable"
+      );
+      expect(Notice).toHaveBeenCalledWith("Failed to read bookmarks.");
+    });
+
+    it("bookmarks a saved chat under the given title at its chat link and confirms with a notice", async () => {
+      const bookmarks = makeBookmarks();
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(makeManager(), makeBookmarkingPlugin(bookmarks))
+      );
+
+      await act(async () => {
+        await result.current.setChatBookmarked("chats/agent__a.md", "Plan the launch", true);
+      });
+
+      expect(bookmarks.urlBookmarkLookup[LINK_A]).toEqual(
+        expect.objectContaining({ type: "url", url: LINK_A, title: "Plan the launch" })
+      );
+      expect(Notice).toHaveBeenCalledWith("Bookmarked.");
+    });
+
+    it("removes a saved chat's bookmark and confirms with a notice", async () => {
+      const bookmarks = makeBookmarks([LINK_A]);
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(makeManager(), makeBookmarkingPlugin(bookmarks))
+      );
+
+      await act(async () => {
+        await result.current.setChatBookmarked("chats/agent__a.md", "Plan the launch", false);
+      });
+
+      expect(bookmarks.urlBookmarkLookup).toEqual({});
+      expect(Notice).toHaveBeenCalledWith("Removed from bookmarks.");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 saves a chat with no note before bookmarking the new note's link and shows the row as that note", async () => {
+      const bookmarks = makeBookmarks();
+      const manager = makeManager();
+      manager.getChatHistoryItems.mockResolvedValue([{ id: "native:opencode:s1" }]);
+      manager.ensureChatNote.mockResolvedValue("chats/saved.md");
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(manager, makeBookmarkingPlugin(bookmarks))
+      );
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        await result.current.setChatBookmarked("native:opencode:s1", "Unsaved chat", true);
+      });
+
+      expect(manager.ensureChatNote).toHaveBeenCalledWith("native:opencode:s1");
+      expect(Object.keys(bookmarks.urlBookmarkLookup)).toEqual([LINK_SAVED]);
+      expect(result.current.chatHistoryItems).toEqual([{ id: "chats/saved.md" }]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/694 adds no bookmark and shows a notice when a chat with no note cannot be saved", async () => {
+      const bookmarks = makeBookmarks();
+      const manager = makeManager();
+      manager.ensureChatNote.mockRejectedValue(new Error("backend is not installed"));
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(manager, makeBookmarkingPlugin(bookmarks))
+      );
+
+      await act(async () => {
+        await result.current.setChatBookmarked("native:opencode:s1", "Unsaved chat", true);
+      });
+
+      expect(bookmarks.addItem).not.toHaveBeenCalled();
+      expect(Notice).toHaveBeenCalledWith("Failed to bookmark chat.");
     });
 
     it("copies the link of the saved chat note the chat id points to", async () => {

@@ -2,6 +2,7 @@ import { backendRegistry } from "@/agentMode/backends/registry";
 import { AgentHomePreviewList } from "@/agentMode/ui/AgentHomeSection";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
 import { RenameChatModal } from "@/agentMode/ui/RenameChatModal";
+import type { ChatBookmarkState } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { describeChatDelete } from "@/lib/chatDeleteText";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Separator } from "@/components/ui/separator";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { type ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
@@ -19,10 +21,14 @@ import { ChatIconWithAttention } from "@/components/chat-components/ChatIconWith
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
 import { isNativeChatId } from "@/utils/nativeChatId";
+import { openBookmarksPluginSettings } from "@/utils/obsidianBookmarks";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
 import {
   ArrowUpRight,
+  Bookmark,
+  BookmarkMinus,
+  Info,
   Link,
   LoaderCircle,
   MessageCircle,
@@ -49,6 +55,8 @@ interface GlobalRecentChatsSectionProps {
   onOpenSourceFile: (id: string) => Promise<void>;
   onCopyChatLink: (id: string) => Promise<void>;
   onSetChatPinned: (id: string, pinned: boolean) => Promise<void>;
+  getChatBookmarkState: (id: string) => Promise<ChatBookmarkState>;
+  onSetChatBookmarked: (id: string, title: string, bookmarked: boolean) => Promise<void>;
   onLoadHistory?: () => void;
   runningChatIds?: ReadonlySet<string>;
   openChatIds?: ReadonlySet<string>;
@@ -119,6 +127,8 @@ ChatIconTile.displayName = "ChatIconTile";
 interface RecentChatActions {
   onUpdateTitle: (id: string, newTitle: string) => Promise<void>;
   onCopyChatLink: (id: string) => Promise<void>;
+  getChatBookmarkState: (id: string) => Promise<ChatBookmarkState>;
+  onSetChatBookmarked: (id: string, title: string, bookmarked: boolean) => Promise<void>;
   onDeleteChat: (id: string) => Promise<void>;
   onOpenSourceFile: (id: string) => void;
   onCloseSession?: (id: string) => Promise<void>;
@@ -167,6 +177,8 @@ function RecentChatMenu({
   actions: {
     onUpdateTitle,
     onCopyChatLink,
+    getChatBookmarkState,
+    onSetChatBookmarked,
     onDeleteChat,
     onOpenSourceFile,
     onCloseSession,
@@ -175,6 +187,18 @@ function RecentChatMenu({
 }: RecentChatMenuProps): React.ReactElement {
   const app = useApp();
   const pinned = isPinned(item);
+  const [bookmarkState, setBookmarkState] = useState<ChatBookmarkState | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    let current = true;
+    void getChatBookmarkState(item.id).then((state) => {
+      if (current) setBookmarkState(state);
+    });
+    return () => {
+      current = false;
+      setBookmarkState(null);
+    };
+  }, [getChatBookmarkState, item.id, open]);
   const [rowBody, setRowBody] = useState<HTMLElement | null>(null);
   const trackRowBody = useCallback(
     (node: HTMLButtonElement | null) => setRowBody(node?.ownerDocument.body ?? null),
@@ -217,6 +241,38 @@ function RecentChatMenu({
           <DropdownMenuItem onSelect={() => safeAsyncHandler(onCopyChatLink)(item.id)}>
             <Link />
             Copy chat link
+          </DropdownMenuItem>
+        )}
+        {bookmarkState === "off" && (
+          <DropdownMenuItem
+            className="tw-text-faint focus:tw-text-faint"
+            onSelect={() => openBookmarksPluginSettings(app)}
+          >
+            <Bookmark />
+            Add to bookmarks
+            <span className="tw-ml-auto">
+              <HelpTooltip
+                side="bottom"
+                contentClassName="tw-max-w-60"
+                content="Turn on the Bookmarks core plugin to bookmark chats. Select to open it in Settings."
+              >
+                <Info className="tw-size-3.5" aria-label="Bookmarks is turned off" />
+              </HelpTooltip>
+            </span>
+          </DropdownMenuItem>
+        )}
+        {(bookmarkState === "bookmarked" || bookmarkState === "not-bookmarked") && (
+          <DropdownMenuItem
+            onSelect={() =>
+              safeAsyncHandler(onSetChatBookmarked)(
+                item.id,
+                item.title,
+                bookmarkState === "not-bookmarked"
+              )
+            }
+          >
+            {bookmarkState === "bookmarked" ? <BookmarkMinus /> : <Bookmark />}
+            {bookmarkState === "bookmarked" ? "Remove from bookmarks" : "Add to bookmarks"}
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
@@ -371,6 +427,8 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   onOpenSourceFile,
   onCopyChatLink,
   onSetChatPinned,
+  getChatBookmarkState,
+  onSetChatBookmarked,
   onLoadHistory,
   runningChatIds,
   openChatIds,
@@ -412,16 +470,20 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
     () => ({
       onUpdateTitle,
       onCopyChatLink,
+      getChatBookmarkState,
+      onSetChatBookmarked,
       onDeleteChat,
       onOpenSourceFile: handleOpenSourceFile,
       onCloseSession,
       onSetChatPinned,
     }),
     [
+      getChatBookmarkState,
       handleOpenSourceFile,
       onCloseSession,
       onCopyChatLink,
       onDeleteChat,
+      onSetChatBookmarked,
       onSetChatPinned,
       onUpdateTitle,
     ]

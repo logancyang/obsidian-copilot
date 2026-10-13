@@ -644,13 +644,17 @@ export class AgentSessionManager {
   async setChatPinned(id: string, pinned: boolean): Promise<PinnedChat> {
     const persistence = this.opts.persistenceManager;
     if (!persistence) throw new Error("Agent chat persistence is not configured.");
-    const native = parseNativeChatId(id);
     // The pin lives in the chat's note, so a chat that has none is saved as one first.
     // https://github.com/logancyang/obsidian-copilot/issues/3195
-    const path = native ? await this.saveNativeChatAsNote(native.backendId, native.sessionId) : id;
+    const path = await this.ensureChatNote(id);
     const pinnedAt = pinned ? Date.now() : null;
     await persistence.setPinnedAt(path, pinnedAt);
     return { id: path, pinnedAt: pinnedAt ?? undefined };
+  }
+
+  async ensureChatNote(id: string): Promise<string> {
+    const native = parseNativeChatId(id);
+    return native ? this.saveNativeChatAsNote(native.backendId, native.sessionId) : id;
   }
 
   private async saveNativeChatAsNote(backendId: BackendId, sessionId: string): Promise<string> {
