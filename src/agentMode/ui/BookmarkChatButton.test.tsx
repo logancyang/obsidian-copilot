@@ -117,7 +117,7 @@ describe("BookmarkChatButton", () => {
       renderButton({ getBookmarkState: async () => "off", onSetBookmarked }, app);
 
       const button = await findReadyButton("Bookmark Chat");
-      expect(button.className).toContain("tw-text-faint");
+      expect(button.className).toContain("tw-opacity-50");
       await act(async () => fireEvent.click(button));
 
       expect(setting.openTabById).toHaveBeenCalledWith("plugins");

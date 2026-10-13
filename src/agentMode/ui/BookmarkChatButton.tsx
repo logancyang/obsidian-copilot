@@ -54,7 +54,7 @@ export function BookmarkChatButton({ getBookmarkState, onSetBookmarked }: Bookma
           size="icon"
           title={label}
           aria-pressed={bookmarked}
-          className={cn(off && "tw-text-faint")}
+          className={cn(off && "tw-opacity-50")}
           disabled={state === null}
           onPointerEnter={refresh}
           onClick={() => void handleClick()}
