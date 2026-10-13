@@ -1329,6 +1329,26 @@ describe("AcpBackendProcess", () => {
           "agent_message_chunk",
         ]);
       });
+
+      it("labels a replayed compaction that carries no trigger as manual, the label that does not claim it was automatic (https://github.com/Brevilabs/obsidian-copilot-private/issues/638)", async () => {
+        const backend = await startLoadCapableBackend();
+        const handler = jest.fn();
+        backend.registerSessionHandler("ses_load", handler);
+        mockLoadSession.mockImplementationOnce(async () => {
+          replayer(backend)({
+            sessionUpdate: "compaction_update",
+            compactionId: "past",
+            status: "completed",
+          });
+          return {};
+        });
+
+        await backend.loadSession({ sessionId: "ses_load", cwd: "/vault" });
+
+        expect(handler.mock.calls.map(([e]) => [e.update.id, e.update.trigger])).toEqual([
+          ["past", "manual"],
+        ]);
+      });
     });
 
     describe("prompt()", () => {
