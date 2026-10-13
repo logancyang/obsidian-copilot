@@ -155,6 +155,20 @@ describe("agentTrail", () => {
       expect(tree.map((n) => n.type)).toEqual(["reasoning", "action", "text"]);
     });
 
+    it("keeps a compaction part as its own node at its position in the turn", () => {
+      const compaction: AgentMessagePart = {
+        kind: "compaction",
+        id: "c1",
+        status: "completed",
+        trigger: "manual",
+        startedAtMs: 0,
+      };
+      const tree = buildAgentTrail([text("before"), compaction, text("after")]);
+
+      expect(tree.map((n) => n.type)).toEqual(["text", "compaction", "text"]);
+      expect(tree[1]).toEqual({ type: "compaction", part: compaction });
+    });
+
     describe("hidden tools", () => {
       it("drops ToolSearch entirely, leaving the surrounding tool", () => {
         const parts = [
