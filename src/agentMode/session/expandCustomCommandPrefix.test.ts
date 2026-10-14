@@ -49,6 +49,18 @@ describe("expandCustomCommandPrefix", () => {
       });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/634 expands a custom command whose title starts with compact and a space instead of treating it as /compact", async () => {
+      const builtinTitle = makeCommand({ title: "compact", content: "CUSTOM COMPACT BODY" });
+      const longer = makeCommand({ title: "compact notes", content: "COMPACT NOTES BODY" });
+      const result = await expandCustomCommandPrefix(
+        "/compact notes",
+        [builtinTitle, longer],
+        "",
+        null
+      );
+      expect(result).toEqual({ text: "COMPACT NOTES BODY", matched: longer });
+    });
+
     it("expands `/foo` exactly to the command body (no args)", async () => {
       const cmd = makeCommand({ title: "foo", content: "FOO BODY" });
       const result = await expandCustomCommandPrefix("/foo", [cmd], "", null);
