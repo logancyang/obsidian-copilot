@@ -62,7 +62,7 @@ export const UpdatingOneSkill: StoryObj<BuiltinSkillsTableProps> = {
     pendingSkills: [args.skills[0].name],
     skills: [
       ...args.skills,
-      { ...args.skills[0], name: "copilot-read-pdf", description: "Read a PDF document." },
+      { ...args.skills[0], name: "miyo-parse", description: "Parse a PDF or EPUB with Miyo." },
     ],
   },
 };

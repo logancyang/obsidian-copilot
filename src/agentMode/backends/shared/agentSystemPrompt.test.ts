@@ -27,9 +27,10 @@ function makePrompt(title: string, content: string): UserSystemPrompt {
 }
 
 const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
+const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
 const AGENT = "opencode";
 const ALL_RELAY_SKILLS_LINE =
-  "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-web-search for web search, copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts, copilot-read-pdf for PDFs.";
+  "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-web-search for web search, copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts.";
 
 function setBuiltinPreferences(
   builtinPreferences: NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>
@@ -126,7 +127,7 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT)).toBe(nonPlus);
     });
 
-    it("omits web search, web fetch, and PDF skills under default settings https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
+    it("omits web search and web fetch skills under default settings https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(
         "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts."
       );
@@ -136,7 +137,7 @@ describe("agentSystemPrompt", () => {
       setBuiltinPreferences({ "copilot-web-search": { disabledAgents: ["opencode"] } });
 
       expect(buildAgentSystemPrompt("opencode")).toContain(
-        "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts, copilot-read-pdf for PDFs."
+        "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts."
       );
       expect(buildAgentSystemPrompt("opencode")).not.toContain("copilot-web-search");
       expect(buildAgentSystemPrompt("claude")).toContain(ALL_RELAY_SKILLS_LINE);
@@ -149,7 +150,6 @@ describe("agentSystemPrompt", () => {
         "copilot-web-fetch": { disabled: true },
         "copilot-youtube-transcript": { disabledAgents: ["codex"] },
         "copilot-fetch-x": { disabledAgents: ["codex"] },
-        "copilot-read-pdf": { disabledAgents: ["codex"] },
       });
 
       const prompt = buildAgentSystemPrompt("codex");
@@ -163,21 +163,31 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_WEB_RESEARCH_STEERING);
     });
 
-    it("uses the local fail-closed document route only when Miyo document processing is on", () => {
+    it(`steers documents to miyo-parse first and lets any other tool read the file when it fails, only when Miyo document processing is on (${ISSUE_656})`, () => {
       updateSetting("enableMiyoDocumentProcessing", false);
       expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_MIYO_DOCUMENT_STEERING);
 
       updateSetting("enableMiyoDocumentProcessing", true);
       const prompt = buildAgentSystemPrompt(AGENT);
-      expect(prompt).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
-      expect(prompt).not.toContain("copilot-read-pdf for PDFs");
+      expect(prompt).toContain(
+        "Read PDFs/EPUBs with miyo-parse first. If it is missing or fails, say so, then read the file with any other tool you have."
+      );
+      expect(prompt).not.toMatch(/stay local|no cloud parsers/);
     });
 
-    it(`keeps the Miyo stay-local rule for an agent whose miyo-parse skill is disabled (${ISSUE_599})`, () => {
+    it(`never steers PDFs to the retired Plus copilot-read-pdf skill (${ISSUE_656})`, () => {
+      setBuiltinPreferences({});
+      for (const enableMiyoDocumentProcessing of [false, true]) {
+        updateSetting("enableMiyoDocumentProcessing", enableMiyoDocumentProcessing);
+        expect(buildAgentSystemPrompt(AGENT)).not.toContain("copilot-read-pdf");
+      }
+    });
+
+    it(`omits the miyo-parse steering for an agent whose miyo-parse skill is disabled (${ISSUE_656})`, () => {
       updateSetting("enableMiyoDocumentProcessing", true);
       setBuiltinPreferences({ "miyo-parse": { disabledAgents: ["claude"] } });
 
-      expect(buildAgentSystemPrompt("claude")).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
+      expect(buildAgentSystemPrompt("claude")).not.toContain(COPILOT_MIYO_DOCUMENT_STEERING);
       expect(buildAgentSystemPrompt("opencode")).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
     });
 

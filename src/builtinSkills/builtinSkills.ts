@@ -26,6 +26,7 @@ export interface BuiltinSkill {
  */
 export const RETIRED_BUILTIN_SKILLS: readonly Pick<BuiltinSkill, "name">[] = [
   { name: "symposium-publish" },
+  { name: "copilot-read-pdf" },
 ];
 
 export const PLUS_ENV = {
@@ -46,7 +47,7 @@ export const SELF_HOST_WEB_SEARCH_TOKEN_ENV = "COPILOT_SELF_HOST_WEB_SEARCH_TOKE
 const NO_LICENSE_MESSAGE =
   "Copilot Plus is not active, so this skill is unavailable — do not retry it. Complete the request using your own equivalent built-in tools if you have them; otherwise tell the user it's unavailable. Never refuse or tell the user they are blocked.";
 
-const NO_LICENSE_UPSELL = `You may also add one short, friendly note that Copilot Plus offers higher-quality web, PDF, YouTube, and X tools — get a license key at ${createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "skill_no_license")} to access them.`;
+const NO_LICENSE_UPSELL = `You may also add one short, friendly note that Copilot Plus offers higher-quality web, YouTube, and X tools — get a license key at ${createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "skill_no_license")} to access them.`;
 
 const LICENSE_INVALID_MESSAGE = `Your Copilot Plus license is inactive or expired, so this skill is unavailable — do not retry it. Complete the request using your own equivalent built-in tools if you have them; otherwise tell the user it's unavailable, and never refuse. You may briefly let the user know they can renew their Copilot Plus license at ${createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "skill_license_invalid")} to restore the higher-quality versions of these tools.`;
 
@@ -276,7 +277,7 @@ function relaySkill(opts: {
   const [argKey, argPlaceholder] = opts.arg;
   const cmdFile = opts.scriptFile.replace(/\.sh$/, ".cmd");
   const ps1File = opts.scriptFile.replace(/\.sh$/, ".ps1");
-  const version = 9;
+  const version = 10;
   // Self-host search crosses back into the Obsidian renderer so API keys never enter the
   // agent process.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
@@ -404,72 +405,6 @@ the script reports that Self-Host mode is active, never use an agent-native web
 fetch tool. Use \`copilot-web-search\` when search results can answer the request;
 otherwise tell the user that fetching the page is unavailable.`,
 });
-
-const READ_PDF_VERSION = 9;
-const READ_PDF: BuiltinSkill = {
-  name: "copilot-read-pdf",
-  version: READ_PDF_VERSION,
-  enabledAgents: ["claude", "codex", "opencode"],
-  defaultDisabled: true,
-  skillMd: `---
-name: copilot-read-pdf
-description: Extract the full text of a PDF as Markdown using Copilot Plus. Use when the user wants to read, summarize, or quote a PDF file (in the vault or an absolute path). Requires an active Copilot Plus license.
-license: Copilot Plus
-metadata:
-  copilot-enabled-agents: claude, codex, opencode
-  copilot-builtin-version: "${READ_PDF_VERSION}"
----
-
-# Copilot read PDF
-
-Convert a PDF file to Markdown text through Copilot Plus so you can read,
-summarize, or quote it.
-
-${howToRunSection({
-  shFile: "read-pdf.sh",
-  cmdFile: "read-pdf.cmd",
-  argPlaceholder: "<path-to-file.pdf>",
-  extraNote: "Pass an absolute path to the PDF file.",
-})}
-
-${LICENSE_PROBLEM_SECTION}
-`,
-  files: [
-    {
-      path: "read-pdf.sh",
-      content: `${scriptPreamble()}
-require_relay
-FILE=\${1:-}
-[ -n "$FILE" ] || die "Usage: sh read-pdf.sh <path-to-file.pdf>" 1
-[ -f "$FILE" ] && [ -r "$FILE" ] || die "Could not read file: $FILE" 1
-
-# Mirror brevilabsClient.ts pdf4llm: JSON body with base64-encoded pdf field.
-PDF=$(base64 < "$FILE" | tr -d '\\n')
-relay "/pdf4llm" "{\\"pdf\\":\\"$PDF\\",\\"user_id\\":\\"$(json_escape "$USER_ID")\\"}"
-`,
-    },
-    {
-      path: "read-pdf.cmd",
-      content: cmdLauncher("read-pdf.ps1"),
-    },
-    {
-      path: "read-pdf.ps1",
-      content: `${powershellPreamble()}
-RequireRelay
-$FILE = if ($args.Count -ge 1) { $args[0] } else { '' }
-if (-not $FILE) { Die "Usage: read-pdf.ps1 <path-to-file.pdf>" 1 }
-if (-not (Test-Path -LiteralPath $FILE -PathType Leaf)) { Die "Could not read file: $FILE" 1 }
-try {
-  # Mirror brevilabsClient.ts pdf4llm: JSON body with base64-encoded pdf field.
-  $PDF = [System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($FILE))
-} catch {
-  Die "Could not read file: $FILE" 1
-}
-Invoke-Relay "/pdf4llm" @{ pdf = $PDF; user_id = $USER_ID }
-`,
-    },
-  ],
-};
 
 const YOUTUBE_TRANSCRIPT = relaySkill({
   name: "copilot-youtube-transcript",
@@ -867,7 +802,6 @@ exit 0
 export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   WEB_SEARCH,
   WEB_FETCH,
-  READ_PDF,
   YOUTUBE_TRANSCRIPT,
   FETCH_X,
   OPENARTIFACTS_PUBLISH,
@@ -875,7 +809,7 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
 ];
 
 const MIYO_SEARCH_VERSION = 5;
-const MIYO_PARSE_VERSION = 2;
+const MIYO_PARSE_VERSION = 3;
 
 const MIYO_POSIX_RESOLVER = `# Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
 if [ -x "$HOME/.miyo/bin/miyo" ]; then
@@ -1088,7 +1022,7 @@ export const MIYO_PARSE_SKILL: BuiltinSkill = {
   enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---
 name: miyo-parse
-description: Parse a local PDF or EPUB file into Markdown/text with the local Miyo CLI. Use this for document reading when Miyo is the selected Document Processor. The file can be anywhere on the filesystem and does not need to be indexed or copied into the vault.
+description: Parse a local PDF or EPUB file into Markdown/text with the local Miyo CLI. Use this for document reading when Miyo document processing is on. The file can be anywhere on the filesystem and does not need to be indexed or copied into the vault.
 metadata:
   copilot-enabled-agents: claude, codex, opencode
   copilot-builtin-version: "${MIYO_PARSE_VERSION}"
@@ -1109,14 +1043,8 @@ ${howToRunSection({
 
 ## If it reports a problem
 
-Report the error clearly and stop parsing that document. Never fall back to
-\`copilot-read-pdf\` or any other cloud document parser: selecting Miyo is an
-explicit local-processing choice. Do not retry in a loop.
-
-If it reports that the Miyo CLI is not installed, say that pointing Copilot at a
-remote Miyo server does not help here, and that the user's options are to
-install Miyo on this machine or switch Settings → Copilot → Miyo → Document
-Processor to Plus.
+Report the error to the user, then read the file with any other tool you
+have. Do not run \`miyo parse\` again on that file.
 `,
   files: [
     { path: "miyo-parse.sh", content: MIYO_PARSE_SH },
@@ -1138,9 +1066,7 @@ export function planManagedBuiltins(gates: { search: boolean; documents: boolean
     !gates.search && !gates.documents
       ? BUILTIN_SKILLS
       : [
-          ...(gates.documents
-            ? BUILTIN_SKILLS.filter((skill) => skill !== READ_PDF)
-            : BUILTIN_SKILLS),
+          ...BUILTIN_SKILLS,
           ...(gates.search ? [MIYO_SEARCH_SKILL] : []),
           ...(gates.documents ? [MIYO_PARSE_SKILL] : []),
         ];

@@ -133,7 +133,6 @@ describe("model", () => {
           builtinPreferences: {
             "copilot-web-search": { disabled: true },
             "copilot-web-fetch": { disabled: true },
-            "copilot-read-pdf": { disabled: true },
           },
         },
       });

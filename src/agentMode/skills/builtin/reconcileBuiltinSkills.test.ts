@@ -15,6 +15,18 @@ import type { BuiltinSeedFs } from "./seedBuiltinSkills";
 jest.mock("@/logger", () => ({ logError: jest.fn(), logInfo: jest.fn(), logWarn: jest.fn() }));
 
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
+const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
+const INSTALLED_PLUS_READ_PDF_MD = `---
+name: copilot-read-pdf
+description: Extract the full text of a PDF as Markdown using Copilot Plus.
+license: Copilot Plus
+metadata:
+  copilot-enabled-agents: claude, codex, opencode
+  copilot-builtin-version: "9"
+---
+
+# Copilot read PDF
+`;
 const folder = "copilot/skills";
 function fixture(preferences?: BuiltinPreferences) {
   const files = new Map<string, string>();
@@ -292,5 +304,22 @@ describe("reconcileBuiltinSkills", () => {
         true
       );
     });
+    it.each([false, true])(
+      `removes an installed Plus copilot-read-pdf and keeps miyo-parse as the only document skill (Miyo document processing on: %s) ${ISSUE_656}`,
+      async (enableMiyoDocumentProcessing) => {
+        const f = fixture({ "copilot-read-pdf": { disabled: true } });
+        f.options.settings.enableMiyoDocumentProcessing = enableMiyoDocumentProcessing;
+        f.options.availableAgents = ["claude"];
+        f.files.set(f.path("copilot-read-pdf"), INSTALLED_PLUS_READ_PDF_MD);
+        f.files.set(`${folder}/copilot-read-pdf/read-pdf.sh`, "legacy Plus relay script");
+
+        await reconcileBuiltinSkills(f.options);
+
+        expect(
+          [...f.files.keys()].filter((path) => path.startsWith(`${folder}/copilot-read-pdf/`))
+        ).toEqual([]);
+        expect(f.files.has(f.path("miyo-parse"))).toBe(enableMiyoDocumentProcessing);
+      }
+    );
   });
 });

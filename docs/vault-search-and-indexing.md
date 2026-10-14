@@ -110,9 +110,9 @@ Miyo can also index supported ChatGPT and Claude chat histories. Configure those
 
 The **Miyo document processing** switch is on by default and affects more than one chat surface, so check the route you use:
 
-- In **Agent Chat**, it runs the local `miyo-parse` CLI for PDF and EPUB files. This stays on the current computer even when semantic search uses a remote Miyo server. If the local CLI is unavailable, Agent Chat stops instead of falling back to a cloud parser.
+- In **Agent Chat**, it installs the `miyo-parse` Skill, which runs the local Miyo CLI for PDF and EPUB files. This stays on the current computer even when semantic search uses a remote Miyo server. If the local CLI is unavailable or cannot parse a file, the agent reports the error and reads the file with any other tool it has.
 - In **Quick Chat**, it asks the connected Miyo service to parse PDF and EPUB files. A local connection stays local; a configured remote connection processes them on that server and requires the server to have access to the registered vault files.
-- With the switch off, Copilot can use Copilot-hosted PDF processing, which may consume paid usage.
+- With the switch off, Agent Chat does not install the Skill and the agent reads documents with its own tools. Quick Chat can use Copilot-hosted PDF processing, which may consume paid usage.
 
 Outside the Miyo route, EPUB and ordinary non-PDF formats such as DOCX are not processed by this switch in regular chat context. Projects have a separate context-conversion route that can use hosted processing. See [Copilot Paid Plans and Data Routes](copilot-plus-and-self-host.md) before using sensitive documents.
 
@@ -131,7 +131,7 @@ Copilot uses Miyo’s recommendation API for related notes. Older Miyo installat
 - **Semantic search is missing:** confirm the connection is healthy and turn on **Semantic search for agents**. Copilot installs the shared Miyo skill for opencode, Claude, and Codex.
 - **New notes are missing:** run **Refresh Miyo index** from the command palette. Indexing progress is shown in Miyo.
 - **Relevant Notes has no semantic results:** Read the card for the active note's Miyo state. **No semantic matches yet** means Miyo found no related notes. The other cards distinguish an empty note, indexing work, an indexing error, and a Miyo folder filter. Older Miyo builds use the less specific **This note isn't indexed in Miyo** card. None of these states shows link-only or backlink-only rows.
-- **Agent Chat Miyo document processing fails:** install Miyo on this computer so its local CLI is available, or turn off **Miyo document processing**. A remote Miyo search connection does not provide the local CLI Agent Chat needs.
+- **Agent Chat Miyo document processing fails:** the agent reports the error and reads the file with its own tools. To use the Skill, install Miyo on this computer so its local CLI is available; to stop using it, turn off **Miyo document processing**. A remote Miyo search connection does not provide the local CLI Agent Chat needs.
 - **Quick Chat Miyo document processing fails:** confirm that the connected Miyo service can access the registered vault and document. When a remote server is configured, troubleshoot the document on that server.
 - **Miyo indexes folders you wanted skipped:** When Copilot first registers a vault, it supplies the current working-folder history and Obsidian ignored paths as initial Miyo exclusions. It does not overwrite an existing registration or later folder edits. Copilot still filters its integrated search results locally; edit the registered folder's server-side include and exclude rules in Miyo.
 - **Mobile:** a remote Miyo server can be configured on mobile, but Agent Chat and its Skills are desktop features. Use Quick Chat on mobile.
