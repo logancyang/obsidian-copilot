@@ -149,6 +149,14 @@ export const TASK_LIST_REORDERED: RenderedDiffFixture = {
   after: "- [ ] Send the invite\n- [ ] Draft the migration runbook\n- [ ] Book the review slot\n",
 };
 
+export const NESTED_TASKS_EDITED: RenderedDiffFixture = {
+  path: "Daily/2026-10-14.md",
+  before:
+    "## Today\n\n- Ship every PR for this release.\n  - [ ] Bookmark chat action\n- [ ] Agent compaction\n- [ ] File edit prompt\n- [ ] Plus parser\n",
+  after:
+    "## Today\n\n- Finish the remaining release merges.\n- [ ] Agent compaction\n- [ ] Plus parser\n",
+};
+
 export const LIST_ITEM_WITH_CODE_EDIT: RenderedDiffFixture = {
   path: "projects/Alpha/Queries.md",
   before: "- Run the checks:\n  ```bash\n  npm run verify\n  ```\n- Ship the build\n",
