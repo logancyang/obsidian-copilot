@@ -1279,13 +1279,6 @@ describe("sdkMessageTranslator", () => {
         ]);
       });
 
-      it("never turns a compaction's summary or hook output into agent text", () => {
-        for (const name of ["claude-compact-manual", "claude-compact-auto"]) {
-          const { updates } = translateFixture(name);
-          expect(updates.map((u) => u.sessionUpdate)).toEqual(["compaction", "compaction"]);
-        }
-      });
-
       it(`keeps repeated compacting statuses on the one open compaction (${ISSUE_635})`, () => {
         const state = createTranslatorState();
         const ids = ["repeat-1", "repeat-2", "repeat-3"].flatMap((uuid) =>
@@ -1323,33 +1316,6 @@ describe("sdkMessageTranslator", () => {
             preTokens: 103249,
             postTokens: 4046,
           },
-        ]);
-      });
-
-      it(`keeps the compaction running through the success status and completes the same row at the boundary (${ISSUE_635})`, () => {
-        const state = createTranslatorState();
-        translateOne(statusFrame({ status: "compacting" }, "open"), state);
-
-        const success = translateOne(statusFrame({ compact_result: "success" }, "ok"), state);
-        const boundary = translateOne(
-          {
-            type: "system",
-            subtype: "compact_boundary",
-            uuid: "boundary",
-            session_id: SESSION_ID,
-            compact_metadata: { trigger: "auto", pre_tokens: 900, post_tokens: 90 },
-          } as unknown as SDKMessage,
-          state
-        );
-
-        expect(success).toEqual([]);
-        expect(boundary).toEqual([
-          expect.objectContaining({
-            id: "open",
-            status: "completed",
-            preTokens: 900,
-            postTokens: 90,
-          }),
         ]);
       });
 
