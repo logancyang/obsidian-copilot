@@ -4,6 +4,7 @@ import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
 import { FeedbackCard, findFeedbackCardIndex } from "@/agentMode/ui/FeedbackCard";
 import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
+import { formatAgentChatTranscript } from "@/agentMode/session/AgentChatPersistenceManager";
 import { formatFeedbackNote, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import { setSettings } from "@/settings/model";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
@@ -222,6 +223,7 @@ const AgentChatMessages = memo(
               openReportIssueModal(plugin, {
                 activeBackend: feedbackOffer.evidence.backendId,
                 initialNote: formatFeedbackNote(feedbackOffer),
+                chatTranscript: formatAgentChatTranscript(messages),
                 preselectAllSources: true,
                 onReported: (report) => chatBackend.markFeedbackReported(report),
               })
@@ -235,7 +237,7 @@ const AgentChatMessages = memo(
             }}
           />
         ) : null,
-      [feedbackOffer, plugin, chatBackend]
+      [feedbackOffer, plugin, chatBackend, messages]
     );
 
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);

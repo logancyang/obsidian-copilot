@@ -34,6 +34,7 @@ const OPENCODE_BACKEND_ID = "opencode";
 const FRAME_LOG_NAME = "acp-frames.ndjson.txt";
 const CHAT_LOG_NAME = "copilot-log.md";
 const OPENCODE_LOG_NAME = "opencode.log";
+const CHAT_TRANSCRIPT_NAME = "chat-transcript.md";
 
 export interface ReportIssueModalParams {
   app: App;
@@ -41,13 +42,14 @@ export interface ReportIssueModalParams {
   pluginVersion: string;
   uploader: ReportUploader;
   initialNote?: string;
+  chatTranscript?: string;
   preselectAllSources?: boolean;
   onReported?: (report: { reportId: string; issueUrl: string }) => void;
 }
 
 export type OpenReportIssueOptions = Pick<
   ReportIssueModalParams,
-  "activeBackend" | "initialNote" | "preselectAllSources" | "onReported"
+  "activeBackend" | "initialNote" | "chatTranscript" | "preselectAllSources" | "onReported"
 >;
 
 export function openReportIssueModal(
@@ -210,6 +212,14 @@ export class ReportIssueModal extends Modal {
         defaultChecked: true,
       },
     ];
+    if (this.params.chatTranscript != null) {
+      sources.push({
+        id: "chatTranscript",
+        label: "This chat's messages",
+        description: "includes any note text shared in the chat",
+        defaultChecked: true,
+      });
+    }
     if (this.params.activeBackend === OPENCODE_BACKEND_ID) {
       sources.push({
         id: "opencodeLog",
@@ -248,6 +258,13 @@ export class ReportIssueModal extends Modal {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/538
     const logs: ReportLogRequest[] = [];
     if (selected.has("chatLog")) logs.push(await chatLogRequest());
+    if (selected.has("chatTranscript")) {
+      logs.push({
+        id: "chatTranscript",
+        name: CHAT_TRANSCRIPT_NAME,
+        text: this.params.chatTranscript,
+      });
+    }
     if (selected.has("opencodeLog")) logs.push(await opencodeLogRequest());
     if (selected.has("activityLog")) logs.push(await activityLogRequest());
 

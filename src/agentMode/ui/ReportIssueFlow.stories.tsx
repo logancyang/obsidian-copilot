@@ -157,3 +157,24 @@ export const DraftedNote: StoryObj<ReportIssueFlowProps> = {
     />
   ),
 };
+
+export const FromChatMenu: StoryObj<ReportIssueFlowProps> = {
+  render: () => (
+    <ReportIssueFlow
+      {...BASE}
+      sources={[
+        ...SOURCES.slice(0, 3),
+        {
+          id: "chatTranscript",
+          label: "This chat's messages",
+          description: "includes any note text shared in the chat",
+          defaultChecked: true,
+        },
+        { ...SOURCES[3], defaultChecked: true },
+      ]}
+      initialNote={
+        "\n\nEvidence: backend opencode · model deepseek-v4-pro · session ses_8f2a · 2026-10-14T17:42:05Z"
+      }
+    />
+  ),
+};

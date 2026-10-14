@@ -8,7 +8,12 @@ import { type ReportUploadAttempt } from "@/utils/reportUpload";
 import { AlertTriangle, Check, FileArchive, Loader2, X, type LucideIcon } from "lucide-react";
 import React from "react";
 
-export type ReportSourceId = "screenshot" | "activityLog" | "chatLog" | "opencodeLog";
+export type ReportSourceId =
+  | "screenshot"
+  | "activityLog"
+  | "chatLog"
+  | "chatTranscript"
+  | "opencodeLog";
 
 export interface ReportSourceOption {
   id: ReportSourceId;

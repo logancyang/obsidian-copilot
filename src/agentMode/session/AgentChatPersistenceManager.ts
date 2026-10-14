@@ -65,6 +65,19 @@ export interface LoadedAgentChat {
   usage?: SessionUsage;
 }
 
+export function formatAgentChatTranscript(messages: AgentChatMessage[]): string {
+  return messages
+    .map((m) => {
+      const ts = m.timestamp ? m.timestamp.display : "Unknown time";
+      const body =
+        m.message.length === 0 && m.fanout
+          ? serializeFanoutComposite(m.fanout, (id) => id)
+          : m.message;
+      return `**${m.sender}**: ${body}\n[Timestamp: ${ts}]`;
+    })
+    .join("\n\n");
+}
+
 export class AgentChatPersistenceManager {
   private readonly loadedTranscripts = new Map<TAbstractFile | string, string>();
 
@@ -119,7 +132,7 @@ export class AgentChatPersistenceManager {
           : "",
         preferredFileName
       );
-      const chatContent = this.formatChatContent(preparedMessages);
+      const chatContent = formatAgentChatTranscript(preparedMessages);
 
       const updates = this.frontmatterUpdates({
         firstMessageEpoch,
@@ -227,19 +240,6 @@ export class AgentChatPersistenceManager {
   private resolveExistingFile(path: string): TFile | null {
     const file = this.app.vault.getAbstractFileByPath(path);
     return file instanceof TFile ? file : null;
-  }
-
-  private formatChatContent(messages: AgentChatMessage[]): string {
-    return messages
-      .map((m) => {
-        const ts = m.timestamp ? m.timestamp.display : "Unknown time";
-        const body =
-          m.message.length === 0 && m.fanout
-            ? serializeFanoutComposite(m.fanout, (id) => id)
-            : m.message;
-        return `**${m.sender}**: ${body}\n[Timestamp: ${ts}]`;
-      })
-      .join("\n\n");
   }
 
   private parseChatBody(body: string, conversationEpoch?: number): AgentChatMessage[] {

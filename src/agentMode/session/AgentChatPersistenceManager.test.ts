@@ -1,6 +1,9 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
+import {
+  AgentChatPersistenceManager,
+  formatAgentChatTranscript,
+} from "./AgentChatPersistenceManager";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage } from "./types";
 import { TFile } from "obsidian";
@@ -135,6 +138,19 @@ describe("AgentChatPersistenceManager", () => {
   beforeEach(() => {
     app = makeApp();
     manager = new AgentChatPersistenceManager(app as unknown as App);
+  });
+
+  describe("formatAgentChatTranscript()", () => {
+    it("writes each message as its sender and text with its timestamp, in the saved chat note's format", () => {
+      expect(
+        formatAgentChatTranscript([
+          makeMessage(USER_SENDER, "hej"),
+          { ...makeMessage(AI_SENDER, "Hello!"), timestamp: null },
+        ])
+      ).toBe(
+        "**user**: hej\n[Timestamp: 2026/01/01 12:00:00]\n\n**ai**: Hello!\n[Timestamp: Unknown time]"
+      );
+    });
   });
 
   describe("saveSession()", () => {

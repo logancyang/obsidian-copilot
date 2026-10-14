@@ -255,6 +255,7 @@ describe("ReportIssueModal", () => {
       const modal = openReportIssueModal(plugin, {
         activeBackend: "codex",
         initialNote: "Replied in Swedish",
+        chatTranscript: "**user**: hej",
         preselectAllSources: true,
         onReported,
       }) as unknown as { open: jest.Mock; params: Record<string, unknown> };
@@ -264,6 +265,7 @@ describe("ReportIssueModal", () => {
         activeBackend: "codex",
         pluginVersion: "4.1.0",
         initialNote: "Replied in Swedish",
+        chatTranscript: "**user**: hej",
         preselectAllSources: true,
         onReported,
       });
@@ -352,6 +354,17 @@ describe("ReportIssueModal", () => {
         expect(checked).toEqual(expect.arrayContaining(["screenshot", "chatLog", "opencodeLog"]));
       });
 
+      it("offers this chat's messages, checked, only when the dialog was opened from a chat", () => {
+        const transcript = modalWith({
+          params: { activeBackend: "claude", chatTranscript: "" },
+        })
+          .buildSources()
+          .find((source) => source.id === "chatTranscript");
+
+        expect(transcript).toMatchObject({ label: "This chat's messages", defaultChecked: true });
+        expect(ids({})).not.toContain("chatTranscript");
+      });
+
       it("leaves the opencode log unchecked by default", () => {
         const opencodeLog = modalWith({
           params: { activeBackend: "opencode" },
@@ -385,12 +398,13 @@ describe("ReportIssueModal", () => {
 
       const activeView = { containerEl: { win: window } };
 
-      const prepare = (selected: ReadonlySet<ReportSourceId>) =>
+      const prepare = (selected: ReadonlySet<ReportSourceId>, chatTranscript?: string) =>
         modalWith({
           app: { workspace: { getActiveViewOfType: () => activeView } },
           params: {
             pluginVersion: "9.9.9",
             activeBackend: "claude",
+            chatTranscript,
           },
         })
           .prepare("it broke\n\nwhile typing", selected)
@@ -497,11 +511,21 @@ describe("ReportIssueModal", () => {
         expect(entryText("copilot-log.md")).toBe(chatLog);
       });
 
+      it("packs this chat's messages into the zip as chat-transcript.md when selected", async () => {
+        const transcript = "**user**: hej\n[Timestamp: 2026/10/14 09:00:00]";
+
+        const report = await prepare(new Set(["chatTranscript"]), transcript);
+
+        const entries = unzipSync(new Uint8Array(await realFs.readFile(report.zipPath)));
+        expect(new TextDecoder().decode(entries["chat-transcript.md"])).toBe(transcript);
+      });
+
       it("asks for the logs smallest-growing first, so a heavy session's frames cannot crowd the others out (https://github.com/Brevilabs/obsidian-copilot-private/issues/538)", async () => {
-        await prepare(new Set(["activityLog", "chatLog", "opencodeLog"]));
+        await prepare(new Set(["activityLog", "chatLog", "chatTranscript", "opencodeLog"]), "hi");
 
         expect(bundleInput().logs.map((log) => log.id)).toEqual([
           "chatLog",
+          "chatTranscript",
           "opencodeLog",
           "activityLog",
         ]);

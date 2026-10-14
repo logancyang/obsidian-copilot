@@ -265,7 +265,7 @@ describe("AgentChatMessages", () => {
       expect(screen.queryByTestId("agent-feedback-card")).toBeNull();
     });
 
-    it("opens the report dialog prefilled from the card with every source checked, and records the sent report", () => {
+    it("opens the report dialog prefilled from the card with every source checked and the chat's messages attached, and records the sent report", () => {
       mockOpenReportIssueModal.mockClear();
       renderMessages(FEEDBACK_TRANSCRIPT, false, { feedbackOffer: FEEDBACK_OFFER });
       fireEvent.click(screen.getByRole("button", { name: "Review & report" }));
@@ -275,6 +275,9 @@ describe("AgentChatMessages", () => {
         {
           activeBackend: "codex",
           initialNote: expect.stringMatching(/^Replied in Swedish to an English request\n/),
+          chatTranscript: expect.stringMatching(
+            /^\*\*user\*\*: why\?\n[\s\S]*\*\*ai\*\*: Next answer\.\n/
+          ),
           preselectAllSources: true,
           onReported: expect.any(Function),
         }
