@@ -204,9 +204,10 @@ Two behaviors preserve the invariant across the rough edges:
 Before a project session opens, `buildProjectContext`
 (`context/manifestBuilder.ts`) reads the project's saved sources and builds a
 `<project_context>` block that is inlined into the session's first user prompt.
-It runs synchronously against Obsidian's in-memory vault index: nothing is
-fetched, converted, or cached, so session start never waits on it and there is
-no load state to report.
+It runs synchronously against Obsidian's in-memory vault index when that first
+message is sent: nothing is fetched, converted, or cached, so session start
+never waits on it, there is no load state to report, and an empty landing
+session never carries a stale listing.
 
 The block lists:
 
@@ -235,15 +236,20 @@ that are not part of the project
 capped at `MAX_MANIFEST_ENTRIES`, with declared sources listed before the
 property and document expansions so a large expansion cannot crowd them out.
 
-A `contextSignature` over the source fields drives reactivity: a re-entered
-project replaces its empty landing session only when its sources or
-instructions changed.
+A session still fixes its working directory, its instructions, and its
+`additionalDirectories` when it starts. The landing capture signature
+(`projects/projectContextSignature.ts`) covers those: a re-entered project
+replaces its empty landing session only when its sources, folder, or
+instructions changed. Once a chat has messages, `ProjectContentTracker` bumps a
+per-project epoch on vault or source changes in the project's scope, and the
+next message carries a `<project_context_updates>` note asking the agent to
+re-check its sources.
 
-`Clear Copilot cache` also deletes `~/.obsidian-copilot/vaults/<vaultId>/context-cache/`,
-a folder no current code reads or writes, and leaves the sibling
-`agent-chat-index.json` intact. The command reaches `context/conversionsLocation.ts`
-through a desktop-gated dynamic `import`, and `scripts/mobile-load-smoke.cjs`
-checks that boundary.
+`Clear Copilot cache` also runs `clearLegacyCaches` (`cache/legacyCaches.ts`),
+which deletes two folders no current code reads or writes: the in-vault
+`.copilot/pdf-cache/` and the off-vault
+`~/.obsidian-copilot/vaults/<vaultId>/context-cache/`. It leaves the sibling
+`agent-chat-index.json` intact.
 
 ## Project instructions (`project.md` + `AGENTS.md`)
 

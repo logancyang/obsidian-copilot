@@ -16,11 +16,10 @@ import {
   setSettings as mockedSetSettings,
 } from "@/settings/model";
 import * as projectsState from "@/projects/state";
-import { buildProjectContext } from "@/context/manifestBuilder";
+import { buildProjectContext, getProjectAdditionalDirectories } from "@/context/manifestBuilder";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { type ProjectConfig } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
-import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { buildCodexModeMapping } from "@/agentMode/backends/codex/codexModeMapping";
 import type {
@@ -36,6 +35,7 @@ import type {
 } from "./types";
 
 const mockBuildProjectContext = buildProjectContext as jest.Mock;
+const mockGetProjectAdditionalDirectories = getProjectAdditionalDirectories as jest.Mock;
 const getSettingsMock = mockedGetSettings as jest.Mock;
 const setSettingsMock = mockedSetSettings as jest.Mock;
 const noticeMock = Notice as unknown as jest.Mock;
@@ -64,20 +64,10 @@ jest.mock("@/projects/ProjectFileManager", () => ({
   },
 }));
 
-jest.mock("@/context/manifestBuilder", () => {
-  const { getProjectContextSignature } = jest.requireActual("@/projects/projectContextSignature");
-  const { getCachedProjectRecordById } = jest.requireActual("@/projects/state");
-  return {
-    buildProjectContext: jest.fn((_app: unknown, projectId: string) => {
-      const record = getCachedProjectRecordById(projectId);
-      return {
-        additionalDirectories: [],
-        projectContextBlock: "<project_context>\n</project_context>",
-        contextSignature: record ? getProjectContextSignature(record) : undefined,
-      };
-    }),
-  };
-});
+jest.mock("@/context/manifestBuilder", () => ({
+  buildProjectContext: jest.fn(() => "<project_context>\n</project_context>"),
+  getProjectAdditionalDirectories: jest.fn(() => []),
+}));
 
 let mockNotificationSound = true;
 
@@ -927,25 +917,28 @@ describe("AgentSessionManager", () => {
         );
       });
 
-      it("hands a project session the context built for its project and a global session none", async () => {
+      it("hands a project session its additional directories and a first-message context builder, and a global session neither", async () => {
         seedProjects("proj-ctx");
-        const projectContext = {
-          additionalDirectories: ["/vault/Shared"],
-          projectContextBlock: "<project_context>\n- `/vault/Shared`\n</project_context>",
-          contextSignature: "sig",
-        };
-        mockBuildProjectContext.mockReturnValueOnce(projectContext);
+        mockGetProjectAdditionalDirectories.mockReturnValueOnce(["/vault/Shared"]);
+        mockBuildProjectContext.mockReturnValueOnce(
+          "<project_context>\n- `/vault/Shared`\n</project_context>"
+        );
         const mgr = buildManager();
 
         await mgr.createSession(undefined, "proj-ctx");
         await mgr.createSession(undefined, GLOBAL_SCOPE);
 
-        expect(sessionCreateSpy.mock.calls[0][0]).toMatchObject({
+        const [projectOpts, globalOpts] = sessionCreateSpy.mock.calls.map(([opts]) => opts);
+        expect(projectOpts).toMatchObject({
           projectId: "proj-ctx",
-          projectContext,
+          additionalDirectories: ["/vault/Shared"],
         });
-        expect(sessionCreateSpy.mock.calls[1][0].projectContext).toBeUndefined();
-        expect(mockBuildProjectContext).toHaveBeenCalledTimes(1);
+        expect(mockBuildProjectContext).not.toHaveBeenCalled();
+        expect(projectOpts.getProjectContextBlock!()).toBe(
+          "<project_context>\n- `/vault/Shared`\n</project_context>"
+        );
+        expect(globalOpts.additionalDirectories).toBeUndefined();
+        expect(globalOpts.getProjectContextBlock).toBeUndefined();
       });
 
       it("only spawns the backend once across multiple createSession calls", async () => {
@@ -4210,11 +4203,7 @@ describe("AgentSessionManager", () => {
 
       it("reattaches a project chat with the folders its project context allows outside the project", async () => {
         seedProjects("proj-ctx");
-        mockBuildProjectContext.mockReturnValueOnce({
-          additionalDirectories: ["/vault/Shared"],
-          projectContextBlock: "<project_context>\n</project_context>",
-          contextSignature: "sig",
-        });
+        mockGetProjectAdditionalDirectories.mockReturnValueOnce(["/vault/Shared"]);
         const replay = buildReplayingBackend();
 
         await buildManager({
@@ -4775,7 +4764,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).not.toBe(landing);
       });
 
-      it("marks an inactive project dirty so re-entry detaches the stale empty landing and respawns", async () => {
+      it("replaces an empty landing on re-entry after the project's sources change", async () => {
         publish(makeRecord({ webUrls: "https://a.com" }));
         const mgr = buildManager();
 
@@ -4794,7 +4783,7 @@ describe("AgentSessionManager", () => {
         expect(visible[0]).not.toBe(landing);
       });
 
-      it("clears dirty once a fresh session captured the new sources (later re-entry reuses)", async () => {
+      it("reuses the replacement landing on a later re-entry when nothing changed since", async () => {
         publish(makeRecord({ webUrls: "https://a.com" }));
         const mgr = buildManager();
         await mgr.enterProject(PROJECT_ID);
@@ -4813,59 +4802,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).toBe(fresh);
       });
 
-      it("keeps a project dirty when the fresh session fails to start (ready rejects)", async () => {
-        publish(makeRecord({ webUrls: "https://a.com" }));
-        const mgr = buildManager();
-        await mgr.enterProject(PROJECT_ID);
-        await flushTimers();
-        await mgr.exitProject();
-
-        publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" }));
-
-        sessionCreateSpy.mockImplementationOnce((opts) => {
-          const rejected = Promise.reject(new Error("startup boom"));
-          rejected.catch(() => {});
-          return makeMockSession({
-            internalId: opts.internalId,
-            backendId: opts.backendId,
-            projectId: opts.projectId,
-            ready: rejected,
-          });
-        });
-        await mgr.enterProject(PROJECT_ID);
-        await flushTimers();
-        await mgr.exitProject();
-
-        sessionCreateSpy.mockClear();
-        await mgr.enterProject(PROJECT_ID);
-        expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
-      });
-
-      it("keeps a project dirty when the create captured an older signature (single-flight race)", async () => {
-        publish(makeRecord({ webUrls: "https://a.com" }));
-        const mgr = buildManager();
-        await mgr.enterProject(PROJECT_ID);
-        await mgr.exitProject();
-
-        publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" }));
-
-        const v1Signature = getProjectContextSignature(makeRecord({ webUrls: "https://a.com" }));
-        mockBuildProjectContext.mockImplementationOnce(() => ({
-          additionalDirectories: [],
-          projectContextBlock: "<project_context>\n</project_context>",
-          contextSignature: v1Signature,
-        }));
-
-        await mgr.enterProject(PROJECT_ID);
-        await flushTimers();
-        await mgr.exitProject();
-
-        sessionCreateSpy.mockClear();
-        await mgr.enterProject(PROJECT_ID);
-        expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
-      });
-
-      it("ignores a usage-timestamp-only touch (no dirty, empty landing still reused)", async () => {
+      it("reuses an empty landing after a usage-timestamp-only touch", async () => {
         publish(makeRecord({ webUrls: "https://a.com" }));
         const mgr = buildManager();
         await mgr.enterProject(PROJECT_ID);
@@ -4897,7 +4834,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).not.toBe(landing);
       });
 
-      it("does not reuse an empty landing after vault content inside the project's sources changes", async () => {
+      it("reuses an empty landing after vault content inside the project's sources changes, building its context at the first message", async () => {
         jest.useFakeTimers();
         publish(makeRecord({ inclusions: "Notes" }));
         const app = buildApp();
@@ -4915,8 +4852,25 @@ describe("AgentSessionManager", () => {
         sessionCreateSpy.mockClear();
         await mgr.enterProject(PROJECT_ID);
 
-        expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
-        expect(mgr.getActiveSession()).not.toBe(landing);
+        expect(sessionCreateSpy).not.toHaveBeenCalled();
+        expect(mgr.getActiveSession()).toBe(landing);
+      });
+
+      it("leaves the first message without an update note, since its context block is built from the current vault", async () => {
+        jest.useFakeTimers();
+        publish(makeRecord({ inclusions: "Notes" }));
+        const app = buildApp();
+        const mgr = buildManager({ app });
+        await mgr.enterProject(PROJECT_ID);
+        const hooks = sessionCreateSpy.mock.calls.at(-1)![0];
+
+        const onModify = (app.vault.on as jest.Mock).mock.calls.find(
+          ([event]) => event === "modify"
+        )![1];
+        onModify(mockTFile({ path: "Notes/topic.md", extension: "md" }));
+
+        hooks.getProjectContextBlock!();
+        expect(hooks.getProjectContextUpdates!()).toBeNull();
       });
 
       it("hands a project session the update note once per change until it acknowledges the epoch", async () => {

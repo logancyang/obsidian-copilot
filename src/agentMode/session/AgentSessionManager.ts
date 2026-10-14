@@ -10,7 +10,7 @@ import {
   subscribeToSettingsChange,
   type CopilotSettings,
 } from "@/settings/model";
-import { buildProjectContext } from "@/context/manifestBuilder";
+import { buildProjectContext, getProjectAdditionalDirectories } from "@/context/manifestBuilder";
 import { err2String } from "@/utils";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import {
@@ -57,8 +57,6 @@ import {
 } from "@/projects/state";
 import type { ProjectFileRecord } from "@/projects/type";
 import {
-  composeContextDirtyKey,
-  contextDirtyKeyMatchesConfig,
   getProjectContextSignature,
   getProjectLandingCaptureSignature,
   landingCaptureIsVerifiable,
@@ -162,10 +160,8 @@ export class AgentSessionManager {
   private scopeSeq = 0;
   private readonly lastActiveByScope = new Map<ProjectScopeId, string>();
   private readonly detachedFromTabIds = new Set<string>();
-  private readonly contextDirtySignatures = new Map<ProjectScopeId, string>();
   private readonly landingCaptureSignatures = new Map<string, string>();
   private readonly contentTracker: ProjectContentTracker;
-  private contentTrackerUnsubscribe?: () => void;
   private readonly lastSeenProjectContentEpochBySession = new Map<string, number>();
   private previousProjectRecords: ProjectFileRecord[] = [];
   private projectRecordsUnsubscriber?: () => void;
@@ -249,9 +245,6 @@ export class AgentSessionManager {
       this.onDefaultSelectionsChanged(prev, next)
     );
     this.contentTracker = new ProjectContentTracker(this.app);
-    this.contentTrackerUnsubscribe = this.contentTracker.onContentChanged((projectId) =>
-      this.markProjectContextDirty(projectId)
-    );
     this.setupProjectRecordChangeMonitor();
   }
 
@@ -341,49 +334,27 @@ export class AgentSessionManager {
     const prevRecords = this.previousProjectRecords;
     this.previousProjectRecords = nextRecords;
 
-    const nextIds = new Set(nextRecords.map((r) => r.project.id));
-    for (const id of this.contextDirtySignatures.keys()) {
-      if (!nextIds.has(id)) this.contextDirtySignatures.delete(id);
-    }
-
     for (const nextRecord of nextRecords) {
       const prevRecord = prevRecords.find((r) => r.project.id === nextRecord.project.id);
       if (!prevRecord) continue;
       const nextSignature = getProjectContextSignature(nextRecord);
       if (getProjectContextSignature(prevRecord) === nextSignature) continue;
 
-      const projectId = nextRecord.project.id;
-      this.contentTracker.bumpEpoch(projectId);
-      this.markProjectContextDirty(projectId, nextRecord);
+      this.contentTracker.bumpEpoch(nextRecord.project.id);
     }
   }
 
-  private markProjectContextDirty(
+  private buildFirstProjectContextBlock(
+    internalId: string,
     projectId: ProjectScopeId,
-    record = getCachedProjectRecordById(projectId)
-  ): void {
-    if (this.disposed || projectId === GLOBAL_SCOPE || !record) return;
-    const key = composeContextDirtyKey(
-      getProjectContextSignature(record),
+    cwd: string
+  ): string {
+    this.contentTracker.flushNow();
+    this.lastSeenProjectContentEpochBySession.set(
+      internalId,
       this.contentTracker.getEpoch(projectId)
     );
-    this.contextDirtySignatures.set(projectId, key);
-  }
-
-  private isProjectContextDirty(projectId: ProjectScopeId): boolean {
-    return this.contextDirtySignatures.has(projectId);
-  }
-
-  private clearContextDirtyIfCaptured(
-    projectId: ProjectScopeId,
-    capturedKey: string | undefined,
-    resultContextSignature: string | undefined
-  ): void {
-    if (capturedKey === undefined || resultContextSignature === undefined) return;
-    if (this.contextDirtySignatures.get(projectId) !== capturedKey) return;
-    if (contextDirtyKeyMatchesConfig(capturedKey, resultContextSignature)) {
-      this.contextDirtySignatures.delete(projectId);
-    }
+    return buildProjectContext(this.app, projectId, cwd);
   }
 
   private getProjectContextUpdates(
@@ -831,14 +802,6 @@ export class AgentSessionManager {
 
     const cwd = this.resolveSessionCwd(projectId);
 
-    if (projectId !== GLOBAL_SCOPE) this.contentTracker.flushNow();
-    const capturedContentEpoch =
-      projectId === GLOBAL_SCOPE ? 0 : this.contentTracker.getEpoch(projectId);
-    const capturedDirtyKey =
-      projectId === GLOBAL_SCOPE ? undefined : this.contextDirtySignatures.get(projectId);
-    const projectContext =
-      projectId === GLOBAL_SCOPE ? undefined : buildProjectContext(this.app, projectId, cwd);
-
     this.pendingCreates++;
     this.startingBackendId = resolvedId;
     this.notify();
@@ -872,9 +835,11 @@ export class AgentSessionManager {
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getApp: () => this.app,
-      projectContext,
       ...(projectId !== GLOBAL_SCOPE
         ? {
+            additionalDirectories: getProjectAdditionalDirectories(this.app, projectId, cwd),
+            getProjectContextBlock: () =>
+              this.buildFirstProjectContextBlock(internalId, projectId, cwd),
             getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
             markProjectContextUpdatesDelivered: (epoch: number) =>
               this.markProjectContextUpdatesDelivered(internalId, epoch),
@@ -897,20 +862,8 @@ export class AgentSessionManager {
     this.attachAttentionTracking(session);
     this.notify();
 
-    const contextSignature = projectContext?.contextSignature;
-    if (contextSignature !== undefined) {
-      this.lastSeenProjectContentEpochBySession.set(internalId, capturedContentEpoch);
-    }
-
     void session.ready
       .then(async () => {
-        if (
-          contextSignature !== undefined &&
-          !this.disposed &&
-          this.sessions.get(internalId) === session
-        ) {
-          this.clearContextDirtyIfCaptured(projectId, capturedDirtyKey, contextSignature);
-        }
         if (descriptor.applyInitialSessionConfig) {
           try {
             await descriptor.applyInitialSessionConfig(session, getSettings(), resolvedSeed);
@@ -1030,9 +983,7 @@ export class AgentSessionManager {
     const scopeSeq = this.setActiveScope(projectId);
 
     if (projectId !== GLOBAL_SCOPE) {
-      this.contentTracker.flushNow();
-      const dirty = this.isProjectContextDirty(projectId);
-      const reusable = dirty ? null : this.pickReusableLandingSession(projectId);
+      const reusable = this.pickReusableLandingSession(projectId);
       this.detachSessionsForProjectEntry(projectId, { includeEmpty: !reusable });
       if (reusable) {
         this.detachedFromTabIds.delete(reusable.internalId);
@@ -1739,8 +1690,6 @@ export class AgentSessionManager {
     this.settingsUnsub();
     this.projectRecordsUnsubscriber?.();
     this.projectRecordsUnsubscriber = undefined;
-    this.contentTrackerUnsubscribe?.();
-    this.contentTrackerUnsubscribe = undefined;
     this.contentTracker.dispose();
     logInfo(
       `[AgentMode] shutdown (pool size=${this.sessions.size}, backends=${this.backends.size})`
@@ -1775,7 +1724,6 @@ export class AgentSessionManager {
     this.scopeSeq++;
     this.lastActiveByScope.clear();
     this.detachedFromTabIds.clear();
-    this.contextDirtySignatures.clear();
     this.firstSessionPromiseByScope.clear();
 
     const allBackends = Array.from(this.backends.values());
@@ -1982,11 +1930,10 @@ export class AgentSessionManager {
       projectId === GLOBAL_SCOPE ? undefined : getCachedProjectRecordById(projectId)
     );
     const cwd = this.resolveSessionCwd(projectId);
-    if (projectId !== GLOBAL_SCOPE) this.contentTracker.flushNow();
     const additionalDirectories =
       projectId === GLOBAL_SCOPE
         ? undefined
-        : buildProjectContext(this.app, projectId, cwd).additionalDirectories;
+        : getProjectAdditionalDirectories(this.app, projectId, cwd);
     const descriptor = this.resolveDescriptor(backendId);
 
     this.pendingCreates++;

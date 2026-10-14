@@ -16,6 +16,7 @@ import { shouldIndexFile } from "@/search/searchUtils";
 import {
   buildProjectContext,
   buildProjectContextBlock,
+  getProjectAdditionalDirectories,
   MAX_MANIFEST_ENTRIES,
   type ManifestPathEntry,
   type ManifestSources,
@@ -83,21 +84,10 @@ describe("manifestBuilder", () => {
       getRecord.mockReturnValue(record({ inclusions: "[[Spec]]" }));
       const app = fakeApp([{ path: "Notes/Spec.md", ext: "md" }]);
 
-      const result = buildProjectContext(app, "p1", CWD);
+      const block = buildProjectContext(app, "p1", CWD);
 
-      expect(result.projectContextBlock).toContain("## Included notes");
-      expect(result.projectContextBlock).toContain("`/vault/Notes/Spec.md`");
-    });
-
-    it("reports only out-of-cwd folder inclusions as additional directories", () => {
-      getRecord.mockReturnValue(record({ inclusions: "External,Proj/Sub" }));
-      const app = fakeApp([], ["External", "Proj/Sub"]);
-
-      const result = buildProjectContext(app, "p1", CWD);
-
-      expect(result.additionalDirectories).toEqual(["/vault/External"]);
-      expect(result.projectContextBlock).toContain("`/vault/External`");
-      expect(result.projectContextBlock).toContain("`/vault/Proj/Sub`");
+      expect(block).toContain("## Included notes");
+      expect(block).toContain("`/vault/Notes/Spec.md`");
     });
 
     it("lists web and YouTube sources as links for the agent to fetch on demand", () => {
@@ -105,19 +95,11 @@ describe("manifestBuilder", () => {
         record({ webUrls: "https://example.com\n", youtubeUrls: "https://youtu.be/abc" })
       );
 
-      const result = buildProjectContext(fakeApp(), "p1", CWD);
+      const block = buildProjectContext(fakeApp(), "p1", CWD);
 
-      expect(result.projectContextBlock).toContain("## Included URLs\n- https://example.com");
-      expect(result.projectContextBlock).toContain("## Included YouTube\n- https://youtu.be/abc");
-      expect(result.projectContextBlock).toContain("not fetched in advance");
-    });
-
-    it("returns the project's context signature with the block", () => {
-      getRecord.mockReturnValue(record({ inclusions: "[[Spec]]" }));
-
-      const result = buildProjectContext(fakeApp(), "p1", CWD);
-
-      expect(result.contextSignature).toEqual(expect.any(String));
+      expect(block).toContain("## Included URLs\n- https://example.com");
+      expect(block).toContain("## Included YouTube\n- https://youtu.be/abc");
+      expect(block).toContain("not fetched in advance");
     });
 
     it("lists every note that shares an inclusion title (basename collision)", () => {
@@ -127,10 +109,10 @@ describe("manifestBuilder", () => {
         { path: "B/Spec.md", ext: "md" },
       ]);
 
-      const result = buildProjectContext(app, "p1", CWD);
+      const block = buildProjectContext(app, "p1", CWD);
 
-      expect(result.projectContextBlock).toContain("`/vault/A/Spec.md`");
-      expect(result.projectContextBlock).toContain("`/vault/B/Spec.md`");
+      expect(block).toContain("`/vault/A/Spec.md`");
+      expect(block).toContain("`/vault/B/Spec.md`");
     });
 
     it("counts a property-only inclusion as a source and enumerates matching notes by absolute path", () => {
@@ -141,18 +123,18 @@ describe("manifestBuilder", () => {
       ]);
       indexFile.mockImplementation((_app: unknown, file: { path: string }) => file.path === "Notes/Relativity.md"); // prettier-ignore
 
-      const result = buildProjectContext(app, "p1", CWD);
+      const block = buildProjectContext(app, "p1", CWD);
 
-      expect(result.projectContextBlock).toContain("## Notes matching an included property");
-      expect(result.projectContextBlock).toContain("`/vault/Notes/Relativity.md`");
-      expect(result.projectContextBlock).not.toContain("Cooking");
+      expect(block).toContain("## Notes matching an included property");
+      expect(block).toContain("`/vault/Notes/Relativity.md`");
+      expect(block).not.toContain("Cooking");
     });
 
     it("lists a note reached by both a title and a property once, as a declaration", () => {
       getRecord.mockReturnValue(record({ inclusions: "[[Relativity]],[Topics:Physics]" }));
       const app = fakeApp([{ path: "Notes/Relativity.md", ext: "md" }]);
 
-      const block = buildProjectContext(app, "p1", CWD).projectContextBlock;
+      const block = buildProjectContext(app, "p1", CWD);
 
       expect(block.match(/\/vault\/Notes\/Relativity\.md/g)).toHaveLength(1);
       expect(block).toContain("## Included notes");
@@ -167,7 +149,7 @@ describe("manifestBuilder", () => {
         { path: "Proj/note.md", ext: "md" },
       ]);
 
-      const block = buildProjectContext(app, "p1", CWD).projectContextBlock;
+      const block = buildProjectContext(app, "p1", CWD);
 
       expect(block).toContain("## Document files");
       expect(block).toContain("- `/vault/Proj/a.pdf`");
@@ -186,7 +168,7 @@ describe("manifestBuilder", () => {
         { path: "Proj/book.epub", ext: "epub" },
       ]);
 
-      const block = buildProjectContext(app, "p1", CWD).projectContextBlock;
+      const block = buildProjectContext(app, "p1", CWD);
 
       expect(block).toContain(
         "## Document files\n- `/vault/Proj/a.pdf`\n- `/vault/Proj/b.DOCX`\n- `/vault/Proj/book.epub`\n- `/vault/Proj/z.png`"
@@ -202,7 +184,7 @@ describe("manifestBuilder", () => {
         { path: "Proj/secret.pdf", ext: "pdf" },
       ]);
 
-      const block = buildProjectContext(app, "p1", CWD).projectContextBlock;
+      const block = buildProjectContext(app, "p1", CWD);
 
       expect(block).toContain("`/vault/Proj/a.pdf`");
       expect(block).not.toContain("secret.pdf");
@@ -212,7 +194,7 @@ describe("manifestBuilder", () => {
       getRecord.mockReturnValue(record({ inclusions: "[[report]]" }));
       const app = fakeApp([{ path: "Docs/report.pdf", ext: "pdf" }]);
 
-      const block = buildProjectContext(app, "p1", CWD).projectContextBlock;
+      const block = buildProjectContext(app, "p1", CWD);
 
       expect(block.match(/\/vault\/Docs\/report\.pdf/g)).toHaveLength(1);
       expect(block).toContain("## Included notes");
@@ -223,7 +205,7 @@ describe("manifestBuilder", () => {
       getRecord.mockReturnValue(record({ inclusions: "Proj" }));
       const app = fakeApp([{ path: "Proj/scan.png", ext: "png" }]);
 
-      const block = buildProjectContext(app, "p1", CWD).projectContextBlock;
+      const block = buildProjectContext(app, "p1", CWD);
 
       expect(block).not.toContain("No context sources are configured");
       expect(block).toContain("`/vault/Proj/scan.png`");
@@ -233,30 +215,52 @@ describe("manifestBuilder", () => {
       getRecord.mockReturnValue(record({ inclusions: "[Topics:Physics]" }));
       indexFile.mockReturnValue(false);
 
-      const block = buildProjectContext(fakeApp([{ path: "Notes/Cooking.md", ext: "md" }]), "p1", CWD).projectContextBlock; // prettier-ignore
+      const block = buildProjectContext(fakeApp([{ path: "Notes/Cooking.md", ext: "md" }]), "p1", CWD); // prettier-ignore
 
       expect(block).toContain("<project_context>");
       expect(block).toContain("## Included properties");
       expect(block).not.toContain("## Included notes");
     });
 
+    it("lists folder inclusions by absolute path, inside or outside the working directory", () => {
+      getRecord.mockReturnValue(record({ inclusions: "External,Proj/Sub" }));
+      const app = fakeApp([], ["External", "Proj/Sub"]);
+
+      const block = buildProjectContext(app, "p1", CWD);
+
+      expect(block).toContain("`/vault/External`");
+      expect(block).toContain("`/vault/Proj/Sub`");
+    });
+
     it("emits the no-sources block when the project has no context sources", () => {
       getRecord.mockReturnValue(record({}));
 
-      const result = buildProjectContext(fakeApp(), "p1", CWD);
-
-      expect(result.additionalDirectories).toEqual([]);
-      expect(result.projectContextBlock).toContain("No context sources are configured");
+      expect(buildProjectContext(fakeApp(), "p1", CWD)).toContain(
+        "No context sources are configured"
+      );
     });
 
-    it("returns the unavailable-context block with no additional directories when the project is unknown", () => {
+    it("returns the unavailable-context block when the project is unknown", () => {
       getRecord.mockReturnValue(undefined);
 
-      const result = buildProjectContext(fakeApp(), "missing", CWD);
+      expect(buildProjectContext(fakeApp(), "missing", CWD)).toContain("could not be loaded");
+    });
+  });
 
-      expect(result.additionalDirectories).toEqual([]);
-      expect(result.projectContextBlock).toContain("could not be loaded");
-      expect(result.contextSignature).toBeUndefined();
+  describe("getProjectAdditionalDirectories()", () => {
+    it("returns only folder inclusions outside the working directory", () => {
+      getRecord.mockReturnValue(record({ inclusions: "External,Proj/Sub,[[Spec]]" }));
+      const app = fakeApp([], ["External", "Proj/Sub"]);
+
+      expect(getProjectAdditionalDirectories(app, "p1", CWD)).toEqual(["/vault/External"]);
+    });
+
+    it("returns no directories when the project has no folder inclusions or is unknown", () => {
+      getRecord.mockReturnValue(record({ webUrls: "https://example.com" }));
+      expect(getProjectAdditionalDirectories(fakeApp(), "p1", CWD)).toEqual([]);
+
+      getRecord.mockReturnValue(undefined);
+      expect(getProjectAdditionalDirectories(fakeApp(), "missing", CWD)).toEqual([]);
     });
   });
 

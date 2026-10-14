@@ -2,8 +2,6 @@ import type { ProjectConfig } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
 import { App, TFile } from "obsidian";
 import {
-  composeContextDirtyKey,
-  contextDirtyKeyMatchesConfig,
   getProjectContextSignature,
   getProjectLandingCaptureSignature,
   landingCaptureIsVerifiable,
@@ -149,7 +147,7 @@ describe("projectContextSignature", () => {
       );
     });
 
-    it("still changes on a context-source edit (folds in the materialization signature)", () => {
+    it("changes on a context-source edit", () => {
       const before = makeRecord(makeProject({ contextSource: { webUrls: "https://a.com" } }));
       const after = makeRecord(
         makeProject({ contextSource: { webUrls: "https://a.com\nhttps://b.com" } })
@@ -165,32 +163,6 @@ describe("projectContextSignature", () => {
       expect(getProjectLandingCaptureSignature(noAgents, before)).toBe(
         getProjectLandingCaptureSignature(noAgents, after)
       );
-    });
-  });
-
-  const sig = getProjectContextSignature(makeRecord(makeProject()));
-
-  describe("composeContextDirtyKey()", () => {
-    it("salts a config signature with an epoch", () => {
-      expect(composeContextDirtyKey(sig, 3)).toBe(`${sig}#3`);
-    });
-  });
-
-  describe("contextDirtyKeyMatchesConfig()", () => {
-    it("matches the bare signature and any epoch-salted form of it", () => {
-      expect(contextDirtyKeyMatchesConfig(sig, sig)).toBe(true);
-      expect(contextDirtyKeyMatchesConfig(composeContextDirtyKey(sig, 0), sig)).toBe(true);
-      expect(contextDirtyKeyMatchesConfig(composeContextDirtyKey(sig, 42), sig)).toBe(true);
-    });
-
-    it("does NOT match a different config signature", () => {
-      const other = getProjectContextSignature(makeRecord(makeProject({ id: "p2" }), "Other/p.md"));
-      expect(contextDirtyKeyMatchesConfig(composeContextDirtyKey(sig, 1), other)).toBe(false);
-    });
-
-    it("is undefined-safe and rejects a non-numeric suffix", () => {
-      expect(contextDirtyKeyMatchesConfig(undefined, sig)).toBe(false);
-      expect(contextDirtyKeyMatchesConfig(`${sig}#abc`, sig)).toBe(false);
     });
   });
 });

@@ -961,15 +961,12 @@ describe("AgentSession", () => {
         );
       });
 
-      it("opens the session with the project context's additional directories", async () => {
+      it("opens the session with the project's additional directories", async () => {
         const mock = makeMockBackend();
         const session = startSession(mock, {
           cwd: "/vault/Projects/p",
           projectId: "proj-7",
-          projectContext: {
-            additionalDirectories: ["/vault/SharedResearch"],
-            projectContextBlock: "<project_context>\n</project_context>",
-          },
+          additionalDirectories: ["/vault/SharedResearch"],
         });
         await session.ready;
         expect(mock.newSession).toHaveBeenCalledWith(
@@ -1958,18 +1955,18 @@ describe("AgentSession", () => {
         expect(output.text).toContain("The agent received the full output");
       });
 
-      it("injects the <project_context> block into the first user prompt only", async () => {
+      it("builds the <project_context> block when the first prompt is sent and injects it into that prompt only", async () => {
         const mock = makeMockBackend();
+        const getProjectContextBlock = jest.fn(
+          () => "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>"
+        );
         const session = startSession(mock, {
           cwd: "/vault/Projects/p",
           projectId: "proj-7",
-          projectContext: {
-            additionalDirectories: [],
-            projectContextBlock:
-              "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>",
-          },
+          getProjectContextBlock,
         });
         await session.ready;
+        expect(getProjectContextBlock).not.toHaveBeenCalled();
 
         await session.sendPrompt("first").turn;
         await session.sendPrompt("second").turn;
@@ -1984,6 +1981,7 @@ describe("AgentSession", () => {
         expect(promptText(0)).toContain("`/vault/Papers`");
         expect(promptText(0)).toContain("<user-message>\nfirst\n</user-message>");
         expect(promptText(1)).not.toContain("<project_context>");
+        expect(getProjectContextBlock).toHaveBeenCalledTimes(1);
       });
 
       it("re-injects the <project_context> block on retry when the first prompt fails", async () => {
@@ -1992,11 +1990,8 @@ describe("AgentSession", () => {
         const session = startSession(mock, {
           cwd: "/vault/Projects/p",
           projectId: "proj-7",
-          projectContext: {
-            additionalDirectories: [],
-            projectContextBlock:
-              "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>",
-          },
+          getProjectContextBlock: () =>
+            "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>",
         });
         await session.ready;
 
@@ -2236,7 +2231,9 @@ describe("AgentSession", () => {
           const mock = makeMockBackend();
           const runFanoutTurn = fanoutRunner(twoAgentTurn());
           const session = makeSession(mock, { runFanoutTurn });
-          (session as unknown as { projectContextBlock: string | null }).projectContextBlock =
+          (
+            session as unknown as { getProjectContextBlockFn: () => string }
+          ).getProjectContextBlockFn = () =>
             "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>";
 
           await session.sendPrompt("review", undefined, undefined, BOTH_AGENTS).turn;

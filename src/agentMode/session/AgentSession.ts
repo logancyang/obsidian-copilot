@@ -65,7 +65,6 @@ import {
 import { getVaultBase } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
 import { ContextProcessor } from "@/contextProcessor";
-import type { ProjectContext } from "@/context/manifestBuilder";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
 import { isFanout } from "@/agentMode/session/fanout/answerers";
@@ -171,7 +170,8 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   runFanoutTurn?: RunFanoutTurn;
   getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
-  projectContext?: ProjectContext;
+  additionalDirectories?: string[];
+  getProjectContextBlock?: () => string;
 }
 
 export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
@@ -201,8 +201,7 @@ export class AgentSession {
   private backendSessionId: SessionId | null = null;
   private readonly backend: BackendProcess;
   private readonly cwd: string | null;
-  private readonly projectContext: ProjectContext | null;
-  private projectContextBlock: string | null = null;
+  private readonly getProjectContextBlockFn: (() => string) | null;
   private firstPromptSent = false;
   private lastSentWebTabBlock: string | null = null;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
@@ -291,7 +290,8 @@ export class AgentSession {
     this.getApp = opts.getApp ?? null;
     this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
-    this.projectContext = "projectContext" in opts ? (opts.projectContext ?? null) : null;
+    this.getProjectContextBlockFn =
+      "getProjectContextBlock" in opts ? (opts.getProjectContextBlock ?? null) : null;
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
       this.resumeSelection = opts.defaultModelSelection;
@@ -339,13 +339,10 @@ export class AgentSession {
   private async initialize(opts: AgentSessionStartOptions): Promise<void> {
     const { backend, cwd, defaultModelSelection } = opts;
     try {
-      const additionalDirectories =
-        this.projectContext?.additionalDirectories ?? EMPTY_ADDITIONAL_DIRECTORIES;
-      this.projectContextBlock = this.projectContext?.projectContextBlock ?? null;
       const resp = await backend.newSession({
         cwd,
         projectId: this.projectId,
-        additionalDirectories,
+        additionalDirectories: opts.additionalDirectories ?? EMPTY_ADDITIONAL_DIRECTORIES,
       });
       if (this.disposed) return;
       const modelLog = resp.state.model
@@ -735,7 +732,7 @@ export class AgentSession {
         );
       }
       const isFirstTurn = !this.firstPromptSent;
-      const projectContextBlock = isFirstTurn ? this.projectContextBlock : null;
+      const projectContextBlock = isFirstTurn ? (this.getProjectContextBlockFn?.() ?? null) : null;
       const projectContextUpdates = this.getProjectContextUpdatesFn?.() ?? null;
       const projectContextUpdatesBlock = projectContextUpdates?.block ?? null;
 

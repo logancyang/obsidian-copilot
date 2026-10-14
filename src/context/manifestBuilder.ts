@@ -1,4 +1,3 @@
-import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import { getCachedProjectRecordById } from "@/projects/state";
 import { getMatchingPatterns, shouldIndexFile, type PatternCategory } from "@/search/searchUtils";
 import { App, FileSystemAdapter, TFile, TFolder } from "obsidian";
@@ -41,12 +40,6 @@ export interface ManifestSources {
   youtubeUrls: string[];
 }
 
-export interface ProjectContext {
-  additionalDirectories: string[];
-  projectContextBlock: string;
-  contextSignature?: string;
-}
-
 interface ManifestLine {
   section: string;
   text: string;
@@ -57,15 +50,12 @@ const EMPTY_MANIFEST_ENTRIES: ManifestPathEntry[] = Object.freeze(
   [] as ManifestPathEntry[]
 ) as ManifestPathEntry[];
 
-const UNAVAILABLE_PROJECT_CONTEXT: ProjectContext = Object.freeze({
-  additionalDirectories: EMPTY_DIRECTORIES,
-  projectContextBlock: [
-    "<project_context>",
-    "This session runs in a project workspace: the working directory is the project's",
-    "folder. This project's context sources could not be loaded for this session.",
-    "</project_context>",
-  ].join("\n"),
-});
+const UNAVAILABLE_PROJECT_CONTEXT_BLOCK = [
+  "<project_context>",
+  "This session runs in a project workspace: the working directory is the project's",
+  "folder. This project's context sources could not be loaded for this session.",
+  "</project_context>",
+].join("\n");
 
 const EMPTY_PROJECT_CONTEXT_BLOCK = [
   "<project_context>",
@@ -74,38 +64,44 @@ const EMPTY_PROJECT_CONTEXT_BLOCK = [
   "</project_context>",
 ].join("\n");
 
-export function buildProjectContext(app: App, projectId: string, cwd: string): ProjectContext {
+export function getProjectAdditionalDirectories(
+  app: App,
+  projectId: string,
+  cwd: string
+): string[] {
+  const contextSource = getCachedProjectRecordById(projectId)?.project.contextSource;
+  if (!contextSource) return EMPTY_DIRECTORIES;
+  const { inclusions } = readProjectPatterns(contextSource);
+  return resolveFolderPaths(app, inclusions?.folderPatterns ?? [], cwd, vaultAdapter(app))
+    .additionalDirectories;
+}
+
+export function buildProjectContext(app: App, projectId: string, cwd: string): string {
   const record = getCachedProjectRecordById(projectId);
-  if (!record) return UNAVAILABLE_PROJECT_CONTEXT;
-  const contextSignature = getProjectContextSignature(record);
+  if (!record) return UNAVAILABLE_PROJECT_CONTEXT_BLOCK;
   const contextSource = record.project.contextSource;
-  const emptyContext: ProjectContext = {
-    additionalDirectories: EMPTY_DIRECTORIES,
-    projectContextBlock: EMPTY_PROJECT_CONTEXT_BLOCK,
-    contextSignature,
-  };
-  if (!contextSource) return emptyContext;
+  if (!contextSource) return EMPTY_PROJECT_CONTEXT_BLOCK;
 
   const webUrls = splitLines(contextSource.webUrls);
   const youtubeUrls = splitLines(contextSource.youtubeUrls);
-  const { inclusions, exclusions } = getMatchingPatterns({
-    inclusions: contextSource.inclusions,
-    exclusions: contextSource.exclusions,
-    isProject: true,
-  });
+  const { inclusions, exclusions } = readProjectPatterns(contextSource);
   const folders = inclusions?.folderPatterns ?? [];
   const notes = inclusions?.notePatterns ?? [];
   const extensions = inclusions?.extensionPatterns ?? [];
   const tags = inclusions?.tagPatterns ?? [];
   const properties = inclusions?.propertyPatterns ?? [];
 
-  const adapter = app.vault.adapter instanceof FileSystemAdapter ? app.vault.adapter : null;
-  const { entries: folderEntries, additionalDirectories } = resolveFolderPaths(
-    app,
-    folders,
-    cwd,
-    adapter
-  );
+  const hasAnySource =
+    webUrls.length > 0 ||
+    youtubeUrls.length > 0 ||
+    folders.length > 0 ||
+    notes.length > 0 ||
+    extensions.length > 0 ||
+    tags.length > 0 ||
+    properties.length > 0;
+  if (!hasAnySource) return EMPTY_PROJECT_CONTEXT_BLOCK;
+
+  const adapter = vaultAdapter(app);
   const noteEntries = resolveNotePaths(app, notes, adapter);
   const declaredNotePaths = new Set(noteEntries.map(manifestEntryKey));
   const propertyNoteEntries = resolvePropertyNotePaths(app, properties, exclusions, adapter).filter(
@@ -117,31 +113,17 @@ export function buildProjectContext(app: App, projectId: string, cwd: string): P
     (entry) => !declaredNotePaths.has(manifestEntryKey(entry))
   );
 
-  const hasAnySource =
-    webUrls.length > 0 ||
-    youtubeUrls.length > 0 ||
-    folders.length > 0 ||
-    notes.length > 0 ||
-    extensions.length > 0 ||
-    tags.length > 0 ||
-    properties.length > 0;
-  if (!hasAnySource) return emptyContext;
-
-  return {
-    additionalDirectories,
-    projectContextBlock: buildProjectContextBlock({
-      folders: folderEntries,
-      notes: noteEntries,
-      extensions,
-      tags,
-      properties,
-      propertyNotes: propertyNoteEntries,
-      documents: documentEntries,
-      webUrls,
-      youtubeUrls,
-    }),
-    contextSignature,
-  };
+  return buildProjectContextBlock({
+    folders: resolveFolderPaths(app, folders, cwd, adapter).entries,
+    notes: noteEntries,
+    extensions,
+    tags,
+    properties,
+    propertyNotes: propertyNoteEntries,
+    documents: documentEntries,
+    webUrls,
+    youtubeUrls,
+  });
 }
 
 export function buildProjectContextBlock(sources: ManifestSources): string {
@@ -202,6 +184,21 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
 
 function line(section: string, text: string): ManifestLine {
   return { section, text };
+}
+
+function readProjectPatterns(contextSource: { inclusions?: string; exclusions?: string }): {
+  inclusions: PatternCategory | null;
+  exclusions: PatternCategory | null;
+} {
+  return getMatchingPatterns({
+    inclusions: contextSource.inclusions,
+    exclusions: contextSource.exclusions,
+    isProject: true,
+  });
+}
+
+function vaultAdapter(app: App): FileSystemAdapter | null {
+  return app.vault.adapter instanceof FileSystemAdapter ? app.vault.adapter : null;
 }
 
 function manifestEntryKey(entry: ManifestPathEntry): string {
