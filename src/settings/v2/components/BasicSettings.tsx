@@ -57,29 +57,6 @@ const AgentsSection: React.FC = () => {
   );
 };
 
-interface CopilotFolderDescriptionProps {
-  configDir: string;
-}
-
-function CopilotFolderDescription({ configDir }: CopilotFolderDescriptionProps) {
-  return (
-    <div className="tw-flex tw-items-center tw-gap-1.5">
-      <span className="tw-leading-none">
-        Where Copilot keeps conversations, prompts, memory and more. All sub-folders derive from
-        this.
-      </span>
-      <HelpTooltip
-        content={
-          <div className="tw-max-w-96 tw-py-4 tw-text-xs tw-text-muted">
-            Use a dot name like <code>.copilot</code> to hide the folder. Obsidian Sync skips hidden
-            folders. <code>{configDir}</code> can&#39;t be used.
-          </div>
-        }
-      />
-    </div>
-  );
-}
-
 export const BasicSettings: React.FC = () => {
   const app = useApp();
   const settings = useSettingsValue();
@@ -260,7 +237,7 @@ export const BasicSettings: React.FC = () => {
         <SettingItem
           type="custom"
           title="Copilot folder location"
-          description={<CopilotFolderDescription configDir={app.vault.configDir} />}
+          description="Where Copilot keeps conversations, prompts, memory and more. All sub-folders derive from this."
         >
           <div className="tw-flex tw-items-center tw-gap-2">
             <Input
@@ -287,7 +264,7 @@ export const BasicSettings: React.FC = () => {
             <Button
               variant="secondary"
               size="icon"
-              onClick={() => void revealFolderInExplorer(app, settings.copilotFolder)}
+              onClick={() => revealFolderInExplorer(app, settings.copilotFolder)}
               aria-label="Open Copilot folder"
               title="Open Copilot folder"
             >

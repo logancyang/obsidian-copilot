@@ -195,7 +195,7 @@ export const SkillsSettings: React.FC = () => {
     (dirPath: string) => {
       const folderRel = toVaultRelative(dirPath, getVaultBase(app));
       if (app.vault.getAbstractFileByPath(folderRel) instanceof TFolder) {
-        void revealFolderInExplorer(app, folderRel);
+        revealFolderInExplorer(app, folderRel);
         return;
       }
       void openWithSystemDefault(dirPath);

@@ -20,8 +20,6 @@ jest.mock("obsidian", () => ({
   Notice: jest.fn(),
   TFile: jest.fn(),
   Vault: jest.fn(),
-  parseYaml: (text: string): unknown =>
-    jest.requireActual<typeof import("yaml")>("yaml").parse(text) as unknown,
 }));
 
 jest.mock("@/logger", () => ({
@@ -782,7 +780,7 @@ describe("customCommandUtils", () => {
       frontmatter: MockFrontmatter;
     }
     interface MockAppLike {
-      vault: { read: jest.Mock; getAbstractFileByPath: jest.Mock; adapter: { exists: jest.Mock } };
+      vault: { read: jest.Mock };
       metadataCache: { getFileCache: jest.Mock };
     }
     type AppRef = { app: unknown };
@@ -809,8 +807,6 @@ describe("customCommandUtils", () => {
             .mockResolvedValue(
               "---\ncopilot-command-context-menu-enabled: true\ncopilot-command-slash-enabled: false\ncopilot-command-context-menu-order: 42\ncopilot-command-model-key: gpt-4\ncopilot-command-last-used: 1234567890\n---\nPrompt content here."
             ),
-          getAbstractFileByPath: jest.fn(() => mockFile),
-          adapter: { exists: jest.fn().mockResolvedValue(true) },
         },
         metadataCache: {
           getFileCache: jest.fn().mockReturnValue(mockMetadata),
@@ -841,6 +837,7 @@ describe("customCommandUtils", () => {
         lastUsedMs: 1234567890,
       });
       expect(app.vault.read).toHaveBeenCalledWith(mockFile);
+      expect(app.metadataCache.getFileCache).toHaveBeenCalledWith(mockFile);
     });
 
     it("uses EMPTY_COMMAND defaults if frontmatter is missing", async () => {

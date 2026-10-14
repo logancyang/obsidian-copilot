@@ -57,23 +57,13 @@ interface TestVault {
   frontmatter: Record<string, unknown>;
 }
 
-function makeTestVault(
-  options: { existingPaths?: string[]; hiddenFolder?: boolean } = {}
-): TestVault {
+function makeTestVault(options: { existingPaths?: string[] } = {}): TestVault {
   const frontmatter: Record<string, unknown> = {};
-  const existing = new Set(options.existingPaths);
   const vault = {
     create: jest.fn(async (path: string) => mockTFile({ path })),
-    // Obsidian indexes visible project folders but never hidden ones. https://github.com/logancyang/obsidian-copilot/issues/3075
-    getAbstractFileByPath: jest.fn((path: string) =>
-      options.hiddenFolder || path.endsWith("project.md") ? null : { path }
-    ),
+    getAbstractFileByPath: jest.fn(() => null),
     adapter: {
-      exists: jest.fn(async (path: string) => existing.has(path)),
-      read: jest.fn(async () => ""),
-      stat: jest.fn(async () => ({ ctime: 0, mtime: 0, size: 0 })),
-      write: jest.fn(async (path: string) => void existing.add(path)),
-      rmdir: jest.fn(async () => {}),
+      exists: jest.fn(async (path: string) => options.existingPaths?.includes(path) ?? false),
     },
   } as unknown as jest.Mocked<Vault>;
   const app = {
@@ -118,37 +108,6 @@ describe("ProjectFileManager", () => {
       expect(record).toMatchObject({ filePath, folderName: "My Project" });
       expect(getCachedProjectRecords()).toEqual([record]);
       expect(isPendingFileWrite(filePath)).toBe(false);
-    });
-
-    it("writes project.md with its frontmatter in a hidden folder https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
-      const { app, vault } = makeTestVault({ hiddenFolder: true });
-      const manager = ProjectFileManager.getInstance(app);
-
-      await manager.createProject(makeConfig({ id: "p1", name: "Hidden", systemPrompt: "Hi." }));
-
-      const adapter = vault.adapter as unknown as Record<string, jest.Mock>;
-      const [path, content] = adapter.write.mock.calls[0] as [string, string];
-      expect(path).toBe("vault-copilot/projects/Hidden/project.md");
-      expect(content).toContain("copilot-project-id: p1");
-      expect(content.endsWith("---\nHi.")).toBe(true);
-      expect(vault.create).not.toHaveBeenCalled();
-    });
-
-    it("leaves no folder behind when a hidden create fails https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
-      const { app, vault } = makeTestVault({
-        hiddenFolder: true,
-        existingPaths: ["vault-copilot/projects/Hidden"],
-      });
-      const adapter = vault.adapter as unknown as Record<string, jest.Mock>;
-      adapter.write.mockRejectedValueOnce(new Error("disk full"));
-      adapter.list = jest.fn(async () => ({ files: [], folders: [] }));
-      const manager = ProjectFileManager.getInstance(app);
-
-      await expect(manager.createProject(makeConfig({ id: "p1", name: "Hidden" }))).rejects.toThrow(
-        "disk full"
-      );
-
-      expect(adapter.rmdir).toHaveBeenCalledWith("vault-copilot/projects/Hidden", true);
     });
 
     it("names the project folder after its id when the name is empty", async () => {
@@ -209,42 +168,6 @@ describe("ProjectFileManager", () => {
       expect(vault.create).not.toHaveBeenCalled();
       expect(getCachedProjectRecords()).toEqual([]);
       expect(isPendingFileWrite(filePath)).toBe(false);
-    });
-  });
-
-  describe("updateProject() in a hidden folder", () => {
-    const filePath = "vault-copilot/projects/Hidden/project.md";
-    const adapterOf = (vault: jest.Mocked<Vault>) =>
-      vault.adapter as unknown as Record<string, jest.Mock>;
-
-    it("keeps frontmatter Copilot does not own and drops cleared settings https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
-      const { app, vault } = makeTestVault({ hiddenFolder: true, existingPaths: [filePath] });
-      adapterOf(vault).read.mockResolvedValue(
-        "---\ncopilot-project-id: p1\ntags:\n  - work\ncopilot-project-temperature: 0.5\n---\nold"
-      );
-      const config = makeConfig({ id: "p1", name: "Hidden", systemPrompt: "new" });
-      seedProject(config, "Hidden");
-
-      await ProjectFileManager.getInstance(app).updateProject("p1", config);
-
-      const content = adapterOf(vault).write.mock.calls[0][1] as string;
-      expect(content).toContain("tags:\n  - work");
-      expect(content).not.toContain("copilot-project-temperature");
-      expect(content.endsWith("---\nnew")).toBe(true);
-    });
-
-    it("writes project.md again when it was deleted outside Obsidian https://github.com/logancyang/obsidian-copilot/issues/3075", async () => {
-      const { app, vault } = makeTestVault({ hiddenFolder: true });
-      const config = makeConfig({ id: "p1", name: "Hidden", systemPrompt: "new" });
-      seedProject(config, "Hidden");
-
-      await ProjectFileManager.getInstance(app).updateProject("p1", config);
-
-      expect(vault.create).not.toHaveBeenCalled();
-      expect(adapterOf(vault).write).toHaveBeenLastCalledWith(
-        filePath,
-        expect.stringContaining("copilot-project-id: p1")
-      );
     });
   });
 });
