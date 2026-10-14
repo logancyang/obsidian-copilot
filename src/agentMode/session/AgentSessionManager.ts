@@ -5,32 +5,12 @@ import type CopilotPlugin from "@/main";
 import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import { AgentInputDraftStore } from "@/agentMode/session/AgentInputDraftStore";
 import {
-  agentProjectContextLoadAtom,
-  type AgentInFlightSource,
-  type AgentProjectContextLoadState,
-  type ContextLoadStepCount,
-  type FailedItem,
-} from "@/aiParams";
-import {
   getSettings,
   setSettings,
-  settingsStore,
   subscribeToSettingsChange,
   type CopilotSettings,
 } from "@/settings/model";
-import {
-  ensureProjectContextMaterialized,
-  EMPTY_CONTEXT_MATERIALIZATION_RESULT,
-  materializeProjectContextSource,
-  type ContextMaterializationResult,
-  type ContextMaterializeProgress,
-} from "@/context/projectContextMaterializer";
-import {
-  PROJECT_CONTEXT_FAILURE_SOURCE,
-  type MaterializedSourceType,
-  type MaterializeSourceIdentity,
-  type SourceFailure,
-} from "@/context/contextCacheStore";
+import { buildProjectContext } from "@/context/manifestBuilder";
 import { err2String } from "@/utils";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import {
@@ -145,39 +125,6 @@ const EMPTY_RECENT_CHAT_IDS: ReadonlySet<string> = new Set();
 const EMPTY_CHAT_INPUT_IDS: readonly string[] = Object.freeze([]);
 
 const RESUMED_SESSION_BEHIND_EPOCH = -1;
-
-function toFailedItem(failure: SourceFailure): FailedItem {
-  return {
-    path: failure.source,
-    type: failure.kind,
-    error: failure.error,
-    usedStaleSnapshot: failure.usedStaleSnapshot,
-  };
-}
-
-function failedItemIsSource(failed: FailedItem, item: MaterializeSourceIdentity): boolean {
-  if (failed.path !== item.source) return false;
-  return failed.type === item.kind;
-}
-
-function addProcessingSource(
-  list: AgentInFlightSource[],
-  item: MaterializeSourceIdentity
-): AgentInFlightSource[] {
-  if (list.some((s) => s.kind === item.kind && s.source === item.source)) return list;
-  return [...list, { kind: item.kind, source: item.source }];
-}
-
-function removeProcessingSource(
-  list: AgentInFlightSource[],
-  item: MaterializeSourceIdentity
-): AgentInFlightSource[] {
-  return list.filter((s) => !(s.kind === item.kind && s.source === item.source));
-}
-
-function upsertFailedItem(list: FailedItem[], failure: FailedItem): FailedItem[] {
-  return [...list.filter((f) => !(f.path === failure.path && f.type === failure.type)), failure];
-}
 
 export type PermissionPrompter = (req: PermissionPrompt) => Promise<PermissionDecision>;
 
@@ -408,7 +355,6 @@ export class AgentSessionManager {
       const projectId = nextRecord.project.id;
       this.contentTracker.bumpEpoch(projectId);
       this.markProjectContextDirty(projectId, nextRecord);
-      if (projectId === this.activeProjectId) this.warmProjectContext(projectId);
     }
   }
 
@@ -422,33 +368,6 @@ export class AgentSessionManager {
       this.contentTracker.getEpoch(projectId)
     );
     this.contextDirtySignatures.set(projectId, key);
-  }
-
-  private warmProjectContext(projectId: ProjectScopeId): void {
-    if (this.disposed || projectId === GLOBAL_SCOPE) return;
-    let cwd: string;
-    try {
-      cwd = this.resolveSessionCwd(projectId);
-    } catch {
-      return;
-    }
-    void ensureProjectContextMaterialized(
-      this.app,
-      projectId,
-      cwd,
-      undefined,
-      undefined,
-      this.currentContextRevisionKey(projectId)
-    ).catch((err) => logWarn(`[AgentMode] background context warm failed for ${projectId}`, err));
-  }
-
-  private currentContextRevisionKey(projectId: ProjectScopeId): string | undefined {
-    const record = getCachedProjectRecordById(projectId);
-    if (!record) return undefined;
-    return composeContextDirtyKey(
-      getProjectContextSignature(record),
-      this.contentTracker.getEpoch(projectId)
-    );
   }
 
   private isProjectContextDirty(projectId: ProjectScopeId): boolean {
@@ -917,15 +836,8 @@ export class AgentSessionManager {
       projectId === GLOBAL_SCOPE ? 0 : this.contentTracker.getEpoch(projectId);
     const capturedDirtyKey =
       projectId === GLOBAL_SCOPE ? undefined : this.contextDirtySignatures.get(projectId);
-    const contextReady =
-      projectId === GLOBAL_SCOPE
-        ? undefined
-        : this.beginContextMaterialization(
-            projectId,
-            cwd,
-            undefined,
-            this.currentContextRevisionKey(projectId)
-          );
+    const projectContext =
+      projectId === GLOBAL_SCOPE ? undefined : buildProjectContext(this.app, projectId, cwd);
 
     this.pendingCreates++;
     this.startingBackendId = resolvedId;
@@ -960,7 +872,7 @@ export class AgentSessionManager {
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getApp: () => this.app,
-      contextReady,
+      projectContext,
       ...(projectId !== GLOBAL_SCOPE
         ? {
             getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
@@ -985,30 +897,22 @@ export class AgentSessionManager {
     this.attachAttentionTracking(session);
     this.notify();
 
-    if (contextReady) {
-      void contextReady
-        .then((result) => {
-          if (this.disposed || this.sessions.get(internalId) !== session) return;
-          if (result.contextSignature === undefined) return;
-          const seen = this.lastSeenProjectContentEpochBySession.get(internalId);
-          if (seen === undefined || capturedContentEpoch > seen) {
-            this.lastSeenProjectContentEpochBySession.set(internalId, capturedContentEpoch);
-          }
-        })
-        .catch(() => {});
+    const contextSignature = projectContext?.contextSignature;
+    if (contextSignature !== undefined) {
+      const seen = this.lastSeenProjectContentEpochBySession.get(internalId);
+      if (seen === undefined || capturedContentEpoch > seen) {
+        this.lastSeenProjectContentEpochBySession.set(internalId, capturedContentEpoch);
+      }
     }
 
     void session.ready
       .then(async () => {
-        if (contextReady) {
-          const result = await contextReady;
-          if (
-            !this.disposed &&
-            this.sessions.get(internalId) === session &&
-            result.contextSignature !== undefined
-          ) {
-            this.clearContextDirtyIfCaptured(projectId, capturedDirtyKey, result.contextSignature);
-          }
+        if (
+          contextSignature !== undefined &&
+          !this.disposed &&
+          this.sessions.get(internalId) === session
+        ) {
+          this.clearContextDirtyIfCaptured(projectId, capturedDirtyKey, contextSignature);
         }
         if (descriptor.applyInitialSessionConfig) {
           try {
@@ -1082,161 +986,6 @@ export class AgentSessionManager {
       throw new Error("Agent Mode requires desktop Obsidian (FileSystemAdapter).");
     }
     return resolveScopeCwd(adapter.getBasePath(), projectId);
-  }
-
-  private beginContextMaterialization(
-    projectId: ProjectScopeId,
-    cwd: string,
-    forceRetryFailed?: boolean,
-    revisionKey?: string
-  ): Promise<ContextMaterializationResult> {
-    const counts: { prefetch?: ContextLoadStepCount } = {};
-    let failedSources: FailedItem[] = [];
-    let processingSources: AgentInFlightSource[] = [];
-
-    const prior = settingsStore.get(agentProjectContextLoadAtom)[projectId];
-    const ownsPublish = !prior?.blocking;
-
-    if (ownsPublish) {
-      this.setContextLoadState(projectId, { phase: "resolve", blocking: true });
-    }
-
-    const publishProgress = () => {
-      this.setContextLoadState(projectId, {
-        phase: "prefetch",
-        blocking: true,
-        ...counts,
-        failedSources,
-        processingSources: processingSources.length > 0 ? processingSources : undefined,
-      });
-    };
-
-    const onProgress = ownsPublish
-      ? (progress: ContextMaterializeProgress) => {
-          switch (progress.phase) {
-            case "failures":
-              failedSources = progress.failures.map(toFailedItem);
-              return;
-            case "itemStart":
-              processingSources = addProcessingSource(processingSources, progress.item);
-              failedSources = failedSources.filter((f) => !failedItemIsSource(f, progress.item));
-              publishProgress();
-              return;
-            case "itemFailed":
-              processingSources = removeProcessingSource(processingSources, progress.item);
-              failedSources = upsertFailedItem(failedSources, toFailedItem(progress.failure));
-              publishProgress();
-              return;
-            case "itemSettled":
-              processingSources = removeProcessingSource(processingSources, progress.item);
-              publishProgress();
-              return;
-            case "prefetch":
-              counts.prefetch = { done: progress.done, total: progress.total };
-              publishProgress();
-              return;
-          }
-        }
-      : undefined;
-
-    return ensureProjectContextMaterialized(
-      this.app,
-      projectId,
-      cwd,
-      onProgress,
-      forceRetryFailed,
-      revisionKey
-    )
-      .then((ctx) => {
-        if (ownsPublish) {
-          this.setContextLoadState(projectId, {
-            phase: "done",
-            blocking: false,
-            ...counts,
-            failedSources,
-          });
-        }
-        return ctx;
-      })
-      .catch((err) => {
-        logWarn(`[AgentMode] project context materialize failed for ${projectId}; continuing`, err);
-        if (ownsPublish) {
-          this.setContextLoadState(projectId, {
-            phase: "done",
-            blocking: false,
-            failedSources: [
-              { path: PROJECT_CONTEXT_FAILURE_SOURCE, type: "nonMd", error: err2String(err) },
-            ],
-          });
-        }
-        return EMPTY_CONTEXT_MATERIALIZATION_RESULT;
-      });
-  }
-
-  private setContextLoadState(projectId: string, state: AgentProjectContextLoadState): void {
-    settingsStore.set(agentProjectContextLoadAtom, (prev) => ({ ...prev, [projectId]: state }));
-  }
-
-  rematerializeContext(projectId: ProjectScopeId): boolean {
-    if (projectId === GLOBAL_SCOPE) return false;
-    if (settingsStore.get(agentProjectContextLoadAtom)[projectId]?.blocking) return false;
-    let cwd: string;
-    try {
-      cwd = this.resolveSessionCwd(projectId);
-    } catch (err) {
-      this.setContextLoadState(projectId, {
-        phase: "done",
-        blocking: false,
-        failedSources: [
-          { path: PROJECT_CONTEXT_FAILURE_SOURCE, type: "nonMd", error: err2String(err) },
-        ],
-      });
-      return false;
-    }
-    void this.beginContextMaterialization(
-      projectId,
-      cwd,
-      true,
-      this.currentContextRevisionKey(projectId)
-    );
-    return true;
-  }
-
-  async rematerializeSource(
-    projectId: ProjectScopeId,
-    item: { kind: MaterializedSourceType; source: string }
-  ): Promise<boolean> {
-    if (projectId === GLOBAL_SCOPE) return false;
-    const before = settingsStore.get(agentProjectContextLoadAtom)[projectId];
-    if (before?.blocking) return false;
-
-    const matchesItem = (f: FailedItem) => f.path === item.source && f.type === item.kind;
-    const sameSource = (r: { kind: MaterializedSourceType; source: string }) =>
-      r.kind === item.kind && r.source === item.source;
-
-    const beforeRetrying = before?.retryingSources ?? [];
-    if (beforeRetrying.some(sameSource)) return false;
-
-    this.setContextLoadState(projectId, {
-      ...(before ?? { phase: "done" as const }),
-      blocking: false,
-      failedSources: (before?.failedSources ?? []).filter((f) => !matchesItem(f)),
-      retryingSources: [...beforeRetrying, item],
-    });
-
-    const failures = await materializeProjectContextSource(this.app, projectId, item);
-
-    const prev = settingsStore.get(agentProjectContextLoadAtom)[projectId];
-    if (prev?.blocking) return false;
-    const others = (prev?.failedSources ?? []).filter((f) => !matchesItem(f));
-    const remainingRetrying = (prev?.retryingSources ?? []).filter((r) => !sameSource(r));
-    this.setContextLoadState(projectId, {
-      ...(prev ?? { phase: "done" as const }),
-      blocking: false,
-      retryingSources: remainingRetrying.length > 0 ? remainingRetrying : undefined,
-      failedSources: [...others, ...failures.map(toFailedItem)],
-    });
-    return true;
   }
 
   getActiveProjectId(): ProjectScopeId {
@@ -2237,15 +1986,10 @@ export class AgentSessionManager {
     );
     const cwd = this.resolveSessionCwd(projectId);
     if (projectId !== GLOBAL_SCOPE) this.contentTracker.flushNow();
-    const contextReady =
+    const additionalDirectories =
       projectId === GLOBAL_SCOPE
         ? undefined
-        : this.beginContextMaterialization(
-            projectId,
-            cwd,
-            undefined,
-            this.currentContextRevisionKey(projectId)
-          );
+        : buildProjectContext(this.app, projectId, cwd).additionalDirectories;
     const descriptor = this.resolveDescriptor(backendId);
 
     this.pendingCreates++;
@@ -2266,13 +2010,6 @@ export class AgentSessionManager {
       return null;
     }
 
-    const additionalDirectories = contextReady
-      ? (await contextReady).additionalDirectories
-      : undefined;
-    if (this.disposed) {
-      this.finishPendingCreate();
-      return null;
-    }
     const internalId = uuidv4();
     // The chat attaches before the backend replays its history, so replayed frames are never in flight without a handler.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/602

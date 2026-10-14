@@ -114,7 +114,7 @@ The **Miyo document processing** switch is on by default and affects more than o
 - In **Quick Chat**, it asks the connected Miyo service to parse PDF and EPUB files. A local connection stays local; a configured remote connection processes them on that server and requires the server to have access to the registered vault files.
 - With the switch off, Agent Chat does not install the Skill and the agent reads documents with its own tools. Quick Chat cannot read PDFs and tells you to turn the switch on and connect Miyo, or to use Agent Chat, where your agent can read them directly. The same message appears when the switch is on but Miyo is not connected. Copilot never sends a PDF to a hosted parser in Quick Chat.
 
-Outside the Miyo route, EPUB and ordinary non-PDF formats such as DOCX are not processed by this switch in regular chat context. Projects give the agent the path of each binary file to read itself, and only convert web pages and YouTube links through hosted processing. See [Copilot Paid Plans and Data Routes](copilot-plus-and-self-host.md) before using sensitive documents.
+Outside the Miyo route, EPUB and ordinary non-PDF formats such as DOCX are not processed by this switch in regular chat context. Projects give the agent the path of each binary file to read itself. See [Copilot Paid Plans and Data Routes](copilot-plus-and-self-host.md) before using sensitive documents.
 
 ## Let other AI tools use your knowledge
 

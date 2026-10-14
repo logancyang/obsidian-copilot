@@ -1,7 +1,5 @@
 import { ProjectConfig } from "@/aiParams";
 import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
-import { buildProcessingItemLookup } from "@/components/project/processingItemStatusView";
-import { useAgentProcessingItems } from "@/components/project/useAgentProcessingItems";
 import { ProjectFileSelectModal } from "@/components/modals/ProjectFileSelectModal";
 import { PropertySearchModal } from "@/components/modals/PropertySearchModal";
 import { TagSearchModal } from "@/components/modals/TagSearchModal";
@@ -356,15 +354,6 @@ function ContextManage({
 }: ContextManageProps) {
   const isMobile = Platform.isMobile;
   const contextUrls = useContextUrls(initialProject);
-  const { items: agentProcessingItems } = useAgentProcessingItems(
-    app,
-    initialProject,
-    initialProject.contextSource
-  );
-  const agentProcessingByKey = useMemo(
-    () => buildProcessingItemLookup(agentProcessingItems),
-    [agentProcessingItems]
-  );
 
   const { inclusions: inclusionPatterns, exclusions: exclusionPatterns } = useMemo(() => {
     return getMatchingPatterns({
@@ -1291,10 +1280,8 @@ function ContextManage({
             <ScrollArea className="tw-max-h-[400px] tw-flex-1 tw-p-4 tw-pt-0">
               {isLinksActive ? (
                 <LinksContentPanel
-                  app={app}
                   urlItems={contextUrls.urlItems}
                   filter={activeSection}
-                  agentProcessingByKey={agentProcessingByKey}
                   onRemove={contextUrls.removeUrl}
                 />
               ) : getDisplayItems.length === 0 ? (

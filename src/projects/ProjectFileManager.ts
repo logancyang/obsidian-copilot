@@ -38,7 +38,6 @@ import {
   upsertCachedProjectRecord,
 } from "@/projects/state";
 import { ensureFolderExists } from "@/utils";
-import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
 import {
   isInVaultCache,
@@ -443,13 +442,6 @@ export class ProjectFileManager {
         }
       } catch (cleanupError) {
         logWarn(`[Projects] Failed to clean up empty project folder: ${folderPath}`, cleanupError);
-      }
-
-      if (isDesktopRuntime()) {
-        const { clearProjectMarkers } = await import("@/context/projectMarkerCleanup");
-        await clearProjectMarkers(this.app, normalizedId).catch((err) =>
-          logError(`[Projects] Failed to clear off-vault failure markers on delete`, err)
-        );
       }
 
       logInfo(`[Projects] Deleted project: ${normalizedId} -> ${folderPath}`);

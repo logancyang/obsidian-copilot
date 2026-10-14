@@ -1,17 +1,10 @@
-import type { ProcessingItem } from "@/components/project/processingAdapter";
-import {
-  ProcessingStatusIcon,
-  processingSourceKey,
-} from "@/components/project/processingItemStatusView";
 import { AddUrlPopover } from "@/components/project/AddUrlPopover";
 import { UrlTypeIcon } from "@/components/project/UrlTypeIcon";
 import { TruncatedText } from "@/components/TruncatedText";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { openAgentCachedItemPreview } from "@/utils/cacheFileOpener";
 import type { UrlItem, UrlKind } from "@/utils/urlTagUtils";
-import { ArrowUpRight, Globe, Link, PlusCircle, SquarePlay, X } from "lucide-react";
-import { App } from "obsidian";
+import { Globe, Link, PlusCircle, SquarePlay, X } from "lucide-react";
 import React from "react";
 
 export type LinksSection = "links" | "web" | "youtube";
@@ -110,24 +103,12 @@ function LinkSubItem({
 }
 
 interface LinksContentPanelProps {
-  app: App;
   urlItems: UrlItem[];
   filter: LinksSection;
-  agentProcessingByKey: ReadonlyMap<string, ProcessingItem>;
   onRemove: (id: string) => void;
 }
 
-export function LinksContentPanel({
-  app,
-  urlItems,
-  filter,
-  agentProcessingByKey,
-  onRemove,
-}: LinksContentPanelProps) {
-  const handlePreview = (item: ProcessingItem) => {
-    void openAgentCachedItemPreview(app, item);
-  };
-
+export function LinksContentPanel({ urlItems, filter, onRemove }: LinksContentPanelProps) {
   const webItems = urlItems.filter((u) => u.type === "web");
   const youtubeItems = urlItems.filter((u) => u.type === "youtube");
   const showWeb = filter === "links" || filter === "web";
@@ -136,24 +117,10 @@ export function LinksContentPanel({
   return (
     <div className="tw-flex tw-flex-col tw-gap-2">
       {showWeb && webItems.length > 0 && (
-        <UrlGroup
-          label="Web"
-          type="web"
-          items={webItems}
-          agentProcessingByKey={agentProcessingByKey}
-          onRemove={onRemove}
-          onPreview={handlePreview}
-        />
+        <UrlGroup label="Web" type="web" items={webItems} onRemove={onRemove} />
       )}
       {showYoutube && youtubeItems.length > 0 && (
-        <UrlGroup
-          label="YouTube"
-          type="youtube"
-          items={youtubeItems}
-          agentProcessingByKey={agentProcessingByKey}
-          onRemove={onRemove}
-          onPreview={handlePreview}
-        />
+        <UrlGroup label="YouTube" type="youtube" items={youtubeItems} onRemove={onRemove} />
       )}
       {((showWeb && webItems.length > 0) || (showYoutube && youtubeItems.length > 0)) === false && (
         <div className="tw-py-6 tw-text-center tw-text-sm tw-text-muted">
@@ -168,16 +135,12 @@ function UrlGroup({
   label,
   type,
   items,
-  agentProcessingByKey,
   onRemove,
-  onPreview,
 }: {
   label: string;
   type: UrlKind;
   items: UrlItem[];
-  agentProcessingByKey: ReadonlyMap<string, ProcessingItem>;
   onRemove: (id: string) => void;
-  onPreview: (item: ProcessingItem) => void;
 }) {
   return (
     <div className="tw-mb-2">
@@ -185,33 +148,21 @@ function UrlGroup({
         <UrlTypeIcon type={type} className="tw-size-3.5" />
         {label} <span className="tw-font-medium">({items.length})</span>
       </div>
-      {items.map((item) => {
-        const status = agentProcessingByKey.get(processingSourceKey(type, item.url));
-        const isReady = status?.status === "ready";
-        return (
-          <div
-            key={item.id}
-            className="tw-group tw-mb-1.5 tw-flex tw-items-center tw-gap-2.5 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-px-3 tw-py-2"
-          >
-            <UrlTypeIcon type={item.type} className="tw-size-4 tw-shrink-0" />
-            <TruncatedText className="tw-min-w-0 tw-flex-1 tw-text-sm" tooltipContent={item.url}>
-              {item.url.replace(/^https?:\/\//, "")}
-            </TruncatedText>
-            {isReady && status && (
-              <ArrowUpRight
-                className="tw-size-4 tw-shrink-0 tw-cursor-pointer tw-text-faint tw-opacity-0 hover:tw-text-normal group-hover:tw-opacity-100"
-                onClick={() => onPreview(status)}
-                aria-label="View converted content"
-              />
-            )}
-            {status && <ProcessingStatusIcon item={status} revealReadyOnHover />}
-            <X
-              className="tw-size-4 tw-shrink-0 tw-cursor-pointer tw-text-faint tw-opacity-0 hover:tw-text-error group-hover:tw-opacity-100"
-              onClick={() => onRemove(item.id)}
-            />
-          </div>
-        );
-      })}
+      {items.map((item) => (
+        <div
+          key={item.id}
+          className="tw-group tw-mb-1.5 tw-flex tw-items-center tw-gap-2.5 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-px-3 tw-py-2"
+        >
+          <UrlTypeIcon type={item.type} className="tw-size-4 tw-shrink-0" />
+          <TruncatedText className="tw-min-w-0 tw-flex-1 tw-text-sm" tooltipContent={item.url}>
+            {item.url.replace(/^https?:\/\//, "")}
+          </TruncatedText>
+          <X
+            className="tw-size-4 tw-shrink-0 tw-cursor-pointer tw-text-faint tw-opacity-0 hover:tw-text-error group-hover:tw-opacity-100"
+            onClick={() => onRemove(item.id)}
+          />
+        </div>
+      ))}
     </div>
   );
 }

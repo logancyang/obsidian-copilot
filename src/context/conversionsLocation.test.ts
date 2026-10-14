@@ -1,9 +1,15 @@
 import type { App } from "obsidian";
 import { FileSystemAdapter } from "obsidian";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { getVaultId } from "@/utils/appPaths";
-import { md5 } from "@/utils/hash";
-import { cacheRoot, markersDir, remotesDir, snapshotAbsPath } from "./conversionsLocation";
+import { clearContextCache } from "./conversionsLocation";
+
+let mockHome = "";
+jest.mock("os", () => ({
+  ...jest.requireActual<typeof import("os")>("os"),
+  homedir: () => mockHome,
+}));
 
 const FsAdapter = FileSystemAdapter as unknown as new (basePath: string) => FileSystemAdapter;
 const appWith = (basePath: string): App =>
@@ -12,32 +18,31 @@ const appWith = (basePath: string): App =>
 describe("conversionsLocation", () => {
   const app = appWith("/Users/me/My Vault");
 
-  describe("cacheRoot()", () => {
-    it("roots the cache at ~/.obsidian-copilot/vaults/<vaultId>/context-cache", () => {
-      const root = cacheRoot(app);
-      expect(
-        root.endsWith(path.join(".obsidian-copilot", "vaults", getVaultId(app), "context-cache"))
-      ).toBe(true);
-    });
+  beforeEach(() => {
+    mockHome = fs.mkdtempSync(
+      path.join(jest.requireActual<typeof import("os")>("os").tmpdir(), "copilot-cache-home-")
+    );
   });
 
-  describe("remotesDir()", () => {
-    it("places the remotes directory directly under the cache root", () => {
-      expect(remotesDir(app)).toBe(path.join(cacheRoot(app), "remotes"));
-    });
+  afterEach(() => {
+    fs.rmSync(mockHome, { recursive: true, force: true });
   });
 
-  describe("markersDir()", () => {
-    it("buckets failure markers under markers/<md5(projectId)>, never the raw project id", () => {
-      const dir = markersDir(app, "proj-1");
-      expect(dir).toBe(path.join(cacheRoot(app), "markers", md5("proj-1")));
-      expect(dir).not.toContain("proj-1");
-    });
-  });
+  describe("clearContextCache()", () => {
+    it("deletes this vault's context-cache folder with every snapshot and marker in it", async () => {
+      const vaultDir = path.join(mockHome, ".obsidian-copilot", "vaults", getVaultId(app));
+      const root = path.join(vaultDir, "context-cache");
+      fs.mkdirSync(path.join(root, "remotes"), { recursive: true });
+      fs.writeFileSync(path.join(root, "remotes", "web-1.md"), "old snapshot");
 
-  describe("snapshotAbsPath()", () => {
-    it("places a snapshot in remotesDir", () => {
-      expect(snapshotAbsPath(app, "web-1.md")).toBe(path.join(remotesDir(app), "web-1.md"));
+      await clearContextCache(app);
+
+      expect(fs.existsSync(root)).toBe(false);
+      expect(fs.existsSync(vaultDir)).toBe(true);
+    });
+
+    it("resolves without error when the vault has no context-cache folder", async () => {
+      await expect(clearContextCache(app)).resolves.toBeUndefined();
     });
   });
 });

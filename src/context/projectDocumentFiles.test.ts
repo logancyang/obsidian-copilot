@@ -8,7 +8,7 @@ jest.mock(
 
 import { shouldIndexFile } from "@/search/searchUtils";
 import type { App } from "obsidian";
-import { countProjectMarkdownFiles, listProjectDocumentFiles } from "./projectDocumentFiles";
+import { listProjectDocumentFiles } from "./projectDocumentFiles";
 
 const indexFile = shouldIndexFile as jest.Mock;
 
@@ -62,18 +62,6 @@ describe("projectDocumentFiles", () => {
       const first = listProjectDocumentFiles(app, {});
       expect(first).toEqual([]);
       expect(listProjectDocumentFiles(app, undefined)).toBe(first);
-    });
-  });
-
-  describe("countProjectMarkdownFiles()", () => {
-    it("counts only the included markdown files", () => {
-      const app = appWith(["Proj/a.md", "Proj/b.MD", "Proj/c.pdf", "Proj/d.png"]);
-
-      expect(countProjectMarkdownFiles(app, INCLUDE_PROJ)).toBe(2);
-    });
-
-    it("returns zero when the project has no inclusions", () => {
-      expect(countProjectMarkdownFiles(appWith(["Proj/a.md"]), {})).toBe(0);
     });
   });
 });

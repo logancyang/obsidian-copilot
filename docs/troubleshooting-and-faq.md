@@ -79,12 +79,6 @@ Permission choices depend on the active agent. **Stop** cancels the current turn
 
 An Agent Chat keeps its original backend after work begins. Create an empty chat to choose another. Use **Recent Chats** for earlier work.
 
-### A project message says “Waiting for context”
-
-The message is queued while Copilot prepares saved sources. Fix or remove any source that cannot load. After changing saved context or instructions, start **New Chat**.
-
-See [Projects](projects.md) for what is saved with a project.
-
 ### A skill or skill command is missing
 
 In **Settings → Copilot → Skills**, confirm the skill has a valid `SKILL.md` and is enabled for your agent. Toggle the agent off and on to recreate its link.

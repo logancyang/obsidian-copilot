@@ -1,5 +1,4 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
-import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
 import type { QueuedAgentMessage } from "@/agentMode/session/AgentInputDraftStore";
@@ -61,10 +60,7 @@ interface AgentChatInputProps {
   modelPickerOverride: ChatInputProps["modelPickerOverride"];
   modePickerOverride: ChatInputProps["modePickerOverride"];
   onCycleMode: () => void;
-  activeProjectId?: string;
-  contextLoadBlocking?: boolean;
   disabled?: boolean;
-  contextStatusIndicator?: React.ReactNode;
 }
 
 const dedupeBy = <T,>(items: Iterable<T>, key: (item: T) => string): T[] => {
@@ -152,16 +148,11 @@ export const AgentChatInput = memo(function AgentChatInput({
   modelPickerOverride,
   modePickerOverride,
   onCycleMode,
-  activeProjectId,
-  contextLoadBlocking = false,
   disabled = false,
-  contextStatusIndicator,
 }: AgentChatInputProps) {
   const eventTarget = useContext(EventTargetContext);
   const chatInputRef = useRef<ChatInputHandle>(null);
 
-  const holdForContext =
-    contextLoadBlocking && !!activeProjectId && activeProjectId !== GLOBAL_SCOPE;
   const [selectedTextContexts] = useSelectedTextContexts();
   const { activeWebTabForMentions } = useActiveWebTabState();
 
@@ -362,11 +353,8 @@ export const AgentChatInput = memo(function AgentChatInput({
         mentionedAgents,
       };
 
-      if (loading || isStarting || holdForContext) {
-        setQueuedMessages((q) => [
-          ...q,
-          { ...item, queueReason: holdForContext ? "context" : "busy" },
-        ]);
+      if (loading || isStarting) {
+        setQueuedMessages((q) => [...q, item]);
         return;
       }
 
@@ -383,7 +371,6 @@ export const AgentChatInput = memo(function AgentChatInput({
       loading,
       isStarting,
       unsupportedImageModelLabel,
-      holdForContext,
       disabled,
       resetCompose,
       runSend,
@@ -394,7 +381,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   );
 
   useEffect(() => {
-    if (disabled || loading || isStarting || holdForContext || queuedMessages.length === 0) return;
+    if (disabled || loading || isStarting || queuedMessages.length === 0) return;
     const combined = combineQueuedMessages(queuedMessages);
     if (
       combined.promptContent?.some((content) => content.type === "image") &&
@@ -411,7 +398,6 @@ export const AgentChatInput = memo(function AgentChatInput({
     disabled,
     loading,
     isStarting,
-    holdForContext,
     queuedMessages,
     runSend,
     setQueuedMessages,
@@ -477,7 +463,6 @@ export const AgentChatInput = memo(function AgentChatInput({
           agentBrands={agentBrands}
           cloudAgentIds={getCloudAgentIds()}
           onMentionedAgentsChange={handleMentionedAgentsChange}
-          topRightAccessory={contextStatusIndicator}
         />
       </div>
     </>

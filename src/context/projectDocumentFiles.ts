@@ -40,19 +40,3 @@ export function listProjectDocumentFiles(
     .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
     .sort(byPath);
 }
-
-export function countProjectMarkdownFiles(
-  app: App,
-  contextSource: { inclusions?: string; exclusions?: string } | undefined
-): number {
-  const { inclusions, exclusions } = getMatchingPatterns({
-    inclusions: contextSource?.inclusions,
-    exclusions: contextSource?.exclusions,
-    isProject: true,
-  });
-  if (!inclusions) return 0;
-  return app.vault
-    .getFiles()
-    .filter((file) => file.extension.toLowerCase() === "md")
-    .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true)).length;
-}

@@ -242,9 +242,8 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
       await fileCache.clear(plugin.app.vault);
 
       if (isDesktopRuntime()) {
-        const { cacheRoot } = await import("@/context/conversionsLocation");
-        const { createNodeContextCacheFs } = await import("@/context/contextCacheFs");
-        await createNodeContextCacheFs(cacheRoot(plugin.app)).clear();
+        const { clearContextCache } = await import("@/context/conversionsLocation");
+        await clearContextCache(plugin.app);
       }
 
       new Notice("All Copilot caches cleared successfully");

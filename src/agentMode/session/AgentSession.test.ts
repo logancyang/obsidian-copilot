@@ -961,21 +961,16 @@ describe("AgentSession", () => {
         );
       });
 
-      it("does not call newSession until contextReady resolves (non-blocking visibility)", async () => {
+      it("opens the session with the project context's additional directories", async () => {
         const mock = makeMockBackend();
-        let release!: (result: { additionalDirectories: string[] }) => void;
-        const contextReady = new Promise<{ additionalDirectories: string[] }>((resolve) => {
-          release = resolve;
-        });
         const session = startSession(mock, {
           cwd: "/vault/Projects/p",
           projectId: "proj-7",
-          contextReady,
+          projectContext: {
+            additionalDirectories: ["/vault/SharedResearch"],
+            projectContextBlock: "<project_context>\n</project_context>",
+          },
         });
-        await Promise.resolve();
-        expect(mock.newSession).not.toHaveBeenCalled();
-        expect(session.getStatus()).toBe("starting");
-        release({ additionalDirectories: ["/vault/SharedResearch"] });
         await session.ready;
         expect(mock.newSession).toHaveBeenCalledWith(
           expect.objectContaining({ additionalDirectories: ["/vault/SharedResearch"] })
@@ -1968,11 +1963,11 @@ describe("AgentSession", () => {
         const session = startSession(mock, {
           cwd: "/vault/Projects/p",
           projectId: "proj-7",
-          contextReady: Promise.resolve({
+          projectContext: {
             additionalDirectories: [],
             projectContextBlock:
               "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>",
-          }),
+          },
         });
         await session.ready;
 
@@ -1997,11 +1992,11 @@ describe("AgentSession", () => {
         const session = startSession(mock, {
           cwd: "/vault/Projects/p",
           projectId: "proj-7",
-          contextReady: Promise.resolve({
+          projectContext: {
             additionalDirectories: [],
             projectContextBlock:
               "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>",
-          }),
+          },
         });
         await session.ready;
 

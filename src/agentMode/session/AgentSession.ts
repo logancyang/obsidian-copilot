@@ -65,7 +65,7 @@ import {
 import { getVaultBase } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
 import { ContextProcessor } from "@/contextProcessor";
-import type { ContextMaterializationResult } from "@/context/projectContextMaterializer";
+import type { ProjectContext } from "@/context/manifestBuilder";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
 import { isFanout } from "@/agentMode/session/fanout/answerers";
@@ -171,7 +171,7 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   runFanoutTurn?: RunFanoutTurn;
   getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
-  contextReady?: Promise<ContextMaterializationResult>;
+  projectContext?: ProjectContext;
 }
 
 export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
@@ -201,7 +201,7 @@ export class AgentSession {
   private backendSessionId: SessionId | null = null;
   private readonly backend: BackendProcess;
   private readonly cwd: string | null;
-  private readonly contextReady: Promise<ContextMaterializationResult> | null;
+  private readonly projectContext: ProjectContext | null;
   private projectContextBlock: string | null = null;
   private firstPromptSent = false;
   private lastSentWebTabBlock: string | null = null;
@@ -291,7 +291,7 @@ export class AgentSession {
     this.getApp = opts.getApp ?? null;
     this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
-    this.contextReady = "contextReady" in opts ? (opts.contextReady ?? null) : null;
+    this.projectContext = "projectContext" in opts ? (opts.projectContext ?? null) : null;
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
       this.resumeSelection = opts.defaultModelSelection;
@@ -339,11 +339,9 @@ export class AgentSession {
   private async initialize(opts: AgentSessionStartOptions): Promise<void> {
     const { backend, cwd, defaultModelSelection } = opts;
     try {
-      const contextResult = this.contextReady ? await this.contextReady : null;
       const additionalDirectories =
-        contextResult?.additionalDirectories ?? EMPTY_ADDITIONAL_DIRECTORIES;
-      this.projectContextBlock = contextResult?.projectContextBlock ?? null;
-      if (this.disposed) return;
+        this.projectContext?.additionalDirectories ?? EMPTY_ADDITIONAL_DIRECTORIES;
+      this.projectContextBlock = this.projectContext?.projectContextBlock ?? null;
       const resp = await backend.newSession({
         cwd,
         projectId: this.projectId,

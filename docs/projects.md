@@ -44,17 +44,17 @@ You can:
 
 Tags match tags stored in note properties. Properties can target notes by a frontmatter field, such as `Topics: Physics`.
 
-When a new Project chat starts, Copilot prepares the saved context. If preparation is still running when you send a message, Copilot queues the message and starts it automatically when the context is ready.
+When a new Project chat starts, Copilot gives the agent a list of the saved context: folders, notes, and files by their location, and web pages and YouTube videos as links. Nothing is downloaded or converted in advance. The agent reads each source when a question needs it.
 
 An existing Project chat keeps the instructions and context captured when that chat started. Start a new chat after changing either one when you need the updated version.
 
-### File support and hosted conversion
+### File and link support
 
 Markdown, text, and source files can be read directly by the active agent. Binary files such as PDFs, Office documents, EPUBs, spreadsheets, and common images are not converted. Copilot gives the agent the absolute path of each original file, and the agent opens it with its own tools. With **Miyo document processing** on, agents use the `miyo-parse` Skill for PDF and EPUB files. How well an agent reads a given format depends on that agent.
 
-Web pages and YouTube transcripts are converted through Copilot's hosted service and require an eligible Copilot plan. The Project context status shows their progress and any failures; it does not list binary files, because nothing is converted for them.
+The agent opens a saved web page with its own web tool or Copilot's web fetch Skill, and reads a YouTube video through Copilot's YouTube transcript Skill, which requires an eligible Copilot plan. Whether a page can be read depends on the tools that agent has.
 
-> **Private Projects:** Copilot does not send a Project's binary files to its conversion service. Web URLs and YouTube links go there, and that conversion runs independently of the **Miyo document processing** switch. If a Project must not send task content to Brevilabs, do not add web URLs or YouTube links as saved context. Use Markdown and document files with local tools or local [Miyo](vault-search-and-indexing.md), use a local model if prompts must also stay on the device, and disable cloud-backed Copilot Skills for every agent you use.
+> **Private Projects:** Copilot does not send a Project's files or links anywhere when a chat starts. A link goes to Brevilabs only when the agent fetches it through a Copilot-hosted Skill. If a Project must not send task content to Brevilabs, use Markdown and document files with local tools or local [Miyo](vault-search-and-indexing.md), use a local model if prompts must also stay on the device, and disable cloud-backed Copilot Skills for every agent you use.
 
 **Ignore Files** controls which files are included in prepared context. It is not a file permission setting. An agent can still find an ignored file through its own tools when the file is inside a location that agent can access.
 

@@ -40,7 +40,6 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
       props: {
         setInputMessage: React.Dispatch<React.SetStateAction<string>>;
         agentBrands?: ReadonlyArray<unknown>;
-        topRightAccessory?: React.ReactNode;
         handleSendMessage?: () => void;
         onStopGenerating?: () => void;
         isGenerating?: boolean;
@@ -59,7 +58,6 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
       capturedAgentBrands = props.agentBrands;
       return (
         <>
-          {props.topRightAccessory}
           <span data-testid="generating-state">{props.isGenerating ? "running" : "idle"}</span>
           <button type="button" onClick={() => props.handleSendMessage?.()}>
             send
@@ -685,25 +683,11 @@ describe("AgentChatInput", () => {
       }) as unknown as AgentChatBackend;
 
     const enqueuedItem = (setQueue: jest.Mock) => {
-      const updater = setQueue.mock.calls[0][0] as (
-        q: readonly unknown[]
-      ) => { queueReason?: string }[];
+      const updater = setQueue.mock.calls[0][0] as (q: readonly unknown[]) => { id: string }[];
       return updater([])[0];
     };
 
-    it("snapshots 'context' when the send is held for project-context materialization", async () => {
-      const backend = makeBackend();
-      const draft = makeDraft();
-
-      renderInput(backend, draft, { activeProjectId: "proj-1", contextLoadBlocking: true });
-      fireEvent.click(screen.getByText("send"));
-      await waitFor(() => expect(draft.setQueue).toHaveBeenCalled());
-
-      expect(backend.sendMessage).not.toHaveBeenCalled();
-      expect(enqueuedItem(draft.setQueue as jest.Mock).queueReason).toBe("context");
-    });
-
-    it("snapshots 'busy' when queued behind an in-flight turn", async () => {
+    it("queues the message instead of sending it while a turn is in flight", async () => {
       const backend = makeBackend();
       const draft = makeDraft({ loading: true });
 
@@ -712,7 +696,7 @@ describe("AgentChatInput", () => {
       await waitFor(() => expect(draft.setQueue).toHaveBeenCalled());
 
       expect(backend.sendMessage).not.toHaveBeenCalled();
-      expect(enqueuedItem(draft.setQueue as jest.Mock).queueReason).toBe("busy");
+      expect(enqueuedItem(draft.setQueue as jest.Mock).id).toMatch(/^queued-/);
     });
 
     it("queues a message behind a plan-approved turn even after draft loading clears (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", async () => {
@@ -724,28 +708,7 @@ describe("AgentChatInput", () => {
       await waitFor(() => expect(draft.setQueue).toHaveBeenCalled());
 
       expect(backend.sendMessage).not.toHaveBeenCalled();
-      expect(enqueuedItem(draft.setQueue as jest.Mock).queueReason).toBe("busy");
-    });
-
-    it("labels only context-held rows with the amber waiting prefix", () => {
-      const draft = makeDraft({
-        queue: [
-          {
-            id: "q1",
-            text: "held for context",
-            rawInput: "held for context",
-            queueReason: "context",
-          },
-          { id: "q2", text: "held while busy", rawInput: "held while busy", queueReason: "busy" },
-        ],
-      });
-
-      renderInput(makeBackend(), draft);
-
-      const rows = screen.getAllByTitle(/held/);
-      expect(rows[0].textContent).toContain("Waiting for context · held for context");
-      expect(rows[1].textContent).toContain("held while busy");
-      expect(rows[1].textContent).not.toContain("Waiting for context");
+      expect(enqueuedItem(draft.setQueue as jest.Mock).id).toMatch(/^queued-/);
     });
 
     it("keeps queued images when the active model is known not to support vision", async () => {
@@ -779,13 +742,6 @@ describe("AgentChatInput", () => {
 
       expect(backend.sendMessage).not.toHaveBeenCalled();
       expect(draft.setQueue).not.toHaveBeenCalled();
-    });
-
-    it("passes the indicator through the accessory slot when mounted", () => {
-      const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
-
-      renderInput(backend, makeDraft(), { contextStatusIndicator: <span>status</span> });
-      expect(screen.getByText("status")).toBeTruthy();
     });
 
     it("regression: clears the composer before awaiting attached-image conversion (#211)", async () => {

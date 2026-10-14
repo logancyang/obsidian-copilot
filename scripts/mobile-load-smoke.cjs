@@ -23,11 +23,7 @@ const loadCriticalFiles = [
   "src/components/chat-components/plugins/slashMenuItems.ts",
 ];
 
-const contextCacheConsumerFiles = [
-  "src/commands/index.ts",
-  "src/components/project/agentProcessingAdapter.ts",
-  "src/utils/cacheFileOpener.ts",
-];
+const contextCacheConsumerFiles = ["src/commands/index.ts"];
 
 const nodeModuleIds = new Set([
   "async_hooks",
@@ -120,7 +116,7 @@ function checkAgentModeImportBoundaries() {
 
 function checkContextCacheImportBoundaries() {
   const desktopOnlyImports =
-    /import\s+(?:type\s+)?[^;]+?\s+from\s+["']@\/context\/(?:conversionsLocation|contextCacheFs)["']\s*;?/g;
+    /import\s+(?:type\s+)?[^;]+?\s+from\s+["']@\/context\/conversionsLocation["']\s*;?/g;
 
   for (const relativePath of contextCacheConsumerFiles) {
     const source = readRepoFile(relativePath);
