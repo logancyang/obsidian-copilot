@@ -1,5 +1,6 @@
 import { logFileManager } from "@/logFileManager";
 import { FileCache } from "@/cache/fileCache";
+import { clearLegacyCaches } from "@/cache/legacyCaches";
 import { logError } from "@/logger";
 import {
   clearRecordedPromptPayload,
@@ -236,18 +237,8 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
 
   addCommand(plugin, COMMAND_IDS.CLEAR_COPILOT_CACHE, async () => {
     try {
-      const { adapter } = plugin.app.vault;
-      if (await adapter.exists(".copilot/pdf-cache")) {
-        await adapter.rmdir(".copilot/pdf-cache", true);
-      }
-
-      const fileCache = FileCache.getInstance<string>();
-      await fileCache.clear(plugin.app.vault);
-
-      if (isDesktopRuntime()) {
-        const { clearContextCache } = await import("@/context/conversionsLocation");
-        await clearContextCache(plugin.app);
-      }
+      await FileCache.getInstance<string>().clear(plugin.app.vault);
+      await clearLegacyCaches(plugin.app);
 
       new Notice("All Copilot caches cleared successfully");
     } catch (error) {
