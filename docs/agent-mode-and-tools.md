@@ -183,6 +183,8 @@ Agents also compact on their own when the context window fills up. Either way, t
 
 When a finished compaction reports its new size, the context ring drops to that size instead of keeping the reading from before it.
 
+Reopening a Codex or opencode chat from chat history shows its past compactions again, each in the place it happened. A compaction that never finished shows as **Compaction cancelled**. Reopening does not change the context ring.
+
 ## Review what a turn changed
 
 When a turn finishes after the agent has edited your vault, a **Files changed** card closes that turn. It lists one row per note, with the number of added and removed lines, and a **new** or **deleted** badge for notes the agent created or removed. The card totals the changes in its header and scrolls when a turn touched many files.
