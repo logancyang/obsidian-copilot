@@ -7,7 +7,7 @@ import React from "react";
 
 export interface FeedbackCardProps {
   offer: FeedbackOffer;
-  onReview: (origin: HTMLElement) => void;
+  onReview: () => void;
   onDismiss: () => void;
   onTurnOff: () => void;
 }
@@ -77,11 +77,7 @@ export const FeedbackCard: React.FC<FeedbackCardProps> = ({
               <Button variant="secondary" size="sm" onClick={onDismiss}>
                 Dismiss
               </Button>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={(event) => onReview(event.currentTarget)}
-              >
+              <Button variant="default" size="sm" onClick={onReview}>
                 Review & report
               </Button>
             </div>

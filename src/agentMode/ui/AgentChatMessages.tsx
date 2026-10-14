@@ -217,9 +217,8 @@ const AgentChatMessages = memo(
         feedbackOffer ? (
           <FeedbackCard
             offer={feedbackOffer}
-            onReview={(origin) =>
+            onReview={() =>
               openReportIssueModal(app, {
-                origin,
                 activeBackend: feedbackOffer.evidence.backendId,
                 initialNote: formatFeedbackNote(feedbackOffer),
                 preselectAllSources: true,

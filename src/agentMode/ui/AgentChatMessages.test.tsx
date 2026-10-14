@@ -265,15 +265,12 @@ describe("AgentChatMessages", () => {
       expect(screen.queryByTestId("agent-feedback-card")).toBeNull();
     });
 
-    it("opens the report dialog from this chat, prefilled from the card with every source checked, and records the sent report", () => {
+    it("opens the report dialog prefilled from the card with every source checked, and records the sent report", () => {
       mockOpenReportIssueModal.mockClear();
       renderMessages(FEEDBACK_TRANSCRIPT, false, { feedbackOffer: FEEDBACK_OFFER });
-      const review = screen.getByRole("button", { name: "Review & report" });
-
-      fireEvent.click(review);
+      fireEvent.click(screen.getByRole("button", { name: "Review & report" }));
 
       expect(mockOpenReportIssueModal).toHaveBeenCalledWith(expect.anything(), {
-        origin: review,
         activeBackend: "codex",
         initialNote: expect.stringMatching(/^Replied in Swedish to an English request\n/),
         preselectAllSources: true,

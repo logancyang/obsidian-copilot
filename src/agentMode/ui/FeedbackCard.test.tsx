@@ -84,15 +84,6 @@ describe("FeedbackCard", () => {
       }
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 hands Review & report its own button so the report captures this chat", () => {
-      const props = renderCard();
-      const review = screen.getByRole("button", { name: "Review & report" });
-
-      fireEvent.click(review);
-
-      expect(props.onReview).toHaveBeenCalledWith(review);
-    });
-
     it("omits the quote when the agent raised the problem itself", () => {
       renderCard({ ...OPEN_OFFER, draft: { ...OPEN_OFFER.draft, userSaid: "" } });
 
