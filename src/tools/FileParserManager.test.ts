@@ -126,7 +126,7 @@ describe("FileParserManager", () => {
         ["PDF", pdf],
         ["EPUB", epub],
       ])(
-        "throws that no processor is available instead of falling back to cloud when Miyo document processing is on but Miyo is unavailable for %s files",
+        "throws that no processor is available when Miyo document processing is on but Miyo is unavailable for %s files",
         async (_format, makeFile) => {
           mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
           mockAvailable.mockReturnValue(false);
@@ -171,7 +171,7 @@ describe("FileParserManager", () => {
 
   describe("PDFParser", () => {
     describe("parseFile()", () => {
-      it("returns the Miyo-extracted text without calling the cloud when Miyo is available", async () => {
+      it("returns the Miyo-extracted text without a network request when Miyo is available", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
         mockAvailable.mockReturnValue(true);
         mockParseDoc.mockResolvedValue({ text: "extracted via miyo" });
@@ -197,7 +197,7 @@ describe("FileParserManager", () => {
         expect(mockParseDoc).not.toHaveBeenCalled();
       });
 
-      it("returns an error string rather than throwing or falling back to cloud when Miyo parsing fails", async () => {
+      it("returns an error string without throwing or making a network request when Miyo parsing fails", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
         mockAvailable.mockReturnValue(true);
         mockParseDoc.mockRejectedValue(new Error("endpoint down"));
@@ -209,7 +209,7 @@ describe("FileParserManager", () => {
         expect(mockRequestUrl).not.toHaveBeenCalled();
       });
 
-      it("returns an unavailable error and never uploads to cloud when Miyo document processing is on but Miyo is unreachable", async () => {
+      it("returns an unavailable error without a network request when Miyo document processing is on but Miyo is unreachable", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
         mockAvailable.mockReturnValue(false);
 
@@ -235,7 +235,7 @@ describe("FileParserManager", () => {
         expect(mockRequestUrl).not.toHaveBeenCalled();
       });
 
-      it("refreshes once and still fails closed without cloud when a 'stale' status is confirmed unavailable", async () => {
+      it("refreshes once and still fails closed without a network request when a 'stale' status is confirmed unavailable", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
         mockSnapshot.mockReturnValue({ documentProcessor: "stale" });
         mockAvailable.mockReturnValue(false);
@@ -249,7 +249,7 @@ describe("FileParserManager", () => {
         expect(mockParseDoc).not.toHaveBeenCalled();
       });
 
-      it("fails closed without refreshing or calling cloud when Miyo document processing is on but Miyo is no longer in use", async () => {
+      it("fails closed without refreshing or making a network request when Miyo document processing is on but Miyo is no longer in use", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
         mockShouldUseMiyo.mockReturnValue(false);
         mockSnapshot.mockReturnValue({ documentProcessor: "unknown" });
@@ -263,7 +263,7 @@ describe("FileParserManager", () => {
         expect(mockParseDoc).not.toHaveBeenCalled();
       });
 
-      it("does not re-read availability after resolving to Miyo, so a later status flip cannot leak to cloud", async () => {
+      it("does not re-read availability after resolving to Miyo, so a later status flip still returns the Miyo text without a network request", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: true }));
         mockSnapshot.mockReturnValue({ documentProcessor: "available" });
         mockAvailable.mockReturnValueOnce(true).mockReturnValue(false);
@@ -289,7 +289,7 @@ describe("FileParserManager", () => {
         expect(mockRefresh).not.toHaveBeenCalled();
       });
 
-      it("returns the Miyo and Agent Chat message without probing Miyo or calling the cloud when Miyo document processing is off https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
+      it("returns the Miyo and Agent Chat message without probing Miyo or making a network request when Miyo document processing is off https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
         mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: false }));
         mockSnapshot.mockReturnValue({ documentProcessor: "unknown" });
 
