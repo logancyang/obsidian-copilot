@@ -8,22 +8,19 @@ import {
   COPILOT_PROJECT_ID,
   COPILOT_PROJECT_INCLUSIONS,
   COPILOT_PROJECT_LAST_USED,
-  COPILOT_PROJECT_MAX_TOKENS,
-  COPILOT_PROJECT_MODEL_KEY,
   COPILOT_PROJECT_NAME,
-  COPILOT_PROJECT_TEMPERATURE,
   COPILOT_PROJECT_WEB_URLS,
   COPILOT_PROJECT_YOUTUBE_URLS,
   PROJECTS_UNSUPPORTED_FOLDER_NAME,
 } from "@/projects/constants";
 import { ProjectFileRecord } from "@/projects/type";
 import {
-  fetchAllProjects,
   getProjectAnchorFromConfigPath,
   getProjectConfigFilePath,
   getProjectFolderPath,
   getProjectsFolder,
   loadAllProjects,
+  scanAllProjectConfigFiles,
   sanitizeVaultPathSegment,
   splitUrlsStringToArray,
   writeProjectFrontmatter,
@@ -77,7 +74,7 @@ export class ProjectFileManager {
   }
 
   public async fetchProjects(): Promise<ProjectFileRecord[]> {
-    return await fetchAllProjects(this.app);
+    return await scanAllProjectConfigFiles(this.app);
   }
 
   public getProjectUsageTimestampsManager(): RecentUsageManager<string> {
@@ -132,7 +129,6 @@ export class ProjectFileManager {
       [COPILOT_PROJECT_ID]: project.id.trim(),
       [COPILOT_PROJECT_NAME]: (project.name || folderName).trim(),
       [COPILOT_PROJECT_DESCRIPTION]: (project.description || "").trim(),
-      [COPILOT_PROJECT_MODEL_KEY]: (project.projectModelKey || "").trim(),
       [COPILOT_PROJECT_INCLUSIONS]: project.contextSource?.inclusions || "",
       [COPILOT_PROJECT_EXCLUSIONS]: project.contextSource?.exclusions || "",
       [COPILOT_PROJECT_WEB_URLS]: webUrls,
@@ -140,13 +136,6 @@ export class ProjectFileManager {
       [COPILOT_PROJECT_CREATED]: timestamps.createdMs,
       [COPILOT_PROJECT_LAST_USED]: timestamps.lastUsedMs,
     };
-
-    if (project.modelConfigs?.temperature != null) {
-      fm[COPILOT_PROJECT_TEMPERATURE] = project.modelConfigs.temperature;
-    }
-    if (project.modelConfigs?.maxTokens != null) {
-      fm[COPILOT_PROJECT_MAX_TOKENS] = project.modelConfigs.maxTokens;
-    }
 
     return `---\n${stringifyYaml(fm)}---\n${project.systemPrompt || ""}`;
   }

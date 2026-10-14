@@ -21,8 +21,6 @@ function makeProject(
     id,
     name: id,
     systemPrompt: "",
-    projectModelKey: "",
-    modelConfigs: {},
     contextSource: {},
     created,
     UsageTimestamps: usageTimestamps,

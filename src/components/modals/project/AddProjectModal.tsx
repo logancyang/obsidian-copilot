@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { DEFAULT_MODEL_SETTING } from "@/constants";
 import { ProjectContextSourceEditor } from "@/components/project/ProjectContextSourceEditor";
 import {
   agentsFileIsUninitialized,
@@ -18,7 +17,7 @@ import { logError } from "@/logger";
 import { ProjectInstructionsField } from "@/instructions/ProjectInstructionsField";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { getCachedProjectRecordById } from "@/projects/state";
-import { err2String, randomUUID } from "@/utils";
+import { err2String } from "@/utils";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { App, Modal, Notice } from "obsidian";
 import React, { useEffect, useMemo, useState } from "react";
@@ -26,7 +25,7 @@ import { Root } from "react-dom/client";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 export interface AddProjectModalContentProps {
-  initialProject?: ProjectConfig;
+  initialProject: ProjectConfig;
   onSave: (project: ProjectConfig) => Promise<void>;
   onCancel: () => void;
   popoverContainer?: HTMLElement | null;
@@ -45,40 +44,16 @@ export function AddProjectModalContent({
     inclusions: false,
   });
 
-  const [formData, setFormData] = useState<ProjectConfig>(() =>
-    initialProject
-      ? { ...initialProject }
-      : {
-          id: randomUUID(),
-          name: "",
-          description: "",
-          systemPrompt: "",
-          projectModelKey: "",
-          modelConfigs: {
-            temperature: DEFAULT_MODEL_SETTING.TEMPERATURE,
-          },
-          contextSource: {
-            inclusions: "",
-            exclusions: "",
-            webUrls: "",
-            youtubeUrls: "",
-          },
-          created: Date.now(),
-          UsageTimestamps: Date.now(),
-        }
-  );
+  const [formData, setFormData] = useState<ProjectConfig>(() => ({ ...initialProject }));
 
-  const record = useMemo(
-    () => (initialProject?.id ? getCachedProjectRecordById(initialProject.id) : undefined),
-    [initialProject?.id]
-  );
+  const record = useMemo(() => getCachedProjectRecordById(initialProject.id), [initialProject.id]);
   const instructionsFolder = useMemo(
     () => (record ? getProjectAnchorFromConfigPath(record.filePath).projectFolderPath : null),
     [record]
   );
   const [instructions, setInstructions] = useState<string | null>(null);
   const [draftOwnsLegacyPrompt, setDraftOwnsLegacyPrompt] = useState(false);
-  const legacyPrompt = initialProject?.systemPrompt ?? "";
+  const legacyPrompt = initialProject.systemPrompt ?? "";
   useEffect(() => {
     if (instructionsFolder === null) return;
     let cancelled = false;
@@ -162,15 +137,11 @@ export function AddProjectModalContent({
 
   const handleSave = async () => {
     const trimmedName = formData.name?.trim() ?? "";
-    const saveData = initialProject
-      ? {
-          ...formData,
-          name: trimmedName,
-          projectModelKey: initialProject.projectModelKey,
-          modelConfigs: initialProject.modelConfigs,
-          ...(draftOwnsLegacyPrompt ? { systemPrompt: "" } : {}),
-        }
-      : { ...formData, name: trimmedName };
+    const saveData = {
+      ...formData,
+      name: trimmedName,
+      ...(draftOwnsLegacyPrompt ? { systemPrompt: "" } : {}),
+    };
 
     if (!saveData.name) {
       setTouched((prev) => ({ ...prev, name: true }));
@@ -213,9 +184,7 @@ export function AddProjectModalContent({
   return (
     <div className="tw-flex tw-h-full tw-flex-col">
       <div className="tw-shrink-0 tw-px-4 tw-pb-2 tw-pt-4">
-        <div className="tw-text-xl tw-font-bold tw-text-normal">
-          {initialProject ? "Edit Project" : "New Project"}
-        </div>
+        <div className="tw-text-xl tw-font-bold tw-text-normal">Edit Project</div>
         <p className="tw-mt-1 tw-text-sm tw-text-muted">
           Configure your project settings and context sources
         </p>
@@ -294,7 +263,7 @@ export class AddProjectModal extends Modal {
   constructor(
     app: App,
     private onSave: (project: ProjectConfig) => Promise<void>,
-    private initialProject?: ProjectConfig
+    private initialProject: ProjectConfig
   ) {
     super(app);
   }

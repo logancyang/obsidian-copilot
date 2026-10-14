@@ -179,7 +179,6 @@ export enum Verbosity {
 export const DEFAULT_MAX_OUTPUT_TOKENS = 20_000;
 
 export const DEFAULT_MODEL_SETTING = {
-  TEMPERATURE: 0.1,
   REASONING_EFFORT: ReasoningEffort.LOW,
   VERBOSITY: Verbosity.MEDIUM,
 } as const;

@@ -4614,8 +4614,6 @@ describe("AgentSessionManager", () => {
             id: PROJECT_ID,
             name: PROJECT_ID,
             systemPrompt,
-            projectModelKey: "",
-            modelConfigs: {},
             contextSource,
             created: 0,
             UsageTimestamps: usageTimestamps,

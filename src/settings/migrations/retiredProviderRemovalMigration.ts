@@ -43,13 +43,6 @@ export function planRetiredProviderRemoval(
   if (isRemovedSelection(settings.defaultModelKey)) patch.defaultModelKey = "";
   if (isRemovedSelection(settings.quickCommandModelKey)) patch.quickCommandModelKey = undefined;
 
-  const projects = settings.projectList ?? [];
-  if (projects.some((project) => isRemovedSelection(project.projectModelKey))) {
-    patch.projectList = projects.map((project) =>
-      isRemovedSelection(project.projectModelKey) ? { ...project, projectModelKey: "" } : project
-    );
-  }
-
   return providerIds.length > 0 || Object.keys(patch).length > 0 ? { providerIds, patch } : null;
 }
 

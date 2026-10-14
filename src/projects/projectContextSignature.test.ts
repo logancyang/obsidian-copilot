@@ -13,8 +13,6 @@ function makeProject(overrides: Partial<ProjectConfig> = {}): ProjectConfig {
     id: "p1",
     name: "Project One",
     systemPrompt: "",
-    projectModelKey: "",
-    modelConfigs: {},
     contextSource: {},
     created: 0,
     UsageTimestamps: 0,

@@ -62,8 +62,6 @@ describe("AgentProjectCreateForm", () => {
       const project = makeNewProjectConfig("Research");
       expect(project.name).toBe("Research");
       expect(project.systemPrompt).toBe("");
-      expect(project.projectModelKey).toBe("");
-      expect(project.modelConfigs).toEqual({});
       expect(project.contextSource).toEqual({
         inclusions: "",
         exclusions: "",

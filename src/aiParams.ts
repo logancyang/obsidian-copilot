@@ -37,11 +37,6 @@ export interface ProjectConfig {
   name: string;
   description?: string;
   systemPrompt: string;
-  projectModelKey: string;
-  modelConfigs: {
-    temperature?: number;
-    maxTokens?: number;
-  };
   contextSource: {
     inclusions?: string;
     exclusions?: string;
