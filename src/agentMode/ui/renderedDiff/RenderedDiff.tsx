@@ -65,10 +65,9 @@ function DiffSegmentView({ path, segment }: DiffSegmentViewProps): React.ReactEl
       <div
         data-change={segment.change}
         className={cn(
-          "tw-border-0 tw-border-l-[3px] tw-border-solid tw-pl-[0.5em]",
           segment.change === "deleted"
-            ? "tw-border-l-[color:rgba(var(--color-red-rgb),0.6)] tw-bg-error tw-text-muted tw-line-through"
-            : "tw-border-l-[color:rgba(var(--color-green-rgb),0.6)] tw-bg-success"
+            ? "tw-bg-error tw-text-muted tw-line-through"
+            : "tw-bg-success"
         )}
       >
         <Markdown onRendered={disableTaskCheckboxes} sourcePath={path} text={segment.markdown} />

@@ -11,6 +11,7 @@ import {
   IMAGE_REPLACED,
   LINK_HREF_CHANGE,
   LIST_ITEM_WITH_CODE_EDIT,
+  NESTED_TASKS_EDITED,
   NON_MARKDOWN_FILE,
   ORDERED_LIST_ITEM_APPENDED,
   REMOVED_LIST_ITEM,
@@ -55,6 +56,8 @@ export const OrderedListItemAppended: StoryObj<RenderedDiffProps> = story(
 );
 
 export const ListItemWithCodeEdit: StoryObj<RenderedDiffProps> = story(LIST_ITEM_WITH_CODE_EDIT);
+
+export const NestedTasksEdited: StoryObj<RenderedDiffProps> = story(NESTED_TASKS_EDITED);
 
 export const LinkHrefChange: StoryObj<RenderedDiffProps> = story(LINK_HREF_CHANGE);
 
