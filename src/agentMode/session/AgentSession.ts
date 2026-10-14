@@ -94,7 +94,7 @@ import type {
   FeedbackDraft,
   FeedbackOfferResult,
 } from "@/agentMode/session/feedback/feedbackMcpServer";
-import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
+import type { FeedbackEvidence, FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
@@ -1058,6 +1058,15 @@ export class AgentSession {
     return this.currentTodoList;
   }
 
+  getReportEvidence(): FeedbackEvidence {
+    return {
+      backendId: this.backendId,
+      model: this.currentState?.model?.current.baseModelId ?? null,
+      sessionId: this.backendSessionId,
+      raisedAt: new Date().toISOString(),
+    };
+  }
+
   getFeedbackOffer(): FeedbackOffer | null {
     return this.feedbackOffer;
   }
@@ -1071,12 +1080,7 @@ export class AgentSession {
       .filter((message) => message.sender === USER_SENDER);
     this.feedbackOffer = {
       draft,
-      evidence: {
-        backendId: this.backendId,
-        model: this.currentState?.model?.current.baseModelId ?? null,
-        sessionId: this.backendSessionId,
-        raisedAt: new Date().toISOString(),
-      },
+      evidence: this.getReportEvidence(),
       afterUserMessageId: userMessages[userMessages.length - 1]?.id ?? null,
       status: "open",
     };

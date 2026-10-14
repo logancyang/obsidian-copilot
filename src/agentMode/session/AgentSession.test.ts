@@ -4289,6 +4289,22 @@ describe("AgentSession", () => {
       });
     });
 
+    describe("getReportEvidence()", () => {
+      it("describes the chat for a bug report by backend, current model, backend session and time", () => {
+        const session = makeSession(makeMockBackend(), {
+          backendId: "codex",
+          initialState: sonnetAndGpt5State(),
+        });
+
+        expect(session.getReportEvidence()).toEqual({
+          backendId: "codex",
+          model: "anthropic/sonnet",
+          sessionId: "acp-1",
+          raisedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        });
+      });
+    });
+
     describe("getFeedbackOffer()", () => {
       it("starts with no feedback card", () => {
         expect(makeSession(makeMockBackend()).getFeedbackOffer()).toBeNull();

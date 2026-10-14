@@ -56,6 +56,7 @@ const meta = {
     onUpdateChatTitle: async () => {},
     onDeleteChat: async () => {},
     onSetChatBookmarked: async () => {},
+    onReportError: () => undefined,
     usageMeter: (
       <UsageMeter
         usage={{ usedTokens: 48_000, contextWindow: 200_000, updatedAt: TIMESTAMP.getTime() }}

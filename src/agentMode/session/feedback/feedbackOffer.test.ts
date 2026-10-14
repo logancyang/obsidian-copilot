@@ -1,4 +1,4 @@
-import { formatFeedbackNote, type FeedbackOffer } from "./feedbackOffer";
+import { formatChatReportNote, formatFeedbackNote, type FeedbackOffer } from "./feedbackOffer";
 
 function offer(userSaid: string): FeedbackOffer {
   return {
@@ -40,6 +40,14 @@ describe("feedbackOffer", () => {
     it("says the agent raised it when the user did not comment", () => {
       expect(formatFeedbackNote(offer(""))).toContain(
         "What the user said: The user didn't comment; the agent raised this."
+      );
+    });
+  });
+
+  describe("formatChatReportNote()", () => {
+    it("leaves the first line blank for the user's own description and ends with the chat's evidence line", () => {
+      expect(formatChatReportNote(offer("").evidence)).toBe(
+        "\n\nEvidence: backend claude · model unknown · session ses_42 · 2026-10-08T22:13:52.669Z"
       );
     });
   });

@@ -180,6 +180,18 @@ describe("AgentChatControls", () => {
       expect(otherWindowDocument.querySelector('[role="menu"]')).toBeNull();
     });
 
+    it("reports an error about the open chat from the More Actions menu, even before any message", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      const onReportError = jest.fn();
+      renderSessionControls({ onReportError });
+
+      const item = within(openMoreActions()).getByRole("menuitem", { name: "Report error" });
+      expect(item.getAttribute("aria-disabled")).toBeNull();
+      fireEvent.click(item);
+
+      expect(onReportError).toHaveBeenCalledTimes(1);
+    });
+
     it("offers Save chat as note in the More Actions menu only when autosave is off", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       const onSaveAsNote = jest.fn();

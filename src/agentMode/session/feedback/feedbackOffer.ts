@@ -30,6 +30,14 @@ export function formatFeedbackNote({ draft, evidence }: FeedbackOffer): string {
     "",
     `Steps to reproduce: ${draft.repro}`,
     "",
-    `Evidence: backend ${evidence.backendId} · model ${evidence.model ?? "unknown"} · session ${evidence.sessionId ?? "unknown"} · ${evidence.raisedAt}`,
+    formatEvidence(evidence),
   ].join("\n");
+}
+
+export function formatChatReportNote(evidence: FeedbackEvidence): string {
+  return `\n\n${formatEvidence(evidence)}`;
+}
+
+function formatEvidence(evidence: FeedbackEvidence): string {
+  return `Evidence: backend ${evidence.backendId} · model ${evidence.model ?? "unknown"} · session ${evidence.sessionId ?? "unknown"} · ${evidence.raisedAt}`;
 }
