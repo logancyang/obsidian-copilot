@@ -110,7 +110,7 @@ Miyo can also index supported ChatGPT and Claude chat histories. Configure those
 
 The **Miyo document processing** switch is on by default and affects more than one chat surface, so check the route you use:
 
-- In **Agent Chat**, it installs the `miyo-parse` Skill, which runs the local Miyo CLI for PDF and EPUB files. This stays on the current computer even when semantic search uses a remote Miyo server. If the local CLI is unavailable or cannot parse a file, the agent reports the error and reads the file with its own tools instead of using a cloud parser.
+- In **Agent Chat**, it installs the `miyo-parse` Skill, which runs the local Miyo CLI for PDF and EPUB files. This stays on the current computer even when semantic search uses a remote Miyo server. If the local CLI is unavailable or cannot parse a file, the agent reports the error and reads the file with any other tool it has.
 - In **Quick Chat**, it asks the connected Miyo service to parse PDF and EPUB files. A local connection stays local; a configured remote connection processes them on that server and requires the server to have access to the registered vault files.
 - With the switch off, Agent Chat does not install the Skill and the agent reads documents with its own tools. Quick Chat can use Copilot-hosted PDF processing, which may consume paid usage.
 

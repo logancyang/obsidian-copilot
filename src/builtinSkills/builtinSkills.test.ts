@@ -502,7 +502,7 @@ describe("builtinSkills", () => {
     it("tells the agent to report a parse error and then read the file itself without retrying https://github.com/Brevilabs/obsidian-copilot-private/issues/656", () => {
       const { skillMd } = MIYO_PARSE_SKILL;
       expect(skillMd).toContain(
-        "Report the error to the user, then read the file with your own tools. Do not\nrun `miyo parse` again on that file."
+        "Report the error to the user, then read the file with any other tool you\nhave. Do not run `miyo parse` again on that file."
       );
       expect(skillMd).not.toMatch(/never fall back|copilot-read-pdf|\bPlus\b/i);
     });

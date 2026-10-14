@@ -1043,8 +1043,8 @@ ${howToRunSection({
 
 ## If it reports a problem
 
-Report the error to the user, then read the file with your own tools. Do not
-run \`miyo parse\` again on that file.
+Report the error to the user, then read the file with any other tool you
+have. Do not run \`miyo parse\` again on that file.
 `,
   files: [
     { path: "miyo-parse.sh", content: MIYO_PARSE_SH },

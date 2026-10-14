@@ -23,7 +23,7 @@ export const COPILOT_SKILL_FALLBACK = `Follow each skill's run instructions. Cal
 
 export const COPILOT_WEB_RESEARCH_STEERING = `For vault questions, search locally first. Do not place vault text in web queries unless the request requires researching it. Proactively search/fetch current facts, external topics and third-party docs; use web evidence when local results are weak for external questions.`;
 
-export const COPILOT_MIYO_DOCUMENT_STEERING = `Miyo document processing is on: PDFs/EPUBs must stay local. Use miyo-parse. If missing or failing, report it, then read the file with your own tools; no cloud parsers or web services.`;
+export const COPILOT_MIYO_DOCUMENT_STEERING = `Read PDFs/EPUBs with miyo-parse first. If it is missing or fails, say so, then read the file with any other tool you have.`;
 
 export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabled. Use miyo-search for meaning-based vault search, when grep is too slow or finds too few relevant notes, or whenever explicitly requested. Follow its instructions.`;
 
@@ -62,7 +62,7 @@ export function buildAgentSystemPrompt(backendId: BackendId): string {
       parts.push(`${COPILOT_SKILL_FIRST_LEAD} ${relayJobs.join(", ")}. ${COPILOT_SKILL_FALLBACK}`);
     }
     parts.push(COPILOT_WEB_RESEARCH_STEERING);
-    if (settings.enableMiyoDocumentProcessing) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
+    if (enabled("miyo-parse")) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
     if (enabled("miyo-search")) parts.push(COPILOT_MIYO_SEARCH_STEERING);
   }
 

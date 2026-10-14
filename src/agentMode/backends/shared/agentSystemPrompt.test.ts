@@ -163,14 +163,16 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_WEB_RESEARCH_STEERING);
     });
 
-    it(`steers documents to miyo-parse, with the agent's own reader as the fallback, only when Miyo document processing is on (${ISSUE_656})`, () => {
+    it(`steers documents to miyo-parse first and lets any other tool read the file when it fails, only when Miyo document processing is on (${ISSUE_656})`, () => {
       updateSetting("enableMiyoDocumentProcessing", false);
       expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_MIYO_DOCUMENT_STEERING);
 
       updateSetting("enableMiyoDocumentProcessing", true);
-      expect(buildAgentSystemPrompt(AGENT)).toContain(
-        "Use miyo-parse. If missing or failing, report it, then read the file with your own tools; no cloud parsers or web services."
+      const prompt = buildAgentSystemPrompt(AGENT);
+      expect(prompt).toContain(
+        "Read PDFs/EPUBs with miyo-parse first. If it is missing or fails, say so, then read the file with any other tool you have."
       );
+      expect(prompt).not.toMatch(/stay local|no cloud parsers/);
     });
 
     it(`never steers PDFs to the retired Plus copilot-read-pdf skill (${ISSUE_656})`, () => {
@@ -181,11 +183,11 @@ describe("agentSystemPrompt", () => {
       }
     });
 
-    it(`keeps the Miyo stay-local rule for an agent whose miyo-parse skill is disabled (${ISSUE_599})`, () => {
+    it(`omits the miyo-parse steering for an agent whose miyo-parse skill is disabled (${ISSUE_656})`, () => {
       updateSetting("enableMiyoDocumentProcessing", true);
       setBuiltinPreferences({ "miyo-parse": { disabledAgents: ["claude"] } });
 
-      expect(buildAgentSystemPrompt("claude")).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
+      expect(buildAgentSystemPrompt("claude")).not.toContain(COPILOT_MIYO_DOCUMENT_STEERING);
       expect(buildAgentSystemPrompt("opencode")).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
     });
 
