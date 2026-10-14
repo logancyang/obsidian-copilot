@@ -1,10 +1,28 @@
-import { listProjectDocumentFiles } from "@/context/projectDocumentFiles";
 import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import { getCachedProjectRecordById } from "@/projects/state";
 import { getMatchingPatterns, shouldIndexFile, type PatternCategory } from "@/search/searchUtils";
 import { App, FileSystemAdapter, TFile, TFolder } from "obsidian";
 
 export const MAX_MANIFEST_ENTRIES = 100;
+
+const DOCUMENT_EXTENSIONS = new Set([
+  "pdf",
+  "doc",
+  "docx",
+  "ppt",
+  "pptx",
+  "epub",
+  "rtf",
+  "xls",
+  "xlsx",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "bmp",
+  "tiff",
+  "webp",
+]);
 
 export interface ManifestPathEntry {
   vaultPath: string;
@@ -95,14 +113,13 @@ export function buildProjectContext(app: App, projectId: string, cwd: string): P
   );
 
   // A document picked in the Files picker is already listed under Included notes, and a duplicate would spend the manifest cap. https://github.com/Brevilabs/obsidian-copilot-private/issues/657
-  const documentEntries = listProjectDocumentFiles(app, contextSource)
-    .map((file) => toManifestEntry(file, adapter))
-    .filter((entry) => !declaredNotePaths.has(manifestEntryKey(entry)));
+  const documentEntries = resolveDocumentPaths(app, inclusions, exclusions, adapter).filter(
+    (entry) => !declaredNotePaths.has(manifestEntryKey(entry))
+  );
 
   const hasAnySource =
     webUrls.length > 0 ||
     youtubeUrls.length > 0 ||
-    documentEntries.length > 0 ||
     folders.length > 0 ||
     notes.length > 0 ||
     extensions.length > 0 ||
@@ -245,6 +262,21 @@ function resolvePropertyNotePaths(
   const inclusions: PatternCategory = { propertyPatterns };
   return app.vault
     .getMarkdownFiles()
+    .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map((file) => toManifestEntry(file, adapter));
+}
+
+function resolveDocumentPaths(
+  app: App,
+  inclusions: PatternCategory | null,
+  exclusions: PatternCategory | null,
+  adapter: FileSystemAdapter | null
+): ManifestPathEntry[] {
+  if (!inclusions) return EMPTY_MANIFEST_ENTRIES;
+  return app.vault
+    .getFiles()
+    .filter((file) => DOCUMENT_EXTENSIONS.has(file.extension.toLowerCase()))
     .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
     .sort((a, b) => a.path.localeCompare(b.path))
     .map((file) => toManifestEntry(file, adapter));

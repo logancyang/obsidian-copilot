@@ -899,10 +899,7 @@ export class AgentSessionManager {
 
     const contextSignature = projectContext?.contextSignature;
     if (contextSignature !== undefined) {
-      const seen = this.lastSeenProjectContentEpochBySession.get(internalId);
-      if (seen === undefined || capturedContentEpoch > seen) {
-        this.lastSeenProjectContentEpochBySession.set(internalId, capturedContentEpoch);
-      }
+      this.lastSeenProjectContentEpochBySession.set(internalId, capturedContentEpoch);
     }
 
     void session.ready

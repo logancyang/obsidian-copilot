@@ -218,7 +218,7 @@ The block lists:
   matches, because a frontmatter value is not something an agent can grep its
   way to reliably.
 - **Document files** (PDFs, Office docs, e-books, images — the extensions in
-  `projectDocumentFiles.ts`) by the absolute path of the original vault file.
+  `DOCUMENT_EXTENSIONS`) by the absolute path of the original vault file.
   The preamble tells the agent they are not converted and to open them with its
   own tools. Claude Code reads PDFs and images natively; with Miyo document
   processing on, the `miyo-parse` Skill parses PDFs and EPUBs for any agent.

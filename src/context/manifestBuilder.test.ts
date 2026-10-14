@@ -176,6 +176,38 @@ describe("manifestBuilder", () => {
       expect(block).toContain("not converted");
     });
 
+    it("lists only PDF, Office, EPUB and image files under Document files, sorted by path", () => {
+      getRecord.mockReturnValue(record({ inclusions: "Proj" }));
+      const app = fakeApp([
+        { path: "Proj/z.png", ext: "png" },
+        { path: "Proj/data.csv", ext: "csv" },
+        { path: "Proj/b.DOCX", ext: "DOCX" },
+        { path: "Proj/a.pdf", ext: "pdf" },
+        { path: "Proj/book.epub", ext: "epub" },
+      ]);
+
+      const block = buildProjectContext(app, "p1", CWD).projectContextBlock;
+
+      expect(block).toContain(
+        "## Document files\n- `/vault/Proj/a.pdf`\n- `/vault/Proj/b.DOCX`\n- `/vault/Proj/book.epub`\n- `/vault/Proj/z.png`"
+      );
+      expect(block).not.toContain("data.csv");
+    });
+
+    it("leaves out document files the project's exclusions match", () => {
+      getRecord.mockReturnValue(record({ inclusions: "Proj", exclusions: "Proj/secret.pdf" }));
+      indexFile.mockImplementation((_app: unknown, file: { path: string }) => file.path !== "Proj/secret.pdf"); // prettier-ignore
+      const app = fakeApp([
+        { path: "Proj/a.pdf", ext: "pdf" },
+        { path: "Proj/secret.pdf", ext: "pdf" },
+      ]);
+
+      const block = buildProjectContext(app, "p1", CWD).projectContextBlock;
+
+      expect(block).toContain("`/vault/Proj/a.pdf`");
+      expect(block).not.toContain("secret.pdf");
+    });
+
     it("lists a document picked as a file once, under Included notes, so it does not spend a second manifest entry https://github.com/Brevilabs/obsidian-copilot-private/issues/657", () => {
       getRecord.mockReturnValue(record({ inclusions: "[[report]]" }));
       const app = fakeApp([{ path: "Docs/report.pdf", ext: "pdf" }]);
