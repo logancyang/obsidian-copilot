@@ -285,10 +285,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           for (const descriptor of listBackendDescriptors()) {
             if (descriptor.restartOnSystemPromptChange) continue;
             void manager
-              .noteSpawnConfigChanged(descriptor.id, "document processor changed")
+              .noteSpawnConfigChanged(descriptor.id, "Miyo document processing changed")
               .catch((e) =>
                 logError(
-                  `[AgentMode] restart after doc processor change failed: ${descriptor.id}`,
+                  `[AgentMode] restart after Miyo document processing change failed: ${descriptor.id}`,
                   e
                 )
               );
