@@ -51,7 +51,6 @@ export function PlusSettings() {
             Copilot paid plans
           </a>{" "}
           add <strong className="tw-font-semibold tw-text-normal">premium chat models</strong>,{" "}
-          <strong className="tw-font-semibold tw-text-normal">document understanding</strong>,{" "}
           <strong className="tw-font-semibold tw-text-normal">advanced web search</strong>, and{" "}
           <strong className="tw-font-semibold tw-text-normal">multi-agent capabilities</strong> to
           your Copilot agentic experience. Pair it with{" "}

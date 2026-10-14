@@ -83,7 +83,7 @@ describe("ContextManager", () => {
           app,
           "user-1",
           repo,
-          {} as FileParserManager,
+          new FileParserManager(),
           app.vault,
           ChainType.LLM_CHAIN,
           false,

@@ -1,13 +1,21 @@
-import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { PDFCache } from "@/cache/pdfCache";
 import { logError, logInfo, logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, resolveDocProcessorBackend } from "@/miyo/miyoUtils";
+import { canProcessDocumentsWithMiyo, getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { saveConvertedDocOutput as saveConvertedDocOutputCore } from "@/utils/convertedDocOutput";
 import { extractRetryTime, isRateLimitError } from "@/utils/rateLimitUtils";
 import { Notice, TFile, Vault } from "obsidian";
 import { CanvasLoader } from "./CanvasLoader";
+
+export const PDF_NEEDS_MIYO_MESSAGE =
+  "Quick Chat reads PDFs through Miyo document processing, which is off or not connected. Turn it on and connect Miyo, or ask in Agent Chat, where your agent can read the PDF directly.";
+
+const PDF_NEEDS_MIYO_REPEAT = "Same reason as the other unreadable PDF in this message.";
+
+function pdfErrorText(file: TFile, reason: string): string {
+  return `[Error: Could not extract content from PDF ${file.basename}. ${reason}]`;
+}
 
 const MIYO_LOCAL_EXTENSIONS = new Set(["pdf", "epub"]);
 
@@ -25,7 +33,7 @@ async function saveConvertedDocOutput(file: TFile, content: string, vault: Vault
   await saveConvertedDocOutputCore(file, content, vault, outputFolder);
 }
 
-type MiyoParseResult = { content: string } | { error: string } | null;
+type MiyoParseResult = { content: string } | { error: string };
 
 class SelfHostDocParser {
   private miyoClient: MiyoClient;
@@ -36,9 +44,6 @@ class SelfHostDocParser {
 
   public async parseDoc(file: TFile, vault: Vault): Promise<MiyoParseResult> {
     const settings = getSettings();
-    if (!isMiyoLocalExtension(file)) {
-      return null;
-    }
 
     try {
       const baseUrl = await this.miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
@@ -68,12 +73,10 @@ class MarkdownParser implements FileParser {
 
 export class PDFParser implements FileParser {
   supportedExtensions = ["pdf"];
-  private brevilabsClient: BrevilabsClient;
   private pdfCache: PDFCache;
   private selfHostDocParser: SelfHostDocParser;
 
-  constructor(brevilabsClient: BrevilabsClient) {
-    this.brevilabsClient = brevilabsClient;
+  constructor() {
     this.pdfCache = PDFCache.getInstance();
     this.selfHostDocParser = new SelfHostDocParser();
   }
@@ -89,39 +92,21 @@ export class PDFParser implements FileParser {
         return cachedResponse.response;
       }
 
-      const settings = getSettings();
-      const backend = isMiyoLocalExtension(file)
-        ? await resolveDocProcessorBackend(settings)
-        : null;
-
-      if (backend === "miyo-unavailable") {
-        logWarn(`[PDFParser] Miyo unavailable for ${file.path}; not falling back to cloud`);
-        return `[Error: Could not extract content from PDF ${file.basename}. Miyo (local document processor) is unavailable — reconnect it or turn off Miyo document processing in settings.]`;
+      // Quick Chat no longer sends PDFs to a cloud parser. https://github.com/Brevilabs/obsidian-copilot-private/issues/653
+      if (!(await canProcessDocumentsWithMiyo())) {
+        logWarn(`[PDFParser] Miyo document processing unavailable for ${file.path}`);
+        return pdfErrorText(file, PDF_NEEDS_MIYO_MESSAGE);
       }
 
-      if (backend === "miyo") {
-        const miyoResult = await this.selfHostDocParser.parseDoc(file, vault);
-        if (miyoResult && "content" in miyoResult) {
-          await this.pdfCache.set(vault, file, {
-            response: miyoResult.content,
-            elapsed_time_ms: 0,
-          });
-          await saveConvertedDocOutput(file, miyoResult.content, vault);
-          return miyoResult.content;
-        }
-
-        if (miyoResult && "error" in miyoResult) {
-          logWarn(`[PDFParser] Miyo parse failed for ${file.path}: ${miyoResult.error}`);
-          return `[Error: Could not extract content from PDF ${file.basename}. ${miyoResult.error}]`;
-        }
+      const miyoResult = await this.selfHostDocParser.parseDoc(file, vault);
+      if ("content" in miyoResult) {
+        await this.pdfCache.set(vault, file, { response: miyoResult.content });
+        await saveConvertedDocOutput(file, miyoResult.content, vault);
+        return miyoResult.content;
       }
 
-      const binaryContent = await vault.readBinary(file);
-      logInfo("Calling pdf4llm API for:", file.path);
-      const pdf4llmResponse = await this.brevilabsClient.pdf4llm(binaryContent);
-      await this.pdfCache.set(vault, file, pdf4llmResponse);
-      await saveConvertedDocOutput(file, pdf4llmResponse.response, vault);
-      return pdf4llmResponse.response;
+      logWarn(`[PDFParser] Miyo parse failed for ${file.path}: ${miyoResult.error}`);
+      return `[Error: Could not extract content from PDF ${file.basename}. ${miyoResult.error}]`;
     } catch (error) {
       logError(`Error extracting content from PDF ${file.path}:`, error);
       return `[Error: Could not extract content from PDF ${file.basename}]`;
@@ -264,15 +249,7 @@ export class Docs4LLMParser implements FileParser {
     try {
       logInfo(`[Docs4LLMParser] Parsing ${file.extension} file: ${file.path}`);
 
-      const backend = isMiyoLocalExtension(file) ? await resolveDocProcessorBackend() : null;
-
-      if (backend === "miyo-unavailable") {
-        throw new Error(
-          `Miyo (local document processor) is unavailable for ${file.basename}; not falling back to cloud. Reconnect Miyo or turn off Miyo document processing.`
-        );
-      }
-
-      if (backend === "miyo") {
+      if (isMiyoLocalExtension(file) && (await canProcessDocumentsWithMiyo())) {
         const miyoResult = await this.selfHostDocParser.parseDoc(file, vault);
         if (miyoResult && "content" in miyoResult) {
           await saveConvertedDocOutput(file, miyoResult.content, vault);
@@ -321,10 +298,10 @@ export class Docs4LLMParser implements FileParser {
 export class FileParserManager {
   private parsers: Map<string, FileParser> = new Map();
 
-  constructor(brevilabsClient: BrevilabsClient, _vault: Vault) {
+  constructor() {
     this.registerParser(new MarkdownParser());
     this.registerParser(new Docs4LLMParser());
-    this.registerParser(new PDFParser(brevilabsClient));
+    this.registerParser(new PDFParser());
     this.registerParser(new CanvasParser());
   }
 
@@ -344,6 +321,22 @@ export class FileParserManager {
 
   supportsExtension(extension: string): boolean {
     return this.parsers.has(extension);
+  }
+
+  // One explanation per send keeps several unreadable PDFs from repeating it, and only parser output is shortened so quoted note text stays intact. https://github.com/Brevilabs/obsidian-copilot-private/issues/653
+  forOneSend(): FileParserManager {
+    const scoped = Object.create(this) as FileParserManager;
+    let explained = false;
+    scoped.parseFile = async (file, vault) => {
+      const content = await this.parseFile(file, vault);
+      if (content !== pdfErrorText(file, PDF_NEEDS_MIYO_MESSAGE)) return content;
+      if (!explained) {
+        explained = true;
+        return content;
+      }
+      return pdfErrorText(file, PDF_NEEDS_MIYO_REPEAT);
+    };
+    return scoped;
   }
 
   async clearPDFCache(vault: Vault): Promise<void> {

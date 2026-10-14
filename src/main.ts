@@ -386,7 +386,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
     const vaultDataManager = VaultDataManager.getInstance();
     vaultDataManager.initialize(this.app);
 
-    this.fileParserManager = new FileParserManager(this.brevilabsClient, this.app.vault);
+    this.fileParserManager = new FileParserManager();
 
     const messageRepo = new MessageRepository();
     const chainManager = this.chainOwner.getCurrentChainManager();
