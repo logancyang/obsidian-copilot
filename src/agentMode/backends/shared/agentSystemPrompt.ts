@@ -12,7 +12,6 @@ const RELAY_SKILL_JOBS: ReadonlyArray<readonly [skill: string, job: string]> = [
   ["copilot-web-fetch", "pages/URLs"],
   ["copilot-youtube-transcript", "YouTube"],
   ["copilot-fetch-x", "X posts"],
-  ["copilot-read-pdf", "PDFs"],
 ];
 
 // A model handed a direct `websearch`/`WebSearch` tool picks it over a skill unless told the skill comes first.
@@ -24,7 +23,7 @@ export const COPILOT_SKILL_FALLBACK = `Follow each skill's run instructions. Cal
 
 export const COPILOT_WEB_RESEARCH_STEERING = `For vault questions, search locally first. Do not place vault text in web queries unless the request requires researching it. Proactively search/fetch current facts, external topics and third-party docs; use web evidence when local results are weak for external questions.`;
 
-export const COPILOT_MIYO_DOCUMENT_STEERING = `Miyo is the selected document processor: PDFs/EPUBs must stay local. Use miyo-parse. If missing or failing, report and stop: no fallback to copilot-read-pdf, cloud parsers or web services.`;
+export const COPILOT_MIYO_DOCUMENT_STEERING = `Miyo document processing is on: PDFs/EPUBs must stay local. Use miyo-parse. If missing or failing, report it, then read the file with your own tools; no cloud parsers or web services.`;
 
 export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabled. Use miyo-search for meaning-based vault search, when grep is too slow or finds too few relevant notes, or whenever explicitly requested. Follow its instructions.`;
 

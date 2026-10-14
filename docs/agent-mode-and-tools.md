@@ -200,9 +200,11 @@ Shared Skills live under `<Copilot folder>/skills/`. Copilot links them into the
 
 The **Built-in Skills** table contains Copilot's bundled skills with read-only previews. Turn off a whole skill to remove its generated files, or turn off an individual agent to exclude it. These choices survive restarts and updates. Copilot generates built-in skills only when an available agent can use them. Setting up another agent enables eligible built-ins for that agent unless you previously opted out. Your own skills remain editable in **Your Skills**.
 
-Custom Skills and built-in Obsidian Skills are free. Active Plus access adds cloud-backed Skills for web research, PDF reading, YouTube transcripts, X posts, and OpenArtifacts.
+Custom Skills and built-in Obsidian Skills are free. Active Plus access adds cloud-backed Skills for web research, YouTube transcripts, X posts, and OpenArtifacts.
 
-The web search, web fetch, and PDF reading Skills (`copilot-web-search`, `copilot-web-fetch`, and `copilot-read-pdf`) start turned off in new installs, so agents use their own web and PDF tools. Turn them on in **Built-in Skills** to route those requests through Copilot instead.
+The web search and web fetch Skills (`copilot-web-search` and `copilot-web-fetch`) start turned off in new installs, so agents use their own web tools. Turn them on in **Built-in Skills** to route those requests through Copilot instead.
+
+While **Miyo document processing** is on, which is the default, **Built-in Skills** also lists `miyo-parse`. It parses a PDF or EPUB on your computer with the local Miyo command-line tool and does not need Plus access. If Miyo cannot parse a file, the agent tells you and reads the file with its own tools. Turning **Miyo document processing** off removes the Skill, and agents read documents with their own tools.
 
 Built-in skill preferences record only the skills and agents that are turned off. New skills use the defaults, and content updates keep your saved choices. Copilot fully manages built-in skill folders. Updating a built-in skill replaces its entire folder; removing it deletes the folder. Both operations remove any files you added inside it. Keep custom skills and files in separate folders. When a skill is retired, Copilot also clears its saved preferences. A renamed skill starts with fresh defaults. If file permissions prevent removal, Copilot reports the failure and keeps your disabled preference. After you restore access, Copilot retries cleanup when skills refresh or the plugin reloads.
 
