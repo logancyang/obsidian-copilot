@@ -165,6 +165,23 @@ export async function writeFrontmatterFile(
   await writeTextFile(app, path, joinFrontmatter(frontmatter, body));
 }
 
+// Adapter writes replace the whole file, so overlapping read-modify-write steps on one path must run one at a time or the later write restores stale text.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/700
+const adapterWrites = new Map<string, Promise<void>>();
+
+export function serializeAdapterWrite<T>(path: string, step: () => Promise<T>): Promise<T> {
+  const result = (adapterWrites.get(path) ?? Promise.resolve()).then(step);
+  const tail = result.then(
+    () => {},
+    () => {}
+  );
+  adapterWrites.set(path, tail);
+  void tail.then(() => {
+    if (adapterWrites.get(path) === tail) adapterWrites.delete(path);
+  });
+  return result;
+}
+
 export async function patchFrontmatter(
   app: App,
   filePath: string,
@@ -184,6 +201,14 @@ export async function patchFrontmatter(
     return;
   }
 
+  await serializeAdapterWrite(filePath, () => patchFrontmatterViaAdapter(app, filePath, updates));
+}
+
+async function patchFrontmatterViaAdapter(
+  app: App,
+  filePath: string,
+  updates: Record<string, string | number | null>
+): Promise<void> {
   if (!(await app.vault.adapter.exists(filePath))) return;
 
   const raw = await app.vault.adapter.read(filePath);

@@ -1,7 +1,7 @@
 import { deriveConversationAttachmentsFolder } from "@/settings/copilotFolder";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
 import { sha256 } from "@/utils/hash";
-import { isFileAlreadyExistsError } from "@/utils/vaultAdapterUtils";
+import { isFileAlreadyExistsError, serializeAdapterWrite } from "@/utils/vaultAdapterUtils";
 import { TFile, type App } from "obsidian";
 
 const IMAGE_EXTENSIONS = new Map([
@@ -85,7 +85,9 @@ export async function updateChatTranscript(
   if (file instanceof TFile) {
     await app.vault.process(file, update);
   } else {
-    await app.vault.adapter.write(path, update(await app.vault.adapter.read(path)));
+    await serializeAdapterWrite(path, async () =>
+      app.vault.adapter.write(path, update(await app.vault.adapter.read(path)))
+    );
   }
   return restoreChatImageReceipts(next, loaded);
 }

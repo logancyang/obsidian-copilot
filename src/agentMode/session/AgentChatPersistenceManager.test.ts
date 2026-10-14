@@ -42,6 +42,7 @@ jest.mock("@/utils/vaultAdapterUtils", () => ({
   isInVaultCache: jest.fn(() => false),
   listMarkdownFiles: jest.fn().mockResolvedValue([]),
   patchFrontmatter: jest.requireActual("@/utils/vaultAdapterUtils").patchFrontmatter,
+  serializeAdapterWrite: jest.requireActual("@/utils/vaultAdapterUtils").serializeAdapterWrite,
 }));
 
 interface FakeFile {

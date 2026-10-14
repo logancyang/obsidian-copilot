@@ -1,5 +1,6 @@
 import { createMemoryVault } from "@/__tests__/memoryVault";
 import { mockTFile } from "@/__tests__/mockObsidian";
+import { updateChatTranscript } from "@/utils/chatImagePersistence";
 import {
   patchFrontmatter,
   readFrontmatterFile,
@@ -109,6 +110,41 @@ describe("vaultAdapterUtils", () => {
       await patchFrontmatter(app, path, { pinnedAt: null });
 
       expect(app.vault.adapter.write).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("serializeAdapterWrite()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/700 keeps both the pin and the newest transcript when a pin overlaps an autosave of a note outside the vault cache", async () => {
+      const path = ".copilot/chats/agent__hidden.md";
+      const { app, files } = createMemoryVault({
+        [path]: '---\ntopic: "Plan"\n---\n\n**user**: hi',
+      });
+      const read = app.vault.adapter.read;
+      let reads = 0;
+      let reachedPinRead!: () => void;
+      let releasePinRead!: () => void;
+      const pinReadReached = new Promise<void>((resolve) => (reachedPinRead = resolve));
+      const pinReadReleased = new Promise<void>((resolve) => (releasePinRead = resolve));
+      app.vault.adapter.read = async (readPath: string) => {
+        const text = await read(readPath);
+        if (reads++ === 0) {
+          reachedPinRead();
+          await pinReadReleased;
+        }
+        return text;
+      };
+
+      const pin = patchFrontmatter(app, path, { pinnedAt: 5 });
+      await pinReadReached;
+      const autosave = updateChatTranscript(
+        app,
+        path,
+        (current) => `${current.split("\n\n")[0]}\n\n**user**: hi again`
+      );
+      releasePinRead();
+      await Promise.all([pin, autosave]);
+
+      expect(files.get(path)).toBe('---\ntopic: "Plan"\npinnedAt: 5\n---\n\n**user**: hi again');
     });
   });
 });
