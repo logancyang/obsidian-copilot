@@ -100,26 +100,6 @@ describe("manifestBuilder", () => {
       expect(result.projectContextBlock).toContain("`/vault/Proj/Sub`");
     });
 
-    it("grants each listed note, property-matched note, and document outside the project folder through its parent folder, once per folder https://github.com/Brevilabs/obsidian-copilot-private/issues/657", () => {
-      getRecord.mockReturnValue(record({ inclusions: "[[Spec]],[Topics:Physics]" }));
-      const app = fakeApp([
-        { path: "Notes/Spec.md", ext: "md" },
-        { path: "Topics/Relativity.md", ext: "md" },
-        { path: "Proj/Local.md", ext: "md" },
-        { path: "Docs/a.pdf", ext: "pdf" },
-        { path: "Docs/b.pdf", ext: "pdf" },
-        { path: "Proj/c.pdf", ext: "pdf" },
-      ]);
-
-      const result = buildProjectContext(app, "p1", CWD);
-
-      expect(result.additionalDirectories).toEqual([
-        "/vault/Notes",
-        "/vault/Topics",
-        "/vault/Docs",
-      ]);
-    });
-
     it("lists web and YouTube sources as links for the agent to fetch on demand", () => {
       getRecord.mockReturnValue(
         record({ webUrls: "https://example.com\n", youtubeUrls: "https://youtu.be/abc" })

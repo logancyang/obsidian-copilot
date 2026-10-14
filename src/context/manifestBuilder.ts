@@ -100,7 +100,12 @@ export function buildProjectContext(app: App, projectId: string, cwd: string): P
   const properties = inclusions?.propertyPatterns ?? [];
 
   const adapter = app.vault.adapter instanceof FileSystemAdapter ? app.vault.adapter : null;
-  const folderEntries = resolveFolderPaths(app, folders, adapter);
+  const { entries: folderEntries, additionalDirectories } = resolveFolderPaths(
+    app,
+    folders,
+    cwd,
+    adapter
+  );
   const noteEntries = resolveNotePaths(app, notes, adapter);
   const declaredNotePaths = new Set(noteEntries.map(manifestEntryKey));
   const propertyNoteEntries = resolvePropertyNotePaths(app, properties, exclusions, adapter).filter(
@@ -123,11 +128,7 @@ export function buildProjectContext(app: App, projectId: string, cwd: string): P
   if (!hasAnySource) return emptyContext;
 
   return {
-    additionalDirectories: resolveAdditionalDirectories(cwd, adapter, folderEntries, [
-      ...noteEntries,
-      ...propertyNoteEntries,
-      ...documentEntries,
-    ]),
+    additionalDirectories,
     projectContextBlock: buildProjectContextBlock({
       folders: folderEntries,
       notes: noteEntries,
@@ -210,36 +211,26 @@ function manifestEntryKey(entry: ManifestPathEntry): string {
 function resolveFolderPaths(
   app: App,
   folderPatterns: string[],
+  cwd: string,
   adapter: FileSystemAdapter | null
-): ManifestPathEntry[] {
-  return folderPatterns.map((pattern) => {
+): { entries: ManifestPathEntry[]; additionalDirectories: string[] } {
+  const entries: ManifestPathEntry[] = [];
+  const external = new Set<string>();
+  for (const pattern of folderPatterns) {
     const vaultPath = pattern.replace(/\/+$/, "");
     const folder = app.vault.getAbstractFileByPath(vaultPath);
-    return adapter && folder instanceof TFolder
-      ? { vaultPath, absPath: adapter.getFullPath(folder.path) }
-      : { vaultPath };
-  });
-}
-
-function resolveAdditionalDirectories(
-  cwd: string,
-  adapter: FileSystemAdapter | null,
-  folderEntries: ManifestPathEntry[],
-  fileEntries: ManifestPathEntry[]
-): string[] {
-  if (!adapter) return EMPTY_DIRECTORIES;
-  const folderDirs = folderEntries.flatMap((entry) => (entry.absPath ? [entry.absPath] : []));
-  // Backends grant directories, not single files, so a listed file outside the project folder is reachable only through its parent folder. https://github.com/Brevilabs/obsidian-copilot-private/issues/657
-  const fileDirs = fileEntries.flatMap((entry) =>
-    entry.absPath ? [adapter.getFullPath(parentVaultPath(entry.vaultPath))] : []
-  );
-  const external = new Set([...folderDirs, ...fileDirs].filter((dir) => !isUnderCwd(cwd, dir)));
-  return external.size > 0 ? [...external] : EMPTY_DIRECTORIES;
-}
-
-function parentVaultPath(vaultPath: string): string {
-  const slash = vaultPath.lastIndexOf("/");
-  return slash === -1 ? "" : vaultPath.slice(0, slash);
+    if (adapter && folder instanceof TFolder) {
+      const abs = adapter.getFullPath(folder.path);
+      entries.push({ vaultPath, absPath: abs });
+      if (!isUnderCwd(cwd, abs)) external.add(abs);
+    } else {
+      entries.push({ vaultPath });
+    }
+  }
+  return {
+    entries,
+    additionalDirectories: external.size > 0 ? [...external] : EMPTY_DIRECTORIES,
+  };
 }
 
 function resolveNotePaths(
