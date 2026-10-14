@@ -41,6 +41,7 @@ function makeApp(initialFiles: Record<string, string> = {}) {
           files.set(path, content);
         }),
         stat: jest.fn(async () => ({ ctime: 0, mtime: 0, size: 0 })),
+        mkdir: jest.fn(async () => undefined),
       },
     },
   };

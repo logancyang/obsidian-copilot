@@ -4,7 +4,6 @@ import { App, TFile } from "obsidian";
 import {
   getProjectContextSignature,
   getProjectLandingCaptureSignature,
-  landingCaptureIsVerifiable,
   normalizeProjectContextSource,
 } from "./projectContextSignature";
 
@@ -104,20 +103,6 @@ describe("projectContextSignature", () => {
       const app = makeApp({ "old-root/projects/One/AGENTS.md": { mtime: 1000, size: 40 } });
 
       expect(getProjectLandingCaptureSignature(app, record)).toContain("agents:1000:40");
-    });
-
-    it("refuses to fingerprint a project under a hidden Copilot root", () => {
-      const record = makeRecord(makeProject(), ".copilot/projects/One/project.md");
-
-      const signature = getProjectLandingCaptureSignature(noAgents, record);
-
-      expect(signature).toContain("agents:unverifiable");
-      expect(landingCaptureIsVerifiable(signature)).toBe(false);
-      expect(
-        landingCaptureIsVerifiable(
-          getProjectLandingCaptureSignature(noAgents, makeRecord(makeProject()))
-        )
-      ).toBe(true);
     });
 
     it("tracks the project's AGENTS.md, not the inert project.md body", () => {

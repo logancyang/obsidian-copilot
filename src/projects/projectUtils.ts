@@ -37,7 +37,6 @@ export {
   getProjectConfigFilePath,
   isProjectConfigFile,
   sanitizeVaultPathSegment,
-  splitUrlsStringToArray,
   readFrontmatterFieldFromFile,
 } from "@/projects/projectPaths";
 
@@ -108,11 +107,7 @@ export async function parseProjectConfigFile(
   app: App,
   file: TFile
 ): Promise<ProjectFileRecord | null> {
-  const cachedFile = app.vault.getAbstractFileByPath(file.path);
-  const isRealVaultFile = cachedFile instanceof TFile;
-  const rawContent = isRealVaultFile
-    ? await app.vault.read(cachedFile)
-    : await app.vault.adapter.read(file.path);
+  const rawContent = await app.vault.read(file);
   const content = stripFrontmatter(rawContent, { trimStart: false });
 
   let frontmatter: Record<string, unknown> | undefined;
@@ -128,9 +123,8 @@ export async function parseProjectConfigFile(
       return null;
     }
   }
-  if (!frontmatter && isRealVaultFile) {
-    const metadata = app.metadataCache.getFileCache(cachedFile);
-    frontmatter = metadata?.frontmatter;
+  if (!frontmatter) {
+    frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
   }
 
   const folderName = getProjectFolderNameFromConfigPath(file.path);
@@ -206,18 +200,6 @@ export async function scanAllProjectConfigFiles(app: App): Promise<ProjectFileRe
       );
       if (configFile instanceof TFile) {
         files.push(configFile);
-      }
-    }
-  } else if (await app.vault.adapter.exists(projectsFolder)) {
-    const { resolveFileByPath } = await import("@/utils/vaultAdapterUtils");
-    const listing = await app.vault.adapter.list(projectsFolder);
-    for (const subFolderPath of listing.folders) {
-      const folderName = subFolderPath.split("/").pop() ?? "";
-      if (folderName === PROJECTS_UNSUPPORTED_FOLDER_NAME) continue;
-      const configPath = `${subFolderPath}/${PROJECT_CONFIG_FILE_NAME}`;
-      if (await app.vault.adapter.exists(configPath)) {
-        const resolved = await resolveFileByPath(app, configPath);
-        if (resolved) files.push(resolved);
       }
     }
   }

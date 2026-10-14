@@ -91,19 +91,10 @@ async function rollbackCreatedFile(app: App, filePath: string, folderPath: strin
   const vault = app.vault;
   try {
     const file = vault.getAbstractFileByPath(filePath);
-    if (file instanceof TFile) {
-      await trashFile(app, file);
-    } else if (await vault.adapter.exists(filePath)) {
-      await vault.adapter.remove(filePath);
-    }
+    if (file instanceof TFile) await trashFile(app, file);
     const folder = vault.getAbstractFileByPath(folderPath);
     if (folder instanceof TFolder && folder.children.length === 0) {
       await trashFile(app, folder);
-    } else if (await vault.adapter.exists(folderPath)) {
-      const listing = await vault.adapter.list(folderPath);
-      if (listing.files.length === 0 && listing.folders.length === 0) {
-        await vault.adapter.rmdir(folderPath, false);
-      }
     }
   } catch (rollbackError) {
     logError(`[Projects] Migration rollback failed for ${filePath}`, rollbackError);
@@ -438,11 +429,10 @@ async function migrateProjectFolderNames(app: App): Promise<void> {
       addPendingFileWrite(newFilePath);
 
       const folderObj = vault.getAbstractFileByPath(oldFolderPath);
-      if (folderObj instanceof TFolder) {
-        await vault.rename(folderObj, newFolderPath);
-      } else {
-        await vault.adapter.rename(oldFolderPath, newFolderPath);
+      if (!(folderObj instanceof TFolder)) {
+        throw new Error(`Project folder not found: ${oldFolderPath}`);
       }
+      await vault.rename(folderObj, newFolderPath);
       renamed++;
       reservedLowerNames.delete(record.folderName.toLowerCase());
       reservedLowerNames.set(lowerTarget, record.project.id);

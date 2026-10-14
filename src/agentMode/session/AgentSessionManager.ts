@@ -59,7 +59,6 @@ import type { ProjectFileRecord } from "@/projects/type";
 import {
   getProjectContextSignature,
   getProjectLandingCaptureSignature,
-  landingCaptureIsVerifiable,
 } from "@/projects/projectContextSignature";
 import { ProjectContentTracker } from "@/context/projectContentTracker";
 import { buildProjectContextUpdatesBlock } from "@/context/contextUpdatesBlockBuilder";
@@ -1029,7 +1028,7 @@ export class AgentSessionManager {
 
   private pickReusableLandingSession(projectId: ProjectScopeId): AgentSession | null {
     const expected = this.currentLandingCaptureSignature(projectId);
-    if (!expected || !landingCaptureIsVerifiable(expected)) return null;
+    if (!expected) return null;
     const isReusable = (session: AgentSession): boolean =>
       this.isReusableLandingShell(session, projectId) &&
       !this.detachedFromTabIds.has(session.internalId) &&

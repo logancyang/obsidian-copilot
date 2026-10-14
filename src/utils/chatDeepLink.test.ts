@@ -26,7 +26,7 @@ describe("chatDeepLink", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetCache.mockReturnValue(null);
-    mockList.mockResolvedValue([]);
+    mockList.mockReturnValue([]);
     mockReadFrontmatter.mockResolvedValue(null);
   });
 
@@ -66,9 +66,9 @@ describe("chatDeepLink", () => {
       );
     });
 
-    it("reads the epoch from disk when the note is in a hidden folder (https://github.com/logancyang/obsidian-copilot/issues/3271)", async () => {
+    it("reads the epoch from disk when a just-saved note has no metadata cache entry yet (https://github.com/Brevilabs/obsidian-copilot-private/issues/712)", async () => {
       mockReadFrontmatter.mockResolvedValue({ epoch: "1735732800000" });
-      expect(await getSavedChatDeepLinkId(app, ".copilot/conversations/chat.md")).toBe(
+      expect(await getSavedChatDeepLinkId(app, "Copilot/conversations/chat.md")).toBe(
         "epoch:1735732800000"
       );
     });
@@ -87,7 +87,7 @@ describe("chatDeepLink", () => {
     it("resolves the conversation whose epoch matches after a file rename", async () => {
       const other = chat("Copilot/conversations/other.md");
       const renamed = chat("Copilot/conversations/renamed.md");
-      mockList.mockResolvedValue([other, renamed]);
+      mockList.mockReturnValue([other, renamed]);
       mockReadFrontmatter.mockImplementation(async (_app, path) => ({
         epoch: path === renamed.path ? "1735732800000" : "1600000000000",
       }));
@@ -96,19 +96,19 @@ describe("chatDeepLink", () => {
     });
 
     it("returns null when no conversation owns the epoch", async () => {
-      mockList.mockResolvedValue([chat("Copilot/conversations/chat.md")]);
+      mockList.mockReturnValue([chat("Copilot/conversations/chat.md")]);
       mockReadFrontmatter.mockResolvedValue({ epoch: "1600000000000" });
       expect(await findChatFileByDeepLinkId(app, "epoch:1735732800000")).toBeNull();
     });
 
     it("ignores a matching note in a sibling folder that shares the folder's name prefix (https://github.com/logancyang/obsidian-copilot/issues/3271)", async () => {
-      mockList.mockResolvedValue([chat("Copilot/conversations-backup/chat.md")]);
+      mockList.mockReturnValue([chat("Copilot/conversations-backup/chat.md")]);
       mockReadFrontmatter.mockResolvedValue({ epoch: "1735732800000" });
       expect(await findChatFileByDeepLinkId(app, "epoch:1735732800000")).toBeNull();
     });
 
     it("returns null when two conversations share the epoch, such as a sync conflict copy (https://github.com/logancyang/obsidian-copilot/issues/3271)", async () => {
-      mockList.mockResolvedValue([
+      mockList.mockReturnValue([
         chat("Copilot/conversations/chat.md"),
         chat("Copilot/conversations/chat (conflicted copy).md"),
       ]);
@@ -117,7 +117,7 @@ describe("chatDeepLink", () => {
     });
 
     it("never resolves an id that is not an epoch, such as a file path", async () => {
-      mockList.mockResolvedValue([chat("Copilot/conversations/chat.md")]);
+      mockList.mockReturnValue([chat("Copilot/conversations/chat.md")]);
       expect(await findChatFileByDeepLinkId(app, "Copilot/conversations/chat.md")).toBeNull();
       expect(mockList).not.toHaveBeenCalled();
     });

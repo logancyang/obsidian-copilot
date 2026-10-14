@@ -139,13 +139,7 @@ import {
   filterChatHistoryFiles,
 } from "@/utils/chatHistoryUtils";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
-import {
-  listMarkdownFiles,
-  patchFrontmatter,
-  readFrontmatterViaAdapter,
-  resolveFileByPath,
-  trashFile,
-} from "@/utils/vaultAdapterUtils";
+import { listMarkdownFiles, readFrontmatterViaAdapter, trashFile } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
 import { withTimeout } from "@/utils";
 import { StartupLoadingView, type CopilotStartup } from "@/components/StartupLoadingView";
@@ -1238,7 +1232,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   }
 
   async getChatHistoryFiles(): Promise<TFile[]> {
-    const folderFiles = await listMarkdownFiles(this.app, getEffectiveConversationsFolder());
+    const folderFiles = listMarkdownFiles(this.app, getEffectiveConversationsFolder());
     if (folderFiles.length === 0) return [];
 
     return filterChatHistoryFiles(this.app, folderFiles);
@@ -1287,8 +1281,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
             frontmatter.lastAccessedAt = persistedAtMs;
           }
         );
-      } else {
-        await patchFrontmatter(this.app, file.path, { lastAccessedAt: persistedAtMs });
       }
 
       this.chatHistoryLastAccessedAtManager.markPersisted(file.path, persistedAtMs);
@@ -1325,8 +1317,8 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       await this.loadNativeAgentChat(fileId);
       return;
     }
-    const file = await resolveFileByPath(this.app, fileId);
-    if (!file) throw new Error("Chat file not found.");
+    const file = this.app.vault.getAbstractFileByPath(fileId);
+    if (!(file instanceof TFile)) throw new Error("Chat file not found.");
 
     const cachedMode = this.app.metadataCache.getFileCache(file)?.frontmatter?.mode;
     let mode = typeof cachedMode === "string" ? cachedMode : undefined;
@@ -1348,9 +1340,9 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   async copyChatLink(resolveNotePath: () => Promise<string>): Promise<void> {
     try {
       const path = await resolveNotePath();
-      const file = path ? await resolveFileByPath(this.app, path) : null;
-      const id = file && (await getSavedChatDeepLinkId(this.app, file.path));
-      if (!file || !id) throw new Error(`No saved chat note to link: "${path}"`);
+      const file = path ? this.app.vault.getAbstractFileByPath(path) : null;
+      const id = file instanceof TFile ? await getSavedChatDeepLinkId(this.app, file.path) : null;
+      if (!(file instanceof TFile) || !id) throw new Error(`No saved chat note to link: "${path}"`);
       const url = buildChatDeepLink(this.app.vault.getName(), id);
       await navigator.clipboard.writeText(
         buildChatMarkdownLink(extractChatTitle(this.app, file), url)
@@ -1416,10 +1408,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file instanceof TFile) {
       await this.app.workspace.getLeaf(true).openFile(file);
-    } else if (await this.app.vault.adapter.exists(fileId)) {
-      new Notice(
-        "Cannot open source files from hidden directories. To open chat notes in the editor, save them to a non-hidden folder in settings."
-      );
     } else {
       throw new Error("Chat file not found.");
     }
@@ -1453,9 +1441,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       });
 
       new Notice("Chat title updated.");
-    } else if (await resolveFileByPath(this.app, fileId)) {
-      await patchFrontmatter(this.app, fileId, { topic: newTitle.trim() });
-      new Notice("Chat title updated.");
     } else {
       throw new Error("Chat file not found.");
     }
@@ -1465,9 +1450,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file instanceof TFile) {
       await trashFile(this.app, file);
-      new Notice("Chat deleted.");
-    } else if (await this.app.vault.adapter.exists(fileId)) {
-      await this.app.vault.adapter.remove(fileId);
       new Notice("Chat deleted.");
     } else {
       throw new Error("Chat file not found.");

@@ -21,7 +21,6 @@ import {
 } from "@/utils";
 import {
   isFileAlreadyExistsError,
-  isInVaultCache,
   isNameTooLongError,
   listMarkdownFiles,
   patchFrontmatter,
@@ -116,21 +115,9 @@ export class ChatPersistenceManager {
       let targetFile: TFile | null = existingFile;
       let savedPath = preferredFileName;
 
-      const existingFileIsReal =
-        existingFile != null && isInVaultCache(this.app, existingFile.path);
-
-      if (existingFile && existingFileIsReal) {
+      if (existingFile) {
         await this.updateTranscript(existingFile.path, noteContent);
         logInfo(`[ChatPersistenceManager] Updated existing chat file: ${existingFile.path}`);
-      } else if (
-        !isInVaultCache(this.app, preferredFileName) &&
-        (await this.app.vault.adapter.exists(preferredFileName))
-      ) {
-        await this.updateTranscript(preferredFileName, noteContent);
-        new Notice("Existing chat note found - updating it now.");
-        logInfo(
-          `[ChatPersistenceManager] Updated existing chat file via adapter: ${preferredFileName}`
-        );
       } else {
         try {
           targetFile = await this.app.vault.create(preferredFileName, noteContent);
@@ -230,12 +217,7 @@ export class ChatPersistenceManager {
 
   async loadChat(file: TFile): Promise<ChatMessage[]> {
     try {
-      let content: string;
-      try {
-        content = await this.app.vault.read(file);
-      } catch {
-        content = await this.app.vault.adapter.read(file.path);
-      }
+      const content = await this.app.vault.read(file);
       const key = this.app.vault.getAbstractFileByPath(file.path) ?? file.path;
       this.loadedTranscripts.set(key, content);
       const messages = this.parseChatContent(content);
@@ -249,7 +231,7 @@ export class ChatPersistenceManager {
   }
 
   async getChatHistoryFiles(folder: string = getEffectiveConversationsFolder()): Promise<TFile[]> {
-    const folderFiles = await listMarkdownFiles(this.app, folder);
+    const folderFiles = listMarkdownFiles(this.app, folder);
     if (folderFiles.length === 0) return [];
 
     return filterChatHistoryFiles(this.app, folderFiles);

@@ -8,8 +8,7 @@ import type CopilotPlugin from "@/main";
 import { buildChatDeepLink, getSavedChatDeepLinkId } from "@/utils/chatDeepLink";
 import { extractChatTitle } from "@/utils/chatHistoryUtils";
 import { getUrlBookmarks, isBookmarksPluginDisabled } from "@/utils/obsidianBookmarks";
-import { resolveFileByPath } from "@/utils/vaultAdapterUtils";
-import { type App, Notice } from "obsidian";
+import { type App, Notice, TFile } from "obsidian";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const EMPTY_CHAT_HISTORY_ITEMS = Object.freeze([]) as unknown as ChatHistoryItem[];
@@ -241,10 +240,10 @@ export function useAgentHistoryControls(
         const path = bookmarked
           ? (await manager.saveActiveSession())?.path
           : session && manager.getSessionSourcePath(session.internalId);
-        const file = path ? await resolveFileByPath(plugin.app, path) : null;
+        const file = path ? plugin.app.vault.getAbstractFileByPath(path) : null;
         // A bookmark opens the chat through its note's link, so a chat that failed to save gets none.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/702
-        if (!file) throw new Error("The active chat has no saved note.");
+        if (!(file instanceof TFile)) throw new Error("The active chat has no saved note.");
         // A renamed tab keeps its title in the session label, which the note's topic and filename miss.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/702
         await setChatBookmarked(file.path, label ?? extractChatTitle(plugin.app, file), bookmarked);
