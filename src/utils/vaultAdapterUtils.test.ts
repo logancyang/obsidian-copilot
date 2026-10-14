@@ -4,6 +4,7 @@ import { updateChatTranscript } from "@/utils/chatImagePersistence";
 import {
   patchFrontmatter,
   readFrontmatterFile,
+  serializeAdapterWrite,
   updateFrontmatter,
   writeFrontmatterFile,
 } from "@/utils/vaultAdapterUtils";
@@ -145,6 +146,18 @@ describe("vaultAdapterUtils", () => {
       await Promise.all([pin, autosave]);
 
       expect(files.get(path)).toBe('---\ntopic: "Plan"\npinnedAt: 5\n---\n\n**user**: hi again');
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/700 runs the next step on the same path after a step rejects", async () => {
+      const path = ".copilot/chats/agent__hidden.md";
+
+      const failed = serializeAdapterWrite(path, async () => {
+        throw new Error("write failed");
+      });
+      const next = serializeAdapterWrite(path, async () => "written");
+
+      await expect(failed).rejects.toThrow("write failed");
+      await expect(next).resolves.toBe("written");
     });
   });
 });
