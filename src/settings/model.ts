@@ -669,7 +669,9 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   }
 
   const copilotFolderValidation = validateCopilotFolder(
-    typeof settingsToSanitize.copilotFolder === "string" ? settingsToSanitize.copilotFolder : ""
+    typeof settingsToSanitize.copilotFolder === "string"
+      ? toVisibleCopilotFolder(settingsToSanitize.copilotFolder)
+      : ""
   );
   sanitizedSettings.copilotFolder = copilotFolderValidation.ok
     ? copilotFolderValidation.folder
@@ -946,6 +948,25 @@ function validateSkillsFolder(
   return { ok: true, folder: cleaned };
 }
 
+export function toVisibleCopilotFolder(folder: string): string {
+  return folder.trim().replace(/(^|[\\/])\.+/g, "$1");
+}
+
+export function copilotFolderOverlapsConfigDir(folder: string, configDir: string): boolean {
+  const normalize = (path: string) =>
+    path
+      .trim()
+      .replace(/\\/g, "/")
+      .replace(/^\/+|\/+$/g, "")
+      .toLowerCase();
+  const root = normalize(folder);
+  const config = normalize(configDir);
+  return (
+    config.length > 0 &&
+    (root === config || root.startsWith(`${config}/`) || config.startsWith(`${root}/`))
+  );
+}
+
 export function validateCopilotFolder(
   value: string,
   configDir?: string
@@ -961,18 +982,7 @@ export function validateCopilotFolder(
   if (cleaned.length === 0) {
     return { ok: false, reason: "Folder name cannot be empty." };
   }
-  const normalizedConfigDir = configDir
-    ?.trim()
-    .replace(/\\/g, "/")
-    .replace(/^\/+|\/+$/g, "")
-    .toLowerCase();
-  const cleanedLower = cleaned.toLowerCase();
-  if (
-    normalizedConfigDir &&
-    (cleanedLower === normalizedConfigDir ||
-      cleanedLower.startsWith(`${normalizedConfigDir}/`) ||
-      normalizedConfigDir.startsWith(`${cleanedLower}/`))
-  ) {
+  if (configDir && copilotFolderOverlapsConfigDir(cleaned, configDir)) {
     return {
       ok: false,
       reason: "Folder path cannot use the Obsidian config folder.",
@@ -985,8 +995,10 @@ export function validateCopilotFolder(
     if (segment === "..") {
       return { ok: false, reason: 'Folder path cannot contain ".." segments.' };
     }
-    if (segment === ".") {
-      return { ok: false, reason: 'Folder path cannot contain "." segments.' };
+    // Obsidian does not index dot folders, so every Copilot feature must see a visible root.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/712
+    if (segment.startsWith(".")) {
+      return { ok: false, reason: "Folder names cannot start with a dot." };
     }
     if (CONTROL_CHAR_RE.test(segment)) {
       return { ok: false, reason: "Folder path contains illegal control characters." };

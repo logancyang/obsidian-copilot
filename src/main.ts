@@ -87,6 +87,7 @@ import {
   updateSetting,
 } from "@/settings/model";
 import { ensureCopilotSubfolders, getEffectiveConversationsFolder } from "@/settings/copilotFolder";
+import { revealHiddenCopilotFolder } from "@/settings/revealCopilotFolder";
 import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
 import { getDeviceId } from "@/utils/deviceId";
@@ -189,6 +190,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
   private startupMigrationItems: StartupMigrationItem[] = [];
+  private loadedCopilotFolder: unknown;
   private pluginLifecycleActive = true;
   private initialization: Promise<void> = Promise.resolve();
   private readonly startedViewCreators = new Map<string, ViewCreator>();
@@ -281,6 +283,17 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       })();
     });
     await runSettingsMigrations(this.modelManagement);
+    const revealedFolder = await revealHiddenCopilotFolder(
+      this.app.vault,
+      this.loadedCopilotFolder,
+      getSettings().copilotFolder
+    );
+    if (revealedFolder) {
+      this.startupMigrationItems.push(revealedFolder);
+      // data.json still names the hidden root until saved, and files left behind would repeat the notice every launch.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/712
+      setSettings({ copilotFolder: getSettings().copilotFolder });
+    }
     const agentMode = isDesktopRuntime()
       ? await Promise.all([import("@/agentMode"), import("@/agentMode/agentModelDiscovery")])
       : null;
@@ -1147,6 +1160,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
 
   async loadSettings() {
     const rawData = (await this.loadData()) as unknown;
+    this.loadedCopilotFolder = (rawData as { copilotFolder?: unknown } | null)?.copilotFolder;
     // The keychain bootstrap may persist a sparse snapshot of the raw on-disk
     // data (vaultId backfill) before settings are hydrated. That snapshot is
     // already in dehydrated, on-disk shape, so it must bypass the

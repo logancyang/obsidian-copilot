@@ -16,6 +16,8 @@ import {
   sanitizeSettings,
   settingsAtom,
   settingsStore,
+  toVisibleCopilotFolder,
+  copilotFolderOverlapsConfigDir,
   validateCopilotFolder,
   CopilotSettings,
   getModelKeyFromModel,
@@ -590,13 +592,16 @@ describe("model", () => {
       expect(out.copilotFolder).toBe("notes/ai");
     });
 
-    it("keeps an existing config-like copilotFolder without vault context", () => {
-      const out = sanitizeSettings({
-        ...DEFAULT_SETTINGS,
-        copilotFolder: ".vault-config/plugins/copilot-data",
-      });
-
-      expect(out.copilotFolder).toBe(".vault-config/plugins/copilot-data");
+    it("loads a hidden copilotFolder as its visible name so every feature can index it (https://github.com/Brevilabs/obsidian-copilot-private/issues/712)", () => {
+      for (const [hidden, visible] of [
+        [".copilot", "copilot"],
+        ["notes/.ai/", "notes/ai"],
+        [".vault-config/plugins/copilot-data", "vault-config/plugins/copilot-data"],
+      ]) {
+        const out = sanitizeSettings({ ...DEFAULT_SETTINGS, copilotFolder: hidden });
+        expect(out.copilotFolder).toBe(visible);
+        expect(out.copilotRootHistory).toContain(visible);
+      }
     });
 
     it("unions the active root into a normalized, deduped copilotRootHistory", () => {
@@ -839,8 +844,14 @@ describe("model", () => {
       expect(validateCopilotFolder("C:/Users/evil").ok).toBe(false);
     });
 
-    it("rejects a lone dot segment", () => {
+    it("rejects any segment that starts with a dot, because Obsidian does not index hidden folders (https://github.com/Brevilabs/obsidian-copilot-private/issues/712)", () => {
+      expect(validateCopilotFolder(".copilot")).toEqual({
+        ok: false,
+        reason: "Folder names cannot start with a dot.",
+      });
+      expect(validateCopilotFolder("notes/.ai").ok).toBe(false);
       expect(validateCopilotFolder("a/./b").ok).toBe(false);
+      expect(validateCopilotFolder("notes.ai/copilot").ok).toBe(true);
     });
 
     it("rejects roots that overlap the active config folder at a segment boundary", () => {
@@ -870,6 +881,32 @@ describe("model", () => {
       expect(validateCopilotFolder("copilot.").ok).toBe(false);
       expect(validateCopilotFolder("team /ai").ok).toBe(false);
       expect(validateCopilotFolder("team./ai").ok).toBe(false);
+    });
+  });
+
+  describe("toVisibleCopilotFolder()", () => {
+    it("drops the leading dots of every segment and keeps visible paths unchanged", () => {
+      expect(toVisibleCopilotFolder(" .copilot ")).toBe("copilot");
+      expect(toVisibleCopilotFolder("..a\\.b/c.d")).toBe("a\\b/c.d");
+      expect(toVisibleCopilotFolder("notes/ai")).toBe("notes/ai");
+    });
+
+    it("turns traversal segments into empty segments that validation still rejects", () => {
+      expect(validateCopilotFolder(toVisibleCopilotFolder("../escape")).ok).toBe(false);
+      expect(validateCopilotFolder(toVisibleCopilotFolder("a/../b")).ok).toBe(false);
+    });
+  });
+
+  describe("copilotFolderOverlapsConfigDir()", () => {
+    it("matches the config folder, anything inside it, and any folder that contains it, in any case", () => {
+      expect(copilotFolderOverlapsConfigDir(".vault-config", ".vault-config")).toBe(true);
+      expect(copilotFolderOverlapsConfigDir(".VAULT-CONFIG/plugins/", ".vault-config")).toBe(true);
+      expect(copilotFolderOverlapsConfigDir(".config", ".config/obsidian")).toBe(true);
+    });
+
+    it("ignores siblings that only share a name prefix and an empty config folder", () => {
+      expect(copilotFolderOverlapsConfigDir(".vault-config-old", ".vault-config")).toBe(false);
+      expect(copilotFolderOverlapsConfigDir("copilot", "")).toBe(false);
     });
   });
 
