@@ -1,10 +1,9 @@
-import { App } from "obsidian";
+import { App, TFile } from "obsidian";
 import { ChatMessage } from "@/types/message";
 import { logInfo, logError, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { getEffectiveMemoryFolder } from "@/settings/copilotFolder";
 import { ensureFolderExists } from "@/utils";
-import { readTextFile, writeTextFile } from "@/utils/vaultAdapterUtils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
@@ -21,23 +20,21 @@ export class UserMemoryManager {
   private async loadMemory(): Promise<void> {
     try {
       const memoryFolder = getEffectiveMemoryFolder();
-      const recentConversations = await readTextFile(
-        this.app,
+      const recentConversationsFile = this.app.vault.getAbstractFileByPath(
         this.getRecentConversationFilePath(memoryFolder)
       );
-      if (recentConversations !== null) {
-        this.recentConversationsContent = recentConversations;
+      if (recentConversationsFile instanceof TFile) {
+        this.recentConversationsContent = await this.app.vault.read(recentConversationsFile);
       } else {
         this.recentConversationsContent = "";
         logInfo("[UserMemoryManager] Recent Conversations file not found, skipping memory load");
       }
 
-      const savedMemories = await readTextFile(
-        this.app,
+      const savedMemoriesFile = this.app.vault.getAbstractFileByPath(
         this.getSavedMemoriesFilePath(memoryFolder)
       );
-      if (savedMemories !== null) {
-        this.savedMemoriesContent = savedMemories;
+      if (savedMemoriesFile instanceof TFile) {
+        this.savedMemoriesContent = await this.app.vault.read(savedMemoriesFile);
       } else {
         this.savedMemoriesContent = "";
         logInfo("[UserMemoryManager] Saved Memories file not found, skipping saved memory load");
@@ -206,7 +203,10 @@ export class UserMemoryManager {
     query: string,
     chatModel: BaseChatModel
   ): Promise<{ content?: string; error?: string }> {
-    const existingContent = (await readTextFile(this.app, filePath)) ?? "";
+    const existingFile = this.app.vault.getAbstractFileByPath(filePath);
+
+    const existingContent =
+      existingFile instanceof TFile ? await this.app.vault.read(existingFile) : "";
 
     if (!chatModel) {
       return { error: "No chat model available, skipping memory update" };
@@ -258,7 +258,11 @@ ${query.trim()}
       return { error: "Empty content returned from LLM" };
     }
 
-    await writeTextFile(this.app, filePath, updatedContent);
+    if (existingFile instanceof TFile) {
+      await this.app.vault.modify(existingFile, updatedContent);
+    } else {
+      await this.app.vault.create(filePath, updatedContent);
+    }
 
     return { content: updatedContent };
   }
@@ -267,9 +271,11 @@ ${query.trim()}
     filePath: string,
     newConversationSection: string
   ): Promise<void> {
-    const fileContent = await readTextFile(this.app, filePath);
+    const existingFile = this.app.vault.getAbstractFileByPath(filePath);
 
-    if (fileContent !== null) {
+    if (existingFile instanceof TFile) {
+      const fileContent = await this.app.vault.read(existingFile);
+
       let updatedContent: string;
 
       if (fileContent.trim() === "") {
@@ -288,10 +294,10 @@ ${query.trim()}
         updatedContent = `${normalized.join("\n\n")}\n`;
       }
 
-      await writeTextFile(this.app, filePath, updatedContent);
+      await this.app.vault.modify(existingFile, updatedContent);
     } else {
       const initialContent = `${newConversationSection.trim()}\n`;
-      await writeTextFile(this.app, filePath, initialContent);
+      await this.app.vault.create(filePath, initialContent);
     }
   }
 

@@ -1,4 +1,4 @@
-import { parse as parseYamlString, stringify as stringifyYamlString } from "yaml";
+import { parse as parseYamlString } from "yaml";
 
 let requestUrlImpl = jest.fn().mockResolvedValue({
   status: 200,
@@ -65,7 +65,6 @@ module.exports = {
   parseYaml: jest.fn().mockImplementation((content) => {
     return parseYamlString(content);
   }),
-  stringifyYaml: jest.fn().mockImplementation((value) => stringifyYamlString(value)),
   Modal: class Modal {
     constructor(app) {
       this.app = app;
