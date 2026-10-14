@@ -20,14 +20,6 @@ jest.mock("@/miyo/MiyoClient", () => ({
   })),
 }));
 
-const mockPdfCacheGet = jest.fn();
-const mockPdfCacheSet = jest.fn();
-jest.mock("@/cache/pdfCache", () => ({
-  PDFCache: {
-    getInstance: () => ({ get: mockPdfCacheGet, set: mockPdfCacheSet }),
-  },
-}));
-
 jest.mock("@/utils/convertedDocOutput", () => ({
   saveConvertedDocOutput: jest.fn(),
 }));
@@ -81,7 +73,6 @@ const mockRequestUrl = jest.fn();
 beforeEach(() => {
   jest.clearAllMocks();
   setRequestUrlImpl(mockRequestUrl);
-  mockPdfCacheGet.mockResolvedValue(null);
   mockResolveBaseUrl.mockResolvedValue("http://localhost:8742");
   mockSnapshot.mockReturnValue({ documentProcessor: "available" });
   mockRefresh.mockResolvedValue({});
@@ -209,21 +200,7 @@ describe("FileParserManager", () => {
         const result = await parser.parseFile(pdf("solo"), asVault);
 
         expect(result).toBe("extracted via miyo");
-        expect(mockPdfCacheSet).toHaveBeenCalledWith(vault, pdf("solo"), {
-          response: "extracted via miyo",
-        });
         expect(mockRequestUrl).not.toHaveBeenCalled();
-      });
-
-      it("returns previously cached text without consulting Miyo even when Miyo document processing is off https://github.com/Brevilabs/obsidian-copilot-private/issues/653", async () => {
-        mockGetSettings.mockReturnValue(settings({ enableMiyoDocumentProcessing: false }));
-        mockPdfCacheGet.mockResolvedValue({ response: "cached earlier", elapsed_time_ms: 1200 });
-
-        const result = await new PDFParser().parseFile(pdf("solo"), asVault);
-
-        expect(result).toBe("cached earlier");
-        expect(mockRefresh).not.toHaveBeenCalled();
-        expect(mockParseDoc).not.toHaveBeenCalled();
       });
 
       it("returns an error string without throwing or making a network request when Miyo parsing fails", async () => {

@@ -1,4 +1,3 @@
-import { PDFCache } from "@/cache/pdfCache";
 import { logError, logInfo, logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { canProcessDocumentsWithMiyo, getMiyoCustomUrl } from "@/miyo/miyoUtils";
@@ -66,24 +65,11 @@ class MarkdownParser implements FileParser {
 
 export class PDFParser implements FileParser {
   supportedExtensions = ["pdf"];
-  private pdfCache: PDFCache;
-  private selfHostDocParser: SelfHostDocParser;
-
-  constructor() {
-    this.pdfCache = PDFCache.getInstance();
-    this.selfHostDocParser = new SelfHostDocParser();
-  }
+  private selfHostDocParser = new SelfHostDocParser();
 
   async parseFile(file: TFile, vault: Vault): Promise<string> {
     try {
       logInfo("Parsing PDF file:", file.path);
-
-      const cachedResponse = await this.pdfCache.get(vault, file);
-      if (cachedResponse) {
-        logInfo("Using cached PDF content for:", file.path);
-        await saveConvertedDocOutput(file, cachedResponse.response, vault);
-        return cachedResponse.response;
-      }
 
       // Quick Chat no longer sends PDFs to a cloud parser. https://github.com/Brevilabs/obsidian-copilot-private/issues/653
       if (!(await canProcessDocumentsWithMiyo())) {
@@ -93,7 +79,6 @@ export class PDFParser implements FileParser {
 
       const miyoResult = await this.selfHostDocParser.parseDoc(file, vault);
       if ("content" in miyoResult) {
-        await this.pdfCache.set(vault, file, { response: miyoResult.content });
         await saveConvertedDocOutput(file, miyoResult.content, vault);
         return miyoResult.content;
       }
@@ -104,11 +89,6 @@ export class PDFParser implements FileParser {
       logError(`Error extracting content from PDF ${file.path}:`, error);
       return `[Error: Could not extract content from PDF ${file.basename}]`;
     }
-  }
-
-  async clearCache(vault: Vault): Promise<void> {
-    logInfo("Clearing PDF cache");
-    await this.pdfCache.clear(vault);
   }
 }
 
@@ -198,12 +178,5 @@ export class FileParserManager {
       return pdfErrorText(file, PDF_NEEDS_MIYO_REPEAT);
     };
     return scoped;
-  }
-
-  async clearPDFCache(vault: Vault): Promise<void> {
-    const pdfParser = this.parsers.get("pdf");
-    if (pdfParser instanceof PDFParser) {
-      await pdfParser.clearCache(vault);
-    }
   }
 }

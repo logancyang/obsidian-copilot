@@ -236,7 +236,10 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
 
   addCommand(plugin, COMMAND_IDS.CLEAR_COPILOT_CACHE, async () => {
     try {
-      await plugin.fileParserManager.clearPDFCache(plugin.app.vault);
+      const { adapter } = plugin.app.vault;
+      if (await adapter.exists(".copilot/pdf-cache")) {
+        await adapter.rmdir(".copilot/pdf-cache", true);
+      }
 
       const fileCache = FileCache.getInstance<string>();
       await fileCache.clear(plugin.app.vault);

@@ -22,9 +22,6 @@ jest.mock("@/commands/customCommandUtils", () => ({
 jest.mock("@/mentions/Mention", () => ({
   Mention: { getInstance: () => ({ processUrlList: async () => ({ urlContext: "" }) }) },
 }));
-jest.mock("@/cache/pdfCache", () => ({
-  PDFCache: { getInstance: () => ({ get: async () => null, set: jest.fn() }) },
-}));
 
 const { __setRequestUrlImpl: setRequestUrlImpl } = obsidianModule as unknown as {
   __setRequestUrlImpl: (impl: unknown) => void;
