@@ -301,11 +301,6 @@ function isCompactionStatus(status: string): status is CompactionStatus {
   return (ACP_COMPACTION_STATUSES as readonly string[]).includes(status);
 }
 
-const OPENCODE_COMPACTION_STATUS = {
-  started: "in_progress",
-  completed: "completed",
-} as const;
-
 interface OpencodeCompactionMarker {
   status?: string;
   messageId?: string;
@@ -320,9 +315,8 @@ function opencodeCompactionFromMeta(meta: Record<string, unknown>): SessionUpdat
   if (!marker.messageId) return null;
   const trigger: CompactionTrigger = marker.reason === "manual" ? "manual" : "auto";
   const base = { sessionUpdate: "compaction" as const, id: marker.messageId, trigger };
-  if (marker.status === "started" || marker.status === "completed") {
-    return { ...base, status: OPENCODE_COMPACTION_STATUS[marker.status] };
-  }
+  if (marker.status === "started") return { ...base, status: "in_progress" };
+  if (marker.status === "completed") return { ...base, status: "completed" };
   if (marker.status !== "failed") return null;
   switch (marker.error?.type) {
     case "aborted":
