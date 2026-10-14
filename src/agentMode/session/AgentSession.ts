@@ -99,7 +99,6 @@ const EMPTY_PERMISSIONS: PermissionPrompt[] = [];
 const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
 const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
-const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as string[];
 
 interface TurnFileCapture {
   edited: boolean;
@@ -170,7 +169,6 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   runFanoutTurn?: RunFanoutTurn;
   getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
-  additionalDirectories?: string[];
   getProjectContextBlock?: () => string;
 }
 
@@ -342,7 +340,6 @@ export class AgentSession {
       const resp = await backend.newSession({
         cwd,
         projectId: this.projectId,
-        additionalDirectories: opts.additionalDirectories ?? EMPTY_ADDITIONAL_DIRECTORIES,
       });
       if (this.disposed) return;
       const modelLog = resp.state.model

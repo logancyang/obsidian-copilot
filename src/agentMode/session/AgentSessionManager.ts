@@ -10,7 +10,7 @@ import {
   subscribeToSettingsChange,
   type CopilotSettings,
 } from "@/settings/model";
-import { buildProjectContext, getProjectAdditionalDirectories } from "@/context/manifestBuilder";
+import { buildProjectContext } from "@/context/manifestBuilder";
 import { err2String } from "@/utils";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import {
@@ -344,17 +344,13 @@ export class AgentSessionManager {
     }
   }
 
-  private buildFirstProjectContextBlock(
-    internalId: string,
-    projectId: ProjectScopeId,
-    cwd: string
-  ): string {
+  private buildFirstProjectContextBlock(internalId: string, projectId: ProjectScopeId): string {
     this.contentTracker.flushNow();
     this.lastSeenProjectContentEpochBySession.set(
       internalId,
       this.contentTracker.getEpoch(projectId)
     );
-    return buildProjectContext(this.app, projectId, cwd);
+    return buildProjectContext(this.app, projectId);
   }
 
   private getProjectContextUpdates(
@@ -837,9 +833,7 @@ export class AgentSessionManager {
       getApp: () => this.app,
       ...(projectId !== GLOBAL_SCOPE
         ? {
-            additionalDirectories: getProjectAdditionalDirectories(this.app, projectId, cwd),
-            getProjectContextBlock: () =>
-              this.buildFirstProjectContextBlock(internalId, projectId, cwd),
+            getProjectContextBlock: () => this.buildFirstProjectContextBlock(internalId, projectId),
             getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
             markProjectContextUpdatesDelivered: (epoch: number) =>
               this.markProjectContextUpdatesDelivered(internalId, epoch),
@@ -1930,10 +1924,6 @@ export class AgentSessionManager {
       projectId === GLOBAL_SCOPE ? undefined : getCachedProjectRecordById(projectId)
     );
     const cwd = this.resolveSessionCwd(projectId);
-    const additionalDirectories =
-      projectId === GLOBAL_SCOPE
-        ? undefined
-        : getProjectAdditionalDirectories(this.app, projectId, cwd);
     const descriptor = this.resolveDescriptor(backendId);
 
     this.pendingCreates++;
@@ -1980,7 +1970,7 @@ export class AgentSessionManager {
         : {}),
     });
 
-    const openInput = { sessionId, cwd, projectId, additionalDirectories };
+    const openInput = { sessionId, cwd, projectId };
     let resumeResult: LoadSessionOutput | null = null;
     try {
       resumeResult = await backend.loadSession(openInput);

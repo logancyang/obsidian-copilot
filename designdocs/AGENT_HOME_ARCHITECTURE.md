@@ -211,8 +211,7 @@ session never carries a stale listing.
 
 The block lists:
 
-- **Folders** by absolute path. Folders outside the session cwd are also
-  returned as `additionalDirectories`, widening the agent's readable roots.
+- **Folders** by absolute path.
 - **Notes** (`[[Title]]` inclusions) resolved to the absolute path of every file
   with that basename.
 - **Properties** as labels, and expanded into the notes whose frontmatter
@@ -236,9 +235,13 @@ that are not part of the project
 capped at `MAX_MANIFEST_ENTRIES`, with declared sources listed before the
 property and document expansions so a large expansion cannot crowd them out.
 
-A session still fixes its working directory, its instructions, and its
-`additionalDirectories` when it starts. The landing capture signature
-(`projects/projectContextSignature.ts`) covers those: a re-entered project
+Listed paths need no extra directory grant: Claude, Codex, and OpenCode read
+any vault file from the project's working directory, and they gate edits by
+mode, not by directory.
+
+A session still fixes its working directory and its instructions when it
+starts. The landing capture signature (`projects/projectContextSignature.ts`)
+covers those and the project's sources: a re-entered project
 replaces its empty landing session only when its sources, folder, or
 instructions changed. Once a chat has messages, `ProjectContentTracker` bumps a
 per-project epoch on vault or source changes in the project's scope, and the

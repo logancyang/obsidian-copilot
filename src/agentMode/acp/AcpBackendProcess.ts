@@ -71,8 +71,7 @@ export type AcpCapability =
   | "session/resume"
   | "session/load"
   | "session/set_mode"
-  | "session/set_config_option"
-  | "session/additional_directories";
+  | "session/set_config_option";
 
 function isMethodNotFoundError(err: unknown): boolean {
   if (err instanceof RequestError) return err.code === JSONRPC_METHOD_NOT_FOUND;
@@ -214,11 +213,8 @@ export class AcpBackendProcess implements BackendProcess {
       if (init.agentCapabilities?.loadSession === true) {
         this.capabilities.set("session/load", true);
       }
-      if (init.agentCapabilities?.sessionCapabilities?.additionalDirectories != null) {
-        this.capabilities.set("session/additional_directories", true);
-      }
       logInfo(
-        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.hasCapability("session/list")}, resumeSession=${this.hasCapability("session/resume")}, loadSession=${this.hasCapability("session/load")}, additionalDirectories=${this.hasCapability("session/additional_directories")})`
+        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.hasCapability("session/list")}, resumeSession=${this.hasCapability("session/resume")}, loadSession=${this.hasCapability("session/load")})`
       );
     } catch (err) {
       logError(
@@ -307,7 +303,6 @@ export class AcpBackendProcess implements BackendProcess {
     const req: NewSessionRequest = {
       cwd: params.cwd,
       mcpServers: [],
-      ...this.additionalDirectoriesField(params.additionalDirectories),
     };
     const wireResp = await this.requireConnection()
       .agent.request("session/new", req)
@@ -439,18 +434,6 @@ export class AcpBackendProcess implements BackendProcess {
     return this.capabilities.get(cap) === true;
   }
 
-  supportsAdditionalDirectories(): boolean {
-    return this.hasCapability("session/additional_directories");
-  }
-
-  private additionalDirectoriesField(roots: string[] | undefined): {
-    additionalDirectories?: string[];
-  } {
-    return this.supportsAdditionalDirectories() && roots?.length
-      ? { additionalDirectories: roots }
-      : {};
-  }
-
   async setSessionModel(params: { sessionId: SessionId; modelId: string }): Promise<BackendState> {
     const option = this.sessionWireState
       .get(params.sessionId)
@@ -563,7 +546,6 @@ export class AcpBackendProcess implements BackendProcess {
           sessionId: sessionIdToAcp(params.sessionId),
           cwd: params.cwd,
           mcpServers: [],
-          ...this.additionalDirectoriesField(params.additionalDirectories),
         }),
       { mustBeAdvertised: true }
     );
@@ -587,7 +569,6 @@ export class AcpBackendProcess implements BackendProcess {
           sessionId: sessionIdToAcp(sessionId),
           cwd: params.cwd,
           mcpServers: [],
-          ...this.additionalDirectoriesField(params.additionalDirectories),
         }),
       { mustBeAdvertised: true }
     );

@@ -16,7 +16,7 @@ import {
   setSettings as mockedSetSettings,
 } from "@/settings/model";
 import * as projectsState from "@/projects/state";
-import { buildProjectContext, getProjectAdditionalDirectories } from "@/context/manifestBuilder";
+import { buildProjectContext } from "@/context/manifestBuilder";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { type ProjectConfig } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
@@ -35,7 +35,6 @@ import type {
 } from "./types";
 
 const mockBuildProjectContext = buildProjectContext as jest.Mock;
-const mockGetProjectAdditionalDirectories = getProjectAdditionalDirectories as jest.Mock;
 const getSettingsMock = mockedGetSettings as jest.Mock;
 const setSettingsMock = mockedSetSettings as jest.Mock;
 const noticeMock = Notice as unknown as jest.Mock;
@@ -66,7 +65,6 @@ jest.mock("@/projects/ProjectFileManager", () => ({
 
 jest.mock("@/context/manifestBuilder", () => ({
   buildProjectContext: jest.fn(() => "<project_context>\n</project_context>"),
-  getProjectAdditionalDirectories: jest.fn(() => []),
 }));
 
 let mockNotificationSound = true;
@@ -917,9 +915,8 @@ describe("AgentSessionManager", () => {
         );
       });
 
-      it("hands a project session its additional directories and a first-message context builder, and a global session neither", async () => {
+      it("hands a project session a first-message context builder and a global session none", async () => {
         seedProjects("proj-ctx");
-        mockGetProjectAdditionalDirectories.mockReturnValueOnce(["/vault/Shared"]);
         mockBuildProjectContext.mockReturnValueOnce(
           "<project_context>\n- `/vault/Shared`\n</project_context>"
         );
@@ -929,15 +926,11 @@ describe("AgentSessionManager", () => {
         await mgr.createSession(undefined, GLOBAL_SCOPE);
 
         const [projectOpts, globalOpts] = sessionCreateSpy.mock.calls.map(([opts]) => opts);
-        expect(projectOpts).toMatchObject({
-          projectId: "proj-ctx",
-          additionalDirectories: ["/vault/Shared"],
-        });
+        expect(projectOpts).toMatchObject({ projectId: "proj-ctx" });
         expect(mockBuildProjectContext).not.toHaveBeenCalled();
         expect(projectOpts.getProjectContextBlock!()).toBe(
           "<project_context>\n- `/vault/Shared`\n</project_context>"
         );
-        expect(globalOpts.additionalDirectories).toBeUndefined();
         expect(globalOpts.getProjectContextBlock).toBeUndefined();
       });
 
@@ -4201,9 +4194,8 @@ describe("AgentSessionManager", () => {
         ]);
       });
 
-      it("reattaches a project chat with the folders its project context allows outside the project", async () => {
+      it("reattaches a project chat to its project scope", async () => {
         seedProjects("proj-ctx");
-        mockGetProjectAdditionalDirectories.mockReturnValueOnce(["/vault/Shared"]);
         const replay = buildReplayingBackend();
 
         await buildManager({
@@ -4219,11 +4211,7 @@ describe("AgentSessionManager", () => {
         }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
 
         expect(replay.backend.loadSession).toHaveBeenCalledWith(
-          expect.objectContaining({
-            sessionId: "native-1",
-            projectId: "proj-ctx",
-            additionalDirectories: ["/vault/Shared"],
-          })
+          expect.objectContaining({ sessionId: "native-1", projectId: "proj-ctx" })
         );
       });
 

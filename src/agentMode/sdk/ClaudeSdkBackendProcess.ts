@@ -75,7 +75,6 @@ interface SessionState {
   model?: string;
   permissionMode?: PermissionMode;
   effort?: EffortLevel;
-  additionalDirectories?: string[];
   claudeTaskPlan: ClaudeTaskPlanState;
   backgroundTasks: ClaudeBackgroundTaskStateMachine;
   active?: Query;
@@ -240,7 +239,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       projectId: params.projectId,
       firstPromptStarted: false,
       model: seedModelId,
-      additionalDirectories: params.additionalDirectories,
       systemPromptAppend: this.resolveSystemPromptAppend(),
       claudeTaskPlan: createClaudeTaskPlanState(),
       backgroundTasks: new ClaudeBackgroundTaskStateMachine(),
@@ -303,9 +301,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     if (session.model) options.model = session.model;
     if (session.permissionMode) options.permissionMode = session.permissionMode;
     if (session.effort) options.effort = session.effort;
-    if (session.additionalDirectories?.length) {
-      options.additionalDirectories = session.additionalDirectories;
-    }
     options.thinking = this.opts.getEnableThinking?.()
       ? { type: "adaptive", display: "summarized" }
       : { type: "disabled" };
@@ -558,7 +553,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       projectId: params.projectId,
       firstPromptStarted: true,
       model: seedModelId,
-      additionalDirectories: params.additionalDirectories,
       systemPromptAppend: this.resolveSystemPromptAppend(),
       claudeTaskPlan,
       backgroundTasks: new ClaudeBackgroundTaskStateMachine(),
@@ -582,10 +576,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       logWarn(`[AgentMode] could not read Claude transcript for ${sessionId}`, err);
       return "";
     }
-  }
-
-  supportsAdditionalDirectories(): boolean {
-    return true;
   }
 
   async shutdown(): Promise<void> {

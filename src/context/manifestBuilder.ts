@@ -45,7 +45,6 @@ interface ManifestLine {
   text: string;
 }
 
-const EMPTY_DIRECTORIES: string[] = Object.freeze([] as string[]) as string[];
 const EMPTY_MANIFEST_ENTRIES: ManifestPathEntry[] = Object.freeze(
   [] as ManifestPathEntry[]
 ) as ManifestPathEntry[];
@@ -64,19 +63,7 @@ const EMPTY_PROJECT_CONTEXT_BLOCK = [
   "</project_context>",
 ].join("\n");
 
-export function getProjectAdditionalDirectories(
-  app: App,
-  projectId: string,
-  cwd: string
-): string[] {
-  const contextSource = getCachedProjectRecordById(projectId)?.project.contextSource;
-  if (!contextSource) return EMPTY_DIRECTORIES;
-  const { inclusions } = readProjectPatterns(contextSource);
-  return resolveFolderPaths(app, inclusions?.folderPatterns ?? [], cwd, vaultAdapter(app))
-    .additionalDirectories;
-}
-
-export function buildProjectContext(app: App, projectId: string, cwd: string): string {
+export function buildProjectContext(app: App, projectId: string): string {
   const record = getCachedProjectRecordById(projectId);
   if (!record) return UNAVAILABLE_PROJECT_CONTEXT_BLOCK;
   const contextSource = record.project.contextSource;
@@ -114,7 +101,7 @@ export function buildProjectContext(app: App, projectId: string, cwd: string): s
   );
 
   return buildProjectContextBlock({
-    folders: resolveFolderPaths(app, folders, cwd, adapter).entries,
+    folders: resolveFolderPaths(app, folders, adapter),
     notes: noteEntries,
     extensions,
     tags,
@@ -208,26 +195,15 @@ function manifestEntryKey(entry: ManifestPathEntry): string {
 function resolveFolderPaths(
   app: App,
   folderPatterns: string[],
-  cwd: string,
   adapter: FileSystemAdapter | null
-): { entries: ManifestPathEntry[]; additionalDirectories: string[] } {
-  const entries: ManifestPathEntry[] = [];
-  const external = new Set<string>();
-  for (const pattern of folderPatterns) {
+): ManifestPathEntry[] {
+  return folderPatterns.map((pattern) => {
     const vaultPath = pattern.replace(/\/+$/, "");
     const folder = app.vault.getAbstractFileByPath(vaultPath);
-    if (adapter && folder instanceof TFolder) {
-      const abs = adapter.getFullPath(folder.path);
-      entries.push({ vaultPath, absPath: abs });
-      if (!isUnderCwd(cwd, abs)) external.add(abs);
-    } else {
-      entries.push({ vaultPath });
-    }
-  }
-  return {
-    entries,
-    additionalDirectories: external.size > 0 ? [...external] : EMPTY_DIRECTORIES,
-  };
+    return adapter && folder instanceof TFolder
+      ? { vaultPath, absPath: adapter.getFullPath(folder.path) }
+      : { vaultPath };
+  });
 }
 
 function resolveNotePaths(
@@ -283,13 +259,6 @@ function toManifestEntry(file: TFile, adapter: FileSystemAdapter | null): Manife
   return adapter
     ? { vaultPath: file.path, absPath: adapter.getFullPath(file.path) }
     : { vaultPath: file.path };
-}
-
-function isUnderCwd(cwd: string, abs: string): boolean {
-  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
-  const base = norm(cwd);
-  const target = norm(abs);
-  return target === base || target.startsWith(`${base}/`);
 }
 
 function splitLines(value: string | undefined): string[] {

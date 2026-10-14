@@ -941,15 +941,11 @@ describe("AgentSession", () => {
         expect(session.getState()?.model?.availableModels).toHaveLength(2);
       });
 
-      it("creates the backend session in the global scope with no extra roots when started with defaults", async () => {
+      it("creates the backend session in the global scope when started with defaults", async () => {
         const mock = makeMockBackend();
         const session = startSession(mock);
         await session.ready;
-        expect(mock.newSession).toHaveBeenCalledWith({
-          cwd: "/vault",
-          projectId: GLOBAL_SCOPE,
-          additionalDirectories: [],
-        });
+        expect(mock.newSession).toHaveBeenCalledWith({ cwd: "/vault", projectId: GLOBAL_SCOPE });
       });
 
       it("passes the session's projectId into the newSession payload", async () => {
@@ -958,19 +954,6 @@ describe("AgentSession", () => {
         await session.ready;
         expect(mock.newSession).toHaveBeenCalledWith(
           expect.objectContaining({ cwd: "/vault/Projects/p", projectId: "proj-7" })
-        );
-      });
-
-      it("opens the session with the project's additional directories", async () => {
-        const mock = makeMockBackend();
-        const session = startSession(mock, {
-          cwd: "/vault/Projects/p",
-          projectId: "proj-7",
-          additionalDirectories: ["/vault/SharedResearch"],
-        });
-        await session.ready;
-        expect(mock.newSession).toHaveBeenCalledWith(
-          expect.objectContaining({ additionalDirectories: ["/vault/SharedResearch"] })
         );
       });
 
