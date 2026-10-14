@@ -7,7 +7,6 @@ interface Props {
   activeProjectId: string;
   signature: string | null;
   isLanding: boolean;
-  blocking: boolean;
   draftEmpty: boolean;
   refresh: () => Promise<boolean>;
 }
@@ -21,7 +20,6 @@ const BASE: Props = {
   activeProjectId: "p1",
   signature: "sig-a",
   isLanding: true,
-  blocking: false,
   draftEmpty: true,
   refresh: async () => true,
 };
@@ -68,18 +66,6 @@ describe("useRefreshEmptyLandingOnContextSourceChange", () => {
     await flush();
     expect(refresh).not.toHaveBeenCalled();
     rerender(<Harness {...BASE} signature="sig-b" draftEmpty={true} refresh={refresh} />);
-    await flush();
-    expect(refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it("defers while blocking, then refreshes once it clears", async () => {
-    const refresh = jest.fn(async () => true);
-    const { rerender } = render(<Harness {...BASE} refresh={refresh} />);
-    await flush();
-    rerender(<Harness {...BASE} signature="sig-b" blocking={true} refresh={refresh} />);
-    await flush();
-    expect(refresh).not.toHaveBeenCalled();
-    rerender(<Harness {...BASE} signature="sig-b" blocking={false} refresh={refresh} />);
     await flush();
     expect(refresh).toHaveBeenCalledTimes(1);
   });

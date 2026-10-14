@@ -28,15 +28,6 @@ export function planGitHubCopilotRemoval(
   if (referencesRemovedProvider(settings.quickCommandModelKey))
     patch.quickCommandModelKey = undefined;
 
-  const projects = settings.projectList ?? [];
-  if (projects.some((project) => referencesRemovedProvider(project.projectModelKey))) {
-    patch.projectList = projects.map((project) =>
-      referencesRemovedProvider(project.projectModelKey)
-        ? { ...project, projectModelKey: "" }
-        : project
-    );
-  }
-
   return Object.keys(patch).length > 0 ? patch : null;
 }
 

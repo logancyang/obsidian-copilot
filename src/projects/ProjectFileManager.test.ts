@@ -34,8 +34,6 @@ function makeConfig(
 ): ProjectConfig {
   return {
     systemPrompt: "",
-    projectModelKey: "",
-    modelConfigs: {},
     contextSource: {},
     created: 0,
     UsageTimestamps: 0,

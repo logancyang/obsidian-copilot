@@ -1,4 +1,4 @@
-import type { CustomModel, ProjectConfig } from "@/aiParams";
+import type { CustomModel } from "@/aiParams";
 import { DEFAULT_SETTINGS } from "@/constants";
 import { logWarn } from "@/logger";
 import type {
@@ -85,19 +85,6 @@ function legacyModel(name: string, providerName: string): CustomModel {
   return { name, provider: providerName, enabled: true, isBuiltIn: false };
 }
 
-function project(projectModelKey: string): ProjectConfig {
-  return {
-    id: "project",
-    name: "Project",
-    systemPrompt: "",
-    projectModelKey,
-    modelConfigs: {},
-    contextSource: {},
-    created: 0,
-    UsageTimestamps: 0,
-  };
-}
-
 function settingsWith(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
   return { ...DEFAULT_SETTINGS, ...overrides };
 }
@@ -144,7 +131,6 @@ describe("retiredProviderRemovalMigration", () => {
           activeModels: [legacyModel("old", "legacy-retired"), legacyModel("kept", "openai")],
           defaultModelKey: "current-retired",
           quickCommandModelKey: "old|legacy-retired",
-          projectList: [project("current-retired"), project("current-openai")],
         }),
         "retired",
         ["legacy-retired"]
@@ -156,7 +142,6 @@ describe("retiredProviderRemovalMigration", () => {
           activeModels: [legacyModel("kept", "openai")],
           defaultModelKey: "",
           quickCommandModelKey: undefined,
-          projectList: [project(""), project("current-openai")],
         },
       });
     });

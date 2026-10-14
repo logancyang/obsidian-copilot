@@ -19,8 +19,6 @@ function makeProject(overrides: Partial<ProjectConfig> = {}): ProjectConfig {
     id: "p1",
     name: "Halcyon Scope",
     systemPrompt: "",
-    projectModelKey: "",
-    modelConfigs: {},
     contextSource: {},
     created: 0,
     UsageTimestamps: 0,

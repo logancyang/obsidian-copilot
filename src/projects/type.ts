@@ -7,8 +7,3 @@ export interface ProjectFileRecord {
 
   folderName: string;
 }
-
-export interface ProjectScanDiagnostics {
-  duplicateIdIndex: Record<string, string[]>;
-  ignoredFiles: string[];
-}

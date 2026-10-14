@@ -1,13 +1,5 @@
 import { ProjectConfig } from "@/aiParams";
 import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
-import type { ProcessingItem } from "@/components/project/processingAdapter";
-import {
-  buildProcessingItemLookup,
-  ProcessingStatusIcon,
-  processingSourceKey,
-} from "@/components/project/processingItemStatusView";
-import { useAgentProcessingItems } from "@/components/project/useAgentProcessingItems";
-import { openAgentCachedItemPreview } from "@/utils/cacheFileOpener";
 import { ProjectFileSelectModal } from "@/components/modals/ProjectFileSelectModal";
 import { PropertySearchModal } from "@/components/modals/PropertySearchModal";
 import { TagSearchModal } from "@/components/modals/TagSearchModal";
@@ -29,7 +21,6 @@ import {
 } from "@/search/searchUtils";
 import { getTagsFromNote } from "@/utils";
 import {
-  ArrowUpRight,
   FileAudio,
   FileImage,
   FileText,
@@ -223,31 +214,13 @@ const SectionList: React.FC<SectionListProps> = ({
 
 interface ItemCardProps {
   item: GroupItem;
-  agentProcessingItem?: ProcessingItem;
   onDelete: (e: React.MouseEvent, item: GroupItem) => void;
-  onOpenCached?: () => void;
 }
 
-function ItemCard({ item, agentProcessingItem, onDelete, onOpenCached }: ItemCardProps) {
+function ItemCard({ item, onDelete }: ItemCardProps) {
   const extension = item.id.split(".").pop() || "";
 
   const IconComponent = item.isIgnored ? Plus : XIcon;
-
-  const previewButton =
-    onOpenCached && agentProcessingItem?.status === "ready" ? (
-      <Button
-        variant="ghost2"
-        size="icon"
-        className="tw-hidden tw-size-5 group-hover:tw-block"
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenCached();
-        }}
-        title="View Parsed Content"
-      >
-        <ArrowUpRight className="tw-size-4" />
-      </Button>
-    ) : null;
 
   return (
     <div className="tw-group tw-flex tw-cursor-pointer tw-items-center tw-rounded-lg tw-border tw-border-solid tw-border-border tw-p-2 tw-transition-shadow hover:tw-shadow-md">
@@ -265,10 +238,6 @@ function ItemCard({ item, agentProcessingItem, onDelete, onOpenCached }: ItemCar
       </div>
 
       <div className="tw-ml-auto tw-flex tw-min-w-[24px] tw-items-center tw-justify-end tw-gap-2">
-        {previewButton}
-        {agentProcessingItem && (
-          <ProcessingStatusIcon item={agentProcessingItem} revealReadyOnHover />
-        )}
         <IconComponent
           className="tw-hidden tw-size-4 tw-shrink-0 tw-text-muted hover:tw-text-warning group-hover:tw-block group-hover:tw-flex-none"
           onClick={(e) => onDelete(e, item)}
@@ -385,15 +354,6 @@ function ContextManage({
 }: ContextManageProps) {
   const isMobile = Platform.isMobile;
   const contextUrls = useContextUrls(initialProject);
-  const { items: agentProcessingItems } = useAgentProcessingItems(
-    app,
-    initialProject,
-    initialProject.contextSource
-  );
-  const agentProcessingByKey = useMemo(
-    () => buildProcessingItemLookup(agentProcessingItems),
-    [agentProcessingItems]
-  );
 
   const { inclusions: inclusionPatterns, exclusions: exclusionPatterns } = useMemo(() => {
     return getMatchingPatterns({
@@ -526,18 +486,6 @@ function ContextManage({
   const [activeItem, setActiveItem] = useState<ActiveItem>(null);
   const isLinksActive =
     activeSection === "links" || activeSection === "web" || activeSection === "youtube";
-
-  const getFileRowStatusProps = useCallback(
-    (item: GroupItem): Pick<ItemCardProps, "agentProcessingItem" | "onOpenCached"> => {
-      if (item.isIgnored || activeSection === "ignoreFiles") return {};
-      const agentItem = agentProcessingByKey.get(processingSourceKey("file", item.id));
-      return {
-        agentProcessingItem: agentItem,
-        onOpenCached: agentItem ? () => void openAgentCachedItemPreview(app, agentItem) : undefined,
-      };
-    },
-    [activeSection, agentProcessingByKey, app]
-  );
 
   const convertGroupListToInclusions = useCallback(
     (list: GroupListItem): string => {
@@ -1332,10 +1280,8 @@ function ContextManage({
             <ScrollArea className="tw-max-h-[400px] tw-flex-1 tw-p-4 tw-pt-0">
               {isLinksActive ? (
                 <LinksContentPanel
-                  app={app}
                   urlItems={contextUrls.urlItems}
                   filter={activeSection}
-                  agentProcessingByKey={agentProcessingByKey}
                   onRemove={contextUrls.removeUrl}
                 />
               ) : getDisplayItems.length === 0 ? (
@@ -1368,7 +1314,6 @@ function ContextManage({
                                   ? handleDeleteIgnoreItem
                                   : handleDeleteItem
                               }
-                              {...getFileRowStatusProps(item)}
                             />
                           );
                         })

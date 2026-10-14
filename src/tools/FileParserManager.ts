@@ -1,11 +1,9 @@
-import { PDFCache } from "@/cache/pdfCache";
 import { logError, logInfo, logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { canProcessDocumentsWithMiyo, getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { saveConvertedDocOutput as saveConvertedDocOutputCore } from "@/utils/convertedDocOutput";
-import { extractRetryTime, isRateLimitError } from "@/utils/rateLimitUtils";
-import { Notice, TFile, Vault } from "obsidian";
+import { TFile, Vault } from "obsidian";
 import { CanvasLoader } from "./CanvasLoader";
 
 export const PDF_NEEDS_MIYO_MESSAGE =
@@ -15,12 +13,6 @@ const PDF_NEEDS_MIYO_REPEAT = "Same reason as the other unreadable PDF in this m
 
 function pdfErrorText(file: TFile, reason: string): string {
   return `[Error: Could not extract content from PDF ${file.basename}. ${reason}]`;
-}
-
-const MIYO_LOCAL_EXTENSIONS = new Set(["pdf", "epub"]);
-
-function isMiyoLocalExtension(file: TFile): boolean {
-  return MIYO_LOCAL_EXTENSIONS.has(file.extension.toLowerCase());
 }
 
 interface FileParser {
@@ -73,24 +65,11 @@ class MarkdownParser implements FileParser {
 
 export class PDFParser implements FileParser {
   supportedExtensions = ["pdf"];
-  private pdfCache: PDFCache;
-  private selfHostDocParser: SelfHostDocParser;
-
-  constructor() {
-    this.pdfCache = PDFCache.getInstance();
-    this.selfHostDocParser = new SelfHostDocParser();
-  }
+  private selfHostDocParser = new SelfHostDocParser();
 
   async parseFile(file: TFile, vault: Vault): Promise<string> {
     try {
       logInfo("Parsing PDF file:", file.path);
-
-      const cachedResponse = await this.pdfCache.get(vault, file);
-      if (cachedResponse) {
-        logInfo("Using cached PDF content for:", file.path);
-        await saveConvertedDocOutput(file, cachedResponse.response, vault);
-        return cachedResponse.response;
-      }
 
       // Quick Chat no longer sends PDFs to a cloud parser. https://github.com/Brevilabs/obsidian-copilot-private/issues/653
       if (!(await canProcessDocumentsWithMiyo())) {
@@ -100,7 +79,6 @@ export class PDFParser implements FileParser {
 
       const miyoResult = await this.selfHostDocParser.parseDoc(file, vault);
       if ("content" in miyoResult) {
-        await this.pdfCache.set(vault, file, { response: miyoResult.content });
         await saveConvertedDocOutput(file, miyoResult.content, vault);
         return miyoResult.content;
       }
@@ -111,11 +89,6 @@ export class PDFParser implements FileParser {
       logError(`Error extracting content from PDF ${file.path}:`, error);
       return `[Error: Could not extract content from PDF ${file.basename}]`;
     }
-  }
-
-  async clearCache(vault: Vault): Promise<void> {
-    logInfo("Clearing PDF cache");
-    await this.pdfCache.clear(vault);
   }
 }
 
@@ -136,163 +109,31 @@ class CanvasParser implements FileParser {
   }
 }
 
-const DOCS4LLM_SUPPORTED_EXTENSIONS: readonly string[] = [
-  "pdf",
-
-  "602",
-  "abw",
-  "cgm",
-  "cwk",
-  "doc",
-  "docx",
-  "docm",
-  "dot",
-  "dotm",
-  "hwp",
-  "key",
-  "lwp",
-  "mw",
-  "mcw",
-  "pages",
-  "pbd",
-  "ppt",
-  "pptm",
-  "pptx",
-  "pot",
-  "potm",
-  "potx",
-  "rtf",
-  "sda",
-  "sdd",
-  "sdp",
-  "sdw",
-  "sgl",
-  "sti",
-  "sxi",
-  "sxw",
-  "stw",
-  "sxg",
-  "txt",
-  "uof",
-  "uop",
-  "uot",
-  "vor",
-  "wpd",
-  "wps",
-  "xml",
-  "zabw",
-  "epub",
-
-  "jpg",
-  "jpeg",
-  "png",
-  "gif",
-  "bmp",
-  "svg",
-  "tiff",
-  "webp",
-  "web",
-  "htm",
-  "html",
-
-  "xlsx",
-  "xls",
-  "xlsm",
-  "xlsb",
-  "xlw",
-  "csv",
-  "dif",
-  "sylk",
-  "slk",
-  "prn",
-  "numbers",
-  "et",
-  "ods",
-  "fods",
-  "uos1",
-  "uos2",
-  "dbf",
-  "wk1",
-  "wk2",
-  "wk3",
-  "wk4",
-  "wks",
-  "123",
-  "wq1",
-  "wq2",
-  "wb1",
-  "wb2",
-  "wb3",
-  "qpw",
-  "xlr",
-  "eth",
-  "tsv",
-
-  "mp3",
-  "mp4",
-  "mpeg",
-  "mpga",
-  "m4a",
-  "wav",
-  "webm",
-];
-
-export class Docs4LLMParser implements FileParser {
-  supportedExtensions = [...DOCS4LLM_SUPPORTED_EXTENSIONS];
-  private selfHostDocParser: SelfHostDocParser;
-
-  constructor() {
-    this.selfHostDocParser = new SelfHostDocParser();
-  }
+export class MiyoEpubParser implements FileParser {
+  supportedExtensions = ["epub"];
+  private selfHostDocParser = new SelfHostDocParser();
 
   async parseFile(file: TFile, vault: Vault): Promise<string> {
     try {
-      logInfo(`[Docs4LLMParser] Parsing ${file.extension} file: ${file.path}`);
+      logInfo(`[MiyoEpubParser] Parsing EPUB file: ${file.path}`);
 
-      if (isMiyoLocalExtension(file) && (await canProcessDocumentsWithMiyo())) {
-        const miyoResult = await this.selfHostDocParser.parseDoc(file, vault);
-        if (miyoResult && "content" in miyoResult) {
-          await saveConvertedDocOutput(file, miyoResult.content, vault);
-          logInfo(`[Docs4LLMParser] Parsed document via Miyo: ${file.path}`);
-          return miyoResult.content;
-        }
-        if (miyoResult && "error" in miyoResult) {
-          throw new Error(`Miyo failed to parse ${file.basename}: ${miyoResult.error}`);
-        }
+      if (!(await canProcessDocumentsWithMiyo())) {
+        throw new Error(
+          `No document processor available for ${file.basename}. Enable Miyo to convert this file type locally.`
+        );
       }
 
-      throw new Error(
-        `No document processor available for ${file.basename}. Enable Miyo to convert this file type locally.`
-      );
+      const miyoResult = await this.selfHostDocParser.parseDoc(file, vault);
+      if ("error" in miyoResult) {
+        throw new Error(`Miyo failed to parse ${file.basename}: ${miyoResult.error}`);
+      }
+      await saveConvertedDocOutput(file, miyoResult.content, vault);
+      return miyoResult.content;
     } catch (error) {
-      logError(`[Docs4LLMParser] Error processing file ${file.path}:`, error);
-
-      if (isRateLimitError(error)) {
-        this.showRateLimitNotice(error);
-      }
-
+      logError(`[MiyoEpubParser] Error processing file ${file.path}:`, error);
       throw error;
     }
   }
-
-  private showRateLimitNotice(error: unknown): void {
-    const now = Date.now();
-
-    if (now - Docs4LLMParser.lastRateLimitNoticeTime < 60000) {
-      return;
-    }
-
-    Docs4LLMParser.lastRateLimitNoticeTime = now;
-
-    const retryTime = extractRetryTime(error);
-
-    new Notice(
-      `⚠️ Rate limit exceeded for document processing. Please try again in ${retryTime}.`,
-      10000
-    );
-  }
-
-  private static lastRateLimitNoticeTime: number = 0;
 }
 
 export class FileParserManager {
@@ -300,7 +141,7 @@ export class FileParserManager {
 
   constructor() {
     this.registerParser(new MarkdownParser());
-    this.registerParser(new Docs4LLMParser());
+    this.registerParser(new MiyoEpubParser());
     this.registerParser(new PDFParser());
     this.registerParser(new CanvasParser());
   }
@@ -337,12 +178,5 @@ export class FileParserManager {
       return pdfErrorText(file, PDF_NEEDS_MIYO_REPEAT);
     };
     return scoped;
-  }
-
-  async clearPDFCache(vault: Vault): Promise<void> {
-    const pdfParser = this.parsers.get("pdf");
-    if (pdfParser instanceof PDFParser) {
-      await pdfParser.clearCache(vault);
-    }
   }
 }

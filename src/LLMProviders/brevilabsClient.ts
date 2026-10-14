@@ -5,48 +5,6 @@ import { applyEntitlement, markPaidPendingEntitlement, turnOffPaid } from "@/plu
 import { getSettings } from "@/settings/model";
 import { App, requestUrl } from "obsidian";
 
-async function buildMultipartFromFormData(
-  formData: FormData
-): Promise<{ body: ArrayBuffer; contentType: string }> {
-  const boundary = `----CopilotBoundary${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
-  const encoder = new TextEncoder();
-  const parts: Uint8Array[] = [];
-
-  for (const [name, value] of formData.entries()) {
-    parts.push(encoder.encode(`--${boundary}\r\n`));
-    if (value instanceof Blob) {
-      const filename = value instanceof File ? value.name : "blob";
-      const contentType = value.type || "application/octet-stream";
-      parts.push(
-        encoder.encode(
-          `Content-Disposition: form-data; name="${name}"; filename="${filename}"\r\n` +
-            `Content-Type: ${contentType}\r\n\r\n`
-        )
-      );
-      const buf = await value.arrayBuffer();
-      parts.push(new Uint8Array(buf));
-      parts.push(encoder.encode("\r\n"));
-    } else {
-      parts.push(encoder.encode(`Content-Disposition: form-data; name="${name}"\r\n\r\n`));
-      parts.push(encoder.encode(String(value)));
-      parts.push(encoder.encode("\r\n"));
-    }
-  }
-  parts.push(encoder.encode(`--${boundary}--\r\n`));
-
-  const totalLength = parts.reduce((sum, p) => sum + p.byteLength, 0);
-  const out = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const part of parts) {
-    out.set(part, offset);
-    offset += part.byteLength;
-  }
-  return {
-    body: out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength),
-    contentType: `multipart/form-data; boundary=${boundary}`,
-  };
-}
-
 interface BrevilabsApiResult<T> {
   data: T | null;
   error?: Error;
@@ -109,11 +67,6 @@ export interface ToolCall {
 
 export interface Url4llmResponse {
   response: string;
-  elapsed_time_ms: number;
-}
-
-export interface Docs4llmResponse {
-  response: unknown;
   elapsed_time_ms: number;
 }
 
@@ -245,40 +198,6 @@ export class BrevilabsClient {
       throw: false,
     });
     return parseBrevilabsResponse<T>(response, endpoint);
-  }
-
-  private async makeFormDataRequest<T>(
-    endpoint: string,
-    formData: FormData
-  ): Promise<BrevilabsApiResult<T>> {
-    this.checkLicenseKey();
-
-    formData.append("user_id", getSettings().userId);
-
-    const url = new URL(`${BREVILABS_API_BASE_URL}${endpoint}`);
-
-    try {
-      const { body, contentType } = await buildMultipartFromFormData(formData);
-
-      const response = await requestUrl({
-        url: url.toString(),
-        method: "POST",
-        headers: {
-          "Content-Type": contentType,
-          Authorization: `Bearer ${getSettings().plusLicenseKey}`,
-          ...this.getPluginVersionHeaders(),
-        },
-        body,
-        throw: false,
-      });
-      return parseBrevilabsResponse<T>(response, `${endpoint} form-data`);
-    } catch (error) {
-      return {
-        data: null,
-        error: error instanceof Error ? error : new Error(String(error)),
-        status: 0,
-      };
-    }
   }
 
   async validateLicenseKey(
@@ -414,67 +333,6 @@ export class BrevilabsClient {
     }
 
     return data;
-  }
-
-  async docs4llm(binaryContent: ArrayBuffer, fileType: string): Promise<Docs4llmResponse> {
-    const formData = new FormData();
-
-    const mimeType = this.getMimeTypeFromExtension(fileType);
-    const blob = new Blob([binaryContent], { type: mimeType });
-
-    const fileName = `file.${fileType}`;
-    const file = new File([blob], fileName, { type: mimeType });
-
-    formData.append("files", file);
-
-    formData.append("file_type", fileType);
-
-    const { data, error } = await this.makeFormDataRequest<Docs4llmResponse>("/docs4llm", formData);
-
-    if (error) {
-      throw error;
-    }
-    if (!data) {
-      throw new Error("No data returned from docs4llm");
-    }
-
-    return data;
-  }
-
-  private getMimeTypeFromExtension(extension: string): string {
-    const mimeMap: Record<string, string> = {
-      pdf: "application/pdf",
-      doc: "application/msword",
-      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      ppt: "application/vnd.ms-powerpoint",
-      pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      epub: "application/epub+zip",
-      txt: "text/plain",
-      rtf: "application/rtf",
-
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      gif: "image/gif",
-      bmp: "image/bmp",
-      svg: "image/svg+xml",
-      tiff: "image/tiff",
-      webp: "image/webp",
-
-      html: "text/html",
-      htm: "text/html",
-
-      xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      xls: "application/vnd.ms-excel",
-      csv: "text/csv",
-
-      mp3: "audio/mpeg",
-      mp4: "video/mp4",
-      wav: "audio/wav",
-      webm: "video/webm",
-    };
-
-    return mimeMap[extension.toLowerCase()] || "application/octet-stream";
   }
 
   async webSearch(query: string): Promise<WebSearchResponse> {

@@ -1,7 +1,6 @@
 import { ChainType } from "@/chainType";
 
 import { ModelCapability, ReasoningEffort, Verbosity } from "@/constants";
-import type { MaterializedSourceType } from "@/context/contextCacheStore";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { atom, useAtom } from "jotai";
@@ -31,44 +30,6 @@ const chainTypeAtom = atom(
   }
 );
 
-export interface FailedItem {
-  path: string;
-  type: "md" | "web" | "youtube" | "nonMd";
-  error?: string;
-  timestamp?: number;
-  usedStaleSnapshot?: boolean;
-}
-
-export interface ContextLoadStepCount {
-  done: number;
-  total: number;
-}
-
-export interface AgentProjectContextLoadState {
-  phase: "idle" | "resolve" | "prefetch" | "parse" | "done";
-  blocking: boolean;
-  resolved?: number;
-  prefetch?: ContextLoadStepCount;
-  parsed?: ContextLoadStepCount;
-  failedSources?: FailedItem[];
-  processingSources?: AgentInFlightSource[];
-  retryingSources?: AgentRetryingSource[];
-}
-
-export interface AgentRetryingSource {
-  kind: MaterializedSourceType;
-  source: string;
-}
-
-export interface AgentInFlightSource {
-  kind: MaterializedSourceType;
-  source: string;
-}
-
-export const EMPTY_RETRYING_SOURCES: readonly AgentRetryingSource[] = Object.freeze([]);
-export const EMPTY_PROCESSING_SOURCES: readonly AgentInFlightSource[] = Object.freeze([]);
-export const agentProjectContextLoadAtom = atom<Record<string, AgentProjectContextLoadState>>({});
-
 const selectedTextContextsAtom = atom<SelectedTextContext[]>([]);
 
 export interface ProjectConfig {
@@ -76,11 +37,6 @@ export interface ProjectConfig {
   name: string;
   description?: string;
   systemPrompt: string;
-  projectModelKey: string;
-  modelConfigs: {
-    temperature?: number;
-    maxTokens?: number;
-  };
   contextSource: {
     inclusions?: string;
     exclusions?: string;

@@ -60,18 +60,3 @@ function getInstructionsFingerprint(app: App, record: ProjectFileRecord): string
   }
   return `legacy:${record.project.systemPrompt ?? ""}`;
 }
-
-export function composeContextDirtyKey(configSignature: string, epoch: number): string {
-  return `${configSignature}#${epoch}`;
-}
-
-export function contextDirtyKeyMatchesConfig(
-  key: string | undefined,
-  configSignature: string
-): boolean {
-  if (key === undefined) return false;
-  if (key === configSignature) return true;
-  const lastHash = key.lastIndexOf("#");
-  if (lastHash < 0) return false;
-  return key.slice(0, lastHash) === configSignature && /^\d+$/.test(key.slice(lastHash + 1));
-}

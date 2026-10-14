@@ -7,7 +7,6 @@ export interface QueuedAgentMessage {
   text: string;
   rawInput: string;
   context?: MessageContext;
-  queueReason?: "context" | "busy";
   promptContent?: PromptContent[];
   mentionedAgents?: ReadonlyArray<BackendId>;
 }

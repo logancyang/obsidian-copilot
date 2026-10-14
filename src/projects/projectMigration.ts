@@ -182,9 +182,7 @@ function getMigrationFolderName(projectId: string, projectName?: string): string
   return deriveProjectFolderName(projectId, projectName);
 }
 
-export async function migrateProjectsFromSettingsToVault(
-  app: App
-): Promise<StartupMigrationItem | null> {
+async function migrateProjectsFromSettingsToVault(app: App): Promise<StartupMigrationItem | null> {
   const passProjectsFolder = getProjectsFolder();
   const vault = app.vault;
   const settings = getSettings();
@@ -389,7 +387,7 @@ export async function migrateProjectsFromSettingsToVault(
 
 async function migrateProjectFolderNames(app: App): Promise<void> {
   const vault = app.vault;
-  const { records } = await scanAllProjectConfigFiles(app);
+  const records = await scanAllProjectConfigFiles(app);
   if (records.length === 0) return;
 
   let renamed = 0;

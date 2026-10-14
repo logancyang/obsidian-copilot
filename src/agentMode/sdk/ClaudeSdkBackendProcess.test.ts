@@ -1134,43 +1134,6 @@ describe("ClaudeSdkBackendProcess", () => {
       });
     });
 
-    describe("supportsAdditionalDirectories()", () => {
-      it("reports support for additionalDirectories (stable SDK option)", () => {
-        expect(makeProc().supportsAdditionalDirectories()).toBe(true);
-      });
-
-      it("forwards captured additionalDirectories into options on every turn", async () => {
-        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-        const proc = makeProc();
-
-        const { sessionId } = await proc.newSession({
-          cwd: "/vault",
-          additionalDirectories: ["/abs/context-a", "/abs/context-b"],
-        });
-        proc.registerSessionHandler(sessionId, () => {});
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-        const call = getPromptQueryCalls()[0][0] as {
-          options: { additionalDirectories?: string[] };
-        };
-        expect(call.options.additionalDirectories).toEqual(["/abs/context-a", "/abs/context-b"]);
-      });
-
-      it("omits additionalDirectories from options when none were captured", async () => {
-        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-        const proc = makeProc();
-
-        const { sessionId } = await proc.newSession({ cwd: "/vault" });
-        proc.registerSessionHandler(sessionId, () => {});
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-        const call = getPromptQueryCalls()[0][0] as {
-          options: { additionalDirectories?: string[] };
-        };
-        expect(call.options.additionalDirectories).toBeUndefined();
-      });
-    });
-
     describe("resumeSession()", () => {
       it("reopens the session with the seeded model state and sends its next prompt as a resume, replaying nothing", async () => {
         queryMock.mockImplementation(() => makeQuery([resultMessage()]));

@@ -87,8 +87,6 @@ export function makeNewProjectConfig(name: string): ProjectConfig {
     id: randomUUID(),
     name,
     systemPrompt: "",
-    projectModelKey: "",
-    modelConfigs: {},
     contextSource: { inclusions: "", exclusions: "", webUrls: "", youtubeUrls: "" },
     created: now,
     UsageTimestamps: now,

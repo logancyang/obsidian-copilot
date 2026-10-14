@@ -16,18 +16,10 @@ import {
   setSettings as mockedSetSettings,
 } from "@/settings/model";
 import * as projectsState from "@/projects/state";
-import {
-  ensureProjectContextMaterialized,
-  type ContextMaterializeProgress,
-} from "@/context/projectContextMaterializer";
+import { buildProjectContext } from "@/context/manifestBuilder";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
-import {
-  agentProjectContextLoadAtom,
-  type AgentProjectContextLoadState,
-  type ProjectConfig,
-} from "@/aiParams";
+import { type ProjectConfig } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
-import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { buildCodexModeMapping } from "@/agentMode/backends/codex/codexModeMapping";
 import type {
@@ -42,7 +34,7 @@ import type {
   SessionEvent,
 } from "./types";
 
-const mockEnsureMaterialized = ensureProjectContextMaterialized as jest.Mock;
+const mockBuildProjectContext = buildProjectContext as jest.Mock;
 const getSettingsMock = mockedGetSettings as jest.Mock;
 const setSettingsMock = mockedSetSettings as jest.Mock;
 const noticeMock = Notice as unknown as jest.Mock;
@@ -71,20 +63,9 @@ jest.mock("@/projects/ProjectFileManager", () => ({
   },
 }));
 
-jest.mock("@/context/projectContextMaterializer", () => {
-  const { getProjectContextSignature } = jest.requireActual("@/projects/projectContextSignature");
-  const { getCachedProjectRecordById } = jest.requireActual("@/projects/state");
-  return {
-    ensureProjectContextMaterialized: jest.fn(async (_app: unknown, projectId: string) => {
-      const record = getCachedProjectRecordById(projectId);
-      return {
-        additionalDirectories: [],
-        contextSignature: record ? getProjectContextSignature(record) : undefined,
-      };
-    }),
-    EMPTY_CONTEXT_MATERIALIZATION_RESULT: { additionalDirectories: [] },
-  };
-});
+jest.mock("@/context/manifestBuilder", () => ({
+  buildProjectContext: jest.fn(() => "<project_context>\n</project_context>"),
+}));
 
 let mockNotificationSound = true;
 
@@ -634,7 +615,7 @@ beforeEach(() => {
   getSettingsMock.mockImplementation(mockDefaultSettings);
   setSettingsMock.mockClear();
   noticeMock.mockClear();
-  mockEnsureMaterialized.mockClear();
+  mockBuildProjectContext.mockClear();
   mockTouchProjectLastUsed.mockClear();
   ensureAgentsFileForDiscoverySpy.mockClear();
   projectsState.updateCachedProjectRecords([]);
@@ -932,6 +913,25 @@ describe("AgentSessionManager", () => {
         expect(sessionCreateSpy).toHaveBeenCalledWith(
           expect.objectContaining({ defaultMode: "default" })
         );
+      });
+
+      it("hands a project session a first-message context builder and a global session none", async () => {
+        seedProjects("proj-ctx");
+        mockBuildProjectContext.mockReturnValueOnce(
+          "<project_context>\n- `/vault/Shared`\n</project_context>"
+        );
+        const mgr = buildManager();
+
+        await mgr.createSession(undefined, "proj-ctx");
+        await mgr.createSession(undefined, GLOBAL_SCOPE);
+
+        const [projectOpts, globalOpts] = sessionCreateSpy.mock.calls.map(([opts]) => opts);
+        expect(projectOpts).toMatchObject({ projectId: "proj-ctx" });
+        expect(mockBuildProjectContext).not.toHaveBeenCalled();
+        expect(projectOpts.getProjectContextBlock!()).toBe(
+          "<project_context>\n- `/vault/Shared`\n</project_context>"
+        );
+        expect(globalOpts.getProjectContextBlock).toBeUndefined();
       });
 
       it("only spawns the backend once across multiple createSession calls", async () => {
@@ -1660,31 +1660,6 @@ describe("AgentSessionManager", () => {
         expect(mockSessionCancel).toHaveBeenCalledTimes(2);
         expect(mockSessionDispose).toHaveBeenCalledTimes(2);
         expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
-      });
-
-      it("stops reacting to project record changes", async () => {
-        const projectId = "proj-shutdown";
-        projectsState.updateCachedProjectRecords([
-          {
-            project: { id: projectId, contextSource: { webUrls: "https://a.com" } },
-            filePath: `Projects/${projectId}/project.md`,
-            folderName: projectId,
-          } as unknown as ProjectFileRecord,
-        ]);
-        const mgr = buildManager();
-        await mgr.enterProject(projectId);
-        await mgr.shutdown();
-        mockEnsureMaterialized.mockClear();
-
-        projectsState.updateCachedProjectRecords([
-          {
-            project: { id: projectId, contextSource: { webUrls: "https://a.com\nhttps://b.com" } },
-            filePath: `Projects/${projectId}/project.md`,
-            folderName: projectId,
-          } as unknown as ProjectFileRecord,
-        ]);
-
-        expect(mockEnsureMaterialized).not.toHaveBeenCalled();
       });
     });
 
@@ -4219,6 +4194,27 @@ describe("AgentSessionManager", () => {
         ]);
       });
 
+      it("reattaches a project chat to its project scope", async () => {
+        seedProjects("proj-ctx");
+        const replay = buildReplayingBackend();
+
+        await buildManager({
+          persistence: {
+            loadFile: jest.fn().mockResolvedValue({
+              backendId: "opencode",
+              sessionId: "native-1",
+              projectId: "proj-ctx",
+              messages: savedTurn,
+            }),
+          },
+          descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
+        }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
+
+        expect(replay.backend.loadSession).toHaveBeenCalledWith(
+          expect.objectContaining({ sessionId: "native-1", projectId: "proj-ctx" })
+        );
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 shows the note's messages when the reattached session replays nothing", async () => {
         const replay = buildReplayingBackend({
           loadSession: jest.fn(async () => {
@@ -4618,8 +4614,6 @@ describe("AgentSessionManager", () => {
             id: PROJECT_ID,
             name: PROJECT_ID,
             systemPrompt,
-            projectModelKey: "",
-            modelConfigs: {},
             contextSource,
             created: 0,
             UsageTimestamps: usageTimestamps,
@@ -4756,7 +4750,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).not.toBe(landing);
       });
 
-      it("marks an inactive project dirty so re-entry detaches the stale empty landing and respawns", async () => {
+      it("replaces an empty landing on re-entry after the project's sources change", async () => {
         publish(makeRecord({ webUrls: "https://a.com" }));
         const mgr = buildManager();
 
@@ -4775,7 +4769,7 @@ describe("AgentSessionManager", () => {
         expect(visible[0]).not.toBe(landing);
       });
 
-      it("clears dirty once a fresh session captured the new sources (later re-entry reuses)", async () => {
+      it("reuses the replacement landing on a later re-entry when nothing changed since", async () => {
         publish(makeRecord({ webUrls: "https://a.com" }));
         const mgr = buildManager();
         await mgr.enterProject(PROJECT_ID);
@@ -4794,58 +4788,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).toBe(fresh);
       });
 
-      it("keeps a project dirty when the fresh session fails to start (ready rejects)", async () => {
-        publish(makeRecord({ webUrls: "https://a.com" }));
-        const mgr = buildManager();
-        await mgr.enterProject(PROJECT_ID);
-        await flushTimers();
-        await mgr.exitProject();
-
-        publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" }));
-
-        sessionCreateSpy.mockImplementationOnce((opts) => {
-          const rejected = Promise.reject(new Error("startup boom"));
-          rejected.catch(() => {});
-          return makeMockSession({
-            internalId: opts.internalId,
-            backendId: opts.backendId,
-            projectId: opts.projectId,
-            ready: rejected,
-          });
-        });
-        await mgr.enterProject(PROJECT_ID);
-        await flushTimers();
-        await mgr.exitProject();
-
-        sessionCreateSpy.mockClear();
-        await mgr.enterProject(PROJECT_ID);
-        expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
-      });
-
-      it("keeps a project dirty when the create captured an older signature (single-flight race)", async () => {
-        publish(makeRecord({ webUrls: "https://a.com" }));
-        const mgr = buildManager();
-        await mgr.enterProject(PROJECT_ID);
-        await mgr.exitProject();
-
-        publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" }));
-
-        const v1Signature = getProjectContextSignature(makeRecord({ webUrls: "https://a.com" }));
-        mockEnsureMaterialized.mockImplementationOnce(async () => ({
-          additionalDirectories: [],
-          contextSignature: v1Signature,
-        }));
-
-        await mgr.enterProject(PROJECT_ID);
-        await flushTimers();
-        await mgr.exitProject();
-
-        sessionCreateSpy.mockClear();
-        await mgr.enterProject(PROJECT_ID);
-        expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
-      });
-
-      it("ignores a usage-timestamp-only touch (no dirty, empty landing still reused)", async () => {
+      it("reuses an empty landing after a usage-timestamp-only touch", async () => {
         publish(makeRecord({ webUrls: "https://a.com" }));
         const mgr = buildManager();
         await mgr.enterProject(PROJECT_ID);
@@ -4877,7 +4820,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).not.toBe(landing);
       });
 
-      it("does not reuse an empty landing after vault content inside the project's sources changes", async () => {
+      it("reuses an empty landing after vault content inside the project's sources changes, building its context at the first message", async () => {
         jest.useFakeTimers();
         publish(makeRecord({ inclusions: "Notes" }));
         const app = buildApp();
@@ -4895,91 +4838,25 @@ describe("AgentSessionManager", () => {
         sessionCreateSpy.mockClear();
         await mgr.enterProject(PROJECT_ID);
 
-        expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
-        expect(mgr.getActiveSession()).not.toBe(landing);
+        expect(sessionCreateSpy).not.toHaveBeenCalled();
+        expect(mgr.getActiveSession()).toBe(landing);
       });
 
-      it("publishes processingSources and incremental failedSources during a run, then clears them when done", async () => {
-        publish(makeRecord({ webUrls: "https://a.com" }));
-        const mgr = buildManager();
-        const setMock = jest.requireMock("@/settings/model").settingsStore.set as jest.Mock;
-        const latest = (): AgentProjectContextLoadState | undefined => {
-          for (let i = setMock.mock.calls.length - 1; i >= 0; i--) {
-            const [atom, updater] = setMock.mock.calls[i];
-            if (atom !== agentProjectContextLoadAtom || typeof updater !== "function") continue;
-            const next = updater({}) as Record<string, AgentProjectContextLoadState>;
-            if (next[PROJECT_ID]) return next[PROJECT_ID];
-          }
-          return undefined;
-        };
-
-        let drive!: (p: ContextMaterializeProgress) => void;
-        let release!: () => void;
-        const gate = new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        mockEnsureMaterialized.mockImplementationOnce(
-          async (
-            _app: unknown,
-            _pid: string,
-            _cwd: string,
-            onProgress: (p: ContextMaterializeProgress) => void
-          ) => {
-            drive = onProgress;
-            onProgress({ phase: "prefetch", done: 0, total: 1 });
-            onProgress({ phase: "itemStart", item: { kind: "web", source: "https://a.com" } });
-            await gate;
-            return { additionalDirectories: [] };
-          }
-        );
-
-        const entering = mgr.enterProject(PROJECT_ID);
-        await flushTimers();
-
-        expect(latest()).toMatchObject({
-          phase: "prefetch",
-          blocking: true,
-          processingSources: [{ kind: "web", source: "https://a.com" }],
-        });
-
-        drive({
-          phase: "itemFailed",
-          item: { kind: "web", source: "https://a.com" },
-          failure: {
-            kind: "web",
-            source: "https://a.com",
-            error: "boom",
-            usedStaleSnapshot: false,
-          },
-        });
-        const afterFail = latest()!;
-        expect(afterFail.processingSources).toBeUndefined();
-        expect(afterFail.failedSources).toEqual([
-          { path: "https://a.com", type: "web", error: "boom", usedStaleSnapshot: false },
-        ]);
-
-        release();
-        await entering;
-        await flushTimers();
-        expect(latest()).toMatchObject({ phase: "done", blocking: false });
-        expect(latest()!.processingSources).toBeUndefined();
-      });
-
-      it("warms the active project's cache on a source edit without gating the composer", async () => {
-        publish(makeRecord({ webUrls: "https://a.com" }));
-        const mgr = buildManager();
+      it("leaves the first message without an update note, since its context block is built from the current vault", async () => {
+        jest.useFakeTimers();
+        publish(makeRecord({ inclusions: "Notes" }));
+        const app = buildApp();
+        const mgr = buildManager({ app });
         await mgr.enterProject(PROJECT_ID);
-        await flushTimers();
+        const hooks = sessionCreateSpy.mock.calls.at(-1)![0];
 
-        mockEnsureMaterialized.mockClear();
-        const settingsStoreSet = jest.requireMock("@/settings/model").settingsStore
-          .set as jest.Mock;
-        settingsStoreSet.mockClear();
+        const onModify = (app.vault.on as jest.Mock).mock.calls.find(
+          ([event]) => event === "modify"
+        )![1];
+        onModify(mockTFile({ path: "Notes/topic.md", extension: "md" }));
 
-        publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" }));
-
-        expect(mockEnsureMaterialized).toHaveBeenCalledTimes(1);
-        expect(settingsStoreSet).not.toHaveBeenCalled();
+        hooks.getProjectContextBlock!();
+        expect(hooks.getProjectContextUpdates!()).toBeNull();
       });
 
       it("hands a project session the update note once per change until it acknowledges the epoch", async () => {
@@ -5011,41 +4888,6 @@ describe("AgentSessionManager", () => {
         await mgr.exitProject();
 
         expect(mockTouchProjectLastUsed).not.toHaveBeenCalled();
-      });
-    });
-
-    describe("rematerializeContext()", () => {
-      const PID = "proj-rematerialize";
-
-      async function enterProjectReady(): Promise<AgentSessionManager> {
-        seedProjects(PID);
-        const mgr = buildManager();
-        await mgr.enterProject(PID);
-        await flushTimers();
-        mockEnsureMaterialized.mockClear();
-        return mgr;
-      }
-
-      it("forces a retry of known-bad sources", async () => {
-        const mgr = await enterProjectReady();
-
-        const started = mgr.rematerializeContext(PID);
-        await flushTimers();
-
-        expect(started).toBe(true);
-        expect(mockEnsureMaterialized).toHaveBeenCalledTimes(1);
-        expect(mockEnsureMaterialized.mock.calls[0][4]).toBe(true);
-      });
-
-      it("early-exits while a run already owns the load atom", async () => {
-        const mgr = await enterProjectReady();
-        const getMock = jest.requireMock("@/settings/model").settingsStore.get as jest.Mock;
-        getMock.mockReturnValueOnce({ [PID]: { phase: "prefetch", blocking: true } });
-
-        const started = mgr.rematerializeContext(PID);
-
-        expect(started).toBe(false);
-        expect(mockEnsureMaterialized).not.toHaveBeenCalled();
       });
     });
   });
