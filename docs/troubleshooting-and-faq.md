@@ -119,7 +119,7 @@ Use **Advanced → Debugging & support → Report an issue** for any Copilot pro
 
 ### Reporting from Agent Chat
 
-When something goes wrong in an Agent Chat, select **More Actions** (⋯) above the composer and choose **Report error**. **Report an issue** opens for that chat without going through Settings: the screenshot is of that chat's pane, every available attachment starts ticked, and the description ends with which agent, model and chat the report came from. Write what went wrong above that line, then continue with the steps above.
+When something goes wrong in an Agent Chat, select **More Actions** (⋯) above the composer and choose **Report error**. **Report an issue** opens for that chat without going through Settings: the screenshot is of the Obsidian window, every available attachment starts ticked, and the description ends with which agent, model and chat the report came from. Write what went wrong above that line, then continue with the steps above.
 
 When you tell Agent Chat it got something wrong, or the agent notices its own mistake, it may draft a report for you. A **Report this to the Copilot team?** card appears under its reply, with a one-line summary and your own words. The card never interrupts the agent, and it appears at most once each time you open a chat. The card is not saved with the chat, so it is gone once you close the chat or reload Obsidian.
 
