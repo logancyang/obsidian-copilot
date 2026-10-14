@@ -49,12 +49,13 @@ describe("agentSystemPrompt", () => {
   describe("buildAgentSystemPrompt()", () => {
     beforeEach(() => {
       resetSettings();
+      updateSetting("enableMiyoDocumentProcessing", false);
       resetPromptState();
     });
 
     it("keeps the full prompt compact without legacy agent restrictions (https://github.com/Brevilabs/obsidian-copilot-private/issues/596)", () => {
-      for (const docProcessorBackend of ["plus", "miyo"] as const) {
-        updateSetting("docProcessorBackend", docProcessorBackend);
+      for (const enableMiyoDocumentProcessing of [false, true]) {
+        updateSetting("enableMiyoDocumentProcessing", enableMiyoDocumentProcessing);
         for (const enableMiyoSearchSkill of [false, true]) {
           updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
           const prompt = buildAgentSystemPrompt(AGENT);
@@ -162,17 +163,18 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_WEB_RESEARCH_STEERING);
     });
 
-    it("uses the local fail-closed document route only when Miyo is selected", () => {
+    it("uses the local fail-closed document route only when Miyo document processing is on", () => {
+      updateSetting("enableMiyoDocumentProcessing", false);
       expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_MIYO_DOCUMENT_STEERING);
 
-      updateSetting("docProcessorBackend", "miyo");
+      updateSetting("enableMiyoDocumentProcessing", true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
       expect(prompt).not.toContain("copilot-read-pdf for PDFs");
     });
 
     it(`keeps the Miyo stay-local rule for an agent whose miyo-parse skill is disabled (${ISSUE_599})`, () => {
-      updateSetting("docProcessorBackend", "miyo");
+      updateSetting("enableMiyoDocumentProcessing", true);
       setBuiltinPreferences({ "miyo-parse": { disabledAgents: ["claude"] } });
 
       expect(buildAgentSystemPrompt("claude")).toContain(COPILOT_MIYO_DOCUMENT_STEERING);

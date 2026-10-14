@@ -91,7 +91,7 @@ export const SkillsSettings: React.FC = () => {
   lastAvailableAgents.current = availableAgents;
   const eligibleBuiltins = planManagedBuiltins({
     search: settings.enableMiyoSearchSkill === true,
-    documents: settings.docProcessorBackend === "miyo",
+    documents: settings.enableMiyoDocumentProcessing,
   }).seed;
   const unavailableReasons: Record<string, string> = {};
   for (const skill of eligibleBuiltins) {

@@ -735,7 +735,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   parallelApiKey: "",
   exaApiKey: "",
   supadataApiKey: "",
-  docProcessorBackend: "plus",
+  enableMiyoDocumentProcessing: true,
   enableLexicalBoosts: true,
   suggestedDefaultCommands: false,
   autonomousAgentEnabledToolIds: [

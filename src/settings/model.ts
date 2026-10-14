@@ -105,7 +105,7 @@ export interface CopilotSettings {
   parallelApiKey: string;
   exaApiKey: string;
   supadataApiKey: string;
-  docProcessorBackend: "plus" | "miyo";
+  enableMiyoDocumentProcessing: boolean;
   enableLexicalBoosts: boolean;
   lexicalSearchRamLimit: number;
   suggestedDefaultCommands: boolean;
@@ -584,9 +584,8 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.selfHostSearchProvider = DEFAULT_SETTINGS.selfHostSearchProvider;
   }
 
-  const validDocProcessorBackends = ["plus", "miyo"] as const;
-  if (!validDocProcessorBackends.includes(sanitizedSettings.docProcessorBackend)) {
-    sanitizedSettings.docProcessorBackend = DEFAULT_SETTINGS.docProcessorBackend;
+  if (typeof sanitizedSettings.enableMiyoDocumentProcessing !== "boolean") {
+    sanitizedSettings.enableMiyoDocumentProcessing = DEFAULT_SETTINGS.enableMiyoDocumentProcessing;
   }
 
   if (typeof sanitizedSettings.passMarkdownImages !== "boolean") {

@@ -1173,6 +1173,6 @@ export function isBuiltinSkillEnabledFor(
   if (pref?.disabled || pref?.disabledAgents?.includes(agentId)) return false;
   return planManagedBuiltins({
     search: settings.enableMiyoSearchSkill === true,
-    documents: settings.docProcessorBackend === "miyo",
+    documents: settings.enableMiyoDocumentProcessing,
   }).seed.some((skill) => skill.name === skillName);
 }

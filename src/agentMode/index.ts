@@ -268,7 +268,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     const nextFolder = deriveSkillsFolder(next);
     const miyoAvailabilityChanged =
       prev.enableMiyoSearchSkill !== next.enableMiyoSearchSkill ||
-      prev.docProcessorBackend !== next.docProcessorBackend ||
+      prev.enableMiyoDocumentProcessing !== next.enableMiyoDocumentProcessing ||
       prev.enableMiyo !== next.enableMiyo ||
       prev.miyoConnectionMode !== next.miyoConnectionMode ||
       prev.miyoServerUrl !== next.miyoServerUrl ||
@@ -281,14 +281,14 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       void seedManagedBuiltins()
         .then(() => {
           refreshSystemPromptAffected();
-          if (prev.docProcessorBackend === next.docProcessorBackend) return;
+          if (prev.enableMiyoDocumentProcessing === next.enableMiyoDocumentProcessing) return;
           for (const descriptor of listBackendDescriptors()) {
             if (descriptor.restartOnSystemPromptChange) continue;
             void manager
-              .noteSpawnConfigChanged(descriptor.id, "document processor changed")
+              .noteSpawnConfigChanged(descriptor.id, "Miyo document processing changed")
               .catch((e) =>
                 logError(
-                  `[AgentMode] restart after doc processor change failed: ${descriptor.id}`,
+                  `[AgentMode] restart after Miyo document processing change failed: ${descriptor.id}`,
                   e
                 )
               );

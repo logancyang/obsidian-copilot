@@ -52,7 +52,7 @@ An existing Project chat keeps the instructions and context captured when that c
 
 Markdown, text, and source files can be read directly by the active agent. Web pages, YouTube transcripts, and binary files such as PDFs, Office documents, EPUBs, spreadsheets, and common images are converted through Copilot's hosted service and require an eligible Copilot plan.
 
-> **Private Projects:** Hosted Project conversion runs independently of the **Document Processor** setting. If a Project must not send task content to Brevilabs, do not add binary files, web URLs, or YouTube URLs as saved context. Use Markdown context with local tools or local [Miyo](vault-search-and-indexing.md), use a local model if prompts must also stay on the device, and disable cloud-backed Copilot Skills for every agent you use.
+> **Private Projects:** Hosted Project conversion runs independently of the **Miyo document processing** switch. If a Project must not send task content to Brevilabs, do not add binary files, web URLs, or YouTube URLs as saved context. Use Markdown context with local tools or local [Miyo](vault-search-and-indexing.md), use a local model if prompts must also stay on the device, and disable cloud-backed Copilot Skills for every agent you use.
 
 **Ignore Files** controls which files are included in prepared context. It is not a file permission setting. An agent can still find an ignored file through its own tools when the file is inside a location that agent can access.
 

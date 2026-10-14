@@ -92,11 +92,11 @@ export class PDFParser implements FileParser {
       const settings = getSettings();
       const backend = isMiyoLocalExtension(file)
         ? await resolveDocProcessorBackend(settings)
-        : "plus";
+        : null;
 
       if (backend === "miyo-unavailable") {
         logWarn(`[PDFParser] Miyo unavailable for ${file.path}; not falling back to cloud`);
-        return `[Error: Could not extract content from PDF ${file.basename}. Miyo (local document processor) is unavailable — reconnect it or switch the Document Processor to Plus in settings.]`;
+        return `[Error: Could not extract content from PDF ${file.basename}. Miyo (local document processor) is unavailable — reconnect it or turn off Miyo document processing in settings.]`;
       }
 
       if (backend === "miyo") {
@@ -264,11 +264,11 @@ export class Docs4LLMParser implements FileParser {
     try {
       logInfo(`[Docs4LLMParser] Parsing ${file.extension} file: ${file.path}`);
 
-      const backend = isMiyoLocalExtension(file) ? await resolveDocProcessorBackend() : "plus";
+      const backend = isMiyoLocalExtension(file) ? await resolveDocProcessorBackend() : null;
 
       if (backend === "miyo-unavailable") {
         throw new Error(
-          `Miyo (local document processor) is unavailable for ${file.basename}; not falling back to cloud. Reconnect Miyo or switch the Document Processor to Plus.`
+          `Miyo (local document processor) is unavailable for ${file.basename}; not falling back to cloud. Reconnect Miyo or turn off Miyo document processing.`
         );
       }
 

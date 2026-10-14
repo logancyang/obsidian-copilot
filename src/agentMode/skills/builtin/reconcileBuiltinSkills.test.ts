@@ -42,6 +42,7 @@ function fixture(preferences?: BuiltinPreferences) {
   };
   const settings = {
     ...DEFAULT_SETTINGS,
+    enableMiyoDocumentProcessing: false,
     agentMode: { ...DEFAULT_SETTINGS.agentMode, skills: { ...DEFAULT_SETTINGS.agentMode.skills } },
   };
   settings.agentMode.skills.builtinPreferences = preferences;

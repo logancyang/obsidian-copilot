@@ -381,28 +381,28 @@ describe("model", () => {
       expect(sanitized.enableSelfHostMode).toBe(true);
     });
 
-    it("defaults docProcessorBackend to 'plus' when missing", () => {
+    it("defaults enableMiyoDocumentProcessing to true when missing", () => {
       const out = sanitizeSettings({
         ...DEFAULT_SETTINGS,
-        docProcessorBackend: undefined,
+        enableMiyoDocumentProcessing: undefined,
       } as unknown as CopilotSettings);
-      expect(out.docProcessorBackend).toBe("plus");
+      expect(out.enableMiyoDocumentProcessing).toBe(true);
     });
 
-    it("resets an invalid docProcessorBackend to 'plus'", () => {
+    it("resets a non-boolean enableMiyoDocumentProcessing to true", () => {
       const out = sanitizeSettings({
         ...DEFAULT_SETTINGS,
-        docProcessorBackend: "bogus",
+        enableMiyoDocumentProcessing: "bogus",
       } as unknown as CopilotSettings);
-      expect(out.docProcessorBackend).toBe("plus");
+      expect(out.enableMiyoDocumentProcessing).toBe(true);
     });
 
-    it("preserves docProcessorBackend='miyo'", () => {
+    it("preserves enableMiyoDocumentProcessing=false", () => {
       const out = sanitizeSettings({
         ...DEFAULT_SETTINGS,
-        docProcessorBackend: "miyo",
+        enableMiyoDocumentProcessing: false,
       });
-      expect(out.docProcessorBackend).toBe("miyo");
+      expect(out.enableMiyoDocumentProcessing).toBe(false);
     });
 
     it.each(["http://miyo-home:8742", "http://127.0.0.1:8742"])(

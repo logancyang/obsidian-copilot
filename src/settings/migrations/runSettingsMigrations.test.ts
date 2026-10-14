@@ -12,8 +12,6 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-jest.mock("@/miyo/miyoStatusStore", () => ({ isMiyoAvailableForCapability: jest.fn() }));
-
 jest.mock("@/services/keychainService", () => ({
   KeychainService: { getInstance: jest.fn(() => ({ isAvailable: () => false })) },
 }));
@@ -163,47 +161,34 @@ describe("settingsMigrations", () => {
       }
     );
 
-    it("v6: seeds the plus document processor for a v5 vault with neither Miyo nor self-host", async () => {
-      seedVault({ settingsVersion: 5, docProcessorBackend: undefined });
-      const { api } = makeApi();
+    it.each([
+      ["plus", false],
+      ["miyo", true],
+      [undefined, true],
+      ["bogus", true],
+    ])(
+      "v15: maps a v14 vault with docProcessorBackend %s to enableMiyoDocumentProcessing=%s",
+      async (docProcessorBackend, expected) => {
+        seedVault({ settingsVersion: 14, docProcessorBackend });
+        const { api } = makeApi();
 
-      await runSettingsMigrations(api);
+        await runSettingsMigrations(api);
 
-      expect(getSettings().docProcessorBackend).toBe("plus");
-    });
+        expect(getSettings().enableMiyoDocumentProcessing).toBe(expected);
+      }
+    );
 
-    it("v6: seeds the miyo document processor when Miyo and self-host mode are both on", async () => {
+    it("v15: keeps the switch the user already set on a v15 vault", async () => {
       seedVault({
-        settingsVersion: 5,
-        docProcessorBackend: undefined,
-        enableMiyo: true,
-        enableSelfHostMode: true,
+        settingsVersion: 15,
+        docProcessorBackend: "miyo",
+        enableMiyoDocumentProcessing: false,
       });
       const { api } = makeApi();
 
       await runSettingsMigrations(api);
 
-      expect(getSettings().docProcessorBackend).toBe("miyo");
-    });
-
-    it("v6: seeds the plus document processor for a mobile vault with Miyo enabled but self-host off", async () => {
-      (Platform as { isMobile: boolean }).isMobile = true;
-      try {
-        seedVault({
-          settingsVersion: 5,
-          docProcessorBackend: undefined,
-          enableMiyo: true,
-          enableSelfHostMode: false,
-          miyoServerUrl: "",
-        });
-        const { api } = makeApi();
-
-        await runSettingsMigrations(api);
-
-        expect(getSettings().docProcessorBackend).toBe("plus");
-      } finally {
-        (Platform as { isMobile: boolean }).isMobile = false;
-      }
+      expect(getSettings().enableMiyoDocumentProcessing).toBe(false);
     });
 
     it("v7: turns the Miyo search skill on for an existing Miyo user", async () => {
