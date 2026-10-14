@@ -69,10 +69,10 @@ jest.mock("@/utils/issueReport", () => ({
     buildReportBundle(...args),
 }));
 
-const captureBehindOverlay = jest.fn<Promise<Uint8Array | null>, unknown[]>();
+const captureWindowBehindDialogs = jest.fn<Promise<Uint8Array | null>, [Window]>();
 
 jest.mock("@/agentMode/ui/reportScreenshot", () => ({
-  captureBehindOverlay: (...args: unknown[]) => captureBehindOverlay(...args),
+  captureWindowBehindDialogs: (win: Window) => captureWindowBehindDialogs(win),
 }));
 
 const openExternal = jest.fn<Promise<void>, [string]>();
@@ -118,8 +118,8 @@ beforeEach(() => {
   openExternal.mockResolvedValue(undefined);
   buildReportBundle.mockReset();
   buildReportBundle.mockImplementation(realIssueReport.buildReportBundle);
-  captureBehindOverlay.mockReset();
-  captureBehindOverlay.mockResolvedValue(null);
+  captureWindowBehindDialogs.mockReset();
+  captureWindowBehindDialogs.mockResolvedValue(null);
   getValidatedPath.mockReset();
   getValidatedPath.mockResolvedValue(null);
   exportLogText.mockReset();
@@ -248,23 +248,10 @@ describe("ReportIssueModal", () => {
       Object.assign(Modal.prototype, { setTitle: jest.fn() });
     });
 
-    function agentLeaf() {
-      const containerEl = window.document.createElement("div");
-      const contentEl = containerEl.appendChild(window.document.createElement("div"));
-      return { view: { containerEl, contentEl } };
-    }
-
-    function appWith(leaves: ReturnType<typeof agentLeaf>[]) {
-      return {
+    it("opens the dialog with the plugin's version and the card's prefill", () => {
+      const app = {
         plugins: { getPlugin: () => ({ manifest: { version: "4.1.0" } }) },
-        workspace: { getLeavesOfType: jest.fn(() => leaves), revealLeaf: jest.fn() },
-        setting: { close: jest.fn() },
-      } as unknown as App & { setting: { close: jest.Mock } };
-    }
-
-    it("opens the dialog for the agent pane with the plugin's version and the card's prefill", () => {
-      const leaf = agentLeaf();
-      const app = appWith([leaf]);
+      } as unknown as App;
       const onReported = jest.fn();
 
       const modal = openReportIssueModal(app, {
@@ -282,28 +269,6 @@ describe("ReportIssueModal", () => {
         preselectAllSources: true,
         onReported,
       });
-      expect((modal.params.canCaptureTarget as () => boolean)()).toBe(true);
-      expect((modal.params.resolveCaptureTarget as () => HTMLElement)()).toBe(leaf.view.contentEl);
-      (modal.params.dismissSettings as () => void)();
-      expect(app.setting.close).toHaveBeenCalledTimes(1);
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 captures the chat a report was opened from and leaves Settings open", () => {
-      const other = agentLeaf();
-      const reporting = agentLeaf();
-      const app = appWith([other, reporting]);
-      const card = reporting.view.contentEl.appendChild(window.document.createElement("button"));
-
-      const modal = openReportIssueModal(app, {
-        activeBackend: "codex",
-        origin: card,
-      }) as unknown as { params: Record<string, unknown> };
-
-      expect((modal.params.resolveCaptureTarget as () => HTMLElement)()).toBe(
-        reporting.view.contentEl
-      );
-      (modal.params.dismissSettings as () => void)();
-      expect(app.setting.close).not.toHaveBeenCalled();
     });
   });
 
@@ -353,14 +318,21 @@ describe("ReportIssueModal", () => {
     describe("buildSources()", () => {
       const ids = (params: Record<string, unknown>) =>
         modalWith({
-          params: { canCaptureTarget: () => true, activeBackend: "claude", ...params },
+          params: { activeBackend: "claude", ...params },
         })
           .buildSources()
           .map((source) => source.id);
 
-      it("offers the screenshot only while there is a pane to photograph", () => {
-        expect(ids({})).toContain("screenshot");
-        expect(ids({ canCaptureTarget: () => false })).not.toContain("screenshot");
+      it("offers a checked screenshot of the Obsidian window", () => {
+        const screenshot = modalWith({ params: { activeBackend: "claude" } })
+          .buildSources()
+          .find((source) => source.id === "screenshot");
+
+        expect(screenshot).toEqual({
+          id: "screenshot",
+          label: "Screenshot of the Obsidian window",
+          defaultChecked: true,
+        });
       });
 
       it("offers the opencode log only when opencode is the active backend", () => {
@@ -371,7 +343,6 @@ describe("ReportIssueModal", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 pre-checks the opencode log when a feedback card opens the dialog", () => {
         const checked = modalWith({
           params: {
-            canCaptureTarget: () => true,
             activeBackend: "opencode",
             preselectAllSources: true,
           },
@@ -385,7 +356,7 @@ describe("ReportIssueModal", () => {
 
       it("leaves the opencode log unchecked by default", () => {
         const opencodeLog = modalWith({
-          params: { canCaptureTarget: () => true, activeBackend: "opencode" },
+          params: { activeBackend: "opencode" },
         })
           .buildSources()
           .find((source) => source.id === "opencodeLog");
@@ -396,7 +367,7 @@ describe("ReportIssueModal", () => {
       it("offers the Copilot log checked even with debug mode off, since OpenCode 2 server errors only reach that log (https://github.com/Brevilabs/obsidian-copilot-private/issues/649)", () => {
         setSettings({ debug: false });
         const copilotLog = modalWith({
-          params: { canCaptureTarget: () => true, activeBackend: "opencode" },
+          params: { activeBackend: "opencode" },
         })
           .buildSources()
           .find((source) => source.id === "chatLog");
@@ -414,11 +385,12 @@ describe("ReportIssueModal", () => {
         }
       });
 
+      const activeView = { containerEl: { win: window } };
+
       const prepare = (selected: ReadonlySet<ReportSourceId>) =>
         modalWith({
+          app: { workspace: { getActiveViewOfType: () => activeView } },
           params: {
-            resolveCaptureTarget: () => null,
-            dismissSettings: () => {},
             pluginVersion: "9.9.9",
             activeBackend: "claude",
           },
@@ -460,7 +432,7 @@ describe("ReportIssueModal", () => {
       });
 
       it("goes on without the screenshot when the capture fails, and says so in the manifest (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-        captureBehindOverlay.mockRejectedValue(new Error("the pane went away"));
+        captureWindowBehindDialogs.mockRejectedValue(new Error("the pane went away"));
 
         const report = await prepare(new Set(["screenshot"]));
 
@@ -474,15 +446,28 @@ describe("ReportIssueModal", () => {
 
       it("hands the assembler the captured bytes when the screenshot was selected", async () => {
         const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-        captureBehindOverlay.mockResolvedValue(png);
+        captureWindowBehindDialogs.mockResolvedValue(png);
 
         await prepare(new Set(["screenshot"]));
 
         expect(bundleInput().screenshotPng).toBe(png);
       });
 
+      it("photographs the window of the pane the user was last working in, not a Settings window the dialog opened over", async () => {
+        const settingsWindow = { name: "settings popout" } as unknown as Window;
+        const modal = modalWith({
+          app: { workspace: { getActiveViewOfType: () => activeView } },
+          containerEl: { win: settingsWindow },
+          params: { pluginVersion: "9.9.9", activeBackend: "claude" },
+        });
+
+        created.push((await modal.prepare("", new Set(["screenshot"]))).zipDir);
+
+        expect(captureWindowBehindDialogs).toHaveBeenCalledWith(window);
+      });
+
       it("hands the assembler null when the screenshot was selected but nothing was captured", async () => {
-        captureBehindOverlay.mockResolvedValue(null);
+        captureWindowBehindDialogs.mockResolvedValue(null);
 
         await prepare(new Set(["screenshot"]));
 
@@ -492,7 +477,7 @@ describe("ReportIssueModal", () => {
       it("leaves the screenshot out of the assembler's input entirely when it was not selected (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
         await prepare(new Set());
 
-        expect(captureBehindOverlay).not.toHaveBeenCalled();
+        expect(captureWindowBehindDialogs).not.toHaveBeenCalled();
         expect(bundleInput().screenshotPng).toBeUndefined();
       });
 

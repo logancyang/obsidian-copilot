@@ -14,12 +14,11 @@ import {
 import { ReportUploadError, type ReportUploader } from "@/utils/reportUpload";
 import { findLatestOpencodeLog } from "@/utils/opencodeLog";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
-import { captureBehindOverlay } from "./reportScreenshot";
+import { captureWindowBehindDialogs } from "./reportScreenshot";
 import { getSettings } from "@/settings/model";
-import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { getPersistedDeviceId } from "@/utils/deviceId";
 import { createReportUploader } from "@/utils/reportUpload.brevilabs";
-import { App, Modal, Notice, apiVersion } from "obsidian";
+import { App, ItemView, Modal, Notice, apiVersion } from "obsidian";
 import React from "react";
 import { Root } from "react-dom/client";
 import {
@@ -38,9 +37,6 @@ const OPENCODE_LOG_NAME = "opencode.log";
 
 export interface ReportIssueModalParams {
   app: App;
-  resolveCaptureTarget: () => Promise<HTMLElement | null> | HTMLElement | null;
-  dismissSettings: () => void;
-  canCaptureTarget: () => boolean;
   activeBackend: string;
   pluginVersion: string;
   uploader: ReportUploader;
@@ -49,12 +45,10 @@ export interface ReportIssueModalParams {
   onReported?: (report: { reportId: string; issueUrl: string }) => void;
 }
 
-export interface OpenReportIssueOptions extends Pick<
+export type OpenReportIssueOptions = Pick<
   ReportIssueModalParams,
   "activeBackend" | "initialNote" | "preselectAllSources" | "onReported"
-> {
-  origin?: HTMLElement;
-}
+>;
 
 export function openReportIssueModal(app: App, options: OpenReportIssueOptions): ReportIssueModal {
   const pluginVersion =
@@ -63,31 +57,10 @@ export function openReportIssueModal(app: App, options: OpenReportIssueOptions):
         plugins: { getPlugin: (id: string) => { manifest?: { version?: string } } | null };
       }
     ).plugins.getPlugin("copilot")?.manifest?.version ?? "unknown";
-  const { origin, ...params } = options;
-  // A report opened from a chat captures that chat rather than the first Agent pane, and was not opened from Settings.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-  const originLeaf = () => {
-    const leaves = app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE);
-    return leaves.find((leaf) => origin && leaf.view.containerEl.contains(origin)) ?? leaves[0];
-  };
   const modal = new ReportIssueModal({
-    ...params,
+    ...options,
     app,
     pluginVersion,
-    canCaptureTarget: () => app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE).length > 0,
-    resolveCaptureTarget: () => {
-      const leaf = originLeaf();
-      if (!leaf) return null;
-      app.workspace.revealLeaf(leaf);
-      const view = leaf.view as unknown as {
-        contentEl?: HTMLElement;
-        containerEl?: HTMLElement;
-      };
-      return view.contentEl ?? view.containerEl ?? null;
-    },
-    dismissSettings: () => {
-      if (!origin) (app as unknown as { setting: { close: () => void } }).setting.close();
-    },
     uploader: createReportUploader({
       installId: () => getPersistedDeviceId(app),
       clientVersion: pluginVersion,
@@ -221,16 +194,9 @@ export class ReportIssueModal extends Modal {
 
   private buildSources(): ReportSourceOption[] {
     const settings = getSettings();
-    const sources: ReportSourceOption[] = [];
-    if (this.params.canCaptureTarget()) {
-      sources.push({
-        id: "screenshot",
-        label: "Screenshot of the Agent Mode pane",
-        defaultChecked: true,
-      });
-    }
     const activityLogOn = settings.agentMode.debugFullFrames;
-    sources.push(
+    const sources: ReportSourceOption[] = [
+      { id: "screenshot", label: "Screenshot of the Obsidian window", defaultChecked: true },
       {
         id: "activityLog",
         label: "Agent Mode activity log",
@@ -244,8 +210,8 @@ export class ReportIssueModal extends Modal {
         // OpenCode 2's server errors reach only this log, and reporters skipped it unchecked.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/649
         defaultChecked: true,
-      }
-    );
+      },
+    ];
     if (this.params.activeBackend === OPENCODE_BACKEND_ID) {
       sources.push({
         id: "opencodeLog",
@@ -270,11 +236,9 @@ export class ReportIssueModal extends Modal {
     if (selected.has("screenshot")) {
       screenshotPng = null;
       try {
-        screenshotPng = await captureBehindOverlay(
-          this.containerEl,
-          () => this.params.resolveCaptureTarget(),
-          () => this.params.dismissSettings()
-        );
+        const workspaceWindow =
+          this.app.workspace.getActiveViewOfType(ItemView)?.containerEl.win ?? this.containerEl.win;
+        screenshotPng = await captureWindowBehindDialogs(workspaceWindow);
       } catch (err) {
         logWarn("[ReportIssue] the screenshot failed; the report goes without it:", err);
       }

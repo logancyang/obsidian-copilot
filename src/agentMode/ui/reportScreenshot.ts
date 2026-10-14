@@ -1,54 +1,75 @@
-import { logInfo, logWarn } from "@/logger";
-import { captureViewScreenshot } from "@/utils/captureViewScreenshot";
-
-const CAPTURE_SETTLE_TIMEOUT_MS = 1200;
-
-const CAPTURE_SETTLE_POLL_MS = 50;
-
-export async function waitForStableTarget(el: HTMLElement): Promise<boolean> {
-  const deadline = Date.now() + CAPTURE_SETTLE_TIMEOUT_MS;
-  let previous: DOMRect | null = null;
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => el.win.setTimeout(resolve, CAPTURE_SETTLE_POLL_MS));
-    if (Date.now() >= deadline) return false;
-    if (!el.isConnected) return false;
-    const rect = el.getBoundingClientRect();
-    const settled =
-      rect.width > 0 &&
-      rect.height > 0 &&
-      previous !== null &&
-      rect.left === previous.left &&
-      rect.top === previous.top &&
-      rect.width === previous.width &&
-      rect.height === previous.height;
-    if (settled) return true;
-    previous = rect;
-  }
-  return false;
+interface ElectronRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
-export async function captureBehindOverlay(
-  overlay: HTMLElement,
-  resolveTarget: () => Promise<HTMLElement | null> | HTMLElement | null,
-  dismissSettings: () => void
-): Promise<Uint8Array | null> {
-  const target = await resolveTarget();
-  if (!target) return null;
+interface ElectronBrowserWindow {
+  getBounds: () => ElectronRect;
+  webContents: {
+    capturePage: () => Promise<{ toPNG: () => Uint8Array }>;
+  };
+}
 
-  const inFrame = overlay.win === target.win;
-  if (inFrame) {
-    dismissSettings();
-    overlay.hide();
-  } else {
-    logInfo("[ReportIssue] the pane is in another window; capturing without dismissing Settings");
-  }
+interface ElectronRemote {
+  getCurrentWindow?: () => ElectronBrowserWindow;
+  BrowserWindow?: { getAllWindows?: () => ElectronBrowserWindow[] };
+}
+
+export async function captureWindowBehindDialogs(win: Window): Promise<Uint8Array | null> {
+  const browserWindow = resolveBrowserWindow(win);
+  if (!browserWindow) return null;
+
+  const dialogs = Array.from(win.document.querySelectorAll<HTMLElement>(".modal-container")).filter(
+    (dialog) => dialog.isShown()
+  );
+  dialogs.forEach((dialog) => dialog.hide());
   try {
-    if (!(await waitForStableTarget(target))) {
-      logWarn("[ReportIssue] the Agent Mode pane never settled; skipping the screenshot");
-      return null;
-    }
-    return await captureViewScreenshot(target);
+    await untilPainted(win);
+    const png = (await browserWindow.webContents.capturePage()).toPNG();
+    return png.length > 0 ? png : null;
   } finally {
-    if (inFrame) overlay.show();
+    dialogs.forEach((dialog) => dialog.show());
   }
+}
+
+function untilPainted(win: Window): Promise<void> {
+  return new Promise((resolve) =>
+    win.requestAnimationFrame(() => win.requestAnimationFrame(() => resolve()))
+  );
+}
+
+function resolveBrowserWindow(domWindow: Window): ElectronBrowserWindow | null {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- screenshot capture is an optional Electron capability and returns null when unavailable
+  const electron = require("electron") as { remote?: ElectronRemote } | undefined;
+  const remote = electron?.remote;
+  if (!remote) return null;
+
+  const current = remote.getCurrentWindow?.() ?? null;
+  if (domWindow === window) return current;
+
+  const all = remote.BrowserWindow?.getAllWindows?.() ?? [];
+  if (all.length === 0) return current;
+  if (all.length === 1) return all[0];
+
+  let best: ElectronBrowserWindow | null = null;
+  let bestDelta = Number.POSITIVE_INFINITY;
+  for (const w of all) {
+    try {
+      const b = w.getBounds();
+      const delta =
+        Math.abs(b.x - domWindow.screenX) +
+        Math.abs(b.y - domWindow.screenY) +
+        Math.abs(b.width - domWindow.outerWidth) +
+        Math.abs(b.height - domWindow.outerHeight);
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        best = w;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return best ?? current;
 }

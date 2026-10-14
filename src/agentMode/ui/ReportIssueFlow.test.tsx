@@ -50,7 +50,7 @@ function deferred<T>() {
 function renderFlow(overrides: Partial<ReportIssueFlowProps> = {}) {
   const props: ReportIssueFlowProps = {
     sources: [
-      { id: "screenshot", label: "Screenshot of the Agent Mode pane", defaultChecked: true },
+      { id: "screenshot", label: "Screenshot of the Obsidian window", defaultChecked: true },
       {
         id: "activityLog",
         label: "Agent Mode activity log",

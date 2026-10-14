@@ -9,7 +9,7 @@ import type { Meta, StoryObj } from "@/lib/story";
 import * as React from "react";
 
 const SOURCES: ReportSourceOption[] = [
-  { id: "screenshot", label: "Screenshot of the Agent Mode pane", defaultChecked: true },
+  { id: "screenshot", label: "Screenshot of the Obsidian window", defaultChecked: true },
   { id: "activityLog", label: "Agent Mode activity log", defaultChecked: true },
   {
     id: "chatLog",
