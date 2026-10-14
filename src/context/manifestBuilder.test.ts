@@ -87,7 +87,7 @@ describe("manifestBuilder", () => {
       expect(block).toContain("`/vault/Notes/Spec.md`");
     });
 
-    it("lists web and YouTube sources as links for the agent to fetch on demand", () => {
+    it("splits the saved web and YouTube URL settings into one link per line", () => {
       getRecord.mockReturnValue(
         record({ webUrls: "https://example.com\n", youtubeUrls: "https://youtu.be/abc" })
       );
@@ -96,7 +96,6 @@ describe("manifestBuilder", () => {
 
       expect(block).toContain("## Included URLs\n- https://example.com");
       expect(block).toContain("## Included YouTube\n- https://youtu.be/abc");
-      expect(block).toContain("not fetched in advance");
     });
 
     it("lists every note that shares an inclusion title (basename collision)", () => {
@@ -152,7 +151,6 @@ describe("manifestBuilder", () => {
       expect(block).toContain("- `/vault/Proj/a.pdf`");
       expect(block).toContain("- `/vault/Notes/brief.DOCX`");
       expect(block).not.toContain("note.md");
-      expect(block).toContain("not converted");
     });
 
     it("lists only PDF, Office, EPUB and image files under Document files, sorted by path", () => {
@@ -313,23 +311,20 @@ describe("manifestBuilder", () => {
       expect(md).toContain(
         "## Document files\n- `/vault/Papers/a.pdf`\n- `/vault/Slides/deck.pptx`"
       );
-      expect(md).toContain("not converted");
     });
 
     it("omits the truncation note when under the cap", () => {
       const md = buildProjectContextBlock(sources({ folders: [abs("A"), abs("B")] }));
-      expect(md).not.toContain("omitted");
+      expect(md).not.toContain("not listed");
     });
 
-    it("reports the listed and omitted counts when sources exceed the entry cap", () => {
+    it("reports how many sources are left out and points the agent at the listed sources when sources exceed the entry cap", () => {
       const folders = Array.from({ length: MAX_MANIFEST_ENTRIES + 25 }, (_, i) =>
         abs(`Folder${i}`)
       );
       const md = buildProjectContextBlock(sources({ folders }));
 
-      expect(md).toContain(`Only the first ${MAX_MANIFEST_ENTRIES} of ${folders.length} sources`);
-      expect(md).toContain("25 more are omitted");
-      expect(md).toContain("Use the declared context sources above");
+      expect(md).toContain("> 25 more sources are not listed; search the sources above for them.");
     });
 
     it("keeps every declared source when property-matched notes overflow the entry cap", () => {
@@ -389,8 +384,7 @@ describe("manifestBuilder", () => {
 
       const listed = many.filter((note) => md.includes(`\`${note.vaultPath}\``));
       expect(listed).toHaveLength(MAX_MANIFEST_ENTRIES - 5);
-      expect(md).toContain(`Only the first ${MAX_MANIFEST_ENTRIES} of 125 sources`);
-      expect(md).toContain("25 more are omitted");
+      expect(md).toContain("25 more sources are not listed");
     });
   });
 });

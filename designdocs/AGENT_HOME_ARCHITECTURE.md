@@ -219,9 +219,8 @@ The block lists:
   way to reliably.
 - **Document files** (PDFs, Office docs, e-books, images — the extensions in
   `DOCUMENT_EXTENSIONS`) by the absolute path of the original vault file.
-  The preamble tells the agent they are not converted and to open them with its
-  own tools. Claude Code reads PDFs and images natively; with Miyo document
-  processing on, the `miyo-parse` Skill parses PDFs and EPUBs for any agent.
+  Claude Code reads PDFs and images natively; with Miyo document processing on,
+  the `miyo-parse` Skill parses PDFs and EPUBs for any agent.
 - **Tags and file-type patterns** as labels for the agent to search.
 - **Web and YouTube links** as plain links. The agent fetches one when a
   question needs it, with its own web tool or the `copilot-web-fetch` /
@@ -234,6 +233,14 @@ that are not part of the project
 (https://github.com/Brevilabs/obsidian-copilot-private/issues/711). The block is
 capped at `MAX_MANIFEST_ENTRIES`, with declared sources listed before the
 property and document expansions so a large expansion cannot crowd them out.
+
+The block carries one line of preamble ("Context sources for this project.")
+and no tool instructions: section headings and absolute paths are enough for
+agents to search folders and tags, open documents, and fetch links on demand,
+and the system prompt already names the Skills for links and documents. An eval
+of Claude Haiku, Claude Sonnet, and Codex on folder, tag, property, document,
+link, note, and over-cap questions scored the same with this preamble as with a
+paragraph of per-source instructions.
 
 Listed paths need no extra directory grant: Claude, Codex, and OpenCode read
 any vault file from the project's working directory, and they gate edits by

@@ -51,15 +51,13 @@ const EMPTY_MANIFEST_ENTRIES: ManifestPathEntry[] = Object.freeze(
 
 const UNAVAILABLE_PROJECT_CONTEXT_BLOCK = [
   "<project_context>",
-  "This session runs in a project workspace: the working directory is the project's",
-  "folder. This project's context sources could not be loaded for this session.",
+  "This project's context sources could not be loaded.",
   "</project_context>",
 ].join("\n");
 
 const EMPTY_PROJECT_CONTEXT_BLOCK = [
   "<project_context>",
-  "This session runs in a project workspace: the working directory is the project's",
-  "folder. No context sources are configured for this project.",
+  "No context sources are configured for this project.",
   "</project_context>",
 ].join("\n");
 
@@ -135,19 +133,7 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
   const shown = lines.slice(0, MAX_MANIFEST_ENTRIES);
   const omitted = total - shown.length;
 
-  const out: string[] = [
-    "<project_context>",
-    "Context sources for this project, with absolute paths. Folders and tags are",
-    "listed as sources, not expanded into member files — use your own search",
-    "(grep/glob/read) to enumerate them. Properties are listed as source labels and",
-    'also expanded into the notes they match, under "Notes matching an included',
-    'property" (the label is listed first so it survives the entry cap).',
-    "URLs and YouTube videos are listed as links and are not fetched in advance:",
-    "read one when a question needs it, with your own web fetch tool or the",
-    "copilot-web-fetch or copilot-youtube-transcript skill when it is available.",
-    "Document files (PDFs, Office files, EPUBs, images) are not converted: each is",
-    "listed by the absolute path of the original file — open it with your own tools.",
-  ];
+  const out: string[] = ["<project_context>", "Context sources for this project."];
 
   let currentSection = "";
   for (const item of shown) {
@@ -159,11 +145,7 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
   }
 
   if (omitted > 0) {
-    out.push(
-      "",
-      `> Only the first ${shown.length} of ${total} sources are listed; ${omitted} more are omitted. ` +
-        `Use the declared context sources above with grep/glob/read to find the rest.`
-    );
+    out.push("", `> ${omitted} more sources are not listed; search the sources above for them.`);
   }
   out.push("</project_context>");
   return out.join("\n");
