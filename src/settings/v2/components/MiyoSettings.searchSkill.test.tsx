@@ -225,11 +225,11 @@ describe("MiyoSettings", () => {
       expect(updateSetting).toHaveBeenCalledWith("enableMiyoDocumentProcessing", false);
     });
 
-    it("explains what turning Miyo document processing off means for Agent Chat and Quick Chat — https://github.com/Brevilabs/obsidian-copilot-private/issues/654", async () => {
+    it("describes Miyo document processing as local PDF and EPUB parsing and shows its switch off when disabled — https://github.com/Brevilabs/obsidian-copilot-private/issues/654", async () => {
       currentSettings.enableMiyoDocumentProcessing = false;
       render(<MiyoSettings />);
       await act(async () => {});
-      expect(screen.getByText(/When off, Agent Chat can use the Copilot PDF skill/)).toBeTruthy();
+      expect(screen.getByText("Miyo parses PDF and EPUB files on your computer.")).toBeTruthy();
       expect(
         screen
           .getByRole("switch", { name: "Enable Miyo document processing" })

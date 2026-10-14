@@ -13,7 +13,7 @@ export const MiyoDocumentProcessingRow: React.FC<MiyoDocumentProcessingRowProps>
 }) => (
   <CapabilityRow
     title="Miyo document processing"
-    description="Agent Chat parses PDF and EPUB files with Miyo on your computer; Quick Chat sends them to your connected Miyo service, local or remote. When off, Agent Chat can use the Copilot PDF skill and Quick Chat uses Copilot Cloud, which may use paid credits."
+    description="Miyo parses PDF and EPUB files on your computer."
     control={
       <SettingSwitch
         checked={enabled}
