@@ -29,6 +29,7 @@ This release also lets you pin and bookmark chats, and the agent can offer a dra
   ![Report this to the Copilot team? card under an Agent Chat reply, with a summary, the quoted complaint, and Don't offer again, Dismiss, and Review & report buttons](https://images.brevilabs.com/newsletters/copilot-releases/4.0.15/feedback-card-1fd8e6f7.png)
 
 - **Report an Issue** can attach a screenshot of the whole Obsidian window. ([#3594](https://github.com/logancyang/obsidian-copilot/pull/3594), @zeroliu)
+- Choose **Report error** in a chat's **⋯** menu to open **Report an Issue** with that chat's details already filled in. ([#3616](https://github.com/logancyang/obsidian-copilot/pull/3616), @zeroliu)
 
 ## 🛠️ Bug Fixes
 
