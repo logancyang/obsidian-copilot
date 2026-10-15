@@ -205,7 +205,7 @@ export class AgentSession {
   readonly ready: Promise<void>;
   private backendSessionId: SessionId | null = null;
   private readonly backend: BackendProcess;
-  private readonly cwd: string | null;
+  readonly cwd: string | null;
   private readonly getProjectContextBlockFn: (() => string) | null;
   private firstPromptSent = false;
   private lastSentWebTabBlock: string | null = null;

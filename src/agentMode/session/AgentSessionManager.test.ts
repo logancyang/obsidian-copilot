@@ -180,6 +180,7 @@ function makeMockSession(overrides: {
   backendId: string;
   backend?: BackendProcess;
   projectId?: string;
+  cwd?: string;
   ready?: Promise<void>;
   label?: string;
 }): AgentSession {
@@ -200,6 +201,7 @@ function makeMockSession(overrides: {
     chatInputId: overrides.chatInputId ?? overrides.internalId,
     backendId: overrides.backendId,
     projectId: overrides.projectId ?? GLOBAL_SCOPE,
+    cwd: overrides.cwd ?? null,
     ready: overrides.ready ?? Promise.resolve(),
     getBackendSessionId: () => sessionId,
     getStatus: () => status,
@@ -269,6 +271,7 @@ const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((o
     backendId: opts.backendId,
     backend: opts.backend,
     projectId: opts.projectId,
+    cwd: opts.cwd ?? undefined,
   })
 );
 
@@ -952,6 +955,64 @@ describe("AgentSessionManager", () => {
         expect(session.offerFeedback).not.toHaveBeenCalled();
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 gives a folder's chats one feedback key when the agent shares MCP servers across sessions", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({
+          feedbackServer,
+          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+        });
+
+        const a = await mgr.createSession();
+        const b = await mgr.createSession();
+
+        const keys = feedbackServer.connect.mock.calls.map(([key]) => key);
+        expect(keys).toEqual([`opencode:${a.cwd}`, `opencode:${b.cwd}`]);
+        expect(keys[0]).toBe(keys[1]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 shows a shared connection's card in the chat whose backend session the agent stamped on the call", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({
+          feedbackServer,
+          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+        });
+        const caller = await mgr.createSession();
+        const newest = await mgr.createSession();
+        const onOffer = feedbackServer.connect.mock.calls[1][1] as (
+          draft: unknown,
+          callerSessionId: string | null
+        ) => string;
+
+        expect(onOffer(FEEDBACK_DRAFT, caller.getBackendSessionId())).toBe("shown");
+        expect(caller.offerFeedback).toHaveBeenCalledWith(FEEDBACK_DRAFT);
+        expect(newest.offerFeedback).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ["carries no caller session", null],
+        ["names a session outside the folder's chats", "backend-elsewhere"],
+      ])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/672 shows no card when a shared connection's call %s",
+        async (_label, callerSessionId) => {
+          offerFeedbackCards(true);
+          const feedbackServer = buildFeedbackServer();
+          const mgr = buildManager({
+            feedbackServer,
+            descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+          });
+          const session = await mgr.createSession();
+          const onOffer = feedbackServer.connect.mock.calls[0][1] as (
+            draft: unknown,
+            callerSessionId: string | null
+          ) => string;
+
+          expect(onOffer(FEEDBACK_DRAFT, callerSessionId)).toBe("unattributed");
+          expect(session.offerFeedback).not.toHaveBeenCalled();
+        }
+      );
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 still starts the chat when the feedback server cannot start", async () => {
         offerFeedbackCards(true);
         const feedbackServer = buildFeedbackServer(
@@ -1541,6 +1602,23 @@ describe("AgentSessionManager", () => {
 
         expect(mgr.getSessions()).toEqual([]);
         expect(mockSessionDispose).toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 keeps a folder's shared feedback key when one of its chats closes", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({
+          feedbackServer,
+          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+        });
+        await mgr.createSession();
+        const newest = await mgr.createSession();
+
+        await mgr.closeSession(newest.internalId);
+
+        expect(feedbackServer.disconnect).not.toHaveBeenCalledWith(
+          feedbackServer.connect.mock.calls[0][0]
+        );
       });
 
       it("when the active session is closed, picks the right neighbor as active", async () => {

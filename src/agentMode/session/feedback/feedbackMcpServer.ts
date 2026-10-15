@@ -12,6 +12,7 @@ type ServerResponse = import("node:http").ServerResponse;
 
 export const FEEDBACK_MCP_SERVER_NAME = "obsidian-copilot";
 export const SEND_FEEDBACK_TOOL_NAME = "send_feedback";
+export const CALLER_SESSION_ARGUMENT = "caller_session_id";
 
 const MCP_PATH = "/mcp";
 const MAX_REQUEST_BYTES = 64 * 1024;
@@ -61,14 +62,18 @@ export interface FeedbackDraft {
   repro: string;
 }
 
-export type FeedbackOfferResult = "shown" | "already_offered" | "turned_off";
+export type FeedbackOfferResult = "shown" | "already_offered" | "turned_off" | "unattributed";
 
-export type FeedbackOfferHandler = (draft: FeedbackDraft) => FeedbackOfferResult;
+export type FeedbackOfferHandler = (
+  draft: FeedbackDraft,
+  callerSessionId: string | null
+) => FeedbackOfferResult;
 
 const OFFER_RESULT_TEXT: Readonly<Record<FeedbackOfferResult, string>> = Object.freeze({
   shown: "Shown to the user. Continue; don't mention it unless asked.",
   already_offered: `Already offered this session. Don't call ${SEND_FEEDBACK_TOOL_NAME} again.`,
   turned_off: `The user turned off feedback reports. Don't call ${SEND_FEEDBACK_TOOL_NAME} again.`,
+  unattributed: `Copilot couldn't tell which chat this came from, so nothing was shown. Don't call ${SEND_FEEDBACK_TOOL_NAME} again.`,
 });
 
 export interface FeedbackMcpServer {
@@ -100,7 +105,9 @@ export function createFeedbackMcpServer(): FeedbackMcpServer {
       );
       const url = `${await server.origin}${MCP_PATH}`;
       const crypto = requireNodeModule<typeof import("node:crypto")>("crypto");
-      const token = crypto.randomBytes(32).toString("hex");
+      // A shared key keeps its token, so a later chat re-registering the server leaves the folder's connection on a valid token.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+      const token = tokensBySession.get(sessionKey) ?? crypto.randomBytes(32).toString("hex");
       tokensBySession.set(sessionKey, token);
       handlersByToken.set(token, onOffer);
       return Object.freeze({
@@ -188,7 +195,12 @@ function callTool(params: Record<string, unknown>, onOffer: FeedbackOfferHandler
   }
   const draft = parseDraft(params.arguments);
   if (!draft) return toolText("title, what_happened and repro must be non-empty strings.", true);
-  return toolText(OFFER_RESULT_TEXT[onOffer(draft)], false);
+  return toolText(OFFER_RESULT_TEXT[onOffer(draft, callerSessionId(params.arguments))], false);
+}
+
+function callerSessionId(args: unknown): string | null {
+  const value = (args as Record<string, unknown>)[CALLER_SESSION_ARGUMENT];
+  return typeof value === "string" && value ? value : null;
 }
 
 function parseDraft(args: unknown): FeedbackDraft | null {
