@@ -7,7 +7,7 @@ jest.mock("@/logger", () => ({
 }));
 
 function vaultWith(adapter: MemoryFolderAdapter) {
-  return { adapter, configDir: ".vault-config" };
+  return { adapter };
 }
 
 describe("revealCopilotFolder", () => {
@@ -97,9 +97,10 @@ describe("revealCopilotFolder", () => {
       expect(adapter.files).toEqual(["copilot/memory/Saved Memories.md"]);
     });
 
-    it("never moves files out of or around the Obsidian config folder", async () => {
+    it("moves Copilot folders out of a root inside the Obsidian config folder, which Obsidian does not index either", async () => {
       const adapter = new MemoryFolderAdapter({
         ".vault-config/plugins/copilot-data/memory/Saved Memories.md": "",
+        ".vault-config/app.json": "",
       });
 
       const item = await revealHiddenCopilotFolder(
@@ -108,9 +109,10 @@ describe("revealCopilotFolder", () => {
         "vault-config/plugins/copilot-data"
       );
 
-      expect(item).toBeNull();
-      expect(adapter.files).toEqual([
-        ".vault-config/plugins/copilot-data/memory/Saved Memories.md",
+      expect(item).toMatchObject({ status: "success" });
+      expect(adapter.files.sort()).toEqual([
+        ".vault-config/app.json",
+        "vault-config/plugins/copilot-data/memory/Saved Memories.md",
       ]);
     });
 

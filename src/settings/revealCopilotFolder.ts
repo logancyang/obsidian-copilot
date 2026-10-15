@@ -1,8 +1,7 @@
 import { logError, logInfo } from "@/logger";
 import type { StartupMigrationItem } from "@/services/startupMigration";
 import { COPILOT_SUBFOLDER } from "@/settings/copilotFolder";
-import { copilotFolderOverlapsConfigDir } from "@/settings/model";
-import { normalizePath, type DataAdapter, type Vault } from "obsidian";
+import { normalizePath, type DataAdapter } from "obsidian";
 
 type FolderAdapter = Pick<DataAdapter, "exists" | "stat" | "list" | "rename" | "mkdir">;
 
@@ -12,14 +11,13 @@ interface MoveResult {
 }
 
 export async function revealHiddenCopilotFolder(
-  vault: { adapter: FolderAdapter; configDir: Vault["configDir"] },
+  vault: { adapter: FolderAdapter },
   loadedFolder: unknown,
   visibleFolder: string
 ): Promise<StartupMigrationItem | null> {
   if (typeof loadedFolder !== "string") return null;
   const hiddenFolder = normalizePath(loadedFolder.trim()).replace(/\/+$/, "");
   if (!hiddenFolder.split("/").some((segment) => segment.startsWith("."))) return null;
-  if (copilotFolderOverlapsConfigDir(hiddenFolder, vault.configDir)) return null;
 
   const { adapter } = vault;
   try {
@@ -71,8 +69,11 @@ async function moveMerging(
   result: MoveResult
 ): Promise<void> {
   if (!(await adapter.exists(to))) {
-    const parent = to.slice(0, Math.max(0, to.lastIndexOf("/")));
-    if (parent && !(await adapter.exists(parent))) await adapter.mkdir(parent);
+    const segments = to.split("/").slice(0, -1);
+    for (let depth = 1; depth <= segments.length; depth++) {
+      const ancestor = segments.slice(0, depth).join("/");
+      if (!(await adapter.exists(ancestor))) await adapter.mkdir(ancestor);
+    }
     await adapter.rename(from, to);
     result.moved++;
     return;

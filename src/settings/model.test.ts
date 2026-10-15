@@ -17,7 +17,6 @@ import {
   settingsAtom,
   settingsStore,
   toVisibleCopilotFolder,
-  copilotFolderOverlapsConfigDir,
   validateCopilotFolder,
   CopilotSettings,
   getModelKeyFromModel,
@@ -894,19 +893,6 @@ describe("model", () => {
     it("turns traversal segments into empty segments that validation still rejects", () => {
       expect(validateCopilotFolder(toVisibleCopilotFolder("../escape")).ok).toBe(false);
       expect(validateCopilotFolder(toVisibleCopilotFolder("a/../b")).ok).toBe(false);
-    });
-  });
-
-  describe("copilotFolderOverlapsConfigDir()", () => {
-    it("matches the config folder, anything inside it, and any folder that contains it, in any case", () => {
-      expect(copilotFolderOverlapsConfigDir(".vault-config", ".vault-config")).toBe(true);
-      expect(copilotFolderOverlapsConfigDir(".VAULT-CONFIG/plugins/", ".vault-config")).toBe(true);
-      expect(copilotFolderOverlapsConfigDir(".config", ".config/obsidian")).toBe(true);
-    });
-
-    it("ignores siblings that only share a name prefix and an empty config folder", () => {
-      expect(copilotFolderOverlapsConfigDir(".vault-config-old", ".vault-config")).toBe(false);
-      expect(copilotFolderOverlapsConfigDir("copilot", "")).toBe(false);
     });
   });
 

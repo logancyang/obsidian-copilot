@@ -952,21 +952,6 @@ export function toVisibleCopilotFolder(folder: string): string {
   return folder.trim().replace(/(^|[\\/])\.+/g, "$1");
 }
 
-export function copilotFolderOverlapsConfigDir(folder: string, configDir: string): boolean {
-  const normalize = (path: string) =>
-    path
-      .trim()
-      .replace(/\\/g, "/")
-      .replace(/^\/+|\/+$/g, "")
-      .toLowerCase();
-  const root = normalize(folder);
-  const config = normalize(configDir);
-  return (
-    config.length > 0 &&
-    (root === config || root.startsWith(`${config}/`) || config.startsWith(`${root}/`))
-  );
-}
-
 export function validateCopilotFolder(
   value: string,
   configDir?: string
@@ -982,7 +967,18 @@ export function validateCopilotFolder(
   if (cleaned.length === 0) {
     return { ok: false, reason: "Folder name cannot be empty." };
   }
-  if (configDir && copilotFolderOverlapsConfigDir(cleaned, configDir)) {
+  const normalizedConfigDir = configDir
+    ?.trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+|\/+$/g, "")
+    .toLowerCase();
+  const cleanedLower = cleaned.toLowerCase();
+  if (
+    normalizedConfigDir &&
+    (cleanedLower === normalizedConfigDir ||
+      cleanedLower.startsWith(`${normalizedConfigDir}/`) ||
+      normalizedConfigDir.startsWith(`${cleanedLower}/`))
+  ) {
     return {
       ok: false,
       reason: "Folder path cannot use the Obsidian config folder.",

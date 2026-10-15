@@ -290,8 +290,11 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
     );
     if (revealedFolder) {
       this.startupMigrationItems.push(revealedFolder);
-      // data.json still names the hidden root until saved, and files left behind would repeat the notice every launch.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/712
+    }
+    // data.json still names the hidden root until saved, and files left behind would repeat the notice every launch;
+    // a failed move stays unsaved so the next launch retries it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/712
+    if (revealedFolder && revealedFolder.status !== "error") {
       setSettings({ copilotFolder: getSettings().copilotFolder });
     }
     const agentMode = isDesktopRuntime()

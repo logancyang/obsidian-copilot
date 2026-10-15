@@ -59,6 +59,9 @@ export class MemoryFolderAdapter implements Pick<
   }
 
   async mkdir(path: string): Promise<void> {
-    this.addFolder(path);
+    if (parentOf(path) && !this.entries.has(parentOf(path))) {
+      throw new Error(`Missing parent: ${parentOf(path)}`);
+    }
+    this.entries.set(path, "folder");
   }
 }
