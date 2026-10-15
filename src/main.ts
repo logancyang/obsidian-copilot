@@ -1261,27 +1261,22 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
 
       let persistedAtMs = timestampToPersist;
 
-      if (
-        this.app.fileManager?.processFrontMatter &&
-        this.app.vault.getAbstractFileByPath(file.path) != null
-      ) {
-        await this.app.fileManager.processFrontMatter(
-          file,
-          (frontmatter: Record<string, unknown>) => {
-            const existingValue = Number(frontmatter.lastAccessedAt);
-            const existingAtMs =
-              Number.isFinite(existingValue) && existingValue > 0 ? existingValue : 0;
+      await this.app.fileManager.processFrontMatter(
+        file,
+        (frontmatter: Record<string, unknown>) => {
+          const existingValue = Number(frontmatter.lastAccessedAt);
+          const existingAtMs =
+            Number.isFinite(existingValue) && existingValue > 0 ? existingValue : 0;
 
-            persistedAtMs = Math.max(existingAtMs, timestampToPersist);
+          persistedAtMs = Math.max(existingAtMs, timestampToPersist);
 
-            if (existingAtMs === persistedAtMs) {
-              return;
-            }
-
-            frontmatter.lastAccessedAt = persistedAtMs;
+          if (existingAtMs === persistedAtMs) {
+            return;
           }
-        );
-      }
+
+          frontmatter.lastAccessedAt = persistedAtMs;
+        }
+      );
 
       this.chatHistoryLastAccessedAtManager.markPersisted(file.path, persistedAtMs);
     } catch (error) {
