@@ -6,8 +6,9 @@ import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPo
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { buildChatDeepLink, getSavedChatDeepLinkId } from "@/utils/chatDeepLink";
+import { extractChatTitle } from "@/utils/chatHistoryUtils";
 import { getUrlBookmarks, isBookmarksPluginDisabled } from "@/utils/obsidianBookmarks";
-import { type App, Notice } from "obsidian";
+import { type App, Notice, TFile } from "obsidian";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const EMPTY_CHAT_HISTORY_ITEMS = Object.freeze([]) as unknown as ChatHistoryItem[];
@@ -24,6 +25,7 @@ export interface AgentHistoryControls {
   copyChatLink: (id: string) => Promise<void>;
   getChatBookmarkState: (id: string) => Promise<ChatBookmarkState>;
   setChatBookmarked: (id: string, title: string, bookmarked: boolean) => Promise<void>;
+  setActiveChatBookmarked: (bookmarked: boolean) => Promise<void>;
 }
 
 export type ChatBookmarkState = "unavailable" | "off" | "bookmarked" | "not-bookmarked";
@@ -227,6 +229,29 @@ export function useAgentHistoryControls(
     [manager, plugin, runWithNotice, replaceChatRowId]
   );
 
+  const setActiveChatBookmarked = useCallback(
+    async (bookmarked: boolean) => {
+      await runWithNotice(bookmarked ? "bookmark chat" : "remove bookmark", async () => {
+        const session = manager.getActiveSession();
+        const label = session?.getLabel();
+        // A native session link only opens on this device: https://github.com/Brevilabs/obsidian-copilot-private/issues/601
+        // Removal needs only the saved note, so a failed resave must not keep the bookmark.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/702
+        const path = bookmarked
+          ? (await manager.saveActiveSession())?.path
+          : session && manager.getSessionSourcePath(session.internalId);
+        const file = path ? plugin.app.vault.getAbstractFileByPath(path) : null;
+        // A bookmark opens the chat through its note's link, so a chat that failed to save gets none.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/702
+        if (!(file instanceof TFile)) throw new Error("The active chat has no saved note.");
+        // A renamed tab keeps its title in the session label, which the note's topic and filename miss.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/702
+        await setChatBookmarked(file.path, label ?? extractChatTitle(plugin.app, file), bookmarked);
+      });
+    },
+    [manager, plugin, runWithNotice, setChatBookmarked]
+  );
+
   return {
     chatHistoryItems: visibleChatHistoryItems,
     chatHistorySettled,
@@ -239,5 +264,6 @@ export function useAgentHistoryControls(
     copyChatLink,
     getChatBookmarkState,
     setChatBookmarked,
+    setActiveChatBookmarked,
   };
 }

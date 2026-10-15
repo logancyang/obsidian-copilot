@@ -5,7 +5,6 @@ interface UseRefreshEmptyLandingOnContextSourceChangeParams {
   activeProjectId: string;
   signature: string | null;
   isLanding: boolean;
-  blocking: boolean;
   draftEmpty: boolean;
   refresh: () => Promise<boolean>;
 }
@@ -14,7 +13,6 @@ export function useRefreshEmptyLandingOnContextSourceChange({
   activeProjectId,
   signature,
   isLanding,
-  blocking,
   draftEmpty,
   refresh,
 }: UseRefreshEmptyLandingOnContextSourceChangeParams): void {
@@ -53,7 +51,7 @@ export function useRefreshEmptyLandingOnContextSourceChange({
       return;
     }
 
-    if (!draftEmpty || blocking || inFlightRef.current) return;
+    if (!draftEmpty || inFlightRef.current) return;
 
     inFlightRef.current = true;
     void refreshRef
@@ -68,5 +66,5 @@ export function useRefreshEmptyLandingOnContextSourceChange({
       .finally(() => {
         inFlightRef.current = false;
       });
-  }, [signature, activeProjectId, isLanding, blocking, draftEmpty, retryTick]);
+  }, [signature, activeProjectId, isLanding, draftEmpty, retryTick]);
 }

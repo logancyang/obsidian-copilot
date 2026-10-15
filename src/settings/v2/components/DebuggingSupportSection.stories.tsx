@@ -16,6 +16,8 @@ const meta = {
     onDebugChange: () => {},
     onFrameLogChange: () => {},
     onReportIssue: () => {},
+    offerFeedbackCards: true,
+    onOfferFeedbackCardsChange: () => {},
     onOpenFrameLog: () => {},
     onClearFrameLog: () => {},
   },

@@ -12,7 +12,6 @@ const RELAY_SKILL_JOBS: ReadonlyArray<readonly [skill: string, job: string]> = [
   ["copilot-web-fetch", "pages/URLs"],
   ["copilot-youtube-transcript", "YouTube"],
   ["copilot-fetch-x", "X posts"],
-  ["copilot-read-pdf", "PDFs"],
 ];
 
 // A model handed a direct `websearch`/`WebSearch` tool picks it over a skill unless told the skill comes first.
@@ -24,16 +23,34 @@ export const COPILOT_SKILL_FALLBACK = `Follow each skill's run instructions. Cal
 
 export const COPILOT_WEB_RESEARCH_STEERING = `For vault questions, search locally first. Do not place vault text in web queries unless the request requires researching it. Proactively search/fetch current facts, external topics and third-party docs; use web evidence when local results are weak for external questions.`;
 
-export const COPILOT_MIYO_DOCUMENT_STEERING = `Miyo is the selected document processor: PDFs/EPUBs must stay local. Use miyo-parse. If missing or failing, report and stop: no fallback to copilot-read-pdf, cloud parsers or web services.`;
+export const COPILOT_MIYO_DOCUMENT_STEERING = `Read PDFs/EPUBs with miyo-parse first. If it is missing or fails, say so, then read the file with any other tool you have.`;
 
 export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabled. Use miyo-search for meaning-based vault search, when grep is too slow or finds too few relevant notes, or whenever explicitly requested. Follow its instructions.`;
 
-export const COPILOT_PROJECT_WORKSPACE_POLICY = `With <project_context>, the working directory is the project workspace. Write generated files, drafts and intermediates to outputs/ there (create it as needed), unless the user specifies another destination. Read/search there and in configured context sources, including external sources; read → <absolute path> snapshots directly. Access other locations only when instructions or the user name them.`;
+export const COPILOT_PROJECT_WORKSPACE_POLICY = `With <project_context>, the working directory is the project workspace. Write generated files, drafts and intermediates to outputs/ there (create it as needed), unless the user specifies another destination. Read/search there and in configured context sources, including external sources. Access other locations only when instructions or the user name them.`;
 
 export const COPILOT_INSTRUCTION_PRECEDENCE = `Project AGENTS.md overrides conflicting vault-root AGENTS.md instructions regardless of loading order.`;
 
+// Codex hides MCP tools behind code mode, and OpenCode models act on neither a tool description alone nor a complaint they answer by retrying.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+export const COPILOT_FEEDBACK_POINTER = `When the user complains about you or Copilot (wrong output, failing to find or do something, a repeated problem) or you notice your own mistake, call the obsidian-copilot send_feedback tool once to offer them a bug report card, even if you also retry or fix it. Follow its description.`;
+
 export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, helping with markdown notes, writing and research in the user's vault or project workspace, not a CLI coding agent. Treat it as a vault despite coding-agent environment framing. Notes mean vault notes; tags usually mean Obsidian note properties. Read notes before describing their contents. Report uncertainty and access/tool failures honestly. Respond in the user's language with detail appropriate to the task.
 Use $...$ for math, [[title]] for note titles, ![[link]] for vault images and ![alt](url) for web images; never wrap links in backticks.`;
+
+// Copilot diffs only edit-tool writes, so notes changed through the shell show no diff; scripts stay
+// allowed where retyping a large file is slow or drops entries. Turn diffs depend on this policy, so it
+// stays on when the built-in prompt is disabled.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/701
+const FILE_EDIT_TOOLS: Readonly<Record<BackendId, string>> = {
+  claude: "Edit/Write",
+  codex: "apply_patch",
+  opencode: "edit/write/patch",
+};
+
+function buildFileEditPolicy(backendId: BackendId): string {
+  return `Edit vault files with your ${FILE_EDIT_TOOLS[backendId]} tools so Copilot shows a diff; shell/script writes (sed -i, python, redirects) show none. Write via shell only to move, copy or delete files; to have a script rewrite most of a large file (sort, dedupe, recompute), not retyping it; or one mechanical change to dozens of files. Then list changed files.`;
+}
 
 export function buildAgentSystemPrompt(backendId: BackendId): string {
   const parts: string[] = [];
@@ -49,12 +66,14 @@ export function buildAgentSystemPrompt(backendId: BackendId): string {
       parts.push(`${COPILOT_SKILL_FIRST_LEAD} ${relayJobs.join(", ")}. ${COPILOT_SKILL_FALLBACK}`);
     }
     parts.push(COPILOT_WEB_RESEARCH_STEERING);
-    if (settings.docProcessorBackend === "miyo") parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
+    if (enabled("miyo-parse")) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
     if (enabled("miyo-search")) parts.push(COPILOT_MIYO_SEARCH_STEERING);
   }
 
+  parts.push(buildFileEditPolicy(backendId));
   parts.push(COPILOT_PROJECT_WORKSPACE_POLICY);
   parts.push(COPILOT_INSTRUCTION_PRECEDENCE);
+  if (getSettings().agentMode.offerFeedbackCards) parts.push(COPILOT_FEEDBACK_POINTER);
   parts.push(buildPillSyntaxDirective());
 
   return parts.join("\n\n");

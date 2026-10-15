@@ -20,16 +20,3 @@ export const ImageOnly: StoryObj<ComponentProps<typeof QueuedMessageList>> = {
     ],
   },
 };
-export const WaitingForContext: StoryObj<ComponentProps<typeof QueuedMessageList>> = {
-  args: {
-    messages: [
-      {
-        id: "image",
-        text: "",
-        rawInput: "",
-        promptContent: [{ type: "image", mimeType: "image/png", data: "AQID" }],
-        queueReason: "context",
-      },
-    ],
-  },
-};

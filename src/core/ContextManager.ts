@@ -66,6 +66,7 @@ export class ContextManager {
       logInfo(`[ContextManager] Processing context for message ${message.id}`);
 
       const processedMessage = message.originalMessage || message.message;
+      const sendParsers = fileParserManager.forOneSend();
 
       const { processedPrompt: processedUserMessage, includedFiles } = await processPrompt(
         app,
@@ -104,7 +105,7 @@ export class ContextManager {
 
       const noteContextAddition = await this.contextProcessor.processContextNotes(
         processedNotePaths,
-        fileParserManager,
+        sendParsers,
         vault,
         notes,
         includeActiveNote,
@@ -131,7 +132,7 @@ export class ContextManager {
         if (filteredTaggedNotes.length > 0) {
           tagContextAddition = await this.contextProcessor.processContextNotes(
             new Set(),
-            fileParserManager,
+            sendParsers,
             vault,
             filteredTaggedNotes,
             false,
@@ -161,7 +162,7 @@ export class ContextManager {
         if (filteredFolderNotes.length > 0) {
           folderContextAddition = await this.contextProcessor.processContextNotes(
             new Set(),
-            fileParserManager,
+            sendParsers,
             vault,
             filteredFolderNotes,
             false,

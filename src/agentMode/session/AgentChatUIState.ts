@@ -16,6 +16,7 @@ import type {
   SessionUsage,
 } from "@/agentMode/session/types";
 import type { MessageContext } from "@/types/message";
+import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 
 export class AgentChatUIState implements AgentChatBackend {
   private listeners = new Set<() => void>();
@@ -149,6 +150,18 @@ export class AgentChatUIState implements AgentChatBackend {
 
   getCurrentTodoList(): AgentTodoListEntry[] | null {
     return this.session.getCurrentTodoList();
+  }
+
+  getFeedbackOffer(): FeedbackOffer | null {
+    return this.session.getFeedbackOffer();
+  }
+
+  dismissFeedbackOffer(): void {
+    this.session.dismissFeedbackOffer();
+  }
+
+  markFeedbackReported(report: { reportId: string; issueUrl: string }): void {
+    this.session.markFeedbackReported(report);
   }
 
   getSessionUsage(): SessionUsage | null {

@@ -2,6 +2,7 @@ import {
   createReportDir,
   discardReport,
   openIssuePageWith,
+  openReportIssueModal,
   ReportIssueModal,
   uploadReport,
 } from "@/agentMode/ui/ReportIssueModal";
@@ -16,7 +17,7 @@ import { getSettings, setSettings } from "@/settings/model";
 import type { ReportInput } from "@/utils/issueReport";
 import { ReportUploadError, type ReportUploader } from "@/utils/reportUpload";
 import { unzipSync } from "fflate";
-import { Notice } from "obsidian";
+import { Modal, Notice, type App, type PluginManifest } from "obsidian";
 import nodeOs from "node:os";
 import nodePath from "node:path";
 
@@ -68,10 +69,10 @@ jest.mock("@/utils/issueReport", () => ({
     buildReportBundle(...args),
 }));
 
-const captureBehindOverlay = jest.fn<Promise<Uint8Array | null>, unknown[]>();
+const captureWindowBehindDialogs = jest.fn<Promise<Uint8Array | null>, [Window]>();
 
 jest.mock("@/agentMode/ui/reportScreenshot", () => ({
-  captureBehindOverlay: (...args: unknown[]) => captureBehindOverlay(...args),
+  captureWindowBehindDialogs: (win: Window) => captureWindowBehindDialogs(win),
 }));
 
 const openExternal = jest.fn<Promise<void>, [string]>();
@@ -117,8 +118,8 @@ beforeEach(() => {
   openExternal.mockResolvedValue(undefined);
   buildReportBundle.mockReset();
   buildReportBundle.mockImplementation(realIssueReport.buildReportBundle);
-  captureBehindOverlay.mockReset();
-  captureBehindOverlay.mockResolvedValue(null);
+  captureWindowBehindDialogs.mockReset();
+  captureWindowBehindDialogs.mockResolvedValue(null);
   getValidatedPath.mockReset();
   getValidatedPath.mockResolvedValue(null);
   exportLogText.mockReset();
@@ -242,6 +243,33 @@ describe("ReportIssueModal", () => {
     });
   });
 
+  describe("openReportIssueModal()", () => {
+    beforeAll(() => {
+      Object.assign(Modal.prototype, { setTitle: jest.fn() });
+    });
+
+    it("opens the dialog with the plugin's version and the card's prefill", () => {
+      const plugin = { app: {} as App, manifest: { version: "4.1.0" } as PluginManifest };
+      const onReported = jest.fn();
+
+      const modal = openReportIssueModal(plugin, {
+        activeBackend: "codex",
+        initialNote: "Replied in Swedish",
+        preselectAllSources: true,
+        onReported,
+      }) as unknown as { open: jest.Mock; params: Record<string, unknown> };
+
+      expect(modal.open).toHaveBeenCalledTimes(1);
+      expect(modal.params).toMatchObject({
+        activeBackend: "codex",
+        pluginVersion: "4.1.0",
+        initialNote: "Replied in Swedish",
+        preselectAllSources: true,
+        onReported,
+      });
+    });
+  });
+
   describe("ReportIssueModal", () => {
     interface ModalUnderTest {
       close: jest.Mock;
@@ -288,14 +316,21 @@ describe("ReportIssueModal", () => {
     describe("buildSources()", () => {
       const ids = (params: Record<string, unknown>) =>
         modalWith({
-          params: { canCaptureTarget: () => true, activeBackend: "claude", ...params },
+          params: { activeBackend: "claude", ...params },
         })
           .buildSources()
           .map((source) => source.id);
 
-      it("offers the screenshot only while there is a pane to photograph", () => {
-        expect(ids({})).toContain("screenshot");
-        expect(ids({ canCaptureTarget: () => false })).not.toContain("screenshot");
+      it("offers a checked screenshot of the Obsidian window", () => {
+        const screenshot = modalWith({ params: { activeBackend: "claude" } })
+          .buildSources()
+          .find((source) => source.id === "screenshot");
+
+        expect(screenshot).toEqual({
+          id: "screenshot",
+          label: "Screenshot of the Obsidian window",
+          defaultChecked: true,
+        });
       });
 
       it("offers the opencode log only when opencode is the active backend", () => {
@@ -303,9 +338,23 @@ describe("ReportIssueModal", () => {
         expect(ids({ activeBackend: "opencode" })).toContain("opencodeLog");
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 pre-checks the opencode log when a feedback card opens the dialog", () => {
+        const checked = modalWith({
+          params: {
+            activeBackend: "opencode",
+            preselectAllSources: true,
+          },
+        })
+          .buildSources()
+          .filter((source) => source.defaultChecked)
+          .map((source) => source.id);
+
+        expect(checked).toEqual(expect.arrayContaining(["screenshot", "chatLog", "opencodeLog"]));
+      });
+
       it("leaves the opencode log unchecked by default", () => {
         const opencodeLog = modalWith({
-          params: { canCaptureTarget: () => true, activeBackend: "opencode" },
+          params: { activeBackend: "opencode" },
         })
           .buildSources()
           .find((source) => source.id === "opencodeLog");
@@ -316,7 +365,7 @@ describe("ReportIssueModal", () => {
       it("offers the Copilot log checked even with debug mode off, since OpenCode 2 server errors only reach that log (https://github.com/Brevilabs/obsidian-copilot-private/issues/649)", () => {
         setSettings({ debug: false });
         const copilotLog = modalWith({
-          params: { canCaptureTarget: () => true, activeBackend: "opencode" },
+          params: { activeBackend: "opencode" },
         })
           .buildSources()
           .find((source) => source.id === "chatLog");
@@ -334,11 +383,12 @@ describe("ReportIssueModal", () => {
         }
       });
 
+      const activeView = { containerEl: { win: window } };
+
       const prepare = (selected: ReadonlySet<ReportSourceId>) =>
         modalWith({
+          app: { workspace: { getActiveViewOfType: () => activeView } },
           params: {
-            resolveCaptureTarget: () => null,
-            dismissSettings: () => {},
             pluginVersion: "9.9.9",
             activeBackend: "claude",
           },
@@ -380,7 +430,7 @@ describe("ReportIssueModal", () => {
       });
 
       it("goes on without the screenshot when the capture fails, and says so in the manifest (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-        captureBehindOverlay.mockRejectedValue(new Error("the pane went away"));
+        captureWindowBehindDialogs.mockRejectedValue(new Error("the pane went away"));
 
         const report = await prepare(new Set(["screenshot"]));
 
@@ -394,15 +444,28 @@ describe("ReportIssueModal", () => {
 
       it("hands the assembler the captured bytes when the screenshot was selected", async () => {
         const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-        captureBehindOverlay.mockResolvedValue(png);
+        captureWindowBehindDialogs.mockResolvedValue(png);
 
         await prepare(new Set(["screenshot"]));
 
         expect(bundleInput().screenshotPng).toBe(png);
       });
 
+      it("photographs the window of the pane the user was last working in, not a Settings window the dialog opened over", async () => {
+        const settingsWindow = { name: "settings popout" } as unknown as Window;
+        const modal = modalWith({
+          app: { workspace: { getActiveViewOfType: () => activeView } },
+          containerEl: { win: settingsWindow },
+          params: { pluginVersion: "9.9.9", activeBackend: "claude" },
+        });
+
+        created.push((await modal.prepare("", new Set(["screenshot"]))).zipDir);
+
+        expect(captureWindowBehindDialogs).toHaveBeenCalledWith(window);
+      });
+
       it("hands the assembler null when the screenshot was selected but nothing was captured", async () => {
-        captureBehindOverlay.mockResolvedValue(null);
+        captureWindowBehindDialogs.mockResolvedValue(null);
 
         await prepare(new Set(["screenshot"]));
 
@@ -412,7 +475,7 @@ describe("ReportIssueModal", () => {
       it("leaves the screenshot out of the assembler's input entirely when it was not selected (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
         await prepare(new Set());
 
-        expect(captureBehindOverlay).not.toHaveBeenCalled();
+        expect(captureWindowBehindDialogs).not.toHaveBeenCalled();
         expect(bundleInput().screenshotPng).toBeUndefined();
       });
 
@@ -463,6 +526,34 @@ describe("ReportIssueModal", () => {
 
     describe("upload()", () => {
       const uploaderResolving = () => jest.fn().mockResolvedValue({ reportId, expiresAt: "" });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 tells the feedback card a report landed, with its id and issue link, even after the dialog closed", async () => {
+        const onReported = jest.fn();
+        const open = modalWith({ params: { uploader: uploaderResolving(), onReported } });
+        const closed = modalWith({
+          params: { uploader: uploaderResolving(), onReported },
+          root: null,
+        });
+
+        await open.upload(prepared);
+        await closed.upload(prepared);
+
+        expect(onReported).toHaveBeenCalledTimes(2);
+        expect(onReported).toHaveBeenCalledWith({
+          reportId,
+          issueUrl: realIssueReport.buildLinkedReportIssueUrl(prepared.issueDraft, reportId),
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 leaves the feedback card untouched when the upload fails", async () => {
+        const onReported = jest.fn();
+        const uploader = jest.fn().mockRejectedValue(new ReportUploadError("Upload failed"));
+        const modal = modalWith({ params: { uploader, onReported } });
+
+        await modal.upload(prepared);
+
+        expect(onReported).not.toHaveBeenCalled();
+      });
 
       it("hands the outcome back while the dialog is up, with nothing announced", async () => {
         const modal = modalWith({ params: { uploader: uploaderResolving() } });

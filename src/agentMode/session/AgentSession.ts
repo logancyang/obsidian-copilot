@@ -4,6 +4,7 @@ import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 import {
   AgentChatMessage,
+  AgentMcpServer,
   AgentMessagePart,
   AgentToolKind,
   AgentPlanEntry,
@@ -65,7 +66,6 @@ import {
 import { getVaultBase } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
 import { ContextProcessor } from "@/contextProcessor";
-import type { ContextMaterializationResult } from "@/context/projectContextMaterializer";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
 import { isFanout } from "@/agentMode/session/fanout/answerers";
@@ -90,6 +90,11 @@ import {
 } from "@/agentMode/session/enabledModelSelection";
 import { stripUserMessageWrapper } from "@/agentMode/session/promptEnvelope";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
+import type {
+  FeedbackDraft,
+  FeedbackOfferResult,
+} from "@/agentMode/session/feedback/feedbackMcpServer";
+import type { FeedbackEvidence, FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
@@ -100,7 +105,6 @@ const EMPTY_PERMISSIONS: PermissionPrompt[] = [];
 const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
 const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
-const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as string[];
 
 interface TurnFileCapture {
   edited: boolean;
@@ -171,7 +175,8 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   runFanoutTurn?: RunFanoutTurn;
   getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
-  contextReady?: Promise<ContextMaterializationResult>;
+  getProjectContextBlock?: () => string;
+  mcpServers?: ReadonlyArray<AgentMcpServer>;
 }
 
 export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
@@ -200,9 +205,8 @@ export class AgentSession {
   readonly ready: Promise<void>;
   private backendSessionId: SessionId | null = null;
   private readonly backend: BackendProcess;
-  private readonly cwd: string | null;
-  private readonly contextReady: Promise<ContextMaterializationResult> | null;
-  private projectContextBlock: string | null = null;
+  readonly cwd: string | null;
+  private readonly getProjectContextBlockFn: (() => string) | null;
   private firstPromptSent = false;
   private lastSentWebTabBlock: string | null = null;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
@@ -269,6 +273,7 @@ export class AgentSession {
   private currentTodoList: AgentTodoListEntry[] | null = null;
   private currentTodoListSignature: string | null = null;
   private currentUsage: SessionUsage | null = null;
+  private feedbackOffer: FeedbackOffer | null = null;
 
   private currentPlanUsage: PlanUsage | null = null;
   private planSeq = 0;
@@ -291,7 +296,8 @@ export class AgentSession {
     this.getApp = opts.getApp ?? null;
     this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
-    this.contextReady = "contextReady" in opts ? (opts.contextReady ?? null) : null;
+    this.getProjectContextBlockFn =
+      "getProjectContextBlock" in opts ? (opts.getProjectContextBlock ?? null) : null;
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
       this.resumeSelection = opts.defaultModelSelection;
@@ -339,15 +345,10 @@ export class AgentSession {
   private async initialize(opts: AgentSessionStartOptions): Promise<void> {
     const { backend, cwd, defaultModelSelection } = opts;
     try {
-      const contextResult = this.contextReady ? await this.contextReady : null;
-      const additionalDirectories =
-        contextResult?.additionalDirectories ?? EMPTY_ADDITIONAL_DIRECTORIES;
-      this.projectContextBlock = contextResult?.projectContextBlock ?? null;
-      if (this.disposed) return;
       const resp = await backend.newSession({
         cwd,
         projectId: this.projectId,
-        additionalDirectories,
+        mcpServers: opts.mcpServers,
       });
       if (this.disposed) return;
       const modelLog = resp.state.model
@@ -737,7 +738,7 @@ export class AgentSession {
         );
       }
       const isFirstTurn = !this.firstPromptSent;
-      const projectContextBlock = isFirstTurn ? this.projectContextBlock : null;
+      const projectContextBlock = isFirstTurn ? (this.getProjectContextBlockFn?.() ?? null) : null;
       const projectContextUpdates = this.getProjectContextUpdatesFn?.() ?? null;
       const projectContextUpdatesBlock = projectContextUpdates?.block ?? null;
 
@@ -1055,6 +1056,50 @@ export class AgentSession {
 
   getCurrentTodoList(): AgentTodoListEntry[] | null {
     return this.currentTodoList;
+  }
+
+  getReportEvidence(): FeedbackEvidence {
+    return {
+      backendId: this.backendId,
+      model: this.currentState?.model?.current.baseModelId ?? null,
+      sessionId: this.backendSessionId,
+      raisedAt: new Date().toISOString(),
+    };
+  }
+
+  getFeedbackOffer(): FeedbackOffer | null {
+    return this.feedbackOffer;
+  }
+
+  // One card per session, whatever became of it, so a frustrated user is never nagged.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+  offerFeedback(draft: FeedbackDraft): FeedbackOfferResult {
+    if (this.feedbackOffer) return "already_offered";
+    const userMessages = this.store
+      .getDisplayMessages()
+      .filter((message) => message.sender === USER_SENDER);
+    this.feedbackOffer = {
+      draft,
+      evidence: this.getReportEvidence(),
+      afterUserMessageId: userMessages[userMessages.length - 1]?.id ?? null,
+      status: "open",
+    };
+    this.notifyMessages();
+    return "shown";
+  }
+
+  dismissFeedbackOffer(): void {
+    if (this.feedbackOffer?.status !== "open") return;
+    this.feedbackOffer = { ...this.feedbackOffer, status: "dismissed" };
+    this.notifyMessages();
+  }
+
+  markFeedbackReported(report: { reportId: string; issueUrl: string }): void {
+    // An upload can land after the user closed the dialog and dismissed the card, which must stay dismissed.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+    if (this.feedbackOffer?.status !== "open") return;
+    this.feedbackOffer = { ...this.feedbackOffer, status: "reported", report };
+    this.notifyMessages();
   }
 
   getSessionUsage(): SessionUsage | null {

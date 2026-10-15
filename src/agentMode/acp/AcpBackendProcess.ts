@@ -7,6 +7,7 @@ import {
   PROTOCOL_VERSION,
   RequestError,
   ndJsonStream,
+  type McpServer,
   type NewSessionRequest,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
@@ -20,6 +21,7 @@ import { AcpProcessManager, AcpProcessManagerOptions } from "./AcpProcessManager
 import { VaultClient } from "./VaultClient";
 import { JSONRPC_METHOD_NOT_FOUND, MethodUnsupportedError } from "@/agentMode/session/errors";
 import type {
+  AgentMcpServer,
   BackendDescriptor,
   BackendProcess,
   BackendState,
@@ -72,7 +74,7 @@ export type AcpCapability =
   | "session/load"
   | "session/set_mode"
   | "session/set_config_option"
-  | "session/additional_directories";
+  | "mcp/http";
 
 function isMethodNotFoundError(err: unknown): boolean {
   if (err instanceof RequestError) return err.code === JSONRPC_METHOD_NOT_FOUND;
@@ -214,11 +216,11 @@ export class AcpBackendProcess implements BackendProcess {
       if (init.agentCapabilities?.loadSession === true) {
         this.capabilities.set("session/load", true);
       }
-      if (init.agentCapabilities?.sessionCapabilities?.additionalDirectories != null) {
-        this.capabilities.set("session/additional_directories", true);
+      if (init.agentCapabilities?.mcpCapabilities?.http === true) {
+        this.capabilities.set("mcp/http", true);
       }
       logInfo(
-        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.hasCapability("session/list")}, resumeSession=${this.hasCapability("session/resume")}, loadSession=${this.hasCapability("session/load")}, additionalDirectories=${this.hasCapability("session/additional_directories")})`
+        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.hasCapability("session/list")}, resumeSession=${this.hasCapability("session/resume")}, loadSession=${this.hasCapability("session/load")})`
       );
     } catch (err) {
       logError(
@@ -306,8 +308,7 @@ export class AcpBackendProcess implements BackendProcess {
   async newSession(params: OpenSessionInput): Promise<OpenSessionOutput> {
     const req: NewSessionRequest = {
       cwd: params.cwd,
-      mcpServers: [],
-      ...this.additionalDirectoriesField(params.additionalDirectories),
+      mcpServers: this.mcpServersField(params.mcpServers),
     };
     const wireResp = await this.requireConnection()
       .agent.request("session/new", req)
@@ -439,16 +440,16 @@ export class AcpBackendProcess implements BackendProcess {
     return this.capabilities.get(cap) === true;
   }
 
-  supportsAdditionalDirectories(): boolean {
-    return this.hasCapability("session/additional_directories");
-  }
-
-  private additionalDirectoriesField(roots: string[] | undefined): {
-    additionalDirectories?: string[];
-  } {
-    return this.supportsAdditionalDirectories() && roots?.length
-      ? { additionalDirectories: roots }
-      : {};
+  // An agent that never advertised HTTP MCP may reject the whole session, so its chat runs without Copilot's tools.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+  private mcpServersField(servers: ReadonlyArray<AgentMcpServer> | undefined): McpServer[] {
+    if (!servers?.length || !this.hasCapability("mcp/http")) return [];
+    return servers.map((server) => ({
+      type: "http",
+      name: server.name,
+      url: server.url,
+      headers: Object.entries(server.headers).map(([name, value]) => ({ name, value })),
+    }));
   }
 
   async setSessionModel(params: { sessionId: SessionId; modelId: string }): Promise<BackendState> {
@@ -562,8 +563,7 @@ export class AcpBackendProcess implements BackendProcess {
         c.agent.request("session/resume", {
           sessionId: sessionIdToAcp(params.sessionId),
           cwd: params.cwd,
-          mcpServers: [],
-          ...this.additionalDirectoriesField(params.additionalDirectories),
+          mcpServers: this.mcpServersField(params.mcpServers),
         }),
       { mustBeAdvertised: true }
     );
@@ -586,8 +586,7 @@ export class AcpBackendProcess implements BackendProcess {
         c.agent.request("session/load", {
           sessionId: sessionIdToAcp(sessionId),
           cwd: params.cwd,
-          mcpServers: [],
-          ...this.additionalDirectoriesField(params.additionalDirectories),
+          mcpServers: this.mcpServersField(params.mcpServers),
         }),
       { mustBeAdvertised: true }
     );

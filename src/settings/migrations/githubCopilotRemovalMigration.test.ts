@@ -1,4 +1,4 @@
-import type { CustomModel, ProjectConfig } from "@/aiParams";
+import type { CustomModel } from "@/aiParams";
 import { ChatModelProviders, DEFAULT_SETTINGS } from "@/constants";
 import { KeychainService } from "@/services/keychainService";
 import { type CopilotSettings, setSettings } from "@/settings/model";
@@ -51,20 +51,6 @@ function model(overrides: Partial<CustomModel>): CustomModel {
   };
 }
 
-function project(overrides: Partial<ProjectConfig>): ProjectConfig {
-  return {
-    id: "p1",
-    name: "Project",
-    systemPrompt: "",
-    projectModelKey: "",
-    modelConfigs: {},
-    contextSource: {},
-    created: 0,
-    UsageTimestamps: 0,
-    ...overrides,
-  };
-}
-
 function settingsWith(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
   return { ...DEFAULT_SETTINGS, ...overrides };
 }
@@ -81,7 +67,6 @@ describe("githubCopilotRemovalMigration", () => {
           settingsWith({
             activeModels: [model({ name: "gpt-4o" })],
             defaultModelKey: "gpt-4o|openai",
-            projectList: [project({ projectModelKey: "gpt-4o|openai" })],
           })
         )
       ).toBeNull();
@@ -135,28 +120,9 @@ describe("githubCopilotRemovalMigration", () => {
       ).toBeNull();
     });
 
-    it("clears only the project selections that pointed at a GitHub Copilot model", () => {
-      const patch = planGitHubCopilotRemoval(
-        settingsWith({
-          projectList: [
-            project({ id: "p1", projectModelKey: "gpt-4o|github-copilot" }),
-            project({ id: "p2", projectModelKey: "gpt-4o|openai" }),
-            project({ id: "p3", projectModelKey: "" }),
-          ],
-        })
-      );
-
-      expect(patch?.projectList).toEqual([
-        project({ id: "p1", projectModelKey: "" }),
-        project({ id: "p2", projectModelKey: "gpt-4o|openai" }),
-        project({ id: "p3", projectModelKey: "" }),
-      ]);
-    });
-
-    it("tolerates settings that predate the model and project lists", () => {
+    it("tolerates settings that predate the model list", () => {
       const bare = settingsWith();
       delete (bare as Partial<CopilotSettings>).activeModels;
-      delete (bare as Partial<CopilotSettings>).projectList;
 
       expect(planGitHubCopilotRemoval(bare)).toBeNull();
     });

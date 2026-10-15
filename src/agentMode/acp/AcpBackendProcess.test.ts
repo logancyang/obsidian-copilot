@@ -1103,26 +1103,6 @@ describe("AcpBackendProcess", () => {
       });
     });
 
-    describe("supportsAdditionalDirectories()", () => {
-      it("reports no additional-directories support when the agent does not advertise the capability", async () => {
-        mockInitializeResult = {
-          protocolVersion: 1,
-          agentCapabilities: { sessionCapabilities: { list: {}, close: {} } },
-        };
-        const backend = await startBackend();
-        expect(backend.supportsAdditionalDirectories()).toBe(false);
-      });
-
-      it("reports additional-directories support when the agent advertises the capability", async () => {
-        mockInitializeResult = {
-          protocolVersion: 1,
-          agentCapabilities: { sessionCapabilities: { additionalDirectories: {} } },
-        };
-        const backend = await startBackend();
-        expect(backend.supportsAdditionalDirectories()).toBe(true);
-      });
-    });
-
     describe("newSession()", () => {
       async function makeListingBackend(): Promise<AcpBackendProcess> {
         mockInitializeResult = {
@@ -1139,44 +1119,36 @@ describe("AcpBackendProcess", () => {
         return backend;
       }
 
-      it("forwards additionalDirectories to session/new when the agent advertises the capability", async () => {
+      const FEEDBACK_SERVER = {
+        name: "obsidian-copilot",
+        url: "http://127.0.0.1:4100/mcp",
+        headers: { Authorization: "Bearer t0k3n" },
+      };
+
+      it("passes Copilot's MCP servers to session/new as HTTP servers when the agent advertises HTTP MCP", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
-          agentCapabilities: { sessionCapabilities: { additionalDirectories: {} } },
+          agentCapabilities: { mcpCapabilities: { http: true } },
         };
         const backend = await startBackend();
-        await backend.newSession({
-          cwd: "/vault",
-          additionalDirectories: ["/abs/context-a", "/abs/context-b"],
-        });
-        const req = mockNewSession.mock.calls[0][0] as { additionalDirectories?: string[] };
-        expect(req.additionalDirectories).toEqual(["/abs/context-a", "/abs/context-b"]);
+        await backend.newSession({ cwd: "/vault", mcpServers: [FEEDBACK_SERVER] });
+        const req = mockNewSession.mock.calls[0][0] as { mcpServers: unknown[] };
+        expect(req.mcpServers).toEqual([
+          {
+            type: "http",
+            name: "obsidian-copilot",
+            url: "http://127.0.0.1:4100/mcp",
+            headers: [{ name: "Authorization", value: "Bearer t0k3n" }],
+          },
+        ]);
       });
 
-      it("drops additionalDirectories from session/new when the agent lacks the capability", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 starts the chat without Copilot's MCP servers when the agent never advertised HTTP MCP", async () => {
         mockInitializeResult = { protocolVersion: 1 };
         const backend = await startBackend();
-        await backend.newSession({
-          cwd: "/vault",
-          additionalDirectories: ["/abs/context"],
-        });
-        const req = mockNewSession.mock.calls[0][0] as {
-          additionalDirectories?: string[];
-          mcpServers: unknown[];
-        };
+        await backend.newSession({ cwd: "/vault", mcpServers: [FEEDBACK_SERVER] });
+        const req = mockNewSession.mock.calls[0][0] as { mcpServers: unknown[] };
         expect(req.mcpServers).toEqual([]);
-        expect(req).not.toHaveProperty("additionalDirectories");
-      });
-
-      it("omits additionalDirectories from session/new when none are supplied", async () => {
-        mockInitializeResult = {
-          protocolVersion: 1,
-          agentCapabilities: { sessionCapabilities: { additionalDirectories: {} } },
-        };
-        const backend = await startBackend();
-        await backend.newSession({ cwd: "/vault" });
-        const req = mockNewSession.mock.calls[0][0] as { additionalDirectories?: string[] };
-        expect(req).not.toHaveProperty("additionalDirectories");
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 requests recovery and explains the failure when a new chat finds the internal service stopped", async () => {
@@ -1239,38 +1211,38 @@ describe("AcpBackendProcess", () => {
     });
 
     describe("resumeSession()", () => {
-      it("forwards additionalDirectories to session/resume when the agent advertises the capability", async () => {
+      it("passes Copilot's MCP servers to session/resume when the agent advertises HTTP MCP", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
-          agentCapabilities: { sessionCapabilities: { resume: {}, additionalDirectories: {} } },
+          agentCapabilities: {
+            sessionCapabilities: { resume: {} },
+            mcpCapabilities: { http: true },
+          },
         };
         const backend = await startBackend();
         await backend.resumeSession({
           sessionId: "s1",
           cwd: "/vault",
-          additionalDirectories: ["/abs/context-a", "/abs/context-b"],
+          mcpServers: [{ name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: {} }],
         });
-        const req = mockResumeSession.mock.calls[0][0] as {
-          additionalDirectories?: string[];
-          mcpServers: unknown[];
-        };
-        expect(req.mcpServers).toEqual([]);
-        expect(req.additionalDirectories).toEqual(["/abs/context-a", "/abs/context-b"]);
+        const req = mockResumeSession.mock.calls[0][0] as { mcpServers: unknown[] };
+        expect(req.mcpServers).toEqual([
+          { type: "http", name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: [] },
+        ]);
       });
 
-      it("drops additionalDirectories from session/resume when the agent lacks the capability", async () => {
+      it("sends the session's cwd with no MCP servers to session/resume", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
           agentCapabilities: { sessionCapabilities: { resume: {} } },
         };
         const backend = await startBackend();
-        await backend.resumeSession({
+        await backend.resumeSession({ sessionId: "s1", cwd: "/vault" });
+        expect(mockResumeSession.mock.calls[0][0]).toEqual({
           sessionId: "s1",
           cwd: "/vault",
-          additionalDirectories: ["/abs/context"],
+          mcpServers: [],
         });
-        const req = mockResumeSession.mock.calls[0][0] as { additionalDirectories?: string[] };
-        expect(req).not.toHaveProperty("additionalDirectories");
       });
     });
 
@@ -1294,26 +1266,21 @@ describe("AcpBackendProcess", () => {
         return backend;
       }
 
-      it("forwards additionalDirectories to session/load when the agent advertises the capability", async () => {
+      it("passes Copilot's MCP servers to session/load when the agent advertises HTTP MCP", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
-          agentCapabilities: {
-            loadSession: true,
-            sessionCapabilities: { additionalDirectories: {} },
-          },
+          agentCapabilities: { loadSession: true, mcpCapabilities: { http: true } },
         };
         const backend = await startBackend();
         await backend.loadSession({
           sessionId: "s1",
           cwd: "/vault",
-          additionalDirectories: ["/abs/context-a", "/abs/context-b"],
+          mcpServers: [{ name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: {} }],
         });
-        const req = mockLoadSession.mock.calls[0][0] as {
-          additionalDirectories?: string[];
-          mcpServers: unknown[];
-        };
-        expect(req.mcpServers).toEqual([]);
-        expect(req.additionalDirectories).toEqual(["/abs/context-a", "/abs/context-b"]);
+        const req = mockLoadSession.mock.calls[0][0] as { mcpServers: unknown[] };
+        expect(req.mcpServers).toEqual([
+          { type: "http", name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: [] },
+        ]);
       });
 
       it("returns the session id and the state the agent reports", async () => {

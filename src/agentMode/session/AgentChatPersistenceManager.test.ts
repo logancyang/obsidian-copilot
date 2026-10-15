@@ -4,6 +4,7 @@ import { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage } from "./types";
 import { TFile } from "obsidian";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { App } from "obsidian";
 import { getSettings } from "@/settings/model";
 import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
@@ -39,8 +40,7 @@ jest.mock("@/utils", () => ({
   }),
 }));
 jest.mock("@/utils/vaultAdapterUtils", () => ({
-  isInVaultCache: jest.fn(() => false),
-  listMarkdownFiles: jest.fn().mockResolvedValue([]),
+  listMarkdownFiles: jest.fn().mockReturnValue([]),
   patchFrontmatter: jest.requireActual("@/utils/vaultAdapterUtils").patchFrontmatter,
 }));
 
@@ -61,7 +61,11 @@ function makeApp() {
       getAbstractFileByPath: jest.fn((path: string) => files.get(path) ?? null),
       create: jest.fn(async (path: string, content: string) => {
         const basename = path.split("/").pop()!.replace(/\.md$/, "");
-        const file = { path, basename, contents: content };
+        const file: FakeFile = Object.assign(Object.create(TFile.prototype), {
+          path,
+          basename,
+          contents: content,
+        });
         files.set(path, file);
         return file;
       }),
@@ -100,7 +104,16 @@ function makeApp() {
       getFileCache: jest.fn(() => undefined),
     },
     fileManager: {
-      processFrontMatter: jest.fn(),
+      processFrontMatter: jest.fn(
+        async (file: FakeFile, update: (frontmatter: Record<string, unknown>) => void) => {
+          const contents = file.contents ?? "";
+          const match = /^---\n([\s\S]*?)\n---\n/.exec(contents);
+          const frontmatter = (match ? parseYaml(match[1]) : {}) as Record<string, unknown>;
+          update(frontmatter);
+          const body = match ? contents.slice(match[0].length) : contents;
+          file.contents = `---\n${stringifyYaml(frontmatter)}---\n${body}`;
+        }
+      ),
     },
   };
 }
@@ -432,22 +445,6 @@ describe("AgentChatPersistenceManager", () => {
       expect(note.contents).not.toContain("Old");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/698 keeps the title of a chat saved in a hidden folder outside the vault cache", async () => {
-      const first = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
-        label: "Claude",
-      });
-      const note = app.files.get(first!.path)!;
-      note.contents = note.contents!.replace("tags:", 'topic: "Renamed"\ntags:');
-
-      const second = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
-        existingPath: first!.path,
-      });
-
-      expect(second!.path).toBe(first!.path);
-      expect(note.contents).toContain('topic: "Renamed"\n');
-      expect(note.contents).toContain('agentLabel: "Claude"\n');
-    });
-
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/698 drops the projectId of a project chat that is saved again as a global chat", async () => {
       const first = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
         projectId: "proj-123",
@@ -503,7 +500,7 @@ describe("AgentChatPersistenceManager", () => {
       expect(app.files.has("test-folder/agent__gone.md")).toBe(false);
     });
 
-    it("keeps the pin of a note in a hidden folder through later autosaves", async () => {
+    it("keeps a chat's pin through later autosaves", async () => {
       const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
       await manager.setPinnedAt(saved!.path, 1_760_000_000_000);
 

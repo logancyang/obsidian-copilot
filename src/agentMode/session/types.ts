@@ -331,10 +331,16 @@ export interface AskUserQuestionPrompt {
   signal?: AbortSignal;
 }
 
+export interface AgentMcpServer {
+  name: string;
+  url: string;
+  headers: Readonly<Record<string, string>>;
+}
+
 export interface OpenSessionInput {
   cwd: string;
   projectId?: ProjectScopeId;
-  additionalDirectories?: string[];
+  mcpServers?: ReadonlyArray<AgentMcpServer>;
 }
 
 export interface OpenSessionOutput {
@@ -346,7 +352,7 @@ export interface ResumeSessionInput {
   sessionId: SessionId;
   cwd: string;
   projectId?: ProjectScopeId;
-  additionalDirectories?: string[];
+  mcpServers?: ReadonlyArray<AgentMcpServer>;
 }
 
 export type ResumeSessionOutput = OpenSessionOutput;
@@ -355,7 +361,7 @@ export interface LoadSessionInput {
   sessionId: SessionId;
   cwd: string;
   projectId?: ProjectScopeId;
-  additionalDirectories?: string[];
+  mcpServers?: ReadonlyArray<AgentMcpServer>;
 }
 
 export type LoadSessionOutput = OpenSessionOutput;
@@ -426,7 +432,6 @@ export interface BackendProcess {
   resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput>;
   loadSession(params: LoadSessionInput): Promise<LoadSessionOutput>;
   sessionExistsLocally?(params: { sessionId: SessionId; cwd: string }): Promise<boolean>;
-  supportsAdditionalDirectories?(): boolean;
   shutdown(): Promise<void>;
 }
 

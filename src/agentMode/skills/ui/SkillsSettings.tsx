@@ -91,7 +91,7 @@ export const SkillsSettings: React.FC = () => {
   lastAvailableAgents.current = availableAgents;
   const eligibleBuiltins = planManagedBuiltins({
     search: settings.enableMiyoSearchSkill === true,
-    documents: settings.docProcessorBackend === "miyo",
+    documents: settings.enableMiyoDocumentProcessing,
   }).seed;
   const unavailableReasons: Record<string, string> = {};
   for (const skill of eligibleBuiltins) {
@@ -195,7 +195,7 @@ export const SkillsSettings: React.FC = () => {
     (dirPath: string) => {
       const folderRel = toVaultRelative(dirPath, getVaultBase(app));
       if (app.vault.getAbstractFileByPath(folderRel) instanceof TFolder) {
-        void revealFolderInExplorer(app, folderRel);
+        revealFolderInExplorer(app, folderRel);
         return;
       }
       void openWithSystemDefault(dirPath);

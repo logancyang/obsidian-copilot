@@ -555,6 +555,39 @@ describe("ClaudeSdkBackendProcess", () => {
         ]);
       });
 
+      it("attaches Copilot's MCP servers over HTTP and pre-approves their tools on every turn", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({
+          cwd: "/vault",
+          mcpServers: [
+            {
+              name: "obsidian-copilot",
+              url: "http://127.0.0.1:4100/mcp",
+              headers: { Authorization: "Bearer t0k3n" },
+            },
+          ],
+        });
+
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const { options } = getPromptQueryCalls()[0][0] as { options: Record<string, unknown> };
+        expect(options.mcpServers).toEqual({
+          "obsidian-copilot": {
+            type: "http",
+            url: "http://127.0.0.1:4100/mcp",
+            headers: { Authorization: "Bearer t0k3n" },
+          },
+        });
+        expect(options.allowedTools).toEqual([
+          "Read",
+          "Glob",
+          "Grep",
+          "LS",
+          "mcp__obsidian-copilot",
+        ]);
+      });
+
       it("starts the first query with the claude_code preset, the tool deny list, the foreground hook, and a fresh session id", async () => {
         queryMock.mockImplementation(() => makeQuery([resultMessage()]));
         const proc = makeProc();
@@ -1131,43 +1164,6 @@ describe("ClaudeSdkBackendProcess", () => {
         await expect(backend.prompt({ sessionId: first.sessionId, prompt: [] })).rejects.toThrow(
           "Unknown session"
         );
-      });
-    });
-
-    describe("supportsAdditionalDirectories()", () => {
-      it("reports support for additionalDirectories (stable SDK option)", () => {
-        expect(makeProc().supportsAdditionalDirectories()).toBe(true);
-      });
-
-      it("forwards captured additionalDirectories into options on every turn", async () => {
-        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-        const proc = makeProc();
-
-        const { sessionId } = await proc.newSession({
-          cwd: "/vault",
-          additionalDirectories: ["/abs/context-a", "/abs/context-b"],
-        });
-        proc.registerSessionHandler(sessionId, () => {});
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-        const call = getPromptQueryCalls()[0][0] as {
-          options: { additionalDirectories?: string[] };
-        };
-        expect(call.options.additionalDirectories).toEqual(["/abs/context-a", "/abs/context-b"]);
-      });
-
-      it("omits additionalDirectories from options when none were captured", async () => {
-        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-        const proc = makeProc();
-
-        const { sessionId } = await proc.newSession({ cwd: "/vault" });
-        proc.registerSessionHandler(sessionId, () => {});
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-        const call = getPromptQueryCalls()[0][0] as {
-          options: { additionalDirectories?: string[] };
-        };
-        expect(call.options.additionalDirectories).toBeUndefined();
       });
     });
 

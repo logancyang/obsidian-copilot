@@ -1,17 +1,39 @@
 import type { TurnFileChange } from "@/agentMode/session/types";
+import {
+  ChangeScroller,
+  useChangeNavigation,
+  type ChangeStep,
+} from "@/agentMode/ui/renderedDiff/ChangeScroller";
 import { RenderedDiff } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import { TurnDiffHeader } from "@/agentMode/ui/TurnDiffHeader";
-import { TURN_DIFF_VIEW_TYPE } from "@/constants";
+import { COMMAND_IDS, COMMAND_NAMES, TURN_DIFF_VIEW_TYPE } from "@/constants";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
-import { App, ItemView, Notice, TFile, Workspace, WorkspaceLeaf } from "obsidian";
+import { App, ItemView, Notice, Plugin, TFile, Workspace, WorkspaceLeaf } from "obsidian";
 import React, { type ReactNode } from "react";
 
 // A diff tab's capture lives only in memory, so tabs restored after a restart or plugin reload are empty.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
 export function closeRestoredTurnDiffs(workspace: Workspace): void {
   workspace.onLayoutReady(() => workspace.detachLeavesOfType(TURN_DIFF_VIEW_TYPE));
+}
+
+export function registerTurnDiffCommands(plugin: Plugin): void {
+  const steps = [
+    [COMMAND_IDS.NEXT_DIFF_CHANGE, 1],
+    [COMMAND_IDS.PREVIOUS_DIFF_CHANGE, -1],
+  ] as const;
+  for (const [id, direction] of steps) {
+    plugin.addCommand({
+      id,
+      name: COMMAND_NAMES[id],
+      repeatable: true,
+      checkCallback: (checking) =>
+        plugin.app.workspace.getActiveViewOfType(TurnDiffView)?.stepChange(direction, checking) ??
+        false,
+    });
+  }
 }
 
 export interface TurnDiffViewState extends TurnFileChange {
@@ -21,6 +43,7 @@ export interface TurnDiffViewState extends TurnFileChange {
 export class TurnDiffView extends ItemView {
   private viewRoot: PluginViewRootHandle | null = null;
   private state: TurnDiffViewState | null = null;
+  private stepper: ((direction: ChangeStep) => void) | null = null;
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
@@ -36,6 +59,12 @@ export class TurnDiffView extends ItemView {
 
   getDisplayText(): string {
     return this.state ? basename(this.state.path) : "File diff";
+  }
+
+  stepChange(direction: ChangeStep, checking: boolean): boolean {
+    if (!this.stepper) return false;
+    if (!checking) this.stepper(direction);
+    return true;
   }
 
   getDiffKey(): string | undefined {
@@ -71,17 +100,29 @@ export class TurnDiffView extends ItemView {
     this.viewRoot = null;
   }
 
+  private readonly setStepper = (stepper: ((direction: ChangeStep) => void) | null): void => {
+    this.stepper = stepper;
+  };
+
   private renderTree(): ReactNode {
-    return this.state ? <TurnDiffPane state={this.state} /> : null;
+    return this.state ? (
+      <TurnDiffPane state={this.state} onStepperChange={this.setStepper} />
+    ) : null;
   }
 }
 
 interface TurnDiffPaneProps {
   state: TurnDiffViewState;
+  onStepperChange: (stepper: ((direction: ChangeStep) => void) | null) => void;
 }
 
-const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state }) => {
+const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state, onStepperChange }) => {
   const app = useApp();
+  const navigation = useChangeNavigation();
+  const total = navigation.layout.ticks.length;
+  React.useEffect(() => {
+    onStepperChange(total > 0 ? navigation.step : null);
+  }, [onStepperChange, navigation.step, total]);
   return (
     <div className="tw-flex tw-h-full tw-flex-col">
       <TurnDiffHeader
@@ -89,13 +130,12 @@ const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state }) => {
         status={state.status}
         additions={state.additions}
         deletions={state.deletions}
+        changes={{ current: navigation.current, total, onStep: navigation.step }}
         onOpenNote={state.status === "deleted" ? undefined : () => openNote(app, state.path)}
       />
-      <div className="tw-flex-1 tw-overflow-y-auto tw-p-[var(--file-margins)]">
-        <div className="markdown-rendered tw-mx-auto tw-max-w-[var(--file-line-width)]">
-          <RenderedDiff before={state.before} after={state.after} path={state.path} />
-        </div>
-      </div>
+      <ChangeScroller navigation={navigation}>
+        <RenderedDiff before={state.before} after={state.after} path={state.path} />
+      </ChangeScroller>
     </div>
   );
 };

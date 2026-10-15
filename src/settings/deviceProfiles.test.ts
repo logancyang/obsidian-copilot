@@ -9,6 +9,7 @@ function makeAgentMode(partial: Partial<AgentMode> = {}): AgentMode {
     activeBackend: "opencode",
     backends: {},
     debugFullFrames: false,
+    offerFeedbackCards: true,
     notificationSound: false,
     notificationSoundId: "piano",
     welcomeDismissed: false,

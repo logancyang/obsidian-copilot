@@ -7,6 +7,7 @@ jest.mock("@/miyo/miyoStatusStore", () => ({
 import { Platform, type App } from "obsidian";
 import type { CopilotSettings } from "@/settings/model";
 import {
+  canProcessDocumentsWithMiyo,
   getExtraSearchFolderOptions,
   getMiyoFilePath,
   getMiyoFolderName,
@@ -14,8 +15,6 @@ import {
   getVaultRelativeMiyoPath,
   isCurrentVaultMiyoPath,
   isLocalMiyoUrl,
-  resolveDocProcessorBackend,
-  seedDocProcessorBackend,
 } from "@/miyo/miyoUtils";
 import {
   getMiyoStatusSnapshot,
@@ -190,32 +189,12 @@ describe("miyoUtils", () => {
     });
   });
 
-  describe("seedDocProcessorBackend()", () => {
-    it("returns 'miyo' when self-host mode is valid and Miyo is enabled", () => {
-      expect(
-        seedDocProcessorBackend(capSettings({ enableSelfHostMode: true, enableMiyo: true }))
-      ).toBe("miyo");
-    });
-
-    it("returns 'plus' when self-host mode is off", () => {
-      expect(
-        seedDocProcessorBackend(capSettings({ enableSelfHostMode: false, enableMiyo: true }))
-      ).toBe("plus");
-    });
-
-    it("returns 'plus' when Miyo is disabled", () => {
-      expect(
-        seedDocProcessorBackend(capSettings({ enableSelfHostMode: true, enableMiyo: false }))
-      ).toBe("plus");
-    });
-  });
-
-  describe("resolveDocProcessorBackend()", () => {
+  describe("canProcessDocumentsWithMiyo()", () => {
     const mockedSnapshot = getMiyoStatusSnapshot as jest.Mock;
     const mockedAvailable = isMiyoAvailableForCapability as jest.Mock;
     const mockedRefresh = refreshMiyoStatus as jest.Mock;
     const miyoSettings = (over: Partial<CopilotSettings> = {}): CopilotSettings =>
-      capSettings({ enableMiyo: true, docProcessorBackend: "miyo", ...over });
+      capSettings({ enableMiyo: true, enableMiyoDocumentProcessing: true, ...over });
 
     beforeEach(() => {
       jest.clearAllMocks();
@@ -223,21 +202,21 @@ describe("miyoUtils", () => {
       mockedAvailable.mockReturnValue(true);
     });
 
-    it("returns 'miyo' when Miyo is selected and its document processor is available", async () => {
-      await expect(resolveDocProcessorBackend(miyoSettings())).resolves.toBe("miyo");
+    it("returns true when Miyo document processing is on and its document processor is available", async () => {
+      await expect(canProcessDocumentsWithMiyo(miyoSettings())).resolves.toBe(true);
       expect(mockedRefresh).not.toHaveBeenCalled();
     });
 
-    it("returns 'plus' without consulting Miyo when another backend is selected", async () => {
+    it("returns false without consulting Miyo when Miyo document processing is off", async () => {
       await expect(
-        resolveDocProcessorBackend(miyoSettings({ docProcessorBackend: "plus" }))
-      ).resolves.toBe("plus");
+        canProcessDocumentsWithMiyo(miyoSettings({ enableMiyoDocumentProcessing: false }))
+      ).resolves.toBe(false);
       expect(mockedRefresh).not.toHaveBeenCalled();
     });
 
-    it("returns 'miyo-unavailable' when Miyo is selected but disabled in settings", async () => {
-      await expect(resolveDocProcessorBackend(miyoSettings({ enableMiyo: false }))).resolves.toBe(
-        "miyo-unavailable"
+    it("returns false when Miyo document processing is on but Miyo is disabled in settings", async () => {
+      await expect(canProcessDocumentsWithMiyo(miyoSettings({ enableMiyo: false }))).resolves.toBe(
+        false
       );
     });
 
@@ -246,16 +225,16 @@ describe("miyoUtils", () => {
       async (status) => {
         mockedSnapshot.mockReturnValue({ documentProcessor: status });
 
-        await expect(resolveDocProcessorBackend(miyoSettings())).resolves.toBe("miyo");
+        await expect(canProcessDocumentsWithMiyo(miyoSettings())).resolves.toBe(true);
         expect(mockedRefresh).toHaveBeenCalledTimes(1);
       }
     );
 
-    it("returns 'miyo-unavailable' when the document processor is not available after checking", async () => {
+    it("returns false when the document processor is not available after checking", async () => {
       mockedSnapshot.mockReturnValue({ documentProcessor: "unavailable" });
       mockedAvailable.mockReturnValue(false);
 
-      await expect(resolveDocProcessorBackend(miyoSettings())).resolves.toBe("miyo-unavailable");
+      await expect(canProcessDocumentsWithMiyo(miyoSettings())).resolves.toBe(false);
     });
   });
 

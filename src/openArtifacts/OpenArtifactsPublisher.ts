@@ -215,7 +215,7 @@ export class OpenArtifactsPublisher {
       docId,
       docUrl,
       initialResult: openingResult,
-      access: this.accessPort(),
+      access: this.accessPort(file),
       onConfirm: openingResult
         ? () => Promise.resolve(openingResult)
         : (action, ownerDocument, linkAccess) =>
@@ -231,7 +231,7 @@ export class OpenArtifactsPublisher {
     }
   }
 
-  private accessPort(): OpenArtifactsAccessPort {
+  private accessPort(file: TFile): OpenArtifactsAccessPort {
     const withKey = async <T>(call: (licenseKey: string) => Promise<T>): Promise<T> => {
       const licenseKey = await this.loadLicenseKey().catch(() => "");
       if (!licenseKey) {
@@ -239,14 +239,29 @@ export class OpenArtifactsPublisher {
       }
       return call(licenseKey);
     };
+    const mutate = <T>(docId: string, call: (licenseKey: string) => Promise<T>): Promise<T> =>
+      withKey(async (key) => {
+        // Sync can replace the saved document while the Share dialog stays open.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+        if ((await getOpenArtifactsDocId(this.app, file)) !== docId) {
+          throw new OpenArtifactsClientError(
+            identityChangedFailure("update").message,
+            "identity_changed",
+            null,
+            false
+          );
+        }
+        return call(key);
+      });
     return {
       load: (docId) => withKey((key) => this.client.getAccess(docId, key)),
       setLinkAccess: (docId, linkAccess) =>
-        withKey((key) => this.client.setLinkAccess(docId, linkAccess, key)),
-      addPerson: (docId, email) => withKey((key) => this.client.addPerson(docId, email, key)),
-      removePerson: (docId, email) => withKey((key) => this.client.removePerson(docId, email, key)),
+        mutate(docId, (key) => this.client.setLinkAccess(docId, linkAccess, key)),
+      addPerson: (docId, email) => mutate(docId, (key) => this.client.addPerson(docId, email, key)),
+      removePerson: (docId, email) =>
+        mutate(docId, (key) => this.client.removePerson(docId, email, key)),
       declineRequest: (docId, email) =>
-        withKey((key) => this.client.declineRequest(docId, email, key)),
+        mutate(docId, (key) => this.client.declineRequest(docId, email, key)),
       open: (docId) => withKey((key) => this.client.openAsOwner(docId, key)),
     };
   }

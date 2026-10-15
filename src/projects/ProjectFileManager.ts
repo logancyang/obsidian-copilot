@@ -1,31 +1,16 @@
 import { ProjectConfig } from "@/aiParams";
 import { removeGeneratedInstructionFiles } from "@/instructions/agentsFile";
 import { logError, logInfo, logWarn } from "@/logger";
-import {
-  COPILOT_PROJECT_CREATED,
-  COPILOT_PROJECT_DESCRIPTION,
-  COPILOT_PROJECT_EXCLUSIONS,
-  COPILOT_PROJECT_ID,
-  COPILOT_PROJECT_INCLUSIONS,
-  COPILOT_PROJECT_LAST_USED,
-  COPILOT_PROJECT_MAX_TOKENS,
-  COPILOT_PROJECT_MODEL_KEY,
-  COPILOT_PROJECT_NAME,
-  COPILOT_PROJECT_TEMPERATURE,
-  COPILOT_PROJECT_WEB_URLS,
-  COPILOT_PROJECT_YOUTUBE_URLS,
-  PROJECTS_UNSUPPORTED_FOLDER_NAME,
-} from "@/projects/constants";
+import { COPILOT_PROJECT_LAST_USED, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
 import { ProjectFileRecord } from "@/projects/type";
 import {
-  fetchAllProjects,
   getProjectAnchorFromConfigPath,
   getProjectConfigFilePath,
   getProjectFolderPath,
   getProjectsFolder,
   loadAllProjects,
+  scanAllProjectConfigFiles,
   sanitizeVaultPathSegment,
-  splitUrlsStringToArray,
   writeProjectFrontmatter,
 } from "@/projects/projectUtils";
 import {
@@ -38,18 +23,9 @@ import {
   upsertCachedProjectRecord,
 } from "@/projects/state";
 import { ensureFolderExists } from "@/utils";
-import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
-import {
-  isInVaultCache,
-  patchFrontmatter,
-  readFrontmatterFile,
-  readFrontmatterViaAdapter,
-  resolveFileByPath,
-  trashFile,
-  writeTextFile,
-} from "@/utils/vaultAdapterUtils";
-import { App, normalizePath, stringifyYaml, TFile, TFolder, Vault } from "obsidian";
+import { trashFile } from "@/utils/vaultAdapterUtils";
+import { App, normalizePath, TFile, TFolder, Vault } from "obsidian";
 import { ensureProjectsMigratedIfNeeded } from "@/projects/projectMigration";
 import type { StartupMigrationItem } from "@/services/startupMigration";
 
@@ -80,7 +56,7 @@ export class ProjectFileManager {
   }
 
   public async fetchProjects(): Promise<ProjectFileRecord[]> {
-    return await fetchAllProjects(this.app);
+    return await scanAllProjectConfigFiles(this.app);
   }
 
   public getProjectUsageTimestampsManager(): RecentUsageManager<string> {
@@ -98,20 +74,10 @@ export class ProjectFileManager {
   private async rollbackCreatedFile(filePath: string, folderPath: string): Promise<void> {
     try {
       const file = this.vault.getAbstractFileByPath(filePath);
-      if (file instanceof TFile) {
-        await trashFile(this.app, file);
-      } else if (await this.vault.adapter.exists(filePath)) {
-        await this.vault.adapter.remove(filePath);
-      }
+      if (file instanceof TFile) await trashFile(this.app, file);
       const folder = this.vault.getAbstractFileByPath(folderPath);
       if (folder instanceof TFolder && folder.children.length === 0) {
         await trashFile(this.app, folder);
-      } else if (await this.vault.adapter.exists(folderPath)) {
-        const listing = await this.vault.adapter.list(folderPath);
-        if (listing.files.length === 0 && listing.folders.length === 0) {
-          // Obsidian's desktop adapter rejects a non-recursive rmdir even for an empty folder. https://github.com/logancyang/obsidian-copilot/issues/3075
-          await this.vault.adapter.rmdir(folderPath, true);
-        }
       }
     } catch (rollbackError) {
       logError(`[Projects] Rollback failed for ${filePath}`, rollbackError);
@@ -122,43 +88,6 @@ export class ProjectFileManager {
     const content = raw.replace(/^\uFEFF/, "");
     const match = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
     return match ? match[0] : null;
-  }
-
-  private buildProjectFileContent(
-    project: ProjectConfig,
-    folderName: string,
-    timestamps: { createdMs: number; lastUsedMs: number },
-    base: Record<string, unknown> = {}
-  ): string {
-    const webUrls = splitUrlsStringToArray(project.contextSource?.webUrls || "");
-    const youtubeUrls = splitUrlsStringToArray(project.contextSource?.youtubeUrls || "");
-
-    const fm: Record<string, unknown> = {
-      ...base,
-      [COPILOT_PROJECT_ID]: project.id.trim(),
-      [COPILOT_PROJECT_NAME]: (project.name || folderName).trim(),
-      [COPILOT_PROJECT_DESCRIPTION]: (project.description || "").trim(),
-      [COPILOT_PROJECT_MODEL_KEY]: (project.projectModelKey || "").trim(),
-      [COPILOT_PROJECT_INCLUSIONS]: project.contextSource?.inclusions || "",
-      [COPILOT_PROJECT_EXCLUSIONS]: project.contextSource?.exclusions || "",
-      [COPILOT_PROJECT_WEB_URLS]: webUrls,
-      [COPILOT_PROJECT_YOUTUBE_URLS]: youtubeUrls,
-      [COPILOT_PROJECT_CREATED]: timestamps.createdMs,
-      [COPILOT_PROJECT_LAST_USED]: timestamps.lastUsedMs,
-    };
-
-    if (project.modelConfigs?.temperature != null) {
-      fm[COPILOT_PROJECT_TEMPERATURE] = project.modelConfigs.temperature;
-    } else {
-      delete fm[COPILOT_PROJECT_TEMPERATURE];
-    }
-    if (project.modelConfigs?.maxTokens != null) {
-      fm[COPILOT_PROJECT_MAX_TOKENS] = project.modelConfigs.maxTokens;
-    } else {
-      delete fm[COPILOT_PROJECT_MAX_TOKENS];
-    }
-
-    return `---\n${stringifyYaml(fm)}---\n${project.systemPrompt || ""}`;
   }
 
   public async createProject(project: ProjectConfig): Promise<ProjectFileRecord> {
@@ -216,20 +145,13 @@ export class ProjectFileManager {
           ? project.UsageTimestamps
           : 0;
 
+      const file = await this.vault.create(filePath, project.systemPrompt || "");
+
       try {
-        if (isInVaultCache(this.app, getProjectsFolder())) {
-          const file = await this.vault.create(filePath, project.systemPrompt || "");
-          await writeProjectFrontmatter(this.app, file, project, folderName, {
-            createdMs,
-            lastUsedMs,
-          });
-        } else {
-          // Obsidian does not index hidden folders, so write through the adapter. https://github.com/logancyang/obsidian-copilot/issues/3075
-          await this.vault.adapter.write(
-            filePath,
-            this.buildProjectFileContent(project, folderName, { createdMs, lastUsedMs })
-          );
-        }
+        await writeProjectFrontmatter(this.app, file, project, folderName, {
+          createdMs,
+          lastUsedMs,
+        });
       } catch (fmError) {
         await this.rollbackCreatedFile(filePath, folderPath);
         throw fmError;
@@ -308,11 +230,10 @@ export class ProjectFileManager {
       try {
         const oldFolderPath = projectFolderIn(existing.folderName);
         const folderObj = this.vault.getAbstractFileByPath(oldFolderPath);
-        if (folderObj instanceof TFolder) {
-          await this.vault.rename(folderObj, newFolderPath);
-        } else {
-          await this.vault.adapter.rename(oldFolderPath, newFolderPath);
+        if (!(folderObj instanceof TFolder)) {
+          throw new Error(`Project folder not found: ${oldFolderPath}`);
         }
+        await this.vault.rename(folderObj, newFolderPath);
       } catch (renameError) {
         removePendingFileWrite(oldFilePathForPending);
         removePendingFileWrite(newFilePath);
@@ -331,7 +252,8 @@ export class ProjectFileManager {
         addPendingFileWrite(filePath);
       }
 
-      let file = await resolveFileByPath(this.app, filePath);
+      const found = this.vault.getAbstractFileByPath(filePath);
+      let file = found instanceof TFile ? found : null;
       let materialized = false;
 
       if (!file) {
@@ -339,10 +261,7 @@ export class ProjectFileManager {
         const folderPath = projectFolderIn(folderName);
         await ensureFolderExists(this.vault, projectsRoot);
         await ensureFolderExists(this.vault, folderPath);
-        // vault.create returns null for hidden paths, so write first and resolve after. https://github.com/logancyang/obsidian-copilot/issues/3075
-        await writeTextFile(this.app, filePath, nextProject.systemPrompt || "");
-        file = await resolveFileByPath(this.app, filePath);
-        if (!file) throw new Error(`Could not create project file: ${filePath}`);
+        file = await this.vault.create(filePath, nextProject.systemPrompt || "");
         materialized = true;
       }
 
@@ -359,36 +278,26 @@ export class ProjectFileManager {
 
       const projectForWrite = { ...nextProject, created: createdMs, UsageTimestamps: lastUsedMs };
 
-      if (isInVaultCache(this.app, filePath)) {
-        try {
-          await writeProjectFrontmatter(this.app, file, projectForWrite, folderName, {
-            createdMs,
-            lastUsedMs,
-          });
-        } catch (fmError) {
-          if (materialized) await this.rollbackCreatedFile(filePath, projectFolderIn(folderName));
-          throw fmError;
-        }
-
-        const rawWithFrontmatter = await this.vault.read(file);
-        const frontmatterBlock = this.getLeadingFrontmatterBlock(rawWithFrontmatter);
-        if (!frontmatterBlock) {
-          throw new Error(`Expected frontmatter block after update: ${file.path}`);
-        }
-        const separator = frontmatterBlock.endsWith("\n") ? "" : "\n";
-        await this.vault.modify(
-          file,
-          frontmatterBlock + separator + (nextProject.systemPrompt || "")
-        );
-      } else {
-        const content = this.buildProjectFileContent(
-          projectForWrite,
-          folderName,
-          { createdMs, lastUsedMs },
-          (await readFrontmatterFile(this.app, filePath))?.frontmatter
-        );
-        await this.vault.adapter.write(filePath, content);
+      try {
+        await writeProjectFrontmatter(this.app, file, projectForWrite, folderName, {
+          createdMs,
+          lastUsedMs,
+        });
+      } catch (fmError) {
+        if (materialized) await this.rollbackCreatedFile(filePath, projectFolderIn(folderName));
+        throw fmError;
       }
+
+      const rawWithFrontmatter = await this.vault.read(file);
+      const frontmatterBlock = this.getLeadingFrontmatterBlock(rawWithFrontmatter);
+      if (!frontmatterBlock) {
+        throw new Error(`Expected frontmatter block after update: ${file.path}`);
+      }
+      const separator = frontmatterBlock.endsWith("\n") ? "" : "\n";
+      await this.vault.modify(
+        file,
+        frontmatterBlock + separator + (nextProject.systemPrompt || "")
+      );
 
       const updated: ProjectFileRecord = {
         project: { ...nextProject, created: createdMs, UsageTimestamps: lastUsedMs },
@@ -408,8 +317,6 @@ export class ProjectFileManager {
           const renamedFolder = this.vault.getAbstractFileByPath(newFolderPath);
           if (renamedFolder instanceof TFolder) {
             await this.vault.rename(renamedFolder, oldFolderPath);
-          } else {
-            await this.vault.adapter.rename(newFolderPath, oldFolderPath);
           }
           logWarn(
             `[Projects] Rolled back folder rename "${folderName}" → "${existing.folderName}" after write failure`
@@ -442,11 +349,7 @@ export class ProjectFileManager {
       addPendingFileWrite(existing.filePath);
 
       const configFile = this.vault.getAbstractFileByPath(existing.filePath);
-      if (configFile instanceof TFile) {
-        await trashFile(this.app, configFile);
-      } else if (await this.vault.adapter.exists(existing.filePath)) {
-        await this.vault.adapter.remove(existing.filePath);
-      }
+      if (configFile instanceof TFile) await trashFile(this.app, configFile);
 
       deleteCachedProjectRecordById(normalizedId);
 
@@ -456,22 +359,9 @@ export class ProjectFileManager {
         const folder = this.vault.getAbstractFileByPath(folderPath);
         if (folder instanceof TFolder && folder.children.length === 0) {
           await trashFile(this.app, folder);
-        } else if (await this.vault.adapter.exists(folderPath)) {
-          const listing = await this.vault.adapter.list(folderPath);
-          if (listing.files.length === 0 && listing.folders.length === 0) {
-            // Obsidian's desktop adapter rejects a non-recursive rmdir even for an empty folder. https://github.com/logancyang/obsidian-copilot/issues/3075
-            await this.vault.adapter.rmdir(folderPath, true);
-          }
         }
       } catch (cleanupError) {
         logWarn(`[Projects] Failed to clean up empty project folder: ${folderPath}`, cleanupError);
-      }
-
-      if (isDesktopRuntime()) {
-        const { clearProjectMarkers } = await import("@/context/projectMarkerCleanup");
-        await clearProjectMarkers(this.app, normalizedId).catch((err) =>
-          logError(`[Projects] Failed to clear off-vault failure markers on delete`, err)
-        );
       }
 
       logInfo(`[Projects] Deleted project: ${normalizedId} -> ${folderPath}`);
@@ -499,36 +389,24 @@ export class ProjectFileManager {
       if (timestampToPersist === null) return;
 
       const filePath = normalizePath(record.filePath);
-      const file = await resolveFileByPath(this.app, filePath);
-      if (!file) return;
+      const file = this.vault.getAbstractFileByPath(filePath);
+      if (!(file instanceof TFile)) return;
 
       const alreadyPending = isPendingFileWrite(filePath);
       let actualPersistedValue = timestampToPersist;
       try {
         if (!alreadyPending) addPendingFileWrite(filePath);
 
-        if (isInVaultCache(this.app, filePath)) {
-          await this.app.fileManager.processFrontMatter(
-            file,
-            (frontmatter: Record<string, unknown>) => {
-              const existing = Number(frontmatter[COPILOT_PROJECT_LAST_USED]);
-              const existingMs = Number.isFinite(existing) && existing > 0 ? existing : 0;
-              actualPersistedValue = Math.max(existingMs, timestampToPersist);
-              if (existingMs === actualPersistedValue) return;
-              frontmatter[COPILOT_PROJECT_LAST_USED] = actualPersistedValue;
-            }
-          );
-        } else {
-          const adapterFm = await readFrontmatterViaAdapter(this.app, filePath);
-          const existing = Number(adapterFm?.[COPILOT_PROJECT_LAST_USED]);
-          const existingMs = Number.isFinite(existing) && existing > 0 ? existing : 0;
-          actualPersistedValue = Math.max(existingMs, timestampToPersist);
-          if (existingMs !== actualPersistedValue) {
-            await patchFrontmatter(this.app, filePath, {
-              [COPILOT_PROJECT_LAST_USED]: actualPersistedValue,
-            });
+        await this.app.fileManager.processFrontMatter(
+          file,
+          (frontmatter: Record<string, unknown>) => {
+            const existing = Number(frontmatter[COPILOT_PROJECT_LAST_USED]);
+            const existingMs = Number.isFinite(existing) && existing > 0 ? existing : 0;
+            actualPersistedValue = Math.max(existingMs, timestampToPersist);
+            if (existingMs === actualPersistedValue) return;
+            frontmatter[COPILOT_PROJECT_LAST_USED] = actualPersistedValue;
           }
-        }
+        );
       } finally {
         if (!alreadyPending) removePendingFileWrite(filePath);
       }

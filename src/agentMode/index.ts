@@ -15,6 +15,7 @@ import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
+import { createFeedbackMcpServer } from "@/agentMode/session/feedback/feedbackMcpServer";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
 import { SkillManager } from "./skills";
 import {
@@ -42,8 +43,8 @@ export { AgentDefaultModelSetting } from "./ui/AgentDefaultModelSetting";
 export { ModelEnableList } from "@/components/ui/ModelEnableList";
 export type { ModelEnableGroup } from "@/components/ui/ModelEnableList";
 export { PlanPreviewView } from "./ui/PlanPreviewView";
-export { ReportIssueModal } from "./ui/ReportIssueModal";
-export { closeRestoredTurnDiffs, TurnDiffView } from "./ui/TurnDiffView";
+export { openReportIssueModal } from "./ui/ReportIssueModal";
+export { closeRestoredTurnDiffs, registerTurnDiffCommands, TurnDiffView } from "./ui/TurnDiffView";
 export {
   backendDisplayOrder,
   backendNeedsSelfHostWarning,
@@ -164,6 +165,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     beforeBackendStart,
     persistenceManager,
     sessionIndex,
+    feedbackServer: createFeedbackMcpServer(),
   });
   managerRef = manager;
   // `noteSpawnConfigChanged` holds the restart behind Reload while a session is open: a skill
@@ -229,6 +231,13 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
   };
   subscribeToSystemPromptChange(refreshSystemPromptAffected);
+  // Codex and OpenCode bake the feedback pointer into their prompt at spawn, so toggling cards must reach a running backend.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+  subscribeToSettingsChange((prev, next) => {
+    if (prev.agentMode.offerFeedbackCards !== next.agentMode.offerFeedbackCards) {
+      refreshSystemPromptAffected();
+    }
+  });
   subscribeToSettingsChange((prev, next) => {
     for (const descriptor of listBackendDescriptors()) {
       if (
@@ -268,7 +277,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     const nextFolder = deriveSkillsFolder(next);
     const miyoAvailabilityChanged =
       prev.enableMiyoSearchSkill !== next.enableMiyoSearchSkill ||
-      prev.docProcessorBackend !== next.docProcessorBackend ||
+      prev.enableMiyoDocumentProcessing !== next.enableMiyoDocumentProcessing ||
       prev.enableMiyo !== next.enableMiyo ||
       prev.miyoConnectionMode !== next.miyoConnectionMode ||
       prev.miyoServerUrl !== next.miyoServerUrl ||
@@ -281,14 +290,14 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       void seedManagedBuiltins()
         .then(() => {
           refreshSystemPromptAffected();
-          if (prev.docProcessorBackend === next.docProcessorBackend) return;
+          if (prev.enableMiyoDocumentProcessing === next.enableMiyoDocumentProcessing) return;
           for (const descriptor of listBackendDescriptors()) {
             if (descriptor.restartOnSystemPromptChange) continue;
             void manager
-              .noteSpawnConfigChanged(descriptor.id, "document processor changed")
+              .noteSpawnConfigChanged(descriptor.id, "Miyo document processing changed")
               .catch((e) =>
                 logError(
-                  `[AgentMode] restart after doc processor change failed: ${descriptor.id}`,
+                  `[AgentMode] restart after Miyo document processing change failed: ${descriptor.id}`,
                   e
                 )
               );

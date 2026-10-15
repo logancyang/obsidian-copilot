@@ -18,7 +18,6 @@ import {
 } from "@/utils";
 import {
   isFileAlreadyExistsError,
-  isInVaultCache,
   isNameTooLongError,
   listMarkdownFiles,
   patchFrontmatter,
@@ -140,17 +139,9 @@ export class AgentChatPersistenceManager {
           renderNote(path === options?.existingPath ? current : "")
         );
 
-      if (existingFile && isInVaultCache(this.app, existingFile.path)) {
+      if (existingFile) {
         await rewriteNote(existingFile.path);
         return { path: existingFile.path };
-      }
-
-      if (
-        !isInVaultCache(this.app, preferredFileName) &&
-        (await this.app.vault.adapter.exists(preferredFileName))
-      ) {
-        await rewriteNote(preferredFileName);
-        return { path: preferredFileName };
       }
 
       try {
@@ -184,13 +175,7 @@ export class AgentChatPersistenceManager {
   }
 
   async loadFile(file: TFile): Promise<LoadedAgentChat> {
-    let content: string;
-    try {
-      content = await this.app.vault.read(file);
-    } catch {
-      content = await this.app.vault.adapter.read(file.path);
-    }
-
+    const content = await this.app.vault.read(file);
     const key = this.app.vault.getAbstractFileByPath(file.path) ?? file.path;
     this.loadedTranscripts.set(key, content);
     const { frontmatter, body } = this.splitFrontmatter(content);
@@ -216,7 +201,7 @@ export class AgentChatPersistenceManager {
   }
 
   async getAgentChatHistoryFiles(): Promise<TFile[]> {
-    const files = await listMarkdownFiles(this.app, getEffectiveConversationsFolder());
+    const files = listMarkdownFiles(this.app, getEffectiveConversationsFolder());
     return files.filter((file) => file.basename.startsWith(AGENT_FILENAME_PREFIX));
   }
 
@@ -227,7 +212,7 @@ export class AgentChatPersistenceManager {
   async setPinnedAt(fileId: string, pinnedAt: number | null): Promise<void> {
     // A row whose note was moved or deleted must fail the pin instead of showing a pin that was never written.
     // https://github.com/logancyang/obsidian-copilot/issues/3195
-    if (!(await this.app.vault.adapter.exists(fileId))) {
+    if (!(this.app.vault.getAbstractFileByPath(fileId) instanceof TFile)) {
       throw new Error(`Chat note not found: ${fileId}`);
     }
     await patchFrontmatter(this.app, fileId, { pinnedAt });
@@ -235,15 +220,8 @@ export class AgentChatPersistenceManager {
 
   async deleteFile(fileId: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(fileId);
-    if (file) {
-      await trashFile(this.app, file);
-      return;
-    }
-    if (await this.app.vault.adapter.exists(fileId)) {
-      await this.app.vault.adapter.remove(fileId);
-      return;
-    }
-    throw new Error("Chat file not found.");
+    if (!file) throw new Error("Chat file not found.");
+    await trashFile(this.app, file);
   }
 
   private resolveExistingFile(path: string): TFile | null {

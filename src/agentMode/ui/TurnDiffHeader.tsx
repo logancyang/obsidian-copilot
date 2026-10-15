@@ -1,13 +1,22 @@
 import type { TurnFileChange } from "@/agentMode/session/types";
 import { FileChangeCounts, FileChangeStatusBadge } from "@/agentMode/ui/FileChangeSummary";
+import type { ChangeStep } from "@/agentMode/ui/renderedDiff/ChangeScroller";
 import { Button } from "@/components/ui/button";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import React from "react";
+
+export interface ChangeStepperProps {
+  current: number;
+  total: number;
+  onStep: (direction: ChangeStep) => void;
+}
 
 export interface TurnDiffHeaderProps {
   path: string;
   status: TurnFileChange["status"];
   additions: number;
   deletions: number;
+  changes?: ChangeStepperProps;
   onOpenNote?: () => void;
 }
 
@@ -16,6 +25,7 @@ export const TurnDiffHeader: React.FC<TurnDiffHeaderProps> = ({
   status,
   additions,
   deletions,
+  changes,
   onOpenNote,
 }) => (
   <div className="copilot-divider-b tw-px-[var(--file-margins)] tw-py-2">
@@ -25,6 +35,7 @@ export const TurnDiffHeader: React.FC<TurnDiffHeaderProps> = ({
       </span>
       <FileChangeStatusBadge status={status} />
       <FileChangeCounts additions={additions} deletions={deletions} />
+      {changes && changes.total > 0 ? <ChangeStepper {...changes} /> : null}
       {onOpenNote ? (
         <Button
           variant="link"
@@ -37,4 +48,18 @@ export const TurnDiffHeader: React.FC<TurnDiffHeaderProps> = ({
       ) : null}
     </div>
   </div>
+);
+
+const ChangeStepper: React.FC<ChangeStepperProps> = ({ current, total, onStep }) => (
+  <span className="tw-ml-1 tw-flex tw-shrink-0 tw-items-center">
+    <Button variant="ghost2" size="icon" aria-label="Previous change" onClick={() => onStep(-1)}>
+      <ChevronUp className="tw-size-4" />
+    </Button>
+    <span className="tw-min-w-[6ch] tw-text-center tw-text-xs tw-tabular-nums tw-text-muted">
+      {current + 1} of {total}
+    </span>
+    <Button variant="ghost2" size="icon" aria-label="Next change" onClick={() => onStep(1)}>
+      <ChevronDown className="tw-size-4" />
+    </Button>
+  </span>
 );

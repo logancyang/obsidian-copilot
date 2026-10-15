@@ -330,22 +330,6 @@ describe("projectContentTracker", () => {
       });
     });
 
-    describe("onContentChanged()", () => {
-      it("notifies subscribers with the affected project id", () => {
-        mockRecords(record("a", { inclusions: "Notes" }));
-        const { app, fire } = makeApp();
-        const tracker = new ProjectContentTracker(app);
-        const seen: string[] = [];
-        tracker.onContentChanged((id) => seen.push(id));
-
-        fire("create", file("Notes/new.md"));
-        tracker.flushNow();
-
-        expect(seen).toEqual(["a"]);
-        tracker.dispose();
-      });
-    });
-
     describe("flushNow()", () => {
       it("drains pending changes synchronously and does not double-bump on a later timer", () => {
         jest.useFakeTimers();

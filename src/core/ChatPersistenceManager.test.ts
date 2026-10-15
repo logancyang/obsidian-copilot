@@ -369,20 +369,6 @@ describe("ChatPersistenceManager", () => {
         expect(Notice).toHaveBeenCalledWith("Existing chat note found - updating it now.");
       });
 
-      it("writes through the adapter when the note exists on disk but not in the vault cache", async () => {
-        jest.spyOn(persistenceManager, "getChatHistoryFiles").mockResolvedValue([]);
-        mockApp.vault.adapter.exists.mockResolvedValue(true);
-
-        const saved = await saveMessages([chatMessage("Hello")]);
-
-        expect(mockApp.vault.adapter.write).toHaveBeenCalledWith(
-          expect.stringContaining("test-folder/"),
-          expect.stringContaining("**user**: Hello")
-        );
-        expect(saved?.path).toBe(mockApp.vault.adapter.write.mock.calls[0][0]);
-        expect(mockApp.vault.create).not.toHaveBeenCalled();
-      });
-
       it.each([
         [
           "special characters",
@@ -707,18 +693,8 @@ Nature's quiet song`);
         expect(messages.map((m) => m.context)).toEqual([undefined, undefined]);
       });
 
-      it("reads through the adapter when the vault cannot read the file", async () => {
-        mockApp.vault.read.mockRejectedValue(new Error("not cached"));
-        mockApp.vault.adapter.read.mockResolvedValue("**user**: Hello\n[Timestamp: Unknown time]");
-
-        const messages = await persistenceManager.loadChat(mockTFile({ path: "hidden/chat.md" }));
-
-        expect(messages.map((m) => m.message)).toEqual(["Hello"]);
-      });
-
       it("returns no messages and shows a notice when the file cannot be read", async () => {
-        mockApp.vault.read.mockRejectedValue(new Error("not cached"));
-        mockApp.vault.adapter.read.mockRejectedValue(new Error("missing"));
+        mockApp.vault.read.mockRejectedValue(new Error("missing"));
 
         expect(await persistenceManager.loadChat(mockTFile({ path: "gone.md" }))).toEqual([]);
         expect(Notice).toHaveBeenCalledWith(

@@ -173,7 +173,24 @@ export class OpenArtifactsClient {
       typeof value.url !== "string" ||
       !isOpenArtifactsDocumentUrl(value.url, docId) ||
       !Array.isArray(value.people) ||
-      !Array.isArray(value.requests)
+      !Array.isArray(value.requests) ||
+      // A malformed server response must not crash the access panel.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+      !value.people.every(
+        (person) =>
+          isRecord(person) &&
+          typeof person.email === "string" &&
+          (person.role === "view" || person.role === "comment") &&
+          typeof person.addedAt === "number" &&
+          Number.isFinite(person.addedAt)
+      ) ||
+      !value.requests.every(
+        (request) =>
+          isRecord(request) &&
+          typeof request.email === "string" &&
+          typeof request.requestedAt === "number" &&
+          Number.isFinite(request.requestedAt)
+      )
     ) {
       throw malformedResponse(response.status);
     }

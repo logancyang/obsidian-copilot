@@ -514,6 +514,19 @@ describe("OpenArtifactsClient", () => {
         });
 
         it.each([
+          ["a null person", { ...ACCESS, people: [null] }],
+          ["a person without an email", { ...ACCESS, people: [{ role: "comment", addedAt: 1 }] }],
+          [
+            "an unsupported role",
+            { ...ACCESS, people: [{ email: "a@b.co", role: "owner", addedAt: 1 }] },
+          ],
+          [
+            "a nonnumeric invitation time",
+            { ...ACCESS, people: [{ email: "a@b.co", role: "view", addedAt: "yesterday" }] },
+          ],
+          ["a null request", { ...ACCESS, requests: [null] }],
+          ["a request without an email", { ...ACCESS, requests: [{ requestedAt: 1 }] }],
+          ["a request without a time", { ...ACCESS, requests: [{ email: "a@b.co" }] }],
           ["a missing requests array", { ...ACCESS, requests: undefined }],
           ["a missing email flag", { ...ACCESS, email: undefined }],
           ["a non-canonical url", { ...ACCESS, url: "https://evil.example/d/" + DOC_ID }],

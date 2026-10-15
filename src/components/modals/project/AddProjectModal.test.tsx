@@ -52,8 +52,6 @@ const PROJECT = {
   name: "My Research",
   description: "",
   systemPrompt: "Cite only #verified notes.",
-  projectModelKey: "",
-  modelConfigs: {},
   contextSource: { inclusions: "", exclusions: "", webUrls: "", youtubeUrls: "" },
 } as unknown as ProjectConfig;
 
@@ -165,11 +163,11 @@ describe("AddProjectModal", () => {
       );
     });
 
-    it("offers no instruction field for a project that has no folder yet", async () => {
+    it("offers no instruction field for a project that has no folder record", async () => {
       getCachedProjectRecordById.mockReturnValue(undefined);
-      renderModal({ initialProject: undefined });
+      renderModal();
 
-      await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("Edit Project")).toBeTruthy());
       expect(screen.queryByLabelText("Project instructions")).toBeNull();
       expect(readAgentsFile).not.toHaveBeenCalled();
     });

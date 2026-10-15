@@ -24,7 +24,6 @@ import {
 import { opencodeEnabledModelEntries, opencodeWireBaseIdFor } from "./opencodeModelResolve";
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
-import { cacheRoot } from "@/context/conversionsLocation";
 import { opencodeCopilotPluginDir } from "./opencodeCopilotPlugin";
 import type { ModelSelectionSession } from "@/agentMode/session/types";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
@@ -85,6 +84,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   restartOnProviderConfigChange: true,
   restartOnSystemPromptChange: true,
   summarizesSessionTitle: true,
+  sharesMcpServersAcrossSessions: true,
   wire: opencodeWire,
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
@@ -197,7 +197,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
         providerRegistry,
         backendConfigRegistry,
         clientVersion: args.clientVersion,
-        getCacheRoot: () => cacheRoot(args.plugin.app),
         getCopilotPluginDir: opencodeCopilotPluginDir,
         getSelfHostWebSearchChannel: () => {
           const bridge = args.plugin.selfHostWebSearchAgentBridge;
