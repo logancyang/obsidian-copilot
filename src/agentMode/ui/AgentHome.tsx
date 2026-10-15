@@ -95,6 +95,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     currentTodoList,
     pendingToolPermissions,
     pendingAskUserQuestions,
+    feedbackOffer,
   } = useAgentChatRuntimeState(backend);
   const isLoading = draft.loading || isTurnInFlight;
 
@@ -664,12 +665,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       sourcePath={manager.getSessionSourcePath(sessionId)}
                       key={sessionId}
                       messages={messages}
-                      app={app}
+                      plugin={plugin}
                       currentPlan={currentPlan}
                       pendingToolPermissions={pendingToolPermissions}
                       pendingAskUserQuestions={pendingAskUserQuestions}
                       chatBackend={backend}
                       isLoading={isLoading}
+                      feedbackOffer={feedbackOffer}
                     />
                     <AgentChatControls
                       onCopyChatLink={

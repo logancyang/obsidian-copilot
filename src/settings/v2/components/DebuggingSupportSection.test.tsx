@@ -10,6 +10,8 @@ function renderSection() {
     onFrameLogChange: jest.fn(),
     frameLogPath: "/tmp/obsidian-copilot/acp-frames/3f9a/acp-frames.ndjson",
     onReportIssue: jest.fn(),
+    offerFeedbackCards: true,
+    onOfferFeedbackCardsChange: jest.fn(),
     onOpenFrameLog: jest.fn(),
     onClearFrameLog: jest.fn(),
   };
@@ -35,9 +37,15 @@ describe("DebuggingSupportSection", () => {
       }
     });
 
-    it("keeps the two switches on separate callbacks", () => {
+    it("keeps the three switches on separate callbacks", () => {
       const props = renderSection();
-      const [debugSwitch, frameLogSwitch] = screen.getAllByRole("switch");
+      const [feedbackSwitch, debugSwitch, frameLogSwitch] = screen.getAllByRole("switch");
+
+      fireEvent.click(feedbackSwitch);
+
+      expect(props.onOfferFeedbackCardsChange).toHaveBeenCalledWith(false);
+      expect(props.onDebugChange).not.toHaveBeenCalled();
+      expect(props.onFrameLogChange).not.toHaveBeenCalled();
 
       fireEvent.click(debugSwitch);
 
@@ -48,6 +56,7 @@ describe("DebuggingSupportSection", () => {
 
       expect(props.onFrameLogChange).toHaveBeenCalledWith(false);
       expect(props.onDebugChange).toHaveBeenCalledTimes(1);
+      expect(props.onOfferFeedbackCardsChange).toHaveBeenCalledTimes(1);
     });
 
     it("names where the activity log is written, so it can be found without this component reading the disk", () => {

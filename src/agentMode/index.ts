@@ -15,6 +15,7 @@ import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
+import { createFeedbackMcpServer } from "@/agentMode/session/feedback/feedbackMcpServer";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
 import { SkillManager } from "./skills";
 import {
@@ -164,6 +165,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     beforeBackendStart,
     persistenceManager,
     sessionIndex,
+    feedbackServer: createFeedbackMcpServer(),
   });
   managerRef = manager;
   // `noteSpawnConfigChanged` holds the restart behind Reload while a session is open: a skill
@@ -229,6 +231,13 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
   };
   subscribeToSystemPromptChange(refreshSystemPromptAffected);
+  // Codex and OpenCode bake the feedback pointer into their prompt at spawn, so toggling cards must reach a running backend.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+  subscribeToSettingsChange((prev, next) => {
+    if (prev.agentMode.offerFeedbackCards !== next.agentMode.offerFeedbackCards) {
+      refreshSystemPromptAffected();
+    }
+  });
   subscribeToSettingsChange((prev, next) => {
     for (const descriptor of listBackendDescriptors()) {
       if (

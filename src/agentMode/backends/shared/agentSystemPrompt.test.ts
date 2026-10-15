@@ -9,6 +9,7 @@ import {
   buildAgentSystemPrompt,
   COPILOT_MIYO_DOCUMENT_STEERING,
   COPILOT_MIYO_SEARCH_STEERING,
+  COPILOT_FEEDBACK_POINTER,
   COPILOT_INSTRUCTION_PRECEDENCE,
   COPILOT_PROJECT_WORKSPACE_POLICY,
   COPILOT_PROMPT_BASE,
@@ -60,7 +61,7 @@ describe("agentSystemPrompt", () => {
         for (const enableMiyoSearchSkill of [false, true]) {
           updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
           const prompt = buildAgentSystemPrompt(AGENT);
-          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3000);
+          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3300);
           expect(prompt).not.toMatch(
             /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
           );
@@ -239,6 +240,17 @@ describe("agentSystemPrompt", () => {
     it("keeps the precedence rule through the builtin toggle, like the workspace policy", () => {
       setDisableBuiltinSystemPrompt(true);
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_INSTRUCTION_PRECEDENCE);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 points the agent at send_feedback while feedback cards are on, even with the builtin prompt disabled", () => {
+      expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_FEEDBACK_POINTER);
+      setDisableBuiltinSystemPrompt(true);
+      expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_FEEDBACK_POINTER);
+    });
+
+    it("drops the send_feedback pointer when the user turns feedback cards off", () => {
+      updateSetting("agentMode", { ...getSettings().agentMode, offerFeedbackCards: false });
+      expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_FEEDBACK_POINTER);
     });
 
     it("emits identical bytes no matter which Chat prompt is selected", () => {

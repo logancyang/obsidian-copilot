@@ -216,6 +216,12 @@ export const AdvancedSettings: React.FC = () => {
         }}
         frameLogPath={frameLogPath}
         onReportIssue={handleReportIssue}
+        offerFeedbackCards={settings.agentMode.offerFeedbackCards}
+        onOfferFeedbackCardsChange={(checked) => {
+          setSettings((cur) => ({
+            agentMode: { ...cur.agentMode, offerFeedbackCards: checked },
+          }));
+        }}
         onOpenFrameLog={safeAsyncHandler(handleOpenFrameLog)}
         onClearFrameLog={safeAsyncHandler(handleClearFrameLog)}
       />

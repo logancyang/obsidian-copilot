@@ -1,4 +1,5 @@
 import type { MessageContext } from "@/types/message";
+import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import type {
   AgentChatMessage,
   AgentQuestionAnswers,
@@ -58,4 +59,10 @@ export interface AgentChatBackend {
   getPendingAskUserQuestions(): AskUserQuestionPrompt[];
 
   resolveAskUserQuestion(requestId: string, answers: AgentQuestionAnswers): void;
+
+  getFeedbackOffer(): FeedbackOffer | null;
+
+  dismissFeedbackOffer(): void;
+
+  markFeedbackReported(report: { reportId: string; issueUrl: string }): void;
 }
