@@ -576,7 +576,7 @@ anyway. The original file remains user-owned; never delete the original HTML fil
 
 Tell the user the absolute path of the HTML file and that, subject to any relative-asset
 warning above, opening it in a browser shows the page as it will be uploaded; OpenArtifacts
-adds its own header and footer bylines when it serves the page.
+adds its own top bar, with a Share button, and a footer byline when it serves the page.
 
 For a new page, end the review message with this line, word for word:
 
