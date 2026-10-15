@@ -247,6 +247,11 @@ describe("selfHostServices", () => {
         contentType: "application/json; charset=utf-8",
         body: { error: "Request body is too large." },
       });
+      await expect(requestAgentSearchChannel(channel, "日".repeat(30_000))).resolves.toEqual({
+        status: 413,
+        contentType: "application/json; charset=utf-8",
+        body: { error: "Request body is too large." },
+      });
       expect(search).not.toHaveBeenCalled();
     });
 

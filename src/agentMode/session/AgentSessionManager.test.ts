@@ -180,6 +180,7 @@ function makeMockSession(overrides: {
   backendId: string;
   backend?: BackendProcess;
   projectId?: string;
+  cwd?: string;
   ready?: Promise<void>;
   label?: string;
 }): AgentSession {
@@ -200,6 +201,7 @@ function makeMockSession(overrides: {
     chatInputId: overrides.chatInputId ?? overrides.internalId,
     backendId: overrides.backendId,
     projectId: overrides.projectId ?? GLOBAL_SCOPE,
+    cwd: overrides.cwd ?? null,
     ready: overrides.ready ?? Promise.resolve(),
     getBackendSessionId: () => sessionId,
     getStatus: () => status,
@@ -269,6 +271,7 @@ const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((o
     backendId: opts.backendId,
     backend: opts.backend,
     projectId: opts.projectId,
+    cwd: opts.cwd ?? undefined,
   })
 );
 
@@ -952,6 +955,64 @@ describe("AgentSessionManager", () => {
         expect(session.offerFeedback).not.toHaveBeenCalled();
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 gives a folder's chats one feedback key when the agent shares MCP servers across sessions", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({
+          feedbackServer,
+          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+        });
+
+        const a = await mgr.createSession();
+        const b = await mgr.createSession();
+
+        const keys = feedbackServer.connect.mock.calls.map(([key]) => key);
+        expect(keys).toEqual([`opencode:${a.cwd}`, `opencode:${b.cwd}`]);
+        expect(keys[0]).toBe(keys[1]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 shows a shared connection's card in the chat whose backend session the agent stamped on the call", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({
+          feedbackServer,
+          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+        });
+        const caller = await mgr.createSession();
+        const newest = await mgr.createSession();
+        const onOffer = feedbackServer.connect.mock.calls[1][1] as (
+          draft: unknown,
+          callerSessionId: string | null
+        ) => string;
+
+        expect(onOffer(FEEDBACK_DRAFT, caller.getBackendSessionId())).toBe("shown");
+        expect(caller.offerFeedback).toHaveBeenCalledWith(FEEDBACK_DRAFT);
+        expect(newest.offerFeedback).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ["carries no caller session", null],
+        ["names a session outside the folder's chats", "backend-elsewhere"],
+      ])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/672 shows no card when a shared connection's call %s",
+        async (_label, callerSessionId) => {
+          offerFeedbackCards(true);
+          const feedbackServer = buildFeedbackServer();
+          const mgr = buildManager({
+            feedbackServer,
+            descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+          });
+          const session = await mgr.createSession();
+          const onOffer = feedbackServer.connect.mock.calls[0][1] as (
+            draft: unknown,
+            callerSessionId: string | null
+          ) => string;
+
+          expect(onOffer(FEEDBACK_DRAFT, callerSessionId)).toBe("unattributed");
+          expect(session.offerFeedback).not.toHaveBeenCalled();
+        }
+      );
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 still starts the chat when the feedback server cannot start", async () => {
         offerFeedbackCards(true);
         const feedbackServer = buildFeedbackServer(
@@ -1519,6 +1580,45 @@ describe("AgentSessionManager", () => {
         await mgr.closeSession(a.internalId);
 
         expect(feedbackServer.disconnect).toHaveBeenCalledWith(a.internalId);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 releases the dropped chat's backend session, so reopening it from history starts one with a live feedback token", async () => {
+        const mgr = buildManager();
+        const a = await mgr.createSession();
+        const proc = mgr.getBackendProcess(a.backendId)!;
+
+        await mgr.closeSession(a.internalId);
+
+        expect(proc.closeSession).toHaveBeenCalledWith({ sessionId: a.getBackendSessionId() });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 still closes the chat when the backend cannot release its session", async () => {
+        const mgr = buildManager();
+        const a = await mgr.createSession();
+        const proc = mgr.getBackendProcess(a.backendId)!;
+        jest.mocked(proc.closeSession!).mockRejectedValueOnce(new Error("session/close timed out"));
+
+        await mgr.closeSession(a.internalId);
+
+        expect(mgr.getSessions()).toEqual([]);
+        expect(mockSessionDispose).toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 keeps a folder's shared feedback key when one of its chats closes", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({
+          feedbackServer,
+          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+        });
+        await mgr.createSession();
+        const newest = await mgr.createSession();
+
+        await mgr.closeSession(newest.internalId);
+
+        expect(feedbackServer.disconnect).not.toHaveBeenCalledWith(
+          feedbackServer.connect.mock.calls[0][0]
+        );
       });
 
       it("when the active session is closed, picks the right neighbor as active", async () => {
@@ -2201,9 +2301,11 @@ describe("AgentSessionManager", () => {
       it("restarts an idle backend and replaces the active affected session", async () => {
         const mgr = buildManager();
         const first = await mgr.createSession();
+        const proc = mgr.getBackendProcess(first.backendId)!;
 
         await expect(mgr.restartBackend("opencode", "skills changed")).resolves.toBe(true);
 
+        expect(proc.closeSession).not.toHaveBeenCalled();
         expect(mockSessionCancel).toHaveBeenCalledWith();
         expect(mockSessionDispose).toHaveBeenCalledWith();
         expect(mockBackendShutdown).toHaveBeenCalledTimes(1);

@@ -1,5 +1,8 @@
 import type { AgentMcpServer, BackendState } from "@/agentMode/session/types";
-import type { FeedbackMcpServer } from "@/agentMode/session/feedback/feedbackMcpServer";
+import type {
+  FeedbackMcpServer,
+  FeedbackOfferHandler,
+} from "@/agentMode/session/feedback/feedbackMcpServer";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
@@ -814,7 +817,7 @@ export class AgentSessionManager {
     }
 
     const internalId = uuidv4();
-    const mcpServers = await this.connectFeedbackServer(internalId);
+    const mcpServers = await this.connectFeedbackServer(internalId, descriptor, cwd);
 
     if (this.disposed) {
       this.finishPendingCreate();
@@ -1495,6 +1498,15 @@ export class AgentSessionManager {
       } catch (e) {
         logWarn(`[AgentMode] cancel during closeSession failed`, e);
       }
+      // Codex keeps a dropped chat's session and its MCP connection, so reopening it from history would call send_feedback with the revoked token.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+      if (session.getBackendSessionId() && !this.restartingBackends.has(session.backendId)) {
+        try {
+          await session.releaseBackendSession();
+        } catch (e) {
+          logWarn(`[AgentMode] releasing the backend session during closeSession failed`, e);
+        }
+      }
     }
     await this.drainAutoSave(session);
     try {
@@ -1686,21 +1698,45 @@ export class AgentSessionManager {
 
   // Feedback cards are optional, so a server that cannot start leaves the chat running without them.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-  private async connectFeedbackServer(internalId: string): Promise<ReadonlyArray<AgentMcpServer>> {
+  private async connectFeedbackServer(
+    internalId: string,
+    descriptor: BackendDescriptor,
+    cwd: string
+  ): Promise<ReadonlyArray<AgentMcpServer>> {
     const server = this.opts.feedbackServer;
     if (!server || !getSettings().agentMode.offerFeedbackCards) return EMPTY_MCP_SERVERS;
+    // A folder's chats share one connection, so its token names only the folder and the agent stamps the calling session on each call.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+    const shared = descriptor.sharesMcpServersAcrossSessions === true;
+    const offer: FeedbackOfferHandler = shared
+      ? (draft, callerSessionId) =>
+          this.findFolderSession(descriptor.id, cwd, callerSessionId)?.offerFeedback(draft) ??
+          "unattributed"
+      : (draft) => this.sessions.get(internalId)?.offerFeedback(draft) ?? "turned_off";
     try {
       return [
-        await server.connect(internalId, (draft) =>
-          getSettings().agentMode.offerFeedbackCards
-            ? (this.sessions.get(internalId)?.offerFeedback(draft) ?? "turned_off")
-            : "turned_off"
+        await server.connect(shared ? `${descriptor.id}:${cwd}` : internalId, (draft, caller) =>
+          getSettings().agentMode.offerFeedbackCards ? offer(draft, caller) : "turned_off"
         ),
       ];
     } catch (err) {
       logWarn("[AgentMode] feedback MCP server unavailable; continuing without it", err);
       return EMPTY_MCP_SERVERS;
     }
+  }
+
+  private findFolderSession(
+    backendId: BackendId,
+    cwd: string,
+    backendSessionId: string | null
+  ): AgentSession | undefined {
+    if (!backendSessionId) return undefined;
+    return Array.from(this.sessions.values()).find(
+      (session) =>
+        session.backendId === backendId &&
+        session.cwd === cwd &&
+        session.getBackendSessionId() === backendSessionId
+    );
   }
 
   async shutdown(): Promise<void> {
@@ -1971,7 +2007,7 @@ export class AgentSessionManager {
     }
 
     const internalId = uuidv4();
-    const mcpServers = await this.connectFeedbackServer(internalId);
+    const mcpServers = await this.connectFeedbackServer(internalId, descriptor, cwd);
     if (this.disposed) {
       this.finishPendingCreate();
       return null;

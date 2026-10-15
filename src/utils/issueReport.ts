@@ -99,7 +99,12 @@ export async function buildReportBundle(
 
   if (input.screenshotPng !== undefined)
     admit(screenshotEntry(input.screenshotPng, remainingBytes));
-  for (const log of input.logs) admit(await logEntry(log, remainingBytes, runtime));
+  // Each log gets an even share of the room left, so a large backend log a report asks for cannot crowd out the chat's own activity log.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+  for (const [index, log] of input.logs.entries()) {
+    const share = Math.floor(remainingBytes / (input.logs.length - index));
+    admit(await logEntry(log, share, runtime));
+  }
 
   const markdown = buildReportMarkdown(input, attachments);
   const noteBytes = encodeText(markdown);

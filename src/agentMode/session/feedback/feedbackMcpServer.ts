@@ -1,13 +1,18 @@
-import { logError } from "@/logger";
 import type { AgentMcpServer } from "@/agentMode/session/types";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import {
+  readRequestText,
+  startLoopbackServer,
+  writeJson,
+  type LoopbackServer,
+} from "@/utils/loopbackServer";
 
-type HttpServer = import("node:http").Server;
 type IncomingMessage = import("node:http").IncomingMessage;
 type ServerResponse = import("node:http").ServerResponse;
 
 export const FEEDBACK_MCP_SERVER_NAME = "obsidian-copilot";
 export const SEND_FEEDBACK_TOOL_NAME = "send_feedback";
+export const CALLER_SESSION_ARGUMENT = "caller_session_id";
 
 const MCP_PATH = "/mcp";
 const MAX_REQUEST_BYTES = 64 * 1024;
@@ -57,14 +62,18 @@ export interface FeedbackDraft {
   repro: string;
 }
 
-export type FeedbackOfferResult = "shown" | "already_offered" | "turned_off";
+export type FeedbackOfferResult = "shown" | "already_offered" | "turned_off" | "unattributed";
 
-export type FeedbackOfferHandler = (draft: FeedbackDraft) => FeedbackOfferResult;
+export type FeedbackOfferHandler = (
+  draft: FeedbackDraft,
+  callerSessionId: string | null
+) => FeedbackOfferResult;
 
 const OFFER_RESULT_TEXT: Readonly<Record<FeedbackOfferResult, string>> = Object.freeze({
   shown: "Shown to the user. Continue; don't mention it unless asked.",
   already_offered: `Already offered this session. Don't call ${SEND_FEEDBACK_TOOL_NAME} again.`,
   turned_off: `The user turned off feedback reports. Don't call ${SEND_FEEDBACK_TOOL_NAME} again.`,
+  unattributed: `Copilot couldn't tell which chat this came from, so nothing was shown. Don't call ${SEND_FEEDBACK_TOOL_NAME} again.`,
 });
 
 export interface FeedbackMcpServer {
@@ -85,39 +94,20 @@ type JsonRpcReply = { result: unknown } | { error: { code: number; message: stri
 export function createFeedbackMcpServer(): FeedbackMcpServer {
   const handlersByToken = new Map<string, FeedbackOfferHandler>();
   const tokensBySession = new Map<string, string>();
-  let server: HttpServer | null = null;
-  let urlPromise: Promise<string> | null = null;
-  let rejectStart: ((error: Error) => void) | null = null;
+  let server: LoopbackServer | null = null;
   let disposed = false;
-
-  const start = (): Promise<string> => {
-    const http = requireNodeModule<typeof import("node:http")>("http");
-    return new Promise((resolve, reject) => {
-      const next = http.createServer((request, response) => {
-        void handleHttpRequest(request, response, handlersByToken);
-      });
-      server = next;
-      // Closing a server whose listen() is still pending cancels the listen callback, so dispose must settle the promise itself.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-      rejectStart = reject;
-      next.once("error", reject);
-      next.listen(0, "127.0.0.1", () => {
-        rejectStart = null;
-        next.on("error", (error) => logError("[AgentMode] feedback MCP server failed", error));
-        next.unref();
-        const { port } = next.address() as import("node:net").AddressInfo;
-        resolve(`http://127.0.0.1:${port}${MCP_PATH}`);
-      });
-    });
-  };
 
   return Object.freeze({
     async connect(sessionKey: string, onOffer: FeedbackOfferHandler): Promise<AgentMcpServer> {
       if (disposed) throw new Error("The feedback MCP server is closed.");
-      urlPromise ??= start();
-      const url = await urlPromise;
+      server ??= startLoopbackServer("feedback MCP server", (request, response) =>
+        handleHttpRequest(request, response, handlersByToken)
+      );
+      const url = `${await server.origin}${MCP_PATH}`;
       const crypto = requireNodeModule<typeof import("node:crypto")>("crypto");
-      const token = crypto.randomBytes(32).toString("hex");
+      // A shared key keeps its token, so a later chat re-registering the server leaves the folder's connection on a valid token.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+      const token = tokensBySession.get(sessionKey) ?? crypto.randomBytes(32).toString("hex");
       tokensBySession.set(sessionKey, token);
       handlersByToken.set(token, onOffer);
       return Object.freeze({
@@ -134,13 +124,10 @@ export function createFeedbackMcpServer(): FeedbackMcpServer {
     },
     dispose(): void {
       disposed = true;
-      rejectStart?.(new Error("The feedback MCP server is closed."));
-      rejectStart = null;
       handlersByToken.clear();
       tokensBySession.clear();
       server?.close();
       server = null;
-      urlPromise = null;
     },
   });
 }
@@ -162,7 +149,7 @@ async function handleHttpRequest(
 
   let message: JsonRpcRequest;
   try {
-    message = JSON.parse(await readBody(request)) as JsonRpcRequest;
+    message = JSON.parse(await readRequestText(request, MAX_REQUEST_BYTES)) as JsonRpcRequest;
   } catch (error) {
     return writeRpcError(response, -32700, error instanceof Error ? error.message : "Parse error.");
   }
@@ -208,7 +195,12 @@ function callTool(params: Record<string, unknown>, onOffer: FeedbackOfferHandler
   }
   const draft = parseDraft(params.arguments);
   if (!draft) return toolText("title, what_happened and repro must be non-empty strings.", true);
-  return toolText(OFFER_RESULT_TEXT[onOffer(draft)], false);
+  return toolText(OFFER_RESULT_TEXT[onOffer(draft, callerSessionId(params.arguments))], false);
+}
+
+function callerSessionId(args: unknown): string | null {
+  const value = (args as Record<string, unknown>)[CALLER_SESSION_ARGUMENT];
+  return typeof value === "string" && value ? value : null;
 }
 
 function parseDraft(args: unknown): FeedbackDraft | null {
@@ -231,23 +223,6 @@ function toolText(text: string, isError: boolean) {
   return { content: [{ type: "text", text }], isError };
 }
 
-async function readBody(request: IncomingMessage): Promise<string> {
-  const decoder = new TextDecoder();
-  let body = "";
-  let size = 0;
-  for await (const chunk of request as AsyncIterable<Uint8Array>) {
-    size += chunk.byteLength;
-    if (size > MAX_REQUEST_BYTES) throw new Error("Request body is too large.");
-    body += decoder.decode(chunk, { stream: true });
-  }
-  return body + decoder.decode();
-}
-
 function writeRpcError(response: ServerResponse, code: number, message: string): void {
   writeJson(response, 400, { jsonrpc: "2.0", id: null, error: { code, message } });
-}
-
-function writeJson(response: ServerResponse, status: number, body: unknown): void {
-  response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
-  response.end(JSON.stringify(body));
 }

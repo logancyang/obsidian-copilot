@@ -127,12 +127,15 @@ describe("feedbackMcpServer", () => {
         rpc(3, "tools/call", { name: "send_feedback", arguments: COMPLAINT })
       );
 
-      expect(ownHandler).toHaveBeenCalledWith({
-        title: COMPLAINT.title,
-        whatHappened: COMPLAINT.what_happened,
-        userSaid: COMPLAINT.user_said,
-        repro: COMPLAINT.repro,
-      });
+      expect(ownHandler).toHaveBeenCalledWith(
+        {
+          title: COMPLAINT.title,
+          whatHappened: COMPLAINT.what_happened,
+          userSaid: COMPLAINT.user_said,
+          repro: COMPLAINT.repro,
+        },
+        null
+      );
       expect(otherHandler).not.toHaveBeenCalled();
       expect(result.body).toEqual({
         jsonrpc: "2.0",
@@ -149,6 +152,10 @@ describe("feedbackMcpServer", () => {
     it.each([
       ["already_offered", "Already offered this session. Don't call send_feedback again."],
       ["turned_off", "The user turned off feedback reports. Don't call send_feedback again."],
+      [
+        "unattributed",
+        "Copilot couldn't tell which chat this came from, so nothing was shown. Don't call send_feedback again.",
+      ],
     ] as const)("tells the agent to stop when the session answers %s", async (outcome, text) => {
       const channel = await server.connect("session-a", () => outcome);
 
@@ -172,12 +179,33 @@ describe("feedbackMcpServer", () => {
         })
       );
 
-      expect(handler).toHaveBeenCalledWith({
-        title: "Retracted answer",
-        whatHappened: "x",
-        userSaid: "",
-        repro: "y",
-      });
+      expect(handler).toHaveBeenCalledWith(
+        { title: "Retracted answer", whatHappened: "x", userSaid: "", repro: "y" },
+        null
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 hands the handler the caller session an agent stamped on the call, and keeps it out of the draft", async () => {
+      const handler = jest.fn().mockReturnValue("shown");
+      const channel = await server.connect("opencode:/vault", handler);
+
+      await post(
+        channel,
+        rpc(6, "tools/call", {
+          name: "send_feedback",
+          arguments: { ...COMPLAINT, caller_session_id: "ses_caller" },
+        })
+      );
+
+      expect(handler).toHaveBeenCalledWith(
+        {
+          title: COMPLAINT.title,
+          whatHappened: COMPLAINT.what_happened,
+          userSaid: COMPLAINT.user_said,
+          repro: COMPLAINT.repro,
+        },
+        "ses_caller"
+      );
     });
 
     it("rejects a call missing a required field without raising a card", async () => {
@@ -263,6 +291,19 @@ describe("feedbackMcpServer", () => {
       expect(malformed).toMatchObject({ status: 400, body: { error: { code: -32700 } } });
       expect(notAnObject).toMatchObject({ status: 400, body: { error: { code: -32600 } } });
       expect(batch).toMatchObject({ status: 400, body: { error: { code: -32600 } } });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 hands a reconnected key its existing token and sends its calls to the newest handler", async () => {
+      const replaced = jest.fn();
+      const current = jest.fn().mockReturnValue("shown");
+      const first = await server.connect("opencode:/vault", replaced);
+
+      const again = await server.connect("opencode:/vault", current);
+      await post(first, rpc(1, "tools/call", { name: "send_feedback", arguments: COMPLAINT }));
+
+      expect(again).toEqual(first);
+      expect(current).toHaveBeenCalledTimes(1);
+      expect(replaced).not.toHaveBeenCalled();
     });
 
     it("revokes a session's token on disconnect and leaves other sessions working", async () => {

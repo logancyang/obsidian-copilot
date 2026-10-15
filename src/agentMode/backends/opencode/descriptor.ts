@@ -84,6 +84,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   restartOnProviderConfigChange: true,
   restartOnSystemPromptChange: true,
   summarizesSessionTitle: true,
+  sharesMcpServersAcrossSessions: true,
   wire: opencodeWire,
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {

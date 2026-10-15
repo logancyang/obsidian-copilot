@@ -4,6 +4,13 @@ import { isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { safeFetchNoThrow } from "@/utils";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import {
+  readRequestText,
+  RequestBodyTooLargeError,
+  startLoopbackServer,
+  writeJson,
+  type LoopbackServer,
+} from "@/utils/loopbackServer";
 
 const FIRECRAWL_SEARCH_URL = "https://api.firecrawl.dev/v2/search";
 const PERPLEXITY_CHAT_URL = "https://api.perplexity.ai/chat/completions";
@@ -13,9 +20,8 @@ const PARALLEL_OBJECTIVE_MAX_LENGTH = 5000;
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
 const SUPADATA_TRANSCRIPT_URL = "https://api.supadata.ai/v1/transcript";
 /** Bounds agent-controlled input. https://github.com/Brevilabs/obsidian-copilot-private/issues/165 */
-const AGENT_SEARCH_REQUEST_MAX_LENGTH = 64 * 1024;
+const AGENT_SEARCH_REQUEST_MAX_BYTES = 64 * 1024;
 
-type HttpServer = import("node:http").Server;
 type IncomingMessage = import("node:http").IncomingMessage;
 type ServerResponse = import("node:http").ServerResponse;
 
@@ -42,9 +48,8 @@ export function createSelfHostWebSearchAgentBridge(
   hasSearchKey: () => boolean = hasSelfHostSearchKey,
   search: (query: string) => Promise<SelfHostWebSearchResult> = selfHostWebSearch
 ): Readonly<SelfHostWebSearchAgentBridge> {
-  let server: HttpServer | null = null;
+  let server: LoopbackServer | null = null;
   let channelPromise: Promise<Readonly<SelfHostWebSearchAgentChannel>> | null = null;
-  let rejectChannelStart: ((error: Error) => void) | null = null;
   let disposed = false;
 
   const runSearch = async (query: string): Promise<SelfHostWebSearchResult> => {
@@ -59,50 +64,13 @@ export function createSelfHostWebSearchAgentBridge(
     return search(query);
   };
 
-  const startChannel = (): Promise<Readonly<SelfHostWebSearchAgentChannel>> => {
-    const http = requireNodeModule<typeof import("node:http")>("http");
+  const startChannel = async (): Promise<Readonly<SelfHostWebSearchAgentChannel>> => {
     const crypto = requireNodeModule<typeof import("node:crypto")>("crypto");
     const token = crypto.randomBytes(32).toString("hex");
-
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      const rejectStart = (error: Error): void => {
-        if (settled) return;
-        settled = true;
-        rejectChannelStart = null;
-        reject(error);
-      };
-      const resolveStart = (channel: Readonly<SelfHostWebSearchAgentChannel>): void => {
-        if (settled) return;
-        settled = true;
-        rejectChannelStart = null;
-        resolve(channel);
-      };
-      rejectChannelStart = rejectStart;
-      const nextServer = http.createServer((request, response) => {
-        void handleAgentSearchRequest(request, response, token, runSearch);
-      });
-      server = nextServer;
-      nextServer.once("error", rejectStart);
-      nextServer.listen(0, "127.0.0.1", () => {
-        if (disposed) {
-          nextServer.close();
-          rejectStart(new Error("Self-host web search channel is closed."));
-          return;
-        }
-        const address = nextServer.address() as import("node:net").AddressInfo;
-        nextServer.on("error", (error) => {
-          logError("[AgentMode] Self-host web search channel failed", error);
-        });
-        nextServer.unref();
-        resolveStart(
-          Object.freeze({
-            url: `http://127.0.0.1:${address.port}/search`,
-            token,
-          })
-        );
-      });
-    });
+    server = startLoopbackServer("self-host web search channel", (request, response) =>
+      handleAgentSearchRequest(request, response, token, runSearch)
+    );
+    return Object.freeze({ url: `${await server.origin}/search`, token });
   };
 
   return Object.freeze({
@@ -115,9 +83,6 @@ export function createSelfHostWebSearchAgentBridge(
     },
     dispose(): void {
       disposed = true;
-      // Closing before `listening` skips the listen callback, so settle the pending spawn explicitly.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
-      rejectChannelStart?.(new Error("Self-host web search channel is closed."));
       server?.close();
       server = null;
       channelPromise = null;
@@ -134,47 +99,25 @@ async function handleAgentSearchRequest(
   // Loopback only, per-lifecycle token, single route, so another vault or local webpage cannot select this instance.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
   if (request.method !== "POST" || request.url !== "/search") {
-    writeAgentSearchResponse(response, 404, { error: "Not found." });
+    writeJson(response, 404, { error: "Not found." });
     return;
   }
   if (request.headers.authorization !== `Bearer ${token}`) {
-    writeAgentSearchResponse(response, 401, { error: "Unauthorized." });
+    writeJson(response, 401, { error: "Unauthorized." });
     return;
   }
 
   try {
-    const query = await readAgentSearchRequestBody(request);
+    const query = await readRequestText(request, AGENT_SEARCH_REQUEST_MAX_BYTES);
     if (!query.trim()) {
-      writeAgentSearchResponse(response, 400, { error: "A non-empty query is required." });
+      writeJson(response, 400, { error: "A non-empty query is required." });
       return;
     }
-    writeAgentSearchResponse(response, 200, await search(query));
+    writeJson(response, 200, await search(query));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const status = message === "Request body is too large." ? 413 : 500;
-    writeAgentSearchResponse(response, status, { error: message });
+    writeJson(response, error instanceof RequestBodyTooLargeError ? 413 : 500, { error: message });
   }
-}
-
-async function readAgentSearchRequestBody(request: IncomingMessage): Promise<string> {
-  request.setEncoding("utf8");
-  let body = "";
-  for await (const chunk of request) {
-    body += chunk;
-    if (body.length > AGENT_SEARCH_REQUEST_MAX_LENGTH) {
-      throw new Error("Request body is too large.");
-    }
-  }
-  return body;
-}
-
-function writeAgentSearchResponse(
-  response: ServerResponse,
-  status: number,
-  body: SelfHostWebSearchResult | { error: string }
-): void {
-  response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
-  response.end(JSON.stringify(body));
 }
 
 interface FirecrawlSearchResult {

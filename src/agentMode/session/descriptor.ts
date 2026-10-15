@@ -95,6 +95,10 @@ export interface BackendDescriptor {
 
   readonly summarizesSessionTitle: boolean;
 
+  // OpenCode registers a session's MCP servers on the instance for its folder, so every chat there shares one connection per server name.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+  readonly sharesMcpServersAcrossSessions?: boolean;
+
   readonly agentProductName?: string;
 
   readonly planFeedbackDelivery?: "permission" | "next_turn";
