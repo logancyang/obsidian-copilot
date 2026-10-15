@@ -92,6 +92,45 @@ describe("AcpProcessManager", () => {
         expect(await readLines(stdout)).toEqual([ENVELOPE]);
       });
     });
+
+    describe("onStderrLine()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/662 delivers each complete stderr line until the listener unsubscribes", () => {
+        const identity = <T>(value: T): T => value;
+        const stderrHandlers: Record<string, (chunk?: string) => void> = {};
+        const child = {
+          stdin: {},
+          stdout: streamOf([]),
+          stderr: {
+            setEncoding: jest.fn(),
+            on: (event: string, handler: (chunk?: string) => void) => {
+              stderrHandlers[event] = handler;
+            },
+          },
+          on: jest.fn(),
+        };
+        (requireNodeModule as jest.Mock).mockImplementation((id: string) =>
+          id === "child_process"
+            ? { spawn: () => child }
+            : { Readable: { toWeb: identity }, Writable: { toWeb: identity } }
+        );
+        const manager = new AcpProcessManager({ command: "/bin/agent", args: ["acp"], env: {} });
+        manager.start();
+        const lines: string[] = [];
+        const unsubscribe = manager.onStderrLine((line) => lines.push(line));
+
+        stderrHandlers.data("level=INFO http.sta");
+        stderrHandlers.data("tus=500\n\nlevel=ERROR message=failed  \nlevel=INFO tail");
+        stderrHandlers.end();
+        unsubscribe();
+        stderrHandlers.data("level=INFO after\n");
+
+        expect(lines).toEqual([
+          "level=INFO http.status=500",
+          "level=ERROR message=failed",
+          "level=INFO tail",
+        ]);
+      });
+    });
   });
 
   describe("sanitizeAcpStdout()", () => {

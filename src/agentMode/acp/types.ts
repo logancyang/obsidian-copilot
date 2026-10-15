@@ -22,4 +22,5 @@ export interface AcpBackend {
   readTurnDiff?(
     promptResultMeta: Readonly<Record<string, unknown>> | null | undefined
   ): TurnDiff | null;
+  failureCauseFromLog?(stderrLine: string): string | null;
 }
