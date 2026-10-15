@@ -78,11 +78,13 @@ function renderModal(
   docId: string | null = null,
   onClosed?: () => void,
   initialResult?: OpenArtifactsModalResult,
-  access?: OpenArtifactsAccessPort
+  access?: OpenArtifactsAccessPort,
+  docUrl?: string
 ): OpenArtifactsModal {
   const modal = new OpenArtifactsModal({} as App, {
     fileName: "Architecture",
     docId,
+    docUrl,
     initialResult,
     access,
     onConfirm,
@@ -338,7 +340,13 @@ describe("OpenArtifactsModal", () => {
         expect(screen.getByText("Invited · email sent")).toBeTruthy();
       });
 
-      it(`${ISSUE} shows one muted line and keeps Update and Delete when the server does not support private documents`, async () => {
+      it(`${ISSUE} shows one muted line and keeps Update, Delete, Copy link and Open when the server does not support private documents`, async () => {
+        const writeText = jest.fn().mockResolvedValue(undefined);
+        Object.defineProperty(window.navigator, "clipboard", {
+          configurable: true,
+          value: { writeText },
+        });
+        const open = jest.spyOn(window, "open").mockImplementation(() => null);
         const message = "Not found, or this server does not support private documents.";
         const port = accessPort({
           load: jest
@@ -346,9 +354,10 @@ describe("OpenArtifactsModal", () => {
             .mockRejectedValue(
               new OpenArtifactsClientError(message, "private_unavailable", 404, false)
             ),
+          open: jest.fn().mockResolvedValue(RECEIPT.url),
         });
         await act(async () => {
-          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, port);
+          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, port, RECEIPT.url);
         });
 
         expect(screen.getByText(message)).toBeTruthy();
@@ -357,6 +366,12 @@ describe("OpenArtifactsModal", () => {
         expect(screen.queryByRole("radio", { name: "Only those invited" })).toBeNull();
         expect(screen.getByRole("button", { name: "Update" })).toBeTruthy();
         expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
+
+        await clickButton("Copy link");
+        expect(writeText).toHaveBeenCalledWith(RECEIPT.url);
+        await clickButton("Open");
+        expect(port.open).toHaveBeenCalledWith(DOC_ID);
+        expect(open).toHaveBeenCalledWith(RECEIPT.url, "_blank", "noopener,noreferrer");
       });
 
       it(`${ISSUE} still shows the alert and Upgrade link for other access errors`, async () => {

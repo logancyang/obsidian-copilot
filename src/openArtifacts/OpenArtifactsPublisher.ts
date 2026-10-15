@@ -12,6 +12,7 @@ import { OpenArtifactsClient, OpenArtifactsClientError } from "@/openArtifacts/O
 import {
   OpenArtifactsFrontmatterParseError,
   getOpenArtifactsDocId,
+  getOpenArtifactsSavedLink,
   removeOpenArtifactsDocId,
   saveOpenArtifactsLink,
   OpenArtifactsPropertyConflictError,
@@ -186,11 +187,14 @@ export class OpenArtifactsPublisher {
       return;
     }
     let docId: string | null = null;
+    let docUrl: string | null = null;
     let initialResult: OpenArtifactsFailureResult | OpenArtifactsPersistenceResult | undefined =
       this.blockedPublishResults.get(file);
     if (!initialResult) {
       try {
-        docId = await getOpenArtifactsDocId(this.app, file);
+        const saved = await getOpenArtifactsSavedLink(this.app, file);
+        docId = saved?.docId ?? null;
+        docUrl = saved?.url ?? null;
       } catch (error) {
         if (
           !(error instanceof OpenArtifactsFrontmatterParseError) &&
@@ -209,6 +213,7 @@ export class OpenArtifactsPublisher {
     modal = this.createModal({
       fileName: file.basename,
       docId,
+      docUrl,
       initialResult: openingResult,
       access: this.accessPort(),
       onConfirm: openingResult

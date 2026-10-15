@@ -227,6 +227,7 @@ describe("OpenArtifactsPublisher", () => {
         const result = await openAndConfirm(harness, "publish");
 
         expect(harness.modalOptions[0].docId).toBe(DOC_ID);
+        expect(harness.modalOptions[0].docUrl).toBe(DOC_URL);
         expect(result).toEqual({
           kind: "success",
           action: "update",

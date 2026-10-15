@@ -49,7 +49,12 @@ function isFrontmatterProperties(value: unknown): value is Record<string, unknow
 const hasProperty = (frontmatter: Record<string, unknown>, key: string): boolean =>
   Object.hasOwn(frontmatter, key);
 
-function identityFrom(frontmatter: Record<string, unknown>): string | null {
+export interface OpenArtifactsSavedLink {
+  docId: string;
+  url: string;
+}
+
+function identityFrom(frontmatter: Record<string, unknown>): OpenArtifactsSavedLink | null {
   const keys = [OPENARTIFACTS_PROPERTY, LEGACY_PROPERTY].filter((key) =>
     hasProperty(frontmatter, key)
   );
@@ -59,10 +64,13 @@ function identityFrom(frontmatter: Record<string, unknown>): string | null {
   if (!first || ids.some((id) => id !== first)) {
     throw new OpenArtifactsPropertyConflictError();
   }
-  return first;
+  return { docId: first, url: frontmatter[keys[0]] as string };
 }
 
-export async function getOpenArtifactsDocId(app: App, file: TFile): Promise<string | null> {
+export async function getOpenArtifactsSavedLink(
+  app: App,
+  file: TFile
+): Promise<OpenArtifactsSavedLink | null> {
   const markdown = (await app.vault.read(file)).replace(/^\uFEFF/, "");
   const yaml = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
   if (yaml === undefined) {
@@ -81,6 +89,10 @@ export async function getOpenArtifactsDocId(app: App, file: TFile): Promise<stri
     throw new OpenArtifactsFrontmatterParseError();
   }
   return identityFrom(frontmatter);
+}
+
+export async function getOpenArtifactsDocId(app: App, file: TFile): Promise<string | null> {
+  return (await getOpenArtifactsSavedLink(app, file))?.docId ?? null;
 }
 
 export async function saveOpenArtifactsLink(

@@ -59,6 +59,7 @@ export interface OpenArtifactsAccessPort {
 export interface OpenArtifactsModalOptions {
   fileName: string;
   docId: string | null;
+  docUrl?: string | null;
   initialResult?: OpenArtifactsModalResult;
   access?: OpenArtifactsAccessPort;
   onConfirm: (
@@ -163,10 +164,12 @@ function OpenArtifactsReceiptView({ receipt, access, actions }: OpenArtifactsRec
 
 function AccessPanel({
   docId,
+  docUrl,
   access,
   showLinkActions = true,
 }: {
   docId: string;
+  docUrl?: string | null;
   access: OpenArtifactsAccessPort;
   showLinkActions?: boolean;
 }) {
@@ -224,7 +227,7 @@ function AccessPanel({
 
   const copyLink = async (event: React.MouseEvent<HTMLButtonElement>) => {
     try {
-      await event.currentTarget.win.navigator.clipboard.writeText(state?.url ?? "");
+      await event.currentTarget.win.navigator.clipboard.writeText(state?.url ?? docUrl ?? "");
       setCopyMessage("Copied");
     } catch {
       setCopyMessage("Could not copy the link");
@@ -341,18 +344,18 @@ function AccessPanel({
               </div>
             ))}
           </div>
-          {showLinkActions && (
-            <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
-              {copyMessage && <span className="tw-text-small tw-text-muted">{copyMessage}</span>}
-              <Button variant="secondary" onClick={safeAsyncHandler(copyLink)}>
-                Copy link
-              </Button>
-              <Button variant="secondary" onClick={safeAsyncHandler(openPage)}>
-                Open
-              </Button>
-            </div>
-          )}
         </>
+      )}
+      {showLinkActions && (
+        <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
+          {copyMessage && <span className="tw-text-small tw-text-muted">{copyMessage}</span>}
+          <Button variant="secondary" onClick={safeAsyncHandler(copyLink)}>
+            Copy link
+          </Button>
+          <Button variant="secondary" onClick={safeAsyncHandler(openPage)}>
+            Open
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -361,6 +364,7 @@ function AccessPanel({
 export function OpenArtifactsModalContent({
   fileName,
   docId,
+  docUrl,
   initialResult,
   access,
   onConfirm,
@@ -525,7 +529,9 @@ export function OpenArtifactsModalContent({
           onChange={(next) => setLinkAccess(next)}
         />
       )}
-      {!confirmationAction && docId && access && <AccessPanel docId={docId} access={access} />}
+      {!confirmationAction && docId && access && (
+        <AccessPanel docId={docId} docUrl={docUrl} access={access} />
+      )}
 
       <div
         className="tw-flex tw-flex-wrap tw-justify-end tw-gap-2"

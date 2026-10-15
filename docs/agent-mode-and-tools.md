@@ -236,7 +236,7 @@ After publishing a Markdown note, the agent saves the link in the note's `openar
 
 ### Sharing a page with only some people
 
-Private sharing is included with every paid plan: Copilot Plus and Believer license keys. On a free or lapsed plan, the agent tells you private sharing needs a paid plan and that nothing was published or changed. Replying **publish** then publishes the page for anyone with the link, and the agent never does that on its own.
+Private sharing is included with every plan that can publish to OpenArtifacts: Plus and Supporter, including existing Believer licenses. On a free or lapsed plan, the agent tells you private sharing needs a paid plan and that nothing was published or changed. Replying **publish** then publishes the page for anyone with the link, and the agent never does that on its own.
 
 When you name people, the agent publishes the page privately and adds each address. Only you and those people can open it, and they sign in with the address that was invited. The agent says an email was sent only when the server really sent one; otherwise it asks you to send them the link. It ends with a **Manage who can open it** link to the page where you can change who has access. If the server does not support private documents, the agent tells you and does not publish the page publicly.
 
@@ -251,7 +251,7 @@ The **Publish file to OpenArtifacts** command opens the **Share with OpenArtifac
 - **Requests** lists addresses that asked to open the page, each with **Approve** and **Decline**. The section is hidden when nobody has asked.
 - **Copy link** copies the page link, and **Open** opens the page for you without a sign-in.
 
-Private sharing needs a paid plan. If your plan does not include it, the dialog shows the message with an **Upgrade** link, and nothing is created. On an older or self-hosted OpenArtifacts server that does not support private documents, the dialog says so, and **Update**, **Delete**, **Copy** and **Open** keep working.
+Private sharing needs a plan that includes OpenArtifacts publishing. If your plan does not include it, the dialog shows the message with an **Upgrade** link, and nothing is created. On an older or self-hosted OpenArtifacts server that does not support private documents, the dialog says so, and **Update**, **Delete**, **Copy link** and **Open** keep working.
 
 Copilot also includes **research-memo** as an optional theme. For a named theme, the skill checks `.openartifacts/themes/<name>.md` in your vault, then `themes/<name>.md` alongside the installed skill. If neither exists, the agent continues with readable defaults. A missing theme never blocks publishing.
 
