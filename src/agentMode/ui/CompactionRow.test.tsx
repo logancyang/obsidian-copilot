@@ -5,6 +5,8 @@ import React from "react";
 
 type CompactionPart = Extract<AgentMessagePart, { kind: "compaction" }>;
 
+const FOLD_ICON = "svg.lucide-fold-vertical";
+
 const part = (overrides: Partial<CompactionPart> = {}): CompactionPart => ({
   kind: "compaction",
   id: "c1",
@@ -23,7 +25,7 @@ describe("CompactionRow", () => {
   afterEach(() => jest.useRealTimers());
 
   describe("CompactionRow()", () => {
-    it("announces a running manual compaction with a shimmering label and the seconds elapsed so far", () => {
+    it("announces a running manual compaction with a fold icon, a shimmering label, and the seconds elapsed so far", () => {
       const { container } = render(<CompactionRow part={part({ status: "in_progress" })} />);
 
       expect(screen.getByRole("status").textContent).toBe("Compacting conversation…");
@@ -31,7 +33,8 @@ describe("CompactionRow", () => {
         "Compacting conversation…"
       );
       expect(screen.getByText("12s")).toBeTruthy();
-      expect(container.querySelector(".copilot-spinner-dot-0")).toBeTruthy();
+      expect(container.querySelector(FOLD_ICON)).toBeTruthy();
+      expect(container.querySelector(".copilot-spinner")).toBeNull();
 
       act(() => jest.advanceTimersByTime(3_000));
 
@@ -49,10 +52,11 @@ describe("CompactionRow", () => {
       expect(screen.getByRole("status").textContent).toBe("Context is full, compacting…");
     });
 
-    it("settles a completed compaction into a quiet divider without a status announcement", () => {
+    it("settles a completed compaction into a quiet divider with the fold icon and no status announcement", () => {
       const { container } = render(<CompactionRow part={part()} />);
 
       expect(screen.getByText("Context compacted")).toBeTruthy();
+      expect(container.querySelector(FOLD_ICON)).toBeTruthy();
       expect(screen.queryByRole("status")).toBeNull();
       expect(container.querySelector(".copilot-spinner")).toBeNull();
     });
@@ -77,7 +81,7 @@ describe("CompactionRow", () => {
       expect(screen.getByText("Context compacted automatically · 90k → 8k tokens")).toBeTruthy();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 announces a failed compaction with its error and a warning icon", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 announces a failed compaction with its error and a warning-tinted fold icon", () => {
       const { container } = render(
         <CompactionRow part={part({ status: "failed", error: "Summary request overloaded" })} />
       );
@@ -85,9 +89,7 @@ describe("CompactionRow", () => {
       expect(screen.getByRole("alert").textContent).toBe(
         "Couldn't compact: Summary request overloaded"
       );
-      expect(
-        container.querySelector("svg.lucide-triangle-alert, svg.lucide-alert-triangle")
-      ).toBeTruthy();
+      expect(container.querySelector(FOLD_ICON)?.classList.contains("tw-text-warning")).toBe(true);
     });
 
     it("shows a failed compaction without a reason as a bare failure", () => {
@@ -96,17 +98,19 @@ describe("CompactionRow", () => {
       expect(screen.getByText("Couldn't compact")).toBeTruthy();
     });
 
-    it("shows a cancelled compaction as muted text", () => {
-      render(<CompactionRow part={part({ status: "cancelled" })} />);
+    it("shows a cancelled compaction as muted text beside the fold icon", () => {
+      const { container } = render(<CompactionRow part={part({ status: "cancelled" })} />);
 
       expect(screen.getByText("Compaction cancelled")).toBeTruthy();
+      expect(container.querySelector(FOLD_ICON)).toBeTruthy();
       expect(screen.queryByRole("status")).toBeNull();
     });
 
-    it("shows a skipped compaction as muted text", () => {
-      render(<CompactionRow part={part({ status: "skipped" })} />);
+    it("shows a skipped compaction as muted text beside the fold icon", () => {
+      const { container } = render(<CompactionRow part={part({ status: "skipped" })} />);
 
       expect(screen.getByText("Nothing to compact yet")).toBeTruthy();
+      expect(container.querySelector(FOLD_ICON)).toBeTruthy();
     });
   });
 });
