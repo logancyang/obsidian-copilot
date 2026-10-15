@@ -2,6 +2,8 @@
 
 # v4.0.15 - Review agent edits, pin and bookmark chats, and report issues from Agent Chat
 
+[![Demo video: Obsidian Copilot 4.0.15: Review Agent Edits, Pin and Bookmark Chats](https://images.brevilabs.com/newsletters/copilot-releases/4.0.15/IH6EvcazpgA-horizontal-fdf439fd.png)](https://youtube.com/shorts/IH6EvcazpgA?feature=share)
+
 See exactly what an agent changed in your vault. When Claude Code, Codex, or OpenCode edits notes in Agent Chat, the reply ends with a list of the changed files. Open one to read the note the way Obsidian renders it, so you can check the agent's work at a glance and spot an edit you didn't want before you move on.
 
 This release also lets you pin and bookmark chats, and the agent can offer a drafted report when something goes wrong.
