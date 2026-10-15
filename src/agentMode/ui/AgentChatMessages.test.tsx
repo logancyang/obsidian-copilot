@@ -199,7 +199,7 @@ function renderMessages(
 ) {
   const props: AgentChatMessagesProps = {
     messages,
-    app: {} as never,
+    plugin: { app: {} as never, manifest: { version: "4.1.0" } as never },
     currentPlan: null,
     pendingToolPermissions: [],
     pendingAskUserQuestions: [],
@@ -270,12 +270,15 @@ describe("AgentChatMessages", () => {
       renderMessages(FEEDBACK_TRANSCRIPT, false, { feedbackOffer: FEEDBACK_OFFER });
       fireEvent.click(screen.getByRole("button", { name: "Review & report" }));
 
-      expect(mockOpenReportIssueModal).toHaveBeenCalledWith(expect.anything(), {
-        activeBackend: "codex",
-        initialNote: expect.stringMatching(/^Replied in Swedish to an English request\n/),
-        preselectAllSources: true,
-        onReported: expect.any(Function),
-      });
+      expect(mockOpenReportIssueModal).toHaveBeenCalledWith(
+        expect.objectContaining({ manifest: { version: "4.1.0" } }),
+        {
+          activeBackend: "codex",
+          initialNote: expect.stringMatching(/^Replied in Swedish to an English request\n/),
+          preselectAllSources: true,
+          onReported: expect.any(Function),
+        }
+      );
       const { onReported } = mockOpenReportIssueModal.mock.calls[0][1] as {
         onReported: (report: { reportId: string; issueUrl: string }) => void;
       };
@@ -422,7 +425,7 @@ describe("AgentChatMessages", () => {
           }),
         ],
         false,
-        { app }
+        { plugin: { app, manifest: { version: "4.1.0" } as never } }
       );
 
       fireEvent.click(screen.getByRole("button", { name: "notes/diff-demo/alpha.md" }));

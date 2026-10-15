@@ -22,12 +22,12 @@ import type {
 } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
 import { logError } from "@/logger";
-import { App } from "obsidian";
+import { App, Plugin } from "obsidian";
 import React, { memo, useMemo } from "react";
 
 interface AgentChatMessagesProps {
   messages: AgentChatMessage[];
-  app: App;
+  plugin: Pick<Plugin, "app" | "manifest">;
   sourcePath?: string;
   currentPlan: CurrentPlan | null;
   pendingToolPermissions: PermissionPrompt[];
@@ -165,7 +165,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
 const AgentChatMessages = memo(
   ({
     messages,
-    app,
+    plugin,
     sourcePath = "",
     currentPlan,
     pendingToolPermissions,
@@ -174,6 +174,7 @@ const AgentChatMessages = memo(
     isLoading,
     feedbackOffer,
   }: AgentChatMessagesProps) => {
+    const { app } = plugin;
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
     const {
@@ -218,7 +219,7 @@ const AgentChatMessages = memo(
           <FeedbackCard
             offer={feedbackOffer}
             onReview={() =>
-              openReportIssueModal(app, {
+              openReportIssueModal(plugin, {
                 activeBackend: feedbackOffer.evidence.backendId,
                 initialNote: formatFeedbackNote(feedbackOffer),
                 preselectAllSources: true,
@@ -234,7 +235,7 @@ const AgentChatMessages = memo(
             }}
           />
         ) : null,
-      [feedbackOffer, app, chatBackend]
+      [feedbackOffer, plugin, chatBackend]
     );
 
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);

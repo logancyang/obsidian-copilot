@@ -95,7 +95,7 @@ const QueuedActionsDemo: React.FC<AgentChatMessagesProps> = (props) => {
       <div className="tw-h-96 tw-overflow-hidden">
         <AgentChatMessages
           {...props}
-          app={app}
+          plugin={{ app, manifest: props.plugin.manifest }}
           pendingToolPermissions={pendingToolPermissions}
           pendingAskUserQuestions={pendingAskUserQuestions}
           chatBackend={chatBackend}
@@ -107,7 +107,10 @@ const QueuedActionsDemo: React.FC<AgentChatMessagesProps> = (props) => {
 
 const actionRailArgs: AgentChatMessagesProps = {
   messages: [message],
-  app: {} as AgentChatMessagesProps["app"],
+  plugin: {
+    app: {} as AgentChatMessagesProps["plugin"]["app"],
+    manifest: { version: "4.1.0" } as AgentChatMessagesProps["plugin"]["manifest"],
+  },
   currentPlan: null,
   pendingToolPermissions: permissions,
   pendingAskUserQuestions: questions,
