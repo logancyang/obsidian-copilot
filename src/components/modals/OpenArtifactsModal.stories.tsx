@@ -24,10 +24,10 @@ const PRIVATE_ACCESS: OpenArtifactsAccess = {
   ...PUBLIC_ACCESS,
   linkAccess: "invited",
   people: [
-    { email: "alice@acme.com", role: "comment", addedAt: 1785000000000 },
+    { email: "alice@example.com", role: "comment", addedAt: 1785000000000 },
     { email: "carol@example.org", role: "comment", addedAt: 1785000050000 },
   ],
-  requests: [{ email: "bob@other.com", requestedAt: 1785000100000 }],
+  requests: [{ email: "bob@example.com", requestedAt: 1785000100000 }],
 };
 
 // Mounts the dialog and chooses Only those invited, so a story can show the state that follows
@@ -171,6 +171,19 @@ export const PrivateSharingNeedsPaidPlan: StoryObj<OpenArtifactsModalContentProp
       retryable: false,
       upgradeUrl: PRICING_URL,
     }),
+  },
+};
+
+// The screen after a first publish: the receipt, then the access panel with people already invited.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+export const PublishedWithAccessPanel: StoryObj<OpenArtifactsModalContentProps> = {
+  args: {
+    access: fakeAccessPort(PRIVATE_ACCESS),
+    initialResult: {
+      kind: "success",
+      action: "publish",
+      receipt: { docId: DOC_ID, url: PRIVATE_ACCESS.url, version: 1, linkAccess: "invited" },
+    },
   },
 };
 

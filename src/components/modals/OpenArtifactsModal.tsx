@@ -265,6 +265,7 @@ function AccessPanel({
             <div className="tw-text-small tw-text-muted">Link access</div>
             <SegmentedControl
               aria-label="Link access"
+              className="tw-self-start"
               options={LINK_ACCESS_OPTIONS}
               value={state.linkAccess}
               disabled={busy}
@@ -523,6 +524,7 @@ export function OpenArtifactsModalContent({
       {confirmationAction === "publish" && (
         <SegmentedControl
           aria-label="Link access"
+          className="tw-self-start"
           options={LINK_ACCESS_OPTIONS}
           value={linkAccess}
           disabled={working}
