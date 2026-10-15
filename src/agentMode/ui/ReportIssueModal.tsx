@@ -375,10 +375,10 @@ async function activityLogRequest(): Promise<ReportLogRequest> {
   if (!getSettings().agentMode.debugFullFrames) {
     return { ...base, unavailableReason: "The Agent Mode activity log is turned off." };
   }
-  const path = await frameSink.getValidatedPath();
-  return path === null
-    ? { ...base, unavailableReason: "The Agent Mode activity log's location is unavailable." }
-    : { ...base, path };
+  const text = await frameSink.readConversations();
+  return text === null
+    ? { ...base, unavailableReason: "The Agent Mode activity log has no chats to attach." }
+    : { ...base, text };
 }
 
 async function chatLogRequest(): Promise<ReportLogRequest> {

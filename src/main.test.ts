@@ -69,7 +69,7 @@ jest.mock("@/agentMode", () => ({
   setFrameSinkVaultBasePath: jest.fn(),
   closeRestoredTurnDiffs: jest.fn(),
   registerTurnDiffCommands: jest.fn(),
-  acpFrameSink: { narrowLegacyLogs: jest.fn(async () => undefined) },
+  acpFrameSink: { removeLegacyLogs: jest.fn(async () => undefined) },
   createAgentSessionManager: jest.fn(() => ({})),
 }));
 jest.mock("@/agentMode/agentModelDiscovery", () => ({ wireAgentModelDiscovery: jest.fn() }));

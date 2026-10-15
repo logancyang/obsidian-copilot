@@ -9,10 +9,15 @@ export interface FrameRecord {
   method: string;
   id: string | null;
   payload: unknown;
+  sessionId?: string | null;
 }
 
-const LOG_FILE_NAME = "acp-frames.ndjson";
-const ROTATED_FILE_NAME = "acp-frames.old.ndjson";
+const LEGACY_LOG_FILE_NAMES = ["acp-frames.ndjson", "acp-frames.old.ndjson"];
+const SESSION_FILE_PREFIX = "session-";
+const FILE_SUFFIX = ".ndjson";
+const BACKGROUND_FILE_NAME = "background.ndjson";
+const STATE_METHOD = "frameSink.state";
+const MAX_CONVERSATIONS = 5;
 const DESKTOP_UNAVAILABLE_PATH = "(Agent Mode frame logs are desktop-only)";
 const LOG_DIR_PREFIX = ["obsidian-copilot", "acp-frames"] as const;
 // Owner-only modes: the log holds full prompt/tool/note content in plaintext,
@@ -20,17 +25,16 @@ const LOG_DIR_PREFIX = ["obsidian-copilot", "acp-frames"] as const;
 // https://github.com/logancyang/obsidian-copilot-preview/issues/250
 const LOG_DIR_MODE = 0o700;
 const LOG_FILE_MODE = 0o600;
-const ROTATE_BYTES = 50 * 1024 * 1024;
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
+const KEEP_HEAD_BYTES = 1024 * 1024;
+const KEEP_TAIL_BYTES = 2 * 1024 * 1024;
 const MAX_LINE_BYTES = 64 * 1024;
 const MAX_QUEUE_FRAMES = 32;
 const MAX_QUEUE_BYTES = 8 * 1024 * 1024;
-const ROTATE_CHECK_EVERY = 25;
 const MAX_PAYLOAD_CHARS = 400;
 
 export interface FrameLogPaths {
   dirPath: string;
-  logPath: string;
-  rotatedPath: string;
 }
 
 export interface RuntimeLstat {
@@ -56,8 +60,9 @@ export interface NodeRuntime {
     opts: { encoding: "utf8"; mode: number }
   ) => Promise<void>;
   rm: (path: string, opts: { force: boolean; recursive?: boolean }) => Promise<void>;
-  stat: (path: string) => Promise<{ size: number }>;
-  rename: (oldPath: string, newPath: string) => Promise<void>;
+  stat: (path: string) => Promise<{ size: number; mtimeMs: number }>;
+  readdir: (path: string) => Promise<string[]>;
+  readFile: (path: string, encoding: "utf8") => Promise<string>;
   chmod: (path: string, mode: number) => Promise<void>;
   lstat: (path: string) => Promise<RuntimeLstat>;
   getuid?: () => number;
@@ -79,22 +84,45 @@ export function setFrameSinkVaultBasePath(basePath: string | null): void {
 export class FrameSink {
   private writeChain: Promise<void> = Promise.resolve();
   private ensuredDirPath: string | null = null;
-  private writeCount = 0;
   private pendingFrames = 0;
   private pendingBytes = 0;
   private droppedSinceLastWrite = 0;
+  private readonly fileBytes = new Map<string, number>();
+  private readonly conversationState = new Map<string, ConversationState>();
+  private readonly probeSessions = new Set<string>();
+  private readonly pruned = new Set<string>();
 
   constructor(private readonly options: FrameSinkOptions = {}) {}
 
   getPath(): string {
-    return this.resolvePaths()?.logPath ?? DESKTOP_UNAVAILABLE_PATH;
+    return this.resolvePaths()?.dirPath ?? DESKTOP_UNAVAILABLE_PATH;
+  }
+
+  /**
+   * The model probe replays a stored session at every backend start; its frames go to the
+   * background file so they never take a place among the newest conversations.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/658
+   */
+  markProbeSession(sessionId: string): void {
+    this.probeSessions.add(sessionId);
+    const paths = this.resolvePaths();
+    const runtime = this.getRuntime();
+    if (!paths || !runtime) return;
+    const filePath = runtime.join(paths.dirPath, conversationFileName(sessionId));
+    this.writeChain = this.writeChain.then(async () => {
+      this.fileBytes.delete(filePath);
+      await removeIfExists(runtime, filePath);
+    });
   }
 
   append(record: FrameRecord): void {
     const paths = this.resolvePaths();
     if (!paths) return;
 
-    const line = this.toLine(record);
+    const sessionId =
+      record.sessionId && !this.probeSessions.has(record.sessionId) ? record.sessionId : null;
+    let line = this.toLine(record);
+    if (sessionId) line += this.stateLine(sessionId, record);
 
     if (
       this.pendingFrames >= MAX_QUEUE_FRAMES ||
@@ -109,7 +137,7 @@ export class FrameSink {
     this.pendingBytes += lineBytes;
 
     this.writeChain = this.writeChain
-      .then(() => this.doAppend(paths, line))
+      .then(() => this.doAppend(paths, sessionId, line, isPromptRequest(record)))
       .then(
         () => {
           this.pendingFrames--;
@@ -132,8 +160,11 @@ export class FrameSink {
       // delete files at an attacker-chosen location.
       // https://github.com/logancyang/obsidian-copilot-preview/issues/250
       await this.ensureFolder(runtime, paths);
-      await removeIfExists(runtime, paths.logPath);
-      await removeIfExists(runtime, paths.rotatedPath);
+      for (const name of await listLogFiles(runtime, paths.dirPath)) {
+        await removeIfExists(runtime, runtime.join(paths.dirPath, name));
+      }
+      this.fileBytes.clear();
+      this.pruned.clear();
     });
     this.writeChain = task.catch(() => {});
     return task;
@@ -146,7 +177,6 @@ export class FrameSink {
       const runtime = this.getRuntime();
       if (!runtime) return;
       await this.ensureFolder(runtime, paths);
-      await ensureFileExists(runtime, paths.logPath);
     });
     this.writeChain = task.catch(() => {});
     await task;
@@ -155,14 +185,14 @@ export class FrameSink {
     const runtime = this.getRuntime();
     if (!runtime) return;
     if (runtime.openPath) {
-      const errorMessage = await runtime.openPath(paths.logPath);
+      const errorMessage = await runtime.openPath(paths.dirPath);
       if (typeof errorMessage === "string" && errorMessage.length > 0) {
         throw new Error(errorMessage);
       }
       return;
     }
     if (runtime.showItemInFolder) {
-      runtime.showItemInFolder(paths.logPath);
+      runtime.showItemInFolder(paths.dirPath);
       return;
     }
     throw new Error("No OS file opener is available.");
@@ -173,18 +203,26 @@ export class FrameSink {
   }
 
   /**
-   * Runs the owner and mode checks of `ensureFolder()` so a reader cannot be handed a path
-   * another account planted on a shared temp root; null when the path cannot be vouched for.
+   * Runs the owner and mode checks of `ensureFolder()` so a reader cannot be handed files
+   * another account planted on a shared temp root; null when the folder cannot be vouched for
+   * or holds no conversation. The text is the retained conversations, oldest first.
    * https://github.com/logancyang/obsidian-copilot-preview/issues/250
    */
-  async getValidatedPath(): Promise<string | null> {
+  async readConversations(): Promise<string | null> {
     const task = this.writeChain.then(async () => {
       const paths = this.resolvePaths();
       if (!paths) return null;
       const runtime = this.getRuntime();
       if (!runtime) return null;
       await this.ensureFolder(runtime, paths);
-      return paths.logPath;
+      const names = await newestConversationFiles(runtime, paths.dirPath);
+      const parts: string[] = [];
+      for (const name of names.reverse()) {
+        const text = await runtime.readFile(runtime.join(paths.dirPath, name), "utf8");
+        if (text)
+          parts.push(JSON.stringify({ frameSink: "conversation", file: name }) + "\n" + text);
+      }
+      return parts.length > 0 ? parts.join("") : null;
     });
     const settled = task.catch(() => null);
     this.writeChain = settled.then(() => {});
@@ -192,21 +230,26 @@ export class FrameSink {
   }
 
   /**
-   * Narrows logs an older build left world-readable even when logging is now off, without
-   * creating the directory chain for users who never log.
-   * https://github.com/logancyang/obsidian-copilot-preview/issues/250
+   * Deletes the single-file logs an older build wrote; they hold every conversation in one
+   * file and may be world-readable. Skipped when the folder is not a real directory of this user.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/658
    */
-  async narrowLegacyLogs(): Promise<void> {
+  async removeLegacyLogs(): Promise<void> {
     const task = this.writeChain.then(async () => {
       const paths = this.resolvePaths();
       const runtime = this.getRuntime();
       if (!paths || !runtime) return;
-      for (const target of [paths.logPath, paths.rotatedPath]) {
-        try {
-          await narrowExistingFile(runtime, target, getPosixOwnerUid(runtime));
-        } catch (error) {
-          logWarn("[AgentMode] Could not narrow debug log permissions", error);
+      try {
+        const entry = await runtime.lstat(paths.dirPath);
+        const ownerUid = getPosixOwnerUid(runtime);
+        if (entry.isSymbolicLink || !entry.isDirectory) return;
+        if (ownerUid !== null && entry.uid !== ownerUid) return;
+        for (const name of LEGACY_LOG_FILE_NAMES) {
+          await removeIfExists(runtime, runtime.join(paths.dirPath, name));
         }
+      } catch (error) {
+        if (!isNotFoundError(error))
+          logWarn("[AgentMode] Could not remove legacy debug logs", error);
       }
     });
     this.writeChain = task;
@@ -240,8 +283,6 @@ export class FrameSink {
     for (const level of [appRoot, framesRoot, paths.dirPath]) {
       await ensurePrivateDirectory(runtime, level, ownerUid);
     }
-    await narrowExistingFile(runtime, paths.logPath, ownerUid);
-    await narrowExistingFile(runtime, paths.rotatedPath, ownerUid);
 
     this.ensuredDirPath = paths.dirPath;
   }
@@ -279,7 +320,30 @@ export class FrameSink {
     );
   }
 
-  private async doAppend(paths: FrameLogPaths, line: string): Promise<void> {
+  private stateLine(sessionId: string, record: FrameRecord): string {
+    const found = modelModeOf(record.payload);
+    if (!found) return "";
+    const prior = this.conversationState.get(sessionId);
+    const next = { ...prior, ...found };
+    if (prior?.model === next.model && prior?.mode === next.mode) return "";
+    this.conversationState.set(sessionId, next);
+    return this.toLine({
+      ...record,
+      dir: "→",
+      tag: "frameSink",
+      kind: "raw",
+      method: STATE_METHOD,
+      id: null,
+      payload: next,
+    });
+  }
+
+  private async doAppend(
+    paths: FrameLogPaths,
+    sessionId: string | null,
+    line: string,
+    isPrompt: boolean
+  ): Promise<void> {
     const runtime = this.getRuntime();
     if (!runtime) return;
 
@@ -300,9 +364,11 @@ export class FrameSink {
       payload = note + line;
     }
 
+    const name = sessionId ? conversationFileName(sessionId) : BACKGROUND_FILE_NAME;
+    const filePath = runtime.join(paths.dirPath, name);
     try {
       await this.ensureFolder(runtime, paths);
-      await runtime.appendFile(paths.logPath, payload, {
+      await runtime.appendFile(filePath, payload, {
         encoding: "utf8",
         mode: LOG_FILE_MODE,
       });
@@ -316,32 +382,127 @@ export class FrameSink {
       return;
     }
 
-    this.writeCount++;
-    if (this.writeCount % ROTATE_CHECK_EVERY === 0) {
-      await this.maybeRotate(runtime, paths);
+    try {
+      const known = this.fileBytes.get(filePath);
+      const size =
+        known === undefined ? (await runtime.stat(filePath)).size : known + payload.length;
+      this.fileBytes.set(filePath, size);
+      if (size > MAX_FILE_BYTES) await this.trimFile(runtime, filePath);
+      if (sessionId && isPrompt && !this.pruned.has(name)) {
+        this.pruned.add(name);
+        await this.pruneConversations(runtime, paths.dirPath);
+      }
+    } catch (error) {
+      logWarn("[AgentMode] Could not trim the debug logs", error);
     }
   }
 
-  private async maybeRotate(runtime: NodeRuntime, paths: FrameLogPaths): Promise<void> {
-    try {
-      const stat = await runtime.stat(paths.logPath);
-      if (stat.size < ROTATE_BYTES) return;
-      await removeIfExists(runtime, paths.rotatedPath);
-      await runtime.rename(paths.logPath, paths.rotatedPath);
-    } catch (error) {
-      logWarn("[AgentMode] Could not rotate the debug log", error);
+  /**
+   * Keeps a conversation's first frames and its newest ones, plus every model and mode line
+   * from the part cut out, so the file still says which model and mode the chat ran with.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/658
+   */
+  private async trimFile(runtime: NodeRuntime, filePath: string): Promise<void> {
+    const lines = (await runtime.readFile(filePath, "utf8")).split("\n").filter(Boolean);
+    let head = 0;
+    for (let bytes = 0; head < lines.length && bytes < KEEP_HEAD_BYTES; head++) {
+      bytes += lines[head].length + 1;
+    }
+    let tail = lines.length;
+    for (let bytes = 0; tail > head && bytes < KEEP_TAIL_BYTES; ) {
+      bytes += lines[--tail].length + 1;
+    }
+    const cut = lines.slice(head, tail);
+    const kept = [
+      ...lines.slice(0, head),
+      JSON.stringify({ frameSink: "elided", frames: cut.length }),
+      ...cut.filter((l) => l.includes(`"method":"${STATE_METHOD}"`)),
+      ...lines.slice(tail),
+    ];
+    const text = kept.join("\n") + "\n";
+    await runtime.writeFile(filePath, text, { encoding: "utf8", mode: LOG_FILE_MODE });
+    this.fileBytes.set(filePath, text.length);
+  }
+
+  private async pruneConversations(runtime: NodeRuntime, dirPath: string): Promise<void> {
+    const names = await newestConversationFiles(runtime, dirPath);
+    for (const name of names.slice(MAX_CONVERSATIONS)) {
+      const filePath = runtime.join(dirPath, name);
+      this.fileBytes.delete(filePath);
+      this.pruned.delete(name);
+      await removeIfExists(runtime, filePath);
     }
   }
+}
+
+interface ConversationState {
+  model?: string;
+  mode?: string;
+}
+
+function conversationFileName(sessionId: string): string {
+  return `${SESSION_FILE_PREFIX}${sessionId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 100)}${FILE_SUFFIX}`;
+}
+
+function isPromptRequest(record: FrameRecord): boolean {
+  return (
+    record.dir === "→" && record.kind === "request" && /^(session\/)?prompt$/.test(record.method)
+  );
+}
+
+async function listLogFiles(runtime: NodeRuntime, dirPath: string): Promise<string[]> {
+  try {
+    return (await runtime.readdir(dirPath)).filter(
+      (name) =>
+        name === BACKGROUND_FILE_NAME ||
+        (name.startsWith(SESSION_FILE_PREFIX) && name.endsWith(FILE_SUFFIX))
+    );
+  } catch (error) {
+    if (isNotFoundError(error)) return [];
+    throw error;
+  }
+}
+
+async function newestConversationFiles(runtime: NodeRuntime, dirPath: string): Promise<string[]> {
+  const names = (await listLogFiles(runtime, dirPath)).filter((n) => n !== BACKGROUND_FILE_NAME);
+  const stamped = await Promise.all(
+    names.map(async (name) => ({
+      name,
+      mtimeMs: (await runtime.stat(runtime.join(dirPath, name))).mtimeMs,
+    }))
+  );
+  return stamped.sort((a, b) => b.mtimeMs - a.mtimeMs).map((f) => f.name);
+}
+
+function modelModeOf(payload: unknown): ConversationState | null {
+  if (!payload || typeof payload !== "object") return null;
+  const root = payload as Record<string, unknown>;
+  const body = (root.update && typeof root.update === "object" ? root.update : root) as Record<
+    string,
+    unknown
+  >;
+  const text = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+  const nested = (key: string, field: string) => {
+    const v = body[key];
+    return v && typeof v === "object" ? text((v as Record<string, unknown>)[field]) : undefined;
+  };
+  let model = text(body.modelId) ?? text(body.currentModelId) ?? nested("models", "currentModelId");
+  let mode = text(body.modeId) ?? text(body.currentModeId) ?? nested("modes", "currentModeId");
+  if (Array.isArray(body.configOptions)) {
+    for (const option of body.configOptions as Record<string, unknown>[]) {
+      const kind = option?.category ?? option?.id;
+      if (kind === "model") model = text(option.currentValue) ?? model;
+      if (kind === "mode") mode = text(option.currentValue) ?? mode;
+    }
+  }
+  if (!model && !mode) return null;
+  return { ...(model && { model }), ...(mode && { mode }) };
 }
 
 export function getFrameLogPaths(vaultBasePath: string, runtime: NodeRuntime): FrameLogPaths {
   const vaultHash = stableHash(vaultBasePath);
   const dirPath = runtime.join(runtime.tmpdir(), ...LOG_DIR_PREFIX, vaultHash);
-  return {
-    dirPath,
-    logPath: runtime.join(dirPath, LOG_FILE_NAME),
-    rotatedPath: runtime.join(dirPath, ROTATED_FILE_NAME),
-  };
+  return { dirPath };
 }
 
 function getNodeRuntime(): NodeRuntime | null {
@@ -374,7 +535,8 @@ function getNodeRuntime(): NodeRuntime | null {
       writeFile: fs.writeFile,
       rm: fs.rm,
       stat: fs.stat,
-      rename: fs.rename,
+      readdir: fs.readdir,
+      readFile: fs.readFile,
       chmod: fs.chmod,
       lstat: async (p) => {
         const st = await fs.lstat(p);
@@ -391,20 +553,6 @@ function getNodeRuntime(): NodeRuntime | null {
     };
   } catch {
     return null;
-  }
-}
-
-/**
- * A failure other than "not found" is rethrown so an unreadable path is not answered with
- * a fresh file at an unvalidated location.
- * https://github.com/logancyang/obsidian-copilot-preview/issues/250
- */
-async function ensureFileExists(runtime: NodeRuntime, path: string): Promise<void> {
-  try {
-    await runtime.lstat(path);
-  } catch (error) {
-    if (!isNotFoundError(error)) throw error;
-    await runtime.writeFile(path, "", { encoding: "utf8", mode: LOG_FILE_MODE });
   }
 }
 
@@ -490,38 +638,6 @@ async function ensurePrivateDirectory(
   if ((entry.mode & 0o7777) !== LOG_DIR_MODE) {
     await runtime.chmod(path, LOG_DIR_MODE);
   }
-}
-
-/**
- * chmod cannot revoke descriptors opened while the file was world-readable, and there is no
- * isFile() check: cross-UID planting is blocked by the 0700 directory chain, and same-UID
- * processes are outside the threat model.
- * https://github.com/logancyang/obsidian-copilot-preview/issues/250
- */
-async function narrowExistingFile(
-  runtime: NodeRuntime,
-  path: string,
-  ownerUid: number | null
-): Promise<void> {
-  let entry: RuntimeLstat;
-  try {
-    entry = await runtime.lstat(path);
-  } catch (error) {
-    if (isNotFoundError(error)) return;
-    throw error;
-  }
-  if (entry.isSymbolicLink) {
-    await runtime.rm(path, { force: true });
-    return;
-  }
-  if (entry.isDirectory) {
-    throw new Error("Frame log file path is a directory.");
-  }
-  if (ownerUid === null) return;
-  if (entry.uid !== ownerUid) {
-    throw new Error("Frame log file is owned by another user.");
-  }
-  await runtime.chmod(path, LOG_FILE_MODE);
 }
 
 function isNotFoundError(error: unknown): boolean {
