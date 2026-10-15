@@ -563,7 +563,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const handleReportError = () => {
     const evidence = activeSession?.getReportEvidence();
-    openReportIssueModal(app, {
+    openReportIssueModal(plugin, {
       activeBackend: evidence?.backendId ?? settings.agentMode.activeBackend,
       initialNote: evidence ? formatChatReportNote(evidence) : undefined,
       preselectAllSources: true,
