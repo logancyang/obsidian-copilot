@@ -1,6 +1,7 @@
 import type { CompactionPart } from "@/agentMode/ui/agentTrail";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
-import { AlertTriangle } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { FoldVertical } from "lucide-react";
 import React from "react";
 
 interface CompactionRowProps {
@@ -27,6 +28,17 @@ const Hairline: React.FC = () => (
   <span className="tw-flex-1 tw-border-0 tw-border-t tw-border-solid tw-border-border" />
 );
 
+const CompactionIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <FoldVertical aria-hidden="true" className={cn("tw-size-3 tw-shrink-0", className)} />
+);
+
+const StatusLine: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="tw-flex tw-items-center tw-gap-1.5 tw-py-1 tw-pl-1 tw-text-ui-small tw-text-muted">
+    <CompactionIcon />
+    <span>{children}</span>
+  </div>
+);
+
 export const CompactionRow: React.FC<CompactionRowProps> = ({ part }) => {
   switch (part.status) {
     case "in_progress":
@@ -35,6 +47,7 @@ export const CompactionRow: React.FC<CompactionRowProps> = ({ part }) => {
           status="running"
           startedAtMs={part.startedAtMs}
           label={RUNNING_LABEL[part.trigger]}
+          icon={<CompactionIcon />}
           inline
         />
       );
@@ -42,6 +55,7 @@ export const CompactionRow: React.FC<CompactionRowProps> = ({ part }) => {
       return (
         <div className="tw-flex tw-items-center tw-gap-2 tw-py-1 tw-text-ui-small tw-text-muted">
           <Hairline />
+          <CompactionIcon />
           <span>{completedText(part)}</span>
           <Hairline />
         </div>
@@ -54,17 +68,13 @@ export const CompactionRow: React.FC<CompactionRowProps> = ({ part }) => {
           role="alert"
           className="tw-flex tw-items-center tw-gap-1.5 tw-py-1 tw-pl-1 tw-text-ui-small tw-text-muted"
         >
-          <AlertTriangle aria-hidden="true" className="tw-size-3 tw-shrink-0 tw-text-warning" />
+          <CompactionIcon className="tw-text-warning" />
           <span>{part.error ? `Couldn't compact: ${part.error}` : "Couldn't compact"}</span>
         </div>
       );
     case "cancelled":
-      return (
-        <div className="tw-py-1 tw-pl-1 tw-text-ui-small tw-text-muted">Compaction cancelled</div>
-      );
+      return <StatusLine>Compaction cancelled</StatusLine>;
     case "skipped":
-      return (
-        <div className="tw-py-1 tw-pl-1 tw-text-ui-small tw-text-muted">Nothing to compact yet</div>
-      );
+      return <StatusLine>Nothing to compact yet</StatusLine>;
   }
 };
