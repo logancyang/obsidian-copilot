@@ -1,17 +1,12 @@
 import { captureWindowBehindDialogs } from "@/agentMode/ui/reportScreenshot";
 
 const capturePage = jest.fn<Promise<{ toPNG: () => Uint8Array }>, []>();
-let mockRemote: object | undefined;
 
-jest.mock(
-  "electron",
-  () => ({
-    get remote() {
-      return mockRemote;
-    },
-  }),
-  { virtual: true }
-);
+function giveElectron(win: Window, capture: typeof capturePage): void {
+  Object.assign(win, {
+    electron: { remote: { getCurrentWindow: () => ({ webContents: { capturePage: capture } }) } },
+  });
+}
 
 describe("reportScreenshot", () => {
   describe("captureWindowBehindDialogs()", () => {
@@ -35,9 +30,7 @@ describe("reportScreenshot", () => {
       window.document.body.innerHTML = "";
       capturePage.mockReset();
       capturePage.mockResolvedValue({ toPNG: () => png });
-      mockRemote = {
-        getCurrentWindow: () => ({ getBounds: jest.fn(), webContents: { capturePage } }),
-      };
+      giveElectron(window, capturePage);
     });
 
     function dialog(hidden = false) {
@@ -61,6 +54,19 @@ describe("reportScreenshot", () => {
       expect([report.hidden, settings.hidden]).toEqual([false, false]);
     });
 
+    it("photographs a popout through that popout's own Electron window", async () => {
+      const iframe = window.document.body.appendChild(window.document.createElement("iframe"));
+      const popout = iframe.contentWindow as Window;
+      const popoutCapture = jest.fn<Promise<{ toPNG: () => Uint8Array }>, []>();
+      popoutCapture.mockResolvedValue({ toPNG: () => png });
+      giveElectron(popout, popoutCapture);
+
+      await expect(captureWindowBehindDialogs(popout)).resolves.toBe(png);
+
+      expect(popoutCapture).toHaveBeenCalled();
+      expect(capturePage).not.toHaveBeenCalled();
+    });
+
     it("leaves a dialog that was already hidden hidden", async () => {
       const closed = dialog(true);
 
@@ -79,7 +85,7 @@ describe("reportScreenshot", () => {
     });
 
     it("returns null without hiding anything where Electron's remote module is unavailable", async () => {
-      mockRemote = undefined;
+      Object.assign(window, { electron: {} });
       const report = dialog();
 
       await expect(captureWindowBehindDialogs(window)).resolves.toBeNull();
