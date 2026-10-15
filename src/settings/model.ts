@@ -669,7 +669,9 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   }
 
   const copilotFolderValidation = validateCopilotFolder(
-    typeof settingsToSanitize.copilotFolder === "string" ? settingsToSanitize.copilotFolder : ""
+    typeof settingsToSanitize.copilotFolder === "string"
+      ? toVisibleCopilotFolder(settingsToSanitize.copilotFolder)
+      : ""
   );
   sanitizedSettings.copilotFolder = copilotFolderValidation.ok
     ? copilotFolderValidation.folder
@@ -946,6 +948,10 @@ function validateSkillsFolder(
   return { ok: true, folder: cleaned };
 }
 
+export function toVisibleCopilotFolder(folder: string): string {
+  return folder.trim().replace(/(^|[\\/])\.+/g, "$1");
+}
+
 export function validateCopilotFolder(
   value: string,
   configDir?: string
@@ -985,8 +991,10 @@ export function validateCopilotFolder(
     if (segment === "..") {
       return { ok: false, reason: 'Folder path cannot contain ".." segments.' };
     }
-    if (segment === ".") {
-      return { ok: false, reason: 'Folder path cannot contain "." segments.' };
+    // Obsidian does not index dot folders, so every Copilot feature must see a visible root.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/712
+    if (segment.startsWith(".")) {
+      return { ok: false, reason: "Folder names cannot start with a dot." };
     }
     if (CONTROL_CHAR_RE.test(segment)) {
       return { ok: false, reason: "Folder path contains illegal control characters." };

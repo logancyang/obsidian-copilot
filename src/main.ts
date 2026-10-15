@@ -18,6 +18,8 @@ import CopilotView from "@/components/CopilotView";
 import RelevantNotesView from "@/components/RelevantNotesView";
 import { ApplyView } from "@/components/composer/ApplyView";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
+import { CopilotFolderMigration } from "@/components/modals/CopilotFolderMigration";
+import React from "react";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
 import { registerContextMenu } from "@/commands/contextMenu";
@@ -87,6 +89,7 @@ import {
   updateSetting,
 } from "@/settings/model";
 import { ensureCopilotSubfolders, getEffectiveConversationsFolder } from "@/settings/copilotFolder";
+import { revealHiddenCopilotFolder } from "@/settings/revealCopilotFolder";
 import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
 import { getDeviceId } from "@/utils/deviceId";
@@ -189,6 +192,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
   private startupMigrationItems: StartupMigrationItem[] = [];
+  private loadedCopilotFolder: unknown;
   private pluginLifecycleActive = true;
   private initialization: Promise<void> = Promise.resolve();
   private readonly startedViewCreators = new Map<string, ViewCreator>();
@@ -281,6 +285,26 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       })();
     });
     await runSettingsMigrations(this.modelManagement);
+    const folderMigration = await revealHiddenCopilotFolder(
+      this.app.vault,
+      this.loadedCopilotFolder,
+      getSettings().copilotFolder
+    );
+    // The dialog tells the user what to move by hand, so the visible root is saved even when the move failed.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/712
+    if (folderMigration) {
+      setSettings({ copilotFolder: getSettings().copilotFolder });
+      this.app.workspace.onLayoutReady(() => {
+        new ConfirmModal(
+          this.app,
+          () => {},
+          React.createElement(CopilotFolderMigration, { migration: folderMigration }),
+          "Copilot folder migration",
+          "OK",
+          ""
+        ).open();
+      });
+    }
     const agentMode = isDesktopRuntime()
       ? await Promise.all([import("@/agentMode"), import("@/agentMode/agentModelDiscovery")])
       : null;
@@ -1147,6 +1171,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
 
   async loadSettings() {
     const rawData = (await this.loadData()) as unknown;
+    this.loadedCopilotFolder = (rawData as { copilotFolder?: unknown } | null)?.copilotFolder;
     // The keychain bootstrap may persist a sparse snapshot of the raw on-disk
     // data (vaultId backfill) before settings are hydrated. That snapshot is
     // already in dehydrated, on-disk shape, so it must bypass the
