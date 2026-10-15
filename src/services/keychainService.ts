@@ -1,4 +1,4 @@
-import { type App, type SecretStorage, FileSystemAdapter } from "obsidian";
+import { type App, type SecretStorage } from "obsidian";
 import { type CopilotSettings, getModelKeyFromModel, getSettings } from "@/settings/model";
 import { type CustomModel } from "@/aiParams";
 import type { Provider } from "@/modelManagement";
@@ -31,26 +31,6 @@ const LEGACY_SECRET_ID = /^copilot-v([0-9a-f]{8})-/;
 const RETIRED_EMBEDDING_SECRET_ID = /^copilot-v[0-9a-f]{8}-model-api-key-embedding-/;
 const MAX_SECRET_ID_LENGTH = 64;
 const API_KEY_SUFFIX = "-api-key";
-
-function legacyVaultIdForPath(app: App): string | undefined {
-  const basePath = getVaultBasePath(app);
-  return basePath ? md5(basePath).slice(0, 8) : undefined;
-}
-
-function getVaultBasePath(app: App): string | undefined {
-  const adapter = app.vault.adapter;
-  if (adapter instanceof FileSystemAdapter) {
-    return adapter.getBasePath();
-  }
-  const adapterAny = adapter as unknown as { getBasePath?: () => string; basePath?: string };
-  if (typeof adapterAny.getBasePath === "function") {
-    return adapterAny.getBasePath();
-  }
-  if (typeof adapterAny.basePath === "string") {
-    return adapterAny.basePath;
-  }
-  return undefined;
-}
 
 function slugify(raw: string): string {
   return raw
@@ -304,12 +284,20 @@ export class KeychainService {
     return { secretEntries, keychainIdsToDelete };
   }
 
-  migrateLegacyNames(settings: CopilotSettings, rawVaultIdHint: unknown): CopilotSettings {
-    const vaultIds = this.legacyVaultIds(rawVaultIdHint);
-    const adopt = (name: string, legacyIdFor: (vaultId: string) => string): void => {
+  // The previous version resolves the synced vault id and provider pointer, so those entries are
+  // the keys that work today; other legacy ids are what this device saved before a sync replaced it.
+  // https://github.com/logancyang/obsidian-copilot/issues/3618
+  migrateLegacyNames(settings: CopilotSettings, syncedVaultId: unknown): CopilotSettings {
+    const vaultIds = this.legacyVaultIds(syncedVaultId);
+    const adopt = (
+      name: string,
+      legacyIdFor: (vaultId: string) => string,
+      currentLegacyId?: string
+    ): void => {
       if (this.storage.getSecret(name) !== null) return;
-      for (const vaultId of vaultIds) {
-        const value = this.storage.getSecret(legacyIdFor(vaultId));
+      const candidates = [currentLegacyId, ...vaultIds.map(legacyIdFor)];
+      for (const id of candidates) {
+        const value = id === undefined ? null : this.storage.getSecret(id);
         if (value !== null) {
           this.storage.setSecret(name, value);
           return;
@@ -334,8 +322,13 @@ export class KeychainService {
     for (const row of Object.values(settings.providers ?? {})) {
       const pointer = row.apiKeyKeychainId;
       if (!pointer) continue;
-      const name = LEGACY_SECRET_ID.test(pointer) ? providerKeychainName(row, providers) : pointer;
-      adopt(name, (vaultId) => `copilot-v${vaultId}-provider-${row.providerId}`);
+      const isLegacy = LEGACY_SECRET_ID.test(pointer);
+      const name = isLegacy ? providerKeychainName(row, providers) : pointer;
+      adopt(
+        name,
+        (vaultId) => `copilot-v${vaultId}-provider-${row.providerId}`,
+        isLegacy ? pointer : undefined
+      );
       if (name !== pointer) {
         providers[row.providerId] = { ...row, apiKeyKeychainId: name };
         pointersChanged = true;
@@ -344,17 +337,16 @@ export class KeychainService {
     return pointersChanged ? { ...settings, providers } : settings;
   }
 
-  private legacyVaultIds(rawVaultIdHint: unknown): string[] {
-    const hint =
-      typeof rawVaultIdHint === "string" && /^[0-9a-f]{8}$/.test(rawVaultIdHint)
-        ? rawVaultIdHint
-        : undefined;
+  private legacyVaultIds(syncedVaultId: unknown): string[] {
+    const synced =
+      typeof syncedVaultId === "string" && /^[0-9a-f]{8}$/.test(syncedVaultId)
+        ? [syncedVaultId]
+        : [];
     const stored = this.storage
       .listSecrets()
       .map((id) => LEGACY_SECRET_ID.exec(id)?.[1])
       .filter((id): id is string => id !== undefined);
-    const local = legacyVaultIdForPath(this.app);
-    return [...new Set([local, hint, ...stored].filter((id): id is string => !!id))];
+    return [...new Set([...synced, ...stored])];
   }
 
   removeRetiredEmbeddingSecrets(): void {

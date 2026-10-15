@@ -164,7 +164,6 @@ describe("settingsPersistence", () => {
         })
       );
       expect(saveData.mock.calls[0][0]).not.toHaveProperty("_keychainOnly");
-      expect(saveData.mock.calls[0][0]).not.toHaveProperty("_keychainVaultId");
     });
 
     it("persists and loads the provider pointers the Keychain name migration rewrote (https://github.com/logancyang/obsidian-copilot/issues/3618)", async () => {

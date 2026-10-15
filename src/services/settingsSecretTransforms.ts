@@ -82,7 +82,6 @@ export function cleanupLegacyFields(settings: CopilotSettings): CopilotSettings 
   delete out.enableEncryption;
   delete out._keychainMigrated;
   delete out._keychainMigratedAt;
-  delete out._keychainVaultId;
   delete out._migrationModalDismissed;
   delete out._diskSecretsCleared;
   delete out._keychainOnly;

@@ -128,8 +128,10 @@ describe("settingsSecretTransforms", () => {
 
       const result = cleanupLegacyFields(settings) as unknown as Record<string, unknown>;
 
-      expect(result).toMatchObject({ _someFutureField: "future-value" });
-      expect(result._keychainVaultId).toBeUndefined();
+      expect(result).toMatchObject({
+        _keychainVaultId: "abc12345",
+        _someFutureField: "future-value",
+      });
       expect(result.enableEncryption).toBeUndefined();
       expect(result._keychainMigrated).toBeUndefined();
       expect(result._keychainMigratedAt).toBeUndefined();

@@ -96,9 +96,8 @@ function makeProvider(overrides: Partial<Provider> = {}): Provider {
   };
 }
 
-const VAULT_PATH = "/Users/test/MyVault";
-const LOCAL_LEGACY_VAULT_ID = md5(VAULT_PATH).slice(0, 8);
-const OTHER_DEVICE_VAULT_ID = "0a1b2c3d";
+const SYNCED_VAULT_ID = "1234abcd";
+const EARLIER_VAULT_ID = "0a1b2c3d";
 
 function makeAdapter(basePath: string) {
   const adapter = new FileSystemAdapter();
@@ -209,54 +208,54 @@ describe("keychainService", () => {
       function migrate(
         entries: Record<string, string>,
         settings: CopilotSettings,
-        rawVaultIdHint?: string
+        syncedVaultId?: string
       ) {
         const storage = makeMapStorage(entries);
-        const service = KeychainService.getInstance(
-          makeApp({ basePath: VAULT_PATH, secretStorage: storage })
-        );
-        const migrated = service.migrateLegacyNames(settings, rawVaultIdHint);
+        const service = KeychainService.getInstance(makeApp({ secretStorage: storage }));
+        const migrated = service.migrateLegacyNames(settings, syncedVaultId);
         return { secrets: storage.secrets, migrated };
       }
 
-      it("copies a top-level secret from this device's path-derived name to its stable name and keeps the original (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
-        const legacyId = `copilot-v${LOCAL_LEGACY_VAULT_ID}-plus-license-key`;
+      it("copies a top-level secret from the synced vault id's name to its stable name and keeps the original (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
+        const legacyId = `copilot-v${SYNCED_VAULT_ID}-plus-license-key`;
 
-        const { secrets } = migrate({ [legacyId]: "lic-local" }, makeSettings());
+        const { secrets } = migrate({ [legacyId]: "lic-current" }, makeSettings(), SYNCED_VAULT_ID);
 
-        expect(secrets.get("copilot-setting-plus-license-key")).toBe("lic-local");
-        expect(secrets.get(legacyId)).toBe("lic-local");
+        expect(secrets.get("copilot-setting-plus-license-key")).toBe("lic-current");
+        expect(secrets.get(legacyId)).toBe("lic-current");
       });
 
-      it("recovers a key this device saved under another device's synced vault id (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
+      it("recovers a key this device saved under a vault id that a later sync replaced (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
         const { secrets } = migrate(
-          { [`copilot-v${OTHER_DEVICE_VAULT_ID}-plus-license-key`]: "lic-under-other-id" },
-          makeSettings()
+          { [`copilot-v${EARLIER_VAULT_ID}-plus-license-key`]: "lic-earlier" },
+          makeSettings(),
+          SYNCED_VAULT_ID
         );
 
-        expect(secrets.get("copilot-setting-plus-license-key")).toBe("lic-under-other-id");
+        expect(secrets.get("copilot-setting-plus-license-key")).toBe("lic-earlier");
       });
 
-      it("prefers this device's path-derived entry over one under the synced vault id", () => {
+      it("prefers the entry under the synced vault id, which is the key the previous version resolves today", () => {
         const { secrets } = migrate(
           {
-            [`copilot-v${OTHER_DEVICE_VAULT_ID}-plus-license-key`]: "lic-other",
-            [`copilot-v${LOCAL_LEGACY_VAULT_ID}-plus-license-key`]: "lic-local",
+            [`copilot-v${EARLIER_VAULT_ID}-plus-license-key`]: "lic-stale",
+            [`copilot-v${SYNCED_VAULT_ID}-plus-license-key`]: "lic-current",
           },
           makeSettings(),
-          OTHER_DEVICE_VAULT_ID
+          SYNCED_VAULT_ID
         );
 
-        expect(secrets.get("copilot-setting-plus-license-key")).toBe("lic-local");
+        expect(secrets.get("copilot-setting-plus-license-key")).toBe("lic-current");
       });
 
       it("leaves an existing stable entry untouched, so a key changed after migration is not reverted", () => {
         const { secrets } = migrate(
           {
             "copilot-setting-plus-license-key": "lic-new",
-            [`copilot-v${LOCAL_LEGACY_VAULT_ID}-plus-license-key`]: "lic-old",
+            [`copilot-v${SYNCED_VAULT_ID}-plus-license-key`]: "lic-old",
           },
-          makeSettings()
+          makeSettings(),
+          SYNCED_VAULT_ID
         );
 
         expect(secrets.get("copilot-setting-plus-license-key")).toBe("lic-new");
@@ -267,10 +266,11 @@ describe("keychainService", () => {
 
         const { secrets } = migrate(
           {
-            [`copilot-v${LOCAL_LEGACY_VAULT_ID}-model-api-key-chat-gpt-4-openai-${identityHash}`]:
+            [`copilot-v${SYNCED_VAULT_ID}-model-api-key-chat-gpt-4-openai-${identityHash}`]:
               "sk-model",
           },
-          makeSettings({ activeModels: [makeModel({ name: "gpt-4", provider: "openai" })] })
+          makeSettings({ activeModels: [makeModel({ name: "gpt-4", provider: "openai" })] }),
+          SYNCED_VAULT_ID
         );
 
         expect(secrets.get(`copilot-model-api-key-chat-gpt-4-openai-${identityHash}`)).toBe(
@@ -279,7 +279,7 @@ describe("keychainService", () => {
       });
 
       it("rewrites a legacy provider pointer to its readable name and copies the key (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
-        const legacyPointer = `copilot-v${LOCAL_LEGACY_VAULT_ID}-provider-row-1`;
+        const legacyPointer = `copilot-v${SYNCED_VAULT_ID}-provider-row-1`;
         const provider = makeProvider({ apiKeyKeychainId: legacyPointer });
 
         const { secrets, migrated } = migrate(
@@ -292,12 +292,28 @@ describe("keychainService", () => {
         expect(secrets.get(legacyPointer)).toBe("sk-ant");
       });
 
+      it("prefers the entry the provider's current pointer names over other legacy entries for that provider", () => {
+        const currentPointer = `copilot-v${EARLIER_VAULT_ID}-provider-row-1`;
+        const provider = makeProvider({ apiKeyKeychainId: currentPointer });
+
+        const { secrets } = migrate(
+          {
+            [`copilot-v${SYNCED_VAULT_ID}-provider-row-1`]: "sk-stale",
+            [currentPointer]: "sk-current",
+          },
+          makeSettings({ providers: { "row-1": provider } }),
+          SYNCED_VAULT_ID
+        );
+
+        expect(secrets.get("copilot-anthropic-api-key")).toBe("sk-current");
+      });
+
       it("fills a readable pointer synced from another device with this device's legacy key for the same provider (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
         const provider = makeProvider({ apiKeyKeychainId: "copilot-anthropic-api-key" });
         const settings = makeSettings({ providers: { "row-1": provider } });
 
         const { secrets, migrated } = migrate(
-          { [`copilot-v${LOCAL_LEGACY_VAULT_ID}-provider-row-1`]: "sk-ant-local" },
+          { [`copilot-v${EARLIER_VAULT_ID}-provider-row-1`]: "sk-ant-local" },
           settings
         );
 
@@ -307,7 +323,7 @@ describe("keychainService", () => {
 
       it("rewrites a legacy pointer this device never held, so a re-entered key lands on the shared name", () => {
         const provider = makeProvider({
-          apiKeyKeychainId: `copilot-v${OTHER_DEVICE_VAULT_ID}-provider-row-1`,
+          apiKeyKeychainId: `copilot-v${SYNCED_VAULT_ID}-provider-row-1`,
         });
 
         const { secrets, migrated } = migrate(

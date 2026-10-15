@@ -5,7 +5,6 @@ import type { Provider } from "@/modelManagement";
 import { KeychainService } from "@/services/keychainService";
 import { loadSettingsWithKeychain, resetPersistenceState } from "@/services/settingsPersistence";
 import type { CopilotSettings } from "@/settings/model";
-import { md5 } from "@/utils/hash";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -19,8 +18,7 @@ if (typeof window.structuredClone === "undefined") {
 
 const noLegacyBackup = async () => ({ status: "not-needed" }) as const;
 
-const VAULT_PATH = "/Users/test/Notes";
-const THIS_DEVICE_VAULT_ID = md5(VAULT_PATH).slice(0, 8);
+const THIS_DEVICE_VAULT_ID = "1234abcd";
 const OTHER_DEVICE_VAULT_ID = "0a1b2c3d";
 
 let secrets: Map<string, string>;
@@ -37,7 +35,7 @@ function makeApp(): App {
         secrets.delete(id);
       },
     },
-    vault: { adapter: { getBasePath: () => VAULT_PATH } },
+    vault: { adapter: {} },
   } as unknown as App;
 }
 
@@ -59,7 +57,7 @@ function diskSettings(vaultId: string, pointer: string): CopilotSettings {
     _keychainVaultId: vaultId,
     isPaidUser: true,
     providers: { "row-anthropic": anthropicRow(pointer) },
-  } as unknown as CopilotSettings;
+  };
 }
 
 async function load(
@@ -109,7 +107,7 @@ describe("settingsPersistence", () => {
       expect(first.providers["row-anthropic"].apiKeyKeychainId).toBe("copilot-anthropic-api-key");
       expect(apiKeyFor(app, first)).toBe("sk-ant-12345");
       expect(saved?.providers["row-anthropic"].apiKeyKeychainId).toBe("copilot-anthropic-api-key");
-      expect(saved).not.toHaveProperty("_keychainVaultId");
+      expect(saved?._keychainVaultId).toBe(THIS_DEVICE_VAULT_ID);
       expect(second.plusLicenseKey).toBe("lic-12345");
       expect(apiKeyFor(app, second)).toBe("sk-ant-12345");
     });

@@ -103,10 +103,7 @@ function migrateKeychainNames(
 ): CopilotSettings {
   if (!keychain.isAvailable()) return rawSettings;
   try {
-    return keychain.migrateLegacyNames(
-      rawSettings,
-      (rawSettings as unknown as Record<string, unknown>)._keychainVaultId
-    );
+    return keychain.migrateLegacyNames(rawSettings, rawSettings._keychainVaultId);
   } catch (error) {
     logWarn("Keychain name migration failed; it will retry on the next load.", error);
     return rawSettings;
