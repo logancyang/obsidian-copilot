@@ -42,7 +42,7 @@ export { AgentDefaultModelSetting } from "./ui/AgentDefaultModelSetting";
 export { ModelEnableList } from "@/components/ui/ModelEnableList";
 export type { ModelEnableGroup } from "@/components/ui/ModelEnableList";
 export { PlanPreviewView } from "./ui/PlanPreviewView";
-export { ReportIssueModal } from "./ui/ReportIssueModal";
+export { openReportIssueModal } from "./ui/ReportIssueModal";
 export { closeRestoredTurnDiffs, registerTurnDiffCommands, TurnDiffView } from "./ui/TurnDiffView";
 export {
   backendDisplayOrder,

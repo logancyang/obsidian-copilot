@@ -9,7 +9,7 @@ import type { Meta, StoryObj } from "@/lib/story";
 import * as React from "react";
 
 const SOURCES: ReportSourceOption[] = [
-  { id: "screenshot", label: "Screenshot of the Agent Mode pane", defaultChecked: true },
+  { id: "screenshot", label: "Screenshot of the Obsidian window", defaultChecked: true },
   { id: "activityLog", label: "Agent Mode activity log", defaultChecked: true },
   {
     id: "chatLog",
@@ -134,6 +134,26 @@ export const UploadFailed: StoryObj<ReportIssueFlowProps> = {
       props={{
         upload: async () => ({ ok: false, error: "Upload failed (HTTP 502)." }),
       }}
+    />
+  ),
+};
+
+export const DraftedNote: StoryObj<ReportIssueFlowProps> = {
+  render: () => (
+    <ReportIssueFlow
+      {...BASE}
+      sources={SOURCES.map((source) => ({ ...source, defaultChecked: true }))}
+      initialNote={[
+        "Replied in Swedish to an English request",
+        "",
+        "What happened: The agent answered 'hej' instead of English.",
+        "",
+        'What the user said: "Why do you switch to a different language?"',
+        "",
+        "Steps to reproduce: 1. Type a garbled 'commit and push'. 2. Observe a Swedish reply.",
+        "",
+        "Evidence: backend opencode · model deepseek-v4-pro · session ses_8f2a · 2026-10-12T17:42:05Z",
+      ].join("\n")}
     />
   ),
 };

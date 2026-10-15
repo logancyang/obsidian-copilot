@@ -1,54 +1,32 @@
-import { logInfo, logWarn } from "@/logger";
-import { captureViewScreenshot } from "@/utils/captureViewScreenshot";
-
-const CAPTURE_SETTLE_TIMEOUT_MS = 1200;
-
-const CAPTURE_SETTLE_POLL_MS = 50;
-
-export async function waitForStableTarget(el: HTMLElement): Promise<boolean> {
-  const deadline = Date.now() + CAPTURE_SETTLE_TIMEOUT_MS;
-  let previous: DOMRect | null = null;
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => el.win.setTimeout(resolve, CAPTURE_SETTLE_POLL_MS));
-    if (Date.now() >= deadline) return false;
-    if (!el.isConnected) return false;
-    const rect = el.getBoundingClientRect();
-    const settled =
-      rect.width > 0 &&
-      rect.height > 0 &&
-      previous !== null &&
-      rect.left === previous.left &&
-      rect.top === previous.top &&
-      rect.width === previous.width &&
-      rect.height === previous.height;
-    if (settled) return true;
-    previous = rect;
-  }
-  return false;
+interface ElectronWindow extends Window {
+  electron?: {
+    remote?: {
+      getCurrentWindow?: () => {
+        webContents: { capturePage: () => Promise<{ toPNG: () => Uint8Array }> };
+      };
+    };
+  };
 }
 
-export async function captureBehindOverlay(
-  overlay: HTMLElement,
-  resolveTarget: () => Promise<HTMLElement | null> | HTMLElement | null,
-  dismissSettings: () => void
-): Promise<Uint8Array | null> {
-  const target = await resolveTarget();
-  if (!target) return null;
+export async function captureWindowBehindDialogs(win: Window): Promise<Uint8Array | null> {
+  const browserWindow = (win as ElectronWindow).electron?.remote?.getCurrentWindow?.();
+  if (!browserWindow) return null;
 
-  const inFrame = overlay.win === target.win;
-  if (inFrame) {
-    dismissSettings();
-    overlay.hide();
-  } else {
-    logInfo("[ReportIssue] the pane is in another window; capturing without dismissing Settings");
-  }
+  const dialogs = Array.from(win.document.querySelectorAll<HTMLElement>(".modal-container")).filter(
+    (dialog) => dialog.isShown()
+  );
+  dialogs.forEach((dialog) => dialog.hide());
   try {
-    if (!(await waitForStableTarget(target))) {
-      logWarn("[ReportIssue] the Agent Mode pane never settled; skipping the screenshot");
-      return null;
-    }
-    return await captureViewScreenshot(target);
+    await untilPainted(win);
+    const png = (await browserWindow.webContents.capturePage()).toPNG();
+    return png.length > 0 ? png : null;
   } finally {
-    if (inFrame) overlay.show();
+    dialogs.forEach((dialog) => dialog.show());
   }
+}
+
+function untilPainted(win: Window): Promise<void> {
+  return new Promise((resolve) =>
+    win.requestAnimationFrame(() => win.requestAnimationFrame(() => resolve()))
+  );
 }
