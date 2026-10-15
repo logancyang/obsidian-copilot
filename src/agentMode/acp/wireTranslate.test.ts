@@ -247,15 +247,14 @@ const testAcpNotificationToEvents = () => {
     ]);
   });
 
-  it("emits no event for a meta-only session_info_update so compaction and retry markers leave the title alone (https://github.com/Brevilabs/obsidian-copilot-private/issues/632)", () => {
-    expect(
-      acpNotificationToEvents(
-        notification({
-          sessionUpdate: "session_info_update",
-          _meta: { opencode: { compaction: { phase: "started" } } },
-        })
-      )
-    ).toEqual([]);
+  it("maps a session_info_update without a title to an event that omits the title", () => {
+    const [event] = acpNotificationToEvents(
+      notification({
+        sessionUpdate: "session_info_update",
+        _meta: { opencode: { compaction: { phase: "started" } } },
+      })
+    );
+    expect(event.update).toEqual({ sessionUpdate: "session_info_update" });
   });
 
   it("passes a real plan notification through unchanged as a single event", () => {
