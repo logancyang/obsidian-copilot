@@ -1521,6 +1521,28 @@ describe("AgentSessionManager", () => {
         expect(feedbackServer.disconnect).toHaveBeenCalledWith(a.internalId);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 releases the dropped chat's backend session, so reopening it from history starts one with a live feedback token", async () => {
+        const mgr = buildManager();
+        const a = await mgr.createSession();
+        const proc = mgr.getBackendProcess(a.backendId)!;
+
+        await mgr.closeSession(a.internalId);
+
+        expect(proc.closeSession).toHaveBeenCalledWith({ sessionId: a.getBackendSessionId() });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 still closes the chat when the backend cannot release its session", async () => {
+        const mgr = buildManager();
+        const a = await mgr.createSession();
+        const proc = mgr.getBackendProcess(a.backendId)!;
+        jest.mocked(proc.closeSession!).mockRejectedValueOnce(new Error("session/close timed out"));
+
+        await mgr.closeSession(a.internalId);
+
+        expect(mgr.getSessions()).toEqual([]);
+        expect(mockSessionDispose).toHaveBeenCalled();
+      });
+
       it("when the active session is closed, picks the right neighbor as active", async () => {
         const mgr = buildManager();
         const a = await mgr.createSession();
@@ -2201,9 +2223,11 @@ describe("AgentSessionManager", () => {
       it("restarts an idle backend and replaces the active affected session", async () => {
         const mgr = buildManager();
         const first = await mgr.createSession();
+        const proc = mgr.getBackendProcess(first.backendId)!;
 
         await expect(mgr.restartBackend("opencode", "skills changed")).resolves.toBe(true);
 
+        expect(proc.closeSession).not.toHaveBeenCalled();
         expect(mockSessionCancel).toHaveBeenCalledWith();
         expect(mockSessionDispose).toHaveBeenCalledWith();
         expect(mockBackendShutdown).toHaveBeenCalledTimes(1);

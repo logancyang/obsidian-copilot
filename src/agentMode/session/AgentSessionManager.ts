@@ -1495,6 +1495,15 @@ export class AgentSessionManager {
       } catch (e) {
         logWarn(`[AgentMode] cancel during closeSession failed`, e);
       }
+      // Codex keeps a dropped chat's session and its MCP connection, so reopening it from history would call send_feedback with the revoked token.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+      if (session.getBackendSessionId() && !this.restartingBackends.has(session.backendId)) {
+        try {
+          await session.releaseBackendSession();
+        } catch (e) {
+          logWarn(`[AgentMode] releasing the backend session during closeSession failed`, e);
+        }
+      }
     }
     await this.drainAutoSave(session);
     try {
