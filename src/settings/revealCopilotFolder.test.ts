@@ -24,12 +24,7 @@ describe("revealCopilotFolder", () => {
         "copilot/copilot-conversations/chat.md",
         "copilot/projects/alpha/project.md",
       ]);
-      expect(item).toEqual({
-        id: "copilot-folder",
-        title: "Copilot folder",
-        status: "success",
-        summary: "Moved .copilot to copilot. Copilot folders can no longer be hidden.",
-      });
+      expect(item).toEqual({ status: "moved", from: ".copilot", to: "copilot", leftBehind: [] });
     });
 
     it("creates the visible parent folders of a nested root before moving it", async () => {
@@ -58,8 +53,8 @@ describe("revealCopilotFolder", () => {
         "copilot/skills/writer/SKILL.md",
       ]);
       expect(item).toMatchObject({
-        status: "action-required",
-        details: ["Left in place: .copilot/memory/Saved Memories.md."],
+        status: "moved",
+        leftBehind: [".copilot/memory/Saved Memories.md"],
       });
     });
 
@@ -81,7 +76,7 @@ describe("revealCopilotFolder", () => {
       });
       const item = await revealHiddenCopilotFolder(vaultWith(withMemory), ".copilot", "copilot");
 
-      expect(item).toMatchObject({ status: "success" });
+      expect(item).toMatchObject({ status: "moved", leftBehind: [] });
       expect(withMemory.files.sort()).toEqual([
         ".copilot/model-catalog-cache.json",
         "copilot/memory/Saved Memories.md",
@@ -97,13 +92,13 @@ describe("revealCopilotFolder", () => {
       expect(adapter.files).toEqual(["copilot/memory/Saved Memories.md"]);
     });
 
-    it("reports an error item and keeps the hidden files when the move fails", async () => {
+    it("reports why the move failed and keeps the hidden files", async () => {
       const adapter = new MemoryFolderAdapter({ ".copilot/memory/Saved Memories.md": "" });
       adapter.rename = jest.fn().mockRejectedValue(new Error("EACCES"));
 
       const item = await revealHiddenCopilotFolder(vaultWith(adapter), ".copilot", "copilot");
 
-      expect(item).toMatchObject({ id: "copilot-folder", status: "error" });
+      expect(item).toEqual({ status: "failed", from: ".copilot", to: "copilot", reason: "EACCES" });
       expect(adapter.files).toEqual([".copilot/memory/Saved Memories.md"]);
     });
   });

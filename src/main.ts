@@ -18,6 +18,8 @@ import CopilotView from "@/components/CopilotView";
 import RelevantNotesView from "@/components/RelevantNotesView";
 import { ApplyView } from "@/components/composer/ApplyView";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
+import { CopilotFolderMigration } from "@/components/modals/CopilotFolderMigration";
+import React from "react";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
 import { registerContextMenu } from "@/commands/contextMenu";
@@ -283,19 +285,25 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       })();
     });
     await runSettingsMigrations(this.modelManagement);
-    const revealedFolder = await revealHiddenCopilotFolder(
+    const folderMigration = await revealHiddenCopilotFolder(
       this.app.vault,
       this.loadedCopilotFolder,
       getSettings().copilotFolder
     );
-    if (revealedFolder) {
-      this.startupMigrationItems.push(revealedFolder);
-    }
-    // data.json still names the hidden root until saved, and files left behind would repeat the notice every launch;
-    // a failed move stays unsaved so the next launch retries it.
+    // The dialog tells the user what to move by hand, so the visible root is saved even when the move failed.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/712
-    if (revealedFolder && revealedFolder.status !== "error") {
+    if (folderMigration) {
       setSettings({ copilotFolder: getSettings().copilotFolder });
+      this.app.workspace.onLayoutReady(() => {
+        new ConfirmModal(
+          this.app,
+          () => {},
+          React.createElement(CopilotFolderMigration, { migration: folderMigration }),
+          "Copilot folder migration",
+          "OK",
+          ""
+        ).open();
+      });
     }
     const agentMode = isDesktopRuntime()
       ? await Promise.all([import("@/agentMode"), import("@/agentMode/agentModelDiscovery")])

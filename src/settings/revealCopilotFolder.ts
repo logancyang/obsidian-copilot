@@ -1,5 +1,4 @@
 import { logError, logInfo } from "@/logger";
-import type { StartupMigrationItem } from "@/services/startupMigration";
 import { COPILOT_SUBFOLDER } from "@/settings/copilotFolder";
 import { normalizePath, type DataAdapter } from "obsidian";
 
@@ -10,11 +9,15 @@ interface MoveResult {
   leftBehind: string[];
 }
 
+export type HiddenFolderMigration =
+  | { status: "moved"; from: string; to: string; leftBehind: string[] }
+  | { status: "failed"; from: string; to: string; reason: string };
+
 export async function revealHiddenCopilotFolder(
   vault: { adapter: FolderAdapter },
   loadedFolder: unknown,
   visibleFolder: string
-): Promise<StartupMigrationItem | null> {
+): Promise<HiddenFolderMigration | null> {
   if (typeof loadedFolder !== "string") return null;
   const hiddenFolder = normalizePath(loadedFolder.trim()).replace(/\/+$/, "");
   if (!hiddenFolder.split("/").some((segment) => segment.startsWith("."))) return null;
@@ -34,28 +37,19 @@ export async function revealHiddenCopilotFolder(
     if (result.moved === 0 && result.leftBehind.length === 0) return null;
 
     logInfo(`Moved the hidden Copilot folder ${hiddenFolder} to ${visibleFolder}.`);
-    if (result.leftBehind.length === 0) {
-      return {
-        id: "copilot-folder",
-        title: "Copilot folder",
-        status: "success",
-        summary: `Moved ${hiddenFolder} to ${visibleFolder}. Copilot folders can no longer be hidden.`,
-      };
-    }
     return {
-      id: "copilot-folder",
-      title: "Copilot folder",
-      status: "action-required",
-      summary: `Moved ${hiddenFolder} to ${visibleFolder}, except files whose names already exist there. Copilot reads only ${visibleFolder}.`,
-      details: result.leftBehind.map((path) => `Left in place: ${path}.`),
+      status: "moved",
+      from: hiddenFolder,
+      to: visibleFolder,
+      leftBehind: result.leftBehind,
     };
   } catch (error) {
     logError(`Failed to move the hidden Copilot folder ${hiddenFolder}.`, error);
     return {
-      id: "copilot-folder",
-      title: "Copilot folder",
-      status: "error",
-      summary: `Could not move ${hiddenFolder} to ${visibleFolder}. Move its contents there to keep using them.`,
+      status: "failed",
+      from: hiddenFolder,
+      to: visibleFolder,
+      reason: error instanceof Error ? error.message : String(error),
     };
   }
 }
