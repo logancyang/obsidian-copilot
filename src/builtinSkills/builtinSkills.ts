@@ -635,8 +635,7 @@ On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 For an existing HTML file on Windows, replace the handoff path with the original absolute
 \`.html\` path and omit the \`docId\`.
 
-Success returns the same server receipt for either input, \`{"docId", "url", "version",
-"linkAccess"}\` for a create (a private publish also prints a \`manageUrl\`). For a Markdown
+Success returns the same server receipt for either input, \`{"docId", "url", "version"}\`, plus \`"linkAccess"\` on a create when the server reports it (a private publish also prints a \`manageUrl\`). For a Markdown
 note, set its \`openartifacts\` frontmatter property to that \`url\` (create the frontmatter
 block if needed, keep every other property), remove a \`symposium\`
 property whose link has the same document id, and delete the generated HTML file from
@@ -654,7 +653,7 @@ report with this line, using the \`manageUrl\` the wrapper printed:
 
 "Manage who can open it: {manageUrl}"
 
-Report a public publish as "Published: {url}. Anyone with the link can open it."
+Report a public create as "Published: {url}. Anyone with the link can open it." Report an update as "Updated: {url}." and do not say who can open it; an update keeps who could open it before.
 
 If an \`add\` fails after a private publish, the page is private. Report the url, who can open
 it, and the failed address with the wrapper's message.
@@ -685,7 +684,7 @@ sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" sh
 sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" share <docId>
 \`\`\`
 
-- After \`link invited\`, say: "People who opened it while it was public may have kept a copy."
+- After \`link invited\` makes a public page private, say: "People who opened it while it was public may have kept a copy."
 - After \`link anyone\`, say that anyone with the link can now open it, and that the list of
   invited people is kept in case the user switches back.
 - When the user asks who has access, run \`share <docId>\` and report \`people\` and the pending

@@ -299,6 +299,9 @@ describe("builtinSkills", () => {
       expect(md).toContain("Published privately: {url}. Only you and {addresses} can open it.");
       expect(md).toContain("Manage who can open it: {manageUrl}");
       expect(md).toContain("Nothing was published.");
+      expect(md).toContain('Report an update as "Updated: {url}."');
+      expect(md).not.toContain("Report a public publish as");
+      expect(md).toContain("After `link invited` makes a public page private");
       expect(md).not.toContain("removes the new page");
       expect(md).not.toContain("Share dialog");
 

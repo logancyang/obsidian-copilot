@@ -140,7 +140,7 @@ export const ManageAfterSwitchToPrivate: StoryObj<OpenArtifactsModalContentProps
   render: () => <AfterSwitch access={fakeAccessPort(PUBLIC_ACCESS)} docId={DOC_ID} />,
 };
 
-// An old or self-hosted server answers the access routes with 404.
+// A server without private documents answers the access routes with 404.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
 export const UnsupportedServer: StoryObj<OpenArtifactsModalContentProps> = {
   args: {
@@ -159,7 +159,7 @@ export const UnsupportedServer: StoryObj<OpenArtifactsModalContentProps> = {
   },
 };
 
-// A free or lapsed plan choosing Only those invited: nothing is created.
+// A server that gives this plan publishing but not private sharing refuses Only those invited: nothing is created.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
 export const PrivateSharingNeedsPaidPlan: StoryObj<OpenArtifactsModalContentProps> = {
   args: {
