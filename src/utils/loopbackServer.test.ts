@@ -10,7 +10,6 @@ import {
 
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
 
-type IncomingMessage = import("node:http").IncomingMessage;
 type ServerResponse = import("node:http").ServerResponse;
 
 function get(url: string): Promise<{ status: number; body: string }> {
@@ -25,10 +24,6 @@ function get(url: string): Promise<{ status: number; body: string }> {
       })
       .on("error", reject);
   });
-}
-
-function requestOf(chunks: Uint8Array[]): IncomingMessage {
-  return Readable.from(chunks) as unknown as IncomingMessage;
 }
 
 describe("loopbackServer", () => {
@@ -83,14 +78,14 @@ describe("loopbackServer", () => {
       const bytes = new TextEncoder().encode("日本語 ✅");
 
       await expect(
-        readRequestText(requestOf([bytes.slice(0, 4), bytes.slice(4)]), 1024)
+        readRequestText(Readable.from([bytes.slice(0, 4), bytes.slice(4)]), 1024)
       ).resolves.toBe("日本語 ✅");
     });
 
     it("rejects a body over the byte limit even when it has fewer characters than the limit", async () => {
       const bytes = new TextEncoder().encode("日".repeat(4));
 
-      await expect(readRequestText(requestOf([bytes]), 10)).rejects.toBeInstanceOf(
+      await expect(readRequestText(Readable.from([bytes]), 10)).rejects.toBeInstanceOf(
         RequestBodyTooLargeError
       );
     });

@@ -51,11 +51,14 @@ export function startLoopbackServer(name: string, handle: LoopbackRequestHandler
   });
 }
 
-export async function readRequestText(request: IncomingMessage, maxBytes: number): Promise<string> {
+export async function readRequestText(
+  request: AsyncIterable<Uint8Array>,
+  maxBytes: number
+): Promise<string> {
   const decoder = new TextDecoder();
   let body = "";
   let size = 0;
-  for await (const chunk of request as AsyncIterable<Uint8Array>) {
+  for await (const chunk of request) {
     size += chunk.byteLength;
     if (size > maxBytes) throw new RequestBodyTooLargeError();
     body += decoder.decode(chunk, { stream: true });
