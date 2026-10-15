@@ -317,8 +317,6 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
         })),
       };
     case "session_info_update":
-      // Updates that omit `title` (opencode's meta-only compaction and retry markers) must not clear the title. https://github.com/Brevilabs/obsidian-copilot-private/issues/632
-      if (update.title === undefined) return null;
       return { sessionUpdate: "session_info_update", title: update.title };
     case "current_mode_update":
       return {

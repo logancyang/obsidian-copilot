@@ -1402,7 +1402,10 @@ export class AgentSession {
     }
 
     if (update.sessionUpdate === "session_info_update") {
-      if (this.backendSummarizesTitle()) this.applyAgentLabel(update.title);
+      // An update that omits `title` (opencode's compaction and retry markers) leaves the title alone; only an explicit null clears it. https://github.com/Brevilabs/obsidian-copilot-private/issues/632
+      if (update.title !== undefined && this.backendSummarizesTitle()) {
+        this.applyAgentLabel(update.title);
+      }
       return;
     }
     if (update.sessionUpdate === "state_changed") {
