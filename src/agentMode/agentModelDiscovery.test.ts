@@ -56,6 +56,8 @@ function catalogWithModels(baseIds: string[]): ModelCatalog {
 interface ApiFake {
   api: ModelManagementApi;
   agentProviders: Array<{ providerId: string; origin: { kind: string; agentType: string } }>;
+  configuredModels: Array<{ configuredModelId: string; info: { id: string } }>;
+  enabledModelIds: string[];
   byok: Array<{ origin: { kind: string; catalogProviderId?: string } }>;
   plus: Array<{ origin: { kind: string } }>;
   registerAgentProvider: jest.Mock;
@@ -64,6 +66,8 @@ interface ApiFake {
 
 function makeApiFake(): ApiFake {
   const agentProviders: ApiFake["agentProviders"] = [];
+  const configuredModels: ApiFake["configuredModels"] = [];
+  const enabledModelIds: ApiFake["enabledModelIds"] = [];
   const byok: ApiFake["byok"] = [];
   const plus: ApiFake["plus"] = [];
 
@@ -88,12 +92,20 @@ function makeApiFake(): ApiFake {
         return [];
       },
     },
+    configuredModelRegistry: {
+      listByProvider: () => configuredModels,
+    },
+    backendConfigRegistry: {
+      get: () => ({ enabledModels: enabledModelIds }),
+    },
     setup: { agent: { registerAgentProvider, syncAgentModels } },
   } as unknown as ModelManagementApi;
 
   return {
     api,
     agentProviders,
+    configuredModels,
+    enabledModelIds,
     byok,
     plus,
     registerAgentProvider,
@@ -280,6 +292,39 @@ describe("agentModelDiscovery", () => {
         wireModelIds: ["gpt-5", "gpt-5.5"],
         fallbackDisplayNames: { "gpt-5": "gpt-5", "gpt-5.5": "gpt-5.5" },
         fallbackDescriptions: {},
+      });
+      unsub();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3569 retains an enabled OpenCode model missing from local discovery", async () => {
+      mockDescriptors = [makeDescriptor({ id: "opencode" })];
+      const m = makeManagerFake();
+      const a = makeApiFake();
+      a.agentProviders.push({
+        providerId: "prov-opencode",
+        origin: { kind: "agent", agentType: "opencode" },
+      });
+      a.configuredModels.push({
+        configuredModelId: "cm-local-qwen3",
+        info: { id: "local/qwen3" },
+      });
+      a.configuredModels.push({
+        configuredModelId: "cm-disabled-legacy-model",
+        info: { id: "old/disabled-model" },
+      });
+      a.enabledModelIds.push("cm-local-qwen3");
+      a.byok.push({ origin: { kind: "byok", catalogProviderId: "anthropic" } });
+      m.setCatalog(
+        "opencode",
+        catalogWithModels(["anthropic/claude-sonnet-4-5", "opencode/big-pickle"])
+      );
+
+      const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
+      await waitFor(() => expect(a.syncAgentModels).toHaveBeenCalledTimes(1));
+
+      expect(a.syncAgentModels.mock.calls[0][0]).toMatchObject({
+        agentType: "opencode",
+        wireModelIds: ["opencode/big-pickle", "local/qwen3"],
       });
       unsub();
     });

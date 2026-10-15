@@ -99,9 +99,19 @@ async function enrollBackend(
     .find((p) => p.origin.kind === "agent" && p.origin.agentType === agentType);
 
   if (existing) {
+    const syncWireModelIds = [...wireModelIds];
+    if (descriptor.id === "opencode") {
+      const enabledModelIds = new Set(api.backendConfigRegistry.get("opencode").enabledModels);
+      const reportedWireIdSet = new Set(reportedWireIds);
+      for (const model of api.configuredModelRegistry.listByProvider(existing.providerId)) {
+        if (enabledModelIds.has(model.configuredModelId) && !reportedWireIdSet.has(model.info.id)) {
+          syncWireModelIds.push(model.info.id);
+        }
+      }
+    }
     await api.setup.agent.syncAgentModels({
       agentType,
-      wireModelIds,
+      wireModelIds: syncWireModelIds,
       fallbackDisplayNames,
       fallbackDescriptions,
     });
