@@ -20,6 +20,7 @@ import { useSettingsValue } from "@/settings/model";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 import {
   Bookmark,
+  Bug,
   Download,
   History,
   Link,
@@ -63,6 +64,7 @@ interface AgentChatControlsProps {
   onCopyChatLink?: () => void | Promise<void>;
   getChatBookmarkState?: () => Promise<ChatBookmarkState>;
   onSetChatBookmarked?: (bookmarked: boolean) => Promise<void>;
+  onReportError?: () => void;
   usageMeter?: React.ReactNode;
   showMultiAgentUpsell?: boolean;
 }
@@ -82,6 +84,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   onCopyChatLink,
   getChatBookmarkState,
   onSetChatBookmarked,
+  onReportError,
   usageMeter,
   showMultiAgentUpsell = false,
 }) => {
@@ -193,6 +196,14 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
                 <DropdownMenuItem onSelect={() => void onSaveAsNote()}>
                   <Download />
                   Save chat as note
+                </DropdownMenuItem>
+              )}
+              {/* A report from here names the chat's agent, model and session, so only a host with a chat offers it.
+                  https://github.com/Brevilabs/obsidian-copilot-private/issues/672 */}
+              {onReportError && (
+                <DropdownMenuItem onSelect={onReportError}>
+                  <Bug />
+                  Report error
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>

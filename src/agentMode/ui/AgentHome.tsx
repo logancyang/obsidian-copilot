@@ -2,6 +2,8 @@ import { useChatRelevantNotesContext } from "@/agentMode/ui/hooks/useChatRelevan
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
+import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
+import { formatChatReportNote } from "@/agentMode/session/feedback/feedbackOffer";
 import AgentContextMeter from "@/agentMode/ui/AgentContextMeter";
 import AgentContextSection, { buildContextSummary } from "@/agentMode/ui/AgentContextSection";
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
@@ -559,6 +561,15 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       return (await manager.saveActiveSession())?.path ?? "";
     });
 
+  const handleReportError = () => {
+    const evidence = activeSession?.getReportEvidence();
+    openReportIssueModal(plugin, {
+      activeBackend: evidence?.backendId ?? settings.agentMode.activeBackend,
+      initialNote: evidence ? formatChatReportNote(evidence) : undefined,
+      preselectAllSources: true,
+    });
+  };
+
   return (
     <div ref={setRootEl} className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
       <div
@@ -683,6 +694,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                           : undefined
                       }
                       onSetChatBookmarked={handleSetActiveChatBookmarked}
+                      onReportError={handleReportError}
                       onNewChat={handleNewChat}
                       onSaveAsNote={handleSaveAsNote}
                       chatHistoryItems={chatHistoryItems}
