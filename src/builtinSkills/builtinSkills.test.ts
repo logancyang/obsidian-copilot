@@ -209,7 +209,7 @@ describe("builtinSkills", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes over HTTPS with the injected license key and never touches the Obsidian CLI", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(6);
+      expect(skill!.version).toBe(7);
 
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",
@@ -267,6 +267,38 @@ describe("builtinSkills", () => {
       expect(scriptOf("openartifacts-publish", ".cmd")).toContain(
         '-File "%~dp0openartifacts-publish.ps1"'
       );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/707 asks who can open a new page, shares through the wrapper, and never sends linkAccess on create", () => {
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
+      expect(skill).toBeDefined();
+      expect(skill!.version).toBe(7);
+
+      const md = skill!.skillMd;
+      expect(md).toContain(
+        "Who should be able to open it? Reply **publish** for anyone with the link, or name people, for example **publish for alice@acme.com**, to share it only with them."
+      );
+      expect(md).toContain("share <docId> add");
+      expect(md).toContain("share <docId> decline");
+      expect(md).toContain("share <docId> link invited");
+      expect(md).toContain("People who opened it while it was public may have kept a copy.");
+      expect(md).toContain("Published privately: {url}. Only you and {addresses} can open it.");
+      expect(md).toContain("Manage who can open it: {manageUrl}");
+      expect(md).toContain("Nothing was published.");
+      expect(md).toContain('Report an update as "Updated: {url}."');
+      expect(md).not.toContain("Report a public publish as");
+      expect(md).toContain("After `link invited` makes a public page private");
+      expect(md).not.toContain("removes the new page");
+      expect(md).not.toContain("Share dialog");
+
+      for (const path of ["openartifacts-publish.sh", "openartifacts-publish.ps1"]) {
+        const script = skill!.files.find((file) => file.path === path)!.content;
+        expect(script).toContain("/api/v1/private-docs");
+        expect(script).toContain("Nothing was published.");
+        expect(script).toContain("Not found, or this server does not support private documents.");
+        expect(script).not.toContain('linkAccess":"invited');
+        expect(script).not.toContain("linkAccess = 'invited'");
+      }
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3196 formats filename-derived page titles in title case without duplicating an equivalent opening H1", () => {
