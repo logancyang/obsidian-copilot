@@ -198,6 +198,8 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
                   Save chat as note
                 </DropdownMenuItem>
               )}
+              {/* A report from here names the chat's agent, model and session, so only a host with a chat offers it.
+                  https://github.com/Brevilabs/obsidian-copilot-private/issues/672 */}
               {onReportError && (
                 <DropdownMenuItem onSelect={onReportError}>
                   <Bug />

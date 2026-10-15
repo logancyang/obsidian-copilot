@@ -180,7 +180,7 @@ describe("AgentChatControls", () => {
       expect(otherWindowDocument.querySelector('[role="menu"]')).toBeNull();
     });
 
-    it("reports an error about the open chat from the More Actions menu", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 reports an error about the open chat from the More Actions menu", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       const onReportError = jest.fn();
       renderSessionControls({ onReportError });
