@@ -6,8 +6,8 @@ const EPOCH_ID = /^epoch:(\d+)$/;
 
 async function readEpoch(app: App, path: string): Promise<number | null> {
   let epoch: unknown = app.metadataCache.getCache(path)?.frontmatter?.epoch;
-  // Hidden conversation folders have no metadata cache entry, so their links need the note read from disk.
-  // https://github.com/logancyang/obsidian-copilot/issues/3271
+  // A chat note saved moments ago has no metadata cache entry yet, so copying its link reads the note from disk.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/712
   if (epoch === undefined) {
     try {
       epoch = (await readFrontmatterViaAdapter(app, path))?.epoch;
@@ -38,7 +38,7 @@ export async function findChatFileByDeepLinkId(app: App, id: string): Promise<TF
   if (!epoch) return null;
   const folder = getEffectiveConversationsFolder();
   let found: TFile | null = null;
-  for (const file of await listMarkdownFiles(app, folder)) {
+  for (const file of listMarkdownFiles(app, folder)) {
     // The listing matches by plain prefix and also returns siblings such as "conversations-backup"; continuing a chat there would overwrite it.
     // https://github.com/logancyang/obsidian-copilot/issues/3271
     if (!file.path.startsWith(`${folder}/`)) continue;

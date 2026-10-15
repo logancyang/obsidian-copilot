@@ -1,18 +1,7 @@
 import { ProjectConfig } from "@/aiParams";
 import { removeGeneratedInstructionFiles } from "@/instructions/agentsFile";
 import { logError, logInfo, logWarn } from "@/logger";
-import {
-  COPILOT_PROJECT_CREATED,
-  COPILOT_PROJECT_DESCRIPTION,
-  COPILOT_PROJECT_EXCLUSIONS,
-  COPILOT_PROJECT_ID,
-  COPILOT_PROJECT_INCLUSIONS,
-  COPILOT_PROJECT_LAST_USED,
-  COPILOT_PROJECT_NAME,
-  COPILOT_PROJECT_WEB_URLS,
-  COPILOT_PROJECT_YOUTUBE_URLS,
-  PROJECTS_UNSUPPORTED_FOLDER_NAME,
-} from "@/projects/constants";
+import { COPILOT_PROJECT_LAST_USED, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
 import { ProjectFileRecord } from "@/projects/type";
 import {
   getProjectAnchorFromConfigPath,
@@ -22,7 +11,6 @@ import {
   loadAllProjects,
   scanAllProjectConfigFiles,
   sanitizeVaultPathSegment,
-  splitUrlsStringToArray,
   writeProjectFrontmatter,
 } from "@/projects/projectUtils";
 import {
@@ -36,14 +24,8 @@ import {
 } from "@/projects/state";
 import { ensureFolderExists } from "@/utils";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
-import {
-  isInVaultCache,
-  patchFrontmatter,
-  readFrontmatterViaAdapter,
-  resolveFileByPath,
-  trashFile,
-} from "@/utils/vaultAdapterUtils";
-import { App, normalizePath, stringifyYaml, TFile, TFolder, Vault } from "obsidian";
+import { trashFile } from "@/utils/vaultAdapterUtils";
+import { App, normalizePath, TFile, TFolder, Vault } from "obsidian";
 import { ensureProjectsMigratedIfNeeded } from "@/projects/projectMigration";
 import type { StartupMigrationItem } from "@/services/startupMigration";
 
@@ -92,19 +74,10 @@ export class ProjectFileManager {
   private async rollbackCreatedFile(filePath: string, folderPath: string): Promise<void> {
     try {
       const file = this.vault.getAbstractFileByPath(filePath);
-      if (file instanceof TFile) {
-        await trashFile(this.app, file);
-      } else if (await this.vault.adapter.exists(filePath)) {
-        await this.vault.adapter.remove(filePath);
-      }
+      if (file instanceof TFile) await trashFile(this.app, file);
       const folder = this.vault.getAbstractFileByPath(folderPath);
       if (folder instanceof TFolder && folder.children.length === 0) {
         await trashFile(this.app, folder);
-      } else if (await this.vault.adapter.exists(folderPath)) {
-        const listing = await this.vault.adapter.list(folderPath);
-        if (listing.files.length === 0 && listing.folders.length === 0) {
-          await this.vault.adapter.rmdir(folderPath, false);
-        }
       }
     } catch (rollbackError) {
       logError(`[Projects] Rollback failed for ${filePath}`, rollbackError);
@@ -115,29 +88,6 @@ export class ProjectFileManager {
     const content = raw.replace(/^\uFEFF/, "");
     const match = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
     return match ? match[0] : null;
-  }
-
-  private buildProjectFileContent(
-    project: ProjectConfig,
-    folderName: string,
-    timestamps: { createdMs: number; lastUsedMs: number }
-  ): string {
-    const webUrls = splitUrlsStringToArray(project.contextSource?.webUrls || "");
-    const youtubeUrls = splitUrlsStringToArray(project.contextSource?.youtubeUrls || "");
-
-    const fm: Record<string, unknown> = {
-      [COPILOT_PROJECT_ID]: project.id.trim(),
-      [COPILOT_PROJECT_NAME]: (project.name || folderName).trim(),
-      [COPILOT_PROJECT_DESCRIPTION]: (project.description || "").trim(),
-      [COPILOT_PROJECT_INCLUSIONS]: project.contextSource?.inclusions || "",
-      [COPILOT_PROJECT_EXCLUSIONS]: project.contextSource?.exclusions || "",
-      [COPILOT_PROJECT_WEB_URLS]: webUrls,
-      [COPILOT_PROJECT_YOUTUBE_URLS]: youtubeUrls,
-      [COPILOT_PROJECT_CREATED]: timestamps.createdMs,
-      [COPILOT_PROJECT_LAST_USED]: timestamps.lastUsedMs,
-    };
-
-    return `---\n${stringifyYaml(fm)}---\n${project.systemPrompt || ""}`;
   }
 
   public async createProject(project: ProjectConfig): Promise<ProjectFileRecord> {
@@ -280,11 +230,10 @@ export class ProjectFileManager {
       try {
         const oldFolderPath = projectFolderIn(existing.folderName);
         const folderObj = this.vault.getAbstractFileByPath(oldFolderPath);
-        if (folderObj instanceof TFolder) {
-          await this.vault.rename(folderObj, newFolderPath);
-        } else {
-          await this.vault.adapter.rename(oldFolderPath, newFolderPath);
+        if (!(folderObj instanceof TFolder)) {
+          throw new Error(`Project folder not found: ${oldFolderPath}`);
         }
+        await this.vault.rename(folderObj, newFolderPath);
       } catch (renameError) {
         removePendingFileWrite(oldFilePathForPending);
         removePendingFileWrite(newFilePath);
@@ -303,7 +252,8 @@ export class ProjectFileManager {
         addPendingFileWrite(filePath);
       }
 
-      let file = await resolveFileByPath(this.app, filePath);
+      const found = this.vault.getAbstractFileByPath(filePath);
+      let file = found instanceof TFile ? found : null;
       let materialized = false;
 
       if (!file) {
@@ -328,34 +278,26 @@ export class ProjectFileManager {
 
       const projectForWrite = { ...nextProject, created: createdMs, UsageTimestamps: lastUsedMs };
 
-      if (isInVaultCache(this.app, filePath)) {
-        try {
-          await writeProjectFrontmatter(this.app, file, projectForWrite, folderName, {
-            createdMs,
-            lastUsedMs,
-          });
-        } catch (fmError) {
-          if (materialized) await this.rollbackCreatedFile(filePath, projectFolderIn(folderName));
-          throw fmError;
-        }
-
-        const rawWithFrontmatter = await this.vault.read(file);
-        const frontmatterBlock = this.getLeadingFrontmatterBlock(rawWithFrontmatter);
-        if (!frontmatterBlock) {
-          throw new Error(`Expected frontmatter block after update: ${file.path}`);
-        }
-        const separator = frontmatterBlock.endsWith("\n") ? "" : "\n";
-        await this.vault.modify(
-          file,
-          frontmatterBlock + separator + (nextProject.systemPrompt || "")
-        );
-      } else {
-        const content = this.buildProjectFileContent(projectForWrite, folderName, {
+      try {
+        await writeProjectFrontmatter(this.app, file, projectForWrite, folderName, {
           createdMs,
           lastUsedMs,
         });
-        await this.vault.adapter.write(filePath, content);
+      } catch (fmError) {
+        if (materialized) await this.rollbackCreatedFile(filePath, projectFolderIn(folderName));
+        throw fmError;
       }
+
+      const rawWithFrontmatter = await this.vault.read(file);
+      const frontmatterBlock = this.getLeadingFrontmatterBlock(rawWithFrontmatter);
+      if (!frontmatterBlock) {
+        throw new Error(`Expected frontmatter block after update: ${file.path}`);
+      }
+      const separator = frontmatterBlock.endsWith("\n") ? "" : "\n";
+      await this.vault.modify(
+        file,
+        frontmatterBlock + separator + (nextProject.systemPrompt || "")
+      );
 
       const updated: ProjectFileRecord = {
         project: { ...nextProject, created: createdMs, UsageTimestamps: lastUsedMs },
@@ -375,8 +317,6 @@ export class ProjectFileManager {
           const renamedFolder = this.vault.getAbstractFileByPath(newFolderPath);
           if (renamedFolder instanceof TFolder) {
             await this.vault.rename(renamedFolder, oldFolderPath);
-          } else {
-            await this.vault.adapter.rename(newFolderPath, oldFolderPath);
           }
           logWarn(
             `[Projects] Rolled back folder rename "${folderName}" → "${existing.folderName}" after write failure`
@@ -409,11 +349,7 @@ export class ProjectFileManager {
       addPendingFileWrite(existing.filePath);
 
       const configFile = this.vault.getAbstractFileByPath(existing.filePath);
-      if (configFile instanceof TFile) {
-        await trashFile(this.app, configFile);
-      } else if (await this.vault.adapter.exists(existing.filePath)) {
-        await this.vault.adapter.remove(existing.filePath);
-      }
+      if (configFile instanceof TFile) await trashFile(this.app, configFile);
 
       deleteCachedProjectRecordById(normalizedId);
 
@@ -423,11 +359,6 @@ export class ProjectFileManager {
         const folder = this.vault.getAbstractFileByPath(folderPath);
         if (folder instanceof TFolder && folder.children.length === 0) {
           await trashFile(this.app, folder);
-        } else if (await this.vault.adapter.exists(folderPath)) {
-          const listing = await this.vault.adapter.list(folderPath);
-          if (listing.files.length === 0 && listing.folders.length === 0) {
-            await this.vault.adapter.rmdir(folderPath, false);
-          }
         }
       } catch (cleanupError) {
         logWarn(`[Projects] Failed to clean up empty project folder: ${folderPath}`, cleanupError);
@@ -458,36 +389,24 @@ export class ProjectFileManager {
       if (timestampToPersist === null) return;
 
       const filePath = normalizePath(record.filePath);
-      const file = await resolveFileByPath(this.app, filePath);
-      if (!file) return;
+      const file = this.vault.getAbstractFileByPath(filePath);
+      if (!(file instanceof TFile)) return;
 
       const alreadyPending = isPendingFileWrite(filePath);
       let actualPersistedValue = timestampToPersist;
       try {
         if (!alreadyPending) addPendingFileWrite(filePath);
 
-        if (isInVaultCache(this.app, filePath)) {
-          await this.app.fileManager.processFrontMatter(
-            file,
-            (frontmatter: Record<string, unknown>) => {
-              const existing = Number(frontmatter[COPILOT_PROJECT_LAST_USED]);
-              const existingMs = Number.isFinite(existing) && existing > 0 ? existing : 0;
-              actualPersistedValue = Math.max(existingMs, timestampToPersist);
-              if (existingMs === actualPersistedValue) return;
-              frontmatter[COPILOT_PROJECT_LAST_USED] = actualPersistedValue;
-            }
-          );
-        } else {
-          const adapterFm = await readFrontmatterViaAdapter(this.app, filePath);
-          const existing = Number(adapterFm?.[COPILOT_PROJECT_LAST_USED]);
-          const existingMs = Number.isFinite(existing) && existing > 0 ? existing : 0;
-          actualPersistedValue = Math.max(existingMs, timestampToPersist);
-          if (existingMs !== actualPersistedValue) {
-            await patchFrontmatter(this.app, filePath, {
-              [COPILOT_PROJECT_LAST_USED]: actualPersistedValue,
-            });
+        await this.app.fileManager.processFrontMatter(
+          file,
+          (frontmatter: Record<string, unknown>) => {
+            const existing = Number(frontmatter[COPILOT_PROJECT_LAST_USED]);
+            const existingMs = Number.isFinite(existing) && existing > 0 ? existing : 0;
+            actualPersistedValue = Math.max(existingMs, timestampToPersist);
+            if (existingMs === actualPersistedValue) return;
+            frontmatter[COPILOT_PROJECT_LAST_USED] = actualPersistedValue;
           }
-        }
+        );
       } finally {
         if (!alreadyPending) removePendingFileWrite(filePath);
       }

@@ -14,7 +14,7 @@ export async function reconcileLegacyAgentsResidue(app: App): Promise<void> {
   const projectsFolder = getProjectsFolder();
   let folderPaths: string[];
   try {
-    folderPaths = await listProjectSubfolders(app, projectsFolder);
+    folderPaths = listProjectSubfolders(app, projectsFolder);
   } catch (error) {
     logError("[Projects] Failed to scan for PR2b-1 AGENTS.md residue", error);
     return;
@@ -36,7 +36,7 @@ export async function reconcileLegacyAgentsResidue(app: App): Promise<void> {
 
       addPendingFileWrite(projectMdPath);
       try {
-        await createFile(app, projectMdPath, content);
+        await app.vault.create(projectMdPath, content);
       } finally {
         removePendingFileWrite(projectMdPath);
       }
@@ -71,16 +71,10 @@ function hasCopilotProjectId(content: string): boolean {
   }
 }
 
-async function listProjectSubfolders(app: App, projectsFolder: string): Promise<string[]> {
+function listProjectSubfolders(app: App, projectsFolder: string): string[] {
   const root = app.vault.getAbstractFileByPath(projectsFolder);
-  if (root instanceof TFolder) {
-    return root.children.filter((c): c is TFolder => c instanceof TFolder).map((c) => c.path);
-  }
-  if (await app.vault.adapter.exists(projectsFolder)) {
-    const listing = await app.vault.adapter.list(projectsFolder);
-    return listing.folders;
-  }
-  return [];
+  if (!(root instanceof TFolder)) return [];
+  return root.children.filter((c): c is TFolder => c instanceof TFolder).map((c) => c.path);
 }
 
 async function fileExists(app: App, path: string): Promise<boolean> {
@@ -102,13 +96,4 @@ async function writeFile(app: App, path: string, content: string): Promise<void>
     return;
   }
   await app.vault.adapter.write(path, content);
-}
-
-async function createFile(app: App, path: string, content: string): Promise<void> {
-  const folderPath = normalizePath(path.split("/").slice(0, -1).join("/"));
-  if (app.vault.getAbstractFileByPath(folderPath) instanceof TFolder) {
-    await app.vault.create(path, content);
-  } else {
-    await app.vault.adapter.write(path, content);
-  }
 }

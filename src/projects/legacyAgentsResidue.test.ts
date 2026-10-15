@@ -1,4 +1,6 @@
+import { mockTFile, mockTFolder } from "@/__tests__/mockObsidian";
 import { reconcileLegacyAgentsResidue } from "@/projects/legacyAgentsResidue";
+import type { TFile } from "obsidian";
 
 jest.mock("@/projects/projectPaths", () => ({
   getProjectsFolder: () => "copilot-projects",
@@ -11,12 +13,10 @@ jest.mock("@/logger", () => ({
 
 function makeVault(initialFiles: Record<string, string>) {
   const files = new Map(Object.entries(initialFiles));
+  const research = mockTFolder({ path: "copilot-projects/Research", children: [] });
+  const projects = mockTFolder({ path: "copilot-projects", children: [research] });
   const adapter = {
-    exists: jest.fn(async (path: string) => path === "copilot-projects" || files.has(path)),
-    list: jest.fn(async () => ({
-      files: [],
-      folders: ["copilot-projects/Research"],
-    })),
+    exists: jest.fn(async (path: string) => files.has(path)),
     read: jest.fn(async (path: string) => files.get(path) ?? ""),
     write: jest.fn(async (path: string, content: string) => {
       files.set(path, content);
@@ -25,7 +25,18 @@ function makeVault(initialFiles: Record<string, string>) {
   };
   const app = {
     vault: {
-      getAbstractFileByPath: jest.fn(() => null),
+      getAbstractFileByPath: jest.fn((path: string) => {
+        if (path === projects.path) return projects;
+        return files.has(path) ? mockTFile({ path }) : null;
+      }),
+      create: jest.fn(async (path: string, content: string) => {
+        files.set(path, content);
+        return mockTFile({ path });
+      }),
+      read: jest.fn(async (file: TFile) => files.get(file.path) ?? ""),
+      modify: jest.fn(async (file: TFile, content: string) => {
+        files.set(file.path, content);
+      }),
       adapter,
     },
   } as never;
