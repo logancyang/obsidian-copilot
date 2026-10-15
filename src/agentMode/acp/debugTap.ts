@@ -11,13 +11,23 @@ interface JsonRpcFrame {
   error?: { code?: number; message?: string; data?: unknown };
 }
 
+interface PendingRequest {
+  method: string;
+  sessionId: string | null;
+}
+
+function sessionIdOf(value: unknown): string | null {
+  const id = (value as { sessionId?: unknown } | null | undefined)?.sessionId;
+  return typeof id === "string" ? id : null;
+}
+
 export function wrapStreamsForDebug(
   stdin: WritableStream<Uint8Array>,
   stdout: ReadableStream<Uint8Array>,
   tag: string
 ): { stdin: WritableStream<Uint8Array>; stdout: ReadableStream<Uint8Array> } {
-  const outboundPending = new Map<string, string>();
-  const inboundPending = new Map<string, string>();
+  const outboundPending = new Map<string, PendingRequest>();
+  const inboundPending = new Map<string, PendingRequest>();
 
   return {
     stdin: tapWritable(stdin, (line) => logFrame("→", line, tag, outboundPending, inboundPending)),
@@ -106,12 +116,18 @@ function logFrame(
   arrow: "→" | "←",
   line: string,
   tag: string,
-  ownPending: Map<string, string>,
-  peerPending: Map<string, string>
+  ownPending: Map<string, PendingRequest>,
+  peerPending: Map<string, PendingRequest>
 ): void {
   const fullFramesOn = !!getSettings().agentMode?.debugFullFrames;
   const emit = fullFramesOn
-    ? (kind: FrameRecord["kind"], method: string, id: string | null, payload: unknown) =>
+    ? (
+        kind: FrameRecord["kind"],
+        method: string,
+        id: string | null,
+        payload: unknown,
+        sessionId: string | null
+      ) =>
         frameSink.append({
           ts: new Date().toISOString(),
           dir: arrow,
@@ -120,6 +136,7 @@ function logFrame(
           method,
           id,
           payload,
+          sessionId,
         })
     : null;
 
@@ -128,7 +145,7 @@ function logFrame(
     frame = JSON.parse(line);
   } catch {
     logInfo(`[ACP ${arrow}][${tag}] (unparsed) ${formatPayload(line)}`);
-    emit?.("raw", "(unparsed)", null, { raw: line });
+    emit?.("raw", "(unparsed)", null, { raw: line }, null);
     return;
   }
 
@@ -137,20 +154,23 @@ function logFrame(
   if (frame.method) {
     const method = frame.method;
     const idLabel = idStr !== null ? `#${idStr}` : "(notif)";
-    if (idStr !== null) ownPending.set(idStr, method);
+    const sessionId = sessionIdOf(frame.params);
+    if (idStr !== null) ownPending.set(idStr, { method, sessionId });
     logInfo(`[ACP ${arrow}][${tag}] ${method}  ${idLabel}  ${formatPayload(frame.params)}`);
-    emit?.(idStr !== null ? "request" : "notif", method, idStr, frame.params);
+    emit?.(idStr !== null ? "request" : "notif", method, idStr, frame.params, sessionId);
     return;
   }
 
-  const method = idStr !== null ? (peerPending.get(idStr) ?? "(unknown)") : "(unknown)";
+  const request = idStr !== null ? peerPending.get(idStr) : undefined;
+  const method = request?.method ?? "(unknown)";
+  const sessionId = request?.sessionId ?? sessionIdOf(frame.result);
   if (idStr !== null) peerPending.delete(idStr);
   const idLabel = idStr !== null ? `#${idStr}` : "(no-id)";
   if (frame.error) {
     logInfo(`[ACP ${arrow}][${tag}] (error) ${method}  ${idLabel}  ${formatPayload(frame.error)}`);
-    emit?.("error", method, idStr, frame.error);
+    emit?.("error", method, idStr, frame.error, sessionId);
   } else {
     logInfo(`[ACP ${arrow}][${tag}] ${method}  ${idLabel}  ${formatPayload(frame.result)}`);
-    emit?.("result", method, idStr, frame.result);
+    emit?.("result", method, idStr, frame.result, sessionId);
   }
 }

@@ -128,17 +128,20 @@ diagnostic frame logs with larger payload summaries, turn on
 **Settings → Advanced → Log Full Agent Mode Frames**.
 
 When enabled, every parsed frame is appended as one NDJSON line outside the
-vault, under the OS temp directory:
+vault, under the OS temp directory, one file per conversation (ACP session ID):
 
 ```text
-<tmp>/obsidian-copilot/acp-frames/<vault-hash>/acp-frames.ndjson
+<tmp>/obsidian-copilot/acp-frames/<vault-hash>/session-<session-id>.ndjson
 ```
+
+Frames with no session (`initialize`, the model probe's session) go to
+`background.ndjson`.
 
 Each line is a `FrameRecord` (`src/agentMode/session/debugSink.ts`):
 
 ```ts
 { ts, dir: "→" | "←", tag, kind: "request" | "notif" | "result" | "error" | "raw",
-  method, id, payload }
+  method, id, payload, sessionId }
 ```
 
 `dir` is from the plugin's perspective: `→` = sent to the agent,
@@ -150,7 +153,7 @@ SDK turns appear in the same file.
 Useful queries:
 
 ```bash
-LOG="<path shown in Settings → Advanced → Agent Mode Frame Log>"
+LOG="<a session-*.ndjson file in the folder shown in Settings → Advanced → Agent Mode Frame Log>"
 
 # count frames by method
 jq -r .method "$LOG" | sort | uniq -c | sort -rn
@@ -162,8 +165,10 @@ jq -c 'select(.method=="session/update") | .payload' "$LOG"
 jq -c 'select(.tag=="claude-sdk")' "$LOG"
 ```
 
-The file is append-only and bounded. Oversized individual frames are replaced
-with a `__truncated` summary, and at 50 MB the file rotates to
-`acp-frames.old.ndjson` (overwriting any prior `.old`) in the same temp
-folder. Use the **Open** / **Clear** buttons in the same settings section, or
-delete the files directly. Disable the toggle when not actively debugging.
+Only the newest 5 conversations are kept, and the issue report attaches them.
+Oversized individual frames are replaced with a `__truncated` summary. A file
+over 4 MB is cut to its first frames and its newest ones, and keeps every
+`frameSink.state` line (the conversation's model and mode, written at start and
+on each change). Use the **Open** / **Clear** buttons in the same settings
+section, or delete the files directly. Disable the toggle when not actively
+debugging.

@@ -2,6 +2,7 @@ import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
 import { App, FileSystemAdapter, Platform } from "obsidian";
+import { frameSink } from "./debugSink";
 import { MethodUnsupportedError } from "./errors";
 import type {
   BackendDescriptor,
@@ -301,6 +302,7 @@ export class AgentModelPreloader {
     };
     const strategies: Strategy[] = [];
     if (storedId) {
+      frameSink.markProbeSession(storedId);
       strategies.push({
         label: `resumed probe session ${storedId}`,
         sessionId: storedId,
@@ -328,6 +330,7 @@ export class AgentModelPreloader {
     }
 
     const resp = await proc.newSession({ cwd });
+    frameSink.markProbeSession(resp.sessionId);
     proc.registerSessionHandler(resp.sessionId, onProbeEvent);
     logInfo(`[AgentMode] preload ${backendId}: created probe session ${resp.sessionId}`);
     if (descriptor.persistProbeSessionId) {
