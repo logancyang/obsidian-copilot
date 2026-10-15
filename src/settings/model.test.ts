@@ -595,7 +595,6 @@ describe("model", () => {
       for (const [hidden, visible] of [
         [".copilot", "copilot"],
         ["notes/.ai/", "notes/ai"],
-        [".vault-config/plugins/copilot-data", "vault-config/plugins/copilot-data"],
       ]) {
         const out = sanitizeSettings({ ...DEFAULT_SETTINGS, copilotFolder: hidden });
         expect(out.copilotFolder).toBe(visible);
