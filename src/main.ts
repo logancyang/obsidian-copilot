@@ -1167,7 +1167,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
     const rawData = (await this.loadData()) as unknown;
     this.loadedCopilotFolder = (rawData as { copilotFolder?: unknown } | null)?.copilotFolder;
     // The keychain bootstrap may persist a sparse snapshot of the raw on-disk
-    // data (vaultId backfill) before settings are hydrated. That snapshot is
+    // data (keychain name migration) before settings are hydrated. That snapshot is
     // already in dehydrated, on-disk shape, so it must bypass the
     // `dehydrateDeviceProfile` override below via `super.saveData` — routing it
     // through `this.saveData` would read the absent flat fields as "cleared"

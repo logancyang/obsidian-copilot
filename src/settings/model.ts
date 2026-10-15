@@ -124,7 +124,6 @@ export interface CopilotSettings {
   defaultSystemPromptTitle: string;
   autoCompactThreshold: number;
   convertedDocOutputFolder: string;
-  _keychainVaultId?: string;
   _pendingCredentialRecovery?: { deviceId: string; path: string; encrypted: boolean };
   settingsVersion?: number;
   agentMode: {

@@ -24,9 +24,8 @@ if (typeof window.structuredClone === "undefined") {
 
 const noLegacyBackup = async () => ({ status: "not-needed" }) as const;
 
-const VAULT_ID = "a1b2c3d4";
-const BYOK_POINTER = `copilot-v${VAULT_ID}-provider-byok_openai`;
-const PLUS_POINTER = `copilot-v${VAULT_ID}-provider-plus_1`;
+const BYOK_POINTER = "copilot-my-openai-api-key";
+const PLUS_POINTER = "copilot-plus-api-key";
 
 let secrets: Map<string, string>;
 let app: App;
@@ -66,7 +65,7 @@ describe("model", () => {
       app = makeApp();
       resetPersistenceState();
       KeychainService.resetInstance();
-      KeychainService.getInstance(app).setVaultId(VAULT_ID);
+      KeychainService.getInstance(app);
     });
 
     it("keeps every credential — top-level, builtin/custom model, BYOK and signed-in Plus provider — reachable through reset, persistence, and a fresh hydration cycle (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", async () => {
@@ -91,7 +90,6 @@ describe("model", () => {
 
       settingsStore.set(settingsAtom, {
         ...DEFAULT_SETTINGS,
-        _keychainVaultId: VAULT_ID,
         openAIApiKey: "sk-top-level",
         openAIOrgId: "org-123",
         isPaidUser: true,
@@ -130,7 +128,6 @@ describe("model", () => {
 
       expect(savedToDisk?.openAIApiKey).toBe("");
       expect(savedToDisk?.activeModels.find((m) => m.name === "custom-gpt")?.apiKey).toBe("");
-      expect(savedToDisk?._keychainVaultId).toBe(VAULT_ID);
       expect(savedToDisk?.providers.byok_openai?.apiKeyKeychainId).toBe(BYOK_POINTER);
 
       KeychainService.resetInstance();
@@ -141,8 +138,6 @@ describe("model", () => {
         async () => {},
         noLegacyBackup
       );
-
-      expect(KeychainService.getInstance(app).getVaultId()).toBe(VAULT_ID);
 
       expect(reloaded.openAIApiKey).toBe("sk-top-level");
       expect(reloaded.openAIOrgId).toBe("org-123");

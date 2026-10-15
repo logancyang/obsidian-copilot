@@ -23,8 +23,7 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
 
   const keychain = {
     isAvailable: jest.fn().mockReturnValue(true),
-    getVaultId: jest.fn().mockReturnValue("abcd1234"),
-    setVaultId: jest.fn(),
+    migrateLegacyNames: jest.fn((settings: CopilotSettings) => settings),
     hydrateFromKeychain: jest.fn(async (settings: CopilotSettings) => ({
       settings,
       hadFailures: false,
@@ -160,12 +159,64 @@ describe("settingsPersistence", () => {
       expect(loaded.openAIApiKey).toBe("keychain-key");
       expect(saveData).toHaveBeenCalledWith(
         expect.objectContaining({
-          _keychainVaultId: "1234abcd",
           openAIApiKey: "",
           activeModels: [expect.objectContaining({ apiKey: "" })],
         })
       );
       expect(saveData.mock.calls[0][0]).not.toHaveProperty("_keychainOnly");
+      expect(saveData.mock.calls[0][0]).not.toHaveProperty("_keychainVaultId");
+    });
+
+    it("persists and loads the provider pointers the Keychain name migration rewrote (https://github.com/logancyang/obsidian-copilot/issues/3618)", async () => {
+      const { module, keychain } = await loadModule();
+      const legacyRow = {
+        providerId: "row-1",
+        apiKeyKeychainId: "copilot-v1234abcd-provider-row-1",
+      };
+      keychain.migrateLegacyNames.mockImplementation(
+        (settings: CopilotSettings) =>
+          ({
+            ...settings,
+            providers: { "row-1": { ...legacyRow, apiKeyKeychainId: "copilot-anthropic-api-key" } },
+          }) as unknown as CopilotSettings
+      );
+      const saveData = jest.fn().mockResolvedValue(undefined);
+
+      const loaded = await module.loadSettingsWithKeychain(
+        APP,
+        { _keychainVaultId: "1234abcd", providers: { "row-1": legacyRow } },
+        saveData,
+        backedUp
+      );
+
+      expect(keychain.migrateLegacyNames).toHaveBeenCalledWith(
+        expect.objectContaining({ providers: { "row-1": legacyRow } }),
+        "1234abcd"
+      );
+      expect(saveData.mock.calls[0][0].providers["row-1"].apiKeyKeychainId).toBe(
+        "copilot-anthropic-api-key"
+      );
+      expect(loaded.providers["row-1"].apiKeyKeychainId).toBe("copilot-anthropic-api-key");
+    });
+
+    it("loads with the stored pointers when the Keychain name migration throws, so the next load retries", async () => {
+      const { module, keychain } = await loadModule();
+      const legacyRow = {
+        providerId: "row-1",
+        apiKeyKeychainId: "copilot-v1234abcd-provider-row-1",
+      };
+      keychain.migrateLegacyNames.mockImplementation(() => {
+        throw new Error("keychain locked");
+      });
+
+      const loaded = await module.loadSettingsWithKeychain(
+        APP,
+        { providers: { "row-1": legacyRow } },
+        jest.fn().mockResolvedValue(undefined),
+        backedUp
+      );
+
+      expect(loaded.providers["row-1"].apiKeyKeychainId).toBe("copilot-v1234abcd-provider-row-1");
     });
 
     it("keeps credentials empty when Keychain is unavailable", async () => {
@@ -183,17 +234,13 @@ describe("settingsPersistence", () => {
       expect(keychain.hydrateFromKeychain).not.toHaveBeenCalled();
     });
 
-    it("persists a vault namespace and current schema version for a fresh install", async () => {
-      const { module, keychain } = await loadModule();
+    it("persists only the current schema version for a fresh install", async () => {
+      const { module } = await loadModule();
       const saveData = jest.fn().mockResolvedValue(undefined);
 
       await module.loadSettingsWithKeychain(APP, null, saveData, backedUp);
 
-      expect(keychain.setVaultId).toHaveBeenCalledWith("abcd1234");
-      expect(saveData).toHaveBeenCalledWith({
-        _keychainVaultId: "abcd1234",
-        settingsVersion: CURRENT_SETTINGS_VERSION,
-      });
+      expect(saveData).toHaveBeenCalledWith({ settingsVersion: CURRENT_SETTINGS_VERSION });
     });
     it("leaves data.json intact when the credential backup fails", async () => {
       const { module } = await loadModule();

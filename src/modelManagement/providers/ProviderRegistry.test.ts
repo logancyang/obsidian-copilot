@@ -49,6 +49,15 @@ const anthropicStub: ProviderAdapter = {
   }),
 };
 
+function linkKeychainName(providerId: string, apiKeyKeychainId: string): void {
+  setSettings((cur) => ({
+    providers: {
+      ...cur.providers,
+      [providerId]: { ...cur.providers[providerId], apiKeyKeychainId },
+    },
+  }));
+}
+
 describe("ProviderRegistry", () => {
   let app: App;
   let secrets: SecretStore;
@@ -174,23 +183,60 @@ describe("ProviderRegistry", () => {
   });
 
   describe("setApiKey()", () => {
-    it("mints the keychain pointer on the first key and reuses it when the key is rotated", async () => {
+    it("mints a readable keychain name on the first key and reuses it when the key is rotated", async () => {
       const id = await registry.add({
         providerType: "anthropic",
         displayName: "A",
-        origin: { kind: "byok" },
+        origin: { kind: "byok", catalogProviderId: "anthropic" },
       });
       expect(registry.get(id)!.apiKeyKeychainId).toBeNull();
 
       await registry.setApiKey(id, "sk-first");
-      const firstKeychainId = registry.get(id)!.apiKeyKeychainId;
-      const vaultId = KeychainService.getInstance(app).getVaultId();
-      expect(firstKeychainId).toBe(`copilot-v${vaultId}-provider-${id}`);
+      expect(registry.get(id)!.apiKeyKeychainId).toBe("copilot-anthropic-api-key");
       expect(await registry.getApiKey(id)).toBe("sk-first");
 
       await registry.setApiKey(id, "sk-rotated");
-      expect(registry.get(id)!.apiKeyKeychainId).toBe(firstKeychainId);
+      expect(registry.get(id)!.apiKeyKeychainId).toBe("copilot-anthropic-api-key");
       expect(await registry.getApiKey(id)).toBe("sk-rotated");
+    });
+
+    it("mints the same name for the same provider configured independently on two devices, so a synced pointer resolves on both (https://github.com/logancyang/obsidian-copilot/issues/3618)", async () => {
+      const input = {
+        providerType: "anthropic" as const,
+        displayName: "Anthropic",
+        origin: { kind: "byok" as const, catalogProviderId: "anthropic" },
+      };
+      const deviceA = await registry.add(input);
+      await registry.setApiKey(deviceA, "sk-shared");
+      const nameOnA = registry.get(deviceA)!.apiKeyKeychainId;
+
+      setSettings({ providers: {} });
+      const deviceB = await registry.add(input);
+      await registry.setApiKey(deviceB, "sk-shared");
+
+      expect(deviceB).not.toBe(deviceA);
+      expect(registry.get(deviceB)!.apiKeyKeychainId).toBe(nameOnA);
+    });
+
+    it("suffixes the name when another provider already holds it", async () => {
+      const first = await registry.add({
+        providerType: "openai-compatible",
+        displayName: "OpenRouter",
+        origin: { kind: "byok", catalogProviderId: "openrouter" },
+      });
+      const second = await registry.add({
+        providerType: "openai-compatible",
+        displayName: "OpenRouter (work)",
+        origin: { kind: "byok", catalogProviderId: "openrouter" },
+      });
+
+      await registry.setApiKey(first, "sk-personal");
+      await registry.setApiKey(second, "sk-work");
+
+      expect(registry.get(first)!.apiKeyKeychainId).toBe("copilot-openrouter-api-key");
+      expect(registry.get(second)!.apiKeyKeychainId).toBe("copilot-openrouter-api-key-2");
+      expect(await registry.getApiKey(first)).toBe("sk-personal");
+      expect(await registry.getApiKey(second)).toBe("sk-work");
     });
 
     it("re-writes a key whose keychain entry went missing behind a live pointer (https://github.com/Brevilabs/obsidian-copilot-private/issues/472)", async () => {
@@ -246,6 +292,41 @@ describe("ProviderRegistry", () => {
       await registry.remove(id);
       expect(registry.get(id)).toBeUndefined();
       expect(KeychainService.getInstance(app).getSecretById(keychainId)).toBeNull();
+    });
+
+    it("keeps a keychain entry that another provider still points at (https://github.com/logancyang/obsidian-copilot/issues/3618)", async () => {
+      const removed = await registry.add({
+        providerType: "anthropic",
+        displayName: "A",
+        origin: { kind: "byok" },
+      });
+      const kept = await registry.add({
+        providerType: "anthropic",
+        displayName: "B",
+        origin: { kind: "agent", agentType: "claude" },
+      });
+      secrets.set("copilot-anthropic-api-key", "sk-shared");
+      linkKeychainName(removed, "copilot-anthropic-api-key");
+      linkKeychainName(kept, "copilot-anthropic-api-key");
+
+      await registry.remove(removed);
+
+      expect(registry.get(removed)).toBeUndefined();
+      expect(await registry.getApiKey(kept)).toBe("sk-shared");
+    });
+
+    it("keeps a keychain entry whose name Copilot does not own (https://github.com/logancyang/obsidian-copilot/issues/3618)", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "A",
+        origin: { kind: "byok" },
+      });
+      secrets.set("anthropic-api-key", "sk-other-plugin");
+      linkKeychainName(id, "anthropic-api-key");
+
+      await registry.remove(id);
+
+      expect(secrets.get("anthropic-api-key")).toBe("sk-other-plugin");
     });
   });
 
