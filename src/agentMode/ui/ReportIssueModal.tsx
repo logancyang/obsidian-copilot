@@ -18,7 +18,7 @@ import { captureWindowBehindDialogs } from "./reportScreenshot";
 import { getSettings } from "@/settings/model";
 import { getPersistedDeviceId } from "@/utils/deviceId";
 import { createReportUploader } from "@/utils/reportUpload.brevilabs";
-import { App, ItemView, Modal, Notice, apiVersion } from "obsidian";
+import { App, ItemView, Modal, Notice, Plugin, apiVersion } from "obsidian";
 import React from "react";
 import { Root } from "react-dom/client";
 import {
@@ -50,20 +50,18 @@ export type OpenReportIssueOptions = Pick<
   "activeBackend" | "initialNote" | "preselectAllSources" | "onReported"
 >;
 
-export function openReportIssueModal(app: App, options: OpenReportIssueOptions): ReportIssueModal {
-  const pluginVersion =
-    (
-      app as unknown as {
-        plugins: { getPlugin: (id: string) => { manifest?: { version?: string } } | null };
-      }
-    ).plugins.getPlugin("copilot")?.manifest?.version ?? "unknown";
+export function openReportIssueModal(
+  plugin: Pick<Plugin, "app" | "manifest">,
+  options: OpenReportIssueOptions
+): ReportIssueModal {
+  const { app, manifest } = plugin;
   const modal = new ReportIssueModal({
     ...options,
     app,
-    pluginVersion,
+    pluginVersion: manifest.version,
     uploader: createReportUploader({
       installId: () => getPersistedDeviceId(app),
-      clientVersion: pluginVersion,
+      clientVersion: manifest.version,
     }),
   });
   modal.open();

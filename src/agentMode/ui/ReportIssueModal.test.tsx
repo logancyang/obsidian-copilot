@@ -17,7 +17,7 @@ import { getSettings, setSettings } from "@/settings/model";
 import type { ReportInput } from "@/utils/issueReport";
 import { ReportUploadError, type ReportUploader } from "@/utils/reportUpload";
 import { unzipSync } from "fflate";
-import { Modal, Notice, type App } from "obsidian";
+import { Modal, Notice, type App, type PluginManifest } from "obsidian";
 import nodeOs from "node:os";
 import nodePath from "node:path";
 
@@ -249,12 +249,10 @@ describe("ReportIssueModal", () => {
     });
 
     it("opens the dialog with the plugin's version and the card's prefill", () => {
-      const app = {
-        plugins: { getPlugin: () => ({ manifest: { version: "4.1.0" } }) },
-      } as unknown as App;
+      const plugin = { app: {} as App, manifest: { version: "4.1.0" } as PluginManifest };
       const onReported = jest.fn();
 
-      const modal = openReportIssueModal(app, {
+      const modal = openReportIssueModal(plugin, {
         activeBackend: "codex",
         initialNote: "Replied in Swedish",
         preselectAllSources: true,

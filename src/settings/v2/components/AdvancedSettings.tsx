@@ -4,6 +4,7 @@ import { SettingSection } from "@/components/ui/setting-section";
 import { DebuggingSupportSection } from "@/settings/v2/components/DebuggingSupportSection";
 import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
 import { useApp } from "@/context";
+import { usePlugin } from "@/contexts/PluginContext";
 import { getCopilotSaveData } from "@/settings/copilotSaveData";
 import { KeychainService } from "@/services/keychainService";
 import {
@@ -31,6 +32,7 @@ const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-o
 
 export const AdvancedSettings: React.FC = () => {
   const app = useApp();
+  const plugin = usePlugin();
   const settings = useSettingsValue();
   const [forgetting, setForgetting] = useState(false);
   const [frameLogPath, setFrameLogPath] = useState(DESKTOP_UNAVAILABLE_FRAME_LOG_PATH);
@@ -60,22 +62,13 @@ export const AdvancedSettings: React.FC = () => {
     }
     void (async () => {
       const { openReportIssueModal } = await import("@/agentMode");
-      const copilotPlugin = (
-        app as unknown as {
-          plugins: {
-            getPlugin: (id: string) => {
-              agentSessionManager?: { getActiveSession?: () => { backendId?: string } | null };
-            } | null;
-          };
-        }
-      ).plugins.getPlugin("copilot");
-      openReportIssueModal(app, {
+      openReportIssueModal(plugin, {
         activeBackend:
-          copilotPlugin?.agentSessionManager?.getActiveSession?.()?.backendId ??
+          plugin.agentSessionManager?.getActiveSession()?.backendId ??
           settings.agentMode.activeBackend,
       });
     })();
-  }, [app, settings.agentMode.activeBackend]);
+  }, [plugin, settings.agentMode.activeBackend]);
 
   const handleOpenFrameLog = useCallback(async () => {
     if (!isDesktopRuntime()) {
