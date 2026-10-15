@@ -505,7 +505,7 @@ const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---
 name: openartifacts-publish
-description: Publish an existing Markdown note or local HTML file, update a published Markdown note, or withdraw an OpenArtifacts page. Use when the user asks to publish, share, update, delete, remove, or withdraw an OpenArtifacts page.
+description: Publish an existing Markdown note or local HTML file, update a published Markdown note, or withdraw an OpenArtifacts page. Also make a page private or public, add or remove the people who can open it, and see and answer access requests. Use when the user asks to publish, share, update, delete, remove, or withdraw an OpenArtifacts page, or to change who can open one.
 metadata:
   copilot-enabled-agents: claude, codex, opencode
   copilot-builtin-version: "${OPENARTIFACTS_PUBLISH_VERSION}"
@@ -576,10 +576,24 @@ anyway. The original file remains user-owned; never delete the original HTML fil
 
 Tell the user the absolute path of the HTML file and that, subject to any relative-asset
 warning above, opening it in a browser shows the page as it will be uploaded; OpenArtifacts
-adds its own header and footer bylines when it serves the page. Then end your turn.
+adds its own header and footer bylines when it serves the page.
+
+For a new page, end the review message with this line, word for word:
+
+"Who should be able to open it? Reply **publish** for anyone with the link, or name people, for example **publish for alice@acme.com**, to share it only with them."
+
+If the user's request already said who (for
+example "publish this privately for Alice" or "publish this publicly"), confirm that choice
+instead of asking: "It will be published privately for {emails}. Reply publish to go ahead." or
+"It will be published for anyone with the link. Reply publish to go ahead." Never guess an
+address: if the user names a person without one, ask for it. An update to a page that is
+already published never asks and keeps who can open it. Then end your turn.
 
 Never publish in the same turn that generated the HTML. Publish only when a later
-message from the user clearly asks to publish this page. Treat anything else as feedback
+message from the user clearly asks to publish this page. A reply of "publish" approves what
+the review message offered: a public page after the question, or the confirmed choice after
+a confirmation. "publish for alice@acme.com" (several addresses may follow, separated by
+commas) or a request for a private page approves a private one. Treat anything else as feedback
 (revise the generated Markdown handoff and repeat this step; for existing HTML, relay the
 feedback and wait for the user to update the file, then repeat steps 1 and 2 before accepting
 publication approval) or as a cancellation. When unsure whether a message is an approval,
@@ -601,13 +615,16 @@ An existing HTML file uses its original path directly:
 sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" publish "/absolute/path/to/page.html" "Page title"
 \`\`\`
 
-To publish a new page that only invited people can open, add \`--private\` right after
-\`publish\`. Do this only when the user asks for a private page. A new page is public
-by default, and updating a page never changes who can open it. The wrapper removes the
-new page and fails if the server does not support private pages, so never tell the user a
-page is private unless the wrapper succeeded. Invitees are added in Copilot's Share dialog
-and sign in with the invited address. A \`402\` means the plan does not include private
-sharing; relay the message.
+If the user named people or asked for a private page, create the new page private by adding
+\`--private\` right after \`publish\`, then add each person with one \`share\` call per address:
+
+\`\`\`bash
+sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" publish --private "/absolute/path/to/page.html" "Page title"
+sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" share <docId> add alice@acme.com
+\`\`\`
+
+Otherwise publish exactly as above, with no flag. Updating a page never changes who can open
+it. Never tell the user a page is private unless the \`--private\` publish succeeded.
 
 On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 
@@ -618,12 +635,34 @@ On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 For an existing HTML file on Windows, replace the handoff path with the original absolute
 \`.html\` path and omit the \`docId\`.
 
-Success returns the same server receipt, \`{"docId", "url", "version"}\`, for either
-input. For a Markdown note, set its \`openartifacts\` frontmatter property to that \`url\`
-(create the frontmatter block if needed, keep every other property), remove a \`symposium\`
+Success returns the same server receipt for either input, \`{"docId", "url", "version",
+"linkAccess"}\` for a create (a private publish also prints a \`manageUrl\`). For a Markdown
+note, set its \`openartifacts\` frontmatter property to that \`url\` (create the frontmatter
+block if needed, keep every other property), remove a \`symposium\`
 property whose link has the same document id, and delete the generated HTML file from
 \`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`. For an existing HTML file, leave the source file
 unchanged. Then report the URL. Publishing the same Markdown note again updates the same page.
+
+Report a private publish as:
+
+"Published privately: {url}. Only you and {addresses} can open it."
+
+Use "Only you can open it." when nobody was named. Say an email was sent only when the \`share\`
+output shows \`"email": true\`; otherwise tell the user the server sent no email and that they
+should send the invitees the link. Invitees sign in with the address that was invited. End the
+report with this line, using the \`manageUrl\` the wrapper printed:
+
+"Manage who can open it: {manageUrl}"
+
+Report a public publish as "Published: {url}. Anyone with the link can open it."
+
+If an \`add\` fails after a private publish, the page is private. Report the url, who can open
+it, and the failed address with the wrapper's message.
+
+If \`publish --private\` says "This OpenArtifacts server does not support private documents. Nothing was published.", relay it and do not publish publicly unless the user asks. On a
+\`402\` with \`privateSharing\`, say private sharing needs a paid plan and that nothing was
+published or changed, and that replying **publish** publishes it for anyone with the link. Never
+do that automatically.
 
 On failure the wrapper prints the HTTP status and the server's message to stderr and
 exits 1. Report that message verbatim. Do not retry on your own, invent a cause, strip
@@ -631,7 +670,34 @@ styling, or publish another way. For a 401, the license key was refused or the p
 cannot publish; point the user at Copilot Settings. For \`not_found\` on an update, stop;
 do not create a replacement page unless the user explicitly asks.
 
-## 4. Withdraw
+## 4. Change who can open a page
+
+Act only when the user asks, and make one change per \`share\` call. Take the \`docId\` the
+way step 5 does: from an OpenArtifacts link the user supplies, the receipt URL reported earlier,
+or the note's \`openartifacts\` property. On Windows, use the \`.cmd\` wrapper the same way.
+
+\`\`\`bash
+sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" share <docId> link invited      # "make it private"
+sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" share <docId> link anyone       # "make it public"
+sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" share <docId> add alice@acme.com
+sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" share <docId> remove alice@acme.com
+sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" share <docId> decline bob@other.com
+sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" share <docId>
+\`\`\`
+
+- After \`link invited\`, say: "People who opened it while it was public may have kept a copy."
+- After \`link anyone\`, say that anyone with the link can now open it, and that the list of
+  invited people is kept in case the user switches back.
+- When the user asks who has access, run \`share <docId>\` and report \`people\` and the pending
+  \`requests\`, with the \`manageUrl\`. Approve a request with \`add <email>\` and decline it with
+  \`decline <email>\`, only when the user says so.
+- Tell the user that invitees sign in with the address that was invited.
+- Private sharing needs a paid plan for making a page private and for adding people. On a
+  \`402\` with \`privateSharing\`, say so and that nothing was changed.
+- If \`share\` says "Not found, or this server does not support private documents.", relay it and
+  do not guess.
+
+## 5. Withdraw
 
 For delete, remove, or withdraw requests, take the \`docId\` from an OpenArtifacts link the
 user supplies or the receipt URL reported earlier. Otherwise, read it with the same rules as
@@ -656,6 +722,7 @@ Never tell the user to delete the page at its public URL.
 usage() {
   printf '%s\n' "Usage: sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh publish [--private] <html-file> <title> [docId]" >&2
   printf '%s\n' "       sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh unshare <docId>" >&2
+  printf '%s\n' "       sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh share <docId> [add|remove|decline <email> | link anyone|invited]" >&2
   exit 1
 }
 
@@ -671,6 +738,8 @@ API_HOST=$(printf '%s' "$API_HOST" | sed 's,/*$,,')
 COMMAND=$1
 DOC_ID=
 PRIVATE=
+SHARE_ACTION=
+SHARE_VALUE=
 if [ "$COMMAND" = publish ] && [ "$2" = --private ]; then
   PRIVATE=1
   shift 2
@@ -691,6 +760,29 @@ case "$COMMAND" in
     [ "$#" -eq 2 ] || usage
     DOC_ID=$2
     ;;
+  share)
+    # One change per call: an address added (which also approves its request), removed or
+    # declined, or the link setting. Never a whole list.
+    # https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+    [ "$#" -ge 2 ] && [ "$#" -le 4 ] || usage
+    DOC_ID=$2
+    SHARE_ACTION=list
+    if [ "$#" -ge 3 ]; then
+      [ "$#" -eq 4 ] || usage
+      SHARE_ACTION=$3
+      SHARE_VALUE=$4
+      case "$SHARE_ACTION" in
+        add|remove|decline) ;;
+        link)
+          case "$SHARE_VALUE" in
+            anyone|invited) ;;
+            *) usage ;;
+          esac
+          ;;
+        *) usage ;;
+      esac
+    fi
+    ;;
   *)
     usage
     ;;
@@ -699,6 +791,19 @@ if [ -n "$DOC_ID" ] && ! printf '%s' "$DOC_ID" | grep -Eq '^[0-9abcdefghjkmnpqrs
   printf '%s\n' "Invalid OpenArtifacts document id: $DOC_ID" >&2
   exit 1
 fi
+EMAIL_PATH=
+case "$SHARE_ACTION" in
+  add|remove|decline)
+    # The address goes into a URL path, so refuse anything that could change the path.
+    case "$SHARE_VALUE" in
+      ''|*[[:space:][:cntrl:]/?#%]*)
+        printf '%s\n' "Invalid email address: $SHARE_VALUE" >&2
+        exit 1
+        ;;
+    esac
+    EMAIL_PATH=$(printf '%s' "$SHARE_VALUE" | sed 's/@/%40/g; s/+/%2B/g')
+    ;;
+esac
 
 # stdin -> one JSON string literal. Bytes pass through untouched except the escapes
 # JSON requires: backslash, quote, tab, CR, LF, and every other control character as
@@ -735,18 +840,44 @@ printf 'Authorization: Bearer %s\n' "$KEY" > "$HEADERS"
 if [ "$COMMAND" = unshare ]; then
   STATUS=$(curl -sS -o "$RESPONSE" -w '%{http_code}' -X DELETE -H "@$HEADERS" "$API_HOST/api/v1/docs/$DOC_ID")
   CURL_STATUS=$?
+elif [ "$COMMAND" = share ]; then
+  ACCESS_URL="$API_HOST/api/v1/docs/$DOC_ID/access"
+  case "$SHARE_ACTION" in
+    list)
+      STATUS=$(curl -sS -g -o "$RESPONSE" -w '%{http_code}' -H "@$HEADERS" "$ACCESS_URL")
+      ;;
+    add)
+      STATUS=$(curl -sS -g -o "$RESPONSE" -w '%{http_code}' -X PUT -H "@$HEADERS" -H 'Content-Length: 0' "$ACCESS_URL/people/$EMAIL_PATH")
+      ;;
+    remove)
+      STATUS=$(curl -sS -g -o "$RESPONSE" -w '%{http_code}' -X DELETE -H "@$HEADERS" "$ACCESS_URL/people/$EMAIL_PATH")
+      ;;
+    decline)
+      STATUS=$(curl -sS -g -o "$RESPONSE" -w '%{http_code}' -X DELETE -H "@$HEADERS" "$ACCESS_URL/requests/$EMAIL_PATH")
+      ;;
+    link)
+      printf '{"linkAccess":"%s"}' "$SHARE_VALUE" > "$BODY"
+      STATUS=$(curl -sS -g -o "$RESPONSE" -w '%{http_code}' -X PUT -H "@$HEADERS" -H 'Content-Type: application/json; charset=utf-8' --data-binary "@$BODY" "$ACCESS_URL")
+      ;;
+  esac
+  CURL_STATUS=$?
 else
   {
     printf '{"title":'
     printf '%s' "$TITLE" | json_string
     printf ',"html":'
     json_string < "$HTML_FILE"
-    [ -z "$PRIVATE" ] || printf ',"linkAccess":"invited"'
     printf '}'
   } > "$BODY"
   if [ -n "$DOC_ID" ]; then
     METHOD=PUT
     URL="$API_HOST/api/v1/docs/$DOC_ID"
+  elif [ -n "$PRIVATE" ]; then
+    # A private create is its own route, with the same body as a public one. A server without
+    # private sharing answers 404 and creates nothing; there is no fallback to a public page.
+    # https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+    METHOD=POST
+    URL="$API_HOST/api/v1/private-docs"
   else
     METHOD=POST
     URL="$API_HOST/api/v1/docs"
@@ -764,17 +895,30 @@ fi
 if [ "$COMMAND" = unshare ] && [ "$STATUS" = 404 ] && grep -q '"not_found"' "$RESPONSE"; then
   STATUS=204
 fi
+# Any 404 from the private route or the access routes means the server cannot do this, and
+# nothing was created or changed.
+# https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+if [ "$STATUS" = 404 ] && [ -n "$PRIVATE" ]; then
+  printf '%s\n' "This OpenArtifacts server does not support private documents. Nothing was published." >&2
+  exit 1
+fi
+if [ "$STATUS" = 404 ] && [ "$COMMAND" = share ]; then
+  printf '%s\n' "Not found, or this server does not support private documents." >&2
+  exit 1
+fi
 case "$STATUS" in
   2??)
-    if [ -n "$PRIVATE" ] && ! grep -Eq '"linkAccess" *: *"invited"' "$RESPONSE"; then
-      # An older or self-hosted server ignores linkAccess and made a public page.
-      NEW_ID=$(sed -n 's/.*"docId" *: *"\([0-9a-z]*\)".*/\1/p' "$RESPONSE")
-      [ -z "$NEW_ID" ] || curl -sS -o /dev/null -X DELETE -H "@$HEADERS" "$API_HOST/api/v1/docs/$NEW_ID"
-      printf '%s\n' "This OpenArtifacts server does not support private documents. The new page was removed." >&2
-      exit 1
-    fi
     if [ "$COMMAND" = unshare ]; then
       printf '{"docId":"%s","status":"unshared"}\n' "$DOC_ID"
+    elif [ "$COMMAND" = share ] || [ -n "$PRIVATE" ]; then
+      # The share page is on the API host, so it is built here rather than taken from the url.
+      # One key is appended to the server's JSON; a JSON string never holds a raw newline.
+      JSON=$(tr -d '\r\n' < "$RESPONSE")
+      NEW_ID=$(printf '%s' "$JSON" | sed -n 's/.*"docId" *: *"\([0-9a-z]*\)".*/\1/p')
+      case "$JSON" in
+        *\}) [ -z "$NEW_ID" ] || JSON=$(printf '%s' "$JSON" | sed 's/}$//')",\"manageUrl\":\"$API_HOST/share/$NEW_ID\"}" ;;
+      esac
+      printf '%s\n' "$JSON"
     else
       cat "$RESPONSE"
       printf '\n'
@@ -804,6 +948,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 function Show-Usage {
   [Console]::Error.WriteLine('Usage: ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 publish [--private] <html-file> <title> [docId]')
   [Console]::Error.WriteLine('       ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 unshare <docId>')
+  [Console]::Error.WriteLine('       ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 share <docId> [add|remove|decline <email> | link anyone|invited]')
   exit 1
 }
 
@@ -819,6 +964,8 @@ $API_HOST = $API_HOST.TrimEnd('/')
 $COMMAND = if ($args.Count -ge 1) { [string]$args[0] } else { '' }
 $DOC_ID = ''
 $PRIVATE = $false
+$SHARE_ACTION = ''
+$SHARE_VALUE = ''
 if ($COMMAND -eq 'publish' -and $args.Count -ge 2 -and [string]$args[1] -eq '--private') {
   $PRIVATE = $true
   $args = @($args[0]) + @($args | Select-Object -Skip 2)
@@ -839,35 +986,81 @@ switch ($COMMAND) {
     if ($args.Count -ne 2) { Show-Usage }
     $DOC_ID = [string]$args[1]
   }
+  'share' {
+    # One change per call: an address added (which also approves its request), removed or
+    # declined, or the link setting. Never a whole list.
+    # https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+    if ($args.Count -lt 2 -or $args.Count -gt 4 -or $args.Count -eq 3) { Show-Usage }
+    $DOC_ID = [string]$args[1]
+    $SHARE_ACTION = 'list'
+    if ($args.Count -eq 4) {
+      $SHARE_ACTION = [string]$args[2]
+      $SHARE_VALUE = [string]$args[3]
+      if ($SHARE_ACTION -cnotin @('add', 'remove', 'decline', 'link')) { Show-Usage }
+      if ($SHARE_ACTION -ceq 'link' -and $SHARE_VALUE -cnotin @('anyone', 'invited')) { Show-Usage }
+    }
+  }
   default { Show-Usage }
 }
 if ($DOC_ID -and $DOC_ID -notmatch '^[0-9abcdefghjkmnpqrstvwxyz]{16}$') {
   [Console]::Error.WriteLine("Invalid OpenArtifacts document id: $DOC_ID")
   exit 1
 }
+$EMAIL_PATH = ''
+if ($SHARE_ACTION -cin @('add', 'remove', 'decline')) {
+  # The address goes into a URL path, so refuse anything that could change the path.
+  if (-not $SHARE_VALUE -or $SHARE_VALUE -match '[\s\x00-\x1f\x7f/?#%]') {
+    [Console]::Error.WriteLine("Invalid email address: $SHARE_VALUE")
+    exit 1
+  }
+  $EMAIL_PATH = [Uri]::EscapeDataString($SHARE_VALUE)
+}
+
+# The server's JSON with the share page appended. The share page is on the API host, so it
+# is built here rather than taken from the url. A JSON string never holds a raw newline.
+function Add-ManageUrl([string]$Json) {
+  $text = $Json.Trim()
+  $match = [regex]::Match($text, '"docId"\s*:\s*"([0-9a-z]+)"')
+  if ($text.EndsWith('}') -and $match.Success) {
+    return $text.Substring(0, $text.Length - 1) + ',"manageUrl":"' + $API_HOST + '/share/' + $match.Groups[1].Value + '"}'
+  }
+  return $text
+}
 
 $headers = @{ Authorization = "Bearer $KEY" }
 try {
-  if ($COMMAND -eq 'unshare') {
+  if ($COMMAND -eq 'share') {
+    $accessUri = "$API_HOST/api/v1/docs/$DOC_ID/access"
+    $response = switch ($SHARE_ACTION) {
+      'add' { Invoke-WebRequest -UseBasicParsing -Method Put -Uri "$accessUri/people/$EMAIL_PATH" -Headers $headers }
+      'remove' { Invoke-WebRequest -UseBasicParsing -Method Delete -Uri "$accessUri/people/$EMAIL_PATH" -Headers $headers }
+      'decline' { Invoke-WebRequest -UseBasicParsing -Method Delete -Uri "$accessUri/requests/$EMAIL_PATH" -Headers $headers }
+      'link' {
+        $linkBody = [System.Text.Encoding]::UTF8.GetBytes('{"linkAccess":"' + $SHARE_VALUE + '"}')
+        Invoke-WebRequest -UseBasicParsing -Method Put -Uri $accessUri -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $linkBody
+      }
+      default { Invoke-WebRequest -UseBasicParsing -Method Get -Uri $accessUri -Headers $headers }
+    }
+    [Console]::Out.WriteLine((Add-ManageUrl ([string]$response.Content)))
+  } elseif ($COMMAND -eq 'unshare') {
     $null = Invoke-WebRequest -UseBasicParsing -Method Delete -Uri "$API_HOST/api/v1/docs/$DOC_ID" -Headers $headers
     [Console]::Out.WriteLine('{"docId":"' + $DOC_ID + '","status":"unshared"}')
   } else {
     $html = [System.IO.File]::ReadAllText($HTML_FILE, (New-Object System.Text.UTF8Encoding($false)))
     $payload = @{ title = $TITLE; html = $html }
-    if ($PRIVATE) { $payload.linkAccess = 'invited' }
     $body = $payload | ConvertTo-Json -Compress -Depth 2
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
     $method = if ($DOC_ID) { 'Put' } else { 'Post' }
-    $uri = if ($DOC_ID) { "$API_HOST/api/v1/docs/$DOC_ID" } else { "$API_HOST/api/v1/docs" }
+    # A private create is its own route, with the same body as a public one. A server without
+    # private sharing answers 404 and creates nothing; there is no fallback to a public page.
+    # https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+    $uri = if ($DOC_ID) { "$API_HOST/api/v1/docs/$DOC_ID" } elseif ($PRIVATE) { "$API_HOST/api/v1/private-docs" } else { "$API_HOST/api/v1/docs" }
     $response = Invoke-WebRequest -UseBasicParsing -Method $method -Uri $uri -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $bytes
-    if ($PRIVATE -and ([string]$response.Content | ConvertFrom-Json).linkAccess -ne 'invited') {
-      # An older or self-hosted server ignores linkAccess and made a public page.
-      $newId = ([string]$response.Content | ConvertFrom-Json).docId
-      if ($newId) { $null = Invoke-WebRequest -UseBasicParsing -Method Delete -Uri "$API_HOST/api/v1/docs/$newId" -Headers $headers }
-      [Console]::Error.WriteLine('This OpenArtifacts server does not support private documents. The new page was removed.')
-      exit 1
+    if ($PRIVATE) {
+      [Console]::Out.WriteLine((Add-ManageUrl ([string]$response.Content)))
+    } else {
+      [Console]::Out.WriteLine([string]$response.Content)
     }
-    [Console]::Out.WriteLine([string]$response.Content)
   }
 } catch {
   $status = $null
@@ -884,6 +1077,14 @@ try {
     # The API's structured not_found means the page is already gone, which is the outcome asked for.
     [Console]::Out.WriteLine('{"docId":"' + $DOC_ID + '","status":"unshared"}')
     exit 0
+  }
+  if ($status -eq 404 -and $PRIVATE) {
+    [Console]::Error.WriteLine('This OpenArtifacts server does not support private documents. Nothing was published.')
+    exit 1
+  }
+  if ($status -eq 404 -and $COMMAND -eq 'share') {
+    [Console]::Error.WriteLine('Not found, or this server does not support private documents.')
+    exit 1
   }
   if ($status) {
     [Console]::Error.WriteLine("OpenArtifacts returned HTTP $status")

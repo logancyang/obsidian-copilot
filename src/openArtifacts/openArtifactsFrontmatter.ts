@@ -10,7 +10,7 @@ const LEGACY_PROPERTY = "symposium";
 export class OpenArtifactsPropertyConflictError extends Error {
   constructor() {
     super(
-      "This note's openartifacts property (or its legacy symposium property) holds a value that is not this note's OpenArtifacts link. Recover the public link from .openartifacts/publish-history.md, then repair or remove the property before publishing."
+      "This note's openartifacts property (or its legacy symposium property) holds a value that is not this note's OpenArtifacts link. Recover the link from .openartifacts/publish-history.md, then repair or remove the property before publishing."
     );
     this.name = "OpenArtifactsPropertyConflictError";
     Object.setPrototypeOf(this, OpenArtifactsPropertyConflictError.prototype);

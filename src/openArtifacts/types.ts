@@ -17,7 +17,11 @@ export interface OpenArtifactsAccess {
   docId: string;
   url: string;
   linkAccess: OpenArtifactsLinkAccess;
-  people: { email: string; addedAt: string }[];
+  // Whether the server sends invite and request emails; when false the owner shares the link.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+  email: boolean;
+  people: { email: string; role: "view" | "comment"; addedAt: number }[];
+  requests: { email: string; requestedAt: number }[];
 }
 
 export type OpenArtifactsAction = "publish" | "update" | "delete";

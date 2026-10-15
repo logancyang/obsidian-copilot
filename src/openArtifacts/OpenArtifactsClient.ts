@@ -3,6 +3,7 @@ import {
   OPENARTIFACTS_DOCUMENT_ORIGIN,
   OPENARTIFACTS_DOC_ID_PATTERN,
 } from "@/openArtifacts/constants";
+import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import type {
   OpenArtifactsAccess,
   OpenArtifactsDocument,
@@ -14,10 +15,20 @@ import { requestUrl, type RequestUrlParam, type RequestUrlResponse } from "obsid
 
 const DOCS_ENDPOINT = `${OPENARTIFACTS_API_ORIGIN}/api/v1/docs`;
 const NETWORK_ERROR_MESSAGE = "Could not reach OpenArtifacts. Please try again.";
+const PRIVATE_DOCS_ENDPOINT = `${OPENARTIFACTS_API_ORIGIN}/api/v1/private-docs`;
+// A private create is its own route, so a server without private sharing answers 404 and creates nothing.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/707
 const PRIVATE_UNSUPPORTED_MESSAGE =
-  "This OpenArtifacts server does not support private documents. Copilot removed the new page; nothing was published.";
+  "This OpenArtifacts server does not support private documents. Nothing was published.";
+// The reference CLI's wording: an unconfigured server answers the whole access family with the same 404 as an old one.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+const PRIVATE_UNAVAILABLE_MESSAGE = "Not found, or this server does not support private documents.";
 const AMBIGUOUS_PUBLISH_MESSAGE =
   "OpenArtifacts may have published this note, but Copilot did not receive a valid receipt. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
+
+// The code of an access-family 404; the modal keys its unsupported-server view on it.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+export const PRIVATE_UNAVAILABLE_CODE = "private_unavailable";
 
 export class OpenArtifactsClientError extends Error {
   constructor(
@@ -39,24 +50,11 @@ export class OpenArtifactsClient {
     licenseKey: string,
     linkAccess?: OpenArtifactsLinkAccess
   ): Promise<OpenArtifactsReceipt> {
-    const receipt = await this.push(
-      "POST",
-      DOCS_ENDPOINT,
-      document,
-      licenseKey,
-      undefined,
-      linkAccess
-    );
-    if (linkAccess === "invited" && receipt.linkAccess !== "invited") {
-      await this.delete(receipt.docId, licenseKey);
-      throw new OpenArtifactsClientError(
-        PRIVATE_UNSUPPORTED_MESSAGE,
-        "private_unsupported",
-        null,
-        false
-      );
-    }
-    return receipt;
+    // Never falls back to POST /api/v1/docs, which would publish the page to anyone.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+    return linkAccess === "invited"
+      ? this.push("POST", PRIVATE_DOCS_ENDPOINT, document, licenseKey, undefined, true)
+      : this.push("POST", DOCS_ENDPOINT, document, licenseKey);
   }
 
   async update(
@@ -112,6 +110,10 @@ export class OpenArtifactsClient {
     return this.access("DELETE", docId, `/people/${encodeURIComponent(email)}`, licenseKey);
   }
 
+  declineRequest(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess> {
+    return this.access("DELETE", docId, `/requests/${encodeURIComponent(email)}`, licenseKey);
+  }
+
   async openAsOwner(docId: string, licenseKey: string): Promise<string> {
     const response = await this.request({
       url: `${DOCS_ENDPOINT}/${encodeURIComponent(docId)}/open`,
@@ -119,6 +121,12 @@ export class OpenArtifactsClient {
       headers: authorizationHeaders(licenseKey),
       throw: false,
     });
+    if (response.status === 404) {
+      // An old or unconfigured server has no /open, and the owner route answers the canonical url for a
+      // public doc, so opening the canonical url is equivalent. The returned url is opened and discarded.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+      return `${OPENARTIFACTS_DOCUMENT_ORIGIN}/d/${docId}`;
+    }
     if (response.status !== 200) {
       throw errorFromResponse(response);
     }
@@ -143,6 +151,16 @@ export class OpenArtifactsClient {
       ...(body && { contentType: "application/json", body: JSON.stringify(body) }),
       throw: false,
     });
+    if (response.status === 404) {
+      // Not yours, deleted, an old Worker and a server without reader sign-in all answer 404.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+      throw new OpenArtifactsClientError(
+        PRIVATE_UNAVAILABLE_MESSAGE,
+        PRIVATE_UNAVAILABLE_CODE,
+        404,
+        false
+      );
+    }
     if (response.status !== 200) {
       throw errorFromResponse(response);
     }
@@ -151,8 +169,11 @@ export class OpenArtifactsClient {
       !isRecord(value) ||
       value.docId !== docId ||
       (value.linkAccess !== "anyone" && value.linkAccess !== "invited") ||
+      typeof value.email !== "boolean" ||
       typeof value.url !== "string" ||
-      !Array.isArray(value.people)
+      !isOpenArtifactsDocumentUrl(value.url, docId) ||
+      !Array.isArray(value.people) ||
+      !Array.isArray(value.requests)
     ) {
       throw malformedResponse(response.status);
     }
@@ -165,7 +186,7 @@ export class OpenArtifactsClient {
     document: OpenArtifactsDocument,
     licenseKey: string,
     expectedDocId?: string,
-    linkAccess?: OpenArtifactsLinkAccess
+    privateCreate = false
   ): Promise<OpenArtifactsReceipt> {
     let response: RequestUrlResponse;
     try {
@@ -177,7 +198,6 @@ export class OpenArtifactsClient {
         body: JSON.stringify({
           title: document.title,
           html: document.html,
-          ...(linkAccess === "invited" && { linkAccess }),
         }),
         throw: false,
       });
@@ -190,6 +210,16 @@ export class OpenArtifactsClient {
         throw ambiguousPublishError(null);
       }
       throw error;
+    }
+    if (privateCreate && response.status === 404) {
+      // Mapped from the status alone, before the body is parsed, so a non-JSON 404 maps the same way.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+      throw new OpenArtifactsClientError(
+        PRIVATE_UNSUPPORTED_MESSAGE,
+        "private_unsupported",
+        404,
+        false
+      );
     }
     const expectedStatus = method === "POST" ? 201 : 200;
     if (response.status !== expectedStatus) {
@@ -269,10 +299,21 @@ function errorFromResponse(response: RequestUrlResponse): OpenArtifactsClientErr
     code,
     response.status,
     code === "internal" || response.status >= 500,
-    response.status === 402 && limit === "privateSharing" && upgradeUrl && isHttpsUrl(upgradeUrl)
-      ? upgradeUrl
+    response.status === 402 && limit === "privateSharing"
+      ? privateSharingUpgradeUrl(upgradeUrl)
       : undefined
   );
+}
+
+/**
+ * The server's https upgrade link when it sends one. A license-key 402 carries none, and Copilot always
+ * authenticates with a license key, so it falls back to the Copilot pricing page.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+ */
+function privateSharingUpgradeUrl(serverUrl: string | undefined): string {
+  return serverUrl && isHttpsUrl(serverUrl)
+    ? serverUrl
+    : createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "openartifacts_private_sharing");
 }
 
 function responseJson(response: RequestUrlResponse): unknown {

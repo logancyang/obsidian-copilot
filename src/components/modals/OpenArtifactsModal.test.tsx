@@ -3,7 +3,8 @@ import type {
   OpenArtifactsModalOptions,
   OpenArtifactsModalResult,
 } from "@/components/modals/OpenArtifactsModal";
-import type { OpenArtifactsReceipt } from "@/openArtifacts/types";
+import type { OpenArtifactsAccess, OpenArtifactsReceipt } from "@/openArtifacts/types";
+import { OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
 import { act, fireEvent, screen } from "@testing-library/react";
 
 jest.mock("obsidian", () => ({
@@ -41,7 +42,32 @@ const RECEIPT: OpenArtifactsReceipt = {
   url: `https://openartifacts.site/d/${DOC_ID}?server=exact`,
   version: 2,
 };
+const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/707";
 const mountedModals: OpenArtifactsModal[] = [];
+
+function accessFixture(overrides: Partial<OpenArtifactsAccess> = {}): OpenArtifactsAccess {
+  return {
+    docId: DOC_ID,
+    url: `https://openartifacts.site/d/${DOC_ID}`,
+    linkAccess: "invited",
+    email: true,
+    people: [],
+    requests: [],
+    ...overrides,
+  };
+}
+
+function accessPort(overrides: Partial<OpenArtifactsAccessPort> = {}): OpenArtifactsAccessPort {
+  return {
+    load: jest.fn().mockResolvedValue(accessFixture()),
+    setLinkAccess: jest.fn(),
+    addPerson: jest.fn(),
+    removePerson: jest.fn(),
+    declineRequest: jest.fn(),
+    open: jest.fn(),
+    ...overrides,
+  };
+}
 
 function createConfirmMock(): jest.MockedFunction<OpenArtifactsModalOptions["onConfirm"]> {
   return jest.fn();
@@ -132,14 +158,9 @@ describe("OpenArtifactsModal", () => {
           action: "publish",
           receipt: RECEIPT,
         });
-        const port = {
-          load: jest.fn().mockResolvedValue({
-            docId: DOC_ID,
-            url: RECEIPT.url,
-            linkAccess: "invited",
-            people: [],
-          }),
-        } as unknown as OpenArtifactsAccessPort;
+        const port = accessPort({
+          load: jest.fn().mockResolvedValue(accessFixture({ url: RECEIPT.url.split("?")[0] })),
+        });
         renderModal(onConfirm, null, undefined, undefined, port);
 
         fireEvent.click(screen.getByRole("radio", { name: "Only those invited" }));
@@ -153,20 +174,17 @@ describe("OpenArtifactsModal", () => {
 
       it("adds and removes people and opens the page through the owner route", async () => {
         const open = jest.spyOn(window, "open").mockImplementation(() => null);
-        const access = {
-          docId: DOC_ID,
-          url: `https://openartifacts.site/d/${DOC_ID}`,
-          linkAccess: "invited" as const,
-          people: [],
+        const access = accessFixture();
+        const withPerson = {
+          ...access,
+          people: [{ email: "a@b.co", role: "comment" as const, addedAt: 1785000000000 }],
         };
-        const withPerson = { ...access, people: [{ email: "a@b.co", addedAt: "t" }] };
-        const port: OpenArtifactsAccessPort = {
+        const port = accessPort({
           load: jest.fn().mockResolvedValue(access),
-          setLinkAccess: jest.fn(),
           addPerson: jest.fn().mockResolvedValue(withPerson),
           removePerson: jest.fn().mockResolvedValue(access),
           open: jest.fn().mockResolvedValue("https://x.openartifacts.site/d/g?grant=1"),
-        };
+        });
         await act(async () => {
           renderModal(createConfirmMock(), DOC_ID, undefined, undefined, port);
         });
@@ -184,6 +202,227 @@ describe("OpenArtifactsModal", () => {
           "_blank",
           "noopener,noreferrer"
         );
+      });
+
+      it(`${ISSUE} shows pending requests above who has access and lets the owner approve or decline each`, async () => {
+        const request = { email: "bob@other.com", requestedAt: 1785000100000 };
+        const pending = accessFixture({ requests: [request] });
+        const approved = accessFixture({
+          people: [{ email: "bob@other.com", role: "comment", addedAt: 1785000200000 }],
+        });
+        const port = accessPort({
+          load: jest.fn().mockResolvedValue(pending),
+          addPerson: jest.fn().mockResolvedValue(approved),
+          declineRequest: jest.fn().mockResolvedValue(accessFixture()),
+        });
+        await act(async () => {
+          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, port);
+        });
+
+        const requests = screen.getByText("Requests");
+        const whoHasAccess = screen.getByText("Who has access");
+        expect(
+          requests.compareDocumentPosition(whoHasAccess) & Node.DOCUMENT_POSITION_FOLLOWING
+        ).toBeTruthy();
+        expect(screen.getByText("bob@other.com")).toBeTruthy();
+        expect(screen.getByText("Asked to open it")).toBeTruthy();
+
+        await clickButton("Decline");
+        expect(port.declineRequest).toHaveBeenCalledWith(DOC_ID, "bob@other.com");
+        expect(screen.queryByText("Requests")).toBeNull();
+      });
+
+      it(`${ISSUE} approves a request by adding the address and moves it to who has access`, async () => {
+        const port = accessPort({
+          load: jest
+            .fn()
+            .mockResolvedValue(
+              accessFixture({ requests: [{ email: "bob@other.com", requestedAt: 1 }] })
+            ),
+          addPerson: jest.fn().mockResolvedValue(
+            accessFixture({
+              people: [{ email: "bob@other.com", role: "comment", addedAt: 2 }],
+            })
+          ),
+        });
+        await act(async () => {
+          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, port);
+        });
+
+        await clickButton("Approve");
+
+        expect(port.addPerson).toHaveBeenCalledWith(DOC_ID, "bob@other.com");
+        expect(screen.queryByText("Requests")).toBeNull();
+        expect(screen.getByText("bob@other.com")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Remove" })).toBeTruthy();
+      });
+
+      it(`${ISSUE} hides the Requests section when nobody has asked`, async () => {
+        await act(async () => {
+          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, accessPort());
+        });
+
+        expect(screen.getByText("Who has access")).toBeTruthy();
+        expect(screen.queryByText("Requests")).toBeNull();
+      });
+
+      it(`${ISSUE} shows the copy notice after a real switch to private, not for a doc loaded as private`, async () => {
+        const port = accessPort({
+          load: jest.fn().mockResolvedValue(accessFixture({ linkAccess: "anyone" })),
+          setLinkAccess: jest.fn().mockResolvedValue(accessFixture({ linkAccess: "invited" })),
+        });
+        await act(async () => {
+          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, port);
+        });
+        const notice = "People who opened it while it was public may have kept a copy.";
+        expect(screen.queryByText(notice)).toBeNull();
+
+        await act(async () => {
+          fireEvent.click(screen.getByRole("radio", { name: "Only those invited" }));
+        });
+
+        expect(port.setLinkAccess).toHaveBeenCalledWith(DOC_ID, "invited");
+        expect(screen.getByText(notice)).toBeTruthy();
+      });
+
+      it(`${ISSUE} does not show the copy notice for a doc that loads as private`, async () => {
+        await act(async () => {
+          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, accessPort());
+        });
+
+        expect(screen.queryByText(/may have kept a copy/)).toBeNull();
+      });
+
+      it(`${ISSUE} drops the copy notice when the link goes back to anyone`, async () => {
+        const port = accessPort({
+          load: jest.fn().mockResolvedValue(accessFixture({ linkAccess: "anyone" })),
+          setLinkAccess: jest
+            .fn()
+            .mockResolvedValueOnce(accessFixture({ linkAccess: "invited" }))
+            .mockResolvedValueOnce(accessFixture({ linkAccess: "anyone" })),
+        });
+        await act(async () => {
+          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, port);
+        });
+
+        await act(async () => {
+          fireEvent.click(screen.getByRole("radio", { name: "Only those invited" }));
+        });
+        expect(screen.getByText(/may have kept a copy/)).toBeTruthy();
+        await act(async () => {
+          fireEvent.click(screen.getByRole("radio", { name: "Anyone with the link" }));
+        });
+        expect(screen.queryByText(/may have kept a copy/)).toBeNull();
+      });
+
+      it(`${ISSUE} tells the owner to send the link when the server sends no invitation email`, async () => {
+        const person = { email: "a@b.co", role: "comment" as const, addedAt: 1 };
+        const quiet = accessPort({
+          load: jest.fn().mockResolvedValue(accessFixture({ email: false, people: [person] })),
+        });
+        await act(async () => {
+          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, quiet);
+        });
+        expect(screen.getByText("Invited · send them the link")).toBeTruthy();
+        expect(screen.queryByText("Invited · email sent")).toBeNull();
+      });
+
+      it(`${ISSUE} says the email was sent when the server emails invitees`, async () => {
+        const person = { email: "a@b.co", role: "comment" as const, addedAt: 1 };
+        const emailing = accessPort({
+          load: jest.fn().mockResolvedValue(accessFixture({ email: true, people: [person] })),
+        });
+        await act(async () => {
+          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, emailing);
+        });
+        expect(screen.getByText("Invited · email sent")).toBeTruthy();
+      });
+
+      it(`${ISSUE} shows one muted line and keeps Update and Delete when the server does not support private documents`, async () => {
+        const message = "Not found, or this server does not support private documents.";
+        const port = accessPort({
+          load: jest
+            .fn()
+            .mockRejectedValue(
+              new OpenArtifactsClientError(message, "private_unavailable", 404, false)
+            ),
+        });
+        await act(async () => {
+          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, port);
+        });
+
+        expect(screen.getByText(message)).toBeTruthy();
+        expect(screen.queryByRole("alert")).toBeNull();
+        expect(screen.queryByLabelText("Add people")).toBeNull();
+        expect(screen.queryByRole("radio", { name: "Only those invited" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Update" })).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
+      });
+
+      it(`${ISSUE} still shows the alert and Upgrade link for other access errors`, async () => {
+        const port = accessPort({
+          load: jest
+            .fn()
+            .mockRejectedValue(
+              new OpenArtifactsClientError(
+                "Private sharing needs a paid plan.",
+                "limit_reached",
+                402,
+                false,
+                "https://www.obsidiancopilot.com/pricing"
+              )
+            ),
+        });
+        await act(async () => {
+          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, port);
+        });
+
+        expect(screen.getByRole("alert").textContent).toContain(
+          "Private sharing needs a paid plan."
+        );
+        expect(screen.getByRole("link", { name: "Upgrade" }).getAttribute("href")).toBe(
+          "https://www.obsidiancopilot.com/pricing"
+        );
+      });
+
+      it(`${ISSUE} shows an Upgrade link on a failed first private publish and creates nothing`, async () => {
+        const onConfirm = createConfirmMock().mockResolvedValue({
+          kind: "failure",
+          action: "publish",
+          message: "Your Copilot plan does not include private sharing.",
+          accessNotice: false,
+          retryable: false,
+          upgradeUrl:
+            "https://www.obsidiancopilot.com/pricing?utm_medium=openartifacts_private_sharing",
+        });
+        renderModal(onConfirm);
+
+        fireEvent.click(screen.getByRole("radio", { name: "Only those invited" }));
+        await clickButton("Yes, publish");
+
+        expect(await screen.findByText(/does not include private sharing/)).toBeTruthy();
+        const link = screen.getByRole("link", { name: "Upgrade" });
+        expect(link.getAttribute("href")).toBe(
+          "https://www.obsidiancopilot.com/pricing?utm_medium=openartifacts_private_sharing"
+        );
+        expect(link.getAttribute("target")).toBe("_blank");
+        expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+      });
+
+      it("shows no Upgrade link on a failure without one", async () => {
+        const onConfirm = createConfirmMock().mockResolvedValue({
+          kind: "failure",
+          action: "publish",
+          message: "Nope.",
+          accessNotice: false,
+          retryable: false,
+        });
+        renderModal(onConfirm);
+
+        await clickButton("Yes, publish");
+
+        expect(await screen.findByText("Nope.")).toBeTruthy();
+        expect(screen.queryByRole("link", { name: "Upgrade" })).toBeNull();
       });
 
       it("allows native close while a confirmed action is pending", async () => {
@@ -298,7 +537,7 @@ describe("OpenArtifactsModal", () => {
         const onConfirm = createConfirmMock().mockResolvedValue({
           kind: "persistence",
           action: "publish",
-          message: "The page is already public. Retry saving its document id.",
+          message: "The page is already published. Retry saving its document id.",
           receipt: RECEIPT,
           retrySave,
         });
@@ -325,7 +564,7 @@ describe("OpenArtifactsModal", () => {
         renderModal(onConfirm, null, undefined, {
           kind: "persistence",
           action: "publish",
-          message: "The page is already public. Retry saving its document id.",
+          message: "The page is already published. Retry saving its document id.",
           receipt: RECEIPT,
           retrySave,
         });

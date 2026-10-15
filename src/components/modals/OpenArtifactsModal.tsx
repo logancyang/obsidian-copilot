@@ -2,7 +2,10 @@ import { Button } from "@/components/ui/button";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
-import { OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
+import {
+  OpenArtifactsClientError,
+  PRIVATE_UNAVAILABLE_CODE,
+} from "@/openArtifacts/OpenArtifactsClient";
 import type {
   OpenArtifactsAccess,
   OpenArtifactsAction,
@@ -26,6 +29,9 @@ export interface OpenArtifactsFailureResult {
   message: string;
   accessNotice: boolean;
   retryable: boolean;
+  // The plan refusal's upgrade link, so a 402 on the first private publish can show it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+  upgradeUrl?: string;
 }
 
 export interface OpenArtifactsPersistenceResult {
@@ -46,6 +52,7 @@ export interface OpenArtifactsAccessPort {
   setLinkAccess(docId: string, linkAccess: OpenArtifactsLinkAccess): Promise<OpenArtifactsAccess>;
   addPerson(docId: string, email: string): Promise<OpenArtifactsAccess>;
   removePerson(docId: string, email: string): Promise<OpenArtifactsAccess>;
+  declineRequest(docId: string, email: string): Promise<OpenArtifactsAccess>;
   open(docId: string): Promise<string>;
 }
 
@@ -80,6 +87,15 @@ const LINK_ACCESS_OPTIONS: SegmentedControlOption<OpenArtifactsLinkAccess>[] = [
   { label: "Anyone with the link", value: "anyone" },
   { label: "Only those invited", value: "invited" },
 ];
+
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+const COPY_NOTICE = "People who opened it while it was public may have kept a copy.";
+
+// Keyed on the code alone so a port, or a gallery story, can raise it without the client class.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+function isPrivateUnavailable(error: unknown): error is Error {
+  return error instanceof Error && (error as { code?: unknown }).code === PRIVATE_UNAVAILABLE_CODE;
+}
 
 function errorText(error: unknown): string {
   return error instanceof OpenArtifactsClientError
@@ -159,6 +175,10 @@ function AccessPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; upgradeUrl?: string } | null>(null);
   const [copyMessage, setCopyMessage] = useState("");
+  // Set when the server answers the access family with 404: an old or unconfigured server.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+  const [unavailable, setUnavailable] = useState<string | null>(null);
+  const [showCopyNotice, setShowCopyNotice] = useState(false);
 
   const run = async (call: () => Promise<OpenArtifactsAccess>): Promise<boolean> => {
     setBusy(true);
@@ -167,6 +187,10 @@ function AccessPanel({
       setState(await call());
       return true;
     } catch (caught) {
+      if (isPrivateUnavailable(caught)) {
+        setUnavailable(caught.message);
+        return false;
+      }
       setError({
         message: errorText(caught),
         upgradeUrl: caught instanceof OpenArtifactsClientError ? caught.upgradeUrl : undefined,
@@ -186,6 +210,15 @@ function AccessPanel({
     const address = email.trim();
     if (address && (await run(() => access.addPerson(docId, address)))) {
       setEmail("");
+    }
+  };
+
+  const switchLinkAccess = async (next: OpenArtifactsLinkAccess) => {
+    const previous = state?.linkAccess;
+    if (await run(() => access.setLinkAccess(docId, next))) {
+      // Only a real switch from public to private can leave copies behind.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+      setShowCopyNotice(previous === "anyone" && next === "invited");
     }
   };
 
@@ -222,7 +255,8 @@ function AccessPanel({
           )}
         </p>
       )}
-      {state && (
+      {unavailable && <p className="tw-m-0 tw-text-small tw-text-muted">{unavailable}</p>}
+      {state && !unavailable && (
         <>
           <div className="tw-flex tw-flex-col tw-gap-1">
             <div className="tw-text-small tw-text-muted">Link access</div>
@@ -231,8 +265,9 @@ function AccessPanel({
               options={LINK_ACCESS_OPTIONS}
               value={state.linkAccess}
               disabled={busy}
-              onChange={(next) => void run(() => access.setLinkAccess(docId, next))}
+              onChange={(next) => void switchLinkAccess(next)}
             />
+            {showCopyNotice && <p className="tw-m-0 tw-text-small tw-text-muted">{COPY_NOTICE}</p>}
           </div>
           <form
             className="tw-flex tw-gap-2"
@@ -253,6 +288,35 @@ function AccessPanel({
               Add
             </Button>
           </form>
+          {state.requests.length > 0 && (
+            <div className="tw-flex tw-flex-col tw-gap-1">
+              <div className="tw-text-small tw-text-muted">Requests</div>
+              {state.requests.map((request) => (
+                <div key={request.email} className="tw-flex tw-items-center tw-justify-between">
+                  <div className="tw-flex tw-flex-col">
+                    <span className="tw-break-all">{request.email}</span>
+                    <span className="tw-text-small tw-text-muted">Asked to open it</span>
+                  </div>
+                  <div className="tw-flex tw-gap-1">
+                    <Button
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() => void run(() => access.addPerson(docId, request.email))}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => void run(() => access.declineRequest(docId, request.email))}
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="tw-flex tw-flex-col tw-gap-1">
             <div className="tw-text-small tw-text-muted">Who has access</div>
             <div className="tw-flex tw-items-center tw-justify-between">
@@ -261,7 +325,12 @@ function AccessPanel({
             </div>
             {state.people.map((person) => (
               <div key={person.email} className="tw-flex tw-items-center tw-justify-between">
-                <span className="tw-break-all">{person.email}</span>
+                <div className="tw-flex tw-flex-col">
+                  <span className="tw-break-all">{person.email}</span>
+                  <span className="tw-text-small tw-text-muted">
+                    {state.email ? "Invited · email sent" : "Invited · send them the link"}
+                  </span>
+                </div>
                 <Button
                   variant="ghost"
                   disabled={busy}
@@ -369,7 +438,17 @@ export function OpenArtifactsModalContent({
             ? "OpenArtifacts access required"
             : `${actionLabel(result.action)} failed`}
         </div>
-        <p className="tw-m-0 tw-text-muted">{result.message}</p>
+        <p className="tw-m-0 tw-text-muted">
+          {result.message}
+          {result.upgradeUrl && (
+            <>
+              {" "}
+              <a href={result.upgradeUrl} target="_blank" rel="noopener noreferrer">
+                Upgrade
+              </a>
+            </>
+          )}
+        </p>
         <div className="tw-flex tw-justify-end tw-gap-2">
           <Button variant="secondary" onClick={onClose}>
             Close

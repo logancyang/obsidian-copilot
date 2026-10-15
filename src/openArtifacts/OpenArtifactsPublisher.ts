@@ -54,6 +54,7 @@ interface OpenArtifactsClientPort {
   ): Promise<OpenArtifactsAccess>;
   addPerson(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess>;
   removePerson(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess>;
+  declineRequest(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess>;
   openAsOwner(docId: string, licenseKey: string): Promise<string>;
 }
 
@@ -121,6 +122,9 @@ function operationFailure(action: OpenArtifactsAction, error: unknown): OpenArti
       message: error.message,
       accessNotice: error.status === 401 && error.code === "unauthorized",
       retryable: error.retryable,
+      // A 402 on the first private publish goes through onConfirm and never reaches AccessPanel.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+      ...(error.upgradeUrl && { upgradeUrl: error.upgradeUrl }),
     };
   }
 
@@ -236,6 +240,8 @@ export class OpenArtifactsPublisher {
         withKey((key) => this.client.setLinkAccess(docId, linkAccess, key)),
       addPerson: (docId, email) => withKey((key) => this.client.addPerson(docId, email, key)),
       removePerson: (docId, email) => withKey((key) => this.client.removePerson(docId, email, key)),
+      declineRequest: (docId, email) =>
+        withKey((key) => this.client.declineRequest(docId, email, key)),
       open: (docId) => withKey((key) => this.client.openAsOwner(docId, key)),
     };
   }
@@ -449,7 +455,7 @@ export class OpenArtifactsPublisher {
       kind: "persistence",
       action: "publish",
       message:
-        "The page is already public. Retry saving its link to this note; this will not publish again.",
+        "The page is already published. Retry saving its link to this note; this will not publish again.",
       receipt,
       retrySave: () =>
         this.withFileLock(file, "publish", async () => this.savePublishedIdentity(file, receipt)),
@@ -488,7 +494,7 @@ export class OpenArtifactsPublisher {
       kind: "persistence",
       action: "delete",
       message:
-        "The public page is already deleted. Retry removing its link from this note; this will not contact OpenArtifacts again.",
+        "The page is already deleted. Retry removing its link from this note; this will not contact OpenArtifacts again.",
       retrySave: () =>
         this.withFileLock(file, "delete", async () =>
           this.removeLocalIdentity(file, expectedDocId)
