@@ -239,7 +239,7 @@ const testAcpNotificationToEvents = () => {
     ]);
   });
 
-  it("maps a session_info_update with an explicit null title to a title-clearing event", () => {
+  it("maps a session_info_update with an explicit null title to a title-clearing event (https://github.com/Brevilabs/obsidian-copilot-private/issues/632)", () => {
     expect(
       acpNotificationToEvents(notification({ sessionUpdate: "session_info_update", title: null }))
     ).toEqual([
@@ -247,7 +247,7 @@ const testAcpNotificationToEvents = () => {
     ]);
   });
 
-  it("maps a session_info_update without a title to an event that omits the title", () => {
+  it("maps a session_info_update without a title, such as an opencode compaction marker, to an event that omits the title so the chat title survives (https://github.com/Brevilabs/obsidian-copilot-private/issues/632)", () => {
     const [event] = acpNotificationToEvents(
       notification({
         sessionUpdate: "session_info_update",
