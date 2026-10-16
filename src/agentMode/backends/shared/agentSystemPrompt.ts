@@ -25,7 +25,9 @@ export const COPILOT_WEB_RESEARCH_STEERING = `For vault questions, search locall
 
 export const COPILOT_MIYO_DOCUMENT_STEERING = `Read PDFs/EPUBs with miyo-parse first. If it is missing or fails, say so, then read the file with any other tool you have.`;
 
-export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabled. Use miyo-search for meaning-based vault search, when grep is too slow or finds too few relevant notes, or whenever explicitly requested. Follow its instructions.`;
+// Searching the vault first even for external-sounding questions, and opening matches before declaring a note absent, keep the agent from skipping the vault or trusting a grep list it never read; "one after the other" keeps it working on backends that serialize tool calls.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/717
+export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabled. For any request that may be answered from the user's notes, even one that sounds external or current, search the vault before answering: run miyo-search, and also grep/glob for any exact names, terms, tags or quoted phrases in the request (one after the other is fine). Merge the results by note path and open the strongest matches before answering. Say the vault does not cover it only after opening the top matches from both searches and finding no support; for external topics, then search the web.`;
 
 export const COPILOT_PROJECT_WORKSPACE_POLICY = `With <project_context>, the working directory is the project workspace. Write generated files, drafts and intermediates to outputs/ there (create it as needed), unless the user specifies another destination. Read/search there and in configured context sources, including external sources. Access other locations only when instructions or the user name them.`;
 

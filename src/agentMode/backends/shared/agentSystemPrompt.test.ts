@@ -28,6 +28,7 @@ function makePrompt(title: string, content: string): UserSystemPrompt {
 }
 
 const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
+const ISSUE_717 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/717";
 const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
 const AGENT = "opencode";
 const ALL_RELAY_SKILLS_LINE =
@@ -62,7 +63,7 @@ describe("agentSystemPrompt", () => {
         for (const enableMiyoSearchSkill of [false, true]) {
           updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
           const prompt = buildAgentSystemPrompt(AGENT);
-          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3300);
+          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3700);
           expect(prompt).not.toMatch(
             /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
           );
@@ -209,6 +210,7 @@ describe("agentSystemPrompt", () => {
 
     it("appends the Miyo steering only when the search skill is enabled", () => {
       updateSetting("enableMiyo", true);
+      updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(COPILOT_MIYO_SEARCH_STEERING);
@@ -222,6 +224,34 @@ describe("agentSystemPrompt", () => {
       expect(prompt).not.toContain("miyo-search");
     });
 
+    it(`steers every vault lookup to miyo-search plus keyword search for exact terms, even for external-sounding questions (${ISSUE_717})`, () => {
+      updateSetting("enableMiyo", true);
+      updateSetting("enableMiyoSearchSkill", true);
+      const prompt = buildAgentSystemPrompt(AGENT);
+      expect(prompt).toContain(
+        "For any request that may be answered from the user's notes, even one that sounds external or current, search the vault before answering: run miyo-search, and also grep/glob for any exact names, terms, tags or quoted phrases in the request"
+      );
+      expect(prompt).not.toContain("when grep is too slow");
+    });
+
+    it(`merges both result sets by note path and opens the top matches before saying the vault lacks an answer, then searches the web for external topics (${ISSUE_717})`, () => {
+      updateSetting("enableMiyo", true);
+      updateSetting("enableMiyoSearchSkill", true);
+      const prompt = buildAgentSystemPrompt(AGENT);
+      expect(prompt).toContain("Merge the results by note path and open the strongest matches");
+      expect(prompt).toContain(
+        "Say the vault does not cover it only after opening the top matches from both searches and finding no support; for external topics, then search the web."
+      );
+    });
+
+    it(`allows the two searches to run one after the other so backends that serialize tool calls follow it (${ISSUE_717})`, () => {
+      updateSetting("enableMiyo", true);
+      updateSetting("enableMiyoSearchSkill", true);
+      const prompt = buildAgentSystemPrompt(AGENT);
+      expect(prompt).toContain("(one after the other is fine)");
+      expect(prompt).not.toMatch(/parallel|simultaneous|same step/i);
+    });
+
     it(`omits the Miyo search steering for an agent whose miyo-search skill is disabled (${ISSUE_599})`, () => {
       updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
@@ -232,6 +262,7 @@ describe("agentSystemPrompt", () => {
     });
 
     it("suppresses the Miyo steering when the builtin prompt is disabled, even if the skill is enabled", () => {
+      updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       setDisableBuiltinSystemPrompt(true);
       const prompt = buildAgentSystemPrompt(AGENT);

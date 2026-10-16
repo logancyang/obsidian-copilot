@@ -1,3 +1,4 @@
+import { getBuiltinSkillVersion } from "@/agentMode/skills/builtin/builtinOwnership";
 import { DEFAULT_SETTINGS } from "@/constants";
 import type { CopilotSettings } from "@/settings/model";
 import {
@@ -32,6 +33,7 @@ function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
 const RELAY_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
 
 const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
+const ISSUE_717 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/717";
 
 function settingsWith(
   builtinPreferences: NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>,
@@ -396,12 +398,49 @@ describe("builtinSkills", () => {
       expect(miyoScript(".cmd")).not.toContain(PLUS_ENV.licenseKey);
     });
 
-    it("documents concrete triggers for when to call it", () => {
+    it(`tells the agent to use it for every request the notes might answer, alongside grep for exact terms (${ISSUE_717})`, () => {
       const md = MIYO_SEARCH_SKILL.skillMd;
-      expect(md).toMatch(/description:[^\n]*too slow/i);
-      expect(md).toMatch(/description:[^\n]*explicitly asks for Miyo search/i);
-      expect(md).toMatch(/When to use it/);
-      expect(md).toMatch(/doesn't surface enough relevant notes/i);
+      expect(md).toMatch(
+        /description:[^\n]*every request that might be answered from the user's notes/i
+      );
+      expect(md).toMatch(/description:[^\n]*including questions that sound external/i);
+      expect(md).toMatch(/description:[^\n]*together with grep for exact terms/i);
+      expect(md).toMatch(
+        /When to use it: for every request that might be answered from the user's/
+      );
+      expect(md).toMatch(
+        /also run `grep`\/glob for any exact names,\s+terms, tags or quoted phrases/
+      );
+    });
+
+    it(`no longer limits it to when grep falls short or to a single search step (${ISSUE_717})`, () => {
+      const md = MIYO_SEARCH_SKILL.skillMd;
+      expect(md).not.toMatch(/too slow/i);
+      expect(md).not.toMatch(/doesn't surface enough relevant notes/i);
+      expect(md).not.toMatch(/single search\s+step/i);
+      expect(md).not.toMatch(/do not fall back to other search tools/i);
+    });
+
+    it(`has the agent merge Miyo and keyword results by note path and open the top matches before saying the vault lacks an answer (${ISSUE_717})`, () => {
+      const md = MIYO_SEARCH_SKILL.skillMd;
+      expect(md).toMatch(/Combine its results with your keyword\s+search results by note path/);
+      expect(md).toMatch(/open the strongest matches before answering/);
+      expect(md).toMatch(
+        /Say the vault does not cover the question only after opening the\s+top matches/
+      );
+      expect(md).toMatch(/continue with keyword search/);
+    });
+
+    it(`lets the two searches run back to back instead of requiring parallel tool calls (${ISSUE_717})`, () => {
+      expect(MIYO_SEARCH_SKILL.skillMd).toMatch(
+        /back to\s+back; they do not need to run in parallel/
+      );
+    });
+
+    it(`ships as version 6 so installs of the earlier wording are replaced, with the stamped marker matching (${ISSUE_717})`, () => {
+      expect(MIYO_SEARCH_SKILL.version).toBe(6);
+      expect(MIYO_SEARCH_SKILL.skillMd).toContain('copilot-builtin-version: "6"');
+      expect(getBuiltinSkillVersion(MIYO_SEARCH_SKILL.skillMd)).toBe(6);
     });
 
     it("runs one deterministic `miyo search ... --json` in each script", () => {
