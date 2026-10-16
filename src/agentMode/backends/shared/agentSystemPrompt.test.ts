@@ -210,7 +210,6 @@ describe("agentSystemPrompt", () => {
 
     it("appends the Miyo steering only when the search skill is enabled", () => {
       updateSetting("enableMiyo", true);
-      updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(COPILOT_MIYO_SEARCH_STEERING);
