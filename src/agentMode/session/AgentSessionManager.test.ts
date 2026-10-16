@@ -226,7 +226,7 @@ function makeMockSession(overrides: {
       hasUserVisibleMessages = messages.length > 0;
     }),
     seedSessionUsage: jest.fn(),
-    seedAgentWithDisplayedHistory: jest.fn(),
+    resendSavedHistoryOnNextTurn: jest.fn(),
     offerFeedback: jest.fn(() => "shown"),
     getSessionUsage: () => null,
     subscribe: (l: Parameters<typeof listeners.add>[0]) => {
@@ -4453,11 +4453,11 @@ describe("AgentSessionManager", () => {
           [USER_SENDER, "saved question"],
           [AI_SENDER, "saved answer"],
         ]);
-        expect(session.seedAgentWithDisplayedHistory).toHaveBeenCalledTimes(1);
+        expect(session.resendSavedHistoryOnNextTurn).toHaveBeenCalledTimes(1);
       });
 
       it("https://github.com/logancyang/obsidian-copilot/issues/3643 does not resend the note's turns when the saved session reattaches", async () => {
-        const seed = jest.spyOn(AgentSession.prototype, "seedAgentWithDisplayedHistory");
+        const resend = jest.spyOn(AgentSession.prototype, "resendSavedHistoryOnNextTurn");
         const replay = buildReplayingBackend({
           loadSession: jest.fn(async () => {
             throw new MethodUnsupportedError("session/load");
@@ -4467,8 +4467,8 @@ describe("AgentSessionManager", () => {
         const session = await openSavedChat(replay);
 
         expect(session.getBackendSessionId()).toBe("native-1");
-        expect(seed).not.toHaveBeenCalled();
-        seed.mockRestore();
+        expect(resend).not.toHaveBeenCalled();
+        resend.mockRestore();
       });
 
       it("reattaches a project chat to its project scope", async () => {

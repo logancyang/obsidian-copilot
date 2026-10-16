@@ -1859,7 +1859,7 @@ export class AgentSessionManager {
       session.loadDisplayMessages(loaded.messages);
       // The agent never saw this note's turns when its saved session is gone from this device.
       // https://github.com/logancyang/obsidian-copilot/issues/3643
-      if (!resumed) session.seedAgentWithDisplayedHistory();
+      if (!resumed) session.resendSavedHistoryOnNextTurn();
     }
     session.seedSessionUsage(loaded.usage);
     if (loaded.label) session.setLabel(loaded.label);

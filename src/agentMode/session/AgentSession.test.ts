@@ -3475,7 +3475,7 @@ describe("AgentSession", () => {
       });
     });
 
-    describe("seedAgentWithDisplayedHistory()", () => {
+    describe("resendSavedHistoryOnNextTurn()", () => {
       const ISSUE_3643 = "https://github.com/logancyang/obsidian-copilot/issues/3643";
       const savedChat: AgentChatMessage[] = [
         {
@@ -3502,7 +3502,7 @@ describe("AgentSession", () => {
         const mock = makeMockBackend();
         const session = makeSession(mock);
         session.loadDisplayMessages(savedChat);
-        session.seedAgentWithDisplayedHistory();
+        session.resendSavedHistoryOnNextTurn();
 
         await session.sendPrompt("what is my secret word?").turn;
         await session.sendPrompt("and backwards?").turn;
@@ -3520,7 +3520,7 @@ describe("AgentSession", () => {
         mock.prompt.mockResolvedValueOnce({ stopReason: "cancelled" });
         const session = makeSession(mock);
         session.loadDisplayMessages(savedChat);
-        session.seedAgentWithDisplayedHistory();
+        session.resendSavedHistoryOnNextTurn();
 
         await session.sendPrompt("what is my secret word?").turn;
         await session.sendPrompt("what is my secret word?").turn;
@@ -3530,7 +3530,7 @@ describe("AgentSession", () => {
         expect(retry).toContain("my secret word is PELICAN");
       });
 
-      it("sends no conversation_history when the chat was never seeded", async () => {
+      it("sends no conversation_history when no saved history is queued", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock);
         session.loadDisplayMessages(savedChat);

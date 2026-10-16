@@ -73,8 +73,10 @@ import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrat
 import { isFanout } from "@/agentMode/session/fanout/answerers";
 import {
   buildConversationHistoryBlock,
+  CONVERSATION_HISTORY_MAX_CHARS,
+} from "@/agentMode/session/conversationHistory";
+import {
   buildPriorFanoutContextBlock,
-  FANOUT_HISTORY_MAX_CHARS,
   FANOUT_READONLY_PREAMBLE,
   isDirectAnswerTurn,
   renderFanoutComposite,
@@ -223,7 +225,7 @@ export class AgentSession {
   private lastTurnError = false;
   private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
   private pendingFanoutContext: PendingFanoutContext[] = [];
-  private agentLacksDisplayedHistory = false;
+  private resendSavedHistory = false;
   private placeholderId: string | null = null;
   private turnFiles = new Map<string, TurnFileCapture>();
   private currentTurnHadRoutedToolActivity = false;
@@ -605,8 +607,8 @@ export class AgentSession {
     this.notifyMessages();
   }
 
-  seedAgentWithDisplayedHistory(): void {
-    this.agentLacksDisplayedHistory = true;
+  resendSavedHistoryOnNextTurn(): void {
+    this.resendSavedHistory = true;
   }
 
   getLabel(): string | null {
@@ -786,7 +788,7 @@ export class AgentSession {
 
         const historyBlock = buildConversationHistoryBlock(
           this.priorDisplayMessages(userMessageId, placeholderId),
-          FANOUT_HISTORY_MAX_CHARS
+          CONVERSATION_HISTORY_MAX_CHARS
         );
         const promptBlocks = buildPromptBlocks(
           displayText,
@@ -802,11 +804,11 @@ export class AgentSession {
 
       // A reopened chat whose agent session is gone from this device sends its saved turns once.
       // https://github.com/logancyang/obsidian-copilot/issues/3643
-      const sendsDisplayedHistory = this.agentLacksDisplayedHistory && !sendsCompact;
-      const historyBlock = sendsDisplayedHistory
+      const sendsSavedHistory = this.resendSavedHistory && !sendsCompact;
+      const historyBlock = sendsSavedHistory
         ? buildConversationHistoryBlock(
             this.priorDisplayMessages(userMessageId, placeholderId),
-            FANOUT_HISTORY_MAX_CHARS
+            CONVERSATION_HISTORY_MAX_CHARS
           )
         : null;
       const leadingContextBlock = sendsCompact
@@ -867,8 +869,8 @@ export class AgentSession {
       if (leadingContextBlock !== null && resp.stopReason !== "cancelled") {
         this.pendingFanoutContext = [];
       }
-      if (sendsDisplayedHistory && resp.stopReason !== "cancelled") {
-        this.agentLacksDisplayedHistory = false;
+      if (sendsSavedHistory && resp.stopReason !== "cancelled") {
+        this.resendSavedHistory = false;
       }
       if (isFirstTurn && promptStarted) this.firstPromptSent = true;
       if (webTabBlock && promptStarted) this.lastSentWebTabBlock = webTabBlock;
