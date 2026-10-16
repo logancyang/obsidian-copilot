@@ -15,7 +15,7 @@ export const MiyoLinkBadge: React.FC = () => {
           aria-labelledby={labelId}
           className="tw-mr-1 tw-inline-flex tw-align-middle"
         >
-          <MiyoLogo className="tw-size-3 tw-text-miyo" />
+          <MiyoLogo className="tw-size-3 tw-text-normal" />
           <span id={labelId} className="tw-hidden">
             Found by Miyo
           </span>
