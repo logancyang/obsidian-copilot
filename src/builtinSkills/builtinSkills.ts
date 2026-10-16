@@ -428,7 +428,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 7;
+const OPENARTIFACTS_PUBLISH_VERSION = 8;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
 const OPENARTIFACTS_DEFAULT_THEME = "research-memo";
@@ -509,9 +509,17 @@ anyway. The original file remains user-owned; never delete the original HTML fil
 
 ## 2. Let the user review
 
-Tell the user the absolute path of the HTML file and that, subject to any relative-asset
-warning above, opening it in a browser shows the page as it will be uploaded; OpenArtifacts
-adds its own top bar, with a Share button, and a footer byline when it serves the page.
+Give the user a clickable Markdown link to the exact HTML file under review, as plain text
+in your reply (not in inline code or a code block). Percent-encode the target (\`%20\` for
+spaces, UTF-8 percent-encoding for non-ASCII characters). For a file inside the vault, such as
+a generated handoff, link its vault-root path:
+\`[page name.html](/.openartifacts/handoffs/page%20name.html)\`. Use the absolute path,
+such as \`[page.html](/Users/me/page.html)\`, only for a file outside the vault. Never put a
+drive letter or other \`:\` in the target; Obsidian treats such links as external. If a file
+outside the vault has such a path (for example on Windows), give its absolute path as plain
+text instead. Copilot opens the link in the default browser. Also say that, subject to any relative-asset warning above, opening it in
+a browser shows the page as it will be uploaded; OpenArtifacts adds its own top bar, with a
+Share button, and a footer byline when it serves the page.
 
 For a new page, end the review message with this line, word for word:
 
