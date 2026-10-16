@@ -70,7 +70,7 @@ export const FeedbackCard: React.FC<FeedbackCardProps> = ({
           </a>
         ) : (
           <>
-            <Button variant="link" size="sm" className="tw-px-0 tw-text-muted" onClick={onTurnOff}>
+            <Button variant="ghost2" size="sm" className="tw-px-0" onClick={onTurnOff}>
               Don&apos;t offer again
             </Button>
             <div className="tw-ml-auto tw-flex tw-gap-2">
