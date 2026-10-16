@@ -61,6 +61,7 @@ describe("MiyoSearchCard", () => {
         const card = container.firstElementChild!;
 
         expect(card.className).toContain(ACCENT_BORDER);
+        expect(card.className).toContain("tw-border-solid");
         expect(card.lastElementChild?.matches(SPARKLE)).toBe(true);
         expect(card.lastElementChild?.getAttribute("aria-hidden")).toBe("true");
       }

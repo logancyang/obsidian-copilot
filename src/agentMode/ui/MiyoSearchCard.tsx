@@ -29,7 +29,7 @@ export const MiyoSearchCard: React.FC<MiyoSearchCardProps> = ({ status, query, n
   return (
     <div
       className={cn(
-        "tw-my-1 tw-flex tw-w-full tw-items-center tw-gap-2 tw-rounded-md tw-border tw-bg-secondary tw-px-2 tw-py-1.5 tw-text-sm",
+        "tw-my-1 tw-flex tw-w-full tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-bg-secondary tw-px-2 tw-py-1.5 tw-text-sm",
         failed ? "tw-border-border" : "tw-border-interactive-accent/40"
       )}
     >
