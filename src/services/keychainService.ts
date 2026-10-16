@@ -1,6 +1,7 @@
 import { type App, type SecretStorage, FileSystemAdapter } from "obsidian";
 import { type CopilotSettings, getModelKeyFromModel, getSettings } from "@/settings/model";
 import { type CustomModel } from "@/aiParams";
+import type { Provider } from "@/modelManagement";
 import {
   stripKeychainFields,
   cleanupLegacyFields,
@@ -52,16 +53,23 @@ function getVaultBasePath(app: App): string | undefined {
 }
 
 const MAX_SECRET_ID_LENGTH = 64;
+// Provider names must not embed the provider's random id: `data.json` syncs, the Keychain does
+// not, so a pointer minted on one device has to name an entry every device can hold.
+// https://github.com/logancyang/obsidian-copilot/issues/3618
+const LEGACY_PROVIDER_SECRET_ID = /^copilot-v[0-9a-f]{8}-provider-(.+)$/;
 
-function normalizeKeychainId(raw: string, maxLength = MAX_SECRET_ID_LENGTH): string {
-  const normalized = raw
+function slugify(raw: string): string {
+  return raw
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+function normalizeKeychainId(raw: string, maxLength = MAX_SECRET_ID_LENGTH): string {
   const hash = md5(raw).slice(0, 8);
   const prefixBudget = Math.max(0, maxLength - 9);
-  const prefix = normalized.slice(0, prefixBudget);
+  const prefix = slugify(raw).slice(0, prefixBudget);
   return prefix + "-" + hash;
 }
 
@@ -89,6 +97,41 @@ function toModelKeychainId(
   const budget = MAX_SECRET_ID_LENGTH - prefix.length;
   const normalizedModel = normalizeKeychainId(modelIdentity, budget);
   return prefix + normalizedModel;
+}
+
+function providerNameSource(provider: Provider): string {
+  switch (provider.origin.kind) {
+    case "byok":
+      return provider.origin.catalogProviderId ?? provider.displayName;
+    case "agent":
+      return provider.displayName;
+    case "copilot-plus":
+      return "plus";
+  }
+}
+
+export function providerKeychainName(
+  vaultId: string,
+  provider: Provider,
+  providers: Record<string, Provider>
+): string {
+  const taken = new Set(
+    Object.values(providers)
+      .filter((row) => row.providerId !== provider.providerId)
+      .map((row) => row.apiKeyKeychainId)
+  );
+  const prefix = `copilot-v${vaultId}-provider-`;
+  const slug = slugify(providerNameSource(provider)) || "custom";
+  for (let n = 1; ; n++) {
+    const suffix = n === 1 ? "-api-key" : `-api-key-${n}`;
+    const budget = MAX_SECRET_ID_LENGTH - prefix.length - suffix.length;
+    const name = prefix + slug.slice(0, budget).replace(/-$/, "") + suffix;
+    if (!taken.has(name)) return name;
+  }
+}
+
+export function isCopilotOwnedSecret(id: string): boolean {
+  return id.startsWith("copilot-");
 }
 
 export interface HydrateResult {
@@ -252,6 +295,37 @@ export class KeychainService {
     ];
 
     return { secretEntries, keychainIdsToDelete };
+  }
+
+  // Every device migrates on load because the pointer it reads may have been rewritten by another
+  // device that already ran this, while this device's key still sits under the old name.
+  // https://github.com/logancyang/obsidian-copilot/issues/3618
+  migrateProviderNames(settings: CopilotSettings): CopilotSettings {
+    const providers = { ...(settings.providers ?? {}) };
+    let changed = false;
+    for (const row of Object.values(settings.providers ?? {})) {
+      const pointer = row.apiKeyKeychainId;
+      if (!pointer || !isCopilotOwnedSecret(pointer)) continue;
+      const isLegacy = LEGACY_PROVIDER_SECRET_ID.exec(pointer)?.[1] === row.providerId;
+      const name = isLegacy ? providerKeychainName(this.vaultId, row, providers) : pointer;
+      const legacyIds = new Set([pointer, `copilot-v${this.vaultId}-provider-${row.providerId}`]);
+      legacyIds.delete(name);
+      for (const id of legacyIds) {
+        const value = this.storage.getSecret(id);
+        if (value === null) continue;
+        if (this.storage.getSecret(name) === null) this.storage.setSecret(name, value);
+        try {
+          this.removeSecret(id);
+        } catch (error) {
+          logWarn(`Keychain: failed to remove migrated provider secret ${id}`, error);
+        }
+      }
+      if (name !== pointer) {
+        providers[row.providerId] = { ...row, apiKeyKeychainId: name };
+        changed = true;
+      }
+    }
+    return changed ? { ...settings, providers } : settings;
   }
 
   removeRetiredEmbeddingSecrets(): void {

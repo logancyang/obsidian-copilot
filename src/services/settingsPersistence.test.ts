@@ -25,6 +25,7 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
     isAvailable: jest.fn().mockReturnValue(true),
     getVaultId: jest.fn().mockReturnValue("abcd1234"),
     setVaultId: jest.fn(),
+    migrateProviderNames: jest.fn((settings: CopilotSettings) => settings),
     hydrateFromKeychain: jest.fn(async (settings: CopilotSettings) => ({
       settings,
       hadFailures: false,
@@ -166,6 +167,56 @@ describe("settingsPersistence", () => {
         })
       );
       expect(saveData.mock.calls[0][0]).not.toHaveProperty("_keychainOnly");
+    });
+
+    it("persists and loads the provider pointers the Keychain name migration rewrote (https://github.com/logancyang/obsidian-copilot/issues/3618)", async () => {
+      const { module, keychain } = await loadModule();
+      const legacyRow = {
+        providerId: "row-1",
+        apiKeyKeychainId: "copilot-v1234abcd-provider-row-1",
+      };
+      const stableName = "copilot-v1234abcd-provider-anthropic-api-key";
+      keychain.migrateProviderNames.mockImplementation(
+        (settings: CopilotSettings) =>
+          ({
+            ...settings,
+            providers: { "row-1": { ...legacyRow, apiKeyKeychainId: stableName } },
+          }) as unknown as CopilotSettings
+      );
+      const saveData = jest.fn().mockResolvedValue(undefined);
+
+      const loaded = await module.loadSettingsWithKeychain(
+        APP,
+        { _keychainVaultId: "1234abcd", providers: { "row-1": legacyRow } },
+        saveData,
+        backedUp
+      );
+
+      expect(keychain.setVaultId.mock.invocationCallOrder[0]).toBeLessThan(
+        keychain.migrateProviderNames.mock.invocationCallOrder[0]
+      );
+      expect(saveData.mock.calls[0][0].providers["row-1"].apiKeyKeychainId).toBe(stableName);
+      expect(loaded.providers["row-1"].apiKeyKeychainId).toBe(stableName);
+    });
+
+    it("loads with the stored pointers when the Keychain name migration throws, so the next load retries", async () => {
+      const { module, keychain } = await loadModule();
+      const legacyRow = {
+        providerId: "row-1",
+        apiKeyKeychainId: "copilot-v1234abcd-provider-row-1",
+      };
+      keychain.migrateProviderNames.mockImplementation(() => {
+        throw new Error("keychain locked");
+      });
+
+      const loaded = await module.loadSettingsWithKeychain(
+        APP,
+        { providers: { "row-1": legacyRow } },
+        jest.fn().mockResolvedValue(undefined),
+        backedUp
+      );
+
+      expect(loaded.providers["row-1"].apiKeyKeychainId).toBe("copilot-v1234abcd-provider-row-1");
     });
 
     it("keeps credentials empty when Keychain is unavailable", async () => {

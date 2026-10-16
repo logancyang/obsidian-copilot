@@ -25,8 +25,8 @@ if (typeof window.structuredClone === "undefined") {
 const noLegacyBackup = async () => ({ status: "not-needed" }) as const;
 
 const VAULT_ID = "a1b2c3d4";
-const BYOK_POINTER = `copilot-v${VAULT_ID}-provider-byok_openai`;
-const PLUS_POINTER = `copilot-v${VAULT_ID}-provider-plus_1`;
+const BYOK_POINTER = `copilot-v${VAULT_ID}-provider-my-openai-api-key`;
+const PLUS_POINTER = `copilot-v${VAULT_ID}-provider-plus-api-key`;
 
 let secrets: Map<string, string>;
 let app: App;

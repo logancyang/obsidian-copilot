@@ -30,11 +30,11 @@ function cloneRawSettings(rawData: unknown): CopilotSettings {
 }
 
 function buildDiskSettings(
-  rawData: unknown,
+  settings: CopilotSettings,
   vaultId: string,
   isFreshInstall: boolean
 ): CopilotSettings {
-  const stripped = stripKeychainFields(cleanupLegacyFields(cloneRawSettings(rawData)));
+  const stripped = stripKeychainFields(cleanupLegacyFields(structuredClone(settings)));
   stripped._keychainVaultId = vaultId;
   if (isFreshInstall) {
     stripped.settingsVersion = CURRENT_SETTINGS_VERSION;
@@ -108,6 +108,19 @@ function credentialMigrationFromRecovery(
   };
 }
 
+function migrateProviderNames(
+  keychain: KeychainService,
+  rawSettings: CopilotSettings
+): CopilotSettings {
+  if (!keychain.isAvailable()) return rawSettings;
+  try {
+    return keychain.migrateProviderNames(rawSettings);
+  } catch (error) {
+    logWarn("Keychain provider name migration failed; it will retry on the next load.", error);
+    return rawSettings;
+  }
+}
+
 export async function loadSettingsWithKeychain(
   app: App,
   rawData: unknown,
@@ -123,7 +136,8 @@ export async function loadSettingsWithKeychain(
     ? persistedVaultId
     : keychain.getVaultId();
   keychain.setVaultId(vaultId);
-  const diskSettings = buildDiskSettings(rawData, vaultId, isFreshInstall);
+  const migratedSettings = migrateProviderNames(keychain, rawSettings);
+  const diskSettings = buildDiskSettings(migratedSettings, vaultId, isFreshInstall);
   let credentialMigration = credentialMigrationFromRecovery(
     app,
     diskSettings._pendingCredentialRecovery
@@ -193,7 +207,7 @@ export async function loadSettingsWithKeychain(
     }
   }
 
-  const runtimeSource = isFreshInstall ? structuredClone(DEFAULT_SETTINGS) : rawSettings;
+  const runtimeSource = isFreshInstall ? structuredClone(DEFAULT_SETTINGS) : migratedSettings;
   const sanitized = cleanupLegacyFields(sanitizeSettings(runtimeSource));
   const baseline = stripKeychainFields({
     ...sanitized,
