@@ -4,6 +4,8 @@ import React, { useEffect, useRef, useState } from "react";
 
 interface TurnDurationLayoutProps {
   inline?: boolean;
+  label?: string;
+  icon?: React.ReactNode;
 }
 
 interface RunningTurnDurationProps extends TurnDurationLayoutProps {
@@ -60,17 +62,17 @@ export const AgentTurnDurationIndicator: React.FC<AgentTurnDurationIndicatorProp
         )}
       >
         <span className="tw-flex tw-size-icon-xs tw-shrink-0 tw-items-center tw-justify-start">
-          <CopilotSpinner animated={isRunning} />
+          {props.icon ?? <CopilotSpinner animated={isRunning} />}
         </span>
         <span>
           <span className={isRunning ? "copilot-shimmer-text tw-font-medium" : "tw-font-medium"}>
-            Worked for
+            {props.label ?? "Worked for"}
           </span>{" "}
           <span className="tw-tabular-nums">{formatWorkedDuration(durationMs)}</span>
         </span>
         {isRunning ? (
           <span className="tw-sr-only" role="status" aria-live="polite">
-            Agent is working
+            {props.label ?? "Agent is working"}
           </span>
         ) : null}
       </div>

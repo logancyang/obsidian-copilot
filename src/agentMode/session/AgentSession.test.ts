@@ -1822,6 +1822,126 @@ describe("AgentSession", () => {
         );
       });
 
+      it("replaces the compaction row in the in-flight reply as its status advances, keeping when it started", async () => {
+        jest.useFakeTimers();
+        try {
+          jest.setSystemTime(10_000);
+          const mock = makeMockBackend();
+          const finishPrompt = holdPrompt(mock);
+          const session = makeSession(mock);
+          const { turn } = session.sendPrompt("/compact");
+
+          mock.emitUpdate({
+            sessionUpdate: "compaction",
+            id: "c1",
+            status: "in_progress",
+            trigger: "manual",
+          });
+          jest.advanceTimersByTime(7_000);
+          mock.emitUpdate({
+            sessionUpdate: "compaction",
+            id: "c1",
+            status: "completed",
+            trigger: "manual",
+            preTokens: 182_000,
+            postTokens: 24_000,
+          });
+
+          expect(aiMessage(session)?.parts).toEqual([
+            {
+              kind: "compaction",
+              id: "c1",
+              status: "completed",
+              trigger: "manual",
+              preTokens: 182_000,
+              postTokens: 24_000,
+              startedAtMs: 10_000,
+            },
+          ]);
+
+          finishPrompt();
+          await turn;
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 finishes a turn whose only activity is a compaction without the empty-turn error", async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("/compact");
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "manual",
+        });
+
+        finishPrompt();
+        await turn;
+
+        const reply = aiMessage(session);
+        expect(reply?.isErrorMessage).toBeFalsy();
+        expect(reply?.message).toBe("");
+        expect(reply?.turnStopReason).toBe("end_turn");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 settles a compaction still in progress when the turn ends to cancelled", async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("keep going");
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "auto-1",
+          status: "in_progress",
+          trigger: "auto",
+        });
+        mock.emitUpdate({
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "Done." },
+        });
+
+        finishPrompt();
+        await turn;
+
+        expect(aiMessage(session)?.parts).toEqual([
+          expect.objectContaining({ kind: "compaction", id: "auto-1", status: "cancelled" }),
+          { kind: "text", text: "Done." },
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 settles a compaction still in progress to failed and reports the prompt's error once, on the turn, when the prompt rejects", async () => {
+        const mock = makeMockBackend();
+        let rejectPrompt: (error: Error) => void = () => {};
+        mock.prompt.mockImplementation(
+          () =>
+            new Promise((_resolve, reject) => {
+              rejectPrompt = reject;
+            })
+        );
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("/compact");
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "in_progress",
+          trigger: "manual",
+        });
+
+        rejectPrompt(new Error("stream error"));
+        await expect(turn).rejects.toThrow("stream error");
+
+        const message = aiMessage(session);
+        expect(message?.parts?.[0]).toMatchObject({
+          kind: "compaction",
+          status: "failed",
+          error: undefined,
+        });
+        expect(message?.message).toContain("stream error");
+      });
+
       it("shows the nested provider error on the placeholder when the prompt rejects", async () => {
         const mock = makeMockBackend();
         const error = new Error("stream error");
@@ -2940,6 +3060,39 @@ describe("AgentSession", () => {
         expect(mock.cancel).toHaveBeenCalledWith({ sessionId: "acp-1" });
         finishPrompt("cancelled");
         expect(await turn).toBe("cancelled");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 drops compaction updates that arrive after a cancel and settles the open row to cancelled", async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("/compact");
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "in_progress",
+          trigger: "manual",
+        });
+
+        await session.cancel();
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "manual",
+        });
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "late",
+          status: "in_progress",
+          trigger: "auto",
+        });
+        finishPrompt("cancelled");
+        await turn;
+
+        expect(aiMessage(session)?.parts).toEqual([
+          expect.objectContaining({ kind: "compaction", id: "c1", status: "cancelled" }),
+        ]);
       });
 
       it("settles locally and drops retry output when backend cancellation fails", async () => {
