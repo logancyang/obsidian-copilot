@@ -4,9 +4,11 @@ import {
   extractSubAgentInputPrompt,
   extractSubAgentReturnText,
   isMiyoSkillLoad,
+  miyoResultPaths,
   miyoSearchRun,
 } from "@/agentMode/ui/toolSummaries";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import type { AgentMessagePart } from "@/agentMode/session/types";
 
 const CTX = { vaultBase: "/Users/me/vault" };
 
@@ -586,7 +588,11 @@ describe("toolSummaries", () => {
         input: { command: `sh "${SCRIPT}" "back pain standing desk"` },
         ...stdout(miyoJson(["notes/Standing desk setup.md", "notes/Untitled 3.md"])),
       });
-      expect(miyoSearchRun(t)).toEqual({ query: "back pain standing desk", noteCount: 2 });
+      expect(miyoSearchRun(t)).toEqual({
+        query: "back pain standing desk",
+        noteCount: 2,
+        notePaths: ["notes/Standing desk setup.md", "notes/Untitled 3.md"],
+      });
     });
 
     it("recognizes a script path with spaces and joins unquoted query words", () => {
@@ -594,7 +600,7 @@ describe("toolSummaries", () => {
         input: { command: `sh "/Users/me/My Vault/skills/miyo-search/miyo-search.sh" tariff code` },
         ...stdout(miyoJson([])),
       });
-      expect(miyoSearchRun(t)).toEqual({ query: "tariff code", noteCount: 0 });
+      expect(miyoSearchRun(t)).toMatchObject({ query: "tariff code", noteCount: 0 });
     });
 
     it("recognizes the Windows .cmd wrapper run through PowerShell", () => {
@@ -604,7 +610,7 @@ describe("toolSummaries", () => {
         },
         ...stdout(miyoJson(["a.md"])),
       });
-      expect(miyoSearchRun(t)).toEqual({ query: "sourdough", noteCount: 1 });
+      expect(miyoSearchRun(t)).toMatchObject({ query: "sourdough", noteCount: 1 });
     });
 
     it("recognizes a direct miyo CLI search and skips its flags and their values", () => {
@@ -616,7 +622,10 @@ describe("toolSummaries", () => {
         },
         ...stdout(miyoJson(["a.md", "b.md", "c.md"])),
       });
-      expect(miyoSearchRun(t)).toEqual({ query: "back pain and standing desk", noteCount: 3 });
+      expect(miyoSearchRun(t)).toMatchObject({
+        query: "back pain and standing desk",
+        noteCount: 3,
+      });
     });
 
     it("recognizes a Codex shell run with no captured stdout and reports an unknown count", () => {
@@ -631,6 +640,7 @@ describe("toolSummaries", () => {
       expect(miyoSearchRun(t)).toEqual({
         query: "What did I write about my back pain?",
         noteCount: null,
+        notePaths: [],
       });
     });
 
@@ -649,7 +659,7 @@ describe("toolSummaries", () => {
         input: { command: `sh ${SCRIPT} 'node lts'`, description: "Search the vault with Miyo" },
         ...stdout(miyoJson(["notes/Node upgrade.md"])),
       });
-      expect(miyoSearchRun(t)).toEqual({ query: "node lts", noteCount: 1 });
+      expect(miyoSearchRun(t)).toMatchObject({ query: "node lts", noteCount: 1 });
     });
 
     it("counts each note once when Miyo returns several chunks of it", () => {
@@ -671,7 +681,7 @@ describe("toolSummaries", () => {
       ["empty output", ""],
     ])("reports an unknown count for %s", (_name, text) => {
       const t = tool({ input: { command: `sh ${SCRIPT} "desk"` }, ...stdout(text) });
-      expect(miyoSearchRun(t)).toEqual({ query: "desk", noteCount: null });
+      expect(miyoSearchRun(t)).toMatchObject({ query: "desk", noteCount: null });
     });
 
     it("ends the query at a redirection and recognizes a run chained after cd (https://github.com/Brevilabs/obsidian-copilot-private/issues/718)", () => {
@@ -702,6 +712,39 @@ describe("toolSummaries", () => {
       ["a call without input", undefined],
     ])("returns null for %s", (_name, input) => {
       expect(miyoSearchRun(tool({ input }))).toBeNull();
+    });
+  });
+
+  describe("miyoResultPaths()", () => {
+    const SCRIPT = "/Users/me/vault/.claude/skills/miyo-search/miyo-search.sh";
+    const search = (query: string, paths: string[]) =>
+      tool({
+        input: { command: `sh ${SCRIPT} "${query}"` },
+        output: [
+          { type: "text", text: JSON.stringify({ results: paths.map((path) => ({ path })) }) },
+        ],
+      });
+
+    it("collects each note path once across every Miyo search in the turn", () => {
+      const parts: AgentMessagePart[] = [
+        search("desk", ["v/notes/A.md", "v/notes/B.md"]),
+        { kind: "text", text: "Checking more." },
+        search("back", ["v/notes/B.md", "v/notes/C.md"]),
+      ];
+      expect([...new Set(miyoResultPaths(parts))]).toEqual([
+        "v/notes/A.md",
+        "v/notes/B.md",
+        "v/notes/C.md",
+      ]);
+    });
+
+    it("ignores other tool calls and Miyo runs with no readable output", () => {
+      const parts: AgentMessagePart[] = [
+        tool({ vendorToolName: "Grep", input: { pattern: "desk" } }),
+        tool({ input: { command: `sh ${SCRIPT} "desk"` } }),
+        { kind: "text", text: "Nothing found." },
+      ];
+      expect(miyoResultPaths(parts)).toEqual([]);
     });
   });
 

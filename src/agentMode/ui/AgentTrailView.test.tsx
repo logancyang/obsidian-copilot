@@ -6,7 +6,11 @@ import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import type { AgentMessagePart, TurnFileChange } from "@/agentMode/session/types";
 
 jest.mock("@/agentMode/ui/AgentMarkdownText", () => ({
-  AgentMarkdownText: ({ text }: { text: string }) => <div data-testid="agent-md">{text}</div>,
+  AgentMarkdownText: ({ text, miyoPaths }: { text: string; miyoPaths?: string[] }) => (
+    <div data-testid="agent-md" data-miyo-paths={miyoPaths?.join("|")}>
+      {text}
+    </div>
+  ),
 }));
 
 jest.mock("@/utils", () => ({
@@ -615,5 +619,22 @@ describe("AgentTrail", () => {
     expect(screen.getByText("2 notes")).toBeTruthy();
     expect(screen.queryByText("Ran skill miyo-search")).toBeNull();
     expect(screen.getAllByText("Ran 2 commands, read 1 file")).toHaveLength(2);
+  });
+
+  it("gives the answer text the note paths from the turn's saved Miyo output (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
+    renderTrail({
+      parts: [
+        toolCall("miyo", {
+          vendorToolName: "Bash",
+          toolKind: "execute",
+          input: { command: 'sh "/v/.claude/skills/miyo-search/miyo-search.sh" "standing desk"' },
+          output: [{ type: "text", text: '{"results":[{"path":"v/a.md"},{"path":"v/b.md"}]}' }],
+        }),
+        text("See [[a]]."),
+      ],
+      isStreaming: false,
+    });
+
+    expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("v/a.md|v/b.md");
   });
 });
