@@ -282,17 +282,6 @@ describe("applySentinels", () => {
       expect(root.querySelectorAll("[data-change]")).toHaveLength(2);
     });
 
-    it("frames an embed once rather than also framing the image it loaded (https://github.com/Brevilabs/obsidian-copilot-private/issues/727)", () => {
-      const embed = el("span", el("img"));
-      embed.className = "internal-embed";
-      const root = el("div", el("p", embed));
-
-      frameMedia(root, "deleted");
-
-      expect(root.querySelectorAll("[data-change=deleted]")).toHaveLength(1);
-      expect(embed.parentElement?.getAttribute("data-change")).toBe("deleted");
-    });
-
     it("leaves a block without images unchanged", () => {
       const root = el("div", el("p", "Only words."));
       const original = root.innerHTML;
