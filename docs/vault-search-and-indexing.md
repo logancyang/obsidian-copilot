@@ -20,7 +20,7 @@ Agent Chat can combine three kinds of search:
 
 You can ask naturally, such as “Find everything I have written about memory consolidation,” or say “Use Miyo” when you want semantic search explicitly. Search results become context for the model you selected, so the model still receives the excerpts Agent Chat uses in its answer.
 
-With **Semantic search for agents** on, the agent searches your vault with Miyo for any question your notes might answer, even one that sounds like a web topic. When your question contains exact names, tags, or quoted phrases, it also runs file search, then opens the best matches from both before answering. If neither turns up support, it tells you your notes do not cover the question and, for outside topics, searches the web.
+With **Semantic search for agents** on, agents search your notes with Miyo and file search for any question your notes might answer before turning to the web.
 
 ## Connect Miyo
 
