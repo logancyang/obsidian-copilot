@@ -261,6 +261,7 @@ describe("reconcileBuiltinSkills", () => {
     });
     it(`upgrades an installed version 5 miyo-search to the bundled version, replacing its scripts and keeping the per-agent opt-outs ${ISSUE_717}`, async () => {
       const f = fixture({ "miyo-search": { disabledAgents: ["codex"] } });
+      f.options.settings.enableMiyo = true;
       f.options.settings.enableMiyoSearchSkill = true;
       f.options.availableAgents = ["claude", "codex", "opencode"];
       const dir = `${folder}/miyo-search`;
@@ -296,6 +297,7 @@ describe("reconcileBuiltinSkills", () => {
     });
     it(`removes an installed version 5 miyo-search instead of upgrading it when the user turned the search skill off ${ISSUE_717}`, async () => {
       const f = fixture();
+      f.options.settings.enableMiyo = true;
       f.options.settings.enableMiyoSearchSkill = false;
       f.options.availableAgents = ["claude"];
       f.files.set(
