@@ -10,6 +10,8 @@ import {
   COPILOT_MIYO_DOCUMENT_STEERING,
   COPILOT_MIYO_SEARCH_STEERING,
   COPILOT_FEEDBACK_POINTER,
+  COPILOT_OBSIDIAN_CLI_STEERING,
+  COPILOT_OBSIDIAN_FORMAT_LEAD,
   COPILOT_INSTRUCTION_PRECEDENCE,
   COPILOT_PROJECT_WORKSPACE_POLICY,
   COPILOT_PROMPT_BASE,
@@ -30,7 +32,10 @@ function makePrompt(title: string, content: string): UserSystemPrompt {
 const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
 const ISSUE_717 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/717";
 const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
+const ISSUE_726 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/726";
 const AGENT = "opencode";
+const ALL_OBSIDIAN_FORMAT_SKILLS_LINE =
+  "Before writing Obsidian syntax, load its skill and follow it over memory: obsidian-markdown for embeds, block IDs, callouts, comments and properties, obsidian-bases for .base files, json-canvas for .canvas files.";
 const ALL_RELAY_SKILLS_LINE =
   "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-web-search for web search, copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts.";
 
@@ -194,11 +199,51 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt("opencode")).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
     });
 
+    it(`tells every agent to load the matching Obsidian skill before writing Obsidian Markdown, .base or .canvas files (${ISSUE_726})`, () => {
+      setBuiltinPreferences({});
+      for (const agent of ["claude", "codex", "opencode"]) {
+        expect(buildAgentSystemPrompt(agent)).toContain(ALL_OBSIDIAN_FORMAT_SKILLS_LINE);
+      }
+    });
+
+    it(`names only the format skills enabled for the agent and drops the line when none is (${ISSUE_726})`, () => {
+      setBuiltinPreferences({
+        "obsidian-markdown": { disabledAgents: ["codex"] },
+        "obsidian-bases": { disabled: true },
+      });
+      expect(buildAgentSystemPrompt("codex")).toContain(
+        `${COPILOT_OBSIDIAN_FORMAT_LEAD} json-canvas for .canvas files.`
+      );
+      expect(buildAgentSystemPrompt("claude")).toContain(
+        `${COPILOT_OBSIDIAN_FORMAT_LEAD} obsidian-markdown for embeds, block IDs, callouts, comments and properties, json-canvas for .canvas files.`
+      );
+
+      setBuiltinPreferences({
+        "obsidian-markdown": { disabled: true },
+        "obsidian-bases": { disabled: true },
+        "json-canvas": { disabledAgents: ["codex"] },
+      });
+      expect(buildAgentSystemPrompt("codex")).not.toContain(COPILOT_OBSIDIAN_FORMAT_LEAD);
+    });
+
+    it(`tells the agent the running Obsidian app is reachable through obsidian-cli only while that skill is enabled for it (${ISSUE_726})`, () => {
+      setBuiltinPreferences({});
+      expect(buildAgentSystemPrompt(AGENT)).toContain(
+        "Obsidian is running: the obsidian-cli skill reaches its live state (open tabs, daily notes, backlinks, Bases results, templates) and link-aware renames."
+      );
+
+      setBuiltinPreferences({ "obsidian-cli": { disabledAgents: [AGENT] } });
+      expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
+      expect(buildAgentSystemPrompt("claude")).toContain(COPILOT_OBSIDIAN_CLI_STEERING);
+    });
+
     it("suppresses the skill and research steering when the builtin prompt is disabled", () => {
       setDisableBuiltinSystemPrompt(true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).not.toContain(COPILOT_SKILL_FALLBACK);
       expect(prompt).not.toContain(COPILOT_WEB_RESEARCH_STEERING);
+      expect(prompt).not.toContain(COPILOT_OBSIDIAN_FORMAT_LEAD);
+      expect(prompt).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
     });
 
     it("omits the Miyo steering when the search skill is not installed", () => {

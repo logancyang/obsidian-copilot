@@ -3,8 +3,8 @@ import type { BuiltinSkill } from "./builtinSkills";
 export const OBSIDIAN_SKILLS_UPSTREAM_REVISION = "a1dc48e68138490d522c04cbf5822214c6eb1202";
 
 const ENABLED_AGENTS = ["claude", "codex", "opencode"] as const;
-const FORMAT_SKILL_VERSION = 1;
-const OBSIDIAN_CLI_VERSION = 2;
+const FORMAT_SKILL_VERSION = 2;
+const OBSIDIAN_CLI_VERSION = 3;
 
 const UPSTREAM_LICENSE = String.raw`MIT License
 
@@ -31,7 +31,7 @@ SOFTWARE.
 
 const OBSIDIAN_MARKDOWN_SKILL_MD = String.raw`---
 name: obsidian-markdown
-description: Create and edit Obsidian-specific Markdown syntax, including wikilinks, embeds, block references, callouts, properties, tags, and comments. Use for Obsidian notes when these extensions matter; ordinary Markdown is assumed knowledge.
+description: Create and edit Obsidian-specific Markdown syntax, including wikilinks, embeds, block references and block IDs, callouts, properties, tags, aliases, and comments. Load before adding or changing any of these in a note.
 license: MIT
 metadata:
   copilot-enabled-agents: claude, codex, opencode
@@ -65,7 +65,8 @@ CommonMark or GFM unless the user asks.
 This paragraph is addressable. ^block-id
 ~~~
 
-Put a block ID on its own line after a list or quote block.
+Put a block ID on its own line after a list or quote block, with a blank line
+before it; without the blank line it marks only the last item.
 
 ## Embeds
 
@@ -675,8 +676,12 @@ meaning beyond raw files:
 - Bases: <code>bases</code>, <code>base:views</code>, and
   <code>base:query</code>. Prefer <code>format=json</code> for structured agent
   consumption.
-- Templates: <code>templates</code> and <code>template:read ... resolve</code>
-  when configured template resolution is required.
+- Templates: <code>create path=&lt;new note&gt; template=&lt;name&gt;</code>
+  creates a note the way Obsidian's template insertion fills it:
+  <code>{{title}}</code> becomes the new note's full file name without
+  extension, and <code>{{date}}</code> and <code>{{time}}</code> become the
+  current date and time. Use <code>templates</code> and
+  <code>template:read ... resolve title=&lt;file name&gt;</code> to preview.
 - Live workspace state: <code>tabs ids</code> lists the currently open tabs and
   their IDs, while <code>workspace ids</code> shows the workspace tree and its
   item IDs.

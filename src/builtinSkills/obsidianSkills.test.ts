@@ -22,12 +22,12 @@ describe("obsidianSkills", () => {
       }
     });
 
-    it("bumps only the changed CLI skill so existing vaults receive the safety update", () => {
+    it("bumps the Markdown and CLI skill versions so existing vaults reseed their corrected guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
       expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.version])).toEqual([
-        ["obsidian-markdown", 1],
-        ["obsidian-bases", 1],
-        ["json-canvas", 1],
-        ["obsidian-cli", 2],
+        ["obsidian-markdown", 2],
+        ["obsidian-bases", 2],
+        ["json-canvas", 2],
+        ["obsidian-cli", 3],
       ]);
     });
 
@@ -82,6 +82,28 @@ describe("obsidianSkills", () => {
       );
     });
 
+    it("names the Markdown syntax that should trigger the skill and puts a list's block ID after a blank line (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+      const md = skillMd("obsidian-markdown");
+      expect(md).toMatch(
+        /description:[^\n]*block IDs[^\n]*Load before adding or changing any of these in a note\./
+      );
+      expect(md).not.toContain("ordinary Markdown is assumed knowledge");
+      expect(md).toContain(
+        "Put a block ID on its own line after a list or quote block, with a blank line\nbefore it; without the blank line it marks only the last item."
+      );
+    });
+
+    it("explains how template insertion fills the title and date placeholders (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+      const md = skillMd("obsidian-cli");
+      expect(md).toContain("<code>create path=&lt;new note&gt; template=&lt;name&gt;</code>");
+      expect(md).toContain(
+        "<code>{{title}}</code> becomes the new note's full file name without\n  extension"
+      );
+      expect(md).toContain(
+        "<code>{{date}}</code> and <code>{{time}}</code> become the\n  current date and time"
+      );
+    });
+
     it("preserves Bases schema, formula, quoting, and duration guidance", () => {
       const md = skillMd("obsidian-bases");
       expect(md).toContain("formulas:");
@@ -124,7 +146,7 @@ describe("obsidianSkills", () => {
       expect(md).toContain('obsidian vault="My Vault"');
       expect(md).toContain("property:set");
       expect(md).toContain("base:query");
-      expect(md).toContain("template:read ... resolve");
+      expect(md).toContain("template:read ... resolve title=");
       expect(md).toContain('obsidian vault="My Vault" tabs ids');
       expect(md).toContain('obsidian vault="My Vault" workspace ids');
       expect(md).toContain("Keep entries\nverbatim");
