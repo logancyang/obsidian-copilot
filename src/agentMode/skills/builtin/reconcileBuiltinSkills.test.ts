@@ -265,7 +265,10 @@ describe("reconcileBuiltinSkills", () => {
       f.options.availableAgents = ["claude", "codex", "opencode"];
       const dir = `${folder}/miyo-search`;
       const installedV5 = MIYO_SEARCH_SKILL.skillMd
-        .replace('copilot-builtin-version: "6"', 'copilot-builtin-version: "5"')
+        .replace(
+          `copilot-builtin-version: "${MIYO_SEARCH_SKILL.version}"`,
+          'copilot-builtin-version: "5"'
+        )
         .replace(/^description:.*$/m, "description: Earlier miyo-search wording.")
         .replace(/^ {2}copilot-enabled-agents:.*$/m, "  copilot-enabled-agents: claude, opencode");
       f.files.set(f.path("miyo-search"), installedV5);
@@ -298,7 +301,7 @@ describe("reconcileBuiltinSkills", () => {
       f.files.set(
         f.path("miyo-search"),
         MIYO_SEARCH_SKILL.skillMd.replace(
-          'copilot-builtin-version: "6"',
+          `copilot-builtin-version: "${MIYO_SEARCH_SKILL.version}"`,
           'copilot-builtin-version: "5"'
         )
       );

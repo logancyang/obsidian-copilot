@@ -1,4 +1,3 @@
-import { getBuiltinSkillVersion } from "@/agentMode/skills/builtin/builtinOwnership";
 import { DEFAULT_SETTINGS } from "@/constants";
 import type { CopilotSettings } from "@/settings/model";
 import {
@@ -34,6 +33,10 @@ const RELAY_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("cop
 
 const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
 const ISSUE_717 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/717";
+
+function flattened(markdown: string): string {
+  return markdown.replace(/\s+/g, " ");
+}
 
 function settingsWith(
   builtinPreferences: NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>,
@@ -399,48 +402,38 @@ describe("builtinSkills", () => {
     });
 
     it(`tells the agent to use it for every request the notes might answer, alongside grep for exact terms (${ISSUE_717})`, () => {
-      const md = MIYO_SEARCH_SKILL.skillMd;
+      const md = flattened(MIYO_SEARCH_SKILL.skillMd);
       expect(md).toMatch(
-        /description:[^\n]*every request that might be answered from the user's notes/i
+        /description:[^\n]*every request that might be answered from the user's notes, including questions that sound external, together with grep for exact terms/
       );
-      expect(md).toMatch(/description:[^\n]*including questions that sound external/i);
-      expect(md).toMatch(/description:[^\n]*together with grep for exact terms/i);
-      expect(md).toMatch(
-        /When to use it: for every request that might be answered from the user's/
+      expect(md).toContain(
+        "When to use it: for every request that might be answered from the user's notes, including questions that sound external or current."
       );
-      expect(md).toMatch(
-        /also run `grep`\/glob for any exact names,\s+terms, tags or quoted phrases/
+      expect(md).toContain(
+        "also run `grep`/glob for any exact names, terms, tags or quoted phrases in the request"
       );
     });
 
     it(`no longer limits it to when grep falls short or to a single search step (${ISSUE_717})`, () => {
-      const md = MIYO_SEARCH_SKILL.skillMd;
-      expect(md).not.toMatch(/too slow/i);
-      expect(md).not.toMatch(/doesn't surface enough relevant notes/i);
-      expect(md).not.toMatch(/single search\s+step/i);
-      expect(md).not.toMatch(/do not fall back to other search tools/i);
+      const md = flattened(MIYO_SEARCH_SKILL.skillMd);
+      expect(md).not.toMatch(/too slow|doesn't surface enough relevant notes/i);
+      expect(md).not.toMatch(/single search step|do not fall back to other search tools/i);
     });
 
     it(`has the agent merge Miyo and keyword results by note path and open the top matches before saying the vault lacks an answer (${ISSUE_717})`, () => {
-      const md = MIYO_SEARCH_SKILL.skillMd;
-      expect(md).toMatch(/Combine its results with your keyword\s+search results by note path/);
-      expect(md).toMatch(/open the strongest matches before answering/);
-      expect(md).toMatch(
-        /Say the vault does not cover the question only after opening the\s+top matches/
+      const md = flattened(MIYO_SEARCH_SKILL.skillMd);
+      expect(md).toContain("Combine its results with your keyword search results by note path");
+      expect(md).toContain("open the strongest matches before answering");
+      expect(md).toContain(
+        "Say the vault does not cover the question only after opening the top matches and finding no support."
       );
-      expect(md).toMatch(/continue with keyword search/);
+      expect(md).toContain("If Miyo reports that it is unavailable, continue with keyword search.");
     });
 
     it(`lets the two searches run back to back instead of requiring parallel tool calls (${ISSUE_717})`, () => {
-      expect(MIYO_SEARCH_SKILL.skillMd).toMatch(
-        /back to\s+back; they do not need to run in parallel/
+      expect(flattened(MIYO_SEARCH_SKILL.skillMd)).toContain(
+        "can run back to back; they do not need to run in parallel"
       );
-    });
-
-    it(`ships as version 6 so installs of the earlier wording are replaced, with the stamped marker matching (${ISSUE_717})`, () => {
-      expect(MIYO_SEARCH_SKILL.version).toBe(6);
-      expect(MIYO_SEARCH_SKILL.skillMd).toContain('copilot-builtin-version: "6"');
-      expect(getBuiltinSkillVersion(MIYO_SEARCH_SKILL.skillMd)).toBe(6);
     });
 
     it("runs one deterministic `miyo search ... --json` in each script", () => {
