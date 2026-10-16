@@ -69,6 +69,7 @@ interface LexicalEditorProps {
   currentChain?: ChainType;
   onEscape?: () => void;
   onShiftTab?: () => void;
+  isAgentMode?: boolean;
 }
 
 const LexicalEditor: React.FC<LexicalEditorProps> = ({
@@ -99,6 +100,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   currentChain,
   onEscape,
   onShiftTab,
+  isAgentMode = false,
 }) => {
   const [focusFn, setFocusFn] = React.useState<(() => void) | null>(null);
   const [editorInstance, setEditorInstance] = React.useState<LexicalEditorType | null>(null);
@@ -221,7 +223,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
             <AgentPillSyncPlugin onAgentsChange={onAgentsChange} />
             <PillDeletionPlugin />
             <PastePlugin enableURLPills={!!onURLsChange} onImagePaste={onImagePaste} />
-            <SlashCommandPlugin />
+            <SlashCommandPlugin isAgentMode={isAgentMode} />
             <NoteCommandPlugin currentActiveFile={currentActiveFile} />
             {currentChain && currentChain !== ChainType.LLM_CHAIN && (
               <TagCommandPlugin onTagSelected={onTagSelected} />

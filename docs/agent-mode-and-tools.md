@@ -163,6 +163,13 @@ Uploaded images are embedded in saved conversation notes. Copilot stores the ima
 
 Type `/` to insert an enabled Skill or [Copilot command](custom-commands.md). For a quick question or rewrite beside the current selection, use [Quick Ask](custom-commands.md#quick-ask).
 
+### Compact a long chat
+
+When a conversation grows long, choose **/compact** at the start of an empty message to have the agent summarize it and free up room in its context window. The `/` menu offers **/compact** only at the start of a message, and it replaces any Skill or command named exactly `compact`. Anything you type after `/compact` is sent with it, so an agent that accepts compaction instructions, such as Claude, can use them.
+
+- Attached notes, web pages, images, and agent mentions are not sent with `/compact`. Project context waits for your next regular message.
+- A queued `/compact` runs as its own turn instead of joining other queued messages. If you stop the current turn, the other queued messages return to the message box without it.
+
 ## Review what a turn changed
 
 When a turn finishes after the agent has edited your vault, a **Files changed** card closes that turn. It lists one row per note, with the number of added and removed lines, and a **new** or **deleted** badge for notes the agent created or removed. The card totals the changes in its header and scrolls when a turn touched many files.
