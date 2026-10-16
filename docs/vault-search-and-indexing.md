@@ -24,7 +24,7 @@ With **Semantic search for agents** on, agents search your notes with Miyo and f
 
 Each Miyo search appears in the chat as a card with the query and, when available, how many notes it found.
 
-When the answer links to a note from that turn's Miyo results, a small Miyo logo appears before the link, and hovering it shows **Found by Miyo**. Links to notes Miyo did not return look as usual. The logo needs the agent to expose the search output, so it does not appear in Codex answers or when Miyo returns more than about 30 KB.
+Links in the answer to notes Miyo found get a small Miyo logo. Codex answers don't show it.
 
 ## Connect Miyo
 
