@@ -30,20 +30,14 @@ const ROW_CLASS: Record<Change, string> = {
 const DELETION_END_CLASS = "tw-me-1";
 
 // Obsidian renders an embed inline, so a mark on the embed itself wraps one text line under the image;
-// a frame of its own outlines and labels the whole image, outside the embed's children that load later.
+// a frame of its own outlines the whole image, outside the embed's children that load later.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/727
 const MEDIA_SELECTOR = "img, .internal-embed";
 const MEDIA_FRAME_BASE_CLASS =
-  "tw-relative tw-m-1.5 tw-inline-block tw-max-w-full tw-align-top tw-outline tw-outline-2 tw-outline-offset-2 [&_img]:tw-block before:tw-absolute before:tw-left-1 before:tw-top-1 before:tw-rounded-sm before:tw-px-1 before:tw-text-ui-smaller before:tw-font-semibold before:tw-text-on-accent";
+  "tw-m-1.5 tw-inline-block tw-max-w-full tw-align-top tw-outline tw-outline-2 tw-outline-offset-2 [&_img]:tw-block";
 const MEDIA_FRAME_CLASS: Record<Change, string> = {
-  inserted: cn(
-    MEDIA_FRAME_BASE_CLASS,
-    "tw-outline-[color:var(--color-green)] before:tw-bg-change-inserted before:tw-content-['+_Added']"
-  ),
-  deleted: cn(
-    MEDIA_FRAME_BASE_CLASS,
-    "tw-outline-[color:var(--color-red)] before:tw-bg-change-deleted before:tw-content-['−_Removed']"
-  ),
+  inserted: cn(MEDIA_FRAME_BASE_CLASS, "tw-outline-[color:var(--color-green)]"),
+  deleted: cn(MEDIA_FRAME_BASE_CLASS, "tw-outline-[color:var(--color-red)]"),
 };
 
 const BLOCK_SELECTOR = "p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, pre, dt, dd, div";
