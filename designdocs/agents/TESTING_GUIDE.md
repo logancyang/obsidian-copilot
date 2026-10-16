@@ -79,6 +79,9 @@ plugin loaded into a real vault. The CLI lives at
 `/Applications/Obsidian.app/Contents/MacOS/obsidian` — use the full path; the
 `obsidian` shim is not always on `PATH`.
 
+To run a whole PR through this flow (fresh fixture vault, evidence, gate JSON), use the
+[`copilot-e2e`](../../.claude/skills/copilot-e2e/SKILL.md) skill.
+
 ## Get a fresh build into the test vault
 
 ```bash

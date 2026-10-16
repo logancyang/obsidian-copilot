@@ -37,7 +37,8 @@
     "test:vault": "bash scripts/test-vault.sh",
     "test:vault:script": "bash scripts/test-vault.test.sh",
     "test:gallery-vault:script": "bash scripts/gallery-vault.test.sh",
-    "test:reset-data": "bash scripts/test-reset-data.sh"
+    "test:reset-data": "bash scripts/test-reset-data.sh",
+    "test:e2e-script": "bash scripts/e2e/copilot-e2e.test.sh"
   },
   "keywords": [],
   "author": "Logan Yang",
