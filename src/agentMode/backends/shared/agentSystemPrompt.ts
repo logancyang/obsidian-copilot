@@ -41,7 +41,7 @@ const OBSIDIAN_FORMAT_SKILL_JOBS: ReadonlyArray<readonly [skill: string, job: st
 export const COPILOT_OBSIDIAN_FORMAT_LEAD =
   "Before writing Obsidian syntax, load its skill and follow it over memory:";
 
-export const COPILOT_OBSIDIAN_CLI_STEERING = `Obsidian is running: the obsidian-cli skill reaches its live state (open tabs, daily notes, backlinks, Bases results, templates) and link-aware renames.`;
+export const COPILOT_OBSIDIAN_CLI_STEERING = `Obsidian is running: the obsidian-cli skill reaches its live state and index (open tabs, daily notes, backlinks, broken links, Bases results, templates) and link-aware renames. Prefer it over searching files for links and Bases results.`;
 
 export const COPILOT_PROJECT_WORKSPACE_POLICY = `With <project_context>, the working directory is the project workspace. Write generated files, drafts and intermediates to outputs/ there (create it as needed), unless the user specifies another destination. Read/search there and in configured context sources, including external sources. Access other locations only when instructions or the user name them.`;
 

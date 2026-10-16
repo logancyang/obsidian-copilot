@@ -229,7 +229,7 @@ describe("agentSystemPrompt", () => {
     it(`tells the agent the running Obsidian app is reachable through obsidian-cli only while that skill is enabled for it (${ISSUE_726})`, () => {
       setBuiltinPreferences({});
       expect(buildAgentSystemPrompt(AGENT)).toContain(
-        "Obsidian is running: the obsidian-cli skill reaches its live state (open tabs, daily notes, backlinks, Bases results, templates) and link-aware renames."
+        "Obsidian is running: the obsidian-cli skill reaches its live state and index (open tabs, daily notes, backlinks, broken links, Bases results, templates) and link-aware renames. Prefer it over searching files for links and Bases results."
       );
 
       setBuiltinPreferences({ "obsidian-cli": { disabledAgents: [AGENT] } });
