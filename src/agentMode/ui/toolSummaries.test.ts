@@ -674,6 +674,25 @@ describe("toolSummaries", () => {
       expect(miyoSearchRun(t)).toEqual({ query: "desk", noteCount: null });
     });
 
+    it("ends the query at a redirection and recognizes a run chained after cd (https://github.com/Brevilabs/obsidian-copilot-private/issues/718)", () => {
+      const t = tool({ input: { command: `cd /Users/me/vault && sh ${SCRIPT} "desk" 2>&1` } });
+      expect(miyoSearchRun(t)?.query).toBe("desk");
+    });
+
+    it.each([
+      ["cat of the script", { command: `cat ${SCRIPT}` }],
+      ["listing the script", { command: `ls -l ${SCRIPT}` }],
+      ["sed over the script", { command: `sed -n '1,40p' ${SCRIPT}` }],
+      ["grep inside the script", { command: `grep -n MIYO ${SCRIPT}` }],
+      ["a quoted mention of the script", { command: `echo "run miyo-search.sh next"` }],
+      ["reading the miyo CLI help", { command: "cat ~/.miyo/bin/miyo search" }],
+    ])(
+      "returns null when a command only names the script: %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/718)",
+      (_name, input) => {
+        expect(miyoSearchRun(tool({ input }))).toBeNull();
+      }
+    );
+
     it.each([
       ["another shell command", { command: "rg -n 'back pain' notes" }],
       ["reading the skill file", { command: "cat .agents/skills/miyo-search/SKILL.md" }],

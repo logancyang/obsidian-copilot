@@ -465,14 +465,20 @@ function shellWords(command: string): string[] {
   );
 }
 
+// Words after which the next word is the program being run, so `cat miyo-search.sh` is not a run.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/718
+const MIYO_LAUNCHERS: ReadonlySet<string> = new Set(["sh", "bash", "zsh", "&", "&&", ";", "||"]);
+
 function miyoSearchQuery(command: string): string | null | undefined {
   const words = shellWords(command);
   for (let i = 0; i < words.length; i++) {
+    if (i > 0 && !MIYO_LAUNCHERS.has(words[i - 1].split("/").pop() ?? "")) continue;
     const name = words[i].split(/[\\/]/).pop() ?? "";
     const isScript = MIYO_SEARCH_SCRIPTS.has(name);
     if (!isScript && !(/^miyo(\.exe)?$/.test(name) && words[i + 1] === "search")) continue;
     const query: string[] = [];
     for (let j = i + (isScript ? 1 : 2); j < words.length; j++) {
+      if (/^(\d?[<>]|[|&;])/.test(words[j])) break;
       if (words[j] === "--json") continue;
       if (words[j].startsWith("-")) j++;
       else query.push(words[j]);
