@@ -50,3 +50,18 @@ export const AgentSlashMenu: StoryObj<TypeaheadMenuContentProps> = {
     showPreview: true,
   },
 };
+
+export const AgentCompactSearch: StoryObj<TypeaheadMenuContentProps> = {
+  args: {
+    ...AgentSlashMenu.args,
+    options: [
+      agentSlashOptions[0],
+      {
+        key: "command:Compact",
+        title: "Compact",
+        content: "Run the custom command named Compact.",
+      },
+    ],
+    query: "compact",
+  },
+};

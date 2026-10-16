@@ -88,7 +88,13 @@ export function filterSlashMenuOptions<T extends { title: string; content?: stri
 ): T[] {
   if (!query) return options;
   const titleResults = fuzzysort.go(query, options, { key: "title", threshold: -10000 });
-  if (titleResults.length > 0) return titleResults.map((result) => result.obj);
+  // Equal search matches keep built-in commands ahead of their custom-command namesakes.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/723
+  if (titleResults.length > 0) {
+    return Array.from(titleResults)
+      .sort((a, b) => b.score - a.score || options.indexOf(a.obj) - options.indexOf(b.obj))
+      .map((result) => result.obj);
+  }
   return fuzzysort
     .go(query, options, { key: "content", threshold: -10000 })
     .map((result) => result.obj);

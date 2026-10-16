@@ -167,6 +167,8 @@ Type `/` to insert an enabled Skill or [Copilot command](custom-commands.md). Fo
 
 When a conversation grows long, choose **/compact** at the start of an empty message to have the agent summarize it and free up room in its context window. The `/` menu offers **/compact** only at the start of a message, and it replaces any Skill or command named exactly `compact`. Anything you type after `/compact` is sent with it, so an agent that accepts compaction instructions, such as Claude, can use them.
 
+When a custom command has the same search relevance, the built-in **compact** stays first in the menu. Commands with different capitalization, such as **Compact**, remain selectable.
+
 - Attached notes, web pages, images, and agent mentions are not sent with `/compact`. Project context waits for your next regular message.
 - A queued `/compact` runs as its own turn instead of joining other queued messages. If you stop the current turn, the other queued messages return to the message box without it.
 

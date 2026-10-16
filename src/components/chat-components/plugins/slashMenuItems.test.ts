@@ -160,10 +160,37 @@ describe("slashMenuItems", () => {
       expect(filterSlashMenuOptions(options, "smz").map((o) => o.title)).toEqual(["summarize"]);
     });
 
+    it("keeps stronger title matches ahead of earlier options while preserving tied order https://github.com/Brevilabs/obsidian-copilot-private/issues/723", () => {
+      const options = [option("longtask"), option("Task"), option("task")];
+
+      expect(filterSlashMenuOptions(options, "task").map((option) => option.title)).toEqual([
+        "Task",
+        "task",
+        "longtask",
+      ]);
+    });
+
     it("falls back to matching option content when no title matches", () => {
       const options = [option("polish", "make the prose tighter"), option("other", "unrelated")];
       expect(filterSlashMenuOptions(options, "prose").map((o) => o.title)).toEqual(["polish"]);
     });
+
+    it.each(["comp", "compact"])(
+      "keeps built-in compact before custom Compact for query %s https://github.com/Brevilabs/obsidian-copilot-private/issues/723",
+      (query) => {
+        const options = composeSlashMenuItems(
+          [],
+          [makeCommand({ title: "Compact" })],
+          "claude",
+          true
+        ).map((item) => ({ title: item.name, item }));
+
+        expect(filterSlashMenuOptions(options, query).map((option) => option.item.kind)).toEqual([
+          "builtin",
+          "command",
+        ]);
+      }
+    );
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/634 ranks the built-in compact first for the exact query compact", () => {
       const skills = [
