@@ -8,6 +8,19 @@ function notification(update: Record<string, unknown>): SessionNotification {
   return { sessionId: SESSION_ID, update } as unknown as SessionNotification;
 }
 
+function opencodeMarker(
+  compaction: Record<string, unknown>,
+  childSession?: Record<string, unknown>
+): SessionNotification {
+  return notification({
+    sessionUpdate: "session_info_update",
+    _meta: {
+      "opencode/compaction": compaction,
+      ...(childSession ? { "opencode/child-session": childSession } : {}),
+    },
+  });
+}
+
 const VALID_TODOS = [
   { content: "Brainstorm autumn imagery", status: "in_progress", priority: "high" },
   { content: "Draft the haiku", status: "pending", priority: "high" },
@@ -334,6 +347,142 @@ const testAcpNotificationToEvents = () => {
       )
     ).toEqual([]);
   });
+
+  it.each([
+    ["started", "manual", "in_progress"],
+    ["started", "auto", "in_progress"],
+    ["completed", "manual", "completed"],
+    ["completed", "auto", "completed"],
+  ] as const)(
+    "maps an opencode %s marker with reason %s to a %s compaction keyed by its messageId (https://github.com/Brevilabs/obsidian-copilot-private/issues/637)",
+    (marker, reason, status) => {
+      expect(
+        acpNotificationToEvents(opencodeMarker({ status: marker, messageId: "msg-1", reason }))
+      ).toEqual([
+        {
+          sessionId: SESSION_ID,
+          update: { sessionUpdate: "compaction", id: "msg-1", status, trigger: reason },
+        },
+      ]);
+    }
+  );
+
+  it("maps a failed marker to a failed compaction carrying the error message (https://github.com/Brevilabs/obsidian-copilot-private/issues/637)", () => {
+    expect(
+      acpNotificationToEvents(
+        opencodeMarker({
+          status: "failed",
+          messageId: "msg-1",
+          reason: "auto",
+          error: { type: "provider.unsupported-operation", message: "Native compaction failed" },
+        })
+      )
+    ).toEqual([
+      {
+        sessionId: SESSION_ID,
+        update: {
+          sessionUpdate: "compaction",
+          id: "msg-1",
+          status: "failed",
+          trigger: "auto",
+          error: "Native compaction failed",
+        },
+      },
+    ]);
+  });
+
+  it("maps a failed marker that arrives with no prior start to a failed compaction (https://github.com/Brevilabs/obsidian-copilot-private/issues/637)", () => {
+    const [event] = acpNotificationToEvents(
+      opencodeMarker({
+        status: "failed",
+        messageId: "msg-9",
+        reason: "auto",
+        error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
+      })
+    );
+
+    expect(event.update).toMatchObject({
+      sessionUpdate: "compaction",
+      id: "msg-9",
+      status: "failed",
+      error: "Compaction was interrupted",
+    });
+  });
+
+  it("maps a failed marker without an error message to a failed compaction without error text (https://github.com/Brevilabs/obsidian-copilot-private/issues/637)", () => {
+    const [event] = acpNotificationToEvents(
+      opencodeMarker({ status: "failed", messageId: "msg-1", reason: "manual" })
+    );
+
+    expect(event.update).toEqual({
+      sessionUpdate: "compaction",
+      id: "msg-1",
+      status: "failed",
+      trigger: "manual",
+    });
+  });
+
+  it("maps a failed marker with error type aborted to a cancelled compaction without error text (https://github.com/Brevilabs/obsidian-copilot-private/issues/637)", () => {
+    expect(
+      acpNotificationToEvents(
+        opencodeMarker({
+          status: "failed",
+          messageId: "msg-1",
+          reason: "manual",
+          error: { type: "aborted", message: "Compaction cancelled" },
+        })
+      )
+    ).toEqual([
+      {
+        sessionId: SESSION_ID,
+        update: {
+          sessionUpdate: "compaction",
+          id: "msg-1",
+          status: "cancelled",
+          trigger: "manual",
+        },
+      },
+    ]);
+  });
+
+  it("maps a compaction.unavailable failure to a skipped compaction (https://github.com/Brevilabs/obsidian-copilot-private/issues/637)", () => {
+    expect(
+      acpNotificationToEvents(
+        opencodeMarker({
+          status: "failed",
+          messageId: "msg-1",
+          reason: "manual",
+          error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
+        })
+      )
+    ).toEqual([
+      {
+        sessionId: SESSION_ID,
+        update: { sessionUpdate: "compaction", id: "msg-1", status: "skipped", trigger: "manual" },
+      },
+    ]);
+  });
+
+  it("emits no event for a marker from a child session so subagent compaction stays out of the main trail (https://github.com/Brevilabs/obsidian-copilot-private/issues/639)", () => {
+    expect(
+      acpNotificationToEvents(
+        opencodeMarker(
+          { status: "started", messageId: "msg-1", reason: "auto" },
+          { id: "ses_child", parentID: "ses_parent", depth: 1, title: "Read files" }
+        )
+      )
+    ).toEqual([]);
+  });
+
+  it.each([
+    ["an unknown status", { status: "paused", messageId: "msg-1", reason: "auto" }],
+    ["no messageId", { status: "started", reason: "auto" }],
+  ])(
+    "emits no event for an opencode marker with %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/637)",
+    (_label, marker) => {
+      expect(acpNotificationToEvents(opencodeMarker(marker))).toEqual([]);
+    }
+  );
 
   it("passes a real plan notification through unchanged as a single event", () => {
     const events = acpNotificationToEvents(

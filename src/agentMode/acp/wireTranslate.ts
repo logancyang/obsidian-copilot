@@ -301,6 +301,38 @@ function isCompactionStatus(status: string): status is CompactionStatus {
   return (ACP_COMPACTION_STATUSES as readonly string[]).includes(status);
 }
 
+interface OpencodeCompactionMarker {
+  status?: string;
+  messageId?: string;
+  reason?: string;
+  error?: { type?: string; message?: string };
+}
+
+// opencode reports compaction as a session_info_update marker; markers from a subagent belong to #639. https://github.com/Brevilabs/obsidian-copilot-private/issues/637
+function opencodeCompactionFromMeta(meta: Record<string, unknown>): SessionUpdate | null {
+  if (meta["opencode/child-session"]) return null;
+  const marker = meta["opencode/compaction"] as OpencodeCompactionMarker;
+  if (!marker.messageId) return null;
+  const trigger: CompactionTrigger = marker.reason === "manual" ? "manual" : "auto";
+  const base = { sessionUpdate: "compaction" as const, id: marker.messageId, trigger };
+  if (marker.status === "started") return { ...base, status: "in_progress" };
+  if (marker.status === "completed") return { ...base, status: "completed" };
+  if (marker.status !== "failed") return null;
+  switch (marker.error?.type) {
+    case "aborted":
+      return { ...base, status: "cancelled" };
+    // opencode returns this only for a history with no text, and an automatic compaction always runs inside a prompt that has a user message, so it never fires for auto. https://github.com/Brevilabs/obsidian-copilot-private/issues/637
+    case "compaction.unavailable":
+      return { ...base, status: "skipped" };
+    default:
+      return {
+        ...base,
+        status: "failed",
+        ...(marker.error?.message ? { error: marker.error.message } : {}),
+      };
+  }
+}
+
 function acpUpdateToSessionUpdate(
   update: SessionNotification["update"],
   compactionTrigger: CompactionTrigger
@@ -344,8 +376,11 @@ function acpUpdateToSessionUpdate(
         ...(update.error ? { error: update.error } : {}),
       };
     }
-    case "session_info_update":
+    case "session_info_update": {
+      const meta = update._meta;
+      if (meta?.["opencode/compaction"]) return opencodeCompactionFromMeta(meta);
       return { sessionUpdate: "session_info_update", title: update.title };
+    }
     case "current_mode_update":
       return {
         sessionUpdate: "current_mode_update",
