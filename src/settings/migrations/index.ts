@@ -34,6 +34,10 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
     if (backfilled) setSettings({ providers: backfilled });
   }
 
+  if (fromVersion < 7 && getSettings().enableMiyo === true) {
+    setSettings({ enableMiyoSearchSkill: true });
+  }
+
   if (fromVersion < 8) {
     setSettings({ copilotFolder: DEFAULT_COPILOT_FOLDER });
 
@@ -91,10 +95,11 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
     setSettings({ enableMiyoDocumentProcessing: docProcessorBackend !== "plus" });
   }
 
-  // v16: "Semantic search for agents" defaults on and takes effect once Miyo connects, so installs
-  // that persisted the old default turn it on once.
+  // v16: "Semantic search for agents" defaults on once Miyo connects. Installs that are not connected
+  // persisted the old default (off) while the switch was locked, so they take the new default; connected
+  // installs keep what they have.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/716
-  if (fromVersion < 16) {
+  if (fromVersion < 16 && getSettings().enableMiyo !== true) {
     setSettings({ enableMiyoSearchSkill: true });
   }
 
