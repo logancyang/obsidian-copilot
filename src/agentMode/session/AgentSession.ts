@@ -223,6 +223,7 @@ export class AgentSession {
   private lastTurnError = false;
   private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
   private pendingFanoutContext: PendingFanoutContext[] = [];
+  private agentLacksDisplayedHistory = false;
   private placeholderId: string | null = null;
   private turnFiles = new Map<string, TurnFileCapture>();
   private currentTurnHadRoutedToolActivity = false;
@@ -604,6 +605,10 @@ export class AgentSession {
     this.notifyMessages();
   }
 
+  seedAgentWithDisplayedHistory(): void {
+    this.agentLacksDisplayedHistory = true;
+  }
+
   getLabel(): string | null {
     return this.label;
   }
@@ -795,9 +800,20 @@ export class AgentSession {
         return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAtMs);
       }
 
+      // A reopened chat whose agent session is gone from this device sends its saved turns once.
+      // https://github.com/logancyang/obsidian-copilot/issues/3643
+      const sendsDisplayedHistory = this.agentLacksDisplayedHistory && !sendsCompact;
+      const historyBlock = sendsDisplayedHistory
+        ? buildConversationHistoryBlock(
+            this.priorDisplayMessages(userMessageId, placeholderId),
+            FANOUT_HISTORY_MAX_CHARS
+          )
+        : null;
       const leadingContextBlock = sendsCompact
         ? null
-        : buildPriorFanoutContextBlock(this.pendingFanoutContext);
+        : [historyBlock, buildPriorFanoutContextBlock(this.pendingFanoutContext)]
+            .filter(Boolean)
+            .join("\n\n") || null;
       // The agent keeps every earlier turn, so resending an unchanged page fills its context
       // window with copies. https://github.com/Brevilabs/obsidian-copilot-private/issues/667
       const webTabPromptBlock = webTabBlock === this.lastSentWebTabBlock ? "" : webTabBlock;
@@ -850,6 +866,9 @@ export class AgentSession {
       }
       if (leadingContextBlock !== null && resp.stopReason !== "cancelled") {
         this.pendingFanoutContext = [];
+      }
+      if (sendsDisplayedHistory && resp.stopReason !== "cancelled") {
+        this.agentLacksDisplayedHistory = false;
       }
       if (isFirstTurn && promptStarted) this.firstPromptSent = true;
       if (webTabBlock && promptStarted) this.lastSentWebTabBlock = webTabBlock;
@@ -976,7 +995,7 @@ export class AgentSession {
 
   private priorDisplayMessages(
     userMessageId: string,
-    placeholderId: string
+    placeholderId: string | null
   ): readonly AgentChatMessage[] {
     return this.store
       .getDisplayMessages()

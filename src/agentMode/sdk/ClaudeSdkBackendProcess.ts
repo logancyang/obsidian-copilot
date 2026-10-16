@@ -543,6 +543,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   }
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
+    // Resuming a transcript this device lacks fails every later prompt, so the chat must start fresh.
+    // https://github.com/logancyang/obsidian-copilot/issues/3643
+    if (!(await this.sessionExistsLocally(params))) {
+      throw new Error(`Claude transcript not found for session ${params.sessionId}`);
+    }
     const claudeTaskPlan = createClaudeTaskPlanState();
     const opened = await this.reopenSession("loadSession", params, claudeTaskPlan);
     const transcript = await this.readTranscript(params.sessionId, params.cwd);

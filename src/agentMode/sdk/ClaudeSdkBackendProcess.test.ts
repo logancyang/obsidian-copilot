@@ -1218,7 +1218,6 @@ describe("ClaudeSdkBackendProcess", () => {
     });
 
     describe("loadSession()", () => {
-      const ISSUE_643 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/643";
       const cwd = "/vault";
       const sessionId = "11111111-2222-3333-4444-555555555555";
       let configDir: string;
@@ -1367,15 +1366,18 @@ describe("ClaudeSdkBackendProcess", () => {
         });
       });
 
-      it(`reopens the session with no replayed history when its transcript is missing (${ISSUE_643})`, async () => {
+      it("https://github.com/logancyang/obsidian-copilot/issues/3643 rejects, and sends no later prompt as a resume, when the session's transcript is not on this machine", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
         const proc = makeProcWithConfigDir();
         const events = registerCollector(proc, sessionId);
 
-        const loaded = await proc.loadSession({ sessionId, cwd });
+        await expect(proc.loadSession({ sessionId, cwd })).rejects.toThrow(sessionId);
+        await expect(
+          proc.prompt({ sessionId, prompt: [{ type: "text", text: "continue" }] })
+        ).rejects.toThrow();
 
-        expect(loaded.sessionId).toBe(sessionId);
-        expect(loaded.state.model?.current.baseModelId).toBe("claude-fake-pro");
         expect(events).toEqual([]);
+        expect(getPromptQueryCalls()).toEqual([]);
       });
     });
 
