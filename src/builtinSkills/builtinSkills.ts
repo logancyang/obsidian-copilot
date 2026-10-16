@@ -1335,6 +1335,14 @@ export const DEFAULT_BUILTIN_PREFERENCES: NonNullable<
   )
 );
 
+export function isMiyoSearchSkillUndecided(settings: CopilotSettings): boolean {
+  return (
+    !settings.enableMiyoSearchSkill &&
+    !settings.miyoSearchSkillOptOut &&
+    !settings.agentMode.skills.builtinPreferences?.[MIYO_SEARCH_SKILL.name]?.disabled
+  );
+}
+
 export function isBuiltinSkillEnabledFor(
   settings: CopilotSettings,
   skillName: string,

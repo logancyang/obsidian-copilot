@@ -5,6 +5,7 @@ import {
   BUILTIN_SKILLS,
   DEFAULT_BUILTIN_PREFERENCES,
   isBuiltinSkillEnabledFor,
+  isMiyoSearchSkillUndecided,
   MIYO_PARSE_SKILL,
   MIYO_SEARCH_SKILL,
   planManagedBuiltins,
@@ -617,6 +618,32 @@ describe("builtinSkills", () => {
       });
       expect(DEFAULT_SETTINGS.agentMode.skills.builtinPreferences).toBe(
         DEFAULT_BUILTIN_PREFERENCES
+      );
+    });
+  });
+
+  describe("isMiyoSearchSkillUndecided()", () => {
+    const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/716";
+
+    it(`is undecided when the switch is off with no opt-out record ${issue}`, () => {
+      expect(isMiyoSearchSkillUndecided(settingsWith({}))).toBe(true);
+    });
+
+    it(`is decided once the switch is on ${issue}`, () => {
+      expect(isMiyoSearchSkillUndecided(settingsWith({}, { enableMiyoSearchSkill: true }))).toBe(
+        false
+      );
+    });
+
+    it(`is decided once the user opted out on the Miyo tab ${issue}`, () => {
+      expect(isMiyoSearchSkillUndecided(settingsWith({}, { miyoSearchSkillOptOut: true }))).toBe(
+        false
+      );
+    });
+
+    it(`is decided once the user disabled the skill in Built-in Skills ${issue}`, () => {
+      expect(isMiyoSearchSkillUndecided(settingsWith({ "miyo-search": { disabled: true } }))).toBe(
+        false
       );
     });
   });

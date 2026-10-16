@@ -724,6 +724,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableSelfHostMode: false,
   enableMiyo: false,
   enableMiyoSearchSkill: false,
+  miyoSearchSkillOptOut: false,
   miyoSearchAll: false,
   miyoExtraSearchFolders: [],
   relevantNotesLiveUpdate: true,

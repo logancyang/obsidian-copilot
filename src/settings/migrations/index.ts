@@ -1,3 +1,4 @@
+import { isMiyoSearchSkillUndecided } from "@/builtinSkills/builtinSkills";
 import { DEFAULT_COPILOT_FOLDER } from "@/constants";
 import { logInfo } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement";
@@ -93,6 +94,13 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
   if (fromVersion < 15) {
     const { docProcessorBackend } = getSettings() as unknown as Record<string, unknown>;
     setSettings({ enableMiyoDocumentProcessing: docProcessorBackend !== "plus" });
+  }
+
+  // v16: Connecting Miyo turns on "Semantic search for agents", so connected users who never
+  // touched it get it once.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/716
+  if (fromVersion < 16 && getSettings().enableMiyo && isMiyoSearchSkillUndecided(getSettings())) {
+    setSettings({ enableMiyoSearchSkill: true });
   }
 
   setSettings({ settingsVersion: CURRENT_SETTINGS_VERSION });
