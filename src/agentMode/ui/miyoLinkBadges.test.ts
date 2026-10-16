@@ -59,10 +59,20 @@ describe("miyoLinkBadges", () => {
       ]).toEqual([]);
     });
 
-    it("drops results from another Miyo folder, including a configured extra folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
+    it("drops results from a configured extra Miyo folder and keeps other paths as they are (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
       expect([
         ...miyoVaultPaths(app, ["Archive/notes/Old.md", "copilot-test-vault/edit-eval/a.md"]),
       ]).toEqual(["copilot-test-vault/edit-eval/a.md"]);
+    });
+
+    it("reads Windows backslash paths the same as forward-slash paths (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
+      expect([
+        ...miyoVaultPaths(app, ["step-2\\notes\\Standing desk setup.md", "Archive\\notes\\Old.md"]),
+      ]).toEqual(["notes/Standing desk setup.md"]);
+    });
+
+    it("strips only the vault-name prefix when a top-level vault folder has the vault's name (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
+      expect([...miyoVaultPaths(app, ["step-2/step-2/Trip.md"])]).toEqual(["step-2/Trip.md"]);
     });
   });
 

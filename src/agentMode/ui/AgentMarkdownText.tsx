@@ -1,4 +1,8 @@
-import { addMiyoBadgeHosts, miyoVaultPaths } from "@/agentMode/ui/miyoLinkBadges";
+import {
+  addMiyoBadgeHosts,
+  EMPTY_BADGE_HOSTS,
+  miyoVaultPaths,
+} from "@/agentMode/ui/miyoLinkBadges";
 import { MiyoLinkBadge } from "@/agentMode/ui/MiyoLinkBadge";
 import { EMPTY_MIYO_PATHS } from "@/agentMode/ui/toolSummaries";
 import { Markdown } from "@/components/Markdown";
@@ -12,15 +16,13 @@ interface AgentMarkdownTextProps {
   miyoPaths?: readonly string[];
 }
 
-const EMPTY_HOSTS: readonly HTMLElement[] = Object.freeze([]);
-
 export const AgentMarkdownText: React.FC<AgentMarkdownTextProps> = ({
   text,
   app,
   miyoPaths = EMPTY_MIYO_PATHS,
 }) => {
   const sourcePath = app.workspace.getActiveFile()?.path ?? "";
-  const [badgeHosts, setBadgeHosts] = React.useState(EMPTY_HOSTS);
+  const [badgeHosts, setBadgeHosts] = React.useState(EMPTY_BADGE_HOSTS);
   const miyoPathsKey = miyoPaths.join("\n");
   const markFoundLinks = React.useCallback(
     (container: HTMLElement) => {
@@ -32,7 +34,7 @@ export const AgentMarkdownText: React.FC<AgentMarkdownTextProps> = ({
               sourcePath,
               miyoVaultPaths(app, miyoPathsKey.split("\n"))
             )
-          : EMPTY_HOSTS
+          : EMPTY_BADGE_HOSTS
       );
     },
     [app, sourcePath, miyoPathsKey]

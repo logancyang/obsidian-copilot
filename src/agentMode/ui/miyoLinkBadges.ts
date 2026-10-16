@@ -1,3 +1,4 @@
+import { getVaultRelativeMiyoPath, isCurrentVaultMiyoPath } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { getVaultBase, isAbsolutePath, toVaultRelative } from "@/utils/vaultPath";
 import type { App } from "obsidian";
@@ -10,10 +11,9 @@ function miyoVaultPath(app: App, raw: string): string | null {
     const relative = toVaultRelative(raw, getVaultBase(app));
     return relative === raw ? null : relative;
   }
-  const [folder, ...rest] = raw.replace(/\\/g, "/").split("/");
-  if (folder === app.vault.getName() && rest.length > 0) return rest.join("/");
-  if (getSettings().miyoExtraSearchFolders.includes(folder)) return null;
-  return raw;
+  const relative = getVaultRelativeMiyoPath(app, raw);
+  if (isCurrentVaultMiyoPath(app, raw)) return relative;
+  return getSettings().miyoExtraSearchFolders.includes(relative.split("/")[0]) ? null : relative;
 }
 
 export function miyoVaultPaths(app: App, resultPaths: readonly string[]): Set<string> {
@@ -25,12 +25,14 @@ export function miyoVaultPaths(app: App, resultPaths: readonly string[]): Set<st
   return paths;
 }
 
+export const EMPTY_BADGE_HOSTS: readonly HTMLElement[] = Object.freeze([]);
+
 export function addMiyoBadgeHosts(
   app: App,
   container: HTMLElement,
   sourcePath: string,
   found: ReadonlySet<string>
-): HTMLElement[] {
+): readonly HTMLElement[] {
   const hosts: HTMLElement[] = [];
   for (const link of container.querySelectorAll<HTMLAnchorElement>("a.internal-link")) {
     const raw = link.getAttribute("data-href") || link.getAttribute("href") || "";
@@ -46,5 +48,5 @@ export function addMiyoBadgeHosts(
     link.before(host);
     hosts.push(host);
   }
-  return hosts;
+  return hosts.length > 0 ? hosts : EMPTY_BADGE_HOSTS;
 }
