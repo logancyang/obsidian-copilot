@@ -104,6 +104,37 @@ describe("obsidianSkills", () => {
       );
     });
 
+    it("keeps example wikilinks inside code fences so installed skills add no unresolved links to the vault (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+      const documents = OBSIDIAN_SKILLS.flatMap((skill) => [
+        skill.skillMd,
+        ...skill.files.filter((file) => file.path.endsWith(".md")).map((file) => file.content),
+      ]);
+      for (const document of documents) {
+        let fence: string | null = null;
+        for (const line of document.split("\n")) {
+          const marker = line.match(/^\s*(~~~|```)/)?.[1];
+          if (marker) {
+            fence = fence === marker ? null : (fence ?? marker);
+          } else if (fence === null) {
+            expect(line).not.toMatch(/\[\[/);
+          }
+        }
+      }
+    });
+
+    it("documents that Bases sorts only by properties listed in the view's order, and rounds day counts (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+      const md = skillMd("obsidian-bases");
+      expect(md).toContain("    sort:\n      - property: due\n        direction: ASC");
+      expect(md).toContain(
+        "Obsidian sorts only by properties that are also listed in\n<code>order</code>, so include every sort property there."
+      );
+      expect(md).toContain(
+        "- Every <code>sort</code> property also appears in that view's <code>order</code>."
+      );
+      expect(md).toContain("(date(due) - today()).days.round()");
+      expect(md).not.toMatch(/today\(\)\)\.days,/);
+    });
+
     it("preserves Bases schema, formula, quoting, and duration guidance", () => {
       const md = skillMd("obsidian-bases");
       expect(md).toContain("formulas:");
