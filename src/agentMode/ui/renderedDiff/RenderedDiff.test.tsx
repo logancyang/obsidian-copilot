@@ -1,5 +1,6 @@
 import {
   BLOCK_MOVED,
+  IMAGE_REMOVED_AND_ADDED,
   NON_MARKDOWN_FILE,
   TASK_BLOCK_INSERTED,
   TASK_CHECKBOX_TOGGLED,
@@ -74,6 +75,22 @@ describe("RenderedDiff", () => {
       expect(deleted.classList).toContain("tw-line-through");
       expect(deleted.classList).toContain("tw-bg-error");
       expect(inserted.classList).toContain("tw-bg-success");
+    });
+
+    it("frames the image in a wholly removed block as removed and the one in a wholly added block as added (https://github.com/Brevilabs/obsidian-copilot-private/issues/727)", async () => {
+      jest.mocked(renderMarkdown).mockImplementation(async (_app, markdown, target) => {
+        const image = /!\[([^\]]*)\]\([^)]*\)/.exec(markdown);
+        if (image === null) target.textContent = markdown;
+        else target.createEl("img", { attr: { alt: image[1] } });
+      });
+      const { container } = render(diffElement(IMAGE_REMOVED_AND_ADDED));
+      const framedAlt = (change: string): Array<string | null> =>
+        Array.from(
+          container.querySelectorAll(`div[data-change=${change}] [data-change=${change}] > img`)
+        ).map((image) => image.getAttribute("alt"));
+
+      await waitFor(() => expect(framedAlt("deleted")).toEqual(["Q2 chart"]));
+      expect(framedAlt("inserted")).toEqual(["Q3 chart"]);
     });
 
     it("shows a non-Markdown file as tinted verbatim lines without rendering it as Markdown", async () => {

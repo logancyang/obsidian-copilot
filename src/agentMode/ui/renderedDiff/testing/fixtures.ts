@@ -54,6 +54,14 @@ export const IMAGE_REPLACED: RenderedDiffFixture = {
     "Pipeline by stage:\n\n![Q2 chart](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iNjAiPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iNjAiIGZpbGw9IiM2NDc0OGIiLz48dGV4dCB4PSI4MCIgeT0iMzgiIGZvbnQtc2l6ZT0iMjAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IndoaXRlIj5RMiBjaGFydCB2MjwvdGV4dD48L3N2Zz4=)\n",
 };
 
+export const IMAGE_REMOVED_AND_ADDED: RenderedDiffFixture = {
+  path: "projects/Alpha/Report.md",
+  before:
+    "Pipeline by stage:\n\n![Q2 chart](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iNjAiPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iNjAiIGZpbGw9IiM2NDc0OGIiLz48dGV4dCB4PSI4MCIgeT0iMzgiIGZvbnQtc2l6ZT0iMjAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IndoaXRlIj5RMiBjaGFydCB2MTwvdGV4dD48L3N2Zz4=)\n\nWins came from two regions.\n",
+  after:
+    "Pipeline by stage:\n\nWins came from two regions.\n\n![Q3 chart](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iNjAiPjxyZWN0IHdpZHRoPSIxNjAiIGhlaWdodD0iNjAiIGZpbGw9IiM2NDc0OGIiLz48dGV4dCB4PSI4MCIgeT0iMzgiIGZvbnQtc2l6ZT0iMjAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IndoaXRlIj5RMiBjaGFydCB2MjwvdGV4dD48L3N2Zz4=)\n",
+};
+
 export const WIKILINK_RENAME: RenderedDiffFixture = {
   path: "projects/Alpha/Resources.md",
   before: "Context lives in [[Migration runbook]] and nowhere else.\n",
@@ -706,6 +714,25 @@ export const RECORDED_PARSES: ReadonlyMap<
           [14, 14, -14],
           [15, 15, -14],
           [16, 16, -14],
+        ],
+      },
+    },
+  ],
+  [
+    IMAGE_REMOVED_AND_ADDED,
+    {
+      before: {
+        sections: [
+          ["paragraph", 0, 0],
+          ["paragraph", 2, 2],
+          ["paragraph", 4, 4],
+        ],
+      },
+      after: {
+        sections: [
+          ["paragraph", 0, 0],
+          ["paragraph", 2, 2],
+          ["paragraph", 4, 4],
         ],
       },
     },

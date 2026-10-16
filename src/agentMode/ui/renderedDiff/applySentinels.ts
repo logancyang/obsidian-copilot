@@ -11,7 +11,7 @@ export const DEL_CLOSE = String.fromCharCode(SENTINEL_BLOCK_START + 3);
 
 export const SENTINEL = new RegExp(`[${INS_OPEN}-${DEL_CLOSE}]`);
 
-type Change = "inserted" | "deleted";
+export type Change = "inserted" | "deleted";
 type Mode = Change | null;
 
 // A wholly changed row carries the tint on its cells, so word tints inside it would stack into patches.
@@ -29,12 +29,21 @@ const ROW_CLASS: Record<Change, string> = {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
 const DELETION_END_CLASS = "tw-me-1";
 
-// Images render without text, so text marks cannot show a replaced image; the element itself carries the change.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+// Obsidian renders an embed inline, so a mark on the embed itself wraps one text line under the image;
+// a frame of its own outlines and labels the whole image, outside the embed's children that load later.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/727
 const MEDIA_SELECTOR = "img, .internal-embed";
-const MEDIA_CLASS: Record<Change, string> = {
-  inserted: cn("tw-ring-2 tw-ring-[color:rgba(var(--color-green-rgb),0.6)]"),
-  deleted: cn("tw-opacity-60 tw-ring-2 tw-ring-[color:rgba(var(--color-red-rgb),0.6)]"),
+const MEDIA_FRAME_BASE_CLASS =
+  "tw-relative tw-m-1.5 tw-inline-block tw-max-w-full tw-align-top tw-outline tw-outline-2 tw-outline-offset-2 [&_img]:tw-block before:tw-absolute before:tw-left-1 before:tw-top-1 before:tw-rounded-sm before:tw-px-1 before:tw-text-ui-smaller before:tw-font-semibold before:tw-text-on-accent";
+const MEDIA_FRAME_CLASS: Record<Change, string> = {
+  inserted: cn(
+    MEDIA_FRAME_BASE_CLASS,
+    "tw-outline-[color:var(--color-green)] before:tw-bg-change-inserted before:tw-content-['+_Added']"
+  ),
+  deleted: cn(
+    MEDIA_FRAME_BASE_CLASS,
+    "tw-outline-[color:var(--color-red)] before:tw-bg-change-deleted before:tw-content-['−_Removed']"
+  ),
 };
 
 const BLOCK_SELECTOR = "p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, pre, dt, dd, div";
@@ -71,10 +80,8 @@ export function applySentinels(root: HTMLElement): void {
     if (node.nodeType !== Node.TEXT_NODE) {
       endedDeletion = null;
       if (mode === null) continue;
-      const media = node as HTMLElement;
-      media.setAttribute("data-change", mode);
-      media.classList.add(...MEDIA_CLASS[mode].split(" "));
-      if (mode === "deleted") lastDeleted = media;
+      const frame = frameElement(node as HTMLElement, mode);
+      if (mode === "deleted") lastDeleted = frame;
       continue;
     }
     const value = node.nodeValue ?? "";
@@ -121,6 +128,23 @@ export function applySentinels(root: HTMLElement): void {
     row.setAttribute("data-change", change);
     row.classList.add(ROW_CLASS[change]);
   }
+}
+
+export function frameMedia(root: HTMLElement, change: Change): void {
+  for (const media of Array.from(root.querySelectorAll<HTMLElement>(MEDIA_SELECTOR))) {
+    if (media.parentElement?.closest(MEDIA_SELECTOR)) continue;
+    frameElement(media, change);
+  }
+}
+
+function frameElement(media: HTMLElement, change: Change): HTMLElement {
+  const frame = media.win.createSpan({
+    cls: MEDIA_FRAME_CLASS[change],
+    attr: { "data-change": change },
+  });
+  media.replaceWith(frame);
+  frame.appendChild(media);
+  return frame;
 }
 
 function markedElement(doc: Document, change: Change, text: string): HTMLElement {

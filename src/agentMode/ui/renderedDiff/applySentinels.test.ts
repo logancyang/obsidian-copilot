@@ -1,5 +1,6 @@
 import {
   applySentinels,
+  frameMedia,
   DEL_CLOSE,
   DEL_OPEN,
   INS_CLOSE,
@@ -13,6 +14,11 @@ function el(tag: string, ...children: Array<Node | string>): HTMLElement {
 }
 
 const PRIVATE_USE = new RegExp(`[${String.fromCharCode(0xe000)}-${String.fromCharCode(0xf8ff)}]`);
+
+const framedSources = (root: HTMLElement, change: string): Array<string | null> =>
+  Array.from(root.querySelectorAll(`[data-change=${change}] > img`)).map((img) =>
+    img.getAttribute("src")
+  );
 
 const marked = (root: HTMLElement, selector: string): string[] =>
   Array.from(root.querySelectorAll(selector)).map((element) => element.textContent ?? "");
@@ -211,7 +217,7 @@ describe("applySentinels", () => {
       expect(root.textContent).toBe("Kept addedNext paragraph.");
     });
 
-    it("marks a replaced image element as deleted and its replacement as inserted, leaving unchanged images alone (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+    it("frames a replaced image as removed and its replacement as added, leaving unchanged images alone (https://github.com/Brevilabs/obsidian-copilot-private/issues/727)", () => {
       const image = (src: string): HTMLElement => {
         const element = el("img");
         element.setAttribute("src", src);
@@ -233,24 +239,21 @@ describe("applySentinels", () => {
 
       applySentinels(root);
 
-      const sources = (selector: string): Array<string | null> =>
-        Array.from(root.querySelectorAll(selector)).map((img) => img.getAttribute("src"));
-      expect(sources("img[data-change=deleted]")).toEqual(["chart-v1.png"]);
-      expect(sources("img[data-change=inserted]")).toEqual(["chart-v2.png"]);
-      expect(sources("img:not([data-change])")).toEqual(["logo.png"]);
-      expect(root.querySelector("img[data-change=deleted]")?.classList).toContain("tw-me-1");
+      expect(framedSources(root, "deleted")).toEqual(["chart-v1.png"]);
+      expect(framedSources(root, "inserted")).toEqual(["chart-v2.png"]);
+      expect(root.querySelector("img[src='logo.png']")?.parentElement?.tagName).toBe("P");
       expect(root.querySelectorAll("del, ins")).toHaveLength(0);
-      expect(PRIVATE_USE.test(root.textContent ?? "")).toBe(false);
+      expect(root.textContent).toBe("");
     });
 
-    it("marks an inserted embed once on its container rather than on the content it loaded (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", () => {
+    it("frames an inserted embed around its container so content the embed loads later stays inside the frame (https://github.com/Brevilabs/obsidian-copilot-private/issues/727)", () => {
       const embed = el("span", el("img"), "caption");
       embed.className = "internal-embed";
       const root = el("div", el("p", INS_OPEN, embed, INS_CLOSE));
 
       applySentinels(root);
 
-      expect(embed.getAttribute("data-change")).toBe("inserted");
+      expect(embed.parentElement?.getAttribute("data-change")).toBe("inserted");
       expect(root.querySelectorAll("[data-change]")).toHaveLength(1);
     });
 
@@ -261,6 +264,42 @@ describe("applySentinels", () => {
       applySentinels(root);
 
       expect(root.querySelector("p")?.firstChild).toBe(original);
+    });
+  });
+
+  describe("frameMedia()", () => {
+    it("frames every image and embed in a wholly added block as added (https://github.com/Brevilabs/obsidian-copilot-private/issues/727)", () => {
+      const image = el("img");
+      image.setAttribute("src", "slides.png");
+      const embed = el("span", el("img"));
+      embed.className = "internal-embed";
+      const root = el("div", el("p", image), el("p", embed));
+
+      frameMedia(root, "inserted");
+
+      expect(framedSources(root, "inserted")).toEqual(["slides.png"]);
+      expect(embed.parentElement?.getAttribute("data-change")).toBe("inserted");
+      expect(root.querySelectorAll("[data-change]")).toHaveLength(2);
+    });
+
+    it("frames an embed once rather than also framing the image it loaded (https://github.com/Brevilabs/obsidian-copilot-private/issues/727)", () => {
+      const embed = el("span", el("img"));
+      embed.className = "internal-embed";
+      const root = el("div", el("p", embed));
+
+      frameMedia(root, "deleted");
+
+      expect(root.querySelectorAll("[data-change=deleted]")).toHaveLength(1);
+      expect(embed.parentElement?.getAttribute("data-change")).toBe("deleted");
+    });
+
+    it("leaves a block without images unchanged", () => {
+      const root = el("div", el("p", "Only words."));
+      const original = root.innerHTML;
+
+      frameMedia(root, "deleted");
+
+      expect(root.innerHTML).toBe(original);
     });
   });
 });
