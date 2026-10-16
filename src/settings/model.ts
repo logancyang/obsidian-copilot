@@ -94,7 +94,6 @@ export interface CopilotSettings {
   enableSelfHostMode: boolean;
   enableMiyo: boolean;
   enableMiyoSearchSkill: boolean;
-  miyoSearchSkillOptOut: boolean;
   miyoSearchAll: boolean;
   miyoExtraSearchFolders: string[];
   relevantNotesLiveUpdate: boolean;

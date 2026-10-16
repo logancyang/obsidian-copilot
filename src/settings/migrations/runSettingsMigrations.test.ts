@@ -2,7 +2,6 @@ import type { CustomModel } from "@/aiParams";
 import { ChatModelProviders, DEFAULT_COPILOT_FOLDER, DEFAULT_SETTINGS } from "@/constants";
 import type { ModelManagementApi, ProviderType } from "@/modelManagement";
 import { getSettings, settingsAtom, settingsStore, type CopilotSettings } from "@/settings/model";
-import { Platform } from "obsidian";
 
 import { CURRENT_SETTINGS_VERSION, runSettingsMigrations } from "./index";
 
@@ -191,94 +190,32 @@ describe("settingsMigrations", () => {
       expect(getSettings().enableMiyoDocumentProcessing).toBe(false);
     });
 
-    it("v7: turns the Miyo search skill on for an existing Miyo user", async () => {
-      seedVault({ settingsVersion: 6, enableMiyo: true, enableMiyoSearchSkill: undefined });
-      const { api } = makeApi();
-
-      await runSettingsMigrations(api);
-
-      expect(getSettings().enableMiyoSearchSkill).toBe(true);
-      expect(getSettings().settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
-    });
-
-    it("v7: leaves the Miyo search skill flag untouched when Miyo was never enabled", async () => {
-      seedVault({ settingsVersion: 6, enableMiyo: false, enableMiyoSearchSkill: undefined });
-      const { api } = makeApi();
-
-      await runSettingsMigrations(api);
-
-      expect(getSettings().enableMiyoSearchSkill).toBeUndefined();
-      expect(getSettings().settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
-    });
-
-    it("v7: keys off persisted enableMiyo, not the mobile-sensitive search backend", async () => {
-      (Platform as { isMobile: boolean }).isMobile = true;
-      try {
-        seedVault({ settingsVersion: 6, enableMiyo: true, enableMiyoSearchSkill: undefined });
+    it.each([
+      ["connected", true],
+      ["not connected", false],
+    ])(
+      "v16: turns the Miyo search switch on once for a v15 install that persisted it off and is %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)",
+      async (_state, enableMiyo) => {
+        seedVault({ settingsVersion: 15, enableMiyo, enableMiyoSearchSkill: false });
         const { api } = makeApi();
 
         await runSettingsMigrations(api);
 
         expect(getSettings().enableMiyoSearchSkill).toBe(true);
-      } finally {
-        (Platform as { isMobile: boolean }).isMobile = false;
+        expect(getSettings().settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
       }
-    });
+    );
 
-    it("v16: turns the Miyo search skill on once for a connected Miyo user who never set it (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
-      seedVault({ settingsVersion: 15, enableMiyo: true, enableMiyoSearchSkill: false });
+    it("v16: turns the switch on for a pre-v7 install that never stored it (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
+      seedVault({ settingsVersion: 6, enableMiyo: false, enableMiyoSearchSkill: undefined });
       const { api } = makeApi();
 
       await runSettingsMigrations(api);
 
       expect(getSettings().enableMiyoSearchSkill).toBe(true);
-      expect(getSettings().settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
     });
 
-    it("v16: keeps the skill off for a connected user who opted out on the Miyo tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
-      seedVault({
-        settingsVersion: 15,
-        enableMiyo: true,
-        enableMiyoSearchSkill: false,
-        miyoSearchSkillOptOut: true,
-      });
-      const { api } = makeApi();
-
-      await runSettingsMigrations(api);
-
-      expect(getSettings().enableMiyoSearchSkill).toBe(false);
-    });
-
-    it("v16: keeps the skill off for a connected user who disabled it in Built-in Skills (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
-      seedVault({
-        settingsVersion: 15,
-        enableMiyo: true,
-        enableMiyoSearchSkill: false,
-        agentMode: {
-          ...DEFAULT_SETTINGS.agentMode,
-          skills: {
-            ...DEFAULT_SETTINGS.agentMode.skills,
-            builtinPreferences: { "miyo-search": { disabled: true } },
-          },
-        },
-      });
-      const { api } = makeApi();
-
-      await runSettingsMigrations(api);
-
-      expect(getSettings().enableMiyoSearchSkill).toBe(false);
-    });
-
-    it("v16: leaves the skill off when Miyo is not connected (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
-      seedVault({ settingsVersion: 15, enableMiyo: false, enableMiyoSearchSkill: false });
-      const { api } = makeApi();
-
-      await runSettingsMigrations(api);
-
-      expect(getSettings().enableMiyoSearchSkill).toBe(false);
-    });
-
-    it("v16: does not re-enable a skill the user turned off on a v16 vault (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
+    it("v16: keeps the switch off for a vault already on v16 where the user turned it off (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
       seedVault({ settingsVersion: 16, enableMiyo: true, enableMiyoSearchSkill: false });
       const { api } = makeApi();
 

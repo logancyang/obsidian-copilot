@@ -1,4 +1,4 @@
-import { isMiyoSearchSkillUndecided } from "@/builtinSkills/builtinSkills";
+import { isMiyoSearchSkillActive } from "@/builtinSkills/builtinSkills";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingSection } from "@/components/ui/setting-section";
@@ -185,42 +185,6 @@ export const MiyoSettings: React.FC = () => {
     }
   }, [beginBusy, endBusy]);
 
-  // The feature gate shares built-in reconciliation so this tab cannot recreate
-  // skills the user disabled, or create directories for unconfigured agents.
-  // https://github.com/logancyang/obsidian-copilot/issues/3022
-  const handleToggleSearchSkill = useCallback(async (next: boolean) => {
-    const attempt = ++skillAttemptRef.current;
-    setPendingSkillEnabled(next);
-    const { enableMiyoSearchSkill: previous, miyoSearchSkillOptOut: previousOptOut } =
-      getSettings();
-    try {
-      const { SkillManager } = await import("@/agentMode");
-      if (skillAttemptRef.current !== attempt || !mountedRef.current) return;
-      updateSetting("miyoSearchSkillOptOut", !next);
-      updateSetting("enableMiyoSearchSkill", next);
-      const result = await SkillManager.getInstance().refresh(true);
-      if (!result.ok || result.reconcileErrorCount > 0) {
-        throw new Error("Could not reconcile Miyo search skill files.");
-      }
-    } catch {
-      // Failed enables must not leave the system prompt advertising an uninstalled skill.
-      // Disable intent survives cleanup failures. https://github.com/logancyang/obsidian-copilot/issues/3022
-      if (next && skillAttemptRef.current === attempt) {
-        updateSetting("miyoSearchSkillOptOut", previousOptOut);
-        updateSetting("enableMiyoSearchSkill", previous);
-      }
-      if (mountedRef.current && skillAttemptRef.current === attempt) {
-        new Notice(
-          next
-            ? "Couldn't update the Miyo search skill. Please try again."
-            : "Miyo search preference saved, but skill files could not be updated. Check Skills settings and try again."
-        );
-      }
-    } finally {
-      if (mountedRef.current && skillAttemptRef.current === attempt) setPendingSkillEnabled(null);
-    }
-  }, []);
-
   const enableMiyoBackend = useCallback(
     async (superseded: () => boolean) => {
       // The caller's lifecycle can expire while its preceding network check is
@@ -240,14 +204,10 @@ export const MiyoSettings: React.FC = () => {
         getMiyoCustomUrl(current) === getMiyoCustomUrl(before);
       if (stillOwner && (!available || superseded())) {
         updateSetting("enableMiyo", prevEnableMiyo);
-      } else if (stillOwner && onDesktop && isMiyoSearchSkillUndecided(current)) {
-        // Connecting is the user's request for Miyo search; an explicit opt-out is never overridden.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/716
-        await handleToggleSearchSkill(true);
       }
       return available;
     },
-    [refresh, onDesktop, handleToggleSearchSkill]
+    [refresh]
   );
 
   const canAutoAddVault = useCallback((): boolean => {
@@ -420,6 +380,39 @@ export const MiyoSettings: React.FC = () => {
     await refresh(true);
   }, [refresh]);
 
+  // The feature gate shares built-in reconciliation so this tab cannot recreate
+  // skills the user disabled, or create directories for unconfigured agents.
+  // https://github.com/logancyang/obsidian-copilot/issues/3022
+  const handleToggleSearchSkill = useCallback(async (next: boolean) => {
+    const attempt = ++skillAttemptRef.current;
+    setPendingSkillEnabled(next);
+    const previous = getSettings().enableMiyoSearchSkill;
+    try {
+      const { SkillManager } = await import("@/agentMode");
+      if (skillAttemptRef.current !== attempt || !mountedRef.current) return;
+      updateSetting("enableMiyoSearchSkill", next);
+      const result = await SkillManager.getInstance().refresh(true);
+      if (!result.ok || result.reconcileErrorCount > 0) {
+        throw new Error("Could not reconcile Miyo search skill files.");
+      }
+    } catch {
+      // Failed enables must not leave the system prompt advertising an uninstalled skill.
+      // Disable intent survives cleanup failures. https://github.com/logancyang/obsidian-copilot/issues/3022
+      if (next && skillAttemptRef.current === attempt) {
+        updateSetting("enableMiyoSearchSkill", previous);
+      }
+      if (mountedRef.current && skillAttemptRef.current === attempt) {
+        new Notice(
+          next
+            ? "Couldn't update the Miyo search skill. Please try again."
+            : "Miyo search preference saved, but skill files could not be updated. Check Skills settings and try again."
+        );
+      }
+    } finally {
+      if (mountedRef.current && skillAttemptRef.current === attempt) setPendingSkillEnabled(null);
+    }
+  }, []);
+
   const changeConnection = (nextMode: "local" | "remote", address = urlDraft) => {
     setConnectionError(null);
     setDraft({ mode: nextMode, address, source: settingsKey });
@@ -459,11 +452,12 @@ export const MiyoSettings: React.FC = () => {
   };
 
   const capabilitiesEnabled = status.backend === "available" || status.backend === "stale";
-  const skillToggleUsable = settings.enableMiyoSearchSkill || capabilitiesEnabled;
+  const skillActive = isMiyoSearchSkillActive(settings);
+  const skillToggleUsable = skillActive || capabilitiesEnabled;
   const connectedRemote = activeMode === "remote";
   const hasPendingConnection =
     mode !== activeMode || (mode === "remote" && urlDraft.trim() !== activeUrl);
-  const searchSkillShown = pendingSkillEnabled ?? settings.enableMiyoSearchSkill;
+  const searchSkillShown = pendingSkillEnabled ?? skillActive;
   const showSearchFolders = searchSkillShown && capabilitiesEnabled && !settings.miyoSearchAll;
   const searchFoldersKey = showSearchFolders ? settingsKey : null;
   const vaultFolderName = getMiyoFolderName(app);

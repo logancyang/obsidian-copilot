@@ -33,9 +33,9 @@ The badge beside the saved connection option shows **Connected**, **Checking…*
 
 A remote server can be connected without the current vault being registered there. Manage folders on the Miyo host to make this vault available for search. Copilot does not send this computer's filesystem path to register it remotely.
 
-Connecting Miyo turns on **Semantic search for agents** under **Powered by Miyo** and installs the agent Skill; if you turn it off, it stays off. The switch appears on desktop only, since Agent Chat does not run on mobile; a connected mobile device still uses Miyo for Copilot Plus chat search and Relevant Notes. For remote connections, manage chat sources and Relay on the Miyo host. The **External apps** Connector is separate from Copilot's connection and does not set its server address.
+**Semantic search for agents** under **Powered by Miyo** is on by default, and Copilot installs the agent Skill once Miyo is connected; if you turn it off, it stays off. The switch appears on desktop only, since Agent Chat does not run on mobile; a connected mobile device still uses Miyo for Copilot Plus chat search and Relevant Notes. For remote connections, manage chat sources and Relay on the Miyo host. The **External apps** Connector is separate from Copilot's connection and does not set its server address.
 
-Indexing and search requests go to your selected Miyo server. **Disconnect** disables Copilot's Miyo backend; installed agent Skills keep their separate feature preferences.
+Indexing and search requests go to your selected Miyo server. **Disconnect** disables Copilot's Miyo backend and removes the `miyo-search` agent Skill; reconnecting installs it again unless you turned off **Semantic search for agents**.
 
 ## What Miyo availability means
 

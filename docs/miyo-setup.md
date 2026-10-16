@@ -69,7 +69,7 @@ In this example, the vault has finished scanning and is marked **Watching**.
 
 ## 4. Check semantic search for agents
 
-Connecting Miyo turns on **Semantic search for agents** on desktop. Return to **Settings → Copilot → Miyo** to confirm it is on. If you turn it off, it stays off when you reconnect.
+On desktop, **Semantic search for agents** is on by default and takes effect once Miyo is connected. Return to **Settings → Copilot → Miyo** to confirm it is on. If you turn it off, Copilot remembers that choice. Disconnecting Miyo removes the agent skill, and reconnecting installs it again unless you turned the switch off.
 
 This gives your Copilot agents access to Miyo search. Keep **Search scope** on **Current vault** if you only want results from the vault you are using.
 

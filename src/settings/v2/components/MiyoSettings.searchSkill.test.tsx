@@ -736,9 +736,9 @@ describe("MiyoSettings", () => {
       expect(updateSetting).not.toHaveBeenCalledWith("enableMiyoSearchSkill", true);
     });
 
-    it("ALLOWS disabling an already-installed skill while Miyo is disconnected", async () => {
+    it("ALLOWS disabling an already-installed skill while the connected Miyo is offline", async () => {
       mockMiyoBackend = "unavailable";
-      currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
+      currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: true, enableMiyoSearchSkill: true };
       render(<MiyoSettings />);
 
       const control = toggle();
@@ -747,6 +747,15 @@ describe("MiyoSettings", () => {
 
       await waitFor(() => expect(refreshSkills).toHaveBeenCalledTimes(1));
       expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", false);
+    });
+
+    it("locks the default-on toggle and hides the search scope until Miyo is connected (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", () => {
+      mockMiyoBackend = "unavailable";
+      currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: false, enableMiyoSearchSkill: true };
+      render(<MiyoSettings />);
+
+      expect(toggle().getAttribute("aria-disabled")).toBe("true");
+      expect(screen.queryByText("Search scope")).toBeNull();
     });
 
     it("keeps the skill toggle operable while the status snapshot is stale", async () => {
@@ -845,97 +854,6 @@ describe("MiyoSettings", () => {
       expect(updateSetting).not.toHaveBeenCalledWith("enableMiyo", false);
     });
 
-    it("turns Semantic search for agents on and installs the skill when Miyo connects for a user who never set it (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
-      disconnectedMiyo();
-      render(<MiyoSettings />);
-
-      fireEvent.click(await screen.findByText("Connect"));
-
-      await waitFor(() => expect(currentSettings.enableMiyoSearchSkill).toBe(true));
-      expect(currentSettings.enableMiyo).toBe(true);
-      expect(refreshSkills).toHaveBeenCalledWith(true);
-      expect(NoticeMock).not.toHaveBeenCalled();
-    });
-
-    it("keeps Semantic search for agents off when Miyo reconnects after the user turned it off (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
-      currentSettings = {
-        ...DEFAULT_SETTINGS,
-        enableMiyo: true,
-        enableMiyoSearchSkill: true,
-      };
-      const { unmount } = render(<MiyoSettings />);
-      fireEvent.click(toggle());
-      await waitFor(() => expect(currentSettings.enableMiyoSearchSkill).toBe(false));
-      expect(currentSettings.miyoSearchSkillOptOut).toBe(true);
-      unmount();
-      refreshSkills.mockClear();
-      mockMiyoBackend = "unavailable";
-      currentSettings = { ...currentSettings, enableMiyo: false };
-
-      render(<MiyoSettings />);
-      fireEvent.click(await screen.findByText("Connect"));
-
-      await waitFor(() => expect(currentSettings.enableMiyo).toBe(true));
-      expect(currentSettings.enableMiyoSearchSkill).toBe(false);
-      expect(refreshSkills).not.toHaveBeenCalled();
-    });
-
-    it("clears the opt-out when the user turns Semantic search for agents back on (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
-      currentSettings = { ...DEFAULT_SETTINGS, miyoSearchSkillOptOut: true };
-      render(<MiyoSettings />);
-
-      fireEvent.click(toggle());
-
-      await waitFor(() => expect(currentSettings.enableMiyoSearchSkill).toBe(true));
-      expect(currentSettings.miyoSearchSkillOptOut).toBe(false);
-    });
-
-    it("leaves the switch off and shows the failure notice when the skill files cannot be installed on connect (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
-      disconnectedMiyo();
-      refreshSkills.mockResolvedValue({ ok: false });
-      render(<MiyoSettings />);
-
-      fireEvent.click(await screen.findByText("Connect"));
-
-      await waitFor(() =>
-        expect(NoticeMock).toHaveBeenCalledWith(
-          "Couldn't update the Miyo search skill. Please try again."
-        )
-      );
-      expect(currentSettings.enableMiyo).toBe(true);
-      expect(currentSettings.enableMiyoSearchSkill).toBe(false);
-      expect(currentSettings.miyoSearchSkillOptOut).toBe(false);
-    });
-
-    it("does not turn the skill on when Miyo fails to connect (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
-      disconnectedMiyo();
-      mockRefreshBackend = "unavailable";
-      render(<MiyoSettings />);
-
-      fireEvent.click(await screen.findByText("Connect"));
-
-      await waitFor(() => expect(updateSetting).toHaveBeenCalledWith("enableMiyo", false));
-      expect(currentSettings.enableMiyoSearchSkill).toBe(false);
-      expect(refreshSkills).not.toHaveBeenCalled();
-    });
-
-    it("does not turn the skill on when connecting on mobile, where Agent mode cannot run (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
-      mockOnDesktop.mockReturnValue(false);
-      disconnectedMiyo();
-      currentSettings = {
-        ...currentSettings,
-        miyoConnectionMode: "remote",
-        miyoServerUrl: "http://home:8742",
-      };
-      render(<MiyoSettings />);
-
-      fireEvent.click(await screen.findByText("Connect"));
-
-      await waitFor(() => expect(currentSettings.enableMiyo).toBe(true));
-      expect(currentSettings.enableMiyoSearchSkill).toBe(false);
-      expect(refreshSkills).not.toHaveBeenCalled();
-    });
-
     it("rolls back an optimistic enable when the attempt is superseded mid-refresh, even if it comes back available", async () => {
       disconnectedMiyo();
       mockReachable = true;
@@ -958,7 +876,6 @@ describe("MiyoSettings", () => {
 
     it("does NOT let an older enable's revert clobber a newer concurrent enable that committed", async () => {
       disconnectedMiyo();
-      currentSettings = { ...currentSettings, miyoSearchSkillOptOut: true };
       mockRefreshBackend = "unavailable";
       render(<MiyoSettings />);
       fireEvent.click(await screen.findByText("Connect"));

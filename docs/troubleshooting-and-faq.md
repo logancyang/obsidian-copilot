@@ -95,7 +95,7 @@ Open **Settings → Copilot → Miyo**.
 - **Register this vault with Miyo:** choose **Register & connect** on the same computer. For a remote connection or mobile device, register the vault in Miyo first, then retry.
 - **Chat sources are not set up:** this belongs to the separate **Search chat** row and does not block Agent Chat vault search. Configure chat sources only if you want ChatGPT or Claude history search.
 
-Connecting turns on **Semantic search for agents** on desktop. If you turned it off, turn it back on under **Powered by Miyo**. Copilot installs `miyo-search` for opencode, Claude, and Codex. If Copilot reports a same-name collision, rename or remove the existing Skill and try again.
+**Semantic search for agents** is on by default and takes effect once Miyo is connected. If you turned it off, turn it back on under **Powered by Miyo**. Copilot installs `miyo-search` for opencode, Claude, and Codex. If Copilot reports a same-name collision, rename or remove the existing Skill and try again.
 
 ## Quick Ask does not open or has no model
 

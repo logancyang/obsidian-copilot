@@ -1335,12 +1335,12 @@ export const DEFAULT_BUILTIN_PREFERENCES: NonNullable<
   )
 );
 
-export function isMiyoSearchSkillUndecided(settings: CopilotSettings): boolean {
-  return (
-    !settings.enableMiyoSearchSkill &&
-    !settings.miyoSearchSkillOptOut &&
-    !settings.agentMode.skills.builtinPreferences?.[MIYO_SEARCH_SKILL.name]?.disabled
-  );
+// The switch defaults on, so it only takes effect while Miyo is connected.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/716
+export function isMiyoSearchSkillActive(
+  settings: Pick<CopilotSettings, "enableMiyo" | "enableMiyoSearchSkill">
+): boolean {
+  return settings.enableMiyo === true && settings.enableMiyoSearchSkill === true;
 }
 
 export function isBuiltinSkillEnabledFor(
@@ -1351,7 +1351,7 @@ export function isBuiltinSkillEnabledFor(
   const pref = settings.agentMode.skills.builtinPreferences?.[skillName];
   if (pref?.disabled || pref?.disabledAgents?.includes(agentId)) return false;
   return planManagedBuiltins({
-    search: settings.enableMiyoSearchSkill === true,
+    search: isMiyoSearchSkillActive(settings),
     documents: settings.enableMiyoDocumentProcessing,
   }).seed.some((skill) => skill.name === skillName);
 }
