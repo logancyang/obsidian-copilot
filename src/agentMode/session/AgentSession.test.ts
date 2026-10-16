@@ -25,6 +25,7 @@ import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
 import { FANOUT_READONLY_PREAMBLE, type FanoutTurn } from "./fanout/fanoutTypes";
 import type {
+  AgentChatMessage,
   AgentToolCallOutput,
   BackendDescriptor,
   BackendProcess,
@@ -3471,6 +3472,72 @@ describe("AgentSession", () => {
           "earlier prompt",
           "earlier reply",
         ]);
+      });
+    });
+
+    describe("resendSavedHistoryOnNextTurn()", () => {
+      const ISSUE_3643 = "https://github.com/logancyang/obsidian-copilot/issues/3643";
+      const savedChat: AgentChatMessage[] = [
+        {
+          id: "m0",
+          sender: USER_SENDER,
+          message: "my secret word is PELICAN",
+          isVisible: true,
+          timestamp: null,
+        },
+        {
+          id: "m1",
+          sender: AI_SENDER,
+          message: "Noted: PELICAN",
+          isVisible: true,
+          timestamp: null,
+        },
+      ];
+      const promptTexts = (mock: MockBackend): string[] =>
+        mock.prompt.mock.calls.map(
+          (call) => (call[0] as { prompt: Array<{ text: string }> }).prompt[0].text
+        );
+
+      it(`${ISSUE_3643} sends the saved turns as conversation_history ahead of the next prompt, then never again`, async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        session.loadDisplayMessages(savedChat);
+        session.resendSavedHistoryOnNextTurn();
+
+        await session.sendPrompt("what is my secret word?").turn;
+        await session.sendPrompt("and backwards?").turn;
+
+        const [first, second] = promptTexts(mock);
+        expect(first).toContain("<conversation_history>");
+        expect(first).toContain('<turn role="user">\nmy secret word is PELICAN\n</turn>');
+        expect(first).toContain('<turn role="assistant">\nNoted: PELICAN\n</turn>');
+        expect(first).toContain("<user-message>\nwhat is my secret word?\n</user-message>");
+        expect(second).toBe("and backwards?");
+      });
+
+      it(`${ISSUE_3643} keeps the saved turns for the following prompt when the first turn is cancelled`, async () => {
+        const mock = makeMockBackend();
+        mock.prompt.mockResolvedValueOnce({ stopReason: "cancelled" });
+        const session = makeSession(mock);
+        session.loadDisplayMessages(savedChat);
+        session.resendSavedHistoryOnNextTurn();
+
+        await session.sendPrompt("what is my secret word?").turn;
+        await session.sendPrompt("what is my secret word?").turn;
+
+        const [, retry] = promptTexts(mock);
+        expect(retry).toContain("<conversation_history>");
+        expect(retry).toContain("my secret word is PELICAN");
+      });
+
+      it("sends no conversation_history when no saved history is queued", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        session.loadDisplayMessages(savedChat);
+
+        await session.sendPrompt("what is my secret word?").turn;
+
+        expect(promptTexts(mock)).toEqual(["what is my secret word?"]);
       });
     });
 

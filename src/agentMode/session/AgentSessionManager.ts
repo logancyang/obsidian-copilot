@@ -1833,8 +1833,9 @@ export class AgentSessionManager {
     const scopeSeq = this.setActiveScope(projectId);
 
     let session: AgentSession;
+    let resumed: AgentSession | null;
     try {
-      const resumed = loaded.sessionId
+      resumed = loaded.sessionId
         ? await this.tryResumeSessionFromHistory(loaded.backendId, loaded.sessionId, projectId)
         : null;
       session = resumed ?? (await this.createSession(loaded.backendId, projectId));
@@ -1856,6 +1857,9 @@ export class AgentSessionManager {
       session.store.fillMissingTimestamps(loaded.messages);
     } else {
       session.loadDisplayMessages(loaded.messages);
+      // The agent never saw this note's turns when its saved session is gone from this device.
+      // https://github.com/logancyang/obsidian-copilot/issues/3643
+      if (!resumed) session.resendSavedHistoryOnNextTurn();
     }
     session.seedSessionUsage(loaded.usage);
     if (loaded.label) session.setLabel(loaded.label);
