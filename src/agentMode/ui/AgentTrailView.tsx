@@ -16,7 +16,8 @@ import { SubAgentCard } from "@/agentMode/ui/SubAgentCard";
 import { ReasoningBlock } from "@/agentMode/ui/ReasoningBlock";
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import { planEntryClass, planEntryIcon } from "@/agentMode/ui/planEntryStyles";
-import type { ToolSummaryContext } from "@/agentMode/ui/toolSummaries";
+import { miyoSearchRun, type ToolSummaryContext } from "@/agentMode/ui/toolSummaries";
+import { MiyoSearchCard } from "@/agentMode/ui/MiyoSearchCard";
 import { useThinkingClock } from "@/agentMode/ui/useThinkingClock";
 import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailExpansion";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
@@ -136,6 +137,10 @@ function renderNode(
 ): React.ReactNode {
   switch (node.type) {
     case "action": {
+      const miyoSearch = miyoSearchRun(node.part);
+      if (miyoSearch) {
+        return <MiyoSearchCard key={key} status={node.part.status} {...miyoSearch} />;
+      }
       const expansionId = actionExpansionId(trailId, node.part.id);
       return (
         <ActionCard

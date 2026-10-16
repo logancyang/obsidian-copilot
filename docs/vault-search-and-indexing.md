@@ -22,6 +22,8 @@ You can ask naturally, such as “Find everything I have written about memory co
 
 With **Semantic search for agents** on, agents search your notes with Miyo and file search for any question your notes might answer before turning to the web.
 
+Each Miyo search shows in the chat as a card with the Miyo logo, the query the agent sent, and how many notes came back when the agent exposes the results. The card shimmers while the search runs and turns red if Miyo can't be reached.
+
 ## Connect Miyo
 
 Open **Settings → Copilot → Miyo** and choose one connection:

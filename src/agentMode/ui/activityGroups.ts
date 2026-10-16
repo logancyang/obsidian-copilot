@@ -1,5 +1,5 @@
 import type { RenderNode, ThoughtPart, ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { pluralize } from "@/agentMode/ui/toolSummaries";
+import { miyoSearchRun, pluralize } from "@/agentMode/ui/toolSummaries";
 import { formatDuration } from "@/lib/duration";
 
 export type ActivityMember =
@@ -52,7 +52,9 @@ export function foldActivityGroups(nodes: RenderNode[]): GroupedTrailNode[] {
         run.push(node);
         break;
       case "action":
-        if (isInteractive(node.part)) {
+        // A grouped Miyo search would be hidden behind "Ran N commands".
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/718
+        if (isInteractive(node.part) || miyoSearchRun(node.part)) {
           flush();
           out.push(node);
         } else {

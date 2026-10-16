@@ -1,0 +1,55 @@
+import React from "react";
+import { MiyoLogo } from "@/components/ui/MiyoLogo";
+import { pluralize } from "@/agentMode/ui/toolSummaries";
+import type { AgentToolStatus } from "@/agentMode/session/types";
+import { cn } from "@/lib/utils";
+
+export interface MiyoSearchCardProps {
+  status: AgentToolStatus;
+  query: string | null;
+  noteCount: number | null;
+}
+
+export const MiyoSearchCard: React.FC<MiyoSearchCardProps> = ({ status, query, noteCount }) => {
+  const running = status === "pending" || status === "in_progress";
+  const failed = status === "failed";
+  const label = running
+    ? "Searching with Miyo"
+    : failed
+      ? "Miyo search failed"
+      : "Searched with Miyo";
+  const outcome =
+    running || failed || noteCount === null
+      ? null
+      : noteCount === 0
+        ? "No notes"
+        : pluralize(noteCount, "note");
+
+  return (
+    <div className="tw-my-1 tw-flex tw-w-full tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-border tw-bg-secondary tw-px-2 tw-py-1.5 tw-text-sm">
+      <MiyoLogo
+        className={cn(
+          "tw-size-4",
+          failed ? "tw-text-faint" : "tw-text-miyo",
+          running && "motion-safe:tw-animate-pulse"
+        )}
+      />
+      <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-baseline tw-gap-1.5">
+        <span
+          className={cn(
+            "tw-shrink-0 tw-font-medium",
+            running
+              ? "tw-bg-gradient-to-r tw-from-cyan-rgb/70 tw-via-cyan tw-to-cyan-rgb/70 tw-bg-[length:200%_100%] tw-bg-clip-text tw-text-transparent motion-safe:tw-animate-[copilot-text-shimmer_2.5s_ease-in-out_infinite] motion-reduce:tw-bg-none motion-reduce:tw-text-normal"
+              : failed
+                ? "tw-text-error"
+                : "tw-text-normal"
+          )}
+        >
+          {label}
+        </span>
+        {query ? <span className="tw-min-w-0 tw-truncate tw-text-muted">“{query}”</span> : null}
+      </div>
+      {outcome ? <span className="tw-shrink-0 tw-text-xs tw-text-muted">{outcome}</span> : null}
+    </div>
+  );
+};

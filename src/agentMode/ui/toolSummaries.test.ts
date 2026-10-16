@@ -3,6 +3,8 @@ import {
   lookupToolSummary,
   extractSubAgentInputPrompt,
   extractSubAgentReturnText,
+  isMiyoSkillLoad,
+  miyoSearchRun,
 } from "@/agentMode/ui/toolSummaries";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 
@@ -563,6 +565,140 @@ describe("toolSummaries", () => {
     it("returns null when prompt is empty or whitespace", () => {
       expect(extractSubAgentInputPrompt(tool({ input: { prompt: "" } }))).toBeNull();
       expect(extractSubAgentInputPrompt(tool({ input: { prompt: "   " } }))).toBeNull();
+    });
+  });
+
+  describe("miyoSearchRun()", () => {
+    const SCRIPT = "/Users/me/vault/.claude/skills/miyo-search/miyo-search.sh";
+    const miyoJson = (paths: string[]) =>
+      JSON.stringify({
+        results: paths.map((path) => ({ path, content: "…" })),
+        count: paths.length,
+      });
+    const stdout = (text: string): Pick<ToolCallPart, "output"> => ({
+      output: [{ type: "text", text }],
+    });
+
+    it("reads the query and the note count from a Claude Bash run of the managed script", () => {
+      const t = tool({
+        vendorToolName: "Bash",
+        toolKind: "execute",
+        input: { command: `sh "${SCRIPT}" "back pain standing desk"` },
+        ...stdout(miyoJson(["notes/Standing desk setup.md", "notes/Untitled 3.md"])),
+      });
+      expect(miyoSearchRun(t)).toEqual({ query: "back pain standing desk", noteCount: 2 });
+    });
+
+    it("recognizes a script path with spaces and joins unquoted query words", () => {
+      const t = tool({
+        input: { command: `sh "/Users/me/My Vault/skills/miyo-search/miyo-search.sh" tariff code` },
+        ...stdout(miyoJson([])),
+      });
+      expect(miyoSearchRun(t)).toEqual({ query: "tariff code", noteCount: 0 });
+    });
+
+    it("recognizes the Windows .cmd wrapper run through PowerShell", () => {
+      const t = tool({
+        input: {
+          command: `& "C:/Users/me/vault/.claude/skills/miyo-search/miyo-search.cmd" "sourdough"`,
+        },
+        ...stdout(miyoJson(["a.md"])),
+      });
+      expect(miyoSearchRun(t)).toEqual({ query: "sourdough", noteCount: 1 });
+    });
+
+    it("recognizes a direct miyo CLI search and skips its flags and their values", () => {
+      const t = tool({
+        vendorToolName: "Bash",
+        input: {
+          command:
+            '~/.miyo/bin/miyo search --json -n 15 "back pain and standing desk" --variant "lower back ache" --folder "My Vault"',
+        },
+        ...stdout(miyoJson(["a.md", "b.md", "c.md"])),
+      });
+      expect(miyoSearchRun(t)).toEqual({ query: "back pain and standing desk", noteCount: 3 });
+    });
+
+    it("recognizes a Codex shell run with no captured stdout and reports an unknown count", () => {
+      const t = tool({
+        toolKind: "execute",
+        title: `"${SCRIPT}" "What did I write about my back pain?"`,
+        input: {
+          command: `sh "${SCRIPT}" "What did I write about my back pain?"`,
+          cwd: "/Users/me/vault",
+        },
+      });
+      expect(miyoSearchRun(t)).toEqual({
+        query: "What did I write about my back pain?",
+        noteCount: null,
+      });
+    });
+
+    it("unwraps a Codex zsh -lc command whose inner quotes are escaped (https://github.com/Brevilabs/obsidian-copilot-private/issues/718)", () => {
+      const t = tool({
+        toolKind: "execute",
+        input: { command: `/bin/zsh -lc "sh \\"${SCRIPT}\\" \\"tariff code ZX-4471\\""` },
+      });
+      expect(miyoSearchRun(t)?.query).toBe("tariff code ZX-4471");
+    });
+
+    it("recognizes an OpenCode bash tool call by its command input", () => {
+      const t = tool({
+        toolKind: "execute",
+        title: "bash",
+        input: { command: `sh ${SCRIPT} 'node lts'`, description: "Search the vault with Miyo" },
+        ...stdout(miyoJson(["notes/Node upgrade.md"])),
+      });
+      expect(miyoSearchRun(t)).toEqual({ query: "node lts", noteCount: 1 });
+    });
+
+    it("counts each note once when Miyo returns several chunks of it", () => {
+      const t = tool({
+        input: { command: `sh ${SCRIPT} "desk"` },
+        ...stdout(miyoJson(["a.md", "a.md", "b.md"])),
+      });
+      expect(miyoSearchRun(t)?.noteCount).toBe(2);
+    });
+
+    it("reports a null query when the script is run without one", () => {
+      expect(miyoSearchRun(tool({ input: { command: `sh ${SCRIPT}` } }))?.query).toBeNull();
+    });
+
+    it.each([
+      ["truncated JSON", '{ "results": [ { "path": "a.md"'],
+      ["a plain error message", "Miyo search failed — the Miyo app may not be running."],
+      ["JSON without a results list", '{"error":"nope"}'],
+      ["empty output", ""],
+    ])("reports an unknown count for %s", (_name, text) => {
+      const t = tool({ input: { command: `sh ${SCRIPT} "desk"` }, ...stdout(text) });
+      expect(miyoSearchRun(t)).toEqual({ query: "desk", noteCount: null });
+    });
+
+    it.each([
+      ["another shell command", { command: "rg -n 'back pain' notes" }],
+      ["reading the skill file", { command: "cat .agents/skills/miyo-search/SKILL.md" }],
+      ["another Miyo subcommand", { command: "~/.miyo/bin/miyo files --json" }],
+      ["the miyo-parse script", { command: `sh /skills/miyo-parse/miyo-parse.sh "a.pdf"` }],
+      ["a tool call without a command", { pattern: "miyo-search.sh" }],
+      ["a call without input", undefined],
+    ])("returns null for %s", (_name, input) => {
+      expect(miyoSearchRun(tool({ input }))).toBeNull();
+    });
+  });
+
+  describe("isMiyoSkillLoad()", () => {
+    it("is true for Claude's Skill tool loading miyo-search (https://github.com/Brevilabs/obsidian-copilot-private/issues/718)", () => {
+      const t = tool({ vendorToolName: "Skill", input: { skill: "miyo-search" } });
+      expect(isMiyoSkillLoad(t)).toBe(true);
+    });
+
+    it("is false for other skills and for non-Skill tools", () => {
+      expect(
+        isMiyoSkillLoad(tool({ vendorToolName: "Skill", input: { skill: "miyo-parse" } }))
+      ).toBe(false);
+      expect(
+        isMiyoSkillLoad(tool({ vendorToolName: "Bash", input: { skill: "miyo-search" } }))
+      ).toBe(false);
     });
   });
 });
