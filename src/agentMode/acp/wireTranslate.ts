@@ -236,7 +236,9 @@ export function acpNotificationToEvents(
     return [];
   }
   const sessionId = sessionIdFromAcp(n.sessionId);
-  const events: SessionEvent[] = [{ sessionId, update: acpUpdateToSessionUpdate(n.update) }];
+  const update = acpUpdateToSessionUpdate(n.update);
+  if (!update) return [];
+  const events: SessionEvent[] = [{ sessionId, update }];
   const todoPlan = todoToolPlanFromAcp(n.update, todoToolCallIds);
   if (todoPlan) events.push({ sessionId, update: todoPlan });
   return events;
@@ -285,7 +287,7 @@ function todoToolPlanFromAcp(
   return { sessionUpdate: "plan", entries };
 }
 
-function acpUpdateToSessionUpdate(update: SessionNotification["update"]): SessionUpdate {
+function acpUpdateToSessionUpdate(update: SessionNotification["update"]): SessionUpdate | null {
   switch (update.sessionUpdate) {
     case "user_message_chunk":
     case "agent_message_chunk":
@@ -315,10 +317,7 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
         })),
       };
     case "session_info_update":
-      return {
-        sessionUpdate: "session_info_update",
-        title: (update as { title?: string | null }).title ?? null,
-      };
+      return { sessionUpdate: "session_info_update", title: update.title };
     case "current_mode_update":
       return {
         sessionUpdate: "current_mode_update",
@@ -341,7 +340,8 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
       };
     }
     default:
-      return { sessionUpdate: "session_info_update", title: null };
+      // Mapping unknown update kinds to a title-less session_info_update cleared the chat title. https://github.com/Brevilabs/obsidian-copilot-private/issues/632
+      return null;
   }
 }
 

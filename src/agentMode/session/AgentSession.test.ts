@@ -3703,6 +3703,19 @@ describe("AgentSession", () => {
           mock.emitUpdate({ sessionUpdate: "session_info_update", title: "Second" });
           expect(session.getLabel()).toBe("Second");
         });
+
+        it("keeps the agent title when an update omits the title, such as an opencode compaction marker (https://github.com/Brevilabs/obsidian-copilot-private/issues/632)", () => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock);
+          const onLabelChanged = jest.fn();
+          mock.emitUpdate({ sessionUpdate: "session_info_update", title: "Autumn leaves" });
+          subscribeTo(session, { onLabelChanged });
+
+          mock.emitUpdate({ sessionUpdate: "session_info_update" });
+
+          expect(session.getLabel()).toBe("Autumn leaves");
+          expect(onLabelChanged).not.toHaveBeenCalled();
+        });
       });
 
       describe("when the agent is polled for a title after a turn", () => {
